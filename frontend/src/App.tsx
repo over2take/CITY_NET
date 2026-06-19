@@ -56,7 +56,7 @@ const renderBaseGeometry = (shape: string) => {
   }
 };
 
-const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token }: any) => {
+const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token, drawCityStep }: any) => {
   const { camera, gl, controls } = useThree();
   const [dragStart, setDragStart] = useState<THREE.Vector3 | null>(null);
   const [dragEnd, setDragEnd] = useState<THREE.Vector3 | null>(null);
@@ -64,7 +64,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
   const raycaster = useRef(new THREE.Raycaster());
 
   useEffect(() => {
-    if ((view === 'district' || view === 'draw_roads' || view === 'city_gen' || isBatchSelecting) && controls) {
+    if ((view === 'district' || view === 'draw_roads' || view === 'city_gen' || (view === 'city_draw' && (drawCityStep === 1 || drawCityStep === 2)) || isBatchSelecting) && controls) {
       camera.position.set(0, 100, 0.1);
       (controls as any).target.set(0, 0, 0);
       (controls as any).update();
@@ -74,10 +74,10 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
       (controls as any).minPolarAngle = 0;
       (controls as any).maxPolarAngle = Math.PI;
     }
-  }, [view, controls, camera]);
+  }, [view, controls, camera, drawCityStep]);
 
   useEffect(() => {
-    if (view !== 'district' && view !== 'draw_roads' && view !== 'city_gen' && !isBatchSelecting && !rhombusState?.active) return;
+    if (view !== 'district' && view !== 'draw_roads' && view !== 'city_gen' && !(view === 'city_draw' && (drawCityStep === 1 || drawCityStep === 2)) && !isBatchSelecting && !rhombusState?.active) return;
 
     const getMouseWorldPos = (e: MouseEvent) => {
         const rect = gl.domElement.getBoundingClientRect();
@@ -136,18 +136,18 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
             return;
         }
 
-        if (view === 'draw_roads' && setRoadTrail) {
+        if ((view === 'draw_roads' || (view === 'city_draw' && drawCityStep === 2)) && setRoadTrail) {
             if (controls) (controls as any).enabled = false;
             setIsPainting(true); 
             setRoadTrail((prev: any) => [...prev, [pos.clone(), pos.clone()]]);
-        } else if (view === 'district' || view === 'city_gen' || isBatchSelecting) {
+        } else if (view === 'district' || view === 'city_gen' || (view === 'city_draw' && drawCityStep === 1) || isBatchSelecting) {
             if (controls) (controls as any).enabled = false;
             setDragStart(pos.clone()); setDragEnd(pos.clone());
         }
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-        if (view === 'draw_roads' && isPainting && setRoadTrail) {
+        if ((view === 'draw_roads' || (view === 'city_draw' && drawCityStep === 2)) && isPainting && setRoadTrail) {
             const pos = getMouseWorldPos(e);
             setRoadTrail((prev: any) => {
                 const newPaths = [...prev];
@@ -168,12 +168,12 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
 
     const handleMouseUp = () => {
         if (controls) (controls as any).enabled = true;
-        if (view === 'draw_roads') { setIsPainting(false); return; }
+        if (view === 'draw_roads' || (view === 'city_draw' && drawCityStep === 2)) { setIsPainting(false); return; }
         if (!dragStart || !dragEnd) return;
         const minX = Math.min(dragStart.x, dragEnd.x); const maxX = Math.max(dragStart.x, dragEnd.x);
         const minZ = Math.min(dragStart.z, dragEnd.z); const maxZ = Math.max(dragStart.z, dragEnd.z);
 
-        if (view === 'city_gen') {
+        if (view === 'city_gen' || (view === 'city_draw' && drawCityStep === 1)) {
             onSelectionChange({ min: new THREE.Vector3(minX, 0, minZ), max: new THREE.Vector3(maxX, 0, maxZ) });
         } else {
             const selectedIds: number[] = [];
@@ -191,7 +191,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [view, dragStart, dragEnd, isPainting, gl, camera, locations, onSelectionChange, controls, setRoadTrail, roadDrawMode, snapToGrid, rhombusState, setRhombusState, isBatchSelecting, userName, refreshLocations]);
+  }, [view, dragStart, dragEnd, isPainting, gl, camera, locations, onSelectionChange, controls, setRoadTrail, roadDrawMode, snapToGrid, rhombusState, setRhombusState, isBatchSelecting, userName, refreshLocations, drawCityStep]);
 
   return (
     <>
@@ -201,7 +201,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
               <meshBasicMaterial color="#ffff00" wireframe transparent opacity={0.5} />
           </mesh>
       )}
-      {view === 'draw_roads' && roadTrail && roadTrail.length > 0 && (
+      {(view === 'draw_roads' || (view === 'city_draw' && drawCityStep === 2)) && roadTrail && roadTrail.length > 0 && (
           <group>
               {roadTrail.map((path, pathIdx) => (
                   <group key={pathIdx}>
@@ -1026,12 +1026,14 @@ function AdminPanel({
   joinSelection, setJoinSelection, roadSelectionBounds, setRoadSelectionBounds,
   roadTrail, setRoadTrail, roadDrawMode, setRoadDrawMode, snapToGrid, setSnapToGrid,
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
-  genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu
+  genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu,
+  drawCityStep, setDrawCityStep, drawCityBlocks, setDrawCityBlocks, selectedBlockIds, setSelectedBlockIds
 }: any) {
   const [density, setDensity] = useState(8);
   const [allowedShapes, setAllowedShapes] = useState<string[]>(['box', 'cylinder', 'sphere']);
   const [activeUserEditing, setActiveUserEditing] = useState<any>(null);
   const [copyBuffer, setCopyBuffer] = useState<any>(null);
+  const [showMapModal, setShowMapModal] = useState(false);
 
   const [fps, setFps] = useState(0);
   useEffect(() => {
@@ -1054,7 +1056,580 @@ function AdminPanel({
     return () => cancelAnimationFrame(animationId);
   }, []);
 
-  const [showMapModal, setShowMapModal] = useState(false);
+  const generateDrawCityBlocks = () => {
+    if (roadTrail.length === 0) {
+      alert("PLEASE DRAW SOME ROADS FIRST");
+      return;
+    }
+    if (!roadSelectionBounds) {
+      alert("NO BOUNDS SELECTED");
+      return;
+    }
+
+    const minX = Math.min(roadSelectionBounds.min.x, roadSelectionBounds.max.x);
+    const maxX = Math.max(roadSelectionBounds.min.x, roadSelectionBounds.max.x);
+    const minZ = Math.min(roadSelectionBounds.min.z, roadSelectionBounds.max.z);
+    const maxZ = Math.max(roadSelectionBounds.min.z, roadSelectionBounds.max.z);
+    const cityW = maxX - minX;
+    const cityD = maxZ - minZ;
+
+    // 1. Convert drawn paths to segment coordinates
+    let allNewSegments: any[] = [];
+    for (const path of roadTrail) {
+        if (path.length < 2) continue;
+        let currentPath = path.map(p => p.clone());
+        
+        // Smoothing
+        for (let iter = 0; iter < 3; iter++) {
+            for (let i = 1; i < currentPath.length - 1; i++) {
+                currentPath[i].lerp(currentPath[i-1].clone().lerp(currentPath[i+1], 0.5), 0.5);
+            }
+        }
+        for (let i = 0; i < currentPath.length - 1; i++) {
+          allNewSegments.push({ x1: currentPath[i].x, z1: currentPath[i].z, x2: currentPath[i+1].x, z2: currentPath[i+1].z, width: drawingRoadWidth });
+        }
+    }
+
+    // 2. Partition bounds into sectors where roads cross
+    let blocks = [{ id: 'block_0', x: (minX + maxX)/2, z: (minZ + maxZ)/2, w: cityW, d: cityD, type: '' }];
+    let blockCounter = 1;
+
+    allNewSegments.forEach(seg => {
+      const dx = Math.abs(seg.x1 - seg.x2);
+      const dz = Math.abs(seg.z1 - seg.z2);
+      const isVertical = dx < dz;
+
+      const nextBlocks: any[] = [];
+      // Margin threshold to prevent splitting blocks into tiny slivers (less than 8 units)
+      const minBlockMargin = 8;
+
+      blocks.forEach(b => {
+        const bMinX = b.x - b.w / 2;
+        const bMaxX = b.x + b.w / 2;
+        const bMinZ = b.z - b.d / 2;
+        const bMaxZ = b.z + b.d / 2;
+
+        if (isVertical) {
+          const rx = (seg.x1 + seg.x2) / 2;
+          const segMinZ = Math.min(seg.z1, seg.z2);
+          const segMaxZ = Math.max(seg.z1, seg.z2);
+
+          const withinX = rx > bMinX + minBlockMargin && rx < bMaxX - minBlockMargin;
+          const overlapsZ = segMinZ < bMaxZ && segMaxZ > bMinZ;
+
+          if (withinX && overlapsZ) {
+            const lw = rx - bMinX;
+            const rw = bMaxX - rx;
+            nextBlocks.push({
+              id: `block_${blockCounter++}`,
+              x: bMinX + lw / 2,
+              z: b.z,
+              w: lw,
+              d: b.d,
+              type: ''
+            });
+            nextBlocks.push({
+              id: `block_${blockCounter++}`,
+              x: bMaxX - rw / 2,
+              z: b.z,
+              w: rw,
+              d: b.d,
+              type: ''
+            });
+          } else {
+            nextBlocks.push(b);
+          }
+        } else {
+          const rz = (seg.z1 + seg.z2) / 2;
+          const segMinX = Math.min(seg.x1, seg.x2);
+          const segMaxX = Math.max(seg.x1, seg.x2);
+
+          const withinZ = rz > bMinZ + minBlockMargin && rz < bMaxZ - minBlockMargin;
+          const overlapsX = segMinX < bMaxX && segMaxX > bMinX;
+
+          if (withinZ && overlapsX) {
+            const td = rz - bMinZ;
+            const bd = bMaxZ - rz;
+            nextBlocks.push({
+              id: `block_${blockCounter++}`,
+              x: b.x,
+              z: bMinZ + td / 2,
+              w: b.w,
+              d: td,
+              type: ''
+            });
+            nextBlocks.push({
+              id: `block_${blockCounter++}`,
+              x: b.x,
+              z: bMaxZ - bd / 2,
+              w: b.w,
+              d: bd,
+              type: ''
+            });
+          } else {
+            nextBlocks.push(b);
+          }
+        }
+      });
+
+      blocks = nextBlocks;
+    });
+
+    setDrawCityBlocks(blocks);
+    setDrawCityStep(3);
+  };
+
+  const assignZoneTypeToSelected = (type: string) => {
+    setDrawCityBlocks((prev: any[]) => prev.map(b => selectedBlockIds.includes(b.id) ? { ...b, type } : b));
+    setSelectedBlockIds([]); // Reset selection
+  };
+
+  const buildDrawCity = async () => {
+    try {
+      if (drawCityBlocks.length === 0) return alert("NO BLOCKS TO BUILD");
+      setIsGeneratingMap(true);
+
+      const minX = Math.min(roadSelectionBounds.min.x, roadSelectionBounds.max.x);
+      const maxX = Math.max(roadSelectionBounds.min.x, roadSelectionBounds.max.x);
+      const minZ = Math.min(roadSelectionBounds.min.z, roadSelectionBounds.max.z);
+      const maxZ = Math.max(roadSelectionBounds.min.z, roadSelectionBounds.max.z);
+      const cityW = maxX - minX;
+      const cityD = maxZ - minZ;
+      const centerX = (minX + maxX) / 2;
+      const centerZ = (minZ + maxZ) / 2;
+      const maxRadius = Math.max(1, Math.max(cityW, cityD) / 2);
+      const slumAngle = Math.random() * Math.PI * 2;
+
+      // 1. Process drawn paths to segments
+      let allNewSegments: any[] = [];
+      for (const path of roadTrail) {
+          if (path.length < 2) continue;
+          let currentPath = path.map(p => p.clone());
+          for (let iter = 0; iter < 3; iter++) {
+              for (let i = 1; i < currentPath.length - 1; i++) {
+                  currentPath[i].lerp(currentPath[i-1].clone().lerp(currentPath[i+1], 0.5), 0.5);
+              }
+          }
+          for (let i = 0; i < currentPath.length - 1; i++) {
+            allNewSegments.push({ x1: currentPath[i].x, z1: currentPath[i].z, x2: currentPath[i+1].x, z2: currentPath[i+1].z, width: drawingRoadWidth });
+          }
+      }
+
+      const finalRoads = consolidateRoads(allNewSegments, roads, 3.0);
+
+      // 2. Subdivide large blocks into smaller building plots
+      const subdivideSector = (sx: number, sz: number, sw: number, sd: number, type: string) => {
+        const plots: { x: number, z: number, w: number, d: number }[] = [];
+        if (type === 'PARK') {
+          return [{ x: sx, z: sz, w: sw, d: sd }];
+        }
+
+        const localSplit = (lx: number, lz: number, lw: number, ld: number, depth: number) => {
+          const minPlotSize = type === 'SLUMS' ? 6 : (type === 'CORPO' ? 22 : 12);
+          const maxDepth = type === 'SLUMS' ? 4 : (type === 'CORPO' ? 2 : 3);
+
+          if (depth >= maxDepth || (lw < minPlotSize * 1.8 && ld < minPlotSize * 1.8)) {
+            plots.push({ x: lx, z: lz, w: lw, d: ld });
+            return;
+          }
+
+          const splitV = lw > ld ? true : (lw === ld ? Math.random() > 0.5 : false);
+          if (splitV) {
+            const splitRatio = 0.4 + Math.random() * 0.2;
+            const lw1 = lw * splitRatio;
+            const lw2 = lw - lw1;
+            localSplit(lx - lw/2 + lw1/2, lz, lw1, ld, depth + 1);
+            localSplit(lx + lw/2 - lw2/2, lz, lw2, ld, depth + 1);
+          } else {
+            const splitRatio = 0.4 + Math.random() * 0.2;
+            const ld1 = ld * splitRatio;
+            const ld2 = ld - ld1;
+            localSplit(lx, lz - ld/2 + ld1/2, lw, ld1, depth + 1);
+            localSplit(lx, lz + ld/2 - ld2/2, lw, ld2, depth + 1);
+          }
+        };
+
+        localSplit(sx, sz, sw, sd, 0);
+        return plots;
+      };
+
+      const rawBuildings: any[] = [];
+      const spatialGrid: any = {};
+      const gridCell = 20;
+      const getGridKey = (x: number, z: number) => `${Math.floor(x/gridCell)},${Math.floor(z/gridCell)}`;
+
+      locations.forEach(l => {
+          const key = getGridKey(l.x, l.z);
+          if (!spatialGrid[key]) spatialGrid[key] = [];
+          spatialGrid[key].push(l);
+      });
+
+      const allRoadsToCheck = [...roads, ...allNewSegments];
+
+      const isBlocked = (x: number, z: number, w: number, d: number, buffer = 2) => {
+          const key = getGridKey(x, z);
+          const neighbors = [key];
+          for(let dx=-1; dx<=1; dx++) { for(let dz=-1; dz<=1; dz++) { if(dx===0 && dz===0) continue; neighbors.push(`${Math.floor(x/gridCell)+dx},${Math.floor(z/gridCell)+dz}`); }}
+          
+          for(const nKey of neighbors) {
+              if(!spatialGrid[nKey]) continue;
+              const blocked = spatialGrid[nKey].some((l: any) => {
+                  const xOverlap = Math.abs(l.x - x) < (l.width + w) / 2 + buffer;
+                  const zOverlap = Math.abs(l.z - z) < (l.depth + d) / 2 + buffer;
+                  return xOverlap && zOverlap;
+              });
+              if (blocked) return true;
+          }
+
+          for (const r of allRoadsToCheck) {
+              const p1 = new THREE.Vector3(r.x1, 0, r.z1);
+              const p2 = new THREE.Vector3(r.x2, 0, r.z2);
+              const line = new THREE.Line3(p1, p2);
+              const closest = new THREE.Vector3();
+              line.closestPointToPoint(new THREE.Vector3(x, 0, z), true, closest);
+              
+              const rx = closest.x;
+              const rz = closest.z;
+              const halfW = w / 2 + r.width / 2 + 1.2;
+              const halfD = d / 2 + r.width / 2 + 1.2;
+              
+              if (Math.abs(rx - x) < halfW && Math.abs(rz - z) < halfD) {
+                  return true;
+              }
+          }
+          return false;
+      };
+
+      drawCityBlocks.forEach((sector) => {
+        if (!sector.type) return;
+
+        const plots = subdivideSector(sector.x, sector.z, sector.w, sector.d, sector.type);
+
+        plots.forEach((b) => {
+          const pad = sector.type === 'SLUMS' ? 2 : (sector.type === 'CORPO' ? 8 : 4);
+          const bw = b.w - pad; const bd = b.d - pad;
+          if (bw < 4 || bd < 4) return;
+
+          // 1. PARK GENERATION
+          if (sector.type === 'PARK') {
+             const numPlants = 6 + Math.floor(Math.random() * 7);
+             for (let pIdx = 0; pIdx < numPlants; pIdx++) {
+                  const px = b.x + (Math.random() - 0.5) * bw * 0.8;
+                  const pz = b.z + (Math.random() - 0.5) * bd * 0.8;
+                  
+                  if (!isBlocked(px, pz, 0.4, 0.4, 0.5)) {
+                      const trunkH = 2.0 + Math.random() * 2.5;
+                      const trunkW = 0.4;
+                      const color = '#00ff66';
+                      const trunk = { name: 'HOLOTREE_TRUNK', description: 'ENVIRONMENTAL_HOLO_NODE', x: px, y: 0, z: pz, width: trunkW, depth: trunkW, height: trunkH, color, shape: 'cylinder' };
+                      rawBuildings.push(trunk);
+                      
+                      const canopyW = 1.5 + Math.random() * 1.0;
+                      const canopyH = 2.0 + Math.random() * 1.5;
+                      const canopyShape = Math.random() > 0.5 ? 'pyramid' : 'box';
+                      rawBuildings.push({ name: 'HOLOTREE_CANOPY', x: px, y: trunkH, z: pz, width: canopyW, depth: canopyW, height: canopyH, color, shape: canopyShape, parent_name: 'ROOT' });
+                  }
+             }
+             return;
+          }
+
+          // 2. BUILDING GENERATION
+          let zoneTypeVal = 0.5;
+          if (sector.type === 'CORPO') zoneTypeVal = 0.9;
+          else if (sector.type === 'URBAN') zoneTypeVal = 0.5;
+          else if (sector.type === 'SLUMS') zoneTypeVal = 0.1;
+          else if (sector.type === 'INDUSTRIAL') zoneTypeVal = -0.1;
+
+          const color = '';
+
+          const isLandmark = Math.random() < 0.20 && (zoneTypeVal > 0.8 || (bw > 30 && bd > 30)) && !isBlocked(b.x, b.z, bw * 0.7, bd * 0.7, 2.0);
+
+          if (isLandmark) {
+            const landmarkStyle = Math.floor(Math.random() * 4);
+            
+            if (landmarkStyle === 0) {
+              const centralSpireH = 150 + Math.random() * 70;
+              const centralSpireW = bw * 0.45; const centralSpireD = bd * 0.45;
+              const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: centralSpireW, depth: centralSpireD, height: centralSpireH, color, shape: 'box' };
+              rawBuildings.push(root);
+              const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+              const bW = bw * 0.15; const bD = bd * 0.15;
+              const offsets = [
+                { dx: -bw * 0.35, dz: -bd * 0.35 }, { dx: bw * 0.35, dz: -bd * 0.35 },
+                { dx: -bw * 0.35, dz: bd * 0.35 }, { dx: bw * 0.35, dz: bd * 0.35 }
+              ];
+              offsets.forEach(offset => {
+                const bx = b.x + offset.dx; const bz = b.z + offset.dz;
+                rawBuildings.push({ name: '', x: bx, y: 0, z: bz, width: bW, depth: bD, height: centralSpireH * 0.4, color, shape: 'box', parent_name: 'CORP_ROOT' });
+                rawBuildings.push({ name: '', x: bx - Math.sign(offset.dx)*bW*0.2, y: centralSpireH * 0.4, z: bz - Math.sign(offset.dz)*bD*0.2, width: bW * 0.7, depth: bD * 0.7, height: centralSpireH * 0.35, color, shape: 'box', parent_name: 'CORP_ROOT' });
+              });
+              rawBuildings.push({ name: '', x: b.x, y: centralSpireH * 0.8, z: b.z, width: centralSpireW * 1.3, depth: centralSpireD * 1.3, height: 4.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
+              rawBuildings.push({ name: '', x: b.x, y: centralSpireH, z: b.z, width: 0.3, depth: 0.3, height: centralSpireH * 0.18, color, shape: 'box', parent_name: 'CORP_ROOT' });
+
+            } else if (landmarkStyle === 1) {
+              const base1W = bw * 0.75; const base1D = bd * 0.75; const base1H = 8.0;
+              const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: base1W, depth: base1D, height: base1H, color, shape: 'box' };
+              rawBuildings.push(root);
+              const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+              const base2W = base1W * 0.75; const base2D = base1D * 0.75; const base2H = 12.0;
+              rawBuildings.push({ name: '', x: b.x, y: base1H, z: b.z, width: base2W, depth: base2D, height: base2H, color, shape: 'box', parent_name: 'CORP_ROOT' });
+
+              const pyramidW = base2W * 0.75; const pyramidD = base2D * 0.75; const pyramidH = 120 + Math.random() * 50;
+              rawBuildings.push({ name: '', x: b.x, y: base1H + base2H, z: b.z, width: pyramidW, depth: pyramidD, height: pyramidH, color, shape: 'pyramid', parent_name: 'CORP_ROOT' });
+
+              const satOffsets = [
+                { dx: -bw * 0.42, dz: -bd * 0.42 }, { dx: bw * 0.42, dz: -bd * 0.42 },
+                { dx: -bw * 0.42, dz: bd * 0.42 }, { dx: bw * 0.42, dz: bd * 0.42 }
+              ];
+              satOffsets.forEach(offset => {
+                const bx = b.x + offset.dx; const bz = b.z + offset.dz;
+                rawBuildings.push({ name: '', x: bx, y: 0, z: bz, width: bw * 0.08, depth: bd * 0.08, height: 4.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
+                rawBuildings.push({ name: '', x: bx, y: 4.0, z: bz, width: bw * 0.08, depth: bd * 0.08, height: 25.0, color, shape: 'pyramid', parent_name: 'CORP_ROOT' });
+              });
+
+            } else if (landmarkStyle === 2) {
+              const pillarW = bw * 0.22; const pillarD = bd * 0.65; const pillarH = 140 + Math.random() * 50;
+              const offsetDist = bw * 0.33;
+
+              const root = { name: '', description: '', x: b.x - offsetDist, y: 0, z: b.z, width: pillarW, depth: pillarD, height: pillarH, color, shape: 'box' };
+              rawBuildings.push(root);
+              const key = getGridKey(b.x - offsetDist, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+              const rightPillar = { name: '', x: b.x + offsetDist, y: 0, z: b.z, width: pillarW, depth: pillarD, height: pillarH, color, shape: 'box', parent_name: 'CORP_ROOT' };
+              rawBuildings.push(rightPillar);
+              const key2 = getGridKey(b.x + offsetDist, b.z); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(rightPillar);
+
+              const archH = 12.0; const archW = offsetDist * 2 + pillarW;
+              rawBuildings.push({ name: '', x: b.x, y: pillarH - archH, z: b.z, width: archW, depth: pillarD * 0.9, height: archH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+
+              const atriumW = offsetDist * 1.3; const atriumD = pillarD * 0.7; const atriumH = pillarH * 0.45;
+              rawBuildings.push({ name: '', x: b.x, y: pillarH * 0.35, z: b.z, width: atriumW, depth: atriumD, height: atriumH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+
+              rawBuildings.push({ name: '', x: b.x - offsetDist, y: pillarH, z: b.z, width: 0.5, depth: 0.5, height: 15.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
+              rawBuildings.push({ name: '', x: b.x + offsetDist, y: pillarH, z: b.z, width: 0.5, depth: 0.5, height: 15.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
+
+            } else {
+              const towerH = 130 + Math.random() * 60;
+              const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: bw * 0.4, depth: bd * 0.4, height: towerH * 0.3, color, shape: 'box' };
+              rawBuildings.push(root);
+              const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+              rawBuildings.push({ name: '', x: b.x, y: towerH * 0.3, z: b.z, width: bw * 0.3, depth: bd * 0.3, height: towerH * 0.4, color, shape: 'box', parent_name: 'CORP_ROOT' });
+              rawBuildings.push({ name: '', x: b.x, y: towerH * 0.7, z: b.z, width: bw * 0.2, depth: bd * 0.2, height: towerH * 0.3, color, shape: 'box', parent_name: 'CORP_ROOT' });
+
+              const disc1W = bw * 0.65; const disc1D = bd * 0.65;
+              rawBuildings.push({ name: '', x: b.x, y: towerH * 0.45, z: b.z, width: disc1W, depth: disc1D, height: 2.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
+              const disc2W = bw * 0.5; const disc2D = bd * 0.5;
+              rawBuildings.push({ name: '', x: b.x, y: towerH * 0.75, z: b.z, width: disc2W, depth: disc2D, height: 1.5, color, shape: 'box', parent_name: 'CORP_ROOT' });
+              const disc3W = bw * 0.32; const disc3D = bd * 0.32;
+              rawBuildings.push({ name: '', x: b.x, y: towerH * 0.92, z: b.z, width: disc3W, depth: disc3D, height: 1.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
+
+              rawBuildings.push({ name: '', x: b.x, y: towerH, z: b.z, width: 0.2, depth: 0.2, height: towerH * 0.2, color, shape: 'box', parent_name: 'CORP_ROOT' });
+              rawBuildings.push({ name: '', x: b.x - bw * 0.1, y: towerH * 0.92, z: b.z - bd * 0.1, width: 0.1, depth: 0.1, height: towerH * 0.12, color, shape: 'box', parent_name: 'CORP_ROOT' });
+              rawBuildings.push({ name: '', x: b.x + bw * 0.1, y: towerH * 0.92, z: b.z + bd * 0.1, width: 0.1, depth: 0.1, height: towerH * 0.12, color, shape: 'box', parent_name: 'CORP_ROOT' });
+            }
+
+          } else if (zoneTypeVal > 0.8) {
+            const baseW = bw * 0.75; const baseD = bd * 0.75;
+            const h = 100 + Math.random() * 90;
+            const corpoStyle = Math.floor(Math.random() * 4);
+
+            if (corpoStyle === 0) {
+              const baseH = h * 0.45; const midH = h * 0.35; const topH = h * 0.2;
+              const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: baseW, depth: baseD, height: baseH, color, shape: 'box' };
+              rawBuildings.push(root);
+              const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+              rawBuildings.push({ name: '', x: b.x, y: baseH, z: b.z, width: baseW * 0.7, depth: baseD * 0.7, height: midH, color, shape: 'box', parent_name: 'ROOT' });
+              rawBuildings.push({ name: '', x: b.x, y: baseH + midH, z: b.z, width: baseW * 0.45, depth: baseD * 0.45, height: topH, color, shape: 'box', parent_name: 'ROOT' });
+              rawBuildings.push({ name: '', x: b.x, y: baseH + midH + topH, z: b.z, width: 0.2, depth: 0.2, height: h * 0.15, color, shape: 'box', parent_name: 'ROOT' });
+            } else if (corpoStyle === 1) {
+              const towerW = baseW * 0.4; const towerD = baseD * 0.8;
+              const t1x = b.x - baseW * 0.3; const t2x = b.x + baseW * 0.3;
+
+              const root = { name: '', description: '', x: t1x, y: 0, z: b.z, width: towerW, depth: towerD, height: h, color, shape: 'box' };
+              rawBuildings.push(root);
+              const key = getGridKey(t1x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+              const beta = { name: '', x: t2x, y: 0, z: b.z, width: towerW, depth: towerD, height: h, color, shape: 'box', parent_name: 'CORP_ROOT' };
+              rawBuildings.push(beta);
+              const key2 = getGridKey(t2x, b.z); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(beta);
+
+              const bridgeH = 4.0; const bridgeW = (t2x - t1x) - towerW;
+              rawBuildings.push({ name: '', x: b.x, y: h * 0.7, z: b.z, width: bridgeW, depth: towerD * 0.4, height: bridgeH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+            } else if (corpoStyle === 2) {
+              const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: baseW * 0.5, depth: baseD * 0.5, height: h, color, shape: 'box' };
+              rawBuildings.push(root);
+              const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+              const wingW = baseW * 0.25; const wingD = baseD * 0.35; const wingH = h * 0.65;
+              rawBuildings.push({ name: '', x: b.x - baseW * 0.35, y: 0, z: b.z, width: wingW, depth: wingD, height: wingH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+              rawBuildings.push({ name: '', x: b.x + baseW * 0.35, y: 0, z: b.z, width: wingW, depth: wingD, height: wingH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+            } else {
+              const towerW = baseW * 0.35; const towerD = baseD * 0.8;
+              const t1x = b.x - baseW * 0.25; const t2x = b.x + baseW * 0.25;
+
+              const root = { name: '', description: '', x: t1x, y: 0, z: b.z, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box' };
+              rawBuildings.push(root);
+              const key = getGridKey(t1x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+              const beta = { name: '', x: t2x, y: 0, z: b.z, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box', parent_name: 'CORP_ROOT' };
+              rawBuildings.push(beta);
+              const key2 = getGridKey(t2x, b.z); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(beta);
+
+              const helipadW = baseW * 1.1; const helipadD = baseD * 0.9;
+              rawBuildings.push({ name: '', x: b.x, y: h * 0.95, z: b.z, width: helipadW, depth: helipadD, height: 2.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
+              rawBuildings.push({ name: '', x: b.x, y: h * 0.95 + 2.0, z: b.z, width: 0.15, depth: 0.15, height: h * 0.18, color, shape: 'box', parent_name: 'CORP_ROOT' });
+            }
+
+          } else if (zoneTypeVal > 0.3) {
+            if (bw > 25 || bd > 25) {
+              const rows = bw > 40 ? 3 : 2; const cols = bd > 40 ? 3 : 2;
+              const pw = bw / cols; const pd = bd / rows;
+              for (let r = 0; r < rows; r++) { for (let c = 0; c < cols; c++) {
+                if (Math.random() < 0.30) continue;
+                const jitterX = (Math.random() - 0.5) * pw * 0.2; const jitterZ = (Math.random() - 0.5) * pd * 0.2;
+                const subX = b.x - bw/2 + pw/2 + c * pw + jitterX;
+                const subZ = b.z - bd/2 + pd/2 + r * pd + jitterZ;
+
+                if (!isBlocked(subX, subZ, pw * 0.6, pd * 0.6, 0.5)) {
+                  const subH = 10 + Math.random() * 20;
+                  const root = { name: '', description: '', x: subX, y: 0, z: subZ, width: pw * 0.6, depth: pd * 0.6, height: subH, color, shape: 'box', rotation: 0 };
+                  rawBuildings.push(root);
+                  const key = getGridKey(subX, subZ); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+                  if (Math.random() > 0.5) {
+                    rawBuildings.push({ name: '', x: subX + pw * 0.22, y: 0, z: subZ - pd * 0.15, width: pw * 0.3, depth: pd * 0.3, height: subH * 0.65, color, shape: 'box', parent_name: 'ROOT' });
+                  } else {
+                    rawBuildings.push({ name: '', x: subX, y: subH, z: subZ, width: pw * 0.6, depth: pd * 0.6, height: 3.5, color, shape: 'pyramid', parent_name: 'ROOT' });
+                  }
+                }
+              }}
+            } else {
+              const h = 10 + Math.random() * 20;
+              const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: bw, depth: bd, height: h, color, shape: 'box', rotation: 0 };
+              rawBuildings.push(root);
+              const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+              if (Math.random() > 0.5) {
+                rawBuildings.push({ name: '', x: b.x + bw * 0.22, y: 0, z: b.z - bd * 0.15, width: bw * 0.3, depth: bd * 0.3, height: h * 0.65, color, shape: 'box', parent_name: 'ROOT' });
+              } else {
+                rawBuildings.push({ name: '', x: b.x, y: h, z: b.z, width: bw * 0.9, depth: bd * 0.9, height: 3.5, color, shape: 'pyramid', parent_name: 'ROOT' });
+              }
+            }
+
+          } else if (zoneTypeVal < 0) {
+            const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
+            rawBuildings.push(root);
+            const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+            const numStructures = Math.random() > 0.5 ? 2 : 1;
+            for (let i = 0; i < numStructures; i++) {
+              const shapeType = Math.random() > 0.5 ? 'cylinder' : 'box';
+              const strW = bw * 0.35; const strD = bd * 0.35; const strH = 15 + Math.random() * 20;
+              const offsetX = numStructures > 1 ? (i === 0 ? -bw * 0.25 : bw * 0.25) : 0;
+              const offsetZ = numStructures > 1 ? (i === 0 ? -bd * 0.25 : bd * 0.25) : 0;
+              rawBuildings.push({ name: '', x: b.x + offsetX, y: 1.2, z: b.z + offsetZ, width: strW, depth: strD, height: strH, color, shape: shapeType, parent_name: 'ROOT' });
+            }
+
+          } else {
+            if (bw > 8 || bd > 8) {
+              const shackSize = 4.0;
+              const nx = Math.max(1, Math.floor(bw / shackSize)); const nz = Math.max(1, Math.floor(bd / shackSize));
+              for (let ix = 0; ix < nx; ix++) { for (let iz = 0; iz < nz; iz++) {
+                const shW = 2.5 + Math.random() * 1.5; const shD = 2.5 + Math.random() * 1.5;
+                const shX = b.x - bw/2 + (ix + 0.5) * (bw / nx) + (Math.random() - 0.5) * 1.0;
+                const shZ = b.z - bd/2 + (iz + 0.5) * (bd / nz) + (Math.random() - 0.5) * 1.0;
+                const shH = 2.5 + Math.random() * 4.0; const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
+
+                if (!isBlocked(shX, shZ, shW, shD, 0.5)) {
+                  const root = { name: '', description: '', x: shX, y: 0, z: shZ, width: shW, depth: shD, height: shH, color: shackColor, shape: 'box' };
+                  rawBuildings.push(root);
+                  const key = getGridKey(shX, shZ); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+                  if (Math.random() < 0.3) {
+                    rawBuildings.push({ name: '', x: shX, y: shH, z: shZ, width: shW * 0.9, depth: shD * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
+                  }
+                }
+              }}
+            } else {
+              const shH = 2.5 + Math.random() * 4.0; const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
+              const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: bw, depth: bd, height: shH, color: shackColor, shape: 'box' };
+              rawBuildings.push(root);
+              const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+              if (Math.random() < 0.3) {
+                rawBuildings.push({ name: '', x: b.x, y: shH, z: b.z, width: bw * 0.9, depth: bd * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
+              }
+            }
+          }
+        });
+      });
+
+      // 3. Insert roads and buildings
+      if (finalRoads.length > 0) {
+        const rRes = await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalRoads) });
+        if (!rRes.ok) throw new Error(`Road insertion failed: ${rRes.status}`);
+      }
+
+      if (rawBuildings.length > 0) {
+        const rootLocs = rawBuildings.filter(b => !b.parent_name);
+        const childLocs = rawBuildings.filter(b => b.parent_name === 'ROOT' || b.parent_name === 'CORP_ROOT');
+
+        const bRes = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(rootLocs) });
+        if (!bRes.ok) throw new Error(`Building insertion failed: ${bRes.status}`);
+
+        const rootData = await bRes.json();
+        if (rootData.data && rootData.data.length > 0 && childLocs.length > 0) {
+          const children: any[] = [];
+          const rootGrid: any = {};
+          rootData.data.forEach((r: any) => {
+            const key = getGridKey(r.x, r.z);
+            if (!rootGrid[key]) rootGrid[key] = [];
+            rootGrid[key].push(r);
+          });
+
+          childLocs.forEach(c => {
+            const key = getGridKey(c.x, c.z);
+            const neighbors = [key];
+            for(let dx=-1; dx<=1; dx++) { for(let dz=-1; dz<=1; dz++) { if(dx===0 && dz===0) continue; neighbors.push(`${Math.floor(c.x/gridCell)+dx},${Math.floor(c.z/gridCell)+dz}`); }}
+            
+            let matched = false;
+            for(const nKey of neighbors) {
+              if(!rootGrid[nKey]) continue;
+              const root = rootGrid[nKey].find((r: any) => {
+                const dist = Math.sqrt((r.x - c.x)**2 + (r.z - c.z)**2);
+                return (c.parent_name === 'ROOT' && dist < 5) || (c.parent_name === 'CORP_ROOT' && dist < 20);
+              });
+              if (root) {
+                children.push({ ...c, parent_id: root.id });
+                matched = true; break;
+              }
+            }
+          });
+
+          if (children.length > 0) {
+            const cRes = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(children) });
+            if (!cRes.ok) throw new Error(`Child building insertion failed: ${cRes.status}`);
+          }
+        }
+      }
+
+      alert(`CUSTOM CITY BUILT SUCCESSFUL: ${drawCityBlocks.length} SECTORS, ${finalRoads.length} ROADS`);
+      refreshLocations();
+      if (refreshRoads) refreshRoads();
+      setView('list');
+      setRoadSelectionBounds(null);
+      setRoadTrail([]);
+      setDrawCityBlocks([]);
+      setSelectedBlockIds([]);
+    } catch (err: any) {
+      console.error(err);
+      alert(`CITY BUILD FAILED: ${err.message}`);
+    } finally {
+      setIsGeneratingMap(false);
+    }
+  };
   const mapRef = useRef<any>(null);
   const [localThrobber, setLocalThrobber] = useState('|');
   useEffect(() => {
@@ -2147,12 +2722,15 @@ out skel qt;`;
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setTargetObject(null); setView('generator'); generateBlock(); }}>+ BLOCK_GEN</button>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setRoadSelectionBounds(null); setView('city_gen'); }}>+ CITY_GEN</button>
-              <button className="utility-btn" style={{flex: 1, borderColor: '#ff0000', color: '#ff0000'}} onClick={startNewEnemy}>+ ADD_ENEMY</button>
+              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setRoadSelectionBounds(null); setRoadTrail([]); setDrawCityBlocks([]); setSelectedBlockIds([]); setDrawCityStep(1); setView('city_draw'); }}>+ DRAW_CITY</button>
           </div>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setRoadTrail([]); setView('draw_roads'); }}>+ DRAW_ROADS</button>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setDistrictSelection([]); setView('district'); }}>+ ADD_DISTRICT</button>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setJoinSelection([]); setView('join'); }}>+ JOIN_STRUCTS</button>
+          </div>
+          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+              <button className="utility-btn" style={{flex: 1, borderColor: '#ff0000', color: '#ff0000'}} onClick={startNewEnemy}>+ ADD_ENEMY</button>
           </div>
           <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={async () => {
             if (confirm("PURGE ALL ROAD DATA?")) {
@@ -2866,6 +3444,117 @@ out skel qt;`;
         </>
       )}
 
+      {view === 'city_draw' && (
+        <>
+          <header style={{marginBottom: '10px'}}>
+            <h3>DRAW_CITY // STEP {drawCityStep}</h3>
+            <button onClick={() => { setView('list'); setRoadSelectionBounds(null); setRoadTrail([]); setDrawCityBlocks([]); setSelectedBlockIds([]); }} className="close-btn" style={{position: 'static'}}>X</button>
+          </header>
+
+          {drawCityStep === 1 && (
+            <>
+              <div className="editor-controls">
+                <p style={{fontSize: '0.75rem', opacity: 0.8, lineHeight: '1.4'}}>
+                  Define the city bounds by left-clicking and dragging a selection box on the tabletop grid map.
+                </p>
+              </div>
+              <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}>
+                {roadSelectionBounds ? (
+                  <p>AREA_SELECTED: {Math.round(Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x))}x{Math.round(Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z))} units</p>
+                ) : (
+                  <p style={{color: 'var(--cyan)'}}>AWAITING BOUNDS SELECTION...</p>
+                )}
+              </div>
+              <button 
+                className="upload-btn" 
+                style={{marginTop: '15px'}} 
+                disabled={!roadSelectionBounds}
+                onClick={() => setDrawCityStep(2)}
+              >
+                NEXT: DRAW ROADS
+              </button>
+            </>
+          )}
+
+          {drawCityStep === 2 && (
+            <>
+              <div className="editor-controls">
+                <label style={{fontSize: '0.7rem'}}>DRAWING_MODE</label>
+                <div className="button-group" style={{marginTop: '5px'}}>
+                  <button className={roadDrawMode === 'free' ? 'active' : ''} onClick={() => { setRoadDrawMode('free'); }}>FREE_DRAW</button>
+                  <button className={roadDrawMode === 'straight' ? 'active' : ''} onClick={() => { setRoadDrawMode('straight'); }}>STRAIGHT</button>
+                </div>
+                <button className={`utility-btn ${snapToGrid ? 'active' : ''}`} onClick={() => setSnapToGrid(!snapToGrid)} style={{marginTop: '10px', width: '100%'}}>{snapToGrid ? 'SNAP_TO_GRID: ON' : 'SNAP_TO_GRID: OFF'}</button>
+                <div style={{marginTop: '10px'}}>
+                  <label style={{fontSize: '0.7rem'}}>ROAD_THICKNESS: {drawingRoadWidth.toFixed(1)}</label>
+                  <input type="range" min="0.5" max="10" step="0.1" value={drawingRoadWidth} onChange={(e) => setDrawingRoadWidth(parseFloat(e.target.value))} style={{width: '100%'}} />
+                </div>
+              </div>
+              <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}>
+                <p>PATHS_DRAWN: {roadTrail.length}</p>
+                <p>TOTAL_NODES: {roadTrail.reduce((acc, curr) => acc + curr.length, 0)}</p>
+                <p style={{opacity: 0.7, marginTop: '5px'}}>HOLD LEFT-CLICK TO PAINT ROADS WITHIN SELECTION</p>
+                <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setRoadTrail([])}>CLEAR_ALL_DRAWINGS</button>
+              </div>
+              <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
+                <button className="utility-btn" style={{flex: 1}} onClick={() => setDrawCityStep(1)}>BACK</button>
+                <button 
+                  className="upload-btn" 
+                  style={{flex: 2}} 
+                  disabled={roadTrail.length === 0}
+                  onClick={generateDrawCityBlocks}
+                >
+                  NEXT: GEN SECTORS
+                </button>
+              </div>
+            </>
+          )}
+
+          {drawCityStep === 3 && (
+            <>
+              <div className="editor-controls">
+                <p style={{fontSize: '0.75rem', opacity: 0.8, lineHeight: '1.4', marginBottom: '10px'}}>
+                  Click on neighborhood sectors in the 3D viewport to select them, then assign a zone type.
+                </p>
+                <label style={{fontSize: '0.7rem'}}>ASSIGN ZONE TYPE TO SELECTED ({selectedBlockIds.length}):</label>
+                <div style={{display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '5px'}}>
+                  <button className="utility-btn" style={{flex: '1 1 80px', borderColor: '#00ffff', color: '#00ffff'}} onClick={() => assignZoneTypeToSelected('CORPO')}>CORPO</button>
+                  <button className="utility-btn" style={{flex: '1 1 80px', borderColor: '#d300d3', color: '#d300d3'}} onClick={() => assignZoneTypeToSelected('URBAN')}>URBAN</button>
+                  <button className="utility-btn" style={{flex: '1 1 80px', borderColor: '#8d5b4c', color: '#8d5b4c'}} onClick={() => assignZoneTypeToSelected('SLUMS')}>SLUMS</button>
+                  <button className="utility-btn" style={{flex: '1 1 80px', borderColor: '#ffff00', color: '#ffff00'}} onClick={() => assignZoneTypeToSelected('INDUSTRIAL')}>INDUSTRIAL</button>
+                  <button className="utility-btn" style={{flex: '1 1 80px', borderColor: '#00ff66', color: '#00ff66'}} onClick={() => assignZoneTypeToSelected('PARK')}>PARK</button>
+                </div>
+              </div>
+              <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px', maxHeight: '150px', overflowY: 'auto'}}>
+                <p>TOTAL SECTORS: {drawCityBlocks.length}</p>
+                <p>ZONED: {drawCityBlocks.filter((b: any) => b.type).length} / {drawCityBlocks.length}</p>
+                <div style={{marginTop: '5px', display: 'flex', flexDirection: 'column', gap: '3px'}}>
+                  {drawCityBlocks.map((b: any, idx: number) => (
+                    <div key={b.id} style={{display: 'flex', justifyContent: 'space-between', opacity: 0.8}}>
+                      <span>Sector #{idx + 1} ({Math.round(b.w)}x{Math.round(b.d)})</span>
+                      <span style={{color: b.type ? (b.type === 'CORPO' ? '#00ffff' : b.type === 'URBAN' ? '#d300d3' : b.type === 'SLUMS' ? '#8d5b4c' : b.type === 'INDUSTRIAL' ? '#ffff00' : '#00ff66') : '#aaa'}}>
+                        {b.type || 'UNZONED'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
+                <button className="utility-btn" style={{flex: 1}} onClick={() => { setDrawCityStep(2); setDrawCityBlocks([]); setSelectedBlockIds([]); }}>BACK</button>
+                <button 
+                  className="upload-btn" 
+                  style={{flex: 2}} 
+                  disabled={drawCityBlocks.filter((b: any) => b.type).length === 0}
+                  onClick={buildDrawCity}
+                >
+                  BUILD CITY
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
       {view === 'join' && (
         <>
           <header style={{marginBottom: '10px'}}><h3>JOIN_STRUCTURES</h3><button onClick={() => { setView('list'); setJoinSelection([]); }} className="close-btn" style={{position: 'static'}}>X</button></header>
@@ -3486,7 +4175,10 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [token, setToken] = useState('');
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const [view, setView] = useState<'list' | 'editor' | 'generator' | 'district' | 'join' | 'draw_roads' | 'city_gen'>('list');
+  const [view, setView] = useState<'list' | 'editor' | 'generator' | 'district' | 'join' | 'draw_roads' | 'city_gen' | 'city_draw'>('list');
+  const [drawCityStep, setDrawCityStep] = useState<number>(1);
+  const [drawCityBlocks, setDrawCityBlocks] = useState<any[]>([]);
+  const [selectedBlockIds, setSelectedBlockIds] = useState<string[]>([]);
   const [editId, setEditId] = useState<number | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(true);
   const [userName, setUserName] = useState<string>('');
@@ -3951,6 +4643,12 @@ function App() {
                 setGenExcludeRoads={setGenExcludeRoads}
                 setRhombusState={setRhombusState}
                 setActiveSidebarMenu={setActiveSidebarMenu}
+                drawCityStep={drawCityStep}
+                setDrawCityStep={setDrawCityStep}
+                drawCityBlocks={drawCityBlocks}
+                setDrawCityBlocks={setDrawCityBlocks}
+                selectedBlockIds={selectedBlockIds}
+                setSelectedBlockIds={setSelectedBlockIds}
                 />
             )}
             {isChatOpen && (
@@ -4018,7 +4716,38 @@ function App() {
             <CameraController target={cameraTarget} onComplete={() => { setCameraTarget(null); setShowZoomComplete(true); setTimeout(() => setShowZoomComplete(false), 3000); }} />
             <Roads roads={roads} />
             <GhostTraffic roads={roads} />
-            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} />
+            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen' || (view === 'city_draw' && drawCityStep === 1)) { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} drawCityStep={drawCityStep} />
+            {roadSelectionBounds && (view === 'city_gen' || view === 'city_draw') && (
+              <mesh position={[(roadSelectionBounds.min.x + roadSelectionBounds.max.x) / 2, 0.02, (roadSelectionBounds.min.z + roadSelectionBounds.max.z) / 2]}>
+                <boxGeometry args={[Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x), 0.05, Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z)]} />
+                <meshBasicMaterial color="#00ff66" wireframe transparent opacity={0.3} />
+              </mesh>
+            )}
+            {view === 'city_draw' && drawCityStep === 3 && drawCityBlocks.map((b: any) => {
+              const isSel = selectedBlockIds.includes(b.id);
+              let color = '#555555';
+              if (b.type === 'CORPO') color = '#00ffff';
+              else if (b.type === 'URBAN') color = '#aa00ff';
+              else if (b.type === 'SLUMS') color = '#8d5b4c';
+              else if (b.type === 'INDUSTRIAL') color = '#ffff00';
+              else if (b.type === 'PARK') color = '#00ff66';
+
+              return (
+                <group key={b.id} position={[b.x, 0.05, b.z]}>
+                  <mesh rotation={[-Math.PI / 2, 0, 0]} onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedBlockIds(prev => prev.includes(b.id) ? prev.filter(id => id !== b.id) : [...prev, b.id]);
+                  }}>
+                    <planeGeometry args={[b.w, b.d]} />
+                    <meshBasicMaterial color={color} transparent opacity={isSel ? 0.35 : 0.15} side={THREE.DoubleSide} />
+                  </mesh>
+                  <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                    <planeGeometry args={[b.w, b.d]} />
+                    <meshBasicMaterial color={isSel ? '#ffffff' : color} wireframe transparent opacity={0.8} />
+                  </mesh>
+                </group>
+              );
+            })}
             <InstancedBuildings buildings={renderLists.simple} onSelect={handleBuildingClick} />
             {renderLists.interactive.map(({ loc, children, isSelected, isBatchSelected }: any) => (
               <Building key={loc.id} location={loc} children={children} onClick={() => handleBuildingClick(loc)} isSelected={isSelected} isBatchSelected={isBatchSelected} setTargetObject={setTargetObject} editMeshRef={editMeshRef} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} />
