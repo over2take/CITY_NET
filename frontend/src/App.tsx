@@ -1033,6 +1033,27 @@ function AdminPanel({
   const [activeUserEditing, setActiveUserEditing] = useState<any>(null);
   const [copyBuffer, setCopyBuffer] = useState<any>(null);
 
+  const [fps, setFps] = useState(0);
+  useEffect(() => {
+    let lastTime = performance.now();
+    let frames = 0;
+    let animationId: number;
+
+    const tick = () => {
+      const now = performance.now();
+      frames++;
+      if (now >= lastTime + 1000) {
+        setFps(Math.round((frames * 1000) / (now - lastTime)));
+        frames = 0;
+        lastTime = now;
+      }
+      animationId = requestAnimationFrame(tick);
+    };
+
+    animationId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animationId);
+  }, []);
+
   const [showMapModal, setShowMapModal] = useState(false);
   const mapRef = useRef<any>(null);
   const [localThrobber, setLocalThrobber] = useState('|');
@@ -2105,7 +2126,21 @@ out skel qt;`;
       {view === 'list' && (
         <>
           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-            <h3>ADMIN_ACCESS // DATA_NET</h3>
+            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <h3>ADMIN_ACCESS // DATA_NET</h3>
+              <span style={{
+                fontSize: '0.6rem',
+                color: 'var(--cyan)',
+                border: '1px solid var(--cyan)',
+                padding: '1px 5px',
+                borderRadius: '3px',
+                textShadow: '0 0 3px var(--cyan)',
+                fontFamily: 'monospace',
+                background: 'rgba(0, 255, 255, 0.05)'
+              }}>
+                FPS: {fps}
+              </span>
+            </div>
             <button className="utility-btn" onClick={handleUndo} title="UNDO LAST CHANGE" style={{fontSize: '0.65rem', padding: '2px 8px'}}>⟲ UNDO</button>
           </div>
           <button className="upload-btn" onClick={startNew}>+ ADD_NEW_DATA_POINT</button>
