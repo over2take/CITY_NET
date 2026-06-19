@@ -1,0 +1,14 @@
+{
+  "name": "mapsystem",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start:backend": "cd backend && nodemon server.js",
+    "start:frontend": "cd frontend && npm run dev",
+    "dev": "npm run start:backend & npm run start:frontend"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

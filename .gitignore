@@ -1,0 +1,24 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+
+# SQLite databases
+backend/city.db
+
+# Large archives
+*.zip
+*.rar
+*.tar.gz
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
