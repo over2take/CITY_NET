@@ -876,7 +876,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
   );
 });
 
-const InstancedBuildings = React.memo(({ buildings, onSelect }: { buildings: any[], onSelect: (loc: any) => void }) => {
+const InstancedShape = React.memo(({ shape, elements, onSelect }: { shape: string, elements: any[], onSelect: (rootLoc: any) => void }) => {
     const wireframeMeshRef = useRef<THREE.InstancedMesh>(null);
     const fillMeshRef = useRef<THREE.InstancedMesh>(null);
     const hitMeshRef = useRef<THREE.InstancedMesh>(null);
@@ -884,21 +884,21 @@ const InstancedBuildings = React.memo(({ buildings, onSelect }: { buildings: any
 
     useEffect(() => {
         if (!wireframeMeshRef.current || !hitMeshRef.current || !fillMeshRef.current) return;
-        buildings.forEach((b, i) => {
-            tempObj.position.set(b.x, b.y + b.height / 2, b.z);
-            tempObj.rotation.set(0, b.rotation || 0, 0);
-            tempObj.scale.set(b.width, b.height, b.depth);
+        elements.forEach((el, i) => {
+            tempObj.position.set(el.x, el.y + el.height / 2, el.z);
+            tempObj.rotation.set(0, el.rotation || 0, 0);
+            tempObj.scale.set(el.width, el.height, el.depth);
             tempObj.updateMatrix();
             
             wireframeMeshRef.current!.setMatrixAt(i, tempObj.matrix);
             fillMeshRef.current!.setMatrixAt(i, tempObj.matrix);
             hitMeshRef.current!.setMatrixAt(i, tempObj.matrix);
             
-            let color = b.district_color || b.color || "#00aa33";
-            const hasData = (b.name && b.name.trim() !== "") || (b.description && b.description.trim() !== "");
+            let color = el.district_color || el.color || "#00aa33";
+            const hasData = (el.name && el.name.trim() !== "") || (el.description && el.description.trim() !== "");
             if (hasData) color = "#8800ff";
-            if (b.isFavorite) color = "#ff7b00";
-            if (b.isDanger) color = "#ff0000";
+            if (el.isFavorite) color = "#ff7b00";
+            if (el.isDanger) color = "#ff0000";
             
             const threeColor = new THREE.Color(color);
             wireframeMeshRef.current!.setColorAt(i, threeColor);
@@ -911,45 +911,75 @@ const InstancedBuildings = React.memo(({ buildings, onSelect }: { buildings: any
         if (fillMeshRef.current.instanceColor) fillMeshRef.current.instanceColor.needsUpdate = true;
 
         hitMeshRef.current.instanceMatrix.needsUpdate = true;
-        // CRITICAL for raycasting on large instanced meshes: compute bounding volumes
         hitMeshRef.current.computeBoundingBox();
         hitMeshRef.current.computeBoundingSphere();
-    }, [buildings]);
+    }, [elements]);
 
     const dragDist = useRef(0);
 
     return (
         <group>
             {/* Visual Wireframe - No raycasting */}
-            <instancedMesh ref={wireframeMeshRef} args={[null as any, null as any, buildings.length]} raycast={() => null}>
-                <boxGeometry args={[1, 1, 1]} />
+            <instancedMesh ref={wireframeMeshRef} args={[null as any, null as any, elements.length]} raycast={() => null}>
+                {renderBaseGeometry(shape)}
                 <meshBasicMaterial wireframe={true} />
             </instancedMesh>
             
             {/* Holographic Face Fill - No raycasting */}
-            <instancedMesh ref={fillMeshRef} args={[null as any, null as any, buildings.length]} raycast={() => null}>
-                <boxGeometry args={[1, 1, 1]} />
+            <instancedMesh ref={fillMeshRef} args={[null as any, null as any, elements.length]} raycast={() => null}>
+                {renderBaseGeometry(shape)}
                 <meshBasicMaterial transparent opacity={0.08} depthWrite={false} blending={THREE.AdditiveBlending} />
             </instancedMesh>
 
             {/* Solid Hitbox - Low opacity is more reliable for R3F raycasting than colorWrite=false */}
             <instancedMesh 
                 ref={hitMeshRef} 
-                args={[null as any, null as any, buildings.length]}
+                args={[null as any, null as any, elements.length]}
                 onPointerDown={() => { dragDist.current = 0; }}
                 onPointerMove={(e) => { dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY); }}
                 onPointerUp={(e) => {
-                    if (dragDist.current < 10) { // Threshold for click
+                    if (dragDist.current < 10) {
                         e.stopPropagation();
-                        if (e.instanceId !== undefined) {
-                            onSelect(buildings[e.instanceId]);
+                        if (e.instanceId !== undefined && elements[e.instanceId]) {
+                            onSelect(elements[e.instanceId].rootLoc);
                         }
                     }
                 }}
             >
-                <boxGeometry args={[1, 1, 1]} />
+                {renderBaseGeometry(shape)}
                 <meshBasicMaterial transparent opacity={0.01} depthWrite={false} />
             </instancedMesh>
+        </group>
+    );
+});
+
+const InstancedBuildings = React.memo(({ buildings, onSelect }: { buildings: any[], onSelect: (loc: any) => void }) => {
+    const groups = useMemo(() => {
+        const result: { [key: string]: any[] } = { box: [], cylinder: [], pyramid: [], sphere: [] };
+        buildings.forEach(el => {
+            const sh = el.shape || 'box';
+            if (result[sh]) {
+                result[sh].push(el);
+            } else {
+                result.box.push(el); // Fallback to box
+            }
+        });
+        return result;
+    }, [buildings]);
+
+    return (
+        <group>
+            {Object.entries(groups).map(([shape, items]) => {
+                if (items.length === 0) return null;
+                return (
+                    <InstancedShape 
+                        key={shape} 
+                        shape={shape} 
+                        elements={items} 
+                        onSelect={onSelect} 
+                    />
+                );
+            })}
         </group>
     );
 });
@@ -1642,7 +1672,29 @@ out skel qt;`;
         return { x, z: maxBz + eps };
       };
 
-      // Iteratively deform and route road segments around all building boundaries
+      // 1. Construct a spatial grid for all buildings
+      const buildingSpatialGrid: { [key: string]: any[] } = {};
+      const bGridCell = 20;
+      const getBGridKey = (x: number, z: number) => `${Math.floor(x / bGridCell)},${Math.floor(z / bGridCell)}`;
+
+      allBuildings.forEach((b: any) => {
+        if (b.x === undefined || b.z === undefined || b.width === undefined || b.depth === undefined) return;
+        const padding = 1.5;
+        const minXCell = Math.floor((b.x - b.width / 2 - padding) / bGridCell);
+        const maxXCell = Math.floor((b.x + b.width / 2 + padding) / bGridCell);
+        const minZCell = Math.floor((b.z - b.depth / 2 - padding) / bGridCell);
+        const maxZCell = Math.floor((b.z + b.depth / 2 + padding) / bGridCell);
+
+        for (let gx = minXCell; gx <= maxXCell; gx++) {
+          for (let gz = minZCell; gz <= maxZCell; gz++) {
+            const key = `${gx},${gz}`;
+            if (!buildingSpatialGrid[key]) buildingSpatialGrid[key] = [];
+            buildingSpatialGrid[key].push(b);
+          }
+        }
+      });
+
+      // Iteratively deform and route road segments around candidate building boundaries
       let segmentQueue = [...consolidatedRoads];
       const deformedRoads: any[] = [];
       const MAX_DEFORM_ITER = 50000;
@@ -1653,7 +1705,28 @@ out skel qt;`;
         const seg = segmentQueue.shift()!;
         let intersected = false;
 
-        for (const b of allBuildings) {
+        const minSegX = Math.min(seg.x1, seg.x2);
+        const maxSegX = Math.max(seg.x1, seg.x2);
+        const minSegZ = Math.min(seg.z1, seg.z2);
+        const maxSegZ = Math.max(seg.z1, seg.z2);
+
+        const minXCell = Math.floor(minSegX / bGridCell);
+        const maxXCell = Math.floor(maxSegX / bGridCell);
+        const minZCell = Math.floor(minSegZ / bGridCell);
+        const maxZCell = Math.floor(maxSegZ / bGridCell);
+
+        const candidates = new Set<any>();
+        for (let gx = minXCell; gx <= maxXCell; gx++) {
+          for (let gz = minZCell; gz <= maxZCell; gz++) {
+            const key = `${gx},${gz}`;
+            const cellBuildings = buildingSpatialGrid[key];
+            if (cellBuildings) {
+              cellBuildings.forEach(b => candidates.add(b));
+            }
+          }
+        }
+
+        for (const b of candidates) {
           if (b.x === undefined || b.z === undefined || b.width === undefined || b.depth === undefined) continue;
 
           // Padding around building footprint (e.g. 1.5 units safety margin)
@@ -3494,9 +3567,30 @@ function App() {
       const isSelected = !isBatchSelecting && view !== 'district' && view !== 'join' && selectedLocation?.id === loc.id;
       const isBatchSelected = selectedIds.includes(loc.id) || districtSelection.includes(loc.id) || joinSelection.includes(loc.id);
       
-      // Optimization: If it's a box and not being actively managed/selected, it goes to instanced list
-      if (!isSelected && !isBatchSelected && children.length === 0 && loc.shape === 'box') {
-        simple.push(loc);
+      if (!isSelected && !isBatchSelected) {
+        // Flatten parent and all its children into the simple (instanced) rendering list
+        const pushSimple = (p: any) => {
+          simple.push({
+            id: p.id,
+            shape: p.shape,
+            x: p.x,
+            y: p.y,
+            z: p.z,
+            width: p.width,
+            height: p.height,
+            depth: p.depth,
+            color: p.color,
+            rotation: p.rotation,
+            district_color: p.district_color,
+            isFavorite: p.isFavorite,
+            isDanger: p.isDanger,
+            name: p.name,
+            description: p.description,
+            rootLoc: loc // Pointer to root parent location for click selection
+          });
+        };
+        pushSimple(loc);
+        children.forEach((c: any) => pushSimple(c));
       } else {
         interactive.push({ loc, children, isSelected, isBatchSelected });
       }
