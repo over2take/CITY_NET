@@ -1092,83 +1092,63 @@ const generateThemedBuildingsForPlot = (
   if (zoneTypeVal < 0) {
     const industrialStyle = Math.floor(Math.random() * 4);
     
+    // Create the base concrete pad platform
+    const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
+    rawBuildings.push(root);
+    const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
     if (industrialStyle === 0) {
-      // Style 0: Classic Double-Tank Platform
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
-      rawBuildings.push(root);
-      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-      
-      const tankR = Math.min(bw, bd) * 0.25;
-      const tankH = 3.5 + Math.random() * 2;
-      const t1x = bx - bw * 0.22;
-      const t1z = bz - bd * 0.22;
-      rawBuildings.push({ name: '', x: t1x, y: 1.2, z: t1z, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
-      const t2x = bx - bw * 0.22;
-      const t2z = bz + bd * 0.22;
-      rawBuildings.push({ name: '', x: t2x, y: 1.2, z: t2z, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
-      
-      const containerW = bw * 0.22; const containerD = bd * 0.5; const containerH = 2.0;
-      const cx = bx + bw * 0.22;
-      rawBuildings.push({ name: '', x: cx, y: 1.2, z: bz - bd * 0.12, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
-      if (Math.random() > 0.5) {
-        rawBuildings.push({ name: '', x: cx, y: 1.2 + containerH, z: bz - bd * 0.12, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
-      } else {
-        rawBuildings.push({ name: '', x: cx, y: 1.2, z: bz + bd * 0.22, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
-      }
+      // Style 0: Refinery Terminal (Medium building, 2 liquid tanks, shipping containers)
+      const wareW = bw * 0.42; const wareD = bd * 0.55; const wareH = 6.0 + Math.random() * 3;
+      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2, z: bz, width: wareW, depth: wareD, height: wareH, color, shape: 'box', parent_name: 'ROOT' });
+
+      const tankR = Math.min(bw, bd) * 0.16; const tankH = 5.0 + Math.random() * 2;
+      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz - bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz + bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+
+      const containerW = bw * 0.22; const containerD = bd * 0.35; const containerH = 2.0;
+      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2 + wareH, z: bz, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
     } 
     else if (industrialStyle === 1) {
-      // Style 1: Smokestack Power Station
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
-      rawBuildings.push(root);
-      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+      // Style 1: Manufacturing Station (Medium building, tall smokestack, liquid tank, containers)
+      const genW = bw * 0.45; const genD = bd * 0.5; const genH = 5.0 + Math.random() * 3;
+      rawBuildings.push({ name: '', x: bx - bw * 0.1, y: 1.2, z: bz - bd * 0.1, width: genW, depth: genD, height: genH, color, shape: 'box', parent_name: 'ROOT' });
 
-      const genW = bw * 0.45; const genD = bd * 0.65; const genH = 4.0 + Math.random() * 2;
-      rawBuildings.push({ name: '', x: bx - bw * 0.1, y: 1.2, z: bz, width: genW, depth: genD, height: genH, color, shape: 'box', parent_name: 'ROOT' });
+      const stackW = 1.0; const stackH = 15.0 + Math.random() * 5;
+      rawBuildings.push({ name: '', x: bx + bw * 0.3, y: 1.2, z: bz - bd * 0.22, width: stackW, depth: stackW, height: stackH, color, shape: 'cylinder', parent_name: 'ROOT' });
 
-      // Two tall smokestacks
-      const stackW = 1.0; const stackH = 15.0 + Math.random() * 10;
-      const s1x = bx + bw * 0.3; const s1z = bz - bd * 0.22;
-      rawBuildings.push({ name: '', x: s1x, y: 1.2, z: s1z, width: stackW, depth: stackW, height: stackH, color, shape: 'cylinder', parent_name: 'ROOT' });
-      const s2x = bx + bw * 0.3; const s2z = bz + bd * 0.22;
-      rawBuildings.push({ name: '', x: s2x, y: 1.2, z: s2z, width: stackW, depth: stackW, height: stackH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      const tankR = Math.min(bw, bd) * 0.18; const tankH = 6.0 + Math.random() * 2;
+      rawBuildings.push({ name: '', x: bx + bw * 0.3, y: 1.2, z: bz + bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
 
-      // Connecting pipe
-      rawBuildings.push({ name: '', x: bx + bw * 0.1, y: 1.2 + genH * 0.7, z: bz, width: bw * 0.4, depth: 0.4, height: 0.4, color, shape: 'box', parent_name: 'ROOT' });
+      const containerW = bw * 0.2; const containerD = bd * 0.3; const containerH = 2.0;
+      rawBuildings.push({ name: '', x: bx - bw * 0.32, y: 1.2, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.32, y: 1.2 + containerH, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
     }
     else if (industrialStyle === 2) {
-      // Style 2: Three-Tank Triangle Terminal
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
-      rawBuildings.push(root);
-      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+      // Style 2: Fuel Storage Depot (Medium building, 3 grouped cylinders, containers)
+      const officeW = bw * 0.35; const officeD = bd * 0.38; const officeH = 4.0 + Math.random() * 2;
+      rawBuildings.push({ name: '', x: bx - bw * 0.24, y: 1.2, z: bz - bd * 0.2, width: officeW, depth: officeD, height: officeH, color, shape: 'box', parent_name: 'ROOT' });
 
-      const tankW = bw * 0.3; const tankH = 5.0 + Math.random() * 4;
-      // Front-left
-      rawBuildings.push({ name: '', x: bx - bw * 0.22, y: 1.2, z: bz - bd * 0.22, width: tankW, depth: tankW, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
-      // Back-left
-      rawBuildings.push({ name: '', x: bx - bw * 0.22, y: 1.2, z: bz + bd * 0.22, width: tankW, depth: tankW, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
-      // Center-right
-      rawBuildings.push({ name: '', x: bx + bw * 0.22, y: 1.2, z: bz, width: tankW, depth: tankW, height: tankH * 1.2, color, shape: 'cylinder', parent_name: 'ROOT' });
+      const tankR = Math.min(bw, bd) * 0.15; const tankH = 6.0 + Math.random() * 3;
+      rawBuildings.push({ name: '', x: bx + bw * 0.22, y: 1.2, z: bz - bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.22, y: 1.2, z: bz + bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.38, y: 1.2, z: bz, width: tankR * 2.2, depth: tankR * 2.2, height: tankH * 1.2, color, shape: 'cylinder', parent_name: 'ROOT' });
 
-      // Connecting pipes
-      rawBuildings.push({ name: '', x: bx - bw * 0.22, y: 1.2 + 2.0, z: bz, width: 0.3, depth: bd * 0.44, height: 0.3, color, shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: 1.2 + 2.0, z: bz, width: bw * 0.44, depth: 0.3, height: 0.3, color, shape: 'box', parent_name: 'ROOT' });
+      const containerW = bw * 0.22; const containerD = bd * 0.32; const containerH = 2.0;
+      rawBuildings.push({ name: '', x: bx - bw * 0.24, y: 1.2, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.24, y: 1.2 + containerH, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
     }
     else {
-      // Style 3: Industrial Warehouse Depot
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
-      rawBuildings.push(root);
-      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+      // Style 3: Power & Distribution Plant (Medium building, cooling tower, containers)
+      const wareW = bw * 0.48; const wareD = bd * 0.55; const wareH = 6.0 + Math.random() * 2;
+      rawBuildings.push({ name: '', x: bx - bw * 0.15, y: 1.2, z: bz, width: wareW, depth: wareD, height: wareH, color, shape: 'box', parent_name: 'ROOT' });
 
-      // Warehouse building
-      const wareW = bw * 0.45; const wareD = bd * 0.75; const wareH = 6.0 + Math.random() * 2;
-      rawBuildings.push({ name: '', x: bx - bw * 0.18, y: 1.2, z: bz, width: wareW, depth: wareD, height: wareH, color, shape: 'box', parent_name: 'ROOT' });
+      const tankR = Math.min(bw, bd) * 0.18; const tankH = 9.0 + Math.random() * 3;
+      rawBuildings.push({ name: '', x: bx + bw * 0.28, y: 1.2, z: bz + bd * 0.18, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
 
-      // Cylindrical cooling tower
-      const coolW = bw * 0.35; const coolH = 10.0 + Math.random() * 3;
-      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz + bd * 0.15, width: coolW, depth: coolW, height: coolH, color, shape: 'cylinder', parent_name: 'ROOT' });
-
-      // Tiny security booth
-      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz - bd * 0.28, width: bw * 0.15, depth: bd * 0.15, height: 2.5, color, shape: 'box', parent_name: 'ROOT' });
+      const containerW = bw * 0.24; const containerD = bd * 0.28; const containerH = 2.0;
+      rawBuildings.push({ name: '', x: bx + bw * 0.28, y: 1.2, z: bz - bd * 0.22, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.28, y: 1.2 + containerH, z: bz - bd * 0.22, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
     }
     return;
   }
