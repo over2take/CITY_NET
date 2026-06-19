@@ -201,7 +201,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
               <meshBasicMaterial color="#ffff00" wireframe transparent opacity={0.5} />
           </mesh>
       )}
-      {(view === 'draw_roads' || (view === 'city_draw' && drawCityStep === 2)) && roadTrail && roadTrail.length > 0 && (
+      {(view === 'draw_roads' || (view === 'city_draw' && (drawCityStep === 2 || drawCityStep === 3))) && roadTrail && roadTrail.length > 0 && (
           <group>
               {roadTrail.map((path, pathIdx) => (
                   <group key={pathIdx}>
@@ -210,8 +210,10 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
                           const pNext = path[i+1];
                           const dist = p.distanceTo(pNext);
                           if (dist < 0.1) return null;
+                          const roadPos = p.clone().lerp(pNext, 0.5);
+                          roadPos.y = (view === 'city_draw' && drawCityStep === 3) ? 0.06 : 0.01;
                           return (
-                              <group key={i} position={p.clone().lerp(pNext, 0.5)} onUpdate={(self) => self.lookAt(pNext)}>
+                              <group key={i} position={roadPos} onUpdate={(self) => self.lookAt(pNext)}>
                                   <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]}>
                                       <planeGeometry args={[dist, drawingRoadWidth]} />
                                       <meshBasicMaterial color="#ffff00" transparent opacity={0.4} side={THREE.DoubleSide} />
@@ -4732,17 +4734,21 @@ function App() {
               else if (b.type === 'INDUSTRIAL') color = '#ffff00';
               else if (b.type === 'PARK') color = '#00ff66';
 
+              // Visual buffer to leave spacing for roads between blocks
+              const visualW = Math.max(2, b.w - drawingRoadWidth);
+              const visualD = Math.max(2, b.d - drawingRoadWidth);
+
               return (
                 <group key={b.id} position={[b.x, 0.05, b.z]}>
                   <mesh rotation={[-Math.PI / 2, 0, 0]} onClick={(e) => {
                     e.stopPropagation();
                     setSelectedBlockIds(prev => prev.includes(b.id) ? prev.filter(id => id !== b.id) : [...prev, b.id]);
                   }}>
-                    <planeGeometry args={[b.w, b.d]} />
+                    <planeGeometry args={[visualW, visualD]} />
                     <meshBasicMaterial color={color} transparent opacity={isSel ? 0.35 : 0.15} side={THREE.DoubleSide} />
                   </mesh>
                   <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                    <planeGeometry args={[b.w, b.d]} />
+                    <planeGeometry args={[visualW, visualD]} />
                     <meshBasicMaterial color={isSel ? '#ffffff' : color} wireframe transparent opacity={0.8} />
                   </mesh>
                 </group>
