@@ -176,24 +176,42 @@ app.put('/api/locations/:id', (req, res) => {
 });
 
 app.post('/api/locations/join', authenticate, (req, res) => {
-  const { ids } = req.body;
-  if (!ids || !Array.isArray(ids) || ids.length < 2) return res.status(400).json({ error: 'Need at least 2 IDs to join' });
+  const { ids, classification } = req.body;
+  if (!ids || !Array.isArray(ids) || ids.length < 1) return res.status(400).json({ error: 'Need at least 1 ID to join/classify' });
 
   const rootId = ids[0];
   const childrenIds = ids.slice(1);
-  const placeholders = childrenIds.map(() => '?').join(',');
 
-  db.all(`SELECT id, parent_id FROM locations WHERE id IN (${placeholders})`, childrenIds, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-
-    const sql = `UPDATE locations SET parent_id = ? WHERE id IN (${placeholders})`;
-    db.run(sql, [rootId, ...childrenIds], function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      recordAction('location_update_batch', { data: rows.map(r => ({ id: r.id, old_data: { parent_id: r.parent_id } })) });
-      emitUpdate();
-      res.json({ message: 'Structures joined', rootId });
-    });
+  const updateRoot = new Promise((resolve, reject) => {
+    if (classification !== undefined) {
+      db.run(`UPDATE locations SET classification = ? WHERE id = ?`, [classification, rootId], function(err) {
+        if (err) return reject(err);
+        resolve();
+      });
+    } else {
+      resolve();
+    }
   });
+
+  updateRoot.then(() => {
+    if (childrenIds.length === 0) {
+      emitUpdate();
+      return res.json({ message: 'Structure classified', rootId });
+    }
+
+    const placeholders = childrenIds.map(() => '?').join(',');
+    db.all(`SELECT id, parent_id FROM locations WHERE id IN (${placeholders})`, childrenIds, (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      const sql = `UPDATE locations SET parent_id = ? WHERE id IN (${placeholders})`;
+      db.run(sql, [rootId, ...childrenIds], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        recordAction('location_update_batch', { data: rows.map(r => ({ id: r.id, old_data: { parent_id: r.parent_id } })) });
+        emitUpdate();
+        res.json({ message: 'Structures joined', rootId });
+      });
+    });
+  }).catch(err => res.status(500).json({ error: err.message }));
 });
 
 app.post('/api/locations/batch-district', authenticate, (req, res) => {
