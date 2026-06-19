@@ -1064,6 +1064,14 @@ const generateThemedBuildingsForPlot = (
     return;
   }
 
+  // Clamping aspect ratio for non-slums buildings to eliminate long flat buildings
+  const maxRatio = 1.6;
+  if (bw > bd * maxRatio) {
+    bw = bd * maxRatio;
+  } else if (bd > bw * maxRatio) {
+    bd = bw * maxRatio;
+  }
+
   // 2. INDUSTRIAL
   if (zoneTypeVal < 0) {
     const industrialStyle = Math.floor(Math.random() * 4);
@@ -1636,8 +1644,15 @@ function AdminPanel({
 
         plots.forEach((b) => {
           const pad = sector.type === 'SLUMS' ? 2 : (sector.type === 'CORPO' ? 8 : 4);
-          const bw = b.w - pad; const bd = b.d - pad;
+          let bw = b.w - pad; let bd = b.d - pad;
           if (bw < 4 || bd < 4) return;
+
+          // Clamp aspect ratio to 1.6 for non-slums zones to eliminate long flat buildings
+          if (sector.type !== 'SLUMS') {
+            const maxRatio = 1.6;
+            if (bw > bd * maxRatio) bw = bd * maxRatio;
+            else if (bd > bw * maxRatio) bd = bw * maxRatio;
+          }
 
           // 1. PARK GENERATION
           if (sector.type === 'PARK') {
@@ -3197,7 +3212,7 @@ out skel qt;`;
                 };
 
                 blocks.forEach((b, bIdx) => {
-                  const pad = 10; const bw = b.w - pad; const bd = b.d - pad;
+                  const pad = 10; let bw = b.w - pad; let bd = b.d - pad;
                   if (bw < 8 || bd < 8) return;
                   
                   let distToCenter = Math.sqrt((b.x - centerX)**2 + (b.z - centerZ)**2);
@@ -3256,6 +3271,14 @@ out skel qt;`;
                   else if (citySectionType === 'SLUMS') zoneTypeVal = 0.1;
                   else if (citySectionType === 'INDUSTRIAL') zoneTypeVal = -0.1;
                   
+                  // Clamp aspect ratio to 1.6 for non-slums zones to eliminate long flat buildings
+                  const isSlum = zoneTypeVal <= 0.25 && zoneTypeVal >= 0;
+                  if (!isSlum) {
+                    const maxRatio = 1.6;
+                    if (bw > bd * maxRatio) bw = bd * maxRatio;
+                    else if (bd > bw * maxRatio) bd = bw * maxRatio;
+                  }
+
                   // 2. LANDMARKS / HERO BUILDINGS
                   // Occasionally create a unique, large building that acts as a visual anchor (with footprint check)
                   const isLandmark = Math.random() < 0.20 && (zoneTypeVal > 0.8 || (bw > 30 && bd > 30)) && !isBlocked(b.x, b.z, bw * 0.7, bd * 0.7, 2.0);
