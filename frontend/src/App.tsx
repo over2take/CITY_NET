@@ -48,7 +48,7 @@ const messages = [
 
 const renderBaseGeometry = (shape: string) => {
   switch (shape) {
-    case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 12]} />;
+    case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 5]} />;
     case 'sphere': return <sphereGeometry args={[0.5, 12, 12]} />;
     case 'rhombus': return <octahedronGeometry args={[0.5]} />;
     case 'pyramid': return <coneGeometry args={[0.5, 1, 4]} />;
@@ -4040,7 +4040,7 @@ function App() {
               <group ref={(group) => { genGroupRef.current = group; setTargetObject(group); }}>
                   {blockBuildings.length > 0 ? (
                     blockBuildings.map((b, i) => {
-                      const renderGenGeometry = () => { switch (b.shape) { case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 12]} />; case 'sphere': return <sphereGeometry args={[0.5, 12, 12]} />; default: return <boxGeometry args={[1, 1, 1]} />; } };
+                      const renderGenGeometry = () => { switch (b.shape) { case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 5]} />; case 'sphere': return <sphereGeometry args={[0.5, 12, 12]} />; default: return <boxGeometry args={[1, 1, 1]} />; } };
                       return ( <mesh key={i} position={[b.x, b.y + (b.height / 2), b.z]} scale={[b.width, b.height, b.depth]}>{renderGenGeometry()}<meshBasicMaterial color="#ff00ff" wireframe /></mesh> );
                     })
                   ) : ( <mesh position={[0, 0, 0]}><boxGeometry args={[2, 4, 2]} /><meshBasicMaterial color="#ffff00" wireframe /></mesh> )}
