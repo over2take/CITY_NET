@@ -1019,6 +1019,333 @@ const loadMapLibre = (): Promise<any> => {
   });
 };
 
+const generateThemedBuildingsForPlot = (
+  bx: number,
+  bz: number,
+  bw: number,
+  bd: number,
+  zoneTypeVal: number,
+  isBlocked: (x: number, z: number, w: number, d: number, buffer?: number) => boolean,
+  getGridKey: (x: number, z: number) => string,
+  spatialGrid: any,
+  rawBuildings: any[]
+) => {
+  const color = ''; // default neutral color
+
+  // 1. SLUMS
+  if (zoneTypeVal <= 0.25 && zoneTypeVal >= 0) {
+    if (bw > 8 || bd > 8) {
+      const shackSize = 4.0;
+      const nx = Math.max(1, Math.floor(bw / shackSize)); const nz = Math.max(1, Math.floor(bd / shackSize));
+      for (let ix = 0; ix < nx; ix++) { for (let iz = 0; iz < nz; iz++) {
+        const shW = 2.5 + Math.random() * 1.5; const shD = 2.5 + Math.random() * 1.5;
+        const shX = bx - bw/2 + (ix + 0.5) * (bw / nx) + (Math.random() - 0.5) * 1.0;
+        const shZ = bz - bd/2 + (iz + 0.5) * (bd / nz) + (Math.random() - 0.5) * 1.0;
+        const shH = 2.5 + Math.random() * 4.0; const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
+
+        if (!isBlocked(shX, shZ, shW, shD, 0.5)) {
+          const root = { name: '', description: '', x: shX, y: 0, z: shZ, width: shW, depth: shD, height: shH, color: shackColor, shape: 'box' };
+          rawBuildings.push(root);
+          const key = getGridKey(shX, shZ); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+          if (Math.random() < 0.3) {
+            rawBuildings.push({ name: '', x: shX, y: shH, z: shZ, width: shW * 0.9, depth: shD * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
+          }
+        }
+      }}
+    } else {
+      const shH = 2.5 + Math.random() * 4.0; const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: shH, color: shackColor, shape: 'box' };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+      if (Math.random() < 0.3) {
+        rawBuildings.push({ name: '', x: bx, y: shH, z: bz, width: bw * 0.9, depth: bd * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
+      }
+    }
+    return;
+  }
+
+  // 2. INDUSTRIAL
+  if (zoneTypeVal < 0) {
+    const industrialStyle = Math.floor(Math.random() * 4);
+    
+    if (industrialStyle === 0) {
+      // Style 0: Classic Double-Tank Platform
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+      
+      const tankR = Math.min(bw, bd) * 0.25;
+      const tankH = 3.5 + Math.random() * 2;
+      const t1x = bx - bw * 0.22;
+      const t1z = bz - bd * 0.22;
+      rawBuildings.push({ name: '', x: t1x, y: 1.2, z: t1z, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      const t2x = bx - bw * 0.22;
+      const t2z = bz + bd * 0.22;
+      rawBuildings.push({ name: '', x: t2x, y: 1.2, z: t2z, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      
+      const containerW = bw * 0.22; const containerD = bd * 0.5; const containerH = 2.0;
+      const cx = bx + bw * 0.22;
+      rawBuildings.push({ name: '', x: cx, y: 1.2, z: bz - bd * 0.12, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
+      if (Math.random() > 0.5) {
+        rawBuildings.push({ name: '', x: cx, y: 1.2 + containerH, z: bz - bd * 0.12, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
+      } else {
+        rawBuildings.push({ name: '', x: cx, y: 1.2, z: bz + bd * 0.22, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
+      }
+    } 
+    else if (industrialStyle === 1) {
+      // Style 1: Smokestack Power Station
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      const genW = bw * 0.45; const genD = bd * 0.65; const genH = 4.0 + Math.random() * 2;
+      rawBuildings.push({ name: '', x: bx - bw * 0.1, y: 1.2, z: bz, width: genW, depth: genD, height: genH, color, shape: 'box', parent_name: 'ROOT' });
+
+      // Two tall smokestacks
+      const stackW = 1.0; const stackH = 15.0 + Math.random() * 10;
+      const s1x = bx + bw * 0.3; const s1z = bz - bd * 0.22;
+      rawBuildings.push({ name: '', x: s1x, y: 1.2, z: s1z, width: stackW, depth: stackW, height: stackH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      const s2x = bx + bw * 0.3; const s2z = bz + bd * 0.22;
+      rawBuildings.push({ name: '', x: s2x, y: 1.2, z: s2z, width: stackW, depth: stackW, height: stackH, color, shape: 'cylinder', parent_name: 'ROOT' });
+
+      // Connecting pipe
+      rawBuildings.push({ name: '', x: bx + bw * 0.1, y: 1.2 + genH * 0.7, z: bz, width: bw * 0.4, depth: 0.4, height: 0.4, color, shape: 'box', parent_name: 'ROOT' });
+    }
+    else if (industrialStyle === 2) {
+      // Style 2: Three-Tank Triangle Terminal
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      const tankW = bw * 0.3; const tankH = 5.0 + Math.random() * 4;
+      // Front-left
+      rawBuildings.push({ name: '', x: bx - bw * 0.22, y: 1.2, z: bz - bd * 0.22, width: tankW, depth: tankW, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      // Back-left
+      rawBuildings.push({ name: '', x: bx - bw * 0.22, y: 1.2, z: bz + bd * 0.22, width: tankW, depth: tankW, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      // Center-right
+      rawBuildings.push({ name: '', x: bx + bw * 0.22, y: 1.2, z: bz, width: tankW, depth: tankW, height: tankH * 1.2, color, shape: 'cylinder', parent_name: 'ROOT' });
+
+      // Connecting pipes
+      rawBuildings.push({ name: '', x: bx - bw * 0.22, y: 1.2 + 2.0, z: bz, width: 0.3, depth: bd * 0.44, height: 0.3, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 1.2 + 2.0, z: bz, width: bw * 0.44, depth: 0.3, height: 0.3, color, shape: 'box', parent_name: 'ROOT' });
+    }
+    else {
+      // Style 3: Industrial Warehouse Depot
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      // Warehouse building
+      const wareW = bw * 0.45; const wareD = bd * 0.75; const wareH = 6.0 + Math.random() * 2;
+      rawBuildings.push({ name: '', x: bx - bw * 0.18, y: 1.2, z: bz, width: wareW, depth: wareD, height: wareH, color, shape: 'box', parent_name: 'ROOT' });
+
+      // Cylindrical cooling tower
+      const coolW = bw * 0.35; const coolH = 10.0 + Math.random() * 3;
+      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz + bd * 0.15, width: coolW, depth: coolW, height: coolH, color, shape: 'cylinder', parent_name: 'ROOT' });
+
+      // Tiny security booth
+      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz - bd * 0.28, width: bw * 0.15, depth: bd * 0.15, height: 2.5, color, shape: 'box', parent_name: 'ROOT' });
+    }
+    return;
+  }
+
+  // 3. CORPO (HIGH-RISE)
+  if (zoneTypeVal > 0.8) {
+    const h = (100 + Math.random() * 90) * (0.85 + Math.random() * 0.3); // Proportional height randomization
+    const baseW = bw * 0.75;
+    const baseD = bd * 0.75;
+
+    if (!isBlocked(bx, bz, baseW, baseD, 2.0)) {
+      const corpoStyle = Math.floor(Math.random() * 8); // Expanded from 4 to 8 styles!
+
+      if (corpoStyle === 0) {
+        // Style 0: Stepped Corporate Spire
+        const baseH = h * 0.45; const midH = h * 0.35; const topH = h * 0.2;
+        const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: baseH, color, shape: 'box' };
+        rawBuildings.push(root);
+        const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+        rawBuildings.push({ name: '', x: bx, y: baseH, z: bz, width: baseW * 0.7, depth: baseD * 0.7, height: midH, color, shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: baseH + midH, z: bz, width: baseW * 0.45, depth: baseD * 0.45, height: topH, color, shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: baseH + midH + topH, z: bz, width: 0.2, depth: 0.2, height: h * 0.15, color, shape: 'box', parent_name: 'ROOT' });
+      } 
+      else if (corpoStyle === 1) {
+        // Style 1: Twin Spire with Skybridge Link
+        const towerW = baseW * 0.4; const towerD = baseD * 0.8;
+        const t1x = bx - baseW * 0.3; const t2x = bx + baseW * 0.3;
+
+        if (!isBlocked(t1x, bz, towerW, towerD, 2.0) && !isBlocked(t2x, bz, towerW, towerD, 2.0)) {
+          const root = { name: '', description: '', x: t1x, y: 0, z: bz, width: towerW, depth: towerD, height: h, color, shape: 'box' };
+          rawBuildings.push(root);
+          const key = getGridKey(t1x, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+          const beta = { name: '', x: t2x, y: 0, z: bz, width: towerW, depth: towerD, height: h, color, shape: 'box', parent_name: 'CORP_ROOT' };
+          rawBuildings.push(beta);
+          const key2 = getGridKey(t2x, bz); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(beta);
+          
+          const bridgeH = 4.0; const bridgeW = (t2x - t1x) - towerW;
+          rawBuildings.push({ name: '', x: bx, y: h * 0.7, z: bz, width: bridgeW, depth: towerD * 0.4, height: bridgeH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+        }
+      } 
+      else if (corpoStyle === 2) {
+        // Style 2: Corporate Citadel with Symmetrical Wings (3 towers)
+        const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.5, depth: baseD * 0.5, height: h, color, shape: 'box' };
+        rawBuildings.push(root);
+        const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+        const wingW = baseW * 0.25; const wingD = baseD * 0.35; const wingH = h * 0.65;
+        rawBuildings.push({ name: '', x: bx - baseW * 0.35, y: 0, z: bz, width: wingW, depth: wingD, height: wingH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+        rawBuildings.push({ name: '', x: bx + baseW * 0.35, y: 0, z: bz, width: wingW, depth: wingD, height: wingH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+      } 
+      else if (corpoStyle === 3) {
+        // Style 3: Split Atrium Spire with Helipad/Comms Disc
+        const towerW = baseW * 0.35; const towerD = baseD * 0.8;
+        const t1x = bx - baseW * 0.25; const t2x = bx + baseW * 0.25;
+
+        if (!isBlocked(t1x, bz, towerW, towerD, 2.0) && !isBlocked(t2x, bz, towerW, towerD, 2.0)) {
+          const root = { name: '', description: '', x: t1x, y: 0, z: bz, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box' };
+          rawBuildings.push(root);
+          const key = getGridKey(t1x, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+          const beta = { name: '', x: t2x, y: 0, z: bz, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box', parent_name: 'CORP_ROOT' };
+          rawBuildings.push(beta);
+          const key2 = getGridKey(t2x, bz); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(beta);
+
+          const helipadW = baseW * 1.1; const helipadD = baseD * 0.9;
+          rawBuildings.push({ name: '', x: bx, y: h * 0.95, z: bz, width: helipadW, depth: helipadD, height: 2.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
+          rawBuildings.push({ name: '', x: bx, y: h * 0.95 + 2.0, z: bz, width: 0.15, depth: 0.15, height: h * 0.18, color, shape: 'box', parent_name: 'CORP_ROOT' });
+        }
+      }
+      else if (corpoStyle === 4) {
+        // Style 4: Cylindrical Tower with Outer Ribs
+        const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.65, depth: baseD * 0.65, height: h, color, shape: 'cylinder' };
+        rawBuildings.push(root);
+        const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+        // 4 outer structural ribs (boxes)
+        const ribW = baseW * 0.08; const ribH = h * 0.82;
+        const ribDistX = baseW * 0.35; const ribDistZ = baseD * 0.35;
+        rawBuildings.push({ name: '', x: bx - ribDistX, y: 0, z: bz, width: ribW, depth: ribW * 2, height: ribH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+        rawBuildings.push({ name: '', x: bx + ribDistX, y: 0, z: bz, width: ribW, depth: ribW * 2, height: ribH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: 0, z: bz - ribDistZ, width: ribW * 2, depth: ribW, height: ribH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: 0, z: bz + ribDistZ, width: ribW * 2, depth: ribW, height: ribH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+
+        // Glowing top sphere
+        rawBuildings.push({ name: '', x: bx, y: h, z: bz, width: baseW * 0.28, depth: baseD * 0.28, height: baseW * 0.28, color, shape: 'sphere', parent_name: 'CORP_ROOT' });
+      }
+      else if (corpoStyle === 5) {
+        // Style 5: Stepped Ziggurat / Arch Spire
+        const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.38, depth: baseD * 0.72, height: h, color, shape: 'box' };
+        rawBuildings.push(root);
+        const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+        // Stepped side towers
+        const sideW = baseW * 0.26; const sideD = baseD * 0.55;
+        rawBuildings.push({ name: '', x: bx - baseW * 0.32, y: 0, z: bz, width: sideW, depth: sideD, height: h * 0.65, color, shape: 'box', parent_name: 'CORP_ROOT' });
+        rawBuildings.push({ name: '', x: bx + baseW * 0.32, y: 0, z: bz, width: sideW, depth: sideD, height: h * 0.65, color, shape: 'box', parent_name: 'CORP_ROOT' });
+
+        // Sky arch link
+        rawBuildings.push({ name: '', x: bx, y: h * 0.58, z: bz, width: baseW * 0.8, depth: sideD * 0.5, height: 3.5, color, shape: 'box', parent_name: 'CORP_ROOT' });
+      }
+      else if (corpoStyle === 6) {
+        // Style 6: Tri-Tower Hub (Three cylinders grouped)
+        const tW = baseW * 0.38; const tD = baseD * 0.38;
+        const c1x = bx; const c1z = bz - baseD * 0.2;
+        const c2x = bx - baseW * 0.2; const c2z = bz + baseD * 0.18;
+        const c3x = bx + baseW * 0.2; const c3z = bz + baseD * 0.18;
+
+        const root = { name: '', description: '', x: c1x, y: 0, z: c1z, width: tW, depth: tD, height: h * 0.9, color, shape: 'cylinder' };
+        rawBuildings.push(root);
+        const key = getGridKey(c1x, c1z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+        rawBuildings.push({ name: '', x: c2x, y: 0, z: c2z, width: tW, depth: tD, height: h * 0.75, color, shape: 'cylinder', parent_name: 'CORP_ROOT' });
+        rawBuildings.push({ name: '', x: c3x, y: 0, z: c3z, width: tW, depth: tD, height: h * 0.98, color, shape: 'cylinder', parent_name: 'CORP_ROOT' });
+
+        // Central box atrium core linking them
+        rawBuildings.push({ name: '', x: bx, y: 0, z: bz, width: baseW * 0.3, depth: baseD * 0.3, height: h * 0.7, color, shape: 'box', parent_name: 'CORP_ROOT' });
+      }
+      else {
+        // Style 7: Cantilevered / Stacked Rotated Spire
+        const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: h * 0.35, color, shape: 'box' };
+        rawBuildings.push(root);
+        const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+        // Rotated tier 2
+        rawBuildings.push({ name: '', x: bx + baseW * 0.08, y: h * 0.35, z: bz - baseD * 0.05, width: baseW * 0.72, depth: baseD * 0.72, height: h * 0.3, color, shape: 'box', rotation: 0.15, parent_name: 'ROOT' });
+        // Rotated tier 3
+        rawBuildings.push({ name: '', x: bx - baseW * 0.05, y: h * 0.65, z: bz + baseD * 0.08, width: baseW * 0.5, depth: baseD * 0.5, height: h * 0.25, color, shape: 'box', rotation: -0.15, parent_name: 'ROOT' });
+        // Antenna
+        rawBuildings.push({ name: '', x: bx, y: h * 0.9, z: bz, width: 0.2, depth: 0.2, height: h * 0.16, color, shape: 'box', parent_name: 'ROOT' });
+      }
+    }
+    return;
+  }
+
+  // 4. URBAN
+  if (zoneTypeVal > 0.3) {
+    const h = (10 + Math.random() * 20) * (0.8 + Math.random() * 0.4);
+    const urbanStyle = Math.floor(Math.random() * 6); // Expanded to 6 styles!
+
+    if (urbanStyle === 0) {
+      // Style 0: Stepped L-Shape Wing (original)
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: h, color, shape: 'box', rotation: 0 };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      const wingX = bx + bw * 0.22; const wingZ = bz - bd * 0.15;
+      rawBuildings.push({ name: '', x: wingX, y: 0, z: wingZ, width: bw * 0.3, depth: bd * 0.3, height: h * 0.65, color, shape: 'box', parent_name: 'ROOT' });
+    }
+    else if (urbanStyle === 1) {
+      // Style 1: Pyramidal Roof Block (original)
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: h, color, shape: 'box', rotation: 0 };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      rawBuildings.push({ name: '', x: bx, y: h, z: bz, width: bw * 0.9, depth: bd * 0.9, height: 3.5, color, shape: 'pyramid', parent_name: 'ROOT' });
+    }
+    else if (urbanStyle === 2) {
+      // Style 2: Twin H-Block
+      const root = { name: '', description: '', x: bx - bw * 0.25, y: 0, z: bz, width: bw * 0.35, depth: bd * 0.95, height: h, color, shape: 'box' };
+      rawBuildings.push(root);
+      const key = getGridKey(bx - bw * 0.25, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      // Tower 2
+      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 0, z: bz, width: bw * 0.35, depth: bd * 0.95, height: h * 0.92, color, shape: 'box', parent_name: 'ROOT' });
+
+      // Connecting bridge lobby
+      rawBuildings.push({ name: '', x: bx, y: h * 0.35, z: bz, width: bw * 0.2, depth: bd * 0.4, height: 3.0, color, shape: 'box', parent_name: 'ROOT' });
+    }
+    else if (urbanStyle === 3) {
+      // Style 3: Cylindrical Core Plaza
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: h * 0.4, color, shape: 'cylinder' };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      // Box tower on top
+      rawBuildings.push({ name: '', x: bx, y: h * 0.4, z: bz, width: bw * 0.65, depth: bd * 0.65, height: h * 0.8, color, shape: 'box', parent_name: 'ROOT' });
+    }
+    else if (urbanStyle === 4) {
+      // Style 4: Stepped Terrace Block
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: h, color, shape: 'box' };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      // Low terrace side block
+      rawBuildings.push({ name: '', x: bx + bw * 0.22, y: h * 0.5, z: bz, width: bw * 0.4, depth: bd * 0.85, height: h * 0.4, color, shape: 'box', parent_name: 'ROOT' });
+    }
+    else {
+      // Style 5: Double-Tier Cylinder Stack
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: h * 0.65, color, shape: 'cylinder' };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      // Upper cylinder
+      rawBuildings.push({ name: '', x: bx, y: h * 0.65, z: bz, width: bw * 0.65, depth: bd * 0.65, height: h * 0.45, color, shape: 'cylinder', parent_name: 'ROOT' });
+    }
+    return;
+  }
+};
+
 function AdminPanel({
   socketRef, token, onLogout, refreshLocations, refreshRoads, locations, roads, editData, setEditData, editId, setEditId,
   transformMode, setTransformMode, targetObject, blockBuildings, setBlockBuildings, selectedLocation,
@@ -1433,137 +1760,8 @@ function AdminPanel({
               rawBuildings.push({ name: '', x: b.x + bw * 0.1, y: towerH * 0.92, z: b.z + bd * 0.1, width: 0.1, depth: 0.1, height: towerH * 0.12, color, shape: 'box', parent_name: 'CORP_ROOT' });
             }
 
-          } else if (zoneTypeVal > 0.8) {
-            const baseW = bw * 0.75; const baseD = bd * 0.75;
-            const h = 100 + Math.random() * 90;
-            const corpoStyle = Math.floor(Math.random() * 4);
-
-            if (corpoStyle === 0) {
-              const baseH = h * 0.45; const midH = h * 0.35; const topH = h * 0.2;
-              const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: baseW, depth: baseD, height: baseH, color, shape: 'box' };
-              rawBuildings.push(root);
-              const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-              rawBuildings.push({ name: '', x: b.x, y: baseH, z: b.z, width: baseW * 0.7, depth: baseD * 0.7, height: midH, color, shape: 'box', parent_name: 'ROOT' });
-              rawBuildings.push({ name: '', x: b.x, y: baseH + midH, z: b.z, width: baseW * 0.45, depth: baseD * 0.45, height: topH, color, shape: 'box', parent_name: 'ROOT' });
-              rawBuildings.push({ name: '', x: b.x, y: baseH + midH + topH, z: b.z, width: 0.2, depth: 0.2, height: h * 0.15, color, shape: 'box', parent_name: 'ROOT' });
-            } else if (corpoStyle === 1) {
-              const towerW = baseW * 0.4; const towerD = baseD * 0.8;
-              const t1x = b.x - baseW * 0.3; const t2x = b.x + baseW * 0.3;
-
-              const root = { name: '', description: '', x: t1x, y: 0, z: b.z, width: towerW, depth: towerD, height: h, color, shape: 'box' };
-              rawBuildings.push(root);
-              const key = getGridKey(t1x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-              const beta = { name: '', x: t2x, y: 0, z: b.z, width: towerW, depth: towerD, height: h, color, shape: 'box', parent_name: 'CORP_ROOT' };
-              rawBuildings.push(beta);
-              const key2 = getGridKey(t2x, b.z); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(beta);
-
-              const bridgeH = 4.0; const bridgeW = (t2x - t1x) - towerW;
-              rawBuildings.push({ name: '', x: b.x, y: h * 0.7, z: b.z, width: bridgeW, depth: towerD * 0.4, height: bridgeH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-            } else if (corpoStyle === 2) {
-              const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: baseW * 0.5, depth: baseD * 0.5, height: h, color, shape: 'box' };
-              rawBuildings.push(root);
-              const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-              const wingW = baseW * 0.25; const wingD = baseD * 0.35; const wingH = h * 0.65;
-              rawBuildings.push({ name: '', x: b.x - baseW * 0.35, y: 0, z: b.z, width: wingW, depth: wingD, height: wingH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-              rawBuildings.push({ name: '', x: b.x + baseW * 0.35, y: 0, z: b.z, width: wingW, depth: wingD, height: wingH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-            } else {
-              const towerW = baseW * 0.35; const towerD = baseD * 0.8;
-              const t1x = b.x - baseW * 0.25; const t2x = b.x + baseW * 0.25;
-
-              const root = { name: '', description: '', x: t1x, y: 0, z: b.z, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box' };
-              rawBuildings.push(root);
-              const key = getGridKey(t1x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-              const beta = { name: '', x: t2x, y: 0, z: b.z, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box', parent_name: 'CORP_ROOT' };
-              rawBuildings.push(beta);
-              const key2 = getGridKey(t2x, b.z); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(beta);
-
-              const helipadW = baseW * 1.1; const helipadD = baseD * 0.9;
-              rawBuildings.push({ name: '', x: b.x, y: h * 0.95, z: b.z, width: helipadW, depth: helipadD, height: 2.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
-              rawBuildings.push({ name: '', x: b.x, y: h * 0.95 + 2.0, z: b.z, width: 0.15, depth: 0.15, height: h * 0.18, color, shape: 'box', parent_name: 'CORP_ROOT' });
-            }
-
-          } else if (zoneTypeVal > 0.3) {
-            if (bw > 25 || bd > 25) {
-              const rows = bw > 40 ? 3 : 2; const cols = bd > 40 ? 3 : 2;
-              const pw = bw / cols; const pd = bd / rows;
-              for (let r = 0; r < rows; r++) { for (let c = 0; c < cols; c++) {
-                if (Math.random() < 0.30) continue;
-                const jitterX = (Math.random() - 0.5) * pw * 0.2; const jitterZ = (Math.random() - 0.5) * pd * 0.2;
-                const subX = b.x - bw/2 + pw/2 + c * pw + jitterX;
-                const subZ = b.z - bd/2 + pd/2 + r * pd + jitterZ;
-
-                if (!isBlocked(subX, subZ, pw * 0.6, pd * 0.6, 0.5)) {
-                  const subH = 10 + Math.random() * 20;
-                  const root = { name: '', description: '', x: subX, y: 0, z: subZ, width: pw * 0.6, depth: pd * 0.6, height: subH, color, shape: 'box', rotation: 0 };
-                  rawBuildings.push(root);
-                  const key = getGridKey(subX, subZ); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-                  if (Math.random() > 0.5) {
-                    rawBuildings.push({ name: '', x: subX + pw * 0.22, y: 0, z: subZ - pd * 0.15, width: pw * 0.3, depth: pd * 0.3, height: subH * 0.65, color, shape: 'box', parent_name: 'ROOT' });
-                  } else {
-                    rawBuildings.push({ name: '', x: subX, y: subH, z: subZ, width: pw * 0.6, depth: pd * 0.6, height: 3.5, color, shape: 'pyramid', parent_name: 'ROOT' });
-                  }
-                }
-              }}
-            } else {
-              const h = 10 + Math.random() * 20;
-              const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: bw, depth: bd, height: h, color, shape: 'box', rotation: 0 };
-              rawBuildings.push(root);
-              const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-              if (Math.random() > 0.5) {
-                rawBuildings.push({ name: '', x: b.x + bw * 0.22, y: 0, z: b.z - bd * 0.15, width: bw * 0.3, depth: bd * 0.3, height: h * 0.65, color, shape: 'box', parent_name: 'ROOT' });
-              } else {
-                rawBuildings.push({ name: '', x: b.x, y: h, z: b.z, width: bw * 0.9, depth: bd * 0.9, height: 3.5, color, shape: 'pyramid', parent_name: 'ROOT' });
-              }
-            }
-
-          } else if (zoneTypeVal < 0) {
-            const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
-            rawBuildings.push(root);
-            const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-            const numStructures = Math.random() > 0.5 ? 2 : 1;
-            for (let i = 0; i < numStructures; i++) {
-              const shapeType = Math.random() > 0.5 ? 'cylinder' : 'box';
-              const strW = bw * 0.35; const strD = bd * 0.35; const strH = 15 + Math.random() * 20;
-              const offsetX = numStructures > 1 ? (i === 0 ? -bw * 0.25 : bw * 0.25) : 0;
-              const offsetZ = numStructures > 1 ? (i === 0 ? -bd * 0.25 : bd * 0.25) : 0;
-              rawBuildings.push({ name: '', x: b.x + offsetX, y: 1.2, z: b.z + offsetZ, width: strW, depth: strD, height: strH, color, shape: shapeType, parent_name: 'ROOT' });
-            }
-
           } else {
-            if (bw > 8 || bd > 8) {
-              const shackSize = 4.0;
-              const nx = Math.max(1, Math.floor(bw / shackSize)); const nz = Math.max(1, Math.floor(bd / shackSize));
-              for (let ix = 0; ix < nx; ix++) { for (let iz = 0; iz < nz; iz++) {
-                const shW = 2.5 + Math.random() * 1.5; const shD = 2.5 + Math.random() * 1.5;
-                const shX = b.x - bw/2 + (ix + 0.5) * (bw / nx) + (Math.random() - 0.5) * 1.0;
-                const shZ = b.z - bd/2 + (iz + 0.5) * (bd / nz) + (Math.random() - 0.5) * 1.0;
-                const shH = 2.5 + Math.random() * 4.0; const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
-
-                if (!isBlocked(shX, shZ, shW, shD, 0.5)) {
-                  const root = { name: '', description: '', x: shX, y: 0, z: shZ, width: shW, depth: shD, height: shH, color: shackColor, shape: 'box' };
-                  rawBuildings.push(root);
-                  const key = getGridKey(shX, shZ); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-                  if (Math.random() < 0.3) {
-                    rawBuildings.push({ name: '', x: shX, y: shH, z: shZ, width: shW * 0.9, depth: shD * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
-                  }
-                }
-              }}
-            } else {
-              const shH = 2.5 + Math.random() * 4.0; const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
-              const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: bw, depth: bd, height: shH, color: shackColor, shape: 'box' };
-              rawBuildings.push(root);
-              const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-              if (Math.random() < 0.3) {
-                rawBuildings.push({ name: '', x: b.x, y: shH, z: b.z, width: bw * 0.9, depth: bd * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
-              }
-            }
+            generateThemedBuildingsForPlot(b.x, b.z, bw, bd, zoneTypeVal, isBlocked, getGridKey, spatialGrid, rawBuildings);
           }
         });
       });
@@ -3198,199 +3396,7 @@ out skel qt;`;
                     return; // Done with this block
                   }
 
-                  if (zoneTypeVal > 0.8) { // HIGH_RISE COMPLEX (Corpo - Complex Multi-Part Buildings)
-                    // Massive corporate citadels (heights 100-190 units)
-                    const h = 100 + Math.random() * 90;
-                    const baseW = bw * 0.75;
-                    const baseD = bd * 0.75;
-                    if (!isBlocked(b.x, b.z, baseW, baseD, 2.0)) {
-                      const color = ''; // No pre-assigned color
-                      const corpoStyle = Math.floor(Math.random() * 4);
-
-                      if (corpoStyle === 0) {
-                        // Style A: Stepped Corporate Spire
-                        const baseH = h * 0.45;
-                        const midH = h * 0.35;
-                        const topH = h * 0.2;
-                        const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: baseW, depth: baseD, height: baseH, color, shape: 'box' };
-                        rawBuildings.push(root);
-                        const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-                        // Middle Layer
-                        rawBuildings.push({ name: '', x: b.x, y: baseH, z: b.z, width: baseW * 0.7, depth: baseD * 0.7, height: midH, color, shape: 'box', parent_name: 'ROOT' });
-                        // Top Layer
-                        rawBuildings.push({ name: '', x: b.x, y: baseH + midH, z: b.z, width: baseW * 0.45, depth: baseD * 0.45, height: topH, color, shape: 'box', parent_name: 'ROOT' });
-                        // Antenna
-                        rawBuildings.push({ name: '', x: b.x, y: baseH + midH + topH, z: b.z, width: 0.2, depth: 0.2, height: h * 0.15, color, shape: 'box', parent_name: 'ROOT' });
-                      } else if (corpoStyle === 1) {
-                        // Style B: Twin Spire with Skybridge Link
-                        const towerW = baseW * 0.4;
-                        const towerD = baseD * 0.8;
-                        const t1x = b.x - baseW * 0.3;
-                        const t2x = b.x + baseW * 0.3;
-
-                        // Check both twin towers bounds to prevent overlaps
-                        if (!isBlocked(t1x, b.z, towerW, towerD, 2.0) && !isBlocked(t2x, b.z, towerW, towerD, 2.0)) {
-                          const root = { name: '', description: '', x: t1x, y: 0, z: b.z, width: towerW, depth: towerD, height: h, color, shape: 'box' };
-                          rawBuildings.push(root);
-                          const key = getGridKey(t1x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-                          // Tower Beta (matches root)
-                          const beta = { name: '', x: t2x, y: 0, z: b.z, width: towerW, depth: towerD, height: h, color, shape: 'box', parent_name: 'CORP_ROOT' };
-                          rawBuildings.push(beta);
-                          const key2 = getGridKey(t2x, b.z); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(beta);
-                          
-                          // Skybridge
-                          const bridgeH = 4.0;
-                          const bridgeW = (t2x - t1x) - towerW;
-                          rawBuildings.push({ name: '', x: b.x, y: h * 0.7, z: b.z, width: bridgeW, depth: towerD * 0.4, height: bridgeH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                        }
-                      } else if (corpoStyle === 2) {
-                        // Style C: Corporate Citadel with Symmetrical Wings (3 towers total)
-                        const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: baseW * 0.5, depth: baseD * 0.5, height: h, color, shape: 'box' };
-                        rawBuildings.push(root);
-                        const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-                        // Symmetrical Left Wing
-                        const wingW = baseW * 0.25;
-                        const wingD = baseD * 0.35;
-                        const wingH = h * 0.65;
-                        rawBuildings.push({ name: '', x: b.x - baseW * 0.35, y: 0, z: b.z, width: wingW, depth: wingD, height: wingH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                        // Symmetrical Right Wing
-                        rawBuildings.push({ name: '', x: b.x + baseW * 0.35, y: 0, z: b.z, width: wingW, depth: wingD, height: wingH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                      } else {
-                        // Style D: Split Atrium Spire with Helipad/Comms Disc
-                        const towerW = baseW * 0.35;
-                        const towerD = baseD * 0.8;
-                        const t1x = b.x - baseW * 0.25;
-                        const t2x = b.x + baseW * 0.25;
-
-                        if (!isBlocked(t1x, b.z, towerW, towerD, 2.0) && !isBlocked(t2x, b.z, towerW, towerD, 2.0)) {
-                          const root = { name: '', description: '', x: t1x, y: 0, z: b.z, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box' };
-                          rawBuildings.push(root);
-                          const key = getGridKey(t1x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-                          // Column Beta
-                          const beta = { name: '', x: t2x, y: 0, z: b.z, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box', parent_name: 'CORP_ROOT' };
-                          rawBuildings.push(beta);
-                          const key2 = getGridKey(t2x, b.z); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(beta);
-
-                          // Helipad Platform on top of both
-                          const helipadW = baseW * 1.1;
-                          const helipadD = baseD * 0.9;
-                          rawBuildings.push({ name: '', x: b.x, y: h * 0.95, z: b.z, width: helipadW, depth: helipadD, height: 2.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                          // Central Needle
-                          rawBuildings.push({ name: '', x: b.x, y: h * 0.95 + 2.0, z: b.z, width: 0.15, depth: 0.15, height: h * 0.18, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                        }
-                      }
-                    }
-                  } else if (zoneTypeVal > 0.3) { // URBAN_GRID (Stepped L-Shapes & Roof Pyramids)
-                    const rows = bw > 40 ? 3 : 2; const cols = bd > 40 ? 3 : 2;
-                    const pw = bw / cols; const pd = bd / rows;
-                    for (let r = 0; r < rows; r++) { for (let c = 0; c < cols; c++) {
-                      if (Math.random() < 0.30) continue; // 30% chance to skip for less clutter
-                      
-                      // Add jitter to break the perfect grid alignment
-                      const jitterX = (Math.random() - 0.5) * pw * 0.2;
-                      const jitterZ = (Math.random() - 0.5) * pd * 0.2;
-                      const bx = b.x - bw/2 + pw/2 + c * pw + jitterX;
-                      const bz = b.z - bd/2 + pd/2 + r * pd + jitterZ;
-
-                      if (!isBlocked(bx, bz, pw * 0.6, pd * 0.6, 1.5)) {
-                        const h = 10 + Math.random() * 20;
-                        const color = ''; // No pre-assigned color
-                        
-                        // Main Urban Tower (Root)
-                        const root = { name: '', description: '', x: bx, y: 0, z: bz, width: pw * 0.6, depth: pd * 0.6, height: h, color, shape: 'box', rotation: 0 };
-                        rawBuildings.push(root);
-                        const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-                        
-                        const urbanStyle = Math.random();
-                        if (urbanStyle > 0.5) {
-                          // L-shape wing extension
-                          const wingX = bx + pw * 0.22;
-                          const wingZ = bz - pd * 0.15;
-                          rawBuildings.push({ name: '', x: wingX, y: 0, z: wingZ, width: pw * 0.3, depth: pd * 0.3, height: h * 0.65, color, shape: 'box', parent_name: 'ROOT' });
-                        } else {
-                          // Low-poly pyramidal roof top
-                          const roofH = 3.5;
-                          rawBuildings.push({ name: '', x: bx, y: h, z: bz, width: pw * 0.6, depth: pd * 0.6, height: roofH, color, shape: 'pyramid', parent_name: 'ROOT' });
-                        }
-                      }
-                    }}
-                  } else if (zoneTypeVal < 0) { // INDUSTRIAL_SECTOR (Double blocks with small wide cylinders & long small boxes)
-                    const rows = bw > 40 ? 3 : 2; const cols = bd > 40 ? 3 : 2;
-                    const pw = bw / cols; const pd = bd / rows;
-                    for (let r = 0; r < rows; r++) { for (let c = 0; c < cols; c++) {
-                      if (Math.random() < 0.20) continue; // 20% skip for spacing
-                      
-                      const jitterX = (Math.random() - 0.5) * pw * 0.15;
-                      const jitterZ = (Math.random() - 0.5) * pd * 0.15;
-                      const bx = b.x - bw/2 + pw/2 + c * pw + jitterX;
-                      const bz = b.z - bd/2 + pd/2 + r * pd + jitterZ;
-                      
-                      const factoryW = pw * 0.75;
-                      const factoryD = pd * 0.75;
-                      
-                      if (!isBlocked(bx, bz, factoryW, factoryD, 1.2)) {
-                        const color = ''; // Neutral wireframe
-                        
-                        // 1. Industrial Base Platform (Root)
-                        const root = { name: '', description: '', x: bx, y: 0, z: bz, width: factoryW, depth: factoryD, height: 1.2, color, shape: 'box', rotation: 0 };
-                        rawBuildings.push(root);
-                        const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-                        
-                        // 2. Fluid Storage Tanks (Small wide cylinders)
-                        const tankR = Math.min(factoryW, factoryD) * 0.25;
-                        const tankH = 3.5 + Math.random() * 2;
-                        // Tank 1
-                        const t1x = bx - factoryW * 0.22;
-                        const t1z = bz - factoryD * 0.22;
-                        rawBuildings.push({ name: '', x: t1x, y: 1.2, z: t1z, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
-                        // Tank 2 (Double block fluid tanks)
-                        const t2x = bx - factoryW * 0.22;
-                        const t2z = bz + factoryD * 0.22;
-                        rawBuildings.push({ name: '', x: t2x, y: 1.2, z: t2z, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
-                        
-                        // 3. Storage Containers (Long small rectangles)
-                        const containerW = factoryW * 0.22;
-                        const containerD = factoryD * 0.5;
-                        const containerH = 2.0;
-                        const cx = bx + factoryW * 0.22;
-                        
-                        // Container 1
-                        rawBuildings.push({ name: '', x: cx, y: 1.2, z: bz - factoryD * 0.12, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
-                        // Container 2 (Stacked or side-by-side)
-                        if (Math.random() > 0.5) {
-                          // Stacked
-                          rawBuildings.push({ name: '', x: cx, y: 1.2 + containerH, z: bz - factoryD * 0.12, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
-                        } else {
-                          // Parallel
-                          rawBuildings.push({ name: '', x: cx, y: 1.2, z: bz + factoryD * 0.22, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
-                        }
-                      }
-                    }}
-                  } else { // ORGANIC_SLUMS (Always simple boxes - no complex multi-part building shapes)
-                    const count = Math.floor(((bw * bd) / 35) * 0.7);
-                    for (let i = 0; i < count; i++) {
-                      const bx = b.x - bw/2 + Math.random() * bw; 
-                      const bz = b.z - bd/2 + Math.random() * bd;
-                      const w = 2 + Math.random() * 4;
-                      const d = 2 + Math.random() * 4;
-                      if (!isBlocked(bx, bz, w, d, 1.0)) {
-                        const h = 3 + Math.random() * 8;
-                        const rot = Math.random() * Math.PI; // Random rotation for organic feel
-                        const color = ''; // No pre-assigned color
-                        const root = { name: '', x: bx, y: 0, z: bz, width: w, depth: d, height: h, color, shape: 'box', rotation: rot };
-                        rawBuildings.push(root);
-                        const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-                        
-                        if (Math.random() > 0.5) {
-                           rawBuildings.push({ name: '', x: bx + (Math.random()-0.5)*1.5, y: h, z: bz + (Math.random()-0.5)*1.5, width: 1.5 + Math.random() * 2, depth: 1.5 + Math.random() * 2, height: h * 0.5, color, shape: 'box', parent_name: 'ROOT' });
-                        }
-                      }
-                    }
-                  }
+                  generateThemedBuildingsForPlot(b.x, b.z, bw, bd, zoneTypeVal, isBlocked, getGridKey, spatialGrid, rawBuildings);
                 });
 
                 if (finalRoads.length > 0) {
