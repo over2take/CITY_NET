@@ -1048,31 +1048,36 @@ const generateThemedBuildingsForPlot = (
 
   // 1. SLUMS
   if (zoneTypeVal <= 0.25 && zoneTypeVal >= 0) {
+    // Single root dirt/trash pad for the entire slums plot so they are joined as one structure
+    const rootColor = '#3a2b20';
+    const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 0.15, color: rootColor, shape: 'box' };
+    rawBuildings.push(root);
+    const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
     if (bw > 8 || bd > 8) {
       const shackSize = 4.0;
       const nx = Math.max(1, Math.floor(bw / shackSize)); const nz = Math.max(1, Math.floor(bd / shackSize));
       for (let ix = 0; ix < nx; ix++) { for (let iz = 0; iz < nz; iz++) {
+        // Spawning probability reduced by 65% (35% chance to spawn)
+        if (Math.random() > 0.35) continue;
+
         const shW = 2.5 + Math.random() * 1.5; const shD = 2.5 + Math.random() * 1.5;
         const shX = bx - bw/2 + (ix + 0.5) * (bw / nx) + (Math.random() - 0.5) * 1.0;
         const shZ = bz - bd/2 + (iz + 0.5) * (bd / nz) + (Math.random() - 0.5) * 1.0;
         const shH = 2.5 + Math.random() * 4.0; const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
 
         if (!isBlocked(shX, shZ, shW, shD, 0.5)) {
-          const root = { name: '', description: '', x: shX, y: 0, z: shZ, width: shW, depth: shD, height: shH, color: shackColor, shape: 'box' };
-          rawBuildings.push(root);
-          const key = getGridKey(shX, shZ); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+          rawBuildings.push({ name: '', x: shX, y: 0.15, z: shZ, width: shW, depth: shD, height: shH, color: shackColor, shape: 'box', parent_name: 'ROOT' });
           if (Math.random() < 0.3) {
-            rawBuildings.push({ name: '', x: shX, y: shH, z: shZ, width: shW * 0.9, depth: shD * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
+            rawBuildings.push({ name: '', x: shX, y: 0.15 + shH, z: shZ, width: shW * 0.9, depth: shD * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
           }
         }
       }}
     } else {
       const shH = 2.5 + Math.random() * 4.0; const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: shH, color: shackColor, shape: 'box' };
-      rawBuildings.push(root);
-      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+      rawBuildings.push({ name: '', x: bx, y: 0.15, z: bz, width: bw * 0.9, depth: bd * 0.9, height: shH, color: shackColor, shape: 'box', parent_name: 'ROOT' });
       if (Math.random() < 0.3) {
-        rawBuildings.push({ name: '', x: bx, y: shH, z: bz, width: bw * 0.9, depth: bd * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: 0.15 + shH, z: bz, width: bw * 0.8, depth: bd * 0.8, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
       }
     }
     return;
@@ -2365,12 +2370,21 @@ out skel qt;`;
 
             } else {
               // Slums Zoning (Organic Shacks)
+              // Single root dirt/trash pad for the entire slums plot so they are joined as one structure
+              const rootColor = '#3a2b20';
+              const root = { name: '', description: 'SLUM_SHACK_GROUP', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 0.15, color: rootColor, shape: 'box' };
+              rawBuildings.push(root);
+              const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
               if (bw > 8 || bd > 8) {
                 const shackSize = 4.0;
                 const nx = Math.max(1, Math.floor(bw / shackSize));
                 const nz = Math.max(1, Math.floor(bd / shackSize));
                 for (let ix = 0; ix < nx; ix++) {
                   for (let iz = 0; iz < nz; iz++) {
+                    // Reduce structures by 65% (35% chance to spawn)
+                    if (Math.random() > 0.35) continue;
+
                     const shW = 2.5 + Math.random() * 1.5;
                     const shD = 2.5 + Math.random() * 1.5;
                     const shX = bx - bw/2 + (ix + 0.5) * (bw / nx) + (Math.random() - 0.5) * 1.0;
@@ -2378,21 +2392,19 @@ out skel qt;`;
                     const shH = hasExplicitHeight ? h : 2.5 + Math.random() * 4.0;
                     const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
                     if (!isBlocked(shX, shZ, shW, shD, 0.5)) {
-                      const root = { name: '', description: 'SLUM_SHACK', x: shX, y: 0, z: shZ, width: shW, depth: shD, height: shH, color: shackColor, shape: 'box' };
-                      rawBuildings.push(root);
-                      const key = getGridKey(shX, shZ); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+                      rawBuildings.push({ name: '', x: shX, y: 0.15, z: shZ, width: shW, depth: shD, height: shH, color: shackColor, shape: 'box', parent_name: 'ROOT' });
                       if (Math.random() < 0.3) {
-                        rawBuildings.push({ name: '', x: shX, y: shH, z: shZ, width: shW * 0.9, depth: shD * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
+                        rawBuildings.push({ name: '', x: shX, y: 0.15 + shH, z: shZ, width: shW * 0.9, depth: shD * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
                       }
                     }
                   }
                 }
               } else {
-                const root = { name: '', description: 'SLUM_SHACK', x: bx, y: 0, z: bz, width: bw, depth: bd, height: h, color: '#8d5b4c', shape: 'box' };
-                rawBuildings.push(root);
-                const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+                const shH = hasExplicitHeight ? h : 2.5 + Math.random() * 4.0;
+                const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
+                rawBuildings.push({ name: '', x: bx, y: 0.15, z: bz, width: bw * 0.9, depth: bd * 0.9, height: shH, color: shackColor, shape: 'box', parent_name: 'ROOT' });
                 if (Math.random() < 0.3) {
-                  rawBuildings.push({ name: '', x: bx, y: h, z: bz, width: bw * 0.9, depth: bd * 0.9, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
+                  rawBuildings.push({ name: '', x: bx, y: 0.15 + shH, z: bz, width: bw * 0.8, depth: bd * 0.8, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
                 }
               }
             }
