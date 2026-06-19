@@ -1052,7 +1052,6 @@ const generateThemedBuildingsForPlot = (
     const rootColor = '#3a2b20';
     const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 0.15, color: rootColor, shape: 'box' };
     rawBuildings.push(root);
-    const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
     if (bw > 8 || bd > 8) {
       const shackSize = 4.0;
@@ -1077,6 +1076,8 @@ const generateThemedBuildingsForPlot = (
         rawBuildings.push({ name: '', x: bx, y: 0.15 + shH, z: bz, width: bw * 0.8, depth: bd * 0.8, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
       }
     }
+
+    const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
     return;
   }
 
@@ -2351,7 +2352,6 @@ out skel qt;`;
               const rootColor = '#3a2b20';
               const root = { name: '', description: 'SLUM_SHACK_GROUP', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 0.15, color: rootColor, shape: 'box' };
               rawBuildings.push(root);
-              const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
               if (bw > 8 || bd > 8) {
                 const shackSize = 4.0;
@@ -2381,6 +2381,8 @@ out skel qt;`;
                   rawBuildings.push({ name: '', x: bx, y: 0.15 + shH, z: bz, width: bw * 0.8, depth: bd * 0.8, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
                 }
               }
+
+              const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
             }
             }
           }
