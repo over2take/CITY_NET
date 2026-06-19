@@ -806,10 +806,16 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
   const currentZ = (minZ + maxZ) / 2;
   const groupPos: [number, number, number] = [currentX, minY, currentZ];
   
-  const hasData = (location.name && location.name.trim() !== "") || (location.description && location.description.trim() !== "");
+  const hasData = (location.name && location.name.trim() !== "") || 
+                  (location.description && location.description.trim() !== "") ||
+                  (location.npcs && location.npcs.trim() !== "");
   let baseColor = location.color || "#00aa33";
   if (location.district_color) baseColor = location.district_color;
-  if (hasData) baseColor = "#8800ff";
+  if (hasData) {
+    baseColor = "#8800ff";
+  } else {
+    baseColor = "#00ff00"; // Neon green if it has no name, description, and residence
+  }
   if (location.isFavorite) baseColor = "#ff7b00";
   if (location.isDanger) baseColor = "#ff0000";
 
@@ -896,9 +902,17 @@ const InstancedShape = React.memo(({ shape, elements, onSelect }: { shape: strin
             fillMeshRef.current!.setMatrixAt(i, tempObj.matrix);
             hitMeshRef.current!.setMatrixAt(i, tempObj.matrix);
             
+            const parentLoc = el.rootLoc || el;
+            const hasData = (parentLoc.name && parentLoc.name.trim() !== "") || 
+                            (parentLoc.description && parentLoc.description.trim() !== "") || 
+                            (parentLoc.npcs && parentLoc.npcs.trim() !== "");
+            
             let color = el.district_color || el.color || "#00aa33";
-            const hasData = (el.name && el.name.trim() !== "") || (el.description && el.description.trim() !== "");
-            if (hasData) color = "#8800ff";
+            if (hasData) {
+              color = "#8800ff";
+            } else {
+              color = "#00ff00"; // Neon green if it has no name, description, and residence
+            }
             if (el.isFavorite) color = "#ff7b00";
             if (el.isDanger) color = "#ff0000";
             
@@ -4344,6 +4358,7 @@ function App() {
             isDanger: p.isDanger,
             name: p.name,
             description: p.description,
+            npcs: p.npcs,
             rootLoc: loc // Pointer to root parent location for click selection
           });
         };
