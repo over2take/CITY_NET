@@ -1058,9 +1058,6 @@ const generateThemedBuildingsForPlot = (
       const shackSize = 4.0;
       const nx = Math.max(1, Math.floor(bw / shackSize)); const nz = Math.max(1, Math.floor(bd / shackSize));
       for (let ix = 0; ix < nx; ix++) { for (let iz = 0; iz < nz; iz++) {
-        // Spawning probability reduced by 65% (35% chance to spawn)
-        if (Math.random() > 0.35) continue;
-
         const shW = 2.5 + Math.random() * 1.5; const shD = 2.5 + Math.random() * 1.5;
         const shX = bx - bw/2 + (ix + 0.5) * (bw / nx) + (Math.random() - 0.5) * 1.0;
         const shZ = bz - bd/2 + (iz + 0.5) * (bd / nz) + (Math.random() - 0.5) * 1.0;
@@ -1084,7 +1081,7 @@ const generateThemedBuildingsForPlot = (
   }
 
   // Clamping aspect ratio for non-slums buildings to eliminate long flat buildings
-  const maxRatio = 1.6;
+  const maxRatio = 1.3;
   if (bw > bd * maxRatio) {
     bw = bd * maxRatio;
   } else if (bd > bw * maxRatio) {
@@ -1666,9 +1663,9 @@ function AdminPanel({
           let bw = b.w - pad; let bd = b.d - pad;
           if (bw < 4 || bd < 4) return;
 
-          // Clamp aspect ratio to 1.6 for non-slums zones to eliminate long flat buildings
+          // Clamp aspect ratio to 1.3 for non-slums zones to eliminate long flat buildings
           if (sector.type !== 'SLUMS') {
-            const maxRatio = 1.6;
+            const maxRatio = 1.3;
             if (bw > bd * maxRatio) bw = bd * maxRatio;
             else if (bd > bw * maxRatio) bd = bw * maxRatio;
           }
@@ -2382,9 +2379,6 @@ out skel qt;`;
                 const nz = Math.max(1, Math.floor(bd / shackSize));
                 for (let ix = 0; ix < nx; ix++) {
                   for (let iz = 0; iz < nz; iz++) {
-                    // Reduce structures by 65% (35% chance to spawn)
-                    if (Math.random() > 0.35) continue;
-
                     const shW = 2.5 + Math.random() * 1.5;
                     const shD = 2.5 + Math.random() * 1.5;
                     const shX = bx - bw/2 + (ix + 0.5) * (bw / nx) + (Math.random() - 0.5) * 1.0;
@@ -3280,9 +3274,12 @@ out skel qt;`;
                     // A single localized slum district occupies the outer edge (normDist > 0.45) of one 120-degree wedge
                     const isInSlumSector = normDist > 0.45 && angleDiff < Math.PI / 3;
                     
-                    if (isInSlumSector) {
-                      // Confine slums strictly to this single outer district
+                    if (isInSlumSector && Math.random() < 0.35) {
+                      // Confine slums strictly to this single outer district (with 35% probability, reducing by 65%)
                       zoneTypeVal = 0.1;
+                    } else if (isInSlumSector) {
+                      // Fallback to Urban (50%) or Corporate (50%)
+                      zoneTypeVal = Math.random() > 0.5 ? 0.5 : 0.9;
                     } else if (normDist > 0.65 && Math.random() < 0.35) {
                       // Outer transition zone has a 35% chance to generate Industrial blocks
                       zoneTypeVal = -0.1;
@@ -3297,10 +3294,10 @@ out skel qt;`;
                   else if (citySectionType === 'SLUMS') zoneTypeVal = 0.1;
                   else if (citySectionType === 'INDUSTRIAL') zoneTypeVal = -0.1;
                   
-                  // Clamp aspect ratio to 1.6 for non-slums zones to eliminate long flat buildings
+                  // Clamp aspect ratio to 1.3 for non-slums zones to eliminate long flat buildings
                   const isSlum = zoneTypeVal <= 0.25 && zoneTypeVal >= 0;
                   if (!isSlum) {
-                    const maxRatio = 1.6;
+                    const maxRatio = 1.3;
                     if (bw > bd * maxRatio) bw = bd * maxRatio;
                     else if (bd > bw * maxRatio) bd = bw * maxRatio;
                   }
