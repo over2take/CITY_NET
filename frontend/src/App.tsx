@@ -2301,13 +2301,27 @@ function AdminPanel({
   };
 
   const startNew = () => {
-    setEditId(null); setSelectedLocation(null); setTargetObject(null);
+    setEditId(null); setSelectedLocation(null);
+    let tx = 0, tz = 0;
+    if (controls && (controls as any).getTarget) {
+        const t = new THREE.Vector3();
+        (controls as any).getTarget(t);
+        tx = t.x; tz = t.z;
+    }
+    setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
     setEditData({ name: '', description: '', npcs: '', x: 0, y: 0, z: 0, width: 8, height: 16, depth: 8, baseWidth: 8, baseHeight: 16, baseDepth: 8, shape: 'box', color: '#00ff00', isFavorite: false, isDanger: false, owner: '' });
     setView('editor');
   };
 
   const startNewEnemy = () => {
-    setEditId(null); setSelectedLocation(null); setTargetObject(null);
+    setEditId(null); setSelectedLocation(null);
+    let tx = 0, tz = 0;
+    if (controls && (controls as any).getTarget) {
+        const t = new THREE.Vector3();
+        (controls as any).getTarget(t);
+        tx = t.x; tz = t.z;
+    }
+    setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
     setEditData({ 
         name: '', description: '', npcs: '', x: 0, y: 0, z: 0, 
         width: 1.875, height: 1.875, depth: 1.875, 
@@ -2559,7 +2573,17 @@ function AdminPanel({
           </div>
           <button className="upload-btn" onClick={startNew}>+ ADD_NEW_DATA_POINT</button>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
-              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setTargetObject(null); setView('generator'); generateBlock(); }}>+ BLOCK_GEN</button>
+              <button className="utility-btn" style={{flex: 1}} onClick={() => { 
+                setSelectedLocation(null); 
+                let tx = 0, tz = 0;
+                if (controls && (controls as any).getTarget) {
+                    const t = new THREE.Vector3();
+                    (controls as any).getTarget(t);
+                    tx = t.x; tz = t.z;
+                }
+                setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
+                setView('generator'); generateBlock(); 
+              }}>+ BLOCK_GEN</button>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setRoadSelectionBounds(null); setView('city_gen'); }}>+ CITY_GEN</button>
           </div>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
