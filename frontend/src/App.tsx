@@ -4328,7 +4328,7 @@ function App() {
 
     newSocket.on('connect', () => {
       console.log("Socket connected, identifying as:", userName);
-      newSocket.emit('identify', { userName, isAdmin: !!token });
+      newSocket.emit('identify', { userName, isAdmin: !!token, token });
     });
 
     newSocket.on('dataUpdated', () => { fetchLocations(); fetchRoads(); });
@@ -4349,7 +4349,7 @@ function App() {
   // Re-identify when admin token changes to update roster rank
   useEffect(() => {
     if (socket && userName) {
-        socket.emit('identify', { userName, isAdmin: !!token });
+        socket.emit('identify', { userName, isAdmin: !!token, token });
     }
   }, [token, socket, userName]);
 

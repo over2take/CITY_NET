@@ -11,10 +11,15 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 const PORT = process.env.PORT || 5000;
-const SECRET = process.env.JWT_SECRET || 'cyberpunk_secret_key';
+if (!process.env.JWT_SECRET) {
+  console.error("CRITICAL ERROR: JWT_SECRET environment variable is not set!");
+  console.error("Please create a .env file and set JWT_SECRET to a secure random string.");
+  process.exit(1);
+}
+const SECRET = process.env.JWT_SECRET;
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // Emit helper
 const emitUpdate = () => io.emit('dataUpdated');
@@ -27,7 +32,6 @@ const recordAction = (type, payload) => {
   });
 };
 
-// Auth Middleware
 const authenticate = (req, res, next) => {
   const token = req.headers['authorization'];
   if (!token) return res.status(401).json({ error: 'Access denied' });
@@ -40,6 +44,21 @@ const authenticate = (req, res, next) => {
   }
 };
 
+const optionalAuthenticate = (req, res, next) => {
+  const token = req.headers['authorization'];
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+  try {
+    const verified = jwt.verify(token.split(' ')[1], SECRET);
+    req.user = verified;
+  } catch (err) {
+    req.user = null; // Proceed as unauthenticated if token is invalid, or you could return error here. We'll proceed as unauth.
+  }
+  next();
+};
+
 // Routes
 app.get('/api/locations', (req, res) => {
   db.all('SELECT * FROM locations', [], (err, rows) => {
@@ -48,9 +67,17 @@ app.get('/api/locations', (req, res) => {
   });
 });
 
-app.post('/api/locations', (req, res) => {
+app.post('/api/locations', optionalAuthenticate, (req, res) => {
   const locations = Array.isArray(req.body) ? req.body : [req.body];
   
+  // Security check: If unauthenticated, ONLY allow creating Rhombuses.
+  if (!req.user) {
+    const hasInvalidShape = locations.some(loc => loc.shape !== 'rhombus');
+    if (hasInvalidShape) {
+      return res.status(401).json({ error: 'Access denied: Unauthenticated users can only create rhombuses.' });
+    }
+  }
+
   const sql = `INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   
@@ -133,7 +160,7 @@ app.post('/api/locations/batch-delete', authenticate, (req, res) => {
   });
 });
 
-app.delete('/api/locations/:id', (req, res) => {
+app.delete('/api/locations/:id', authenticate, (req, res) => {
   db.get('SELECT * FROM locations WHERE id = ?', [req.params.id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'Not found' });
@@ -147,7 +174,7 @@ app.delete('/api/locations/:id', (req, res) => {
   });
 });
 
-app.put('/api/locations/:id', (req, res) => {
+app.put('/api/locations/:id', authenticate, (req, res) => {
   const { name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation } = req.body;
   
   if (name === undefined || x === undefined || y === undefined || z === undefined) {
@@ -383,7 +410,23 @@ io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   socket.on('identify', (data) => {
-    const info = typeof data === 'string' ? { userName: data, isAdmin: false } : data;
+    let info = typeof data === 'string' ? { userName: data, isAdmin: false } : data;
+    
+    // SECURITY FIX: Verify JWT if client claims to be admin
+    if (info.isAdmin && info.token) {
+        try {
+            jwt.verify(info.token, SECRET);
+            // Token is valid, keep isAdmin = true
+        } catch (err) {
+            console.warn(`User ${info.userName} claimed admin but provided invalid token.`);
+            info.isAdmin = false;
+        }
+    } else {
+        info.isAdmin = false; // Force false if no token provided
+    }
+    // Remove token from info before broadcasting
+    delete info.token;
+
     console.log(`User identified: ${info.userName} (Admin: ${info.isAdmin})`);
     userSockets.set(socket.id, info);
     broadcastActiveUsers();
@@ -458,8 +501,9 @@ io.on('connection', (socket) => {
     
     // Delay the actual deletion to allow the animation to play
     setTimeout(() => {
-        db.run('DELETE FROM locations WHERE id = ?', [data.id], (err) => {
-            if (!err) {
+        // SECURITY FIX: Enforce shape = 'rhombus' to prevent arbitrary building deletion
+        db.run('DELETE FROM locations WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
+            if (!err && this.changes > 0) {
                 recordAction('location_delete', { data: [{ id: data.id }] });
                 emitUpdate();
             }
