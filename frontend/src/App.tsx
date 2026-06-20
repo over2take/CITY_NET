@@ -3475,7 +3475,7 @@ function DraggableWindow({ title, children, pos, setPos, onClose, windowStyle = 
   );
 }
 
-function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isPrimaryAdmin, onGrantAccess, onRevokeAccess, socket, token }: any) {
+function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isPrimaryAdmin, onGrantAccess, onRevokeAccess, socket, token, isChatOpen }: any) {
   const [inputText, setInputText] = useState('');
   
   // Private messaging states
@@ -3586,176 +3586,178 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
   const showSendAs = activeTab !== 'GLOBAL' && isPrimaryAdmin && myNPCs.length > 0;
 
   return (
-    <DraggableWindow 
-        title="CITY_NET // COMMS" 
-        pos={pos} 
-        setPos={setPos} 
-        onClose={onClose}
-        windowStyle={{ maxWidth: 'none', width: '850px' }}
-        contentStyle={{ maxHeight: 'none', padding: 0, overflow: 'visible' }}
-        notificationsEnabled={notificationsEnabled}
-        onToggleNotifications={onToggleNotifications}
-    >
-      {/* Click outside listener for dropdowns */}
-      {activeDropdown && (
-        <div 
-            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} 
-            onClick={() => setActiveDropdown(null)} 
-        />
-      )}
-
-      {/* TABS BAR */}
-      <div style={{ display: 'flex', background: 'var(--dark-green)', padding: '5px 5px 0 5px', gap: '5px', overflowX: 'auto' }}>
-          <div 
-              onClick={() => setActiveTab('GLOBAL')}
-              style={{ padding: '8px 15px', background: activeTab === 'GLOBAL' ? 'var(--black)' : 'transparent', color: activeTab === 'GLOBAL' ? 'var(--green)' : '#888', borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
-          >
-              [ GLOBAL ]
-          </div>
-          {openTabs.map(tab => (
-              <div 
-                  key={tab}
-                  onClick={() => openTab(tab)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 15px', background: activeTab === tab ? 'var(--black)' : 'transparent', color: activeTab === tab ? 'var(--cyan)' : (unreadTabs.has(tab) ? '#ffaa00' : '#888'), borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
-              >
-                  {tab} {unreadTabs.has(tab) && '*'}
-                  <span onClick={(e) => closeTab(e, tab)} style={{ color: '#ff0000', marginLeft: '5px', cursor: 'pointer' }}>×</span>
-              </div>
-          ))}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'row', height: '560px', background: 'var(--black)' }}>
-        {/* Main Section: History & Input */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '2px solid var(--dark-green)' }}>
-          <div 
-            ref={scrollRef}
-            style={{ flex: 1, overflowY: 'auto', padding: '15px', fontSize: '0.8rem' }}
-          >
-            {displayMessages.map((msg: any) => (
-              <div key={msg.id || Math.random()} style={{ marginBottom: '10px', opacity: msg.sender === 'SYSTEM' ? 0.6 : 1 }}>
-                <span style={{ color: 'var(--green)', fontSize: '0.65rem', marginRight: '8px', fontFamily: 'monospace' }}>[{msg.timestamp}]</span>
-                <span style={{ color: msg.sender === userName ? 'var(--cyan)' : (msg.sender === 'SYSTEM' ? '#ff0000' : (myNPCs.includes(msg.sender) ? '#ffaa00' : 'var(--green)')), fontWeight: 'bold' }}>
-                  {msg.sender}:
-                </span>
-                <span style={{ marginLeft: '8px', wordBreak: 'break-all', color: activeTab === 'GLOBAL' ? '#fff' : '#aaa' }}>{msg.text}</span>
-              </div>
-            ))}
-          </div>
-          <form onSubmit={handleSubmit} style={{ padding: '15px', display: 'flex', gap: '10px', background: 'rgba(0,25,0,0.5)', borderTop: '2px solid var(--dark-green)', alignItems: 'center' }}>
-            {showSendAs && (
-              <select 
-                value={sendAs} 
-                onChange={(e) => setSendAs(e.target.value)}
-                style={{ background: 'var(--black)', border: '1px solid var(--green)', color: 'var(--green)', padding: '10px', fontSize: '0.8rem', cursor: 'pointer' }}
-              >
-                <option value={userName}>{userName}</option>
-                {myNPCs.map((npc: string) => (
-                  <option key={npc} value={npc}>[NPC] {npc}</option>
-                ))}
-              </select>
-            )}
-            <input 
-              value={inputText}
-              onChange={e => setInputText(e.target.value)}
-              placeholder={activeTab === 'GLOBAL' ? "TYPE_GLOBAL_BROADCAST..." : `ENCRYPTED_MESSAGE_TO_${activeTab}...`}
-              style={{ flex: 1, background: 'rgba(0,40,0,0.6)', border: '1px solid var(--green)', color: 'var(--green)', padding: '10px', fontSize: '0.9rem' }}
+    <div style={{ display: isChatOpen ? 'block' : 'none' }}>
+        <DraggableWindow 
+            title="CITY_NET // COMMS" 
+            pos={pos} 
+            setPos={setPos} 
+            onClose={onClose}
+            windowStyle={{ maxWidth: 'none', width: '850px' }}
+            contentStyle={{ maxHeight: 'none', padding: 0, overflow: 'visible' }}
+            notificationsEnabled={notificationsEnabled}
+            onToggleNotifications={onToggleNotifications}
+        >
+          {/* Click outside listener for dropdowns */}
+          {activeDropdown && (
+            <div 
+                style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} 
+                onClick={() => setActiveDropdown(null)} 
             />
-            <button type="submit" className="upload-btn" style={{ width: '100px', margin: 0 }}>SEND</button>
-          </form>
-        </div>
-
-        {/* User Roster: Right Side */}
-        <div style={{ width: '220px', display: 'flex', flexDirection: 'column', background: 'rgba(0,10,0,0.3)' }}>
-          <div style={{ padding: '12px', fontSize: '0.75rem', fontWeight: 'bold', borderBottom: '2px solid var(--dark-green)', color: 'var(--green)', textShadow: 'var(--glow)' }}>OPERATORS_ONLINE</div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '10px', position: 'relative' }}>
-            {activeUsers.map((user: any) => (
-              <div key={user.userName} style={{ position: 'relative' }}>
-                <div 
-                  onClick={() => handleUserClick(user)}
-                  style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '10px', 
-                      marginBottom: '10px', 
-                      padding: '5px', 
-                      background: user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent',
-                      cursor: user.userName !== userName ? 'pointer' : 'default',
-                      borderRadius: '4px'
-                  }}
-                  onMouseOver={(e) => {
-                      if (user.userName !== userName) {
-                          e.currentTarget.style.background = 'rgba(0,255,255,0.1)';
-                      }
-                  }}
-                  onMouseOut={(e) => {
-                      e.currentTarget.style.background = user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent';
-                  }}
-                >
-                  <div style={{ width: '6px', height: '6px', background: user.isAdmin ? '#ff0000' : (user.isTemporaryAdmin ? '#ffaa00' : (user.isNPC ? '#aa00ff' : 'var(--green)')), borderRadius: '50%', boxShadow: user.isAdmin ? '0 0 5px #ff0000' : (user.isTemporaryAdmin ? '0 0 5px #ffaa00' : (user.isNPC ? '0 0 5px #aa00ff' : '0 0 5px var(--green)')) }}></div>
-                  <span style={{ color: user.userName === userName ? 'var(--cyan)' : '#888', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      {user.userName}
-                      {user.isAdmin && <span title="Primary Admin">⭐</span>}
-                      {user.isTemporaryAdmin && <span title="Temporary Admin">🌟</span>}
-                      {user.isNPC && <span title="NPC" style={{ color: '#aa00ff' }}>[NPC]</span>}
-                  </span>
-                </div>
-
-                {/* Context Menu Dropdown */}
-                {activeDropdown === user.userName && (
-                  <div style={{ position: 'absolute', top: '25px', left: '15px', background: 'var(--black)', border: '1px solid var(--green)', padding: '5px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '150px' }}>
-                      <button 
-                        className="utility-btn" 
-                        style={{ margin: 0, textAlign: 'left', width: '100%' }}
-                        onClick={() => openTab(user.userName)}
-                      >
-                        PRIVATE_MESSAGE
-                      </button>
-                      
-                      {isPrimaryAdmin && !user.isAdmin && !user.isNPC && (
-                          <button 
-                            className={`utility-btn ${user.isTemporaryAdmin ? 'danger-btn' : ''}`} 
-                            style={{ margin: 0, textAlign: 'left', width: '100%' }}
-                            onClick={() => {
-                                if (user.isTemporaryAdmin) onRevokeAccess(user.userName);
-                                else onGrantAccess(user.userName);
-                                setActiveDropdown(null);
-                            }}
-                          >
-                            {user.isTemporaryAdmin ? 'REVOKE_ADMIN' : 'GRANT_ADMIN'}
-                          </button>
-                      )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          
-          {/* NPC Creation Block */}
-          {isPrimaryAdmin && (
-            <div style={{ padding: '10px', borderTop: '2px solid var(--dark-green)' }}>
-                {showNpcPrompt ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <input 
-                          value={npcNameInput}
-                          onChange={e => setNpcNameInput(e.target.value)}
-                          placeholder="NPC NAME..."
-                          style={{ background: 'var(--black)', border: '1px solid var(--green)', color: 'var(--green)', padding: '5px', fontSize: '0.7rem' }}
-                        />
-                        <div style={{ display: 'flex', gap: '5px' }}>
-                            <button className="upload-btn" style={{ margin: 0, flex: 1, padding: '5px' }} onClick={handleCreateNPC}>CREATE</button>
-                            <button className="utility-btn" style={{ margin: 0, flex: 1, padding: '5px' }} onClick={() => setShowNpcPrompt(false)}>CANCEL</button>
-                        </div>
-                    </div>
-                ) : (
-                    <button className="utility-btn" style={{ margin: 0, width: '100%' }} onClick={() => setShowNpcPrompt(true)}>
-                        [+] ADD NPC
-                    </button>
-                )}
-            </div>
           )}
-        </div>
-      </div>
-    </DraggableWindow>
+
+          {/* TABS BAR */}
+          <div style={{ display: 'flex', background: 'var(--dark-green)', padding: '5px 5px 0 5px', gap: '5px', overflowX: 'auto' }}>
+              <div 
+                  onClick={() => setActiveTab('GLOBAL')}
+                  style={{ padding: '8px 15px', background: activeTab === 'GLOBAL' ? 'var(--black)' : 'transparent', color: activeTab === 'GLOBAL' ? 'var(--green)' : '#888', borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                  [ GLOBAL ]
+              </div>
+              {openTabs.map(tab => (
+                  <div 
+                      key={tab}
+                      onClick={() => openTab(tab)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 15px', background: activeTab === tab ? 'var(--black)' : 'transparent', color: activeTab === tab ? 'var(--cyan)' : (unreadTabs.has(tab) ? '#ffaa00' : '#888'), borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                      {tab} {unreadTabs.has(tab) && '*'}
+                      <span onClick={(e) => closeTab(e, tab)} style={{ color: '#ff0000', marginLeft: '5px', cursor: 'pointer' }}>×</span>
+                  </div>
+              ))}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'row', height: '560px', background: 'var(--black)' }}>
+            {/* Main Section: History & Input */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '2px solid var(--dark-green)' }}>
+              <div 
+                ref={scrollRef}
+                style={{ flex: 1, overflowY: 'auto', padding: '15px', fontSize: '0.8rem' }}
+              >
+                {displayMessages.map((msg: any) => (
+                  <div key={msg.id || Math.random()} style={{ marginBottom: '10px', opacity: msg.sender === 'SYSTEM' ? 0.6 : 1 }}>
+                    <span style={{ color: 'var(--green)', fontSize: '0.65rem', marginRight: '8px', fontFamily: 'monospace' }}>[{msg.timestamp}]</span>
+                    <span style={{ color: msg.sender === userName ? 'var(--cyan)' : (msg.sender === 'SYSTEM' ? '#ff0000' : (myNPCs.includes(msg.sender) ? '#ffaa00' : 'var(--green)')), fontWeight: 'bold' }}>
+                      {msg.sender}:
+                    </span>
+                    <span style={{ marginLeft: '8px', wordBreak: 'break-all', color: activeTab === 'GLOBAL' ? '#fff' : '#aaa' }}>{msg.text}</span>
+                  </div>
+                ))}
+              </div>
+              <form onSubmit={handleSubmit} style={{ padding: '15px', display: 'flex', gap: '10px', background: 'rgba(0,25,0,0.5)', borderTop: '2px solid var(--dark-green)', alignItems: 'center' }}>
+                {showSendAs && (
+                  <select 
+                    value={sendAs} 
+                    onChange={(e) => setSendAs(e.target.value)}
+                    style={{ background: 'var(--black)', border: '1px solid var(--green)', color: 'var(--green)', padding: '10px', fontSize: '0.8rem', cursor: 'pointer' }}
+                  >
+                    <option value={userName}>{userName}</option>
+                    {myNPCs.map((npc: string) => (
+                      <option key={npc} value={npc}>[NPC] {npc}</option>
+                    ))}
+                  </select>
+                )}
+                <input 
+                  value={inputText}
+                  onChange={e => setInputText(e.target.value)}
+                  placeholder={activeTab === 'GLOBAL' ? "TYPE_GLOBAL_BROADCAST..." : `ENCRYPTED_MESSAGE_TO_${activeTab}...`}
+                  style={{ flex: 1, background: 'rgba(0,40,0,0.6)', border: '1px solid var(--green)', color: 'var(--green)', padding: '10px', fontSize: '0.9rem' }}
+                />
+                <button type="submit" className="upload-btn" style={{ width: '100px', margin: 0 }}>SEND</button>
+              </form>
+            </div>
+
+            {/* User Roster: Right Side */}
+            <div style={{ width: '220px', display: 'flex', flexDirection: 'column', background: 'rgba(0,10,0,0.3)' }}>
+              <div style={{ padding: '12px', fontSize: '0.75rem', fontWeight: 'bold', borderBottom: '2px solid var(--dark-green)', color: 'var(--green)', textShadow: 'var(--glow)' }}>OPERATORS_ONLINE</div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '10px', position: 'relative' }}>
+                {activeUsers.map((user: any) => (
+                  <div key={user.userName} style={{ position: 'relative' }}>
+                    <div 
+                      onClick={() => handleUserClick(user)}
+                      style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '10px', 
+                          marginBottom: '10px', 
+                          padding: '5px', 
+                          background: user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent',
+                          cursor: user.userName !== userName ? 'pointer' : 'default',
+                          borderRadius: '4px'
+                      }}
+                      onMouseOver={(e) => {
+                          if (user.userName !== userName) {
+                              e.currentTarget.style.background = 'rgba(0,255,255,0.1)';
+                          }
+                      }}
+                      onMouseOut={(e) => {
+                          e.currentTarget.style.background = user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent';
+                      }}
+                    >
+                      <div style={{ width: '6px', height: '6px', background: user.isAdmin ? '#ff0000' : (user.isTemporaryAdmin ? '#ffaa00' : (user.isNPC ? '#aa00ff' : 'var(--green)')), borderRadius: '50%', boxShadow: user.isAdmin ? '0 0 5px #ff0000' : (user.isTemporaryAdmin ? '0 0 5px #ffaa00' : (user.isNPC ? '0 0 5px #aa00ff' : '0 0 5px var(--green)')) }}></div>
+                      <span style={{ color: user.userName === userName ? 'var(--cyan)' : '#888', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          {user.userName}
+                          {user.isAdmin && <span title="Primary Admin">⭐</span>}
+                          {user.isTemporaryAdmin && <span title="Temporary Admin">🌟</span>}
+                          {user.isNPC && <span title="NPC" style={{ color: '#aa00ff' }}>[NPC]</span>}
+                      </span>
+                    </div>
+
+                    {/* Context Menu Dropdown */}
+                    {activeDropdown === user.userName && (
+                      <div style={{ position: 'absolute', top: '25px', left: '15px', background: 'var(--black)', border: '1px solid var(--green)', padding: '5px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '150px' }}>
+                          <button 
+                            className="utility-btn" 
+                            style={{ margin: 0, textAlign: 'left', width: '100%' }}
+                            onClick={() => openTab(user.userName)}
+                          >
+                            PRIVATE_MESSAGE
+                          </button>
+                          
+                          {isPrimaryAdmin && !user.isAdmin && !user.isNPC && (
+                              <button 
+                                className={`utility-btn ${user.isTemporaryAdmin ? 'danger-btn' : ''}`} 
+                                style={{ margin: 0, textAlign: 'left', width: '100%' }}
+                                onClick={() => {
+                                    if (user.isTemporaryAdmin) onRevokeAccess(user.userName);
+                                    else onGrantAccess(user.userName);
+                                    setActiveDropdown(null);
+                                }}
+                              >
+                                {user.isTemporaryAdmin ? 'REVOKE_ADMIN' : 'GRANT_ADMIN'}
+                              </button>
+                          )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* NPC Creation Block */}
+              {isPrimaryAdmin && (
+                <div style={{ padding: '10px', borderTop: '2px solid var(--dark-green)' }}>
+                    {showNpcPrompt ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                            <input 
+                              value={npcNameInput}
+                              onChange={e => setNpcNameInput(e.target.value)}
+                              placeholder="NPC NAME..."
+                              style={{ background: 'var(--black)', border: '1px solid var(--green)', color: 'var(--green)', padding: '5px', fontSize: '0.7rem' }}
+                            />
+                            <div style={{ display: 'flex', gap: '5px' }}>
+                                <button className="upload-btn" style={{ margin: 0, flex: 1, padding: '5px' }} onClick={handleCreateNPC}>CREATE</button>
+                                <button className="utility-btn" style={{ margin: 0, flex: 1, padding: '5px' }} onClick={() => setShowNpcPrompt(false)}>CANCEL</button>
+                            </div>
+                        </div>
+                    ) : (
+                        <button className="utility-btn" style={{ margin: 0, width: '100%' }} onClick={() => setShowNpcPrompt(true)}>
+                            [+] ADD NPC
+                        </button>
+                    )}
+                </div>
+              )}
+            </div>
+          </div>
+        </DraggableWindow>
+    </div>
   );
 }
 
@@ -4545,6 +4547,12 @@ function App() {
         }
     });
 
+    newSocket.on('receivePrivateMessage', (msg: any) => {
+        if (!isChatOpenRef.current && notificationsEnabledRef.current && msg.sender !== userName) {
+            setHasUnreadChat(true);
+        }
+    });
+
     newSocket.on('accessGranted', (data: any) => {
         if (data.targetUser === userName) {
             setToken(data.token);
@@ -4786,7 +4794,6 @@ function App() {
                 setIsCopyingSize={setIsCopyingSize}
                 />
             )}
-            {isChatOpen && (
               <ChatWindow 
                   pos={chatPos} 
                   setPos={setChatPos} 
@@ -4802,8 +4809,8 @@ function App() {
                   onRevokeAccess={handleRevokeAccess}
                   socket={socketRef.current}
                   token={token}
+                  isChatOpen={isChatOpen}
               />
-            )}
             {(() => {
               const isRhombus = selectedLocation?.shape === 'rhombus' || selectedLocation?.shape === 'enemy_rhombus';
               const isOwner = selectedLocation?.owner === userName;
