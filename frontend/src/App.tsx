@@ -3232,6 +3232,20 @@ function AdminPanel({
                 <>
                     <textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} />
                     
+                    <div style={{marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '5px'}}>
+                        <label style={{fontSize: '0.7rem'}}>BASE SHAPE</label>
+                        <select 
+                            value={editData.shape} 
+                            onChange={e => setEditData({...editData, shape: e.target.value})} 
+                            style={{width: '100%', padding: '5px', background: 'rgba(0,40,0,0.6)', border: '1px solid var(--green)', color: 'var(--green)', outline: 'none'}}
+                        >
+                            <option value="box">Box</option>
+                            <option value="cylinder">Cylinder</option>
+                            <option value="sphere">Sphere</option>
+                            <option value="pyramid">Pyramid</option>
+                        </select>
+                    </div>
+
                     {/* NEW PROCEDURAL GEN SECTION */}
                     <div style={{marginTop: '10px', padding: '10px', border: '1px solid #333', background: 'rgba(0,0,0,0.5)'}}>
                       <label style={{fontSize: '0.7rem'}}>PROCEDURAL GENERATION</label>
