@@ -486,7 +486,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   const intersection = useMemo(() => new THREE.Vector3(), []);
   
   const isAdmin = token !== '';
-  const [localPos, setLocalPos] = useState({ x: location.x, z: location.z });
+  const localPos = useRef({ x: location.x, z: location.z });
   const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
 
   // Smooth movement interpolation
@@ -517,7 +517,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   }, [location.id, socket]);
 
   useEffect(() => { 
-    setLocalPos({ x: location.x, z: location.z }); 
+    localPos.current = { x: location.x, z: location.z }; 
   }, [location.x, location.z]);
 
   useFrame((state, delta) => {
@@ -525,8 +525,8 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
     
     // Interpolate towards localPos (35% slower + frame-rate independent)
     const targetY = location.y + (location.height / 4);
-    visualPos.current.x = THREE.MathUtils.lerp(visualPos.current.x, localPos.x, 2.6 * delta);
-    visualPos.current.z = THREE.MathUtils.lerp(visualPos.current.z, localPos.z, 2.6 * delta);
+    visualPos.current.x = THREE.MathUtils.lerp(visualPos.current.x, localPos.current.x, 2.6 * delta);
+    visualPos.current.z = THREE.MathUtils.lerp(visualPos.current.z, localPos.current.z, 2.6 * delta);
     visualPos.current.y = THREE.MathUtils.lerp(visualPos.current.y, targetY, 2.6 * delta);
 
     const d = state.camera.position.distanceTo(visualPos.current);
@@ -592,7 +592,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
     const currentRaycaster = e.raycaster || raycaster;
     if (currentRaycaster && currentRaycaster.ray) {
         currentRaycaster.ray.intersectPlane(plane, intersection);
-        setDragOffset(new THREE.Vector3(localPos.x - intersection.x, 0, localPos.z - intersection.z));
+        setDragOffset(new THREE.Vector3(localPos.current.x - intersection.x, 0, localPos.current.z - intersection.z));
     }
     if (controls) (controls as any).enabled = false;
     setIsDragging(true);
@@ -607,7 +607,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
         const targetX = intersection.x + dragOffset.x;
         const targetZ = intersection.z + dragOffset.z;
         const snapped = getClosestPointOnRoads(targetX, targetZ, roads || [], 15);
-        setLocalPos(snapped);
+        localPos.current = snapped;
     }
   };
 
@@ -621,7 +621,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
         onClick(); // Stationary click -> open info window
     } else if (isAdmin) {
         // Only admins can actually SAVE the new position after a drag
-        await fetch(`/api/locations/${location.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...location, x: localPos.x, z: localPos.z }) });
+        await fetch(`/api/locations/${location.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...location, x: localPos.current.x, z: localPos.current.z }) });
         refreshLocations();
     }
   };
@@ -670,14 +670,14 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
 
   const isOnline = activeUsers.some((u: any) => u.userName === location.owner);
 
-  const [localPos, setLocalPos] = useState({ x: location.x, z: location.z });
+  const localPos = useRef({ x: location.x, z: location.z });
   const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
 
   // Smooth movement interpolation
   const visualPos = useRef(new THREE.Vector3(location.x, location.y + (location.height / 2), location.z));
 
   useEffect(() => {
-    setLocalPos({ x: location.x, z: location.z });
+    localPos.current = { x: location.x, z: location.z };
   }, [location.x, location.z]);
 
   const [animState, setAnimState] = useState<'none' | 'appearing' | 'fading'>('none');
@@ -707,8 +707,8 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
     
     // Interpolate towards localPos (35% slower + frame-rate independent)
     const targetY = location.y + (location.height / 2);
-    visualPos.current.x = THREE.MathUtils.lerp(visualPos.current.x, localPos.x, 2.6 * delta);
-    visualPos.current.z = THREE.MathUtils.lerp(visualPos.current.z, localPos.z, 2.6 * delta);
+    visualPos.current.x = THREE.MathUtils.lerp(visualPos.current.x, localPos.current.x, 2.6 * delta);
+    visualPos.current.z = THREE.MathUtils.lerp(visualPos.current.z, localPos.current.z, 2.6 * delta);
     visualPos.current.y = THREE.MathUtils.lerp(visualPos.current.y, targetY, 2.6 * delta);
 
     const d = Math.sqrt((camPos.x - visualPos.current.x) ** 2 + (camPos.y - visualPos.current.y) ** 2 + (camPos.z - visualPos.current.z) ** 2);
@@ -790,7 +790,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
     const currentRaycaster = e.raycaster || raycaster;
     if (currentRaycaster && currentRaycaster.ray) {
         currentRaycaster.ray.intersectPlane(plane, intersection);
-        setDragOffset(new THREE.Vector3(localPos.x - intersection.x, 0, localPos.z - intersection.z));
+        setDragOffset(new THREE.Vector3(localPos.current.x - intersection.x, 0, localPos.current.z - intersection.z));
     }
     if (controls) (controls as any).enabled = false;
     setIsDragging(true);
@@ -805,7 +805,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
         const targetX = intersection.x + dragOffset.x;
         const targetZ = intersection.z + dragOffset.z;
         const snapped = getClosestPointOnRoads(targetX, targetZ, roads || [], 15);
-        setLocalPos(snapped);
+        localPos.current = snapped;
     }
   };
 
@@ -819,7 +819,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
         onClick(); // Stationary click -> open info window
     } else if (canManage) {
         // Only owners/admins can actually SAVE the new position after a drag
-        await fetch(`/api/locations/${location.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...location, x: localPos.x, z: localPos.z }) });
+        await fetch(`/api/locations/${location.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...location, x: localPos.current.x, z: localPos.current.z }) });
         refreshLocations();
     }
   };
