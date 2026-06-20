@@ -453,26 +453,37 @@ const GhostTraffic = React.memo(({ roads }: { roads: any[] }) => {
   );
 });
 
+const _p1 = new THREE.Vector3();
+const _p2 = new THREE.Vector3();
+const _pt = new THREE.Vector3();
+const _closest = new THREE.Vector3();
+const _line = new THREE.Line3();
+
 const getClosestPointOnRoads = (x: number, z: number, roadsList: any[], maxSnapDistance = 15) => {
     if (!roadsList || roadsList.length === 0) return { x, z };
-    let closestPt = new THREE.Vector3(x, 0, z);
+    
+    _pt.set(x, 0, z);
     let minDistance = Infinity;
+    let closestX = x;
+    let closestZ = z;
 
-    roadsList.forEach(r => {
-        const p1 = new THREE.Vector3(r.x1, 0, r.z1);
-        const p2 = new THREE.Vector3(r.x2, 0, r.z2);
-        const line = new THREE.Line3(p1, p2);
-        const closest = new THREE.Vector3();
-        line.closestPointToPoint(new THREE.Vector3(x, 0, z), true, closest);
-        const dist = closest.distanceTo(new THREE.Vector3(x, 0, z));
+    for (let i = 0; i < roadsList.length; i++) {
+        const r = roadsList[i];
+        _p1.set(r.x1, 0, r.z1);
+        _p2.set(r.x2, 0, r.z2);
+        _line.set(_p1, _p2);
+        _line.closestPointToPoint(_pt, true, _closest);
+        
+        const dist = _closest.distanceTo(_pt);
         if (dist < minDistance) {
             minDistance = dist;
-            closestPt.copy(closest);
+            closestX = _closest.x;
+            closestZ = _closest.z;
         }
-    });
+    }
 
     if (minDistance < maxSnapDistance) {
-        return { x: closestPt.x, z: closestPt.z };
+        return { x: closestX, z: closestZ };
     }
     return { x, z };
 };
@@ -481,6 +492,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   const meshRef = useRef<THREE.Mesh>(null);
   const coreRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.PointLight>(null);
+  const groupRef = useRef<THREE.Group>(null);
   const { controls, raycaster } = useThree();
   const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
   const intersection = useMemo(() => new THREE.Vector3(), []);
@@ -528,6 +540,10 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
     visualPos.current.x = THREE.MathUtils.lerp(visualPos.current.x, localPos.current.x, 2.6 * delta);
     visualPos.current.z = THREE.MathUtils.lerp(visualPos.current.z, localPos.current.z, 2.6 * delta);
     visualPos.current.y = THREE.MathUtils.lerp(visualPos.current.y, targetY, 2.6 * delta);
+
+    if (groupRef.current) {
+        groupRef.current.position.copy(visualPos.current);
+    }
 
     const d = state.camera.position.distanceTo(visualPos.current);
     const zoomComp = Math.max(1, d / 120);
@@ -629,6 +645,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   return (
     <group 
         ref={(group) => { 
+            groupRef.current = group as any;
             if (group) {
                 group.position.copy(visualPos.current);
             }
@@ -660,6 +677,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   const glowRef = useRef<THREE.Mesh>(null);
   const haloRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.PointLight>(null);
+  const groupRef = useRef<THREE.Group>(null);
   const { controls, raycaster } = useThree();
   const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
   const intersection = useMemo(() => new THREE.Vector3(), []);
@@ -710,6 +728,10 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
     visualPos.current.x = THREE.MathUtils.lerp(visualPos.current.x, localPos.current.x, 2.6 * delta);
     visualPos.current.z = THREE.MathUtils.lerp(visualPos.current.z, localPos.current.z, 2.6 * delta);
     visualPos.current.y = THREE.MathUtils.lerp(visualPos.current.y, targetY, 2.6 * delta);
+
+    if (groupRef.current) {
+        groupRef.current.position.copy(visualPos.current);
+    }
 
     const d = Math.sqrt((camPos.x - visualPos.current.x) ** 2 + (camPos.y - visualPos.current.y) ** 2 + (camPos.z - visualPos.current.z) ** 2);
 
