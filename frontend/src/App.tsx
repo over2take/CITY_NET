@@ -964,7 +964,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
         
         return (
           <group key={p.id} position={[pX, (p.y - groupPos[1]) + (p.height / 2), pZ]} scale={[p.width, p.height, p.depth]}>
-            <mesh rotation={[0, p.rotation || 0, 0]} position={[p.x, p.y + (p.height / 2), p.z]} scale={[p.width, p.height, p.depth]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+            <mesh rotation={[0, (p.rotation || 0) - (location.rotation || 0), 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
               {renderBaseGeometry(p.shape, p.polyCount || 5)}
               {/* Invisible Solid Hitbox (handles interactions) */}
               <mesh 
