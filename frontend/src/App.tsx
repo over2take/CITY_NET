@@ -1033,16 +1033,16 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
               <mesh raycast={() => null}>
                 {renderBaseGeometry(p.shape, p.polyCount || 5)}
                 <meshBasicMaterial 
-                  color={isBatchSelected ? "#ffff00" : location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || location.district_color || baseColor)} 
+                  color={isBatchSelected ? "#ffff00" : location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : baseColor)} 
                   wireframe={true} 
                 />
               </mesh>
               
-              {/* Semi-transparent fill */}
+              {/* Solid Fill */}
               <mesh raycast={() => null}>
                 {renderBaseGeometry(p.shape, p.polyCount || 5)}
                 <meshBasicMaterial 
-                  color={location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)} 
+                  color={location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : baseColor)} 
                   transparent={true}
                   opacity={(isSelected || isBatchSelected) ? 0.3 : (isOverlapped ? 0.0 : 0.05)}
                   depthTest={!isOverlapped}
