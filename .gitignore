@@ -22,3 +22,8 @@ backend/city.db
 .idea/
 .DS_Store
 Thumbs.db
+
+# Tunnel Configs and Certificates
+ngrok.yml
+cert.pem
+cloudflared/
