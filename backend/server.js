@@ -407,8 +407,14 @@ const userSockets = new Map(); // socket.id -> userName
 
 let activeNPCs = [];
 db.all('SELECT username, isActive FROM fake_users', (err, rows) => {
-  if (!err && rows) {
+  if (err) {
+    console.error("Error loading fake_users:", err.message);
+  } else if (rows) {
     activeNPCs = rows.map(r => ({ userName: r.username, isActive: r.isActive === 1 }));
+    console.log("Loaded NPCs from DB:", activeNPCs);
+    if (typeof broadcastActiveUsers === 'function') {
+      broadcastActiveUsers();
+    }
   }
 });
 
