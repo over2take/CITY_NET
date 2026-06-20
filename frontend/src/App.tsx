@@ -594,7 +594,18 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
         coreRef.current.rotation.y -= 0.06 * rotationSpeed;
         coreRef.current.scale.set((0.4 + pulse * 0.1) * scaleMult, (0.4 + pulse * 0.1) * scaleMult, (0.4 + pulse * 0.1) * scaleMult);
     }
+
+    if (!(window as any).activeRhombuses) (window as any).activeRhombuses = {};
+    (window as any).activeRhombuses[location.id] = visualPos.current;
   });
+
+  useEffect(() => {
+    return () => {
+      if ((window as any).activeRhombuses) {
+        delete (window as any).activeRhombuses[location.id];
+      }
+    };
+  }, [location.id]);
 
   const dragDist = useRef(0);
 
@@ -802,7 +813,8 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
       glowRef.current.rotation.copy(meshRef.current.rotation);
       glowRef.current.scale.set(location.width * 1.2 * finalScaleMult, location.height * 1.2 * finalScaleMult, location.depth * 1.2 * finalScaleMult);
       if (glowRef.current.material) (glowRef.current.material as any).opacity = (baseOpacity * 0.4) * pulse;
-      (window as any).localRhombusPos = visualPos.current;
+      if (!(window as any).activeRhombuses) (window as any).activeRhombuses = {};
+      (window as any).activeRhombuses[location.id] = visualPos.current;
     }
 
     if (haloRef.current) {
@@ -817,6 +829,14 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
     meshRef.current.scale.set(location.width * finalScaleMult, location.height * finalScaleMult, location.depth * finalScaleMult);
     if (meshRef.current.material) (meshRef.current.material as any).opacity = baseOpacity * pulse;
   });
+
+  useEffect(() => {
+    return () => {
+      if ((window as any).activeRhombuses) {
+        delete (window as any).activeRhombuses[location.id];
+      }
+    };
+  }, [location.id]);
 
   const dragDist = useRef(0);
 
@@ -925,14 +945,22 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
 const OverlapChecker = React.memo(({ locations, setOverlapIds }: any) => {
     const lastOverlaps = useRef('');
     useFrame(() => {
-        if (!(window as any).localRhombusPos) return;
-        const pPos = (window as any).localRhombusPos;
+        const activeRhombuses = (window as any).activeRhombuses || {};
         const overlaps: number[] = [];
         for (let i = 0; i < locations.length; i++) {
             const l = locations[i];
-            if (l.shape === 'rhombus' || l.shape === 'road' || l.shape === 'intersection') continue;
-            // AABB with a small margin
-            if (Math.abs(l.x - pPos.x) <= l.width/2 + 0.1 && Math.abs(l.z - pPos.z) <= l.depth/2 + 0.1) {
+            if (l.shape === 'rhombus' || l.shape === 'enemy_rhombus' || l.shape === 'road' || l.shape === 'intersection') continue;
+            
+            // Check against ALL active rhombuses
+            let isOverlapping = false;
+            for (const id in activeRhombuses) {
+                const pPos = activeRhombuses[id];
+                if (Math.abs(l.x - pPos.x) <= l.width/2 + 0.1 && Math.abs(l.z - pPos.z) <= l.depth/2 + 0.1) {
+                    isOverlapping = true;
+                    break;
+                }
+            }
+            if (isOverlapping) {
                 overlaps.push(l.id);
             }
         }
