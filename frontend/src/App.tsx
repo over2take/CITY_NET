@@ -3477,6 +3477,7 @@ function DraggableWindow({ title, children, pos, setPos, onClose, windowStyle = 
 
 function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isAdmin, onGrantAccess, onRevokeAccess }: any) {
   const [inputText, setInputText] = useState('');
+  const [accessTarget, setAccessTarget] = useState<{ userName: string, action: 'GRANT' | 'REVOKE' } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -3495,13 +3496,9 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
     if (!isAdmin || user.userName === userName || user.isAdmin) return; // Cannot grant to self or real admins
     
     if (user.isTemporaryAdmin) {
-        if (window.confirm(`Revoke elevated access from ${user.userName}?`)) {
-            onRevokeAccess(user.userName);
-        }
+        setAccessTarget({ userName: user.userName, action: 'REVOKE' });
     } else {
-        if (window.confirm(`Grant elevated access to ${user.userName}?`)) {
-            onGrantAccess(user.userName);
-        }
+        setAccessTarget({ userName: user.userName, action: 'GRANT' });
     }
   };
 
@@ -3516,6 +3513,33 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
         notificationsEnabled={notificationsEnabled}
         onToggleNotifications={onToggleNotifications}
     >
+      {accessTarget && (
+        <div className="modal-overlay" style={{ zIndex: 1000, position: 'absolute' }}>
+          <div className="panel" style={{ color: 'var(--green)', borderColor: 'var(--green)', textAlign: 'center', background: 'rgba(0,10,0,0.95)' }}>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>
+              {accessTarget.action === 'GRANT' ? 'GRANT ELEVATED ACCESS?' : 'REVOKE ELEVATED ACCESS?'}
+            </h2>
+            <p style={{ color: '#fff', marginBottom: '20px' }}>Target Operator: <span style={{ color: 'var(--cyan)', fontWeight: 'bold' }}>{accessTarget.userName}</span></p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button 
+                className={`upload-btn ${accessTarget.action === 'REVOKE' ? 'danger-btn' : ''}`}
+                style={{ margin: 0 }}
+                onClick={() => {
+                  if (accessTarget.action === 'GRANT') {
+                    onGrantAccess(accessTarget.userName);
+                  } else {
+                    onRevokeAccess(accessTarget.userName);
+                  }
+                  setAccessTarget(null);
+                }}
+              >
+                CONFIRM
+              </button>
+              <button className="utility-btn" style={{ margin: 0 }} onClick={() => setAccessTarget(null)}>CANCEL</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'row', height: '600px', background: 'var(--black)' }}>
         {/* Main Section: History & Input */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '2px solid var(--dark-green)' }}>
