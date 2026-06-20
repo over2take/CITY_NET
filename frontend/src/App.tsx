@@ -983,24 +983,24 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
                 <meshBasicMaterial transparent opacity={0.01} depthWrite={false} />
               </mesh>
 
-              {/* Visible Wireframe/Solid */}
+              {/* Wireframe */}
+              <mesh raycast={() => null}>
+                {renderBaseGeometry(p.shape, p.polyCount || 5)}
+                <meshBasicMaterial 
+                  color={(isSelected || isBatchSelected) ? (isBatchSelected ? "#ffff00" : "#00ffff") : location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)} 
+                  wireframe={true} 
+                />
+              </mesh>
+              
+              {/* Semi-transparent fill */}
               <mesh raycast={() => null}>
                 {renderBaseGeometry(p.shape, p.polyCount || 5)}
                 <meshBasicMaterial 
                   color={location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)} 
-                  wireframe={!isSelected} 
-                  transparent={isSelected}
-                  opacity={isSelected ? 0.3 : 1.0}
+                  transparent={true}
+                  opacity={(isSelected || isBatchSelected) ? 0.3 : 0.05}
                 />
               </mesh>
-              
-              {/* Inner Selection Highlight Skeleton */}
-              {(isSelected || isBatchSelected) && (
-                  <mesh scale={[0.95, 0.95, 0.95]} raycast={() => null}>
-                    {renderBaseGeometry(p.shape, p.polyCount || 5)}
-                    <meshBasicMaterial color={isBatchSelected ? "#ccaa00" : "#0088cc"} wireframe={true} transparent opacity={1.0} />
-                  </mesh>
-              )}
             </mesh>
           </group>
         );
