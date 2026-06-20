@@ -406,9 +406,9 @@ app.post('/api/control', authenticate, (req, res) => {
 const userSockets = new Map(); // socket.id -> userName
 
 let activeNPCs = [];
-db.all('SELECT username FROM fake_users', (err, rows) => {
+db.all('SELECT username, isActive FROM fake_users', (err, rows) => {
   if (!err && rows) {
-    activeNPCs = rows.map(r => r.username);
+    activeNPCs = rows.map(r => ({ userName: r.username, isActive: r.isActive === 1 }));
   }
 });
 
@@ -422,7 +422,7 @@ const broadcastActiveUsers = () => {
   });
   
   activeNPCs.forEach(npc => {
-    userMap.set(npc, { userName: npc, isAdmin: false, isTemporaryAdmin: false, isNPC: true });
+    userMap.set(npc.userName, { userName: npc.userName, isAdmin: false, isTemporaryAdmin: false, isNPC: true, isActive: npc.isActive });
   });
 
   const activeUsers = Array.from(userMap.values());
@@ -528,10 +528,47 @@ io.on('connection', (socket) => {
     try {
       const verified = jwt.verify(data.adminToken, SECRET);
       if (verified && !verified.isTemporary) {
-        db.run('INSERT INTO fake_users (username) VALUES (?)', [data.npcName], function(err) {
+        db.run('INSERT INTO fake_users (username, isActive) VALUES (?, 1)', [data.npcName], function(err) {
           if (!err) {
-            activeNPCs.push(data.npcName);
+            activeNPCs.push({ userName: data.npcName, isActive: true });
             console.log(`Admin ${verified.username} created NPC: ${data.npcName}`);
+            broadcastActiveUsers();
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('Unauthorized attempt to create NPC:', err.message);
+    }
+  });
+
+  socket.on('toggleNPCStatus', (data) => {
+    // data: { adminToken, npcName, isActive }
+    try {
+      const verified = jwt.verify(data.adminToken, SECRET);
+      if (verified && !verified.isTemporary) {
+        db.run('UPDATE fake_users SET isActive = ? WHERE username = ?', [data.isActive ? 1 : 0, data.npcName], function(err) {
+          if (!err) {
+            const npc = activeNPCs.find(n => n.userName === data.npcName);
+            if (npc) {
+              npc.isActive = data.isActive;
+              broadcastActiveUsers();
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('Unauthorized attempt to toggle NPC:', err.message);
+    }
+  });
+
+  socket.on('deleteNPC', (data) => {
+    // data: { adminToken, npcName }
+    try {
+      const verified = jwt.verify(data.adminToken, SECRET);
+      if (verified && !verified.isTemporary) {
+        db.run('DELETE FROM fake_users WHERE username = ?', [data.npcName], function(err) {
+          if (!err) {
+            activeNPCs = activeNPCs.filter(n => n.userName !== data.npcName);
             broadcastActiveUsers();
           }
         });
@@ -659,8 +696,12 @@ io.on('connection', (socket) => {
 app.post('/api/chat/purge', authenticate, (req, res) => {
   db.run('DELETE FROM chat_logs', (err) => {
     if (err) return res.status(500).json({ error: err.message });
-    io.emit('chatHistory', []); // Clear all clients instantly
-    res.json({ message: 'Chat history purged' });
+    db.run('DELETE FROM private_messages', (err2) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      io.emit('chatHistory', []); // Clear all clients instantly
+      io.emit('purgePrivateMessages'); // Tell clients to clear PMs
+      res.json({ message: 'Chat history purged' });
+    });
   });
 });
 

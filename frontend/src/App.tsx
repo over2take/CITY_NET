@@ -3531,12 +3531,21 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
         setPrivateMessages(prev => ({ ...prev, [data.targetUser]: data.history }));
     };
 
+    const handlePurge = () => {
+        setPrivateMessages({});
+        setOpenTabs([]);
+        setActiveTab('GLOBAL');
+        setUnreadTabs(new Set());
+    };
+
     socket.on('receivePrivateMessage', handleReceivePM);
     socket.on('privateHistory', handlePrivateHistory);
+    socket.on('purgePrivateMessages', handlePurge);
 
     return () => {
         socket.off('receivePrivateMessage', handleReceivePM);
         socket.off('privateHistory', handlePrivateHistory);
+        socket.off('purgePrivateMessages', handlePurge);
     };
   }, [socket, userName, isPrimaryAdmin, activeUsers]);
 
@@ -3582,7 +3591,7 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
   };
 
   const displayMessages = activeTab === 'GLOBAL' ? messages : (privateMessages[activeTab] || []);
-  const myNPCs = activeUsers.filter((u: any) => u.isNPC).map((u: any) => u.userName);
+  const myNPCs = activeUsers.filter((u: any) => u.isNPC && u.isActive !== false).map((u: any) => u.userName);
   const showSendAs = activeTab !== 'GLOBAL' && isPrimaryAdmin && myNPCs.length > 0;
 
   return (
@@ -3669,66 +3678,96 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
             <div style={{ width: '220px', display: 'flex', flexDirection: 'column', background: 'rgba(0,10,0,0.3)' }}>
               <div style={{ padding: '12px', fontSize: '0.75rem', fontWeight: 'bold', borderBottom: '2px solid var(--dark-green)', color: 'var(--green)', textShadow: 'var(--glow)' }}>OPERATORS_ONLINE</div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '10px', position: 'relative' }}>
-                {activeUsers.map((user: any) => (
-                  <div key={user.userName} style={{ position: 'relative' }}>
-                    <div 
-                      onClick={() => handleUserClick(user)}
-                      style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '10px', 
-                          marginBottom: '10px', 
-                          padding: '5px', 
-                          background: user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent',
-                          cursor: user.userName !== userName ? 'pointer' : 'default',
-                          borderRadius: '4px'
-                      }}
-                      onMouseOver={(e) => {
-                          if (user.userName !== userName) {
-                              e.currentTarget.style.background = 'rgba(0,255,255,0.1)';
-                          }
-                      }}
-                      onMouseOut={(e) => {
-                          e.currentTarget.style.background = user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent';
-                      }}
-                    >
-                      <div style={{ width: '6px', height: '6px', background: user.isAdmin ? '#ff0000' : (user.isTemporaryAdmin ? '#ffaa00' : (user.isNPC ? '#aa00ff' : 'var(--green)')), borderRadius: '50%', boxShadow: user.isAdmin ? '0 0 5px #ff0000' : (user.isTemporaryAdmin ? '0 0 5px #ffaa00' : (user.isNPC ? '0 0 5px #aa00ff' : '0 0 5px var(--green)')) }}></div>
-                      <span style={{ color: user.userName === userName ? 'var(--cyan)' : '#888', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                          {user.userName}
-                          {user.isAdmin && <span title="Primary Admin">⭐</span>}
-                          {user.isTemporaryAdmin && <span title="Temporary Admin">🌟</span>}
-                          {user.isNPC && <span title="NPC" style={{ color: '#aa00ff' }}>[NPC]</span>}
-                      </span>
-                    </div>
+                {activeUsers.map((user: any) => {
+                  const dotColor = user.isAdmin ? '#ff0000' : (user.isTemporaryAdmin ? '#ffaa00' : (user.isNPC ? (user.isActive === false ? '#555' : '#aa00ff') : 'var(--green)'));
+                  const dotShadow = (user.isNPC && user.isActive === false) ? 'none' : `0 0 5px ${dotColor}`;
+                  return (
+                    <div key={user.userName} style={{ position: 'relative' }}>
+                        <div 
+                          onClick={() => handleUserClick(user)}
+                          style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '10px', 
+                              marginBottom: '10px', 
+                              padding: '5px', 
+                              background: user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent',
+                              cursor: user.userName !== userName ? 'pointer' : 'default',
+                              borderRadius: '4px',
+                              opacity: (user.isNPC && user.isActive === false) ? 0.5 : 1
+                          }}
+                          onMouseOver={(e) => {
+                              if (user.userName !== userName) {
+                                  e.currentTarget.style.background = 'rgba(0,255,255,0.1)';
+                              }
+                          }}
+                          onMouseOut={(e) => {
+                              e.currentTarget.style.background = user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent';
+                          }}
+                        >
+                          <div style={{ width: '6px', height: '6px', background: dotColor, borderRadius: '50%', boxShadow: dotShadow }}></div>
+                          <span style={{ color: user.userName === userName ? 'var(--cyan)' : '#888', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              {user.userName}
+                              {user.isAdmin && <span title="Primary Admin">⭐</span>}
+                              {user.isTemporaryAdmin && <span title="Temporary Admin">🌟</span>}
+                              {user.isNPC && <span title="NPC" style={{ color: user.isActive === false ? '#555' : '#aa00ff' }}>[NPC]</span>}
+                          </span>
+                        </div>
 
-                    {/* Context Menu Dropdown */}
-                    {activeDropdown === user.userName && (
-                      <div style={{ position: 'absolute', top: '25px', left: '15px', background: 'var(--black)', border: '1px solid var(--green)', padding: '5px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '150px' }}>
-                          <button 
-                            className="utility-btn" 
-                            style={{ margin: 0, textAlign: 'left', width: '100%' }}
-                            onClick={() => openTab(user.userName)}
-                          >
-                            PRIVATE_MESSAGE
-                          </button>
-                          
-                          {isPrimaryAdmin && !user.isAdmin && !user.isNPC && (
+                        {/* Context Menu Dropdown */}
+                        {activeDropdown === user.userName && (
+                          <div style={{ position: 'absolute', top: '25px', left: '15px', background: 'var(--black)', border: '1px solid var(--green)', padding: '5px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '150px' }}>
                               <button 
-                                className={`utility-btn ${user.isTemporaryAdmin ? 'danger-btn' : ''}`} 
+                                className="utility-btn" 
                                 style={{ margin: 0, textAlign: 'left', width: '100%' }}
-                                onClick={() => {
-                                    if (user.isTemporaryAdmin) onRevokeAccess(user.userName);
-                                    else onGrantAccess(user.userName);
-                                    setActiveDropdown(null);
-                                }}
+                                onClick={() => openTab(user.userName)}
                               >
-                                {user.isTemporaryAdmin ? 'REVOKE_ADMIN' : 'GRANT_ADMIN'}
+                                PRIVATE_MESSAGE
                               </button>
-                          )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                              
+                              {isPrimaryAdmin && !user.isAdmin && !user.isNPC && (
+                                  <button 
+                                    className={`utility-btn ${user.isTemporaryAdmin ? 'danger-btn' : ''}`} 
+                                    style={{ margin: 0, textAlign: 'left', width: '100%' }}
+                                    onClick={() => {
+                                        if (user.isTemporaryAdmin) onRevokeAccess(user.userName);
+                                        else onGrantAccess(user.userName);
+                                        setActiveDropdown(null);
+                                    }}
+                                  >
+                                    {user.isTemporaryAdmin ? 'REVOKE_ADMIN' : 'GRANT_ADMIN'}
+                                  </button>
+                              )}
+
+                              {isPrimaryAdmin && user.isNPC && (
+                                  <>
+                                      <button 
+                                        className="utility-btn" 
+                                        style={{ margin: 0, textAlign: 'left', width: '100%' }}
+                                        onClick={() => {
+                                            socket.emit('toggleNPCStatus', { adminToken: token, npcName: user.userName, isActive: user.isActive === false ? true : false });
+                                            setActiveDropdown(null);
+                                        }}
+                                      >
+                                        {user.isActive === false ? 'ACTIVATE_NPC' : 'DEACTIVATE_NPC'}
+                                      </button>
+                                      <button 
+                                        className="danger-btn" 
+                                        style={{ margin: 0, textAlign: 'left', width: '100%' }}
+                                        onClick={() => {
+                                            socket.emit('deleteNPC', { adminToken: token, npcName: user.userName });
+                                            setActiveDropdown(null);
+                                        }}
+                                      >
+                                        DELETE_NPC
+                                      </button>
+                                  </>
+                              )}
+                          </div>
+                        )}
+                    </div>
+                  );
+                })}
               </div>
               
               {/* NPC Creation Block */}

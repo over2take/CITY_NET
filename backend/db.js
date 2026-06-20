@@ -78,8 +78,11 @@ db.serialize(() => {
 
   db.run(`CREATE TABLE IF NOT EXISTS fake_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL
-  )`);
+    username TEXT UNIQUE NOT NULL,
+    isActive INTEGER DEFAULT 1
+  )`, () => {
+    db.run("ALTER TABLE fake_users ADD COLUMN isActive INTEGER DEFAULT 1", (err) => {});
+  });
 
   db.run(`CREATE TABLE IF NOT EXISTS private_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
