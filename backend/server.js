@@ -497,7 +497,8 @@ app.post('/api/chat/purge', authenticate, (req, res) => {
 const path = require('path');
 const frontendDist = path.join(__dirname, '../frontend/dist');
 app.use(express.static(frontendDist));
-app.get('*', (req, res) => {
+// Fallback for SPA routing - using app.use catches all unmatched routes safely
+app.use((req, res) => {
   res.sendFile(path.join(frontendDist, 'index.html'));
 });
 
