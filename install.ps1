@@ -3,11 +3,25 @@ Write-Host "   CITY NET // REMOTE DEPLOYMENT SETUP" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. Check for Node.js
-if (!(Get-Command "npm" -ErrorAction SilentlyContinue)) {
-    Write-Host "[SYSTEM] Node.js not found. Installing via winget..." -ForegroundColor Yellow
-    winget install OpenJS.NodeJS -e --silent
-    Write-Host "[SYSTEM] Node.js installed. You may need to restart the script if npm is still not found." -ForegroundColor Yellow
+# 1. Check for Node.js and ensure it is version 22+
+$needsNodeUpdate = $false
+if (!(Get-Command "node" -ErrorAction SilentlyContinue)) {
+    $needsNodeUpdate = $true
+} else {
+    $nodeVersion = node -v
+    $majorVersion = [int]($nodeVersion -replace '^v(\d+)\..*', '$1')
+    if ($majorVersion -lt 22) {
+        Write-Host "[SYSTEM] Node.js is outdated (v$majorVersion). Upgrading..." -ForegroundColor Yellow
+        $needsNodeUpdate = $true
+    }
+}
+
+if ($needsNodeUpdate) {
+    Write-Host "[SYSTEM] Installing/Upgrading Node.js via winget..." -ForegroundColor Yellow
+    winget install OpenJS.NodeJS -e --silent --accept-package-agreements --accept-source-agreements
+    Write-Host "[SYSTEM] Node.js installed. You MUST restart this PowerShell window for the new version to take effect!" -ForegroundColor Red
+    pause
+    exit
 }
 
 # 2. Check for Git
