@@ -81,6 +81,10 @@ db.serialize(() => {
   db.run(`ALTER TABLE locations ADD COLUMN classification TEXT`, (err) => {
     // Ignore error if column already exists
   });
+
+  db.run(`ALTER TABLE locations ADD COLUMN polyCount INTEGER DEFAULT 5`, (err) => {
+    // Ignore error if column already exists
+  });
 });
 
 module.exports = db;

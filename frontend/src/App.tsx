@@ -54,12 +54,12 @@ const getStructLabel = (loc: any) => {
   return prefix ? `${prefix}_struct_${loc.id}` : `STRUCT_${loc.id}`;
 };
 
-const renderBaseGeometry = (shape: string) => {
+const renderBaseGeometry = (shape: string, polyCount: number = 5) => {
   switch (shape) {
-    case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 5]} />;
-    case 'sphere': return <sphereGeometry args={[0.5, 6, 6]} />;
+    case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, Math.max(3, polyCount)]} />;
+    case 'sphere': return <sphereGeometry args={[0.5, Math.max(3, polyCount), Math.max(3, polyCount)]} />;
     case 'rhombus': return <octahedronGeometry args={[0.5]} />;
-    case 'pyramid': return <coneGeometry args={[0.5, 1, 4]} />;
+    case 'pyramid': return <coneGeometry args={[0.5, 1, Math.max(3, polyCount)]} />;
     default: return <boxGeometry args={[1, 1, 1]} />;
   }
 };
@@ -907,39 +907,41 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
         
         return (
           <group key={p.id} position={[pX, (p.y - groupPos[1]) + (p.height / 2), pZ]} scale={[p.width, p.height, p.depth]}>
-            {/* Invisible Solid Hitbox (handles interactions) */}
-            <mesh 
-                ref={isRoot ? meshRef as any : null}
-                userData={{ id: p.id }}
-                onPointerDown={() => { dragDist.current = 0; }}
-                onPointerMove={(e) => { dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY); }}
-                onPointerUp={(e) => {
-                    if (dragDist.current < 10) {
-                        e.stopPropagation();
-                        onClick();
-                    }
-                }}
-            >
-              {renderBaseGeometry(p.shape)}
-              {/* Solid Hitbox - Low opacity is more reliable for R3F raycasting than colorWrite=false */}
-              <meshBasicMaterial transparent opacity={0.01} depthWrite={false} />
-            </mesh>
+            <mesh rotation={[0, p.rotation || 0, 0]} position={[p.x, p.y + (p.height / 2), p.z]} scale={[p.width, p.height, p.depth]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+              {renderBaseGeometry(p.shape, p.polyCount || 5)}
+              {/* Invisible Solid Hitbox (handles interactions) */}
+              <mesh 
+                  ref={isRoot ? meshRef as any : null}
+                  userData={{ id: p.id }}
+                  onPointerDown={() => { dragDist.current = 0; }}
+                  onPointerMove={(e) => { dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY); }}
+                  onPointerUp={(e) => {
+                      if (dragDist.current < 10) {
+                          e.stopPropagation();
+                          onClick();
+                      }
+                  }}
+              >
+                {renderBaseGeometry(p.shape, p.polyCount || 5)}
+                <meshBasicMaterial transparent opacity={0.01} depthWrite={false} />
+              </mesh>
 
-            {/* Visible Wireframe/Solid */}
-            <mesh raycast={() => null}>
-              {renderBaseGeometry(p.shape)}
-              <meshBasicMaterial 
-                color={location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)} 
-                wireframe={!isSelected} 
-                transparent={isSelected}
-                opacity={isSelected ? 0.3 : 1.0}
-              />
+              {/* Visible Wireframe/Solid */}
+              <mesh raycast={() => null}>
+                {renderBaseGeometry(p.shape, p.polyCount || 5)}
+                <meshBasicMaterial 
+                  color={location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)} 
+                  wireframe={!isSelected} 
+                  transparent={isSelected}
+                  opacity={isSelected ? 0.3 : 1.0}
+                />
+              </mesh>
             </mesh>
             
             {/* Semi-transparent fill when selected */}
             {(isSelected || isBatchSelected) && (
                 <mesh scale={[0.99, 0.99, 0.99]} raycast={() => null}>
-                  {renderBaseGeometry(p.shape)}
+                  {renderBaseGeometry(p.shape, p.polyCount || 5)}
                   <meshBasicMaterial 
                     color={new THREE.Color(location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)).multiplyScalar(0.02)} 
                   />
@@ -949,7 +951,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
             {/* Selection Highlight */}
             {(isSelected || isBatchSelected) && (
                 <mesh scale={[1.05, 1.05, 1.05]} raycast={() => null}>
-                  {renderBaseGeometry(p.shape)}
+                  {renderBaseGeometry(p.shape, p.polyCount || 5)}
                   <meshBasicMaterial color={isBatchSelected ? "#ffff00" : "#00ffff"} wireframe={true} transparent opacity={0.5} />
                 </mesh>
             )}
@@ -960,7 +962,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
   );
 });
 
-const InstancedShape = React.memo(({ shape, elements, onSelect }: { shape: string, elements: any[], onSelect: (rootLoc: any) => void }) => {
+const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect }: { shape: string, polyCount: number, elements: any[], onSelect: (rootLoc: any) => void }) => {
     const wireframeMeshRef = useRef<THREE.InstancedMesh>(null);
     const fillMeshRef = useRef<THREE.InstancedMesh>(null);
     const hitMeshRef = useRef<THREE.InstancedMesh>(null);
@@ -1013,13 +1015,13 @@ const InstancedShape = React.memo(({ shape, elements, onSelect }: { shape: strin
         <group>
             {/* Visual Wireframe - No raycasting */}
             <instancedMesh ref={wireframeMeshRef} args={[null as any, null as any, elements.length]} raycast={() => null}>
-                {renderBaseGeometry(shape)}
+                {renderBaseGeometry(shape, polyCount)}
                 <meshBasicMaterial wireframe={true} />
             </instancedMesh>
             
             {/* Holographic Face Fill - No raycasting */}
             <instancedMesh ref={fillMeshRef} args={[null as any, null as any, elements.length]} raycast={() => null}>
-                {renderBaseGeometry(shape)}
+                {renderBaseGeometry(shape, polyCount)}
                 <meshBasicMaterial color="#020202" />
             </instancedMesh>
 
@@ -1039,7 +1041,7 @@ const InstancedShape = React.memo(({ shape, elements, onSelect }: { shape: strin
                       }
                   }}
               >
-                  {renderBaseGeometry(shape)}
+                  {renderBaseGeometry(shape, polyCount)}
                   <meshBasicMaterial transparent opacity={0.01} depthWrite={false} />
               </instancedMesh>
             </Bvh>
@@ -1049,26 +1051,27 @@ const InstancedShape = React.memo(({ shape, elements, onSelect }: { shape: strin
 
 const InstancedBuildings = React.memo(({ buildings, onSelect }: { buildings: any[], onSelect: (loc: any) => void }) => {
     const groups = useMemo(() => {
-        const result: { [key: string]: any[] } = { box: [], cylinder: [], pyramid: [], sphere: [] };
+        const result: { [key: string]: any[] } = {};
         buildings.forEach(el => {
             const sh = el.shape || 'box';
-            if (result[sh]) {
-                result[sh].push(el);
-            } else {
-                result.box.push(el); // Fallback to box
-            }
+            const pc = el.polyCount || 5;
+            const key = `${sh}_${pc}`;
+            if (!result[key]) result[key] = [];
+            result[key].push(el);
         });
         return result;
     }, [buildings]);
 
     return (
         <group>
-            {Object.entries(groups).map(([shape, items]) => {
+            {Object.entries(groups).map(([key, items]) => {
+                const [shape, pcStr] = key.split('_');
                 if (items.length === 0) return null;
                 return (
                     <InstancedShape 
-                        key={shape} 
+                        key={key} 
                         shape={shape} 
+                        polyCount={parseInt(pcStr)}
                         elements={items} 
                         onSelect={onSelect} 
                     />
@@ -1145,6 +1148,7 @@ const generateThemedBuildingsForPlot = (
           color: p.color,
           shape: p.shape,
           rotation: p.rotation,
+          polyCount: p.polyCount || 5,
           parent_name: 'ROOT'
         };
         rawBuildings.push(part);
@@ -1184,37 +1188,37 @@ const generateThemedBuildingsForPlot = (
 
         if (!isBlocked(shX, shZ, shW, shD, 0.5)) {
           if (!rootShack) {
-            rootShack = { name: '', description: '', x: shX, y: 0, z: shZ, width: shW, depth: shD, height: shH, color: shackColor, shape: 'box' };
+            rootShack = { name: '', description: '', x: shX, y: 0, z: shZ, width: shW, depth: shD, height: shH, color: shackColor, shape: 'box', polyCount: 5 };
             rawBuildings.push(rootShack);
             const key = getGridKey(shX, shZ); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(rootShack);
           } else {
-            const shack = { name: '', x: shX, y: 0, z: shZ, width: shW, depth: shD, height: shH, color: shackColor, shape: 'box', parent_name: 'ROOT' };
+            const shack = { name: '', x: shX, y: 0, z: shZ, width: shW, depth: shD, height: shH, color: shackColor, shape: 'box', polyCount: 5, parent_name: 'ROOT' };
             rawBuildings.push(shack);
             const key = getGridKey(shX, shZ); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(shack);
           }
           if (Math.random() < 0.3) {
-            rawBuildings.push({ name: '', x: shX, y: shH, z: shZ, width: shW * 0.9, depth: shD * 0.9, height: 1.0 + Math.random() * 1.5, color: '#00ff00', shape: 'pyramid', parent_name: 'ROOT' });
+            rawBuildings.push({ name: '', x: shX, y: shH, z: shZ, width: shW * 0.9, depth: shD * 0.9, height: 1.0 + Math.random() * 1.5, color: '#00ff00', shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
           }
         }
       }
     } else {
       const shH = 2.5 + Math.random() * 4.0; const shackColor = '#00ff00';
-      rootShack = { name: '', description: '', x: bx, y: 0, z: bz, width: bw * 0.7, depth: bd * 0.7, height: shH, color: shackColor, shape: 'box' };
+      rootShack = { name: '', description: '', x: bx, y: 0, z: bz, width: bw * 0.7, depth: bd * 0.7, height: shH, color: shackColor, shape: 'box', polyCount: 5 };
       rawBuildings.push(rootShack);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(rootShack);
       if (Math.random() < 0.3) {
-        rawBuildings.push({ name: '', x: bx, y: shH, z: bz, width: bw * 0.6, depth: bd * 0.6, height: 1.0 + Math.random() * 1.5, color: '#00ff00', shape: 'pyramid', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: shH, z: bz, width: bw * 0.6, depth: bd * 0.6, height: 1.0 + Math.random() * 1.5, color: '#00ff00', shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
       }
     }
 
     // Fallback: if no shack was spawned (e.g. all blocked or small size failed), force-spawn one at the center to ensure block is populated
     if (!rootShack) {
       const shH = 2.5 + Math.random() * 4.0; const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
-      rootShack = { name: '', description: '', x: bx, y: 0, z: bz, width: Math.max(3.0, bw * 0.8), depth: Math.max(3.0, bd * 0.8), height: shH, color: shackColor, shape: 'box' };
+      rootShack = { name: '', description: '', x: bx, y: 0, z: bz, width: Math.max(3.0, bw * 0.8), depth: Math.max(3.0, bd * 0.8), height: shH, color: shackColor, shape: 'box', polyCount: 5 };
       rawBuildings.push(rootShack);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(rootShack);
       if (Math.random() < 0.3) {
-        rawBuildings.push({ name: '', x: bx, y: shH, z: bz, width: rootShack.width * 0.8, depth: rootShack.depth * 0.8, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: shH, z: bz, width: rootShack.width * 0.8, depth: rootShack.depth * 0.8, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     return;
@@ -1235,129 +1239,129 @@ const generateThemedBuildingsForPlot = (
     const industrialStyle = styleOverride !== undefined ? styleOverride % 10 : Math.floor(Math.random() * 10);
     
     // Create the base concrete pad platform
-    const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', rotation: 0 };
+    const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', polyCount: 5, rotation: 0 };
     rawBuildings.push(root);
     const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
     if (industrialStyle === 0) {
       // Style 0: Refinery Terminal (Medium building, 2 liquid tanks, shipping containers)
       const wareW = bw * 0.42; const wareD = bd * 0.55; const wareH = 6.0 + Math.random() * 3;
-      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2, z: bz, width: wareW, depth: wareD, height: wareH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2, z: bz, width: wareW, depth: wareD, height: wareH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       const tankR = Math.min(bw, bd) * 0.16; const tankH = 5.0 + Math.random() * 2;
-      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz - bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz + bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz - bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz + bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
 
       const containerW = bw * 0.22; const containerD = bd * 0.35; const containerH = 2.0;
-      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2 + wareH, z: bz, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2 + wareH, z: bz, width: containerW, depth: containerD, height: containerH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
     } 
     else if (industrialStyle === 1) {
       // Style 1: Manufacturing Station (Medium building, tall smokestack, liquid tank, containers)
       const genW = bw * 0.45; const genD = bd * 0.5; const genH = 5.0 + Math.random() * 3;
-      rawBuildings.push({ name: '', x: bx - bw * 0.1, y: 1.2, z: bz - bd * 0.1, width: genW, depth: genD, height: genH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.1, y: 1.2, z: bz - bd * 0.1, width: genW, depth: genD, height: genH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       const stackW = 1.0; const stackH = 15.0 + Math.random() * 5;
-      rawBuildings.push({ name: '', x: bx + bw * 0.3, y: 1.2, z: bz - bd * 0.22, width: stackW, depth: stackW, height: stackH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.3, y: 1.2, z: bz - bd * 0.22, width: stackW, depth: stackW, height: stackH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
 
       const tankR = Math.min(bw, bd) * 0.18; const tankH = 6.0 + Math.random() * 2;
-      rawBuildings.push({ name: '', x: bx + bw * 0.3, y: 1.2, z: bz + bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.3, y: 1.2, z: bz + bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
 
       const containerW = bw * 0.2; const containerD = bd * 0.3; const containerH = 2.0;
-      rawBuildings.push({ name: '', x: bx - bw * 0.32, y: 1.2, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx - bw * 0.32, y: 1.2 + containerH, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.32, y: 1.2, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.32, y: 1.2 + containerH, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (industrialStyle === 2) {
       // Style 2: Fuel Storage Depot (Medium building, 3 grouped cylinders, containers)
       const officeW = bw * 0.35; const officeD = bd * 0.38; const officeH = 4.0 + Math.random() * 2;
-      rawBuildings.push({ name: '', x: bx - bw * 0.24, y: 1.2, z: bz - bd * 0.2, width: officeW, depth: officeD, height: officeH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.24, y: 1.2, z: bz - bd * 0.2, width: officeW, depth: officeD, height: officeH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       const tankR = Math.min(bw, bd) * 0.15; const tankH = 6.0 + Math.random() * 3;
-      rawBuildings.push({ name: '', x: bx + bw * 0.22, y: 1.2, z: bz - bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + bw * 0.22, y: 1.2, z: bz + bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + bw * 0.38, y: 1.2, z: bz, width: tankR * 2.2, depth: tankR * 2.2, height: tankH * 1.2, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.22, y: 1.2, z: bz - bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.22, y: 1.2, z: bz + bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.38, y: 1.2, z: bz, width: tankR * 2.2, depth: tankR * 2.2, height: tankH * 1.2, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
 
       const containerW = bw * 0.22; const containerD = bd * 0.32; const containerH = 2.0;
-      rawBuildings.push({ name: '', x: bx - bw * 0.24, y: 1.2, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx - bw * 0.24, y: 1.2 + containerH, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.24, y: 1.2, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.24, y: 1.2 + containerH, z: bz + bd * 0.25, width: containerW, depth: containerD, height: containerH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (industrialStyle === 3) {
       // Style 3: Power & Distribution Plant (Medium building, cooling tower, containers)
       const wareW = bw * 0.48; const wareD = bd * 0.55; const wareH = 6.0 + Math.random() * 2;
-      rawBuildings.push({ name: '', x: bx - bw * 0.15, y: 1.2, z: bz, width: wareW, depth: wareD, height: wareH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.15, y: 1.2, z: bz, width: wareW, depth: wareD, height: wareH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       const tankR = Math.min(bw, bd) * 0.18; const tankH = 9.0 + Math.random() * 3;
-      rawBuildings.push({ name: '', x: bx + bw * 0.28, y: 1.2, z: bz + bd * 0.18, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.28, y: 1.2, z: bz + bd * 0.18, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
 
       const containerW = bw * 0.24; const containerD = bd * 0.28; const containerH = 2.0;
-      rawBuildings.push({ name: '', x: bx + bw * 0.28, y: 1.2, z: bz - bd * 0.22, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + bw * 0.28, y: 1.2 + containerH, z: bz - bd * 0.22, width: containerW, depth: containerD, height: containerH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.28, y: 1.2, z: bz - bd * 0.22, width: containerW, depth: containerD, height: containerH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.28, y: 1.2 + containerH, z: bz - bd * 0.22, width: containerW, depth: containerD, height: containerH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (industrialStyle === 4) {
       // Style 4: Industrial Standard A
       // Instructions: lowpoly cylinder for liquids, small retangles for storage crates, and a medum sized buiding for opterations.
       const opW = bw * 0.4; const opD = bd * 0.4; const opH = 5.0 + Math.random() * 2;
-      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2, z: bz - bd * 0.2, width: opW, depth: opD, height: opH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2, z: bz - bd * 0.2, width: opW, depth: opD, height: opH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       const tankR = Math.min(bw, bd) * 0.15; const tankH = 6.0;
-      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz - bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz - bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       for(let i=0; i<3; i++) {
-        rawBuildings.push({ name: '', x: bx - bw*0.1 + i*1.5, y: 1.2, z: bz + bd*0.3, width: 1.2, depth: 1.2, height: 1.2, color: ['#aa3333','#3355aa'][i%2], shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw*0.1 + i*1.5, y: 1.2, z: bz + bd*0.3, width: 1.2, depth: 1.2, height: 1.2, color: ['#aa3333','#3355aa'][i%2], shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (industrialStyle === 5) {
       // Style 5: Industrial Standard B
       // Instructions: lowpoly cylinder for liquids, small retangles for storage crates, and a medum sized buiding for opterations.
       const opW = bw * 0.5; const opD = bd * 0.3; const opH = 4.0;
-      rawBuildings.push({ name: '', x: bx, y: 1.2, z: bz + bd * 0.25, width: opW, depth: opD, height: opH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 1.2, z: bz + bd * 0.25, width: opW, depth: opD, height: opH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       const tankR = Math.min(bw, bd) * 0.2; const tankH = 5.0;
-      rawBuildings.push({ name: '', x: bx - bw * 0.25, y: 1.2, z: bz - bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.25, y: 1.2, z: bz - bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       for(let i=0; i<4; i++) {
-        rawBuildings.push({ name: '', x: bx + bw*0.15 + (i%2)*1.2, y: 1.2 + Math.floor(i/2)*1.2, z: bz - bd*0.2, width: 1.0, depth: 1.0, height: 1.0, color: '#33aa33', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw*0.15 + (i%2)*1.2, y: 1.2 + Math.floor(i/2)*1.2, z: bz - bd*0.2, width: 1.0, depth: 1.0, height: 1.0, color: '#33aa33', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (industrialStyle === 6) {
       // Style 6: Industrial Standard C
       // Instructions: lowpoly cylinder for liquids, small retangles for storage crates, and a medum sized buiding for opterations.
       const opW = bw * 0.35; const opD = bd * 0.6; const opH = 7.0;
-      rawBuildings.push({ name: '', x: bx + bw * 0.2, y: 1.2, z: bz, width: opW, depth: opD, height: opH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.2, y: 1.2, z: bz, width: opW, depth: opD, height: opH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       const tankR = Math.min(bw, bd) * 0.12; const tankH = 8.0;
-      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2, z: bz - bd * 0.25, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2, z: bz, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2, z: bz - bd * 0.25, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2, z: bz, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       for(let i=0; i<2; i++) {
-        rawBuildings.push({ name: '', x: bx - bw*0.2, y: 1.2, z: bz + bd*0.3, width: 1.5, depth: 1.5, height: 1.5, color: '#ddaa22', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw*0.2, y: 1.2, z: bz + bd*0.3, width: 1.5, depth: 1.5, height: 1.5, color: '#ddaa22', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (industrialStyle === 7) {
       // Style 7: Industrial Standard D
       // Instructions: lowpoly cylinder for liquids, small retangles for storage crates, and a medum sized buiding for opterations.
       const opW = bw * 0.45; const opD = bd * 0.45; const opH = 4.5;
-      rawBuildings.push({ name: '', x: bx, y: 1.2, z: bz, width: opW, depth: opD, height: opH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 1.2, z: bz, width: opW, depth: opD, height: opH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       const tankR = Math.min(bw, bd) * 0.16; const tankH = 4.0;
-      rawBuildings.push({ name: '', x: bx - bw * 0.3, y: 1.2, z: bz - bd * 0.3, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + bw * 0.3, y: 1.2, z: bz + bd * 0.3, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.3, y: 1.2, z: bz - bd * 0.3, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.3, y: 1.2, z: bz + bd * 0.3, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       for(let i=0; i<3; i++) {
-        rawBuildings.push({ name: '', x: bx + bw*0.3, y: 1.2 + i*1.0, z: bz - bd*0.3, width: 1.0, depth: 1.0, height: 1.0, color: '#aa3333', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw*0.3, y: 1.2 + i*1.0, z: bz - bd*0.3, width: 1.0, depth: 1.0, height: 1.0, color: '#aa3333', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (industrialStyle === 8) {
       // Style 8: Industrial Standard E
       // Instructions: lowpoly cylinder for liquids, small retangles for storage crates, and a medum sized buiding for opterations.
       const opW = bw * 0.6; const opD = bd * 0.25; const opH = 5.5;
-      rawBuildings.push({ name: '', x: bx, y: 1.2, z: bz - bd * 0.3, width: opW, depth: opD, height: opH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 1.2, z: bz - bd * 0.3, width: opW, depth: opD, height: opH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       const tankR = Math.min(bw, bd) * 0.18; const tankH = 6.5;
-      rawBuildings.push({ name: '', x: bx, y: 1.2, z: bz + bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 1.2, z: bz + bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       for(let i=0; i<2; i++) {
-        rawBuildings.push({ name: '', x: bx - bw*0.3, y: 1.2, z: bz + bd*0.2, width: 1.2, depth: 1.8, height: 1.2, color: '#3355aa', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw*0.3, y: 1.2, z: bz + bd*0.2, width: 1.2, depth: 1.8, height: 1.2, color: '#3355aa', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (industrialStyle === 9) {
       // Style 9: Industrial Standard F
       // Instructions: lowpoly cylinder for liquids, small retangles for storage crates, and a medum sized buiding for opterations.
       const opW = bw * 0.4; const opD = bd * 0.5; const opH = 8.0;
-      rawBuildings.push({ name: '', x: bx - bw * 0.25, y: 1.2, z: bz + bd * 0.1, width: opW, depth: opD, height: opH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.25, y: 1.2, z: bz + bd * 0.1, width: opW, depth: opD, height: opH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       const tankR = Math.min(bw, bd) * 0.15; const tankH = 4.5;
-      rawBuildings.push({ name: '', x: bx + bw * 0.2, y: 1.2, z: bz - bd * 0.25, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.2, y: 1.2, z: bz - bd * 0.25, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       for(let i=0; i<4; i++) {
-        rawBuildings.push({ name: '', x: bx + bw*0.25, y: 1.2 + Math.floor(i/2)*1.0, z: bz + bd*0.2 + (i%2)*1.0, width: 0.9, depth: 0.9, height: 0.9, color: '#ddaa22', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw*0.25, y: 1.2 + Math.floor(i/2)*1.0, z: bz + bd*0.2 + (i%2)*1.0, width: 0.9, depth: 0.9, height: 0.9, color: '#ddaa22', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     return;
@@ -1378,17 +1382,17 @@ const generateThemedBuildingsForPlot = (
       const shaftH = h * 0.75;
       const tipH = h * 0.13;
       // Wide stepped pedestal base
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: pedW, depth: pedW, height: pedH, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: pedW, depth: pedW, height: pedH, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       // Mid pedestal step
-      rawBuildings.push({ name: '', x: bx, y: pedH, z: bz, width: pedW * 0.75, depth: pedW * 0.75, height: pedH * 0.6, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pedH, z: bz, width: pedW * 0.75, depth: pedW * 0.75, height: pedH * 0.6, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Tall narrow shaft
-      rawBuildings.push({ name: '', x: bx, y: pedH * 1.6, z: bz, width: shaftW, depth: shaftW, height: shaftH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pedH * 1.6, z: bz, width: shaftW, depth: shaftW, height: shaftH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Pyramid tip
-      rawBuildings.push({ name: '', x: bx, y: pedH * 1.6 + shaftH, z: bz, width: shaftW * 1.1, depth: shaftW * 1.1, height: tipH, color, shape: 'pyramid', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pedH * 1.6 + shaftH, z: bz, width: shaftW * 1.1, depth: shaftW * 1.1, height: tipH, color, shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
       // Glowing apex sphere
-      rawBuildings.push({ name: '', x: bx, y: pedH * 1.6 + shaftH + tipH, z: bz, width: shaftW * 0.25, depth: shaftW * 0.25, height: shaftW * 0.25, color, shape: 'sphere', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pedH * 1.6 + shaftH + tipH, z: bz, width: shaftW * 0.25, depth: shaftW * 0.25, height: shaftW * 0.25, color, shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (landmarkStyle === 1) {
       // Style 2: Colossus Statue (humanoid silhouette on pedestal)
@@ -1399,21 +1403,21 @@ const generateThemedBuildingsForPlot = (
       const torsoH = h * 0.28;
       const headR = bodyW * 0.5;
       // Stepped pedestal
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: pedW, depth: pedW * 0.8, height: pedH, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: pedW, depth: pedW * 0.8, height: pedH, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       // Left leg
-      rawBuildings.push({ name: '', x: bx - bodyW * 0.2, y: pedH, z: bz, width: bodyW * 0.3, depth: bodyW * 0.35, height: legH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bodyW * 0.2, y: pedH, z: bz, width: bodyW * 0.3, depth: bodyW * 0.35, height: legH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Right leg
-      rawBuildings.push({ name: '', x: bx + bodyW * 0.2, y: pedH, z: bz, width: bodyW * 0.3, depth: bodyW * 0.35, height: legH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bodyW * 0.2, y: pedH, z: bz, width: bodyW * 0.3, depth: bodyW * 0.35, height: legH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Torso
-      rawBuildings.push({ name: '', x: bx, y: pedH + legH, z: bz, width: bodyW * 0.85, depth: bodyW * 0.5, height: torsoH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pedH + legH, z: bz, width: bodyW * 0.85, depth: bodyW * 0.5, height: torsoH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Left arm raised
-      rawBuildings.push({ name: '', x: bx - bodyW * 0.65, y: pedH + legH + torsoH * 0.5, z: bz, width: bodyW * 0.25, depth: bodyW * 0.25, height: torsoH * 0.85, color, shape: 'cylinder', rotation: 0.4, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bodyW * 0.65, y: pedH + legH + torsoH * 0.5, z: bz, width: bodyW * 0.25, depth: bodyW * 0.25, height: torsoH * 0.85, color, shape: 'cylinder', polyCount: 5, rotation: 0.4, parent_name: 'ROOT' });
       // Right arm
-      rawBuildings.push({ name: '', x: bx + bodyW * 0.65, y: pedH + legH + torsoH * 0.2, z: bz, width: bodyW * 0.22, depth: bodyW * 0.22, height: torsoH * 0.65, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bodyW * 0.65, y: pedH + legH + torsoH * 0.2, z: bz, width: bodyW * 0.22, depth: bodyW * 0.22, height: torsoH * 0.65, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       // Head
-      rawBuildings.push({ name: '', x: bx, y: pedH + legH + torsoH, z: bz, width: headR, depth: headR, height: headR * 1.1, color, shape: 'sphere', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pedH + legH + torsoH, z: bz, width: headR, depth: headR, height: headR * 1.1, color, shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (landmarkStyle === 2) {
       // Style 3: Triumphal Arch / Memorial Gate
@@ -1423,38 +1427,38 @@ const generateThemedBuildingsForPlot = (
       const pillarH = h * 0.75;
       const spanH = h * 0.25;
       // Left pillar
-      const root = { name: '', description: '', x: bx - archW * 0.36, y: 0, z: bz, width: pillarW, depth: archD, height: pillarH, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx - archW * 0.36, y: 0, z: bz, width: pillarW, depth: archD, height: pillarH, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx - archW * 0.36, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       // Right pillar
-      rawBuildings.push({ name: '', x: bx + archW * 0.36, y: 0, z: bz, width: pillarW, depth: archD, height: pillarH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + archW * 0.36, y: 0, z: bz, width: pillarW, depth: archD, height: pillarH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Spanning lintel / arch top
-      rawBuildings.push({ name: '', x: bx, y: pillarH, z: bz, width: archW, depth: archD, height: spanH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pillarH, z: bz, width: archW, depth: archD, height: spanH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Decorative relief panels on sides
-      rawBuildings.push({ name: '', x: bx, y: pillarH * 0.4, z: bz - archD * 0.55, width: archW * 0.5, depth: 0.5, height: pillarH * 0.3, color, shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: pillarH * 0.4, z: bz + archD * 0.55, width: archW * 0.5, depth: 0.5, height: pillarH * 0.3, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pillarH * 0.4, z: bz - archD * 0.55, width: archW * 0.5, depth: 0.5, height: pillarH * 0.3, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pillarH * 0.4, z: bz + archD * 0.55, width: archW * 0.5, depth: 0.5, height: pillarH * 0.3, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Victory spike / finial on top center
-      rawBuildings.push({ name: '', x: bx, y: pillarH + spanH, z: bz, width: pillarW * 0.3, depth: pillarW * 0.3, height: spanH * 0.6, color, shape: 'pyramid', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pillarH + spanH, z: bz, width: pillarW * 0.3, depth: pillarW * 0.3, height: spanH * 0.6, color, shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (landmarkStyle === 3) {
       // Style 4: Comm / Signal Tower (tall lattice spire)
       const baseR = Math.min(baseW, baseD) * 0.25;
       const towerH = h;
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseR * 2.2, depth: baseR * 2.2, height: towerH * 0.06, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseR * 2.2, depth: baseR * 2.2, height: towerH * 0.06, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       // Four corner support legs
       const legOffset = baseR * 0.8;
-      rawBuildings.push({ name: '', x: bx - legOffset, y: 0, z: bz - legOffset, width: baseR * 0.25, depth: baseR * 0.25, height: towerH * 0.45, color, shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + legOffset, y: 0, z: bz - legOffset, width: baseR * 0.25, depth: baseR * 0.25, height: towerH * 0.45, color, shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx - legOffset, y: 0, z: bz + legOffset, width: baseR * 0.25, depth: baseR * 0.25, height: towerH * 0.45, color, shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + legOffset, y: 0, z: bz + legOffset, width: baseR * 0.25, depth: baseR * 0.25, height: towerH * 0.45, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - legOffset, y: 0, z: bz - legOffset, width: baseR * 0.25, depth: baseR * 0.25, height: towerH * 0.45, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + legOffset, y: 0, z: bz - legOffset, width: baseR * 0.25, depth: baseR * 0.25, height: towerH * 0.45, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - legOffset, y: 0, z: bz + legOffset, width: baseR * 0.25, depth: baseR * 0.25, height: towerH * 0.45, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + legOffset, y: 0, z: bz + legOffset, width: baseR * 0.25, depth: baseR * 0.25, height: towerH * 0.45, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       // Central mast
-      rawBuildings.push({ name: '', x: bx, y: towerH * 0.06, z: bz, width: baseR * 0.28, depth: baseR * 0.28, height: towerH * 0.85, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.06, z: bz, width: baseR * 0.28, depth: baseR * 0.28, height: towerH * 0.85, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       // Signal dish
-      rawBuildings.push({ name: '', x: bx, y: towerH * 0.72, z: bz, width: baseR * 1.1, depth: baseR * 0.3, height: baseR * 0.8, color, shape: 'cylinder', rotation: 0.35, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.72, z: bz, width: baseR * 1.1, depth: baseR * 0.3, height: baseR * 0.8, color, shape: 'cylinder', polyCount: 5, rotation: 0.35, parent_name: 'ROOT' });
       // Blinking beacon sphere
-      rawBuildings.push({ name: '', x: bx, y: towerH * 0.91, z: bz, width: baseR * 0.18, depth: baseR * 0.18, height: baseR * 0.18, color, shape: 'sphere', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.91, z: bz, width: baseR * 0.18, depth: baseR * 0.18, height: baseR * 0.18, color, shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (landmarkStyle === 4) {
       // Style 5: Plaza Fountain Monument (wide stepped plaza with central column)
@@ -1468,43 +1472,43 @@ const generateThemedBuildingsForPlot = (
       const colW = plazaW * 0.12;
       const colH = h * 0.65;
       // Wide flat plaza base
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: plazaW, depth: plazaD, height: plazaH, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: plazaW, depth: plazaD, height: plazaH, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       // Raised inner ring
-      rawBuildings.push({ name: '', x: bx, y: plazaH, z: bz, width: ring1W, depth: ring1W, height: ring1H, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: plazaH, z: bz, width: ring1W, depth: ring1W, height: ring1H, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       // Pool ring / inner platform
-      rawBuildings.push({ name: '', x: bx, y: plazaH + ring1H, z: bz, width: ring2W, depth: ring2W, height: ring2H, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: plazaH + ring1H, z: bz, width: ring2W, depth: ring2W, height: ring2H, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       // Central decorative column
-      rawBuildings.push({ name: '', x: bx, y: plazaH + ring1H + ring2H, z: bz, width: colW, depth: colW, height: colH, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: plazaH + ring1H + ring2H, z: bz, width: colW, depth: colW, height: colH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       // Capital / crown sphere
       const crownR = colW * 1.2;
-      rawBuildings.push({ name: '', x: bx, y: plazaH + ring1H + ring2H + colH, z: bz, width: crownR, depth: crownR, height: crownR, color, shape: 'sphere', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: plazaH + ring1H + ring2H + colH, z: bz, width: crownR, depth: crownR, height: crownR, color, shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
       // Four ornamental pillars around the plaza
       const pillarOff = ring1W * 0.4;
       const pR = colW * 0.45;
       const pHh = colH * 0.35;
-      rawBuildings.push({ name: '', x: bx - pillarOff, y: plazaH + ring1H + ring2H, z: bz - pillarOff, width: pR, depth: pR, height: pHh, color, shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + pillarOff, y: plazaH + ring1H + ring2H, z: bz - pillarOff, width: pR, depth: pR, height: pHh, color, shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx - pillarOff, y: plazaH + ring1H + ring2H, z: bz + pillarOff, width: pR, depth: pR, height: pHh, color, shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + pillarOff, y: plazaH + ring1H + ring2H, z: bz + pillarOff, width: pR, depth: pR, height: pHh, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - pillarOff, y: plazaH + ring1H + ring2H, z: bz - pillarOff, width: pR, depth: pR, height: pHh, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + pillarOff, y: plazaH + ring1H + ring2H, z: bz - pillarOff, width: pR, depth: pR, height: pHh, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - pillarOff, y: plazaH + ring1H + ring2H, z: bz + pillarOff, width: pR, depth: pR, height: pHh, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + pillarOff, y: plazaH + ring1H + ring2H, z: bz + pillarOff, width: pR, depth: pR, height: pHh, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (landmarkStyle === 5) {
       // Style 6: Corporate Arcology (3 stacked pyramids + glowing orb)
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: h * 0.4, color, shape: 'pyramid' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: h * 0.4, color, shape: 'pyramid', polyCount: 5 };
       rawBuildings.push(root);
       const key2 = getGridKey(bx, bz); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(root);
-      rawBuildings.push({ name: '', x: bx, y: h * 0.4, z: bz, width: baseW * 0.6, depth: baseD * 0.6, height: h * 0.4, color, shape: 'pyramid', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: h * 0.8, z: bz, width: baseW * 0.3, depth: baseD * 0.3, height: h * 0.2, color, shape: 'pyramid', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: h * 0.4, z: bz, width: baseW * 0.6, depth: baseD * 0.6, height: h * 0.4, color, shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: h * 0.8, z: bz, width: baseW * 0.3, depth: baseD * 0.3, height: h * 0.2, color, shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
       const peakSphereR = Math.min(baseW, baseD) * 0.15;
-      rawBuildings.push({ name: '', x: bx, y: h * 1.05, z: bz, width: peakSphereR, depth: peakSphereR, height: peakSphereR, color, shape: 'sphere', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: h * 1.05, z: bz, width: peakSphereR, depth: peakSphereR, height: peakSphereR, color, shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (landmarkStyle === 6) {
       // Style 7: Cyber-Citadel (Stepped buttresses + tall central spire)
       const centralSpireH = h;
       const centralSpireW = baseW * 0.45;
       const centralSpireD = baseD * 0.45;
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: centralSpireW, depth: centralSpireD, height: centralSpireH, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: centralSpireW, depth: centralSpireD, height: centralSpireH, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       // Tiered corner buttresses
@@ -1519,32 +1523,32 @@ const generateThemedBuildingsForPlot = (
       offsets.forEach(offset => {
         const ox = bx + offset.dx;
         const oz = bz + offset.dz;
-        rawBuildings.push({ name: '', x: ox, y: 0, z: oz, width: buttW, depth: buttD, height: centralSpireH * 0.4, color, shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: ox - Math.sign(offset.dx)*buttW*0.2, y: centralSpireH * 0.4, z: oz - Math.sign(offset.dz)*buttD*0.2, width: buttW * 0.7, depth: buttD * 0.7, height: centralSpireH * 0.35, color, shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: ox, y: 0, z: oz, width: buttW, depth: buttD, height: centralSpireH * 0.4, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: ox - Math.sign(offset.dx)*buttW*0.2, y: centralSpireH * 0.4, z: oz - Math.sign(offset.dz)*buttD*0.2, width: buttW * 0.7, depth: buttD * 0.7, height: centralSpireH * 0.35, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       });
       // Large top ring
-      rawBuildings.push({ name: '', x: bx, y: centralSpireH * 0.8, z: bz, width: centralSpireW * 1.3, depth: centralSpireD * 1.3, height: h * 0.03, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: centralSpireH * 0.8, z: bz, width: centralSpireW * 1.3, depth: centralSpireD * 1.3, height: h * 0.03, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Top antenna
-      rawBuildings.push({ name: '', x: bx, y: centralSpireH, z: bz, width: 0.3, depth: 0.3, height: centralSpireH * 0.18, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: centralSpireH, z: bz, width: 0.3, depth: 0.3, height: centralSpireH * 0.18, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (landmarkStyle === 7) {
       // Style 8: Hyper-Pyramid Complex (Grand tiered pyramid with satellite obelisks)
       const base1W = baseW * 0.75;
       const base1D = baseD * 0.75;
       const base1H = h * 0.05;
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: base1W, depth: base1D, height: base1H, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: base1W, depth: base1D, height: base1H, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       // Stepped Tier 2 Base
       const base2W = base1W * 0.75;
       const base2D = base1D * 0.75;
       const base2H = h * 0.08;
-      rawBuildings.push({ name: '', x: bx, y: base1H, z: bz, width: base2W, depth: base2D, height: base2H, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: base1H, z: bz, width: base2W, depth: base2D, height: base2H, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Crown Pyramid
       const pyramidW = base2W * 0.75;
       const pyramidD = base2D * 0.75;
       const pyramidH = h * 0.87;
-      rawBuildings.push({ name: '', x: bx, y: base1H + base2H, z: bz, width: pyramidW, depth: pyramidD, height: pyramidH, color, shape: 'pyramid', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: base1H + base2H, z: bz, width: pyramidW, depth: pyramidD, height: pyramidH, color, shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
       // Satellite Obelisks at corners
       const satOffsets = [
         { dx: -baseW * 0.42, dz: -baseD * 0.42 },
@@ -1555,8 +1559,8 @@ const generateThemedBuildingsForPlot = (
       satOffsets.forEach(offset => {
         const ox = bx + offset.dx;
         const oz = bz + offset.dz;
-        rawBuildings.push({ name: '', x: ox, y: 0, z: oz, width: baseW * 0.08, depth: baseD * 0.08, height: h * 0.03, color, shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: ox, y: h * 0.03, z: oz, width: baseW * 0.08, depth: baseD * 0.08, height: h * 0.17, color, shape: 'pyramid', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: ox, y: 0, z: oz, width: baseW * 0.08, depth: baseD * 0.08, height: h * 0.03, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: ox, y: h * 0.03, z: oz, width: baseW * 0.08, depth: baseD * 0.08, height: h * 0.17, color, shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
       });
     }
     else if (landmarkStyle === 8) {
@@ -1565,41 +1569,41 @@ const generateThemedBuildingsForPlot = (
       const pillarD = baseD * 0.65;
       const pillarH = h;
       const offsetDist = baseW * 0.33;
-      const root = { name: '', description: '', x: bx - offsetDist, y: 0, z: bz, width: pillarW, depth: pillarD, height: pillarH, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx - offsetDist, y: 0, z: bz, width: pillarW, depth: pillarD, height: pillarH, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx - offsetDist, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       // Right Pillar
-      rawBuildings.push({ name: '', x: bx + offsetDist, y: 0, z: bz, width: pillarW, depth: pillarD, height: pillarH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + offsetDist, y: 0, z: bz, width: pillarW, depth: pillarD, height: pillarH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Top Connecting Arch
       const archH2 = h * 0.08;
       const archW2 = offsetDist * 2 + pillarW;
-      rawBuildings.push({ name: '', x: bx, y: pillarH - archH2, z: bz, width: archW2, depth: pillarD * 0.9, height: archH2, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pillarH - archH2, z: bz, width: archW2, depth: pillarD * 0.9, height: archH2, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Center Suspended Atrium
       const atriumW = offsetDist * 1.3;
       const atriumD = pillarD * 0.7;
       const atriumH = pillarH * 0.45;
-      rawBuildings.push({ name: '', x: bx, y: pillarH * 0.35, z: bz, width: atriumW, depth: atriumD, height: atriumH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: pillarH * 0.35, z: bz, width: atriumW, depth: atriumD, height: atriumH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Twin spires on top
-      rawBuildings.push({ name: '', x: bx - offsetDist, y: pillarH, z: bz, width: 0.5, depth: 0.5, height: h * 0.1, color, shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + offsetDist, y: pillarH, z: bz, width: 0.5, depth: 0.5, height: h * 0.1, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - offsetDist, y: pillarH, z: bz, width: 0.5, depth: 0.5, height: h * 0.1, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + offsetDist, y: pillarH, z: bz, width: 0.5, depth: 0.5, height: h * 0.1, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (landmarkStyle === 9) {
       // Style 10: Communications Array (Stepped tower + horizontal array discs + needles)
       const towerH = h;
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.4, depth: baseD * 0.4, height: towerH * 0.3, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.4, depth: baseD * 0.4, height: towerH * 0.3, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       // Mid and Upper Sections
-      rawBuildings.push({ name: '', x: bx, y: towerH * 0.3, z: bz, width: baseW * 0.3, depth: baseD * 0.3, height: towerH * 0.4, color, shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: towerH * 0.7, z: bz, width: baseW * 0.2, depth: baseD * 0.2, height: towerH * 0.3, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.3, z: bz, width: baseW * 0.3, depth: baseD * 0.3, height: towerH * 0.4, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.7, z: bz, width: baseW * 0.2, depth: baseD * 0.2, height: towerH * 0.3, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Horizontal Array Discs
-      rawBuildings.push({ name: '', x: bx, y: towerH * 0.45, z: bz, width: baseW * 0.65, depth: baseD * 0.65, height: h * 0.015, color, shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: towerH * 0.75, z: bz, width: baseW * 0.5, depth: baseD * 0.5, height: h * 0.01, color, shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: towerH * 0.92, z: bz, width: baseW * 0.32, depth: baseD * 0.32, height: h * 0.008, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.45, z: bz, width: baseW * 0.65, depth: baseD * 0.65, height: h * 0.015, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.75, z: bz, width: baseW * 0.5, depth: baseD * 0.5, height: h * 0.01, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.92, z: bz, width: baseW * 0.32, depth: baseD * 0.32, height: h * 0.008, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Top needle / antenna
-      rawBuildings.push({ name: '', x: bx, y: towerH, z: bz, width: 0.3, depth: 0.3, height: towerH * 0.12, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH, z: bz, width: 0.3, depth: 0.3, height: towerH * 0.12, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Beacon sphere
-      rawBuildings.push({ name: '', x: bx, y: towerH * 1.12, z: bz, width: baseW * 0.06, depth: baseD * 0.06, height: baseW * 0.06, color, shape: 'sphere', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 1.12, z: bz, width: baseW * 0.06, depth: baseD * 0.06, height: baseW * 0.06, color, shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (landmarkStyle === 10) {
       // Style 11: Ferris Wheel (horizontal cylinder-like wheel with triangle supports)
@@ -1608,20 +1612,20 @@ const generateThemedBuildingsForPlot = (
       const supportSpread = baseD * 0.35;
 
       // Ground platform
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.7, depth: baseD * 0.7, height: h * 0.015, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.7, depth: baseD * 0.7, height: h * 0.015, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
       // Front A-frame support (pyramid/triangle)
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz - supportSpread, width: baseW * 0.12, depth: baseD * 0.12, height: wheelCenterY * 1.05, color, shape: 'pyramid', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz - supportSpread, width: baseW * 0.12, depth: baseD * 0.12, height: wheelCenterY * 1.05, color, shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
       // Back A-frame support (pyramid/triangle)
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + supportSpread, width: baseW * 0.12, depth: baseD * 0.12, height: wheelCenterY * 1.05, color, shape: 'pyramid', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + supportSpread, width: baseW * 0.12, depth: baseD * 0.12, height: wheelCenterY * 1.05, color, shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
 
       // The wheel (sphere flattened on Z axis - in wireframe looks like a circular frame)
-      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - wheelRadius, z: bz, width: wheelRadius * 2, depth: supportSpread * 0.3, height: wheelRadius * 2, color, shape: 'sphere', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - wheelRadius, z: bz, width: wheelRadius * 2, depth: supportSpread * 0.3, height: wheelRadius * 2, color, shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
 
       // Center axle hub
-      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - wheelRadius * 0.08, z: bz, width: wheelRadius * 0.15, depth: supportSpread * 1.8, height: wheelRadius * 0.15, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - wheelRadius * 0.08, z: bz, width: wheelRadius * 0.15, depth: supportSpread * 1.8, height: wheelRadius * 0.15, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Gondola cabins around the wheel rim
       const numGondolas = 8;
@@ -1630,15 +1634,15 @@ const generateThemedBuildingsForPlot = (
         const gx = bx + Math.cos(angle) * wheelRadius * 0.88;
         const gy = wheelCenterY + Math.sin(angle) * wheelRadius * 0.88;
         const gondolaSize = wheelRadius * 0.09;
-        rawBuildings.push({ name: '', x: gx, y: gy - gondolaSize / 2, z: bz, width: gondolaSize, depth: gondolaSize, height: gondolaSize * 1.2, color, shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: gx, y: gy - gondolaSize / 2, z: bz, width: gondolaSize, depth: gondolaSize, height: gondolaSize * 1.2, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
 
       // Cross-brace spokes (thin boxes through center)
       const spokeW = wheelRadius * 0.03;
       // Vertical spoke
-      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - wheelRadius * 0.85, z: bz, width: spokeW, depth: spokeW, height: wheelRadius * 1.7, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - wheelRadius * 0.85, z: bz, width: spokeW, depth: spokeW, height: wheelRadius * 1.7, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // Horizontal spoke
-      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - spokeW / 2, z: bz, width: wheelRadius * 1.7, depth: spokeW, height: spokeW, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - spokeW / 2, z: bz, width: wheelRadius * 1.7, depth: spokeW, height: spokeW, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (landmarkStyle === 11) {
       // Style 12: Cyber-Swing Ride (Star Flyer / High-Altitude Carousel)
@@ -1647,19 +1651,19 @@ const generateThemedBuildingsForPlot = (
       const canopyRadius = Math.min(baseW, baseD) * 0.45;
       
       // Base platform
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: canopyRadius * 2.2, depth: canopyRadius * 2.2, height: h * 0.05, color, shape: 'cylinder' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: canopyRadius * 2.2, depth: canopyRadius * 2.2, height: h * 0.05, color, shape: 'cylinder', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
       // Central tower
-      rawBuildings.push({ name: '', x: bx, y: h * 0.05, z: bz, width: towerRadius * 2, depth: towerRadius * 2, height: rideHeight * 0.85, color, shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: h * 0.05, z: bz, width: towerRadius * 2, depth: towerRadius * 2, height: rideHeight * 0.85, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
 
       // Top mechanical hub (glowing)
       const hubY = h * 0.9;
-      rawBuildings.push({ name: '', x: bx, y: hubY, z: bz, width: towerRadius * 4, depth: towerRadius * 4, height: rideHeight * 0.05, color: '#ff00aa', shape: 'cylinder', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: hubY, z: bz, width: towerRadius * 4, depth: towerRadius * 4, height: rideHeight * 0.05, color: '#ff00aa', shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
 
       // Canopy roof (pyramid for low-poly tent look)
-      rawBuildings.push({ name: '', x: bx, y: hubY + rideHeight * 0.05, z: bz, width: canopyRadius * 2, depth: canopyRadius * 2, height: rideHeight * 0.1, color, shape: 'pyramid', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: hubY + rideHeight * 0.05, z: bz, width: canopyRadius * 2, depth: canopyRadius * 2, height: rideHeight * 0.1, color, shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
 
       // Swings flinging outwards
       const numSwings = 8;
@@ -1685,11 +1689,11 @@ const generateThemedBuildingsForPlot = (
             const lx = attachX + (seatX - attachX) * t;
             const ly = attachY + (seatY - attachY) * t;
             const lz = attachZ + (seatZ - attachZ) * t;
-            rawBuildings.push({ name: '', x: lx, y: ly, z: lz, width: 0.3, depth: 0.3, height: 0.3, color: '#555555', shape: 'box', parent_name: 'ROOT' });
+            rawBuildings.push({ name: '', x: lx, y: ly, z: lz, width: 0.3, depth: 0.3, height: 0.3, color: '#555555', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
          }
 
          // Rider Seat
-         rawBuildings.push({ name: '', x: seatX, y: seatY, z: seatZ, width: 2.0, depth: 2.0, height: 1.5, color: '#00ffff', shape: 'box', parent_name: 'ROOT' });
+         rawBuildings.push({ name: '', x: seatX, y: seatY, z: seatZ, width: 2.0, depth: 2.0, height: 1.5, color: '#00ffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     return;
@@ -1721,13 +1725,13 @@ const generateThemedBuildingsForPlot = (
 
     if (corpoStyle === 0) {
       // Style 0: Asymmetrical Nexus (main tower + data-centre annex + skybridges)
-      const root = { name: '', description: '', x: bx - baseW * 0.2, y: 0, z: bz - baseD * 0.2, width: baseW * 0.6, depth: baseD * 0.6, height: h, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx - baseW * 0.2, y: 0, z: bz - baseD * 0.2, width: baseW * 0.6, depth: baseD * 0.6, height: h, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx - baseW * 0.2, bz - baseD * 0.2); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-      const annex = { name: '', x: bx + baseW * 0.25, y: 0, z: bz + baseD * 0.25, width: baseW * 0.5, depth: baseD * 0.5, height: h * 0.4, color, shape: 'box', parent_name: 'ROOT' };
+      const annex = { name: '', x: bx + baseW * 0.25, y: 0, z: bz + baseD * 0.25, width: baseW * 0.5, depth: baseD * 0.5, height: h * 0.4, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' };
       rawBuildings.push(annex);
-      rawBuildings.push({ name: '', x: bx, y: h * 0.2, z: bz, width: baseW * 0.5, depth: baseD * 0.1, height: 4.0, color, shape: 'box', rotation: -0.785, parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: h * 0.35, z: bz, width: baseW * 0.5, depth: baseD * 0.1, height: 4.0, color, shape: 'box', rotation: -0.785, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: h * 0.2, z: bz, width: baseW * 0.5, depth: baseD * 0.1, height: 4.0, color, shape: 'box', polyCount: 5, rotation: -0.785, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: h * 0.35, z: bz, width: baseW * 0.5, depth: baseD * 0.1, height: 4.0, color, shape: 'box', polyCount: 5, rotation: -0.785, parent_name: 'ROOT' });
     }
     else if (corpoStyle === 1) {
       // Style 1: Twin Spire with Skybridge Link
@@ -1737,35 +1741,35 @@ const generateThemedBuildingsForPlot = (
       if (allowed && (isBlocked(t1x, bz, towerW, towerD, 1.0) || isBlocked(t2x, bz, towerW, towerD, 1.0))) {
         // Fallback to Style 0 if sub-towers are blocked but parent plot was not blocked
         const baseH = h * 0.45; const midH = h * 0.35; const topH = h * 0.2;
-        const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: baseH, color, shape: 'box' };
+        const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: baseH, color, shape: 'box', polyCount: 5 };
         rawBuildings.push(root);
         const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
-        rawBuildings.push({ name: '', x: bx, y: baseH, z: bz, width: baseW * 0.7, depth: baseD * 0.7, height: midH, color, shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx, y: baseH + midH, z: bz, width: baseW * 0.45, depth: baseD * 0.45, height: topH, color, shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx, y: baseH + midH + topH, z: bz, width: 0.2, depth: 0.2, height: h * 0.15, color, shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: baseH, z: bz, width: baseW * 0.7, depth: baseD * 0.7, height: midH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: baseH + midH, z: bz, width: baseW * 0.45, depth: baseD * 0.45, height: topH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: baseH + midH + topH, z: bz, width: 0.2, depth: 0.2, height: h * 0.15, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       } else {
-        const root = { name: '', description: '', x: t1x, y: 0, z: bz, width: towerW, depth: towerD, height: h, color, shape: 'box' };
+        const root = { name: '', description: '', x: t1x, y: 0, z: bz, width: towerW, depth: towerD, height: h, color, shape: 'box', polyCount: 5 };
         rawBuildings.push(root);
         const key = getGridKey(t1x, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
-        const beta = { name: '', x: t2x, y: 0, z: bz, width: towerW, depth: towerD, height: h, color, shape: 'box', parent_name: 'CORP_ROOT' };
+        const beta = { name: '', x: t2x, y: 0, z: bz, width: towerW, depth: towerD, height: h, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' };
         rawBuildings.push(beta);
         const key2 = getGridKey(t2x, bz); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(beta);
         
         const bridgeH = 4.0; const bridgeW = (t2x - t1x) - towerW;
-        rawBuildings.push({ name: '', x: bx, y: h * 0.7, z: bz, width: bridgeW, depth: towerD * 0.4, height: bridgeH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: h * 0.7, z: bz, width: bridgeW, depth: towerD * 0.4, height: bridgeH, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
       }
     } 
     else if (corpoStyle === 2) {
       // Style 2: Corporate Citadel with Symmetrical Wings (3 towers)
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.5, depth: baseD * 0.5, height: h, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.5, depth: baseD * 0.5, height: h, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
       const wingW = baseW * 0.25; const wingD = baseD * 0.35; const wingH = h * 0.65;
-      rawBuildings.push({ name: '', x: bx - baseW * 0.35, y: 0, z: bz, width: wingW, depth: wingD, height: wingH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-      rawBuildings.push({ name: '', x: bx + baseW * 0.35, y: 0, z: bz, width: wingW, depth: wingD, height: wingH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: bx - baseW * 0.35, y: 0, z: bz, width: wingW, depth: wingD, height: wingH, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: bx + baseW * 0.35, y: 0, z: bz, width: wingW, depth: wingD, height: wingH, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
     } 
     else if (corpoStyle === 3) {
       // Style 3: Split Atrium Spire with Helipad/Comms Disc
@@ -1775,58 +1779,58 @@ const generateThemedBuildingsForPlot = (
       if (allowed && (isBlocked(t1x, bz, towerW, towerD, 1.0) || isBlocked(t2x, bz, towerW, towerD, 1.0))) {
         // Fallback to Style 0 if sub-towers are blocked but parent plot was not blocked
         const baseH = h * 0.45; const midH = h * 0.35; const topH = h * 0.2;
-        const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: baseH, color, shape: 'box' };
+        const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: baseH, color, shape: 'box', polyCount: 5 };
         rawBuildings.push(root);
         const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
-        rawBuildings.push({ name: '', x: bx, y: baseH, z: bz, width: baseW * 0.7, depth: baseD * 0.7, height: midH, color, shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx, y: baseH + midH, z: bz, width: baseW * 0.45, depth: baseD * 0.45, height: topH, color, shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx, y: baseH + midH + topH, z: bz, width: 0.2, depth: 0.2, height: h * 0.15, color, shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: baseH, z: bz, width: baseW * 0.7, depth: baseD * 0.7, height: midH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: baseH + midH, z: bz, width: baseW * 0.45, depth: baseD * 0.45, height: topH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: baseH + midH + topH, z: bz, width: 0.2, depth: 0.2, height: h * 0.15, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       } else {
-        const root = { name: '', description: '', x: t1x, y: 0, z: bz, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box' };
+        const root = { name: '', description: '', x: t1x, y: 0, z: bz, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box', polyCount: 5 };
         rawBuildings.push(root);
         const key = getGridKey(t1x, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
-        const beta = { name: '', x: t2x, y: 0, z: bz, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box', parent_name: 'CORP_ROOT' };
+        const beta = { name: '', x: t2x, y: 0, z: bz, width: towerW, depth: towerD, height: h * 0.95, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' };
         rawBuildings.push(beta);
         const key2 = getGridKey(t2x, bz); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(beta);
 
         const helipadW = baseW * 1.1; const helipadD = baseD * 0.9;
-        rawBuildings.push({ name: '', x: bx, y: h * 0.95, z: bz, width: helipadW, depth: helipadD, height: 2.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
-        rawBuildings.push({ name: '', x: bx, y: h * 0.95 + 2.0, z: bz, width: 0.15, depth: 0.15, height: h * 0.18, color, shape: 'box', parent_name: 'CORP_ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: h * 0.95, z: bz, width: helipadW, depth: helipadD, height: 2.0, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: h * 0.95 + 2.0, z: bz, width: 0.15, depth: 0.15, height: h * 0.18, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
       }
     }
     else if (corpoStyle === 4) {
       // Style 4: Cylindrical Tower with Outer Ribs
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.65, depth: baseD * 0.65, height: h, color, shape: 'cylinder' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.65, depth: baseD * 0.65, height: h, color, shape: 'cylinder', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
       // 4 outer structural ribs (boxes)
       const ribW = baseW * 0.08; const ribH = h * 0.82;
       const ribDistX = baseW * 0.35; const ribDistZ = baseD * 0.35;
-      rawBuildings.push({ name: '', x: bx - ribDistX, y: 0, z: bz, width: ribW, depth: ribW * 2, height: ribH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-      rawBuildings.push({ name: '', x: bx + ribDistX, y: 0, z: bz, width: ribW, depth: ribW * 2, height: ribH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz - ribDistZ, width: ribW * 2, depth: ribW, height: ribH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + ribDistZ, width: ribW * 2, depth: ribW, height: ribH, color, shape: 'box', parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: bx - ribDistX, y: 0, z: bz, width: ribW, depth: ribW * 2, height: ribH, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: bx + ribDistX, y: 0, z: bz, width: ribW, depth: ribW * 2, height: ribH, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz - ribDistZ, width: ribW * 2, depth: ribW, height: ribH, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + ribDistZ, width: ribW * 2, depth: ribW, height: ribH, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
 
       // Glowing top sphere
       const sphereR = Math.min(baseW, baseD) * 0.28;
-      rawBuildings.push({ name: '', x: bx, y: h, z: bz, width: sphereR, depth: sphereR, height: sphereR, color, shape: 'sphere', parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: h, z: bz, width: sphereR, depth: sphereR, height: sphereR, color, shape: 'sphere', polyCount: 5, parent_name: 'CORP_ROOT' });
     }
     else if (corpoStyle === 5) {
       // Style 5: Stepped Ziggurat / Arch Spire
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.38, depth: baseD * 0.72, height: h, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.38, depth: baseD * 0.72, height: h, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
       // Stepped side towers
       const sideW = baseW * 0.26; const sideD = baseD * 0.55;
-      rawBuildings.push({ name: '', x: bx - baseW * 0.32, y: 0, z: bz, width: sideW, depth: sideD, height: h * 0.65, color, shape: 'box', parent_name: 'CORP_ROOT' });
-      rawBuildings.push({ name: '', x: bx + baseW * 0.32, y: 0, z: bz, width: sideW, depth: sideD, height: h * 0.65, color, shape: 'box', parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: bx - baseW * 0.32, y: 0, z: bz, width: sideW, depth: sideD, height: h * 0.65, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: bx + baseW * 0.32, y: 0, z: bz, width: sideW, depth: sideD, height: h * 0.65, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
 
       // Sky arch link
-      rawBuildings.push({ name: '', x: bx, y: h * 0.58, z: bz, width: baseW * 0.8, depth: sideD * 0.5, height: 3.5, color, shape: 'box', parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: h * 0.58, z: bz, width: baseW * 0.8, depth: sideD * 0.5, height: 3.5, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
     }
     else if (corpoStyle === 6) {
       // Style 6: Tri-Tower Hub (Three cylinders grouped)
@@ -1835,48 +1839,48 @@ const generateThemedBuildingsForPlot = (
       const c2x = bx - baseW * 0.2; const c2z = bz + baseD * 0.18;
       const c3x = bx + baseW * 0.2; const c3z = bz + baseD * 0.18;
 
-      const root = { name: '', description: '', x: c1x, y: 0, z: c1z, width: tW, depth: tD, height: h * 0.9, color, shape: 'cylinder' };
+      const root = { name: '', description: '', x: c1x, y: 0, z: c1z, width: tW, depth: tD, height: h * 0.9, color, shape: 'cylinder', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(c1x, c1z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
-      rawBuildings.push({ name: '', x: c2x, y: 0, z: c2z, width: tW, depth: tD, height: h * 0.75, color, shape: 'cylinder', parent_name: 'CORP_ROOT' });
-      rawBuildings.push({ name: '', x: c3x, y: 0, z: c3z, width: tW, depth: tD, height: h * 0.98, color, shape: 'cylinder', parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: c2x, y: 0, z: c2z, width: tW, depth: tD, height: h * 0.75, color, shape: 'cylinder', polyCount: 5, parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: c3x, y: 0, z: c3z, width: tW, depth: tD, height: h * 0.98, color, shape: 'cylinder', polyCount: 5, parent_name: 'CORP_ROOT' });
 
       // Central box atrium core linking them
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz, width: baseW * 0.3, depth: baseD * 0.3, height: h * 0.7, color, shape: 'box', parent_name: 'CORP_ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz, width: baseW * 0.3, depth: baseD * 0.3, height: h * 0.7, color, shape: 'box', polyCount: 5, parent_name: 'CORP_ROOT' });
     }
     else if (corpoStyle === 7) {
       // Style 7: Cantilevered / Stacked Rotated Spire
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: h * 0.35, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: h * 0.35, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
       // Rotated tier 2
-      rawBuildings.push({ name: '', x: bx + baseW * 0.08, y: h * 0.35, z: bz - baseD * 0.05, width: baseW * 0.72, depth: baseD * 0.72, height: h * 0.3, color, shape: 'box', rotation: 0.15, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + baseW * 0.08, y: h * 0.35, z: bz - baseD * 0.05, width: baseW * 0.72, depth: baseD * 0.72, height: h * 0.3, color, shape: 'box', polyCount: 5, rotation: 0.15, parent_name: 'ROOT' });
       // Rotated tier 3
-      rawBuildings.push({ name: '', x: bx - baseW * 0.05, y: h * 0.65, z: bz + baseD * 0.08, width: baseW * 0.5, depth: baseD * 0.5, height: h * 0.25, color, shape: 'box', rotation: -0.15, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - baseW * 0.05, y: h * 0.65, z: bz + baseD * 0.08, width: baseW * 0.5, depth: baseD * 0.5, height: h * 0.25, color, shape: 'box', polyCount: 5, rotation: -0.15, parent_name: 'ROOT' });
       // Antenna
-      rawBuildings.push({ name: '', x: bx, y: h * 0.9, z: bz, width: 0.2, depth: 0.2, height: h * 0.16, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: h * 0.9, z: bz, width: 0.2, depth: 0.2, height: h * 0.16, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (corpoStyle === 8) {
       // Style 8: The Monolith Slab
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD * 0.6, height: h, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD * 0.6, height: h, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
       // Vertical data core
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + baseD * 0.3, width: baseW * 0.2, depth: baseD * 0.1, height: h * 1.05, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + baseD * 0.3, width: baseW * 0.2, depth: baseD * 0.1, height: h * 1.05, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
     }
     else if (corpoStyle === 9) {
       // Style 9: Stepped Corporate Spire (3 stacked tiers)
       const baseH = h * 0.45; const midH = h * 0.35; const topH = h * 0.2;
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: baseH, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW, depth: baseD, height: baseH, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
-      rawBuildings.push({ name: '', x: bx, y: baseH, z: bz, width: baseW * 0.7, depth: baseD * 0.7, height: midH, color, shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: baseH + midH, z: bz, width: baseW * 0.45, depth: baseD * 0.45, height: topH, color, shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: baseH + midH + topH, z: bz, width: 0.2, depth: 0.2, height: h * 0.15, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: baseH, z: bz, width: baseW * 0.7, depth: baseD * 0.7, height: midH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: baseH + midH, z: bz, width: baseW * 0.45, depth: baseD * 0.45, height: topH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: baseH + midH + topH, z: bz, width: 0.2, depth: 0.2, height: h * 0.15, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
     }
     return;
   }
@@ -1891,35 +1895,35 @@ const generateThemedBuildingsForPlot = (
       const wingD = bd * 0.22;
       const wingW = bw * 0.22;
       
-      const root = { name: '', description: '', x: bx, y: 0, z: bz - bd * 0.39, width: bw, depth: wingD, height: h, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz - bd * 0.39, width: bw, depth: wingD, height: h, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz - bd * 0.39); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
       // South wing
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + bd * 0.39, width: bw, depth: wingD, height: h * 0.9, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + bd * 0.39, width: bw, depth: wingD, height: h * 0.9, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // West wing
-      rawBuildings.push({ name: '', x: bx - bw * 0.39, y: 0, z: bz, width: wingW, depth: bd * 0.56, height: h * 0.95, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.39, y: 0, z: bz, width: wingW, depth: bd * 0.56, height: h * 0.95, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // East wing
-      rawBuildings.push({ name: '', x: bx + bw * 0.39, y: 0, z: bz, width: wingW, depth: bd * 0.56, height: h * 0.85, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.39, y: 0, z: bz, width: wingW, depth: bd * 0.56, height: h * 0.85, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Courtyard grass lawn
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz, width: bw * 0.54, depth: bd * 0.54, height: 0.1, color: '#1a5925', shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz, width: bw * 0.54, depth: bd * 0.54, height: 0.1, color: '#1a5925', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       
       // Holographic tree in center
       const trunkH = 1.8;
-      rawBuildings.push({ name: 'HOLOTREE_TRUNK', x: bx, y: 0.1, z: bz, width: 0.2, depth: 0.2, height: trunkH, color: '#00ff66', shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: 'HOLOTREE_CANOPY', x: bx, y: 0.1 + trunkH, z: bz, width: 1.5, depth: 1.5, height: 1.5, color: '#00ff66', shape: 'sphere', parent_name: 'ROOT' });
+      rawBuildings.push({ name: 'HOLOTREE_TRUNK', x: bx, y: 0.1, z: bz, width: 0.2, depth: 0.2, height: trunkH, color: '#00ff66', shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: 'HOLOTREE_CANOPY', x: bx, y: 0.1 + trunkH, z: bz, width: 1.5, depth: 1.5, height: 1.5, color: '#00ff66', shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
 
       // Stacked balconies on exterior sides
       const balW = 0.4; const balD = 1.8; const balH = 0.15;
       for (let yLevel = 3.0; yLevel < h - 2; yLevel += 4.0) {
         // Balconies on West facade of West wing
-        rawBuildings.push({ name: '', x: bx - bw * 0.39 - wingW/2 - balW/2, y: yLevel, z: bz - bd * 0.15, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx - bw * 0.39 - wingW/2 - balW/2, y: yLevel, z: bz + bd * 0.15, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw * 0.39 - wingW/2 - balW/2, y: yLevel, z: bz - bd * 0.15, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw * 0.39 - wingW/2 - balW/2, y: yLevel, z: bz + bd * 0.15, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
         // Balconies on East facade of East wing
-        rawBuildings.push({ name: '', x: bx + bw * 0.39 + wingW/2 + balW/2, y: yLevel, z: bz - bd * 0.15, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx + bw * 0.39 + wingW/2 + balW/2, y: yLevel, z: bz + bd * 0.15, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw * 0.39 + wingW/2 + balW/2, y: yLevel, z: bz - bd * 0.15, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw * 0.39 + wingW/2 + balW/2, y: yLevel, z: bz + bd * 0.15, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (urbanStyle === 1) {
@@ -1927,32 +1931,32 @@ const generateThemedBuildingsForPlot = (
       const wingD = bd * 0.25;
       const wingW = bw * 0.25;
 
-      const root = { name: '', description: '', x: bx, y: 0, z: bz - bd * 0.375, width: bw, depth: wingD, height: h, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz - bd * 0.375, width: bw, depth: wingD, height: h, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz - bd * 0.375); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
       // East wing
-      rawBuildings.push({ name: '', x: bx + bw * 0.375, y: 0, z: bz + bd * 0.125, width: wingW, depth: bd * 0.75, height: h * 0.9, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.375, y: 0, z: bz + bd * 0.125, width: wingW, depth: bd * 0.75, height: h * 0.9, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       // West wing
-      rawBuildings.push({ name: '', x: bx - bw * 0.375, y: 0, z: bz + bd * 0.125, width: wingW, depth: bd * 0.75, height: h * 0.9, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.375, y: 0, z: bz + bd * 0.125, width: wingW, depth: bd * 0.75, height: h * 0.9, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Dark asphalt parking lot pad
       const lotW = bw * 0.5; const lotD = bd * 0.7;
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + bd * 0.125, width: lotW, depth: lotD, height: 0.08, color: '#242528', shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + bd * 0.125, width: lotW, depth: lotD, height: 0.08, color: '#242528', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Small box cars parked in the lot
       const carW = 1.0; const carD = 1.8; const carH = 0.65;
       const carColors = ['#cc3333', '#3355cc', '#4f5259', '#d1d5db'];
-      rawBuildings.push({ name: 'PARKED_VEHICLE', x: bx - lotW * 0.22, y: 0.08, z: bz + bd * 0.05, width: carW, depth: carD, height: carH, color: carColors[0], shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: 'PARKED_VEHICLE', x: bx - lotW * 0.22, y: 0.08, z: bz + bd * 0.25, width: carW, depth: carD, height: carH, color: carColors[1], shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: 'PARKED_VEHICLE', x: bx + lotW * 0.22, y: 0.08, z: bz + bd * 0.05, width: carW, depth: carD, height: carH, color: carColors[2], shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: 'PARKED_VEHICLE', x: bx + lotW * 0.22, y: 0.08, z: bz + bd * 0.25, width: carW, depth: carD, height: carH, color: carColors[3], shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: 'PARKED_VEHICLE', x: bx - lotW * 0.22, y: 0.08, z: bz + bd * 0.05, width: carW, depth: carD, height: carH, color: carColors[0], shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: 'PARKED_VEHICLE', x: bx - lotW * 0.22, y: 0.08, z: bz + bd * 0.25, width: carW, depth: carD, height: carH, color: carColors[1], shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: 'PARKED_VEHICLE', x: bx + lotW * 0.22, y: 0.08, z: bz + bd * 0.05, width: carW, depth: carD, height: carH, color: carColors[2], shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: 'PARKED_VEHICLE', x: bx + lotW * 0.22, y: 0.08, z: bz + bd * 0.25, width: carW, depth: carD, height: carH, color: carColors[3], shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Balconies facing the parking lot
       const balW = 0.4; const balD = 1.5; const balH = 0.15;
       for (let yLevel = 3.0; yLevel < h - 2; yLevel += 4.0) {
-        rawBuildings.push({ name: '', x: bx - bw * 0.375 + wingW/2 + balW/2, y: yLevel, z: bz + bd * 0.1, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx + bw * 0.375 - wingW/2 - balW/2, y: yLevel, z: bz + bd * 0.1, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw * 0.375 + wingW/2 + balW/2, y: yLevel, z: bz + bd * 0.1, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw * 0.375 - wingW/2 - balW/2, y: yLevel, z: bz + bd * 0.1, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (urbanStyle === 2) {
@@ -1960,166 +1964,166 @@ const generateThemedBuildingsForPlot = (
       const wingD = bd * 0.28;
       const wingW = bw * 0.28;
 
-      const root = { name: '', description: '', x: bx, y: 0, z: bz - bd * 0.36, width: bw, depth: wingD, height: h, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz - bd * 0.36, width: bw, depth: wingD, height: h, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz - bd * 0.36); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
       // West wing (terraced shorter)
       const westH = h * 0.75;
-      rawBuildings.push({ name: '', x: bx - bw * 0.36, y: 0, z: bz + bd * 0.14, width: wingW, depth: bd * 0.72, height: westH, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.36, y: 0, z: bz + bd * 0.14, width: wingW, depth: bd * 0.72, height: westH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Plaza pad
       const plazaW = bw * 0.68; const plazaD = bd * 0.68;
-      rawBuildings.push({ name: '', x: bx + bw * 0.14, y: 0, z: bz + bd * 0.14, width: plazaW, depth: plazaD, height: 0.08, color: '#524337', shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.14, y: 0, z: bz + bd * 0.14, width: plazaW, depth: plazaD, height: 0.08, color: '#524337', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Gazebo
-      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 0.08, z: bz + bd * 0.25, width: 0.1, depth: 0.1, height: 2.5, color: '#a3a3a3', shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 2.58, z: bz + bd * 0.25, width: 2.0, depth: 2.0, height: 0.15, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 0.08, z: bz + bd * 0.25, width: 0.1, depth: 0.1, height: 2.5, color: '#a3a3a3', shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 2.58, z: bz + bd * 0.25, width: 2.0, depth: 2.0, height: 0.15, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Plaza Tree
-      rawBuildings.push({ name: 'HOLOTREE_TRUNK', x: bx + bw * 0.05, y: 0.08, z: bz + bd * 0.05, width: 0.15, depth: 0.15, height: 1.5, color: '#00ff66', shape: 'cylinder', parent_name: 'ROOT' });
-      rawBuildings.push({ name: 'HOLOTREE_CANOPY', x: bx + bw * 0.05, y: 1.58, z: bz + bd * 0.05, width: 1.2, depth: 1.2, height: 1.2, color: '#00ff66', shape: 'sphere', parent_name: 'ROOT' });
+      rawBuildings.push({ name: 'HOLOTREE_TRUNK', x: bx + bw * 0.05, y: 0.08, z: bz + bd * 0.05, width: 0.15, depth: 0.15, height: 1.5, color: '#00ff66', shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: 'HOLOTREE_CANOPY', x: bx + bw * 0.05, y: 1.58, z: bz + bd * 0.05, width: 1.2, depth: 1.2, height: 1.2, color: '#00ff66', shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
 
       // Balconies facing the plaza
       const balW = 0.4; const balD = 1.6; const balH = 0.15;
       for (let yLevel = 3.0; yLevel < h - 2; yLevel += 4.0) {
-        rawBuildings.push({ name: '', x: bx + bw * 0.15, y: yLevel, z: bz - bd * 0.36 + wingD/2 + balW/2, width: balD, depth: balW, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw * 0.15, y: yLevel, z: bz - bd * 0.36 + wingD/2 + balW/2, width: balD, depth: balW, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
       for (let yLevel = 3.0; yLevel < westH - 2; yLevel += 4.0) {
-        rawBuildings.push({ name: '', x: bx - bw * 0.36 + wingW/2 + balW/2, y: yLevel, z: bz + bd * 0.05, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw * 0.36 + wingW/2 + balW/2, y: yLevel, z: bz + bd * 0.05, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (urbanStyle === 3) {
       // Style 3: Parallel Slab Towers with Sky Bridge
       const wingW = bw * 0.24;
-      const root = { name: '', description: '', x: bx - bw * 0.38, y: 0, z: bz, width: wingW, depth: bd, height: h, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx - bw * 0.38, y: 0, z: bz, width: wingW, depth: bd, height: h, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx - bw * 0.38, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
       // East wing slab
-      rawBuildings.push({ name: '', x: bx + bw * 0.38, y: 0, z: bz, width: wingW, depth: bd, height: h, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.38, y: 0, z: bz, width: wingW, depth: bd, height: h, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Central landscape pathway
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz, width: bw * 0.52, depth: bd * 0.9, height: 0.08, color: '#3d3e42', shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz, width: bw * 0.52, depth: bd * 0.9, height: 0.08, color: '#3d3e42', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Sky bridge linking them at h * 0.7 height
       const bridgeH = 3.0; const bridgeY = h * 0.65;
-      rawBuildings.push({ name: '', x: bx, y: bridgeY, z: bz, width: bw * 0.52, depth: bd * 0.22, height: bridgeH, color: '#00e5ff', shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: bridgeY, z: bz, width: bw * 0.52, depth: bd * 0.22, height: bridgeH, color: '#00e5ff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Stacked balconies on front and back end faces
       const balW = wingW * 0.8; const balD = 0.4; const balH = 0.15;
       for (let yLevel = 3.0; yLevel < h - 2; yLevel += 4.0) {
-        rawBuildings.push({ name: '', x: bx - bw * 0.38, y: yLevel, z: bz - bd/2 - balD/2, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx - bw * 0.38, y: yLevel, z: bz + bd/2 + balD/2, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx + bw * 0.38, y: yLevel, z: bz - bd/2 - balD/2, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx + bw * 0.38, y: yLevel, z: bz + bd/2 + balD/2, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw * 0.38, y: yLevel, z: bz - bd/2 - balD/2, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw * 0.38, y: yLevel, z: bz + bd/2 + balD/2, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw * 0.38, y: yLevel, z: bz - bd/2 - balD/2, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw * 0.38, y: yLevel, z: bz + bd/2 + balD/2, width: balW, depth: balD, height: balH, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (urbanStyle === 4) {
       // Style 4: Urban Standard A
       // Instructions: A towering mixed living building, that should have balconies, or windows. they can also have courtyards, or parking lots.
       const mainW = bw * 0.8; const mainD = bd * 0.5;
-      const root = { name: '', description: '', x: bx, y: 0, z: bz - bd * 0.2, width: mainW, depth: mainD, height: h, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz - bd * 0.2, width: mainW, depth: mainD, height: h, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz - bd * 0.2); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       
       // Parking Lot
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + bd * 0.25, width: bw * 0.8, depth: bd * 0.4, height: 0.1, color: '#242528', shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx - bw*0.2, y: 0.1, z: bz + bd*0.25, width: 1.0, depth: 2.0, height: 0.8, color: '#cc3333', shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + bd * 0.25, width: bw * 0.8, depth: bd * 0.4, height: 0.1, color: '#242528', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw*0.2, y: 0.1, z: bz + bd*0.25, width: 1.0, depth: 2.0, height: 0.8, color: '#cc3333', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       
       // Balconies
       for (let yLevel = 4.0; yLevel < h - 3; yLevel += 4.0) {
-        rawBuildings.push({ name: '', x: bx, y: yLevel, z: bz - bd * 0.2 + mainD/2 + 0.5, width: mainW * 0.6, depth: 1.0, height: 0.2, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx, y: yLevel, z: bz - bd * 0.2 + mainD/2 + 0.5, width: mainW * 0.6, depth: 1.0, height: 0.2, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (urbanStyle === 5) {
       // Style 5: Urban Standard B
       // Instructions: A towering mixed living building, that should have balconies, or windows. they can also have courtyards, or parking lots.
       const mainW = bw * 0.6; const mainD = bd * 0.6;
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: mainW, depth: mainD, height: h * 1.2, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: mainW, depth: mainD, height: h * 1.2, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       
       // Courtyard (wrap around base)
-      rawBuildings.push({ name: '', x: bx + bw*0.3, y: 0, z: bz, width: bw * 0.3, depth: bd * 0.8, height: 0.1, color: '#1a5925', shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + bw*0.3, y: 0.1, z: bz, width: 1.5, depth: 1.5, height: 3.0, color: '#00ff66', shape: 'sphere', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw*0.3, y: 0, z: bz, width: bw * 0.3, depth: bd * 0.8, height: 0.1, color: '#1a5925', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw*0.3, y: 0.1, z: bz, width: 1.5, depth: 1.5, height: 3.0, color: '#00ff66', shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
       
       // Windows
       for (let yLevel = 5.0; yLevel < h * 1.2 - 5; yLevel += 5.0) {
-        rawBuildings.push({ name: '', x: bx + mainW/2 + 0.1, y: yLevel, z: bz, width: 0.2, depth: mainD * 0.5, height: 2.0, color: '#00e5ff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + mainW/2 + 0.1, y: yLevel, z: bz, width: 0.2, depth: mainD * 0.5, height: 2.0, color: '#00e5ff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (urbanStyle === 6) {
       // Style 6: Urban Standard C
       // Instructions: A towering mixed living building, that should have balconies, or windows. they can also have courtyards, or parking lots.
       const mainW = bw * 0.9; const mainD = bd * 0.4;
-      const root = { name: '', description: '', x: bx, y: 0, z: bz + bd * 0.25, width: mainW, depth: mainD, height: h * 0.9, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz + bd * 0.25, width: mainW, depth: mainD, height: h * 0.9, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz + bd * 0.25); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       
       // Parking Lot
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz - bd * 0.25, width: bw * 0.9, depth: bd * 0.45, height: 0.1, color: '#242528', shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx + bw*0.2, y: 0.1, z: bz - bd*0.25, width: 1.2, depth: 2.2, height: 0.9, color: '#3355cc', shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz - bd * 0.25, width: bw * 0.9, depth: bd * 0.45, height: 0.1, color: '#242528', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw*0.2, y: 0.1, z: bz - bd*0.25, width: 1.2, depth: 2.2, height: 0.9, color: '#3355cc', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Balconies
       for (let yLevel = 3.0; yLevel < h * 0.9 - 3; yLevel += 3.5) {
-        rawBuildings.push({ name: '', x: bx - bw*0.2, y: yLevel, z: bz + bd * 0.25 - mainD/2 - 0.4, width: 2.0, depth: 0.8, height: 0.3, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx + bw*0.2, y: yLevel, z: bz + bd * 0.25 - mainD/2 - 0.4, width: 2.0, depth: 0.8, height: 0.3, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw*0.2, y: yLevel, z: bz + bd * 0.25 - mainD/2 - 0.4, width: 2.0, depth: 0.8, height: 0.3, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw*0.2, y: yLevel, z: bz + bd * 0.25 - mainD/2 - 0.4, width: 2.0, depth: 0.8, height: 0.3, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (urbanStyle === 7) {
       // Style 7: Urban Standard D
       // Instructions: A towering mixed living building, that should have balconies, or windows. they can also have courtyards, or parking lots.
       const mainW = bw * 0.5; const mainD = bd * 0.8;
-      const root = { name: '', description: '', x: bx - bw * 0.2, y: 0, z: bz, width: mainW, depth: mainD, height: h * 1.1, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx - bw * 0.2, y: 0, z: bz, width: mainW, depth: mainD, height: h * 1.1, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx - bw * 0.2, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       
       // Courtyard
-      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 0, z: bz, width: bw * 0.4, depth: bd * 0.8, height: 0.1, color: '#1a5925', shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 0, z: bz, width: bw * 0.4, depth: bd * 0.8, height: 0.1, color: '#1a5925', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       for (let i = -1; i <= 1; i += 2) {
-        rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 0.1, z: bz + i * bd * 0.2, width: 1.2, depth: 1.2, height: 2.5, color: '#00ff66', shape: 'sphere', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 0.1, z: bz + i * bd * 0.2, width: 1.2, depth: 1.2, height: 2.5, color: '#00ff66', shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
       }
 
       // Windows
       for (let yLevel = 4.0; yLevel < h * 1.1 - 4; yLevel += 6.0) {
-        rawBuildings.push({ name: '', x: bx - bw * 0.2 + mainW/2 + 0.1, y: yLevel, z: bz, width: 0.2, depth: mainD * 0.6, height: 3.0, color: '#00e5ff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw * 0.2 + mainW/2 + 0.1, y: yLevel, z: bz, width: 0.2, depth: mainD * 0.6, height: 3.0, color: '#00e5ff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (urbanStyle === 8) {
       // Style 8: Urban Standard E
       // Instructions: A towering mixed living building, that should have balconies, or windows. they can also have courtyards, or parking lots.
       const mainW = bw * 0.7; const mainD = bd * 0.7;
-      const root = { name: '', description: '', x: bx, y: 0, z: bz - bd * 0.1, width: mainW, depth: mainD, height: h * 1.3, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz - bd * 0.1, width: mainW, depth: mainD, height: h * 1.3, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz - bd * 0.1); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       
       // Parking Lot
-      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + bd * 0.35, width: bw * 0.9, depth: bd * 0.2, height: 0.1, color: '#242528', shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx, y: 0.1, z: bz + bd * 0.35, width: 1.5, depth: 1.0, height: 0.8, color: '#d1d5db', shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + bd * 0.35, width: bw * 0.9, depth: bd * 0.2, height: 0.1, color: '#242528', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: 0.1, z: bz + bd * 0.35, width: 1.5, depth: 1.0, height: 0.8, color: '#d1d5db', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
       // Balconies
       for (let yLevel = 5.0; yLevel < h * 1.3 - 5; yLevel += 5.0) {
-        rawBuildings.push({ name: '', x: bx - mainW/4, y: yLevel, z: bz - bd * 0.1 + mainD/2 + 0.5, width: mainW * 0.3, depth: 1.0, height: 0.2, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx + mainW/4, y: yLevel, z: bz - bd * 0.1 + mainD/2 + 0.5, width: mainW * 0.3, depth: 1.0, height: 0.2, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - mainW/4, y: yLevel, z: bz - bd * 0.1 + mainD/2 + 0.5, width: mainW * 0.3, depth: 1.0, height: 0.2, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + mainW/4, y: yLevel, z: bz - bd * 0.1 + mainD/2 + 0.5, width: mainW * 0.3, depth: 1.0, height: 0.2, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (urbanStyle === 9) {
       // Style 9: Urban Standard F
       // Instructions: A towering mixed living building, that should have balconies, or windows. they can also have courtyards, or parking lots.
       const mainW = bw * 0.65; const mainD = bd * 0.65;
-      const root = { name: '', description: '', x: bx + bw * 0.1, y: 0, z: bz + bd * 0.1, width: mainW, depth: mainD, height: h * 1.15, color, shape: 'box' };
+      const root = { name: '', description: '', x: bx + bw * 0.1, y: 0, z: bz + bd * 0.1, width: mainW, depth: mainD, height: h * 1.15, color, shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx + bw * 0.1, bz + bd * 0.1); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       
       // Courtyard
-      rawBuildings.push({ name: '', x: bx - bw * 0.3, y: 0, z: bz - bd * 0.3, width: bw * 0.3, depth: bd * 0.3, height: 0.1, color: '#1a5925', shape: 'box', parent_name: 'ROOT' });
-      rawBuildings.push({ name: '', x: bx - bw * 0.3, y: 0.1, z: bz - bd * 0.3, width: 2.0, depth: 2.0, height: 2.0, color: '#00ff66', shape: 'sphere', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.3, y: 0, z: bz - bd * 0.3, width: bw * 0.3, depth: bd * 0.3, height: 0.1, color: '#1a5925', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx - bw * 0.3, y: 0.1, z: bz - bd * 0.3, width: 2.0, depth: 2.0, height: 2.0, color: '#00ff66', shape: 'sphere', polyCount: 5, parent_name: 'ROOT' });
 
       // Windows and Balconies
       for (let yLevel = 4.0; yLevel < h * 1.15 - 4; yLevel += 4.5) {
-        rawBuildings.push({ name: '', x: bx + bw * 0.1 - mainW/2 - 0.1, y: yLevel, z: bz + bd * 0.1, width: 0.2, depth: mainD * 0.5, height: 2.5, color: '#00e5ff', shape: 'box', parent_name: 'ROOT' });
-        rawBuildings.push({ name: '', x: bx + bw * 0.1, y: yLevel, z: bz + bd * 0.1 - mainD/2 - 0.4, width: mainW * 0.4, depth: 0.8, height: 0.2, color: '#ffffff', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw * 0.1 - mainW/2 - 0.1, y: yLevel, z: bz + bd * 0.1, width: 0.2, depth: mainD * 0.5, height: 2.5, color: '#00e5ff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw * 0.1, y: yLevel, z: bz + bd * 0.1 - mainD/2 - 0.4, width: mainW * 0.4, depth: 0.8, height: 0.2, color: '#ffffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     return;
@@ -2135,7 +2139,7 @@ const generateThemedBuildingsForPlot = (
       const numStalls = 5 + Math.floor(Math.random() * 4); // 5 to 8
       const stallW = bw * 0.15; const stallD = bd * 0.15; const stallH = 2.5;
       
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 0.1, color: '#333', shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 0.1, color: '#333', shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
 
@@ -2145,15 +2149,15 @@ const generateThemedBuildingsForPlot = (
         const sz = bz - bd/2 + stallD/2 + Math.random() * (bd - stallD);
         
         // Main stall box
-        rawBuildings.push({ name: '', x: sx, y: 0.1, z: sz, width: stallW, depth: stallD, height: stallH, color: '#666', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: sx, y: 0.1, z: sz, width: stallW, depth: stallD, height: stallH, color: '#666', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
         // Overhang awning
-        rawBuildings.push({ name: '', x: sx, y: 0.1 + stallH, z: sz + stallD*0.3, width: stallW*1.1, depth: stallD*1.2, height: 0.1, color: ['#cc3333','#3355cc','#33cc55','#ddaa22'][Math.floor(Math.random()*4)], shape: 'box', rotation: 0.1, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: sx, y: 0.1 + stallH, z: sz + stallD*0.3, width: stallW*1.1, depth: stallD*1.2, height: 0.1, color: ['#cc3333','#3355cc','#33cc55','#ddaa22'][Math.floor(Math.random()*4)], shape: 'box', polyCount: 5, rotation: 0.1, parent_name: 'ROOT' });
         // Table in front
-        rawBuildings.push({ name: '', x: sx, y: 0.1, z: sz + stallD*0.6, width: stallW*0.8, depth: stallD*0.4, height: 0.8, color: '#8b5a2b', shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: sx, y: 0.1, z: sz + stallD*0.6, width: stallW*0.8, depth: stallD*0.4, height: 0.8, color: '#8b5a2b', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     } else {
       // Super Markets: Long rectangular buildings (Pipe, L, C shaped) with multiple levels and stores with outdoor stairs and walkways
-      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 0.1, color: '#222', shape: 'box' };
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 0.1, color: '#222', shape: 'box', polyCount: 5 };
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       
@@ -2166,34 +2170,34 @@ const generateThemedBuildingsForPlot = (
         
         // Base rectangular shapes depending on style (2: Pipe/I, 3: L, 4: C)
         if (marketStyle === 2) { // Pipe / I Shape
-          rawBuildings.push({ name: '', x: bx, y: yBase, z: bz, width: bw * 0.8, depth: wingD, height: levelH, color, shape: 'box', parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx, y: yBase, z: bz, width: bw * 0.8, depth: wingD, height: levelH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
           // Walkway on one side
-          rawBuildings.push({ name: '', x: bx, y: yBase, z: bz + wingD/2 + 0.5, width: bw * 0.8, depth: 1.0, height: 0.2, color: '#aaa', shape: 'box', parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx, y: yBase, z: bz + wingD/2 + 0.5, width: bw * 0.8, depth: 1.0, height: 0.2, color: '#aaa', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
         } else if (marketStyle === 3) { // L Shape
-          rawBuildings.push({ name: '', x: bx, y: yBase, z: bz - bd*0.25, width: bw * 0.8, depth: wingD, height: levelH, color, shape: 'box', parent_name: 'ROOT' });
-          rawBuildings.push({ name: '', x: bx - bw*0.25, y: yBase, z: bz + bd*0.15, width: wingW, depth: bd * 0.5, height: levelH, color, shape: 'box', parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx, y: yBase, z: bz - bd*0.25, width: bw * 0.8, depth: wingD, height: levelH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx - bw*0.25, y: yBase, z: bz + bd*0.15, width: wingW, depth: bd * 0.5, height: levelH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
           // Walkway inner corner
-          rawBuildings.push({ name: '', x: bx + bw*0.15, y: yBase, z: bz - bd*0.1, width: bw * 0.5, depth: 1.0, height: 0.2, color: '#aaa', shape: 'box', parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx + bw*0.15, y: yBase, z: bz - bd*0.1, width: bw * 0.5, depth: 1.0, height: 0.2, color: '#aaa', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
         } else if (marketStyle === 4) { // C Shape
-          rawBuildings.push({ name: '', x: bx, y: yBase, z: bz - bd*0.35, width: bw * 0.9, depth: wingD, height: levelH, color, shape: 'box', parent_name: 'ROOT' });
-          rawBuildings.push({ name: '', x: bx - bw*0.3, y: yBase, z: bz, width: wingW, depth: bd * 0.6, height: levelH, color, shape: 'box', parent_name: 'ROOT' });
-          rawBuildings.push({ name: '', x: bx + bw*0.3, y: yBase, z: bz, width: wingW, depth: bd * 0.6, height: levelH, color, shape: 'box', parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx, y: yBase, z: bz - bd*0.35, width: bw * 0.9, depth: wingD, height: levelH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx - bw*0.3, y: yBase, z: bz, width: wingW, depth: bd * 0.6, height: levelH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx + bw*0.3, y: yBase, z: bz, width: wingW, depth: bd * 0.6, height: levelH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
           // Walkways inner edges
-          rawBuildings.push({ name: '', x: bx, y: yBase, z: bz - bd*0.15, width: bw * 0.6, depth: 1.0, height: 0.2, color: '#aaa', shape: 'box', parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx, y: yBase, z: bz - bd*0.15, width: bw * 0.6, depth: 1.0, height: 0.2, color: '#aaa', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
         }
 
         // Stores (Glass windows)
         if (marketStyle === 2) {
-          rawBuildings.push({ name: '', x: bx, y: yBase + 1.0, z: bz + wingD/2, width: bw * 0.7, depth: 0.2, height: levelH - 1.5, color: '#00e5ff', shape: 'box', parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx, y: yBase + 1.0, z: bz + wingD/2, width: bw * 0.7, depth: 0.2, height: levelH - 1.5, color: '#00e5ff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
         } else if (marketStyle === 3) {
-          rawBuildings.push({ name: '', x: bx + bw*0.15, y: yBase + 1.0, z: bz - bd*0.25 + wingD/2, width: bw * 0.5, depth: 0.2, height: levelH - 1.5, color: '#00e5ff', shape: 'box', parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx + bw*0.15, y: yBase + 1.0, z: bz - bd*0.25 + wingD/2, width: bw * 0.5, depth: 0.2, height: levelH - 1.5, color: '#00e5ff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
         } else if (marketStyle === 4) {
-          rawBuildings.push({ name: '', x: bx, y: yBase + 1.0, z: bz - bd*0.35 + wingD/2, width: bw * 0.5, depth: 0.2, height: levelH - 1.5, color: '#00e5ff', shape: 'box', parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx, y: yBase + 1.0, z: bz - bd*0.35 + wingD/2, width: bw * 0.5, depth: 0.2, height: levelH - 1.5, color: '#00e5ff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
         }
 
         // Outdoor Stairs connecting levels (if not top level)
         if (L < levels - 1) {
-          rawBuildings.push({ name: '', x: bx + bw*0.3, y: yBase, z: bz + bd*0.3, width: 2.0, depth: 4.0, height: levelH, color: '#888', shape: 'pyramid', rotation: 0, parent_name: 'ROOT' });
+          rawBuildings.push({ name: '', x: bx + bw*0.3, y: yBase, z: bz + bd*0.3, width: 2.0, depth: 4.0, height: levelH, color: '#888', shape: 'pyramid', polyCount: 5, rotation: 0, parent_name: 'ROOT' });
         }
       }
     }
@@ -2309,7 +2313,7 @@ function AdminPanel({
         tx = t.x; tz = t.z;
     }
     setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
-    setEditData({ name: '', description: '', npcs: '', x: 0, y: 0, z: 0, width: 8, height: 16, depth: 8, baseWidth: 8, baseHeight: 16, baseDepth: 8, shape: 'box', color: '#00ff00', isFavorite: false, isDanger: false, owner: '' });
+    setEditData({ name: '', description: '', npcs: '', x: 0, y: 0, z: 0, width: 8, height: 16, depth: 8, baseWidth: 8, baseHeight: 16, baseDepth: 8, shape: 'box', color: '#00ff00', isFavorite: false, isDanger: false, owner: '', polyCount: 5 });
     setView('editor');
   };
 
@@ -2326,14 +2330,14 @@ function AdminPanel({
         name: '', description: '', npcs: '', x: 0, y: 0, z: 0, 
         width: 1.875, height: 1.875, depth: 1.875, 
         baseWidth: 1.875, baseHeight: 1.875, baseDepth: 1.875,
-        shape: 'enemy_rhombus', color: '#ff0000', isFavorite: false, isDanger: false, owner: 'SYSTEM' 
+        shape: 'enemy_rhombus', color: '#ff0000', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5
     });
     setView('editor');
   };
 
   const startEdit = (loc: any) => {
     setEditId(loc.id);
-    setEditData({ ...loc, baseWidth: loc.width, baseHeight: loc.height, baseDepth: loc.depth, shape: loc.shape || 'box' });
+    setEditData({ ...loc, baseWidth: loc.width, baseHeight: loc.height, baseDepth: loc.depth, shape: loc.shape || 'box', polyCount: loc.polyCount || 5 });
     if (targetObject) targetObject.scale.set(1, 1, 1);
     setView('editor');
   };
@@ -3244,6 +3248,17 @@ function AdminPanel({
                             <option value="sphere">Sphere</option>
                             <option value="pyramid">Pyramid</option>
                         </select>
+                        {editorGenParts.length === 0 && (editData.shape === 'sphere' || editData.shape === 'cylinder' || editData.shape === 'pyramid') && (
+                            <div style={{marginTop: '5px'}}>
+                                <label style={{fontSize: '0.7rem'}}>POLYGON DETAIL: {editData.polyCount || 5}</label>
+                                <input 
+                                    type="range" min="3" max="32" 
+                                    value={editData.polyCount || 5} 
+                                    onChange={(e) => setEditData({...editData, polyCount: parseInt(e.target.value)})} 
+                                    style={{width: '100%'}} 
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {/* NEW PROCEDURAL GEN SECTION */}
@@ -3958,6 +3973,7 @@ function App() {
           simple.push({
             id: p.id,
             shape: p.shape,
+            polyCount: p.polyCount,
             x: p.x,
             y: p.y,
             z: p.z,
@@ -4175,7 +4191,7 @@ function App() {
 
   const [transformMode, setTransformMode] = useState<'translate' | 'scale'>('translate');
   const [isDragging, setIsDragging] = useState(false);
-  const [editData, setEditData] = useState({ name: '', description: '', npcs: '', x: 0, y: 0, z: 0, width: 8, height: 16, depth: 8, baseWidth: 8, baseHeight: 16, baseDepth: 8, shape: 'box', color: '#00ff00', isFavorite: false, isDanger: false, owner: '' });
+  const [editData, setEditData] = useState({ name: '', description: '', npcs: '', x: 0, y: 0, z: 0, width: 8, height: 16, depth: 8, baseWidth: 8, baseHeight: 16, baseDepth: 8, shape: 'box', color: '#00ff00', isFavorite: false, isDanger: false, owner: '', polyCount: 5 });
   const [editorGenParts, setEditorGenParts] = useState<any[]>([]);
   const [editorGenType, setEditorGenType] = useState<string>('');
   const [editorStyleIndex, setEditorStyleIndex] = useState(0);
@@ -4263,7 +4279,7 @@ function App() {
     }
   }, [token, socket, userName]);
 
-  useEffect(() => { if (isEditModalOpen && activeEditLocation) setEditData({ ...activeEditLocation, baseWidth: activeEditLocation.width, baseHeight: activeEditLocation.height, baseDepth: activeEditLocation.depth }); }, [isEditModalOpen, activeEditLocation]);
+  useEffect(() => { if (isEditModalOpen && activeEditLocation) setEditData({ ...activeEditLocation, baseWidth: activeEditLocation.width, baseHeight: activeEditLocation.height, baseDepth: activeEditLocation.depth, polyCount: activeEditLocation.polyCount || 5 }); }, [isEditModalOpen, activeEditLocation]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -4581,7 +4597,7 @@ function App() {
                   </>
                 ) : (
                   <mesh position={[0, editData.height / 2, 0]} scale={[editData.width, editData.height, editData.depth]}>
-                    {renderBaseGeometry(editData.shape)}
+                    {renderBaseGeometry(editData.shape, editData.polyCount || 5)}
                     <meshBasicMaterial color="#00ff00" wireframe />
                   </mesh>
                 )}
