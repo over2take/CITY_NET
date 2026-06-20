@@ -90,21 +90,18 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
 
       if (panX !== 0 || panZ !== 0) {
         const speed = 40 * delta;
-        if ((controls as any).setLookAt) {
+        if ((controls as any).moveTo) {
             const t = new THREE.Vector3();
             (controls as any).getTarget(t);
-            (controls as any).setLookAt(
-                camera.position.x + panX * speed, camera.position.y, camera.position.z + panZ * speed,
-                t.x + panX * speed, t.y, t.z + panZ * speed,
-                false
-            );
+            (controls as any).moveTo(t.x + panX * speed, t.y, t.z + panZ * speed, false);
         } else {
             camera.position.x += panX * speed;
             camera.position.z += panZ * speed;
             (controls as any).target.x += panX * speed;
             (controls as any).target.z += panZ * speed;
         }
-        (controls as any).update();
+        
+        camera.updateMatrixWorld();
 
         // Continue drawing road while panning
         const mouse = new THREE.Vector2((mx / rect.width) * 2 - 1, -(my / rect.height) * 2 + 1);
