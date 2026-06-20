@@ -89,10 +89,20 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
 
       if (panX !== 0 || panZ !== 0) {
         const speed = 40 * delta;
-        camera.position.x += panX * speed;
-        camera.position.z += panZ * speed;
-        (controls as any).target.x += panX * speed;
-        (controls as any).target.z += panZ * speed;
+        if ((controls as any).setLookAt) {
+            const t = new THREE.Vector3();
+            (controls as any).getTarget(t);
+            (controls as any).setLookAt(
+                camera.position.x + panX * speed, camera.position.y, camera.position.z + panZ * speed,
+                t.x + panX * speed, t.y, t.z + panZ * speed,
+                false
+            );
+        } else {
+            camera.position.x += panX * speed;
+            camera.position.z += panZ * speed;
+            (controls as any).target.x += panX * speed;
+            (controls as any).target.z += panZ * speed;
+        }
         (controls as any).update();
 
         // Continue drawing road while panning
@@ -124,8 +134,12 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
 
   useEffect(() => {
     if ((view === 'district' || view === 'draw_roads' || view === 'city_gen' || isBatchSelecting) && controls) {
-      camera.position.set(0, 100, 0.1);
-      (controls as any).target.set(0, 0, 0);
+      if ((controls as any).setLookAt) {
+          (controls as any).setLookAt(0, 100, 0.1, 0, 0, 0, false);
+      } else {
+          camera.position.set(0, 100, 0.1);
+          (controls as any).target.set(0, 0, 0);
+      }
       (controls as any).update();
       (controls as any).minPolarAngle = 0;
       (controls as any).maxPolarAngle = 0.01;
