@@ -12,8 +12,9 @@ Before running the application in a production or public environment, you must s
 2. Locate the `.env.example` file.
 3. Make a copy of `.env.example` and rename the copy to exactly `.env` (it should have no file extension).
 4. Open the new `.env` file in a text editor and change the `JWT_SECRET` value to a secure, random string (like a long password). 
+5. In that same `.env` file, change `ADMIN_USER` and `ADMIN_PASS` to your desired primary administrator login credentials. 
 
-*Note: Do not commit the `.env` file to public repositories.*
+*Note: Do not commit the `.env` file to public repositories. If you do not configure your credentials, the system will use the default (`admin` / `cyberpunk_password`) which is insecure for production.*
 
 ### 2. Running the Servers
 We use simple batch files to handle dependencies, booting, and tunneling.
