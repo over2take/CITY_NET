@@ -624,8 +624,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
         currentRaycaster.ray.intersectPlane(plane, intersection);
         const targetX = intersection.x + dragOffset.x;
         const targetZ = intersection.z + dragOffset.z;
-        const snapped = getClosestPointOnRoads(targetX, targetZ, roads || [], 15);
-        localPos.current = snapped;
+        localPos.current = { x: targetX, z: targetZ };
     }
   };
 
@@ -847,8 +846,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
         currentRaycaster.ray.intersectPlane(plane, intersection);
         const targetX = intersection.x + dragOffset.x;
         const targetZ = intersection.z + dragOffset.z;
-        const snapped = getClosestPointOnRoads(targetX, targetZ, roads || [], 15);
-        localPos.current = snapped;
+        localPos.current = { x: targetX, z: targetZ };
     }
   };
 
