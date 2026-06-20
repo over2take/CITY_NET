@@ -405,6 +405,13 @@ app.post('/api/control', authenticate, (req, res) => {
 // Socket.io tracking
 const userSockets = new Map(); // socket.id -> userName
 
+let activeNPCs = [];
+db.all('SELECT username FROM fake_users', (err, rows) => {
+  if (!err && rows) {
+    activeNPCs = rows.map(r => r.username);
+  }
+});
+
 const broadcastActiveUsers = () => {
   // Map to unique users by name, preserving admin status
   const userMap = new Map();
@@ -413,6 +420,11 @@ const broadcastActiveUsers = () => {
     const displayInfo = { ...info, isTemporaryAdmin: elevatedUsers.has(info.userName) };
     userMap.set(info.userName, displayInfo);
   });
+  
+  activeNPCs.forEach(npc => {
+    userMap.set(npc, { userName: npc, isAdmin: false, isTemporaryAdmin: false, isNPC: true });
+  });
+
   const activeUsers = Array.from(userMap.values());
   io.emit('activeUsersUpdated', activeUsers);
 };
@@ -509,6 +521,73 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.warn('Unauthorized attempt to revoke access:', err.message);
     }
+  });
+
+  socket.on('createNPC', (data) => {
+    // data: { adminToken, npcName }
+    try {
+      const verified = jwt.verify(data.adminToken, SECRET);
+      if (verified && !verified.isTemporary) {
+        db.run('INSERT INTO fake_users (username) VALUES (?)', [data.npcName], function(err) {
+          if (!err) {
+            activeNPCs.push(data.npcName);
+            console.log(`Admin ${verified.username} created NPC: ${data.npcName}`);
+            broadcastActiveUsers();
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('Unauthorized attempt to create NPC:', err.message);
+    }
+  });
+
+  socket.on('sendPrivateMessage', (data) => {
+    // data: { sender, recipient, text }
+    db.run('INSERT INTO private_messages (sender, recipient, text) VALUES (?, ?, ?)', [data.sender, data.recipient, data.text], function(err) {
+      if (!err) {
+        db.get('SELECT * FROM private_messages WHERE id = ?', [this.lastID], (err, row) => {
+          if (row) {
+            const formattedMsg = {
+              ...row,
+              timestamp: new Date(row.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            
+            // SECURITY: Only emit to sender, recipient, or Primary Admins
+            const targetSockets = new Set();
+            const involvesNPC = activeNPCs.includes(data.sender) || activeNPCs.includes(data.recipient);
+            
+            userSockets.forEach((info, socketId) => {
+              if (info.userName === data.sender || info.userName === data.recipient) {
+                targetSockets.add(socketId);
+              }
+              if (involvesNPC && info.isAdmin) {
+                targetSockets.add(socketId);
+              }
+            });
+
+            targetSockets.forEach(id => io.to(id).emit('receivePrivateMessage', formattedMsg));
+          }
+        });
+      }
+    });
+  });
+
+  socket.on('getPrivateHistory', (data) => {
+    // data: { user1, user2 }
+    db.all(`SELECT * FROM private_messages 
+            WHERE (sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?) 
+            ORDER BY timestamp DESC LIMIT 50`, 
+            [data.user1, data.user2, data.user2, data.user1], (err, rows) => {
+      if (!err) {
+        socket.emit('privateHistory', {
+          targetUser: data.user2,
+          history: rows.reverse().map(r => ({
+            ...r,
+            timestamp: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }))
+        });
+      }
+    });
   });
 
   socket.on('updateNotifications', (data) => {

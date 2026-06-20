@@ -3475,93 +3475,189 @@ function DraggableWindow({ title, children, pos, setPos, onClose, windowStyle = 
   );
 }
 
-function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isPrimaryAdmin, onGrantAccess, onRevokeAccess }: any) {
+function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isPrimaryAdmin, onGrantAccess, onRevokeAccess, socket, token }: any) {
   const [inputText, setInputText] = useState('');
-  const [accessTarget, setAccessTarget] = useState<{ userName: string, action: 'GRANT' | 'REVOKE' } | null>(null);
+  
+  // Private messaging states
+  const [activeTab, setActiveTab] = useState('GLOBAL');
+  const [openTabs, setOpenTabs] = useState<string[]>([]);
+  const [privateMessages, setPrivateMessages] = useState<Record<string, any[]>>({});
+  const [unreadTabs, setUnreadTabs] = useState<Set<string>>(new Set());
+  const [sendAs, setSendAs] = useState(userName);
+  
+  // NPC Creation UI
+  const [npcNameInput, setNpcNameInput] = useState('');
+  const [showNpcPrompt, setShowNpcPrompt] = useState(false);
+
+  // Dropdown UI
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
+  }, [messages, privateMessages, activeTab]);
+
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleReceivePM = (msg: any) => {
+        const npcs = activeUsers.filter((u: any) => u.isNPC).map((u: any) => u.userName);
+        let tabName = '';
+        
+        if (msg.sender === userName || (isPrimaryAdmin && npcs.includes(msg.sender))) {
+            tabName = msg.recipient;
+        } else if (msg.recipient === userName || (isPrimaryAdmin && npcs.includes(msg.recipient))) {
+            tabName = msg.sender;
+        } else {
+            return;
+        }
+
+        setPrivateMessages(prev => {
+            const history = prev[tabName] || [];
+            return { ...prev, [tabName]: [...history, msg] };
+        });
+
+        setActiveTab(currentActive => {
+            if (currentActive !== tabName) {
+                setUnreadTabs(prev => new Set(prev).add(tabName));
+                setOpenTabs(prev => prev.includes(tabName) ? prev : [...prev, tabName]);
+            }
+            return currentActive;
+        });
+    };
+
+    const handlePrivateHistory = (data: any) => {
+        setPrivateMessages(prev => ({ ...prev, [data.targetUser]: data.history }));
+    };
+
+    socket.on('receivePrivateMessage', handleReceivePM);
+    socket.on('privateHistory', handlePrivateHistory);
+
+    return () => {
+        socket.off('receivePrivateMessage', handleReceivePM);
+        socket.off('privateHistory', handlePrivateHistory);
+    };
+  }, [socket, userName, isPrimaryAdmin, activeUsers]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputText.trim()) {
-      onSendMessage(inputText);
+      if (activeTab === 'GLOBAL') {
+          onSendMessage(inputText);
+      } else {
+          socket.emit('sendPrivateMessage', { sender: sendAs, recipient: activeTab, text: inputText });
+      }
       setInputText('');
     }
   };
 
-  const handleUserClick = (user: any) => {
-    if (!isPrimaryAdmin || user.userName === userName || user.isAdmin) return; // Cannot grant to self or real admins
-    
-    if (user.isTemporaryAdmin) {
-        setAccessTarget({ userName: user.userName, action: 'REVOKE' });
-    } else {
-        setAccessTarget({ userName: user.userName, action: 'GRANT' });
+  const handleCreateNPC = () => {
+    if (npcNameInput.trim() && token) {
+        socket.emit('createNPC', { adminToken: token, npcName: npcNameInput.trim() });
+        setNpcNameInput('');
+        setShowNpcPrompt(false);
     }
   };
 
+  const openTab = (targetUser: string) => {
+      if (!openTabs.includes(targetUser)) {
+          setOpenTabs(prev => [...prev, targetUser]);
+      }
+      setActiveTab(targetUser);
+      setActiveDropdown(null);
+      setUnreadTabs(prev => { const next = new Set(prev); next.delete(targetUser); return next; });
+      socket.emit('getPrivateHistory', { user1: userName, user2: targetUser });
+  };
+  
+  const closeTab = (e: React.MouseEvent, targetUser: string) => {
+      e.stopPropagation();
+      setOpenTabs(prev => prev.filter(t => t !== targetUser));
+      if (activeTab === targetUser) setActiveTab('GLOBAL');
+  };
+
+  const handleUserClick = (user: any) => {
+      if (user.userName === userName) return;
+      setActiveDropdown(activeDropdown === user.userName ? null : user.userName);
+  };
+
+  const displayMessages = activeTab === 'GLOBAL' ? messages : (privateMessages[activeTab] || []);
+  const myNPCs = activeUsers.filter((u: any) => u.isNPC).map((u: any) => u.userName);
+  const showSendAs = activeTab !== 'GLOBAL' && isPrimaryAdmin && myNPCs.length > 0;
+
   return (
     <DraggableWindow 
-        title="CITY_NET // GLOBAL_CHAT" 
+        title="CITY_NET // COMMS" 
         pos={pos} 
         setPos={setPos} 
         onClose={onClose}
         windowStyle={{ maxWidth: 'none', width: '850px' }}
-        contentStyle={{ maxHeight: 'none', padding: 0, overflow: 'hidden' }}
+        contentStyle={{ maxHeight: 'none', padding: 0, overflow: 'visible' }}
         notificationsEnabled={notificationsEnabled}
         onToggleNotifications={onToggleNotifications}
     >
-      {accessTarget && (
-        <div className="modal-overlay" style={{ zIndex: 1000, position: 'absolute' }}>
-          <div className="panel" style={{ color: 'var(--green)', borderColor: 'var(--green)', textAlign: 'center', background: 'rgba(0,10,0,0.95)' }}>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '20px' }}>
-              {accessTarget.action === 'GRANT' ? 'GRANT ELEVATED ACCESS?' : 'REVOKE ELEVATED ACCESS?'}
-            </h2>
-            <p style={{ color: '#fff', marginBottom: '20px' }}>Target Operator: <span style={{ color: 'var(--cyan)', fontWeight: 'bold' }}>{accessTarget.userName}</span></p>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button 
-                className={`upload-btn ${accessTarget.action === 'REVOKE' ? 'danger-btn' : ''}`}
-                style={{ margin: 0 }}
-                onClick={() => {
-                  if (accessTarget.action === 'GRANT') {
-                    onGrantAccess(accessTarget.userName);
-                  } else {
-                    onRevokeAccess(accessTarget.userName);
-                  }
-                  setAccessTarget(null);
-                }}
-              >
-                CONFIRM
-              </button>
-              <button className="utility-btn" style={{ margin: 0 }} onClick={() => setAccessTarget(null)}>CANCEL</button>
-            </div>
-          </div>
-        </div>
+      {/* Click outside listener for dropdowns */}
+      {activeDropdown && (
+        <div 
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} 
+            onClick={() => setActiveDropdown(null)} 
+        />
       )}
-      <div style={{ display: 'flex', flexDirection: 'row', height: '600px', background: 'var(--black)' }}>
+
+      {/* TABS BAR */}
+      <div style={{ display: 'flex', background: 'var(--dark-green)', padding: '5px 5px 0 5px', gap: '5px', overflowX: 'auto' }}>
+          <div 
+              onClick={() => setActiveTab('GLOBAL')}
+              style={{ padding: '8px 15px', background: activeTab === 'GLOBAL' ? 'var(--black)' : 'transparent', color: activeTab === 'GLOBAL' ? 'var(--green)' : '#888', borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+              [ GLOBAL ]
+          </div>
+          {openTabs.map(tab => (
+              <div 
+                  key={tab}
+                  onClick={() => openTab(tab)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 15px', background: activeTab === tab ? 'var(--black)' : 'transparent', color: activeTab === tab ? 'var(--cyan)' : (unreadTabs.has(tab) ? '#ffaa00' : '#888'), borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                  {tab} {unreadTabs.has(tab) && '*'}
+                  <span onClick={(e) => closeTab(e, tab)} style={{ color: '#ff0000', marginLeft: '5px', cursor: 'pointer' }}>×</span>
+              </div>
+          ))}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'row', height: '560px', background: 'var(--black)' }}>
         {/* Main Section: History & Input */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '2px solid var(--dark-green)' }}>
           <div 
             ref={scrollRef}
             style={{ flex: 1, overflowY: 'auto', padding: '15px', fontSize: '0.8rem' }}
           >
-            {messages.map((msg: any) => (
-              <div key={msg.id} style={{ marginBottom: '10px', opacity: msg.sender === 'SYSTEM' ? 0.6 : 1 }}>
+            {displayMessages.map((msg: any) => (
+              <div key={msg.id || Math.random()} style={{ marginBottom: '10px', opacity: msg.sender === 'SYSTEM' ? 0.6 : 1 }}>
                 <span style={{ color: 'var(--green)', fontSize: '0.65rem', marginRight: '8px', fontFamily: 'monospace' }}>[{msg.timestamp}]</span>
-                <span style={{ color: msg.sender === userName ? 'var(--cyan)' : (msg.sender === 'SYSTEM' ? '#ff0000' : 'var(--green)'), fontWeight: 'bold' }}>
+                <span style={{ color: msg.sender === userName ? 'var(--cyan)' : (msg.sender === 'SYSTEM' ? '#ff0000' : (myNPCs.includes(msg.sender) ? '#ffaa00' : 'var(--green)')), fontWeight: 'bold' }}>
                   {msg.sender}:
                 </span>
-                <span style={{ marginLeft: '8px', wordBreak: 'break-all', color: '#fff' }}>{msg.text}</span>
+                <span style={{ marginLeft: '8px', wordBreak: 'break-all', color: activeTab === 'GLOBAL' ? '#fff' : '#aaa' }}>{msg.text}</span>
               </div>
             ))}
           </div>
-          <form onSubmit={handleSubmit} style={{ padding: '15px', display: 'flex', gap: '10px', background: 'rgba(0,25,0,0.5)', borderTop: '2px solid var(--dark-green)' }}>
+          <form onSubmit={handleSubmit} style={{ padding: '15px', display: 'flex', gap: '10px', background: 'rgba(0,25,0,0.5)', borderTop: '2px solid var(--dark-green)', alignItems: 'center' }}>
+            {showSendAs && (
+              <select 
+                value={sendAs} 
+                onChange={(e) => setSendAs(e.target.value)}
+                style={{ background: 'var(--black)', border: '1px solid var(--green)', color: 'var(--green)', padding: '10px', fontSize: '0.8rem', cursor: 'pointer' }}
+              >
+                <option value={userName}>{userName}</option>
+                {myNPCs.map((npc: string) => (
+                  <option key={npc} value={npc}>[NPC] {npc}</option>
+                ))}
+              </select>
+            )}
             <input 
               value={inputText}
               onChange={e => setInputText(e.target.value)}
-              placeholder="TYPE_UPLINK_MESSAGE..."
+              placeholder={activeTab === 'GLOBAL' ? "TYPE_GLOBAL_BROADCAST..." : `ENCRYPTED_MESSAGE_TO_${activeTab}...`}
               style={{ flex: 1, background: 'rgba(0,40,0,0.6)', border: '1px solid var(--green)', color: 'var(--green)', padding: '10px', fontSize: '0.9rem' }}
             />
             <button type="submit" className="upload-btn" style={{ width: '100px', margin: 0 }}>SEND</button>
@@ -3571,39 +3667,92 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
         {/* User Roster: Right Side */}
         <div style={{ width: '220px', display: 'flex', flexDirection: 'column', background: 'rgba(0,10,0,0.3)' }}>
           <div style={{ padding: '12px', fontSize: '0.75rem', fontWeight: 'bold', borderBottom: '2px solid var(--dark-green)', color: 'var(--green)', textShadow: 'var(--glow)' }}>OPERATORS_ONLINE</div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '10px', position: 'relative' }}>
             {activeUsers.map((user: any) => (
-              <div 
-                key={user.userName} 
-                onClick={() => handleUserClick(user)}
-                style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '10px', 
-                    marginBottom: '10px', 
-                    padding: '5px', 
-                    background: user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent',
-                    cursor: (isPrimaryAdmin && user.userName !== userName && !user.isAdmin) ? 'pointer' : 'default',
-                    borderRadius: '4px'
-                }}
-                onMouseOver={(e) => {
-                    if (isPrimaryAdmin && user.userName !== userName && !user.isAdmin) {
-                        e.currentTarget.style.background = 'rgba(0,255,255,0.1)';
-                    }
-                }}
-                onMouseOut={(e) => {
-                    e.currentTarget.style.background = user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent';
-                }}
-              >
-                <div style={{ width: '6px', height: '6px', background: user.isAdmin ? '#ff0000' : (user.isTemporaryAdmin ? '#ffaa00' : 'var(--green)'), borderRadius: '50%', boxShadow: user.isAdmin ? '0 0 5px #ff0000' : (user.isTemporaryAdmin ? '0 0 5px #ffaa00' : '0 0 5px var(--green)') }}></div>
-                <span style={{ color: user.userName === userName ? 'var(--cyan)' : '#888', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    {user.userName}
-                    {user.isAdmin && <span title="Primary Admin">⭐</span>}
-                    {user.isTemporaryAdmin && <span title="Temporary Admin">🌟</span>}
-                </span>
+              <div key={user.userName} style={{ position: 'relative' }}>
+                <div 
+                  onClick={() => handleUserClick(user)}
+                  style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '10px', 
+                      marginBottom: '10px', 
+                      padding: '5px', 
+                      background: user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent',
+                      cursor: user.userName !== userName ? 'pointer' : 'default',
+                      borderRadius: '4px'
+                  }}
+                  onMouseOver={(e) => {
+                      if (user.userName !== userName) {
+                          e.currentTarget.style.background = 'rgba(0,255,255,0.1)';
+                      }
+                  }}
+                  onMouseOut={(e) => {
+                      e.currentTarget.style.background = user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent';
+                  }}
+                >
+                  <div style={{ width: '6px', height: '6px', background: user.isAdmin ? '#ff0000' : (user.isTemporaryAdmin ? '#ffaa00' : (user.isNPC ? '#aa00ff' : 'var(--green)')), borderRadius: '50%', boxShadow: user.isAdmin ? '0 0 5px #ff0000' : (user.isTemporaryAdmin ? '0 0 5px #ffaa00' : (user.isNPC ? '0 0 5px #aa00ff' : '0 0 5px var(--green)')) }}></div>
+                  <span style={{ color: user.userName === userName ? 'var(--cyan)' : '#888', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      {user.userName}
+                      {user.isAdmin && <span title="Primary Admin">⭐</span>}
+                      {user.isTemporaryAdmin && <span title="Temporary Admin">🌟</span>}
+                      {user.isNPC && <span title="NPC" style={{ color: '#aa00ff' }}>[NPC]</span>}
+                  </span>
+                </div>
+
+                {/* Context Menu Dropdown */}
+                {activeDropdown === user.userName && (
+                  <div style={{ position: 'absolute', top: '25px', left: '15px', background: 'var(--black)', border: '1px solid var(--green)', padding: '5px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '150px' }}>
+                      <button 
+                        className="utility-btn" 
+                        style={{ margin: 0, textAlign: 'left', width: '100%' }}
+                        onClick={() => openTab(user.userName)}
+                      >
+                        PRIVATE_MESSAGE
+                      </button>
+                      
+                      {isPrimaryAdmin && !user.isAdmin && !user.isNPC && (
+                          <button 
+                            className={`utility-btn ${user.isTemporaryAdmin ? 'danger-btn' : ''}`} 
+                            style={{ margin: 0, textAlign: 'left', width: '100%' }}
+                            onClick={() => {
+                                if (user.isTemporaryAdmin) onRevokeAccess(user.userName);
+                                else onGrantAccess(user.userName);
+                                setActiveDropdown(null);
+                            }}
+                          >
+                            {user.isTemporaryAdmin ? 'REVOKE_ADMIN' : 'GRANT_ADMIN'}
+                          </button>
+                      )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
+          
+          {/* NPC Creation Block */}
+          {isPrimaryAdmin && (
+            <div style={{ padding: '10px', borderTop: '2px solid var(--dark-green)' }}>
+                {showNpcPrompt ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        <input 
+                          value={npcNameInput}
+                          onChange={e => setNpcNameInput(e.target.value)}
+                          placeholder="NPC NAME..."
+                          style={{ background: 'var(--black)', border: '1px solid var(--green)', color: 'var(--green)', padding: '5px', fontSize: '0.7rem' }}
+                        />
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                            <button className="upload-btn" style={{ margin: 0, flex: 1, padding: '5px' }} onClick={handleCreateNPC}>CREATE</button>
+                            <button className="utility-btn" style={{ margin: 0, flex: 1, padding: '5px' }} onClick={() => setShowNpcPrompt(false)}>CANCEL</button>
+                        </div>
+                    </div>
+                ) : (
+                    <button className="utility-btn" style={{ margin: 0, width: '100%' }} onClick={() => setShowNpcPrompt(true)}>
+                        [+] ADD NPC
+                    </button>
+                )}
+            </div>
+          )}
         </div>
       </div>
     </DraggableWindow>
@@ -4651,6 +4800,8 @@ function App() {
                   isPrimaryAdmin={isPrimaryAdmin}
                   onGrantAccess={handleGrantAccess}
                   onRevokeAccess={handleRevokeAccess}
+                  socket={socketRef.current}
+                  token={token}
               />
             )}
             {(() => {
