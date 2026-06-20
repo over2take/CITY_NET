@@ -2303,9 +2303,9 @@ function AdminPanel({
   const startNew = () => {
     setEditId(null); setSelectedLocation(null);
     let tx = 0, tz = 0;
-    if (controls && (controls as any).getTarget) {
+    if (controlsRef.current && controlsRef.current.getTarget) {
         const t = new THREE.Vector3();
-        (controls as any).getTarget(t);
+        controlsRef.current.getTarget(t);
         tx = t.x; tz = t.z;
     }
     setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
@@ -2316,9 +2316,9 @@ function AdminPanel({
   const startNewEnemy = () => {
     setEditId(null); setSelectedLocation(null);
     let tx = 0, tz = 0;
-    if (controls && (controls as any).getTarget) {
+    if (controlsRef.current && controlsRef.current.getTarget) {
         const t = new THREE.Vector3();
-        (controls as any).getTarget(t);
+        controlsRef.current.getTarget(t);
         tx = t.x; tz = t.z;
     }
     setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
@@ -2576,9 +2576,9 @@ function AdminPanel({
               <button className="utility-btn" style={{flex: 1}} onClick={() => { 
                 setSelectedLocation(null); 
                 let tx = 0, tz = 0;
-                if (controls && (controls as any).getTarget) {
+                if (controlsRef.current && controlsRef.current.getTarget) {
                     const t = new THREE.Vector3();
-                    (controls as any).getTarget(t);
+                    controlsRef.current.getTarget(t);
                     tx = t.x; tz = t.z;
                 }
                 setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
@@ -3812,6 +3812,7 @@ function CameraController({ target, onComplete }: { target: { pos: [number, numb
 }
 
 function App() {
+  const controlsRef = useRef<any>(null);
   const [locations, setLocations] = useState<any[]>([]);
   const [roads, setRoads] = useState<any[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
@@ -4493,7 +4494,7 @@ function App() {
           </div>
           <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
             <PerspectiveCamera makeDefault position={[80, 80, 80]} />
-            <CameraControls makeDefault enabled={!isDragging} dollyToCursor={true} />
+            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging} dollyToCursor={true} />
             <CursorPivotControls />
             <color attach="background" args={['#000000']} />
             {/* @ts-ignore */}
