@@ -987,7 +987,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
               <mesh raycast={() => null}>
                 {renderBaseGeometry(p.shape, p.polyCount || 5)}
                 <meshBasicMaterial 
-                  color={(isSelected || isBatchSelected) ? (isBatchSelected ? "#ffff00" : "#00ffff") : location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)} 
+                  color={isBatchSelected ? "#ffff00" : location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)} 
                   wireframe={true} 
                 />
               </mesh>
