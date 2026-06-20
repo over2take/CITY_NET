@@ -1033,7 +1033,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
               <mesh raycast={() => null}>
                 {renderBaseGeometry(p.shape, p.polyCount || 5)}
                 <meshBasicMaterial 
-                  color={isBatchSelected ? "#ffff00" : location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)} 
+                  color={isBatchSelected ? "#ffff00" : location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || location.district_color || baseColor)} 
                   wireframe={true} 
                 />
               </mesh>
@@ -2338,6 +2338,7 @@ function AdminPanel({
   setSelectedLocation, setTargetObject, isChatOpen, setIsChatOpen, controlsRef, view, setView, pendingRequests, setPendingRequests,
   isBatchSelecting, setIsBatchSelecting, selectedIds, setSelectedIds, toggleSelection, batchDelete,
   districtSelection, setDistrictSelection, districtConfig, setDistrictConfig,
+  districts, fetchDistricts, editingDistrict, setEditingDistrict,
   joinSelection, setJoinSelection, selectedClassification, setSelectedClassification, roadSelectionBounds, setRoadSelectionBounds,
   roadTrail, setRoadTrail, roadDrawMode, setRoadDrawMode, snapToGrid, setSnapToGrid,
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
@@ -2746,7 +2747,7 @@ function AdminPanel({
           </div>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setRoadTrail([]); setView('draw_roads'); }}>+ DRAW_ROADS</button>
-              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setDistrictSelection([]); setView('district'); }}>+ ADD_DISTRICT</button>
+              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setDistrictSelection([]); setEditingDistrict(null); setView('district'); }}>+ MNG_DISTRICT</button>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setJoinSelection([]); setView('join'); }}>+ JOIN_STRUCTS</button>
           </div>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
@@ -2879,16 +2880,56 @@ function AdminPanel({
         </>
       )}
 
-      {view === 'district' && (
+      {view === 'district' && !editingDistrict && (
         <>
-          <header style={{marginBottom: '10px'}}><h3>ADD_DISTRICT</h3><button onClick={() => { setView('list'); setDistrictSelection([]); }} className="close-btn" style={{position: 'static'}}>X</button></header>
-          <div className="editor-controls">
+          <header style={{marginBottom: '10px'}}><h3>MNG_DISTRICT</h3><button onClick={() => { setView('list'); setDistrictSelection([]); setEditingDistrict(null); }} className="close-btn" style={{position: 'static'}}>X</button></header>
+          
+          {districts.map(d => (
+            <div key={d.id} className="list-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                <div>
+                  <span style={{display: 'inline-block', width: '12px', height: '12px', backgroundColor: d.color, marginRight: '8px', border: '1px solid #000'}}></span>
+                  <span>{d.name}</span>
+                </div>
+                <div style={{display: 'flex', gap: '5px'}}>
+                  <button className="upload-btn" style={{padding: '2px 5px', fontSize: '0.6rem'}} onClick={() => { 
+                      setEditingDistrict(d); 
+                      // Pre-fill selection with current buildings in district
+                      setDistrictSelection(locations.filter((l: any) => l.district_name === d.name).map((l: any) => l.id)); 
+                  }}>EDIT</button>
+                  <button className="upload-btn danger-btn" style={{padding: '2px 5px', fontSize: '0.6rem'}} onClick={async () => {
+                      if (!confirm('Delete District?')) return;
+                      await fetch(`/api/districts/${d.name}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                      fetchDistricts();
+                      refreshLocations();
+                  }}>DEL</button>
+                </div>
+            </div>
+          ))}
+
+          <div className="editor-controls" style={{marginTop: '20px', borderTop: '1px solid #333', paddingTop: '10px'}}>
+            <h4>CREATE NEW DISTRICT</h4>
             <label style={{fontSize: '0.7rem'}}>DISTRICT_NAME</label><input placeholder="Name" value={districtConfig.name} onChange={e => setDistrictConfig({...districtConfig, name: e.target.value})} style={{width: '100%', marginBottom: '10px'}} />
-            <label style={{fontSize: '0.7rem'}}>DISTRICT_COLOR</label><div className="button-group" style={{marginTop: '5px'}}>{['#00ff00', '#00ffff', '#ffff00', '#ff00ff'].map(c => <button key={c} className={districtConfig.color === c ? 'active' : ''} style={{backgroundColor: c, color: '#000'}} onClick={() => setDistrictConfig({...districtConfig, color: c})}>■</button>)}</div>
+            <label style={{fontSize: '0.7rem'}}>DISTRICT_COLOR</label>
             <input type="color" value={districtConfig.color} onChange={e => setDistrictConfig({...districtConfig, color: e.target.value})} style={{width: '100%', marginTop: '5px', height: '30px', padding: '0', background: 'none', border: '1px solid var(--green)'}} />
+            <button className="upload-btn" style={{marginTop: '10px'}} onClick={async () => { 
+                if (!districtConfig.name.trim()) return alert("NAME REQUIRED"); 
+                const res = await fetch('/api/districts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ name: districtConfig.name, color: districtConfig.color }) }); 
+                if (res.ok) { fetchDistricts(); setDistrictConfig({name: '', color: '#00ff00'}); } 
+            }}>CREATE</button>
           </div>
+        </>
+      )}
+
+      {view === 'district' && editingDistrict && (
+        <>
+          <header style={{marginBottom: '10px'}}><h3>EDITING: {editingDistrict.name}</h3><button onClick={() => { setEditingDistrict(null); setDistrictSelection([]); }} className="close-btn" style={{position: 'static'}}>X</button></header>
+          
           <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}><p>SELECTION: {districtSelection.length} UNITS</p><p style={{opacity: 0.7}}>DRAG TO SELECT MULTIPLE UNITS</p><p style={{opacity: 0.7}}>CLICK TO TOGGLE INDIVIDUALS</p></div>
-          <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => { if (!districtConfig.name.trim()) return alert("NAME REQUIRED"); const res = await fetch('/api/locations/batch-district', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: districtSelection, district_name: districtConfig.name, district_color: districtConfig.color }) }); if (res.ok) { alert("DISTRICT_SAVED"); refreshLocations(); setView('list'); setDistrictSelection([]); } }}>ASSIGN_DISTRICT</button>
+          
+          <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => { 
+              const res = await fetch('/api/locations/batch-district', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: districtSelection, district_name: editingDistrict.name, district_color: editingDistrict.color }) }); 
+              if (res.ok) { alert("DISTRICT_SAVED"); refreshLocations(); setEditingDistrict(null); setDistrictSelection([]); } 
+          }}>SAVE DISTRICT</button>
         </>
       )}
 
@@ -4256,6 +4297,8 @@ function CameraController({ target, onComplete }: { target: { pos: [number, numb
 function App() {
   const controlsRef = useRef<any>(null);
   const [locations, setLocations] = useState<any[]>([]);
+  const [districts, setDistricts] = useState<any[]>([]);
+  const [editingDistrict, setEditingDistrict] = useState<any>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [roads, setRoads] = useState<any[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
@@ -4716,6 +4759,7 @@ function App() {
   useEffect(() => { if (view !== 'generator') setTargetObject(null); if (view !== 'editor') { setEditorGenParts([]); setEditorGenType(''); setIsCopyingSize(false); } }, [view]);
 
   const fetchLocations = () => { fetch(`/api/locations?_t=${Date.now()}`).then(res => res.json()).then(data => setLocations(data)).catch(err => console.error("Error fetching locations:", err)); };
+  const fetchDistricts = () => { fetch(`/api/districts?_t=${Date.now()}`).then(res => res.json()).then(data => setDistricts(data)).catch(err => console.error("Error fetching districts:", err)); };
   const fetchRoads = () => { fetch(`/api/roads?_t=${Date.now()}`).then(res => res.json()).then(data => setRoads(data)).catch(err => console.error("Error fetching roads:", err)); };
 
   const batchDelete = async () => {
@@ -4777,7 +4821,7 @@ function App() {
       newSocket.emit('identify', { userName, isAdmin: !!token, token });
     });
 
-    newSocket.on('dataUpdated', () => { fetchLocations(); fetchRoads(); });
+    newSocket.on('dataUpdated', () => { fetchLocations(); fetchRoads(); fetchDistricts(); });
     newSocket.on('activeUsersUpdated', (users: any[]) => setActiveUsers(users));
     newSocket.on('editingRequested', (data: any) => {
       if (data.userId !== userName && notification === "REQUEST_SENT_TO_ADMIN") {
@@ -4941,6 +4985,10 @@ function App() {
                 onLogout={() => { setToken(''); setIsAdmin(false); setShowAdminPanel(false); }}
                 refreshLocations={fetchLocations}
                 refreshRoads={fetchRoads}
+                districts={districts}
+                fetchDistricts={fetchDistricts}
+                editingDistrict={editingDistrict}
+                setEditingDistrict={setEditingDistrict}
                 locations={locations} 
                 roads={roads} 
                 editData={editData} 

@@ -250,18 +250,52 @@ app.post('/api/locations/join', authenticate, (req, res) => {
   }).catch(err => res.status(500).json({ error: err.message }));
 });
 
+app.get('/api/districts', (req, res) => {
+  db.all('SELECT * FROM districts', (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.post('/api/districts', authenticate, (req, res) => {
+  const { name, color } = req.body;
+  if (!name || !color) return res.status(400).json({ error: 'Name and color required' });
+  db.run('INSERT INTO districts (name, color) VALUES (?, ?)', [name, color], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    emitUpdate();
+    res.json({ id: this.lastID, name, color });
+  });
+});
+
+app.delete('/api/districts/:name', authenticate, (req, res) => {
+  const name = req.params.name;
+  db.run('DELETE FROM districts WHERE name = ?', [name], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    db.run('UPDATE locations SET district_name = NULL, district_color = NULL WHERE district_name = ?', [name], (err2) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      emitUpdate();
+      res.json({ message: 'Deleted' });
+    });
+  });
+});
+
 app.post('/api/locations/batch-district', authenticate, (req, res) => {
   const { ids, district_name, district_color } = req.body;
-  if (!ids || !Array.isArray(ids)) return res.status(400).json({ error: 'Invalid data' });
+  if (!Array.isArray(ids)) return res.status(400).json({ error: 'Invalid data' });
 
-  const placeholders = ids.map(() => '?').join(',');
-  db.all(`SELECT id, district_name, district_color FROM locations WHERE id IN (${placeholders})`, ids, (err, rows) => {
+  // First, remove this district from all locations to sync it properly
+  db.run('UPDATE locations SET district_name = NULL, district_color = NULL WHERE district_name = ?', [district_name], (err) => {
     if (err) return res.status(500).json({ error: err.message });
+    
+    if (ids.length === 0) {
+      emitUpdate();
+      return res.json({ message: 'District cleared' });
+    }
 
+    const placeholders = ids.map(() => '?').join(',');
     const sql = `UPDATE locations SET district_name = ?, district_color = ? WHERE id IN (${placeholders})`;
-    db.run(sql, [district_name, district_color, ...ids], function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      recordAction('location_update_batch', { data: rows.map(r => ({ id: r.id, old_data: { district_name: r.district_name, district_color: r.district_color } })) });
+    db.run(sql, [district_name, district_color, ...ids], function(err2) {
+      if (err2) return res.status(500).json({ error: err2.message });
       emitUpdate();
       res.json({ message: 'District updated' });
     });

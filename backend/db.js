@@ -27,6 +27,24 @@ db.serialize(() => {
     owner TEXT
   )`);
 
+  db.run(`CREATE TABLE IF NOT EXISTS districts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    color TEXT NOT NULL
+  )`, () => {
+    // Migration: Extract existing districts from locations table and insert them into districts table
+    db.all('SELECT DISTINCT district_name, district_color FROM locations WHERE district_name IS NOT NULL AND district_name != ""', (err, rows) => {
+      if (err) return;
+      if (rows && rows.length > 0) {
+        const stmt = db.prepare('INSERT OR IGNORE INTO districts (name, color) VALUES (?, ?)');
+        rows.forEach(r => {
+          stmt.run([r.district_name, r.district_color]);
+        });
+        stmt.finalize();
+      }
+    });
+  });
+
   db.run(`CREATE TABLE IF NOT EXISTS admin (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
