@@ -662,7 +662,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
           onPointerUp={handlePointerUp}
       >
         <octahedronGeometry args={[0.5]} />
-        <meshBasicMaterial color="#ff0000" transparent opacity={0.9} />
+        <meshBasicMaterial color="#ff0000" transparent opacity={0.9} depthTest={false} />
       </mesh>
       
       {isLocalDragging && (
@@ -681,7 +681,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
       {/* Enemy Core - Pulsing Void */}
       <mesh ref={coreRef as any} scale={[0.4, 0.4, 0.4]}>
         <octahedronGeometry args={[0.5]} />
-        <meshBasicMaterial color="#220000" />
+        <meshBasicMaterial color="#220000" depthTest={false} />
       </mesh>
       
       {/* Red Alert Light */}
@@ -887,11 +887,11 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
           onPointerUp={handlePointerUp}
       >
         <octahedronGeometry args={[0.5]} />
-        <meshBasicMaterial transparent opacity={0.8} color={isSelected ? "#00ffff" : baseColor} />
+        <meshBasicMaterial transparent opacity={0.8} color={isSelected ? "#00ffff" : baseColor} depthTest={false} />
         {/* Solid Inner Core */}
         <mesh scale={[0.4, 0.4, 0.4]}>
           <octahedronGeometry args={[0.5]} />
-          <meshBasicMaterial color={isSelected ? "#ffffff" : baseColor} />
+          <meshBasicMaterial color={isSelected ? "#ffffff" : baseColor} depthTest={false} />
         </mesh>
       </mesh>
 
@@ -911,11 +911,11 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
       <>
           <mesh ref={glowRef as any} scale={[1.2, 1.2, 1.2]} raycast={() => null}>
               <octahedronGeometry args={[0.5]} />
-              <meshBasicMaterial color={baseColor} transparent opacity={0.4} blending={THREE.AdditiveBlending} depthWrite={false} />
+              <meshBasicMaterial color={baseColor} transparent opacity={0.4} blending={THREE.AdditiveBlending} depthWrite={false} depthTest={false} />
           </mesh>
           <mesh ref={haloRef as any} scale={[1.6, 1.6, 1.6]} raycast={() => null}>
               <sphereGeometry args={[0.5, 6, 6]} />
-              <meshBasicMaterial color={baseColor} transparent opacity={0.15} blending={THREE.AdditiveBlending} depthWrite={false} />
+              <meshBasicMaterial color={baseColor} transparent opacity={0.15} blending={THREE.AdditiveBlending} depthWrite={false} depthTest={false} />
           </mesh>
           <pointLight ref={lightRef} color={baseColor} intensity={2.5} distance={15} decay={2} />
       </>
