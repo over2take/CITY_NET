@@ -1033,7 +1033,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
               <mesh raycast={() => null}>
                 {renderBaseGeometry(p.shape, p.polyCount || 5)}
                 <meshBasicMaterial 
-                  color={isBatchSelected ? "#ffff00" : location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : baseColor)} 
+                  color={isBatchSelected ? "#ffff00" : location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : hasData ? "#8800ff" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : "#00ff00")} 
                   wireframe={true} 
                 />
               </mesh>
@@ -1042,7 +1042,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
               <mesh raycast={() => null}>
                 {renderBaseGeometry(p.shape, p.polyCount || 5)}
                 <meshBasicMaterial 
-                  color={location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : baseColor)} 
+                  color={location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : hasData ? "#8800ff" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : "#00ff00")} 
                   transparent={true}
                   opacity={(isSelected || isBatchSelected) ? 0.3 : (isOverlapped ? 0.0 : 0.05)}
                   depthTest={!isOverlapped}
@@ -1079,11 +1079,10 @@ const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect, isDra
                             (parentLoc.description && parentLoc.description.trim() !== "") || 
                             (parentLoc.npcs && parentLoc.npcs.trim() !== "");
             
-            let baseColor = hasData ? "#8800ff" : "#00ff00";
-            
-            let color = baseColor;
+            let color = "#00ff00";
             if (parentLoc.district_color) color = parentLoc.district_color;
             if (el.color && el.color !== "#00ff00") color = el.color;
+            if (hasData) color = "#8800ff";
             if (parentLoc.isFavorite) color = "#ff7b00";
             if (parentLoc.isDanger) color = "#ff0000";
             
