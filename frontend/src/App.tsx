@@ -344,13 +344,13 @@ const Roads = React.memo(({ roads }: { roads: any[] }) => {
   return (
     <group>
       {/* Road Base - Vibrant Cyber Green */}
-      <instancedMesh ref={baseMeshRef} args={[null as any, null as any, roads.length]}>
+      <instancedMesh ref={baseMeshRef} args={[null as any, null as any, roads.length]} frustumCulled={false}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial color="#004411" transparent opacity={0.7} side={THREE.DoubleSide} />
       </instancedMesh>
       
       {/* Road Core - Pulsing Neon Link */}
-      <instancedMesh ref={coreMeshRef} args={[null as any, null as any, roads.length]}>
+      <instancedMesh ref={coreMeshRef} args={[null as any, null as any, roads.length]} frustumCulled={false}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial color="#00ffaa" transparent opacity={0.9} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
       </instancedMesh>
@@ -447,7 +447,7 @@ const GhostTraffic = React.memo(({ roads }: { roads: any[] }) => {
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[null as any, null as any, packetCount]}>
+    <instancedMesh ref={meshRef} args={[null as any, null as any, packetCount]} frustumCulled={false}>
       <boxGeometry args={[1, 1, 1]} />
       <meshBasicMaterial transparent blending={THREE.AdditiveBlending} depthWrite={false} />
     </instancedMesh>
