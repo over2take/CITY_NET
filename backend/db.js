@@ -36,10 +36,13 @@ db.serialize(() => {
     db.get('SELECT COUNT(*) as count FROM admin', (err, row) => {
       if (row && row.count === 0) {
         const bcrypt = require('bcrypt');
-        bcrypt.hash('cyberpunk_password', 10, (err, hash) => {
+        const adminUser = process.env.ADMIN_USER || 'admin';
+        const adminPass = process.env.ADMIN_PASS || 'cyberpunk_password';
+        
+        bcrypt.hash(adminPass, 10, (err, hash) => {
           if (!err) {
-            db.run('INSERT INTO admin (username, password) VALUES (?, ?)', ['admin', hash]);
-            console.log('[SYSTEM] Default admin user created.');
+            db.run('INSERT INTO admin (username, password) VALUES (?, ?)', [adminUser, hash]);
+            console.log(`[SYSTEM] Initial admin user '${adminUser}' created.`);
           }
         });
       }
