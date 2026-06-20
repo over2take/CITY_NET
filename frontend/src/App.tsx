@@ -2209,7 +2209,7 @@ const generateThemedBuildingsForPlot = (
 function AdminPanel({
   socketRef, token, onLogout, refreshLocations, refreshRoads, locations, roads, editData, setEditData, editId, setEditId,
   transformMode, setTransformMode, targetObject, blockBuildings, setBlockBuildings, selectedLocation,
-  setSelectedLocation, setTargetObject, view, setView, pendingRequests, setPendingRequests,
+  setSelectedLocation, setTargetObject, isChatOpen, setIsChatOpen, controlsRef, view, setView, pendingRequests, setPendingRequests,
   isBatchSelecting, setIsBatchSelecting, selectedIds, setSelectedIds, toggleSelection, batchDelete,
   districtSelection, setDistrictSelection, districtConfig, setDistrictConfig,
   joinSelection, setJoinSelection, selectedClassification, setSelectedClassification, roadSelectionBounds, setRoadSelectionBounds,
@@ -4373,6 +4373,7 @@ function App() {
               <AdminPanel
                 socketRef={socketRef}
                 token={token}
+                controlsRef={controlsRef}
                 onLogout={() => { setToken(''); setIsAdmin(false); setShowAdminPanel(false); }}
                 refreshLocations={fetchLocations}
                 refreshRoads={fetchRoads}
