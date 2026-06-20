@@ -2403,14 +2403,29 @@ function AdminPanel({
     })).filter(s => new THREE.Vector3(s.x1, 0, s.z1).distanceTo(new THREE.Vector3(s.x2, 0, s.z2)) > 0.5);
   };
 
+  const getCenterGroundTarget = () => {
+    let tx = 0, tz = 0;
+    if (controlsRef.current) {
+        const camera = controlsRef.current._camera || controlsRef.current.camera;
+        if (camera) {
+            const rc = new THREE.Raycaster();
+            rc.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const target = new THREE.Vector3();
+            rc.ray.intersectPlane(plane, target);
+            tx = target.x; tz = target.z;
+        } else if (controlsRef.current.getTarget) {
+            const t = new THREE.Vector3();
+            controlsRef.current.getTarget(t);
+            tx = t.x; tz = t.z;
+        }
+    }
+    return { tx, tz };
+  };
+
   const startNew = () => {
     setEditId(null); setSelectedLocation(null);
-    let tx = 0, tz = 0;
-    if (controlsRef.current && controlsRef.current.getTarget) {
-        const t = new THREE.Vector3();
-        controlsRef.current.getTarget(t);
-        tx = t.x; tz = t.z;
-    }
+    const { tx, tz } = getCenterGroundTarget();
     setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
     setEditData({ name: '', description: '', npcs: '', x: tx, y: 0, z: tz, width: 8, height: 16, depth: 8, baseWidth: 8, baseHeight: 16, baseDepth: 8, shape: 'box', color: '#00ff00', isFavorite: false, isDanger: false, owner: '', polyCount: 5 });
     setView('editor');
@@ -2418,12 +2433,7 @@ function AdminPanel({
 
   const startNewEnemy = () => {
     setEditId(null); setSelectedLocation(null);
-    let tx = 0, tz = 0;
-    if (controlsRef.current && controlsRef.current.getTarget) {
-        const t = new THREE.Vector3();
-        controlsRef.current.getTarget(t);
-        tx = t.x; tz = t.z;
-    }
+    const { tx, tz } = getCenterGroundTarget();
     setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
     setEditData({ 
         name: '', description: '', npcs: '', x: tx, y: 0, z: tz, 
@@ -2678,12 +2688,7 @@ function AdminPanel({
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { 
                 setSelectedLocation(null); 
-                let tx = 0, tz = 0;
-                if (controlsRef.current && controlsRef.current.getTarget) {
-                    const t = new THREE.Vector3();
-                    controlsRef.current.getTarget(t);
-                    tx = t.x; tz = t.z;
-                }
+                const { tx, tz } = getCenterGroundTarget();
                 setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
                 setView('generator'); generateBlock(); 
               }}>+ BLOCK_GEN</button>
@@ -4093,6 +4098,14 @@ function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation, isOpen
   );
 }
 
+const GlobalCameraCapture = () => {
+  const { camera } = useThree();
+  useEffect(() => {
+    (window as any).globalCamera = camera;
+  }, [camera]);
+  return null;
+};
+
 function CursorPivotControls() {
   const { camera, controls, raycaster, pointer, scene } = useThree();
 
@@ -4924,6 +4937,7 @@ function App() {
             <PerspectiveCamera makeDefault position={[0, 200, 250]} />
             <CameraControls ref={controlsRef} makeDefault enabled={!isDragging} dollyToCursor={true} />
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
+            <GlobalCameraCapture />
             <CursorPivotControls />
             <color attach="background" args={['#000000']} />
             {/* @ts-ignore */}
