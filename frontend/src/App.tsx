@@ -1208,7 +1208,7 @@ const generateThemedBuildingsForPlot = (
   else if (zoneTypeVal === 3.0) targetGenType = 'CUSTOM';
 
   const customPool = sourceLocations.filter(b => b.classification === targetGenType && !b.parent_id);
-  const baseMaxStyle = (targetGenType === 'CORPO' ? 10 : targetGenType === 'URBAN' ? 10 : targetGenType === 'INDUSTRIAL' ? 10 : targetGenType === 'SLUMS' ? 1 : targetGenType === 'LANDMARK' ? 13 : targetGenType === 'MARKETS' ? 5 : 0);
+  const baseMaxStyle = (targetGenType === 'CORPO' ? 11 : targetGenType === 'URBAN' ? 10 : targetGenType === 'INDUSTRIAL' ? 10 : targetGenType === 'SLUMS' ? 1 : targetGenType === 'LANDMARK' ? 13 : targetGenType === 'MARKETS' ? 5 : 0);
 
   if (styleOverride !== undefined && styleOverride >= baseMaxStyle && customPool.length > 0) {
     const customIndex = styleOverride - baseMaxStyle;
@@ -1822,7 +1822,7 @@ const generateThemedBuildingsForPlot = (
       baseD = Math.max(4.0, bd * 0.3);
     }
 
-    const corpoStyle = styleOverride !== undefined ? styleOverride % 10 : Math.floor(Math.random() * 10); // 10 styles
+    const corpoStyle = styleOverride !== undefined ? styleOverride % 11 : Math.floor(Math.random() * 11); // 11 styles
 
     if (corpoStyle === 0) {
       // Style 0: Asymmetrical Nexus (main tower + data-centre annex + skybridges)
@@ -1982,6 +1982,29 @@ const generateThemedBuildingsForPlot = (
       rawBuildings.push({ name: '', x: bx, y: baseH, z: bz, width: baseW * 0.7, depth: baseD * 0.7, height: midH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       rawBuildings.push({ name: '', x: bx, y: baseH + midH, z: bz, width: baseW * 0.45, depth: baseD * 0.45, height: topH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       rawBuildings.push({ name: '', x: bx, y: baseH + midH + topH, z: bz, width: 0.2, depth: 0.2, height: h * 0.15, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+    }
+    else if (corpoStyle === 10) {
+      // Style 11: Player Custom Structure (L-Shaped Cantilever Tower)
+      const rootW = baseW * 0.25;
+      const rootD = baseD;
+      const rootH = h * 0.91;
+      const rootX = bx - baseW * 0.375;
+
+      const root = { name: '', description: '', x: rootX, y: 0, z: bz, width: rootW, depth: rootD, height: rootH, color, shape: 'box', polyCount: 5 };
+      rawBuildings.push(root);
+      const key = getGridKey(rootX, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      const midY = h * 0.32;
+      const midH = h * 0.41;
+      rawBuildings.push({ name: '', x: bx, y: midY, z: bz, width: baseW * 0.5, depth: baseD * 0.7, height: midH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+
+      const topY = h * 0.84;
+      const topH = h * 0.07;
+      rawBuildings.push({ name: '', x: bx, y: topY, z: bz, width: baseW, depth: baseD * 0.9, height: topH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+
+      const spireY = h * 0.91;
+      const spireH = h * 0.09;
+      rawBuildings.push({ name: '', x: rootX, y: spireY, z: bz, width: baseW * 0.02, depth: baseD * 0.02, height: spireH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
     }
     return;
   }
@@ -3428,7 +3451,7 @@ function AdminPanel({
                         ))}
                       </div>
                       {editorGenType && (() => {
-                        const baseMaxStyle = editorGenType === 'CORPO' ? 10 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 13 : editorGenType === 'MARKETS' ? 5 : 0;
+                        const baseMaxStyle = editorGenType === 'CORPO' ? 11 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 13 : editorGenType === 'MARKETS' ? 5 : 0;
                         const customPoolSize = locations.filter((b: any) => b.classification === editorGenType && !b.parent_id).length;
                         const maxStyle = baseMaxStyle + customPoolSize;
                         if (maxStyle === 0) return null;
@@ -4504,7 +4527,7 @@ function App() {
                 else if (editorGenType === 'LANDMARK') zoneVal = 1.5;
                 else if (editorGenType === 'MARKETS') zoneVal = 2.0;
                 else if (editorGenType === 'CUSTOM') zoneVal = 3.0;
-                const baseMaxStyle = editorGenType === 'CORPO' ? 10 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 13 : editorGenType === 'MARKETS' ? 5 : 0;
+                const baseMaxStyle = editorGenType === 'CORPO' ? 11 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 13 : editorGenType === 'MARKETS' ? 5 : 0;
                 const customPoolSize = locations.filter((b: any) => b.classification === editorGenType && !b.parent_id).length;
                 const maxStyle = baseMaxStyle + customPoolSize;
                 if (maxStyle === 0) return;
