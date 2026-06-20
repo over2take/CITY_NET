@@ -803,6 +803,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
       glowRef.current.rotation.copy(meshRef.current.rotation);
       glowRef.current.scale.set(location.width * 1.2 * finalScaleMult, location.height * 1.2 * finalScaleMult, location.depth * 1.2 * finalScaleMult);
       if (glowRef.current.material) (glowRef.current.material as any).opacity = (baseOpacity * 0.4) * pulse;
+      (window as any).localRhombusPos = visualPos.current;
     }
 
     if (haloRef.current) {
@@ -923,7 +924,30 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   );
 });
 
-const Building = React.memo(({ location, children, onClick, isSelected, isBatchSelected, setTargetObject, editMeshRef, token, userName, refreshLocations, setIsDragging, socket, activeUsers }: any) => {
+const OverlapChecker = React.memo(({ locations, setOverlapIds }: any) => {
+    const lastOverlaps = useRef('');
+    useFrame(() => {
+        if (!(window as any).localRhombusPos) return;
+        const pPos = (window as any).localRhombusPos;
+        const overlaps: number[] = [];
+        for (let i = 0; i < locations.length; i++) {
+            const l = locations[i];
+            if (l.shape === 'rhombus' || l.shape === 'road' || l.shape === 'intersection') continue;
+            // AABB with a small margin
+            if (Math.abs(l.x - pPos.x) <= l.width/2 + 0.1 && Math.abs(l.z - pPos.z) <= l.depth/2 + 0.1) {
+                overlaps.push(l.id);
+            }
+        }
+        const str = overlaps.join(',');
+        if (str !== lastOverlaps.current) {
+            lastOverlaps.current = str;
+            setOverlapIds(overlaps);
+        }
+    });
+    return null;
+});
+
+const Building = React.memo(({ location, children, onClick, isSelected, isBatchSelected, isOverlapped, setTargetObject, editMeshRef, token, userName, refreshLocations, setIsDragging, socket, activeUsers }: any) => {
   const meshRef = useRef<THREE.Mesh>(null);
   
   const parts = [location, ...(children || [])];
@@ -998,7 +1022,8 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
                 <meshBasicMaterial 
                   color={location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)} 
                   transparent={true}
-                  opacity={(isSelected || isBatchSelected) ? 0.3 : 0.05}
+                  opacity={(isSelected || isBatchSelected) ? 0.3 : (isOverlapped ? 0.0 : 0.05)}
+                  depthTest={!isOverlapped}
                 />
               </mesh>
             </mesh>
@@ -3890,6 +3915,7 @@ function CameraController({ target, onComplete }: { target: { pos: [number, numb
 function App() {
   const controlsRef = useRef<any>(null);
   const [locations, setLocations] = useState<any[]>([]);
+  const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [roads, setRoads] = useState<any[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
   const [cameraTarget, setCameraTarget] = useState<{ pos: [number, number, number], size: number } | null>(null);
@@ -4013,8 +4039,9 @@ function App() {
       const children = groupedLocations[loc.id] || [];
       const isSelected = !isBatchSelecting && view !== 'district' && view !== 'join' && selectedLocation?.id === loc.id;
       const isBatchSelected = selectedIds.includes(loc.id) || districtSelection.includes(loc.id) || joinSelection.includes(loc.id);
+      const isOverlapped = overlapIds.includes(loc.id);
       
-      if (!isSelected && !isBatchSelected) {
+      if (!isSelected && !isBatchSelected && !isOverlapped) {
         // Flatten parent and all its children into the simple (instanced) rendering list
         const pushSimple = (p: any) => {
           simple.push({
@@ -4041,11 +4068,11 @@ function App() {
         pushSimple(loc);
         children.forEach((c: any) => pushSimple(c));
       } else {
-        interactive.push({ loc, children, isSelected, isBatchSelected });
+        interactive.push({ loc, children, isSelected, isBatchSelected, isOverlapped });
       }
     });
     return { simple, interactive };
-  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection]);
+  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds]);
 
   const toggleSelection = (id: number) => { setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]); };
 
@@ -4573,6 +4600,7 @@ function App() {
           <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
             <PerspectiveCamera makeDefault position={[80, 80, 80]} />
             <CameraControls ref={controlsRef} makeDefault enabled={!isDragging} dollyToCursor={true} />
+            <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <CursorPivotControls />
             <color attach="background" args={['#000000']} />
             {/* @ts-ignore */}
@@ -4611,8 +4639,8 @@ function App() {
               </mesh>
             )}
 <InstancedBuildings buildings={renderLists.simple} onSelect={handleBuildingClick} />
-            {renderLists.interactive.map(({ loc, children, isSelected, isBatchSelected }: any) => (
-              <Building key={loc.id} location={loc} children={children} onClick={() => handleBuildingClick(loc)} isSelected={isSelected} isBatchSelected={isBatchSelected} setTargetObject={setTargetObject} editMeshRef={editMeshRef} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} />
+            {renderLists.interactive.map(({ loc, children, isSelected, isBatchSelected, isOverlapped }: any) => (
+              <Building key={loc.id} location={loc} children={children} onClick={() => handleBuildingClick(loc)} isSelected={isSelected} isBatchSelected={isBatchSelected} isOverlapped={isOverlapped} setTargetObject={setTargetObject} editMeshRef={editMeshRef} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} />
             ))}
             {/* Dedicated Player Rhombus Rendering */}
             {locations.filter(l => l.shape === 'rhombus').map(loc => (
