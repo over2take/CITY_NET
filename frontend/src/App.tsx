@@ -993,25 +993,24 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
                   opacity={isSelected ? 0.3 : 1.0}
                 />
               </mesh>
-            </mesh>
-            
-            {/* Semi-transparent fill when selected */}
-            {(isSelected || isBatchSelected) && (
-                <mesh scale={[0.99, 0.99, 0.99]} raycast={() => null}>
-                  {renderBaseGeometry(p.shape, p.polyCount || 5)}
-                  <meshBasicMaterial 
-                    color={new THREE.Color(location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)).multiplyScalar(0.02)} 
-                  />
-                </mesh>
-            )}
+              {/* Semi-transparent fill when selected */}
+              {(isSelected || isBatchSelected) && (
+                  <mesh scale={[0.99, 0.99, 0.99]} raycast={() => null}>
+                    {renderBaseGeometry(p.shape, p.polyCount || 5)}
+                    <meshBasicMaterial 
+                      color={new THREE.Color(location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)).multiplyScalar(0.02)} 
+                    />
+                  </mesh>
+              )}
 
-            {/* Selection Highlight */}
-            {(isSelected || isBatchSelected) && (
-                <mesh scale={[1.05, 1.05, 1.05]} raycast={() => null}>
-                  {renderBaseGeometry(p.shape, p.polyCount || 5)}
-                  <meshBasicMaterial color={isBatchSelected ? "#ffff00" : "#00ffff"} wireframe={true} transparent opacity={0.5} />
-                </mesh>
-            )}
+              {/* Selection Highlight */}
+              {(isSelected || isBatchSelected) && (
+                  <mesh scale={[1.05, 1.05, 1.05]} raycast={() => null}>
+                    {renderBaseGeometry(p.shape, p.polyCount || 5)}
+                    <meshBasicMaterial color={isBatchSelected ? "#ffff00" : "#00ffff"} wireframe={true} transparent opacity={0.5} />
+                  </mesh>
+              )}
+            </mesh>
           </group>
         );
       })}
