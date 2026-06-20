@@ -4894,7 +4894,7 @@ function App() {
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : (<><span style={{ display: 'inline-block', width: '250px', textAlign: 'right' }}>{isWaiting ? 'SYSTEM READY // ' : `SYSTEM CHECKING ${throbber} // `}</span><span style={{ display: 'inline-block', width: '300px', textAlign: 'left', whiteSpace: 'nowrap' }}>{statusText}</span></>)}</p></div>
           </div>
           <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
-            <PerspectiveCamera makeDefault position={[80, 80, 80]} />
+            <PerspectiveCamera makeDefault position={[0, 200, 250]} />
             <CameraControls ref={controlsRef} makeDefault enabled={!isDragging} dollyToCursor={true} />
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <CursorPivotControls />
