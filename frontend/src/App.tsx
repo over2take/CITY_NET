@@ -2628,11 +2628,11 @@ function AdminPanel({
     let root = selectedLocation;
     // If the user selected a child part, resolve the root structure first
     if (selectedLocation.parent_id) {
-        const foundRoot = locations.find((l: any) => l.id === selectedLocation.parent_id);
+        const foundRoot = locations.find((l: any) => String(l.id) === String(selectedLocation.parent_id));
         if (foundRoot) root = foundRoot;
     }
     
-    const children = locations.filter((l: any) => l.parent_id === root.id);
+    const children = locations.filter((l: any) => String(l.parent_id) === String(root.id));
     setCopyBuffer({ root, children });
     alert("DATA_LINK_COPIED");
   };
@@ -2643,7 +2643,9 @@ function AdminPanel({
     const offsetX = 5;
     const offsetZ = 5;
     
-    const newRoot = { ...copyBuffer.root, id: undefined, x: copyBuffer.root.x + offsetX, z: copyBuffer.root.z + offsetZ };
+    const newRoot = { ...copyBuffer.root, x: copyBuffer.root.x + offsetX, z: copyBuffer.root.z + offsetZ };
+    delete newRoot.id; // explicitly remove id to avoid serialization anomalies
+
     const res = await fetch('/api/locations', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, 
@@ -2655,13 +2657,11 @@ function AdminPanel({
         const newRootId = result.data[0].id;
         
         if (copyBuffer.children.length > 0) {
-            const newChildren = copyBuffer.children.map((c: any) => ({
-                ...c,
-                id: undefined,
-                parent_id: newRootId,
-                x: c.x + offsetX,
-                z: c.z + offsetZ
-            }));
+            const newChildren = copyBuffer.children.map((c: any) => {
+                const newChild = { ...c, parent_id: Number(newRootId), x: c.x + offsetX, z: c.z + offsetZ };
+                delete newChild.id;
+                return newChild;
+            });
             await fetch('/api/locations', { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, 
