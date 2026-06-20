@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, Grid, TransformControls } from '@react-three/drei';
+import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh } from '@react-three/drei';
 import { io } from 'socket.io-client';
 import * as THREE from 'three';
 import rhombusIcon from './assets/rhombus.svg';
@@ -70,6 +70,57 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
   const [dragEnd, setDragEnd] = useState<THREE.Vector3 | null>(null);
   const [isPainting, setIsPainting] = useState(false);
   const raycaster = useRef(new THREE.Raycaster());
+  const mouseScreenPos = useRef<{ x: number, y: number } | null>(null);
+
+  useFrame((state, delta) => {
+    if (view === 'draw_roads' && isPainting && mouseScreenPos.current && controls) {
+      const rect = gl.domElement.getBoundingClientRect();
+      const mx = mouseScreenPos.current.x - rect.left;
+      const my = mouseScreenPos.current.y - rect.top;
+      const edgeSize = 40; 
+      let panX = 0;
+      let panZ = 0;
+
+      if (mx < edgeSize) panX = -1;
+      else if (mx > rect.width - edgeSize) panX = 1;
+      
+      if (my < edgeSize) panZ = -1;
+      else if (my > rect.height - edgeSize) panZ = 1;
+
+      if (panX !== 0 || panZ !== 0) {
+        const speed = 40 * delta;
+        camera.position.x += panX * speed;
+        camera.position.z += panZ * speed;
+        (controls as any).target.x += panX * speed;
+        (controls as any).target.z += panZ * speed;
+        (controls as any).update();
+
+        // Continue drawing road while panning
+        const mouse = new THREE.Vector2((mx / rect.width) * 2 - 1, -(my / rect.height) * 2 + 1);
+        raycaster.current.setFromCamera(mouse, camera);
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const target = new THREE.Vector3(); 
+        raycaster.current.ray.intersectPlane(plane, target);
+        if (snapToGrid) { target.x = Math.round(target.x); target.z = Math.round(target.z); }
+
+        if (setRoadTrail) {
+          setRoadTrail((prev: any) => {
+              if (!prev || prev.length === 0) return prev;
+              const newPaths = [...prev];
+              const currentPath = [...newPaths[newPaths.length - 1]];
+              if (roadDrawMode === 'straight') {
+                  currentPath[1] = target.clone();
+              } else {
+                  const lastPos = currentPath[currentPath.length - 1];
+                  if (!lastPos || target.distanceTo(lastPos) > 0.8) currentPath.push(target.clone());
+              }
+              newPaths[newPaths.length - 1] = currentPath;
+              return newPaths;
+          });
+        }
+      }
+    }
+  });
 
   useEffect(() => {
     if ((view === 'district' || view === 'draw_roads' || view === 'city_gen' || isBatchSelecting) && controls) {
@@ -155,6 +206,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
     };
 
     const handleMouseMove = (e: MouseEvent) => {
+        mouseScreenPos.current = { x: e.clientX, y: e.clientY };
         if (view === 'draw_roads' && isPainting && setRoadTrail) {
             const pos = getMouseWorldPos(e);
             setRoadTrail((prev: any) => {
@@ -175,6 +227,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
     };
 
     const handleMouseUp = () => {
+        mouseScreenPos.current = null;
         if (controls) (controls as any).enabled = true;
         if (view === 'draw_roads') { setIsPainting(false); return; }
         if (!dragStart || !dragEnd) return;
@@ -874,11 +927,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
                 <mesh scale={[0.99, 0.99, 0.99]} raycast={() => null}>
                   {renderBaseGeometry(p.shape)}
                   <meshBasicMaterial 
-                    color={location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)} 
-                    transparent={true} 
-                    opacity={0.08} 
-                    depthWrite={false} 
-                    blending={THREE.AdditiveBlending} 
+                    color={new THREE.Color(location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : (p.color || baseColor)).multiplyScalar(0.02)} 
                   />
                 </mesh>
             )}
@@ -957,27 +1006,29 @@ const InstancedShape = React.memo(({ shape, elements, onSelect }: { shape: strin
             {/* Holographic Face Fill - No raycasting */}
             <instancedMesh ref={fillMeshRef} args={[null as any, null as any, elements.length]} raycast={() => null}>
                 {renderBaseGeometry(shape)}
-                <meshBasicMaterial transparent opacity={0.08} depthWrite={false} blending={THREE.AdditiveBlending} />
+                <meshBasicMaterial color="#020202" />
             </instancedMesh>
 
             {/* Solid Hitbox - Low opacity is more reliable for R3F raycasting than colorWrite=false */}
-            <instancedMesh 
-                ref={hitMeshRef} 
-                args={[null as any, null as any, elements.length]}
-                onPointerDown={() => { dragDist.current = 0; }}
-                onPointerMove={(e) => { dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY); }}
-                onPointerUp={(e) => {
-                    if (dragDist.current < 10) {
-                        e.stopPropagation();
-                        if (e.instanceId !== undefined && elements[e.instanceId]) {
-                            onSelect(elements[e.instanceId].rootLoc);
-                        }
-                    }
-                }}
-            >
-                {renderBaseGeometry(shape)}
-                <meshBasicMaterial transparent opacity={0.01} depthWrite={false} />
-            </instancedMesh>
+            <Bvh firstHitOnly>
+              <instancedMesh 
+                  ref={hitMeshRef} 
+                  args={[null as any, null as any, elements.length]}
+                  onPointerDown={() => { dragDist.current = 0; }}
+                  onPointerMove={(e) => { dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY); }}
+                  onPointerUp={(e) => {
+                      if (dragDist.current < 10) {
+                          e.stopPropagation();
+                          if (e.instanceId !== undefined && elements[e.instanceId]) {
+                              onSelect(elements[e.instanceId].rootLoc);
+                          }
+                      }
+                  }}
+              >
+                  {renderBaseGeometry(shape)}
+                  <meshBasicMaterial transparent opacity={0.01} depthWrite={false} />
+              </instancedMesh>
+            </Bvh>
         </group>
     );
 });
@@ -1041,7 +1092,7 @@ const generateThemedBuildingsForPlot = (
   else if (zoneTypeVal === 3.0) targetGenType = 'CUSTOM';
 
   const customPool = sourceLocations.filter(b => b.classification === targetGenType && !b.parent_id);
-  const baseMaxStyle = (targetGenType === 'CORPO' ? 10 : targetGenType === 'URBAN' ? 10 : targetGenType === 'INDUSTRIAL' ? 10 : targetGenType === 'SLUMS' ? 1 : targetGenType === 'LANDMARK' ? 6 : targetGenType === 'MARKETS' ? 5 : 0);
+  const baseMaxStyle = (targetGenType === 'CORPO' ? 10 : targetGenType === 'URBAN' ? 10 : targetGenType === 'INDUSTRIAL' ? 10 : targetGenType === 'SLUMS' ? 1 : targetGenType === 'LANDMARK' ? 12 : targetGenType === 'MARKETS' ? 5 : 0);
 
   if (styleOverride !== undefined && styleOverride >= baseMaxStyle && customPool.length > 0) {
     const customIndex = styleOverride - baseMaxStyle;
@@ -1303,7 +1354,7 @@ const generateThemedBuildingsForPlot = (
     const h = overrideH !== undefined ? overrideH : (20 + Math.random() * 60);
     const baseW = bw * 0.9;
     const baseD = bd * 0.9;
-    const landmarkStyle = styleOverride !== undefined ? styleOverride % 6 : Math.floor(Math.random() * 6);
+    const landmarkStyle = styleOverride !== undefined ? styleOverride % 12 : Math.floor(Math.random() * 12);
 
     if (landmarkStyle === 0) {
       // Style 1: Grand Obelisk
@@ -1433,6 +1484,199 @@ const generateThemedBuildingsForPlot = (
       rawBuildings.push({ name: '', x: bx, y: h * 0.8, z: bz, width: baseW * 0.3, depth: baseD * 0.3, height: h * 0.2, color, shape: 'pyramid', parent_name: 'ROOT' });
       const peakSphereR = Math.min(baseW, baseD) * 0.15;
       rawBuildings.push({ name: '', x: bx, y: h * 1.05, z: bz, width: peakSphereR, depth: peakSphereR, height: peakSphereR, color, shape: 'sphere', parent_name: 'ROOT' });
+    }
+    else if (landmarkStyle === 6) {
+      // Style 7: Cyber-Citadel (Stepped buttresses + tall central spire)
+      const centralSpireH = h;
+      const centralSpireW = baseW * 0.45;
+      const centralSpireD = baseD * 0.45;
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: centralSpireW, depth: centralSpireD, height: centralSpireH, color, shape: 'box' };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+      // Tiered corner buttresses
+      const buttW = baseW * 0.15;
+      const buttD = baseD * 0.15;
+      const offsets = [
+        { dx: -baseW * 0.35, dz: -baseD * 0.35 },
+        { dx: baseW * 0.35, dz: -baseD * 0.35 },
+        { dx: -baseW * 0.35, dz: baseD * 0.35 },
+        { dx: baseW * 0.35, dz: baseD * 0.35 }
+      ];
+      offsets.forEach(offset => {
+        const ox = bx + offset.dx;
+        const oz = bz + offset.dz;
+        rawBuildings.push({ name: '', x: ox, y: 0, z: oz, width: buttW, depth: buttD, height: centralSpireH * 0.4, color, shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: ox - Math.sign(offset.dx)*buttW*0.2, y: centralSpireH * 0.4, z: oz - Math.sign(offset.dz)*buttD*0.2, width: buttW * 0.7, depth: buttD * 0.7, height: centralSpireH * 0.35, color, shape: 'box', parent_name: 'ROOT' });
+      });
+      // Large top ring
+      rawBuildings.push({ name: '', x: bx, y: centralSpireH * 0.8, z: bz, width: centralSpireW * 1.3, depth: centralSpireD * 1.3, height: h * 0.03, color, shape: 'box', parent_name: 'ROOT' });
+      // Top antenna
+      rawBuildings.push({ name: '', x: bx, y: centralSpireH, z: bz, width: 0.3, depth: 0.3, height: centralSpireH * 0.18, color, shape: 'box', parent_name: 'ROOT' });
+    }
+    else if (landmarkStyle === 7) {
+      // Style 8: Hyper-Pyramid Complex (Grand tiered pyramid with satellite obelisks)
+      const base1W = baseW * 0.75;
+      const base1D = baseD * 0.75;
+      const base1H = h * 0.05;
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: base1W, depth: base1D, height: base1H, color, shape: 'box' };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+      // Stepped Tier 2 Base
+      const base2W = base1W * 0.75;
+      const base2D = base1D * 0.75;
+      const base2H = h * 0.08;
+      rawBuildings.push({ name: '', x: bx, y: base1H, z: bz, width: base2W, depth: base2D, height: base2H, color, shape: 'box', parent_name: 'ROOT' });
+      // Crown Pyramid
+      const pyramidW = base2W * 0.75;
+      const pyramidD = base2D * 0.75;
+      const pyramidH = h * 0.87;
+      rawBuildings.push({ name: '', x: bx, y: base1H + base2H, z: bz, width: pyramidW, depth: pyramidD, height: pyramidH, color, shape: 'pyramid', parent_name: 'ROOT' });
+      // Satellite Obelisks at corners
+      const satOffsets = [
+        { dx: -baseW * 0.42, dz: -baseD * 0.42 },
+        { dx: baseW * 0.42, dz: -baseD * 0.42 },
+        { dx: -baseW * 0.42, dz: baseD * 0.42 },
+        { dx: baseW * 0.42, dz: baseD * 0.42 }
+      ];
+      satOffsets.forEach(offset => {
+        const ox = bx + offset.dx;
+        const oz = bz + offset.dz;
+        rawBuildings.push({ name: '', x: ox, y: 0, z: oz, width: baseW * 0.08, depth: baseD * 0.08, height: h * 0.03, color, shape: 'box', parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: ox, y: h * 0.03, z: oz, width: baseW * 0.08, depth: baseD * 0.08, height: h * 0.17, color, shape: 'pyramid', parent_name: 'ROOT' });
+      });
+    }
+    else if (landmarkStyle === 8) {
+      // Style 9: Megastructure Arch / Arcology (Twin pillars + joining arch + suspended atrium)
+      const pillarW = baseW * 0.22;
+      const pillarD = baseD * 0.65;
+      const pillarH = h;
+      const offsetDist = baseW * 0.33;
+      const root = { name: '', description: '', x: bx - offsetDist, y: 0, z: bz, width: pillarW, depth: pillarD, height: pillarH, color, shape: 'box' };
+      rawBuildings.push(root);
+      const key = getGridKey(bx - offsetDist, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+      // Right Pillar
+      rawBuildings.push({ name: '', x: bx + offsetDist, y: 0, z: bz, width: pillarW, depth: pillarD, height: pillarH, color, shape: 'box', parent_name: 'ROOT' });
+      // Top Connecting Arch
+      const archH2 = h * 0.08;
+      const archW2 = offsetDist * 2 + pillarW;
+      rawBuildings.push({ name: '', x: bx, y: pillarH - archH2, z: bz, width: archW2, depth: pillarD * 0.9, height: archH2, color, shape: 'box', parent_name: 'ROOT' });
+      // Center Suspended Atrium
+      const atriumW = offsetDist * 1.3;
+      const atriumD = pillarD * 0.7;
+      const atriumH = pillarH * 0.45;
+      rawBuildings.push({ name: '', x: bx, y: pillarH * 0.35, z: bz, width: atriumW, depth: atriumD, height: atriumH, color, shape: 'box', parent_name: 'ROOT' });
+      // Twin spires on top
+      rawBuildings.push({ name: '', x: bx - offsetDist, y: pillarH, z: bz, width: 0.5, depth: 0.5, height: h * 0.1, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx + offsetDist, y: pillarH, z: bz, width: 0.5, depth: 0.5, height: h * 0.1, color, shape: 'box', parent_name: 'ROOT' });
+    }
+    else if (landmarkStyle === 9) {
+      // Style 10: Communications Array (Stepped tower + horizontal array discs + needles)
+      const towerH = h;
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.4, depth: baseD * 0.4, height: towerH * 0.3, color, shape: 'box' };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+      // Mid and Upper Sections
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.3, z: bz, width: baseW * 0.3, depth: baseD * 0.3, height: towerH * 0.4, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.7, z: bz, width: baseW * 0.2, depth: baseD * 0.2, height: towerH * 0.3, color, shape: 'box', parent_name: 'ROOT' });
+      // Horizontal Array Discs
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.45, z: bz, width: baseW * 0.65, depth: baseD * 0.65, height: h * 0.015, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.75, z: bz, width: baseW * 0.5, depth: baseD * 0.5, height: h * 0.01, color, shape: 'box', parent_name: 'ROOT' });
+      rawBuildings.push({ name: '', x: bx, y: towerH * 0.92, z: bz, width: baseW * 0.32, depth: baseD * 0.32, height: h * 0.008, color, shape: 'box', parent_name: 'ROOT' });
+      // Top needle / antenna
+      rawBuildings.push({ name: '', x: bx, y: towerH, z: bz, width: 0.3, depth: 0.3, height: towerH * 0.12, color, shape: 'box', parent_name: 'ROOT' });
+      // Beacon sphere
+      rawBuildings.push({ name: '', x: bx, y: towerH * 1.12, z: bz, width: baseW * 0.06, depth: baseD * 0.06, height: baseW * 0.06, color, shape: 'sphere', parent_name: 'ROOT' });
+    }
+    else if (landmarkStyle === 10) {
+      // Style 11: Ferris Wheel (horizontal cylinder-like wheel with triangle supports)
+      const wheelRadius = Math.min(baseW, baseD) * 0.4;
+      const wheelCenterY = wheelRadius * 1.1 + h * 0.02;
+      const supportSpread = baseD * 0.35;
+
+      // Ground platform
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 0.7, depth: baseD * 0.7, height: h * 0.015, color, shape: 'box' };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      // Front A-frame support (pyramid/triangle)
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz - supportSpread, width: baseW * 0.12, depth: baseD * 0.12, height: wheelCenterY * 1.05, color, shape: 'pyramid', parent_name: 'ROOT' });
+      // Back A-frame support (pyramid/triangle)
+      rawBuildings.push({ name: '', x: bx, y: 0, z: bz + supportSpread, width: baseW * 0.12, depth: baseD * 0.12, height: wheelCenterY * 1.05, color, shape: 'pyramid', parent_name: 'ROOT' });
+
+      // The wheel (sphere flattened on Z axis - in wireframe looks like a circular frame)
+      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - wheelRadius, z: bz, width: wheelRadius * 2, depth: supportSpread * 0.3, height: wheelRadius * 2, color, shape: 'sphere', parent_name: 'ROOT' });
+
+      // Center axle hub
+      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - wheelRadius * 0.08, z: bz, width: wheelRadius * 0.15, depth: supportSpread * 1.8, height: wheelRadius * 0.15, color, shape: 'box', parent_name: 'ROOT' });
+
+      // Gondola cabins around the wheel rim
+      const numGondolas = 8;
+      for (let i = 0; i < numGondolas; i++) {
+        const angle = (i / numGondolas) * Math.PI * 2;
+        const gx = bx + Math.cos(angle) * wheelRadius * 0.88;
+        const gy = wheelCenterY + Math.sin(angle) * wheelRadius * 0.88;
+        const gondolaSize = wheelRadius * 0.09;
+        rawBuildings.push({ name: '', x: gx, y: gy - gondolaSize / 2, z: bz, width: gondolaSize, depth: gondolaSize, height: gondolaSize * 1.2, color, shape: 'box', parent_name: 'ROOT' });
+      }
+
+      // Cross-brace spokes (thin boxes through center)
+      const spokeW = wheelRadius * 0.03;
+      // Vertical spoke
+      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - wheelRadius * 0.85, z: bz, width: spokeW, depth: spokeW, height: wheelRadius * 1.7, color, shape: 'box', parent_name: 'ROOT' });
+      // Horizontal spoke
+      rawBuildings.push({ name: '', x: bx, y: wheelCenterY - spokeW / 2, z: bz, width: wheelRadius * 1.7, depth: spokeW, height: spokeW, color, shape: 'box', parent_name: 'ROOT' });
+    }
+    else if (landmarkStyle === 11) {
+      // Style 12: Cyber-Swing Ride (Star Flyer / High-Altitude Carousel)
+      const towerRadius = Math.max(2, Math.min(baseW, baseD) * 0.1);
+      const rideHeight = h;
+      const canopyRadius = Math.min(baseW, baseD) * 0.45;
+      
+      // Base platform
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: canopyRadius * 2.2, depth: canopyRadius * 2.2, height: h * 0.05, color, shape: 'cylinder' };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      // Central tower
+      rawBuildings.push({ name: '', x: bx, y: h * 0.05, z: bz, width: towerRadius * 2, depth: towerRadius * 2, height: rideHeight * 0.85, color, shape: 'cylinder', parent_name: 'ROOT' });
+
+      // Top mechanical hub (glowing)
+      const hubY = h * 0.9;
+      rawBuildings.push({ name: '', x: bx, y: hubY, z: bz, width: towerRadius * 4, depth: towerRadius * 4, height: rideHeight * 0.05, color: '#ff00aa', shape: 'cylinder', parent_name: 'ROOT' });
+
+      // Canopy roof (pyramid for low-poly tent look)
+      rawBuildings.push({ name: '', x: bx, y: hubY + rideHeight * 0.05, z: bz, width: canopyRadius * 2, depth: canopyRadius * 2, height: rideHeight * 0.1, color, shape: 'pyramid', parent_name: 'ROOT' });
+
+      // Swings flinging outwards
+      const numSwings = 8;
+      const swingDrop = rideHeight * 0.35; // How far down the chains hang
+      const swingOutward = canopyRadius * 0.7; // The outward centrifugal force
+      
+      for (let i = 0; i < numSwings; i++) {
+         const angle = (i / numSwings) * Math.PI * 2;
+         // Attachment point at the edge of the canopy
+         const attachX = bx + Math.cos(angle) * (canopyRadius * 0.8);
+         const attachZ = bz + Math.sin(angle) * (canopyRadius * 0.8);
+         const attachY = hubY;
+
+         // Seat point (swung outwards and downwards)
+         const seatX = bx + Math.cos(angle) * (canopyRadius * 0.8 + swingOutward);
+         const seatZ = bz + Math.sin(angle) * (canopyRadius * 0.8 + swingOutward);
+         const seatY = attachY - swingDrop;
+
+         // Chain links
+         const chainLinks = 6;
+         for (let j = 1; j <= chainLinks; j++) {
+            const t = j / chainLinks;
+            const lx = attachX + (seatX - attachX) * t;
+            const ly = attachY + (seatY - attachY) * t;
+            const lz = attachZ + (seatZ - attachZ) * t;
+            rawBuildings.push({ name: '', x: lx, y: ly, z: lz, width: 0.3, depth: 0.3, height: 0.3, color: '#555555', shape: 'box', parent_name: 'ROOT' });
+         }
+
+         // Rider Seat
+         rawBuildings.push({ name: '', x: seatX, y: seatY, z: seatZ, width: 2.0, depth: 2.0, height: 1.5, color: '#00ffff', shape: 'box', parent_name: 'ROOT' });
+      }
     }
     return;
   }
@@ -2992,7 +3236,7 @@ function AdminPanel({
                         ))}
                       </div>
                       {editorGenType && (() => {
-                        const baseMaxStyle = editorGenType === 'CORPO' ? 10 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 6 : editorGenType === 'MARKETS' ? 5 : 0;
+                        const baseMaxStyle = editorGenType === 'CORPO' ? 10 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 12 : editorGenType === 'MARKETS' ? 5 : 0;
                         const customPoolSize = locations.filter((b: any) => b.classification === editorGenType && !b.parent_id).length;
                         const maxStyle = baseMaxStyle + customPoolSize;
                         if (maxStyle === 0) return null;
@@ -3014,7 +3258,7 @@ function AdminPanel({
                               generateThemedBuildingsForPlot(0, 0, bWidth, bDepth, zoneVal, () => false, () => '', {}, raw, locations, undefined, bHeight, currentStyle);
                               setEditorStyleIndex(editorStyleIndex + 1);
                               setEditorGenParts(raw);
-                          }}>NEXT_STYLE [{currentStyle + 1}/{maxStyle}]</button>
+                          }}>NEXT_STYLE [{currentStyle === 0 ? maxStyle : currentStyle}/{maxStyle}]</button>
                         );
                       })()}
                     </div>
@@ -3432,6 +3676,31 @@ function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation, isOpen
   );
 }
 
+function CursorPivotControls() {
+  const { camera, controls, raycaster, pointer, scene } = useThree();
+
+  useEffect(() => {
+    const handlePointerDown = (e: PointerEvent) => {
+      // Rotate on left or right click
+      if ((e.button === 0 || e.button === 2) && controls && (controls as any).setOrbitPoint) {
+        const x = (e.clientX / window.innerWidth) * 2 - 1;
+        const y = -(e.clientY / window.innerHeight) * 2 + 1;
+        const mouse = new THREE.Vector2(x, y);
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(scene.children, true);
+        if (intersects.length > 0) {
+          const point = intersects[0].point;
+          (controls as any).setOrbitPoint(point.x, point.y, point.z);
+        }
+      }
+    };
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
+  }, [camera, pointer, raycaster, scene, controls]);
+
+  return null;
+}
+
 function CameraController({ target, onComplete }: { target: { pos: [number, number, number], size: number } | null, onComplete: () => void }) {
   const { camera, controls } = useThree();
   const startTime = useRef<number | null>(null);
@@ -3447,7 +3716,11 @@ function CameraController({ target, onComplete }: { target: { pos: [number, numb
     if (startTime.current === null) {
         startTime.current = state.clock.elapsedTime;
         startPos.current.copy(camera.position);
-        startTarget.current.copy((controls as any).target);
+        if ((controls as any).getTarget) {
+             (controls as any).getTarget(startTarget.current);
+        } else if ((controls as any).target) {
+             startTarget.current.copy((controls as any).target);
+        }
     }
 
     const duration = 2.0; // Slightly longer for more cinematic feel
@@ -3482,8 +3755,14 @@ function CameraController({ target, onComplete }: { target: { pos: [number, numb
     currentPos.add(panAxis.multiplyScalar(panAmount));
 
     // Apply to camera and controls
-    camera.position.copy(currentPos);
-    (controls as any).target.lerpVectors(startTarget.current, destTarget, t);
+    const currentTarget = new THREE.Vector3().lerpVectors(startTarget.current, destTarget, t);
+    if ((controls as any).setLookAt) {
+        (controls as any).setLookAt(currentPos.x, currentPos.y, currentPos.z, currentTarget.x, currentTarget.y, currentTarget.z, false);
+    } else {
+        camera.position.copy(currentPos);
+        (controls as any).target.lerpVectors(startTarget.current, destTarget, t);
+    }
+    
     (controls as any).update();
 
     if (progress >= 1) {
@@ -3761,7 +4040,7 @@ function App() {
                 else if (editorGenType === 'LANDMARK') zoneVal = 1.5;
                 else if (editorGenType === 'MARKETS') zoneVal = 2.0;
                 else if (editorGenType === 'CUSTOM') zoneVal = 3.0;
-                const baseMaxStyle = editorGenType === 'CORPO' ? 10 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 6 : editorGenType === 'MARKETS' ? 5 : 0;
+                const baseMaxStyle = editorGenType === 'CORPO' ? 10 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 12 : editorGenType === 'MARKETS' ? 5 : 0;
                 const customPoolSize = locations.filter((b: any) => b.classification === editorGenType && !b.parent_id).length;
                 const maxStyle = baseMaxStyle + customPoolSize;
                 if (maxStyle === 0) return;
@@ -4176,10 +4455,34 @@ function App() {
           </div>
           <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
             <PerspectiveCamera makeDefault position={[80, 80, 80]} />
-            <OrbitControls makeDefault enabled={!isDragging} zoomToCursor dampingFactor={0.1} enableDamping />
+            <CameraControls makeDefault enabled={!isDragging} dollyToCursor={true} />
+            <CursorPivotControls />
             <color attach="background" args={['#000000']} />
             {/* @ts-ignore */}
             <Grid raycast={() => null} infiniteGrid fadeDistance={750} fadeStrength={1.5} cellSize={1} cellThickness={0.7} sectionSize={10} sectionThickness={1.2} sectionColor="#006600" cellColor="#003300" />
+            {token !== '' && (
+              <group position={[0, 0.01, 0]}>
+                {/* Center Lines (Blue) */}
+                <mesh position={[0, 0, 0]} raycast={() => null}>
+                  <boxGeometry args={[0.2, 0.01, 2000]} />
+                  <meshBasicMaterial color="#0044ff" transparent opacity={0.6} />
+                </mesh>
+                <mesh position={[0, 0, 0]} raycast={() => null}>
+                  <boxGeometry args={[2000, 0.01, 0.2]} />
+                  <meshBasicMaterial color="#0044ff" transparent opacity={0.6} />
+                </mesh>
+
+                {/* Bifurcating Lines (White) */}
+                <mesh position={[0, 0, 0]} rotation={[0, Math.PI / 4, 0]} raycast={() => null}>
+                  <boxGeometry args={[0.1, 0.01, 2000]} />
+                  <meshBasicMaterial color="#ffffff" transparent opacity={0.4} />
+                </mesh>
+                <mesh position={[0, 0, 0]} rotation={[0, -Math.PI / 4, 0]} raycast={() => null}>
+                  <boxGeometry args={[0.1, 0.01, 2000]} />
+                  <meshBasicMaterial color="#ffffff" transparent opacity={0.4} />
+                </mesh>
+              </group>
+            )}
             <CameraController target={cameraTarget} onComplete={() => { setCameraTarget(null); setShowZoomComplete(true); setTimeout(() => setShowZoomComplete(false), 3000); }} />
             <Roads roads={roads} />
             <GhostTraffic roads={roads} />
