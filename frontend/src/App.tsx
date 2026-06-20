@@ -1079,12 +1079,11 @@ const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect, isDra
                             (parentLoc.description && parentLoc.description.trim() !== "") || 
                             (parentLoc.npcs && parentLoc.npcs.trim() !== "");
             
-            let color = el.district_color || el.color || "#00aa33";
-            if (hasData) {
-              color = "#8800ff";
-            } else {
-              color = "#00ff00"; // Neon green if it has no name, description, and residence
-            }
+            let baseColor = hasData ? "#8800ff" : "#00ff00";
+            
+            let color = baseColor;
+            if (el.district_color) color = el.district_color;
+            if (el.color && el.color !== "#00ff00") color = el.color;
             if (el.isFavorite) color = "#ff7b00";
             if (el.isDanger) color = "#ff0000";
             
