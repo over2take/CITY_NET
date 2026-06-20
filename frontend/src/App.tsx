@@ -1248,8 +1248,10 @@ const generateThemedBuildingsForPlot = (
           shape: p.shape,
           rotation: p.rotation,
           polyCount: p.polyCount || 5,
-          parent_name: 'ROOT'
         };
+        if (p.id !== customRoot.id) {
+          part.parent_name = 'ROOT';
+        }
         rawBuildings.push(part);
         
         if (p.id === customRoot.id) {
@@ -3382,9 +3384,9 @@ function AdminPanel({
                         )}
                     </div>
 
-                    {/* NEW PROCEDURAL GEN SECTION */}
+                    {/* NEW PREMADE STRUCTURES SECTION */}
                     <div style={{marginTop: '10px', padding: '10px', border: '1px solid #333', background: 'rgba(0,0,0,0.5)'}}>
-                      <label style={{fontSize: '0.7rem'}}>PROCEDURAL GENERATION</label>
+                      <label style={{fontSize: '0.7rem'}}>PREMADE STRUCTURES</label>
                       <div className="button-group" style={{marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
                         {['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'LANDMARK', 'MARKETS', 'CUSTOM'].map(t => (
                           <button key={t} type="button" className={editorGenType === t ? 'active' : ''} onClick={() => {
