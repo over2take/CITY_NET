@@ -680,6 +680,23 @@ io.on('connection', (socket) => {
     }, 3000); // 3 second animation window
   });
 
+  socket.on('moveRhombus', (data) => {
+    // data: { id, x, z }
+    const info = userSockets.get(socket.id);
+    if (!info) return;
+
+    db.get('SELECT owner FROM locations WHERE id = ?', [data.id], (err, row) => {
+      if (err || !row) return;
+      if (info.isAdmin || info.userName === row.owner) {
+        db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [data.x, data.z, data.id], function(updateErr) {
+          if (!updateErr) {
+            emitUpdate();
+          }
+        });
+      }
+    });
+  });
+
   socket.on('disconnect', () => {
     const info = userSockets.get(socket.id);
     if (info) {

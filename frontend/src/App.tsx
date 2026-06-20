@@ -650,8 +650,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
         onClick(); // Stationary click -> open info window
     } else if (isAdmin) {
         // Only admins can actually SAVE the new position after a drag
-        await fetch(`/api/locations/${location.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...location, x: localPos.current.x, z: localPos.current.z }) });
-        refreshLocations();
+        socket.emit('moveRhombus', { id: location.id, x: localPos.current.x, z: localPos.current.z });
     }
   };
 
@@ -881,8 +880,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
         onClick(); // Stationary click -> open info window
     } else if (canManage) {
         // Only owners/admins can actually SAVE the new position after a drag
-        await fetch(`/api/locations/${location.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...location, x: localPos.current.x, z: localPos.current.z }) });
-        refreshLocations();
+        socket.emit('moveRhombus', { id: location.id, x: localPos.current.x, z: localPos.current.z });
     }
   };
 
@@ -1112,13 +1110,13 @@ const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect, isDra
     return (
         <group>
             {/* Visual Wireframe - No raycasting */}
-            <instancedMesh ref={wireframeMeshRef} args={[null as any, null as any, elements.length]} raycast={() => null}>
+            <instancedMesh ref={wireframeMeshRef} frustumCulled={false} args={[null as any, null as any, elements.length]} raycast={() => null}>
                 {renderBaseGeometry(shape, polyCount)}
                 <meshBasicMaterial wireframe={true} />
             </instancedMesh>
             
             {/* Holographic Face Fill - No raycasting */}
-            <instancedMesh ref={fillMeshRef} args={[null as any, null as any, elements.length]} raycast={() => null}>
+            <instancedMesh ref={fillMeshRef} frustumCulled={false} args={[null as any, null as any, elements.length]} raycast={() => null}>
                 {renderBaseGeometry(shape, polyCount)}
                 <meshBasicMaterial color="#020202" />
             </instancedMesh>
@@ -1127,6 +1125,7 @@ const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect, isDra
             <Bvh firstHitOnly>
               <instancedMesh 
                   ref={hitMeshRef} 
+                  frustumCulled={false}
                   raycast={isDragging ? () => null : undefined}
                   args={[null as any, null as any, elements.length]}
                   onPointerDown={() => { dragDist.current = 0; }}
