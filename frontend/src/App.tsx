@@ -2412,7 +2412,7 @@ function AdminPanel({
         tx = t.x; tz = t.z;
     }
     setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
-    setEditData({ name: '', description: '', npcs: '', x: 0, y: 0, z: 0, width: 8, height: 16, depth: 8, baseWidth: 8, baseHeight: 16, baseDepth: 8, shape: 'box', color: '#00ff00', isFavorite: false, isDanger: false, owner: '', polyCount: 5 });
+    setEditData({ name: '', description: '', npcs: '', x: tx, y: 0, z: tz, width: 8, height: 16, depth: 8, baseWidth: 8, baseHeight: 16, baseDepth: 8, shape: 'box', color: '#00ff00', isFavorite: false, isDanger: false, owner: '', polyCount: 5 });
     setView('editor');
   };
 
@@ -2426,7 +2426,7 @@ function AdminPanel({
     }
     setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
     setEditData({ 
-        name: '', description: '', npcs: '', x: 0, y: 0, z: 0, 
+        name: '', description: '', npcs: '', x: tx, y: 0, z: tz, 
         width: 1.875, height: 1.875, depth: 1.875, 
         baseWidth: 1.875, baseHeight: 1.875, baseDepth: 1.875,
         shape: 'enemy_rhombus', color: '#ff0000', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5
@@ -5004,7 +5004,15 @@ function App() {
             {/* @ts-ignore */}
             {token && (view === 'editor' || view === 'generator') && targetObject && <TransformControls object={targetObject} mode={view === 'generator' ? 'translate' : transformMode} translationSnap={snapToGrid ? 1 : null} onDraggingChanged={(e: any) => setIsDragging(e.value)} />}
             {token && view === 'generator' && (
-              <group ref={(group) => { genGroupRef.current = group; setTargetObject(group); }}>
+              <group ref={(group) => { 
+                  if (group) {
+                      if (targetObject && !targetObject.isObject3D) {
+                          group.position.copy(targetObject.position);
+                      }
+                      genGroupRef.current = group; 
+                      if (targetObject !== group) setTargetObject(group); 
+                  }
+              }}>
                   {blockBuildings.length > 0 ? (
                     blockBuildings.map((b, i) => {
                       const renderGenGeometry = () => { switch (b.shape) { case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 5]} />; case 'sphere': return <sphereGeometry args={[0.5, 6, 6]} />; default: return <boxGeometry args={[1, 1, 1]} />; } };
