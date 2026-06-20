@@ -1082,10 +1082,10 @@ const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect, isDra
             let baseColor = hasData ? "#8800ff" : "#00ff00";
             
             let color = baseColor;
-            if (el.district_color) color = el.district_color;
+            if (parentLoc.district_color) color = parentLoc.district_color;
             if (el.color && el.color !== "#00ff00") color = el.color;
-            if (el.isFavorite) color = "#ff7b00";
-            if (el.isDanger) color = "#ff0000";
+            if (parentLoc.isFavorite) color = "#ff7b00";
+            if (parentLoc.isDanger) color = "#ff0000";
             
             const threeColor = new THREE.Color(color);
             wireframeMeshRef.current!.setColorAt(i, threeColor);
