@@ -1208,7 +1208,7 @@ const generateThemedBuildingsForPlot = (
   else if (zoneTypeVal === 3.0) targetGenType = 'CUSTOM';
 
   const customPool = sourceLocations.filter(b => b.classification === targetGenType && !b.parent_id);
-  const baseMaxStyle = (targetGenType === 'CORPO' ? 10 : targetGenType === 'URBAN' ? 10 : targetGenType === 'INDUSTRIAL' ? 10 : targetGenType === 'SLUMS' ? 1 : targetGenType === 'LANDMARK' ? 12 : targetGenType === 'MARKETS' ? 5 : 0);
+  const baseMaxStyle = (targetGenType === 'CORPO' ? 10 : targetGenType === 'URBAN' ? 10 : targetGenType === 'INDUSTRIAL' ? 10 : targetGenType === 'SLUMS' ? 1 : targetGenType === 'LANDMARK' ? 13 : targetGenType === 'MARKETS' ? 5 : 0);
 
   if (styleOverride !== undefined && styleOverride >= baseMaxStyle && customPool.length > 0) {
     const customIndex = styleOverride - baseMaxStyle;
@@ -1473,7 +1473,7 @@ const generateThemedBuildingsForPlot = (
     const h = overrideH !== undefined ? overrideH : (20 + Math.random() * 60);
     const baseW = bw * 0.9;
     const baseD = bd * 0.9;
-    const landmarkStyle = styleOverride !== undefined ? styleOverride % 12 : Math.floor(Math.random() * 12);
+    const landmarkStyle = styleOverride !== undefined ? styleOverride % 13 : Math.floor(Math.random() * 13);
 
     if (landmarkStyle === 0) {
       // Style 1: Grand Obelisk
@@ -3426,7 +3426,7 @@ function AdminPanel({
                         ))}
                       </div>
                       {editorGenType && (() => {
-                        const baseMaxStyle = editorGenType === 'CORPO' ? 10 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 12 : editorGenType === 'MARKETS' ? 5 : 0;
+                        const baseMaxStyle = editorGenType === 'CORPO' ? 10 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 13 : editorGenType === 'MARKETS' ? 5 : 0;
                         const customPoolSize = locations.filter((b: any) => b.classification === editorGenType && !b.parent_id).length;
                         const maxStyle = baseMaxStyle + customPoolSize;
                         if (maxStyle === 0) return null;
@@ -4502,7 +4502,7 @@ function App() {
                 else if (editorGenType === 'LANDMARK') zoneVal = 1.5;
                 else if (editorGenType === 'MARKETS') zoneVal = 2.0;
                 else if (editorGenType === 'CUSTOM') zoneVal = 3.0;
-                const baseMaxStyle = editorGenType === 'CORPO' ? 10 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 12 : editorGenType === 'MARKETS' ? 5 : 0;
+                const baseMaxStyle = editorGenType === 'CORPO' ? 10 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 13 : editorGenType === 'MARKETS' ? 5 : 0;
                 const customPoolSize = locations.filter((b: any) => b.classification === editorGenType && !b.parent_id).length;
                 const maxStyle = baseMaxStyle + customPoolSize;
                 if (maxStyle === 0) return;
