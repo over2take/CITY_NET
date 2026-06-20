@@ -947,7 +947,7 @@ const OverlapChecker = React.memo(({ locations, setOverlapIds }: any) => {
     return null;
 });
 
-const Building = React.memo(({ location, children, onClick, isSelected, isBatchSelected, isOverlapped, setTargetObject, editMeshRef, token, userName, refreshLocations, setIsDragging, socket, activeUsers }: any) => {
+const Building = React.memo(({ location, children, onClick, isSelected, isBatchSelected, isOverlapped, setTargetObject, editMeshRef, token, userName, refreshLocations, setIsDragging, isDragging, socket, activeUsers }: any) => {
   const meshRef = useRef<THREE.Mesh>(null);
   
   const parts = [location, ...(children || [])];
@@ -993,6 +993,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
               <mesh 
                   ref={isRoot ? meshRef as any : null}
                   userData={{ id: p.id }}
+                  raycast={isDragging ? () => null : undefined}
                   onPointerDown={() => { dragDist.current = 0; }}
                   onPointerMove={(e) => { dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY); }}
                   onPointerUp={(e) => {
@@ -1033,7 +1034,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
   );
 });
 
-const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect }: { shape: string, polyCount: number, elements: any[], onSelect: (rootLoc: any) => void }) => {
+const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect, isDragging }: { shape: string, polyCount: number, elements: any[], onSelect: (rootLoc: any) => void, isDragging?: boolean }) => {
     const wireframeMeshRef = useRef<THREE.InstancedMesh>(null);
     const fillMeshRef = useRef<THREE.InstancedMesh>(null);
     const hitMeshRef = useRef<THREE.InstancedMesh>(null);
@@ -1100,6 +1101,7 @@ const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect }: { s
             <Bvh firstHitOnly>
               <instancedMesh 
                   ref={hitMeshRef} 
+                  raycast={isDragging ? () => null : undefined}
                   args={[null as any, null as any, elements.length]}
                   onPointerDown={() => { dragDist.current = 0; }}
                   onPointerMove={(e) => { dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY); }}
@@ -1120,7 +1122,7 @@ const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect }: { s
     );
 });
 
-const InstancedBuildings = React.memo(({ buildings, onSelect }: { buildings: any[], onSelect: (loc: any) => void }) => {
+const InstancedBuildings = React.memo(({ buildings, onSelect, isDragging }: { buildings: any[], onSelect: (loc: any) => void, isDragging?: boolean }) => {
     const groups = useMemo(() => {
         const result: { [key: string]: any[] } = {};
         buildings.forEach(el => {
@@ -1145,6 +1147,7 @@ const InstancedBuildings = React.memo(({ buildings, onSelect }: { buildings: any
                         polyCount={parseInt(pcStr)}
                         elements={items} 
                         onSelect={onSelect} 
+                        isDragging={isDragging}
                     />
                 );
             })}
@@ -4637,9 +4640,9 @@ function App() {
                 <meshBasicMaterial color="#00ff66" wireframe transparent opacity={0.3} />
               </mesh>
             )}
-<InstancedBuildings buildings={renderLists.simple} onSelect={handleBuildingClick} />
+<InstancedBuildings buildings={renderLists.simple} onSelect={handleBuildingClick} isDragging={isDragging} />
             {renderLists.interactive.map(({ loc, children, isSelected, isBatchSelected, isOverlapped }: any) => (
-              <Building key={loc.id} location={loc} children={children} onClick={() => handleBuildingClick(loc)} isSelected={isSelected} isBatchSelected={isBatchSelected} isOverlapped={isOverlapped} setTargetObject={setTargetObject} editMeshRef={editMeshRef} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} />
+              <Building key={loc.id} location={loc} children={children} onClick={() => handleBuildingClick(loc)} isSelected={isSelected} isBatchSelected={isBatchSelected} isOverlapped={isOverlapped} setTargetObject={setTargetObject} editMeshRef={editMeshRef} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} isDragging={isDragging} socket={socket} activeUsers={activeUsers} />
             ))}
             {/* Dedicated Player Rhombus Rendering */}
             {locations.filter(l => l.shape === 'rhombus').map(loc => (
