@@ -31,7 +31,20 @@ db.serialize(() => {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
     password TEXT
-  )`);
+  )`, () => {
+    // Seed default admin if empty
+    db.get('SELECT COUNT(*) as count FROM admin', (err, row) => {
+      if (row && row.count === 0) {
+        const bcrypt = require('bcrypt');
+        bcrypt.hash('cyberpunk_password', 10, (err, hash) => {
+          if (!err) {
+            db.run('INSERT INTO admin (username, password) VALUES (?, ?)', ['admin', hash]);
+            console.log('[SYSTEM] Default admin user created.');
+          }
+        });
+      }
+    });
+  });
 
   db.run(`CREATE TABLE IF NOT EXISTS roads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
