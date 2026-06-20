@@ -4366,14 +4366,14 @@ function App() {
     newSocket.on('accessGranted', (data: any) => {
         if (data.targetUser === userName) {
             setToken(data.token);
-            alert("SYSTEM: You have been granted temporary elevated access.");
+            setNotification("TEMPORARY_ADMIN_ACCESS_GRANTED");
         }
     });
 
     newSocket.on('accessRevoked', (data: any) => {
         if (data.targetUser === userName) {
             setToken('');
-            alert("SYSTEM: Your temporary elevated access has been revoked.");
+            setNotification("TEMPORARY_ADMIN_ACCESS_REVOKED");
         }
     });
 
