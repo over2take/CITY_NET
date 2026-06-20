@@ -23,14 +23,18 @@ if exist ngrok.yml (
 set CF_CMD=cloudflared
 if exist cloudflared.exe set CF_CMD=.\cloudflared.exe
 
-if exist cloudflared_token.txt (
-    set /p CF_TOKEN=<cloudflared_token.txt
-    echo [SYSTEM] STARTING CLOUDFLARE (PERSISTENT TUNNEL)...
-    start "CITY_NET_CLOUDFLARE" cmd /k "%CF_CMD% tunnel run %CF_TOKEN%"
-) else (
-    echo [SYSTEM] STARTING CLOUDFLARE (RANDOM QUICK TUNNEL)...
-    start "CITY_NET_CLOUDFLARE" cmd /k "%CF_CMD% tunnel --url http://localhost:5000"
-)
+if not exist cloudflared_token.txt goto quick_tunnel
+
+set /p CF_TOKEN=<cloudflared_token.txt
+echo [SYSTEM] STARTING CLOUDFLARE (PERSISTENT TUNNEL)...
+start "CITY_NET_CLOUDFLARE" cmd /k "%CF_CMD% tunnel run %CF_TOKEN%"
+goto end_tunnel
+
+:quick_tunnel
+echo [SYSTEM] STARTING CLOUDFLARE (RANDOM QUICK TUNNEL)...
+start "CITY_NET_CLOUDFLARE" cmd /k "%CF_CMD% tunnel --url http://localhost:5000"
+
+:end_tunnel
 
 echo.
 echo [SUCCESS] PRODUCTION SYSTEMS NOMINAL.
