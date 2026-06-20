@@ -2641,9 +2641,11 @@ function AdminPanel({
 
   const handlePaste = async () => {
     if (!copyBuffer) return;
-    // Offset slightly so it's not exactly on top
-    const offsetX = 5;
-    const offsetZ = 5;
+    
+    // Spawn at the center of the user's view
+    const target = getCenterGroundTarget();
+    const offsetX = target.tx - copyBuffer.root.x;
+    const offsetZ = target.tz - copyBuffer.root.z;
     
     const newRoot = { ...copyBuffer.root, x: copyBuffer.root.x + offsetX, z: copyBuffer.root.z + offsetZ };
     delete newRoot.id; // explicitly remove id to avoid serialization anomalies
