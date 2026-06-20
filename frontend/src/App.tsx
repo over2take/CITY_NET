@@ -3475,7 +3475,7 @@ function DraggableWindow({ title, children, pos, setPos, onClose, windowStyle = 
   );
 }
 
-function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isAdmin, onGrantAccess, onRevokeAccess }: any) {
+function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isPrimaryAdmin, onGrantAccess, onRevokeAccess }: any) {
   const [inputText, setInputText] = useState('');
   const [accessTarget, setAccessTarget] = useState<{ userName: string, action: 'GRANT' | 'REVOKE' } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -3493,7 +3493,7 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
   };
 
   const handleUserClick = (user: any) => {
-    if (!isAdmin || user.userName === userName || user.isAdmin) return; // Cannot grant to self or real admins
+    if (!isPrimaryAdmin || user.userName === userName || user.isAdmin) return; // Cannot grant to self or real admins
     
     if (user.isTemporaryAdmin) {
         setAccessTarget({ userName: user.userName, action: 'REVOKE' });
@@ -3583,11 +3583,11 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
                     marginBottom: '10px', 
                     padding: '5px', 
                     background: user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent',
-                    cursor: (isAdmin && user.userName !== userName && !user.isAdmin) ? 'pointer' : 'default',
+                    cursor: (isPrimaryAdmin && user.userName !== userName && !user.isAdmin) ? 'pointer' : 'default',
                     borderRadius: '4px'
                 }}
                 onMouseOver={(e) => {
-                    if (isAdmin && user.userName !== userName && !user.isAdmin) {
+                    if (isPrimaryAdmin && user.userName !== userName && !user.isAdmin) {
                         e.currentTarget.style.background = 'rgba(0,255,255,0.1)';
                     }
                 }}
@@ -3983,6 +3983,15 @@ function App() {
   const [showZoomComplete, setShowZoomComplete] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [token, setToken] = useState('');
+  
+  let isPrimaryAdmin = false;
+  if (token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      isPrimaryAdmin = !payload.isTemporary;
+    } catch (e) { }
+  }
+
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [view, setView] = useState<'list' | 'editor' | 'generator' | 'district' | 'join' | 'draw_roads' | 'city_gen'>('list');
   const [editId, setEditId] = useState<number | null>(null);
@@ -4639,7 +4648,7 @@ function App() {
                   onSendMessage={handleSendMessage}
                   notificationsEnabled={notificationsEnabled}
                   onToggleNotifications={toggleNotifications}
-                  isAdmin={!!token}
+                  isPrimaryAdmin={isPrimaryAdmin}
                   onGrantAccess={handleGrantAccess}
                   onRevokeAccess={handleRevokeAccess}
               />
