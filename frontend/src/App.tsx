@@ -56,6 +56,7 @@ const getStructLabel = (loc: any) => {
 
 const renderBaseGeometry = (shape: string, polyCount: number = 5) => {
   switch (shape) {
+    case 'none': return null;
     case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, Math.max(3, polyCount)]} />;
     case 'sphere': return <sphereGeometry args={[0.5, Math.max(3, polyCount), Math.max(3, polyCount)]} />;
     case 'rhombus': return <octahedronGeometry args={[0.5]} />;
@@ -4638,7 +4639,7 @@ function App() {
           description: 'Holographic Forest Cluster',
           x: cx, y: 0, z: cz,
           width: 1.0, depth: 1.0, height: 0.1,
-          color: '#1a5925', shape: 'box', polyCount: 5
+          color: '#1a5925', shape: 'none', polyCount: 5
       };
       
       const res = await fetch('/api/locations', { 
@@ -5134,7 +5135,7 @@ function App() {
                       </mesh>
                     )}
                     {editorGenParts.map((b, i) => {
-                      const renderGenGeometry = () => { switch (b.shape) { case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 5]} />; case 'sphere': return <sphereGeometry args={[0.5, 6, 6]} />; case 'pyramid': return <cylinderGeometry args={[0, 0.5, 1, 4]} />; default: return <boxGeometry args={[1, 1, 1]} />; } };
+                      const renderGenGeometry = () => { switch (b.shape) { case 'none': return null; case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 5]} />; case 'sphere': return <sphereGeometry args={[0.5, 6, 6]} />; case 'pyramid': return <cylinderGeometry args={[0, 0.5, 1, 4]} />; default: return <boxGeometry args={[1, 1, 1]} />; } };
                       return (
                         <mesh key={i} userData={{ id: b.id }} position={[b.x, b.y + (b.height / 2), b.z]} scale={[b.width, b.height, b.depth]} rotation={[0, b.rotation || 0, 0]}>
                           {renderGenGeometry()}
@@ -5165,7 +5166,7 @@ function App() {
               }}>
                   {blockBuildings.length > 0 ? (
                     blockBuildings.map((b, i) => {
-                      const renderGenGeometry = () => { switch (b.shape) { case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 5]} />; case 'sphere': return <sphereGeometry args={[0.5, 6, 6]} />; default: return <boxGeometry args={[1, 1, 1]} />; } };
+                      const renderGenGeometry = () => { switch (b.shape) { case 'none': return null; case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 5]} />; case 'sphere': return <sphereGeometry args={[0.5, 6, 6]} />; default: return <boxGeometry args={[1, 1, 1]} />; } };
                       return ( <mesh key={i} position={[b.x, b.y + (b.height / 2), b.z]} scale={[b.width, b.height, b.depth]}>{renderGenGeometry()}<meshBasicMaterial color="#ff00ff" wireframe /></mesh> );
                     })
                   ) : ( <mesh position={[0, 0, 0]}><boxGeometry args={[2, 4, 2]} /><meshBasicMaterial color="#ffff00" wireframe /></mesh> )}
