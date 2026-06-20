@@ -24,6 +24,8 @@ app.use(express.json({ limit: '2mb' }));
 // Emit helper
 const emitUpdate = () => io.emit('dataUpdated');
 
+const elevatedUsers = new Set();
+
 const recordAction = (type, payload) => {
   db.run('INSERT INTO action_history (type, payload) VALUES (?, ?)', [type, JSON.stringify(payload)], (err) => {
     if (err) console.error('Failed to record action:', err.message);
@@ -37,6 +39,9 @@ const authenticate = (req, res, next) => {
   if (!token) return res.status(401).json({ error: 'Access denied' });
   try {
     const verified = jwt.verify(token.split(' ')[1], SECRET);
+    if (verified.isTemporary && !elevatedUsers.has(verified.username)) {
+      return res.status(401).json({ error: 'Temporary access revoked' });
+    }
     req.user = verified;
     next();
   } catch (err) {
@@ -52,7 +57,11 @@ const optionalAuthenticate = (req, res, next) => {
   }
   try {
     const verified = jwt.verify(token.split(' ')[1], SECRET);
-    req.user = verified;
+    if (verified.isTemporary && !elevatedUsers.has(verified.username)) {
+      req.user = null; // Treat as unauthenticated if temporary access is revoked
+    } else {
+      req.user = verified;
+    }
   } catch (err) {
     req.user = null; // Proceed as unauthenticated if token is invalid, or you could return error here. We'll proceed as unauth.
   }
@@ -400,7 +409,9 @@ const broadcastActiveUsers = () => {
   // Map to unique users by name, preserving admin status
   const userMap = new Map();
   userSockets.forEach((info) => {
-    userMap.set(info.userName, info);
+    // Add isTemporaryAdmin flag
+    const displayInfo = { ...info, isTemporaryAdmin: elevatedUsers.has(info.userName) };
+    userMap.set(info.userName, displayInfo);
   });
   const activeUsers = Array.from(userMap.values());
   io.emit('activeUsersUpdated', activeUsers);
@@ -415,8 +426,12 @@ io.on('connection', (socket) => {
     // SECURITY FIX: Verify JWT if client claims to be admin
     if (info.isAdmin && info.token) {
         try {
-            jwt.verify(info.token, SECRET);
-            // Token is valid, keep isAdmin = true
+            const verified = jwt.verify(info.token, SECRET);
+            // Token is valid, keep isAdmin = true. Don't mark as temp if it's the real admin.
+            if (verified.isTemporary) {
+                info.isAdmin = false;
+                // If they are a temporary admin, broadcastActiveUsers will add the isTemporaryAdmin flag.
+            }
         } catch (err) {
             console.warn(`User ${info.userName} claimed admin but provided invalid token.`);
             info.isAdmin = false;
@@ -462,6 +477,38 @@ io.on('connection', (socket) => {
         });
       }
     });
+  });
+
+  socket.on('grantElevatedAccess', (data) => {
+    // data: { adminToken, targetUser }
+    try {
+      const verified = jwt.verify(data.adminToken, SECRET);
+      if (verified && !verified.isTemporary) {
+        // Only true admins can grant access
+        elevatedUsers.add(data.targetUser);
+        const tempToken = jwt.sign({ username: data.targetUser, isTemporary: true }, SECRET, { expiresIn: '12h' });
+        console.log(`Admin ${verified.username} granted temporary access to ${data.targetUser}`);
+        io.emit('accessGranted', { targetUser: data.targetUser, token: tempToken });
+        broadcastActiveUsers();
+      }
+    } catch (err) {
+      console.warn('Unauthorized attempt to grant access:', err.message);
+    }
+  });
+
+  socket.on('revokeElevatedAccess', (data) => {
+    // data: { adminToken, targetUser }
+    try {
+      const verified = jwt.verify(data.adminToken, SECRET);
+      if (verified && !verified.isTemporary) {
+        elevatedUsers.delete(data.targetUser);
+        console.log(`Admin ${verified.username} revoked temporary access from ${data.targetUser}`);
+        io.emit('accessRevoked', { targetUser: data.targetUser });
+        broadcastActiveUsers();
+      }
+    } catch (err) {
+      console.warn('Unauthorized attempt to revoke access:', err.message);
+    }
   });
 
   socket.on('updateNotifications', (data) => {

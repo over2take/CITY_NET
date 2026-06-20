@@ -3475,7 +3475,7 @@ function DraggableWindow({ title, children, pos, setPos, onClose, windowStyle = 
   );
 }
 
-function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications }: any) {
+function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isAdmin, onGrantAccess, onRevokeAccess }: any) {
   const [inputText, setInputText] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -3488,6 +3488,20 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
     if (inputText.trim()) {
       onSendMessage(inputText);
       setInputText('');
+    }
+  };
+
+  const handleUserClick = (user: any) => {
+    if (!isAdmin || user.userName === userName || user.isAdmin) return; // Cannot grant to self or real admins
+    
+    if (user.isTemporaryAdmin) {
+        if (window.confirm(`Revoke elevated access from ${user.userName}?`)) {
+            onRevokeAccess(user.userName);
+        }
+    } else {
+        if (window.confirm(`Grant elevated access to ${user.userName}?`)) {
+            onGrantAccess(user.userName);
+        }
     }
   };
 
@@ -3535,10 +3549,33 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
           <div style={{ padding: '12px', fontSize: '0.75rem', fontWeight: 'bold', borderBottom: '2px solid var(--dark-green)', color: 'var(--green)', textShadow: 'var(--glow)' }}>OPERATORS_ONLINE</div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
             {activeUsers.map((user: any) => (
-              <div key={user.userName} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', padding: '5px', background: user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent' }}>
-                <div style={{ width: '6px', height: '6px', background: user.isAdmin ? '#ff0000' : 'var(--green)', borderRadius: '50%', boxShadow: user.isAdmin ? '0 0 5px #ff0000' : '0 0 5px var(--green)' }}></div>
-                <span style={{ color: user.userName === userName ? 'var(--cyan)' : '#888', fontSize: '0.7rem' }}>
-                    {user.userName}{user.isAdmin ? ' - Admin' : ''}
+              <div 
+                key={user.userName} 
+                onClick={() => handleUserClick(user)}
+                style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    marginBottom: '10px', 
+                    padding: '5px', 
+                    background: user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent',
+                    cursor: (isAdmin && user.userName !== userName && !user.isAdmin) ? 'pointer' : 'default',
+                    borderRadius: '4px'
+                }}
+                onMouseOver={(e) => {
+                    if (isAdmin && user.userName !== userName && !user.isAdmin) {
+                        e.currentTarget.style.background = 'rgba(0,255,255,0.1)';
+                    }
+                }}
+                onMouseOut={(e) => {
+                    e.currentTarget.style.background = user.userName === userName ? 'rgba(0,255,255,0.05)' : 'transparent';
+                }}
+              >
+                <div style={{ width: '6px', height: '6px', background: user.isAdmin ? '#ff0000' : (user.isTemporaryAdmin ? '#ffaa00' : 'var(--green)'), borderRadius: '50%', boxShadow: user.isAdmin ? '0 0 5px #ff0000' : (user.isTemporaryAdmin ? '0 0 5px #ffaa00' : '0 0 5px var(--green)') }}></div>
+                <span style={{ color: user.userName === userName ? 'var(--cyan)' : '#888', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    {user.userName}
+                    {user.isAdmin && <span title="Primary Admin">⭐</span>}
+                    {user.isTemporaryAdmin && <span title="Temporary Admin">🌟</span>}
                 </span>
               </div>
             ))}
@@ -4326,6 +4363,20 @@ function App() {
         }
     });
 
+    newSocket.on('accessGranted', (data: any) => {
+        if (data.targetUser === userName) {
+            setToken(data.token);
+            alert("SYSTEM: You have been granted temporary elevated access.");
+        }
+    });
+
+    newSocket.on('accessRevoked', (data: any) => {
+        if (data.targetUser === userName) {
+            setToken('');
+            alert("SYSTEM: Your temporary elevated access has been revoked.");
+        }
+    });
+
     newSocket.on('connect', () => {
       console.log("Socket connected, identifying as:", userName);
       newSocket.emit('identify', { userName, isAdmin: !!token, token });
@@ -4367,6 +4418,18 @@ function App() {
   const handleSendMessage = (text: string) => {
     if (socketRef.current) {
         socketRef.current.emit('sendMessage', { sender: userName, text });
+    }
+  };
+
+  const handleGrantAccess = (targetUser: string) => {
+    if (socketRef.current && token) {
+      socketRef.current.emit('grantElevatedAccess', { adminToken: token, targetUser });
+    }
+  };
+
+  const handleRevokeAccess = (targetUser: string) => {
+    if (socketRef.current && token) {
+      socketRef.current.emit('revokeElevatedAccess', { adminToken: token, targetUser });
     }
   };
 
@@ -4552,6 +4615,9 @@ function App() {
                   onSendMessage={handleSendMessage}
                   notificationsEnabled={notificationsEnabled}
                   onToggleNotifications={toggleNotifications}
+                  isAdmin={!!token}
+                  onGrantAccess={handleGrantAccess}
+                  onRevokeAccess={handleRevokeAccess}
               />
             )}
             {(() => {
