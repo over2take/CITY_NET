@@ -4782,7 +4782,7 @@ function App() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    fetchLocations(); fetchRoads();
+    fetchLocations(); fetchRoads(); fetchDistricts();
     const newSocket = io();
     socketRef.current = newSocket;
     setSocket(newSocket);
