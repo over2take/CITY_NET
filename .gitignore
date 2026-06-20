@@ -28,3 +28,4 @@ ngrok.yml
 cert.pem
 cloudflared/
 cloudflared_token.txt
+cloudflared.exe

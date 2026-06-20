@@ -49,6 +49,13 @@ Write-Host "       TUNNEL CONFIGURATION (OPTIONAL)    " -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host "Leave blank and press Enter to skip." -ForegroundColor Gray
 
+# Download Cloudflared automatically if it's missing
+if (!(Test-Path "cloudflared.exe") -and !(Get-Command "cloudflared" -ErrorAction SilentlyContinue)) {
+    Write-Host "`n[SYSTEM] cloudflared not found. Downloading the latest version..." -ForegroundColor Yellow
+    Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "cloudflared.exe"
+    Write-Host "[SUCCESS] cloudflared downloaded!" -ForegroundColor Green
+}
+
 # 3. Configure Ngrok
 $ngrokToken = Read-Host "Enter your Ngrok Auth Token"
 if ($ngrokToken) {
