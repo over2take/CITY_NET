@@ -2345,7 +2345,8 @@ function AdminPanel({
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
   genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu,
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
-  isCopyingSize, setIsCopyingSize
+  isCopyingSize, setIsCopyingSize,
+  isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize
 }: any) {
   const [density, setDensity] = useState(8);
   const [allowedShapes, setAllowedShapes] = useState<string[]>(['box', 'cylinder', 'sphere']);
@@ -2729,6 +2730,13 @@ function AdminPanel({
             <button className="utility-btn" onClick={handleUndo} title="UNDO LAST CHANGE" style={{fontSize: '0.65rem', padding: '2px 8px'}}>⟲ UNDO</button>
           </div>
           <button className="upload-btn" onClick={startNew}>+ ADD_NEW_DATA_POINT</button>
+          <button className={`utility-btn ${isPlantingTrees ? 'active' : ''}`} onClick={() => setIsPlantingTrees(!isPlantingTrees)} style={{marginTop: '10px', width: '100%'}}>{isPlantingTrees ? 'PLANTING_TREES: ON' : 'PLANTING_TREES: OFF'}</button>
+          {isPlantingTrees && (
+              <div style={{marginTop: '10px', padding: '10px', border: '1px solid #00ff66', background: 'rgba(0, 255, 102, 0.1)'}}>
+                  <label style={{fontSize: '0.7rem', color: '#00ff66'}}>TREES_PER_CLICK: {treeBatchSize}</label>
+                  <input type="range" min="1" max="20" value={treeBatchSize} onChange={e => setTreeBatchSize(parseInt(e.target.value))} style={{width: '100%'}} />
+              </div>
+          )}
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { 
                 setSelectedLocation(null); 
@@ -4614,7 +4622,83 @@ function App() {
   const [editorGenType, setEditorGenType] = useState<string>('');
   const [editorStyleIndex, setEditorStyleIndex] = useState(0);
   const [isCopyingSize, setIsCopyingSize] = useState(false);
+  const [isPlantingTrees, setIsPlantingTrees] = useState(false);
+  const [treeBatchSize, setTreeBatchSize] = useState(5);
   const [blockBuildings, setBlockBuildings] = useState<any[]>([]);
+
+  const handleTreePlantClick = async (e: any) => {
+      if (!isPlantingTrees || !isAdmin) return;
+      e.stopPropagation();
+      
+      const cx = e.point.x;
+      const cz = e.point.z;
+      
+      const root = {
+          name: 'PARK',
+          description: 'Holographic Forest Cluster',
+          x: cx, y: 0, z: cz,
+          width: 1.0, depth: 1.0, height: 0.1,
+          color: '#1a5925', shape: 'box', polyCount: 5
+      };
+      
+      const res = await fetch('/api/locations', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, 
+          body: JSON.stringify(root) 
+      });
+      
+      if (res.ok) {
+          const result = await res.json();
+          const rootId = result.data[0].id;
+          
+          const trees: any[] = [];
+          const placedPoints: {x: number, z: number}[] = [];
+          const minSpread = 2.5;
+          const maxSpread = Math.max(3, treeBatchSize * 1.5);
+          
+          for (let i = 0; i < treeBatchSize; i++) {
+              let px = cx;
+              let pz = cz;
+              
+              if (treeBatchSize > 1) {
+                  let attempts = 0;
+                  while (attempts < 50) {
+                      const r = Math.sqrt(Math.random()) * maxSpread;
+                      const theta = Math.random() * Math.PI * 2;
+                      px = cx + r * Math.cos(theta);
+                      pz = cz + r * Math.sin(theta);
+                      
+                      const isFarEnough = placedPoints.every(p => Math.sqrt((p.x - px)**2 + (p.z - pz)**2) > minSpread);
+                      if (isFarEnough) break;
+                      attempts++;
+                  }
+              }
+              
+              placedPoints.push({x: px, z: pz});
+              
+              const trunkHFixed = 1.5;
+              const canopyWFixed = 1.2;
+              
+              trees.push({
+                  name: 'HOLOTREE_TRUNK', x: px, y: 0.1, z: pz, 
+                  width: 0.15, depth: 0.15, height: trunkHFixed, 
+                  color: '#00ff66', shape: 'cylinder', parent_id: Number(rootId), polyCount: 5
+              });
+              
+              trees.push({
+                  name: 'HOLOTREE_CANOPY', x: px, y: 0.1 + trunkHFixed, z: pz, 
+                  width: canopyWFixed, depth: canopyWFixed, height: canopyWFixed, 
+                  color: '#00ff66', shape: 'sphere', parent_id: Number(rootId), polyCount: 5
+              });
+          }
+          
+          await fetch('/api/locations', { 
+              method: 'POST', 
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, 
+              body: JSON.stringify(trees) 
+          });
+      }
+  };
   const [targetObject, setTargetObject] = useState<any>(null);
   const genGroupRef = useRef<any>(null);
   const editMeshRef = useRef<any>(null);
@@ -4851,6 +4935,8 @@ function App() {
             {isAdmin && !token && <div className="panel admin-login"><form onSubmit={handleLogin}><input placeholder="USERNAME" onChange={e => setLoginForm({...loginForm, username: e.target.value})} /><input type="password" placeholder="PASSWORD" onChange={e => setLoginForm({...loginForm, password: e.target.value})} /><button type="submit">ACCESS_SYSTEM</button></form></div>}
             {token && showAdminPanel && (
               <AdminPanel
+                isPlantingTrees={isPlantingTrees} setIsPlantingTrees={setIsPlantingTrees}
+                treeBatchSize={treeBatchSize} setTreeBatchSize={setTreeBatchSize}
                 socketRef={socketRef}
                 token={token}
                 controlsRef={controlsRef}
@@ -4985,6 +5071,12 @@ function App() {
             <CursorPivotControls />
             <color attach="background" args={['#000000']} />
             {/* @ts-ignore */}
+            {isPlantingTrees && (
+                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} onPointerDown={handleTreePlantClick}>
+                    <planeGeometry args={[10000, 10000]} />
+                    <meshBasicMaterial visible={false} />
+                </mesh>
+            )}
             <Grid raycast={() => null} infiniteGrid fadeDistance={750} fadeStrength={1.5} cellSize={1} cellThickness={0.7} sectionSize={10} sectionThickness={1.2} sectionColor="#006600" cellColor="#003300" />
             {token !== '' && (
               <group position={[0, 0.01, 0]}>
