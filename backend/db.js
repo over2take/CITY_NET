@@ -34,18 +34,22 @@ db.serialize(() => {
   )`, () => {
     // Seed default admin if empty
     db.get('SELECT COUNT(*) as count FROM admin', (err, row) => {
-      if (row && row.count === 0) {
-        const bcrypt = require('bcrypt');
-        const adminUser = process.env.ADMIN_USER || 'admin';
-        const adminPass = process.env.ADMIN_PASS || 'cyberpunk_password';
-        
-        bcrypt.hash(adminPass, 10, (err, hash) => {
-          if (!err) {
+      const bcrypt = require('bcrypt');
+      const adminUser = process.env.ADMIN_USER || 'admin';
+      const adminPass = process.env.ADMIN_PASS || 'cyberpunk_password';
+      
+      bcrypt.hash(adminPass, 10, (err, hash) => {
+        if (!err) {
+          if (row && row.count === 0) {
             db.run('INSERT INTO admin (username, password) VALUES (?, ?)', [adminUser, hash]);
             console.log(`[SYSTEM] Initial admin user '${adminUser}' created.`);
+          } else {
+            // Update the existing admin user to match .env
+            db.run('UPDATE admin SET username = ?, password = ? WHERE id = (SELECT MIN(id) FROM admin)', [adminUser, hash]);
+            console.log(`[SYSTEM] Admin credentials synchronized with environment.`);
           }
-        });
-      }
+        }
+      });
     });
   });
 
