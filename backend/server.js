@@ -316,6 +316,20 @@ app.post('/api/login', (req, res) => {
   });
 });
 
+app.post('/api/request-silent-token', (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Username required' });
+  elevatedUsers.add(username);
+  const tempToken = jwt.sign({ username, isTemporary: true }, SECRET, { expiresIn: '5m' });
+  res.json({ token: tempToken });
+});
+
+app.post('/api/revoke-silent-token', (req, res) => {
+  const { username } = req.body;
+  if (username) elevatedUsers.delete(username);
+  res.json({ message: 'Revoked' });
+});
+
 app.post('/api/undo', authenticate, (req, res) => {
   db.get('SELECT * FROM action_history ORDER BY timestamp DESC LIMIT 1', [], (err, action) => {
     if (err) return res.status(500).json({ error: err.message });
