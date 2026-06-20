@@ -498,6 +498,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   const intersection = useMemo(() => new THREE.Vector3(), []);
   
   const isAdmin = token !== '';
+  const [isLocalDragging, setIsLocalDragging] = useState(false);
   const localPos = useRef({ x: location.x, z: location.z });
   const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
 
@@ -611,6 +612,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
         setDragOffset(new THREE.Vector3(localPos.current.x - intersection.x, 0, localPos.current.z - intersection.z));
     }
     if (controls) (controls as any).enabled = false;
+    setIsLocalDragging(true);
     setIsDragging(true);
   };
 
@@ -629,6 +631,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
 
   const handlePointerUp = async (e: any) => {
     if (controls) (controls as any).enabled = true;
+    setIsLocalDragging(false);
     setIsDragging(false);
     
     // EVERYONE can open the info window with a click
@@ -660,12 +663,27 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
       >
         <octahedronGeometry args={[0.5]} />
         <meshBasicMaterial color="#ff0000" transparent opacity={0.9} />
-        {/* Enemy Core - Pulsing Void */}
-        <mesh ref={coreRef as any} scale={[0.4, 0.4, 0.4]}>
-          <octahedronGeometry args={[0.5]} />
-          <meshBasicMaterial color="#220000" />
-        </mesh>
       </mesh>
+      
+      {isLocalDragging && (
+          <mesh 
+              rotation={[-Math.PI / 2, 0, 0]} 
+              position={[0, -visualPos.current.y, 0]} 
+              scale={[10000, 10000, 1]} 
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+          >
+              <planeGeometry />
+              <meshBasicMaterial visible={false} />
+          </mesh>
+      )}
+
+      {/* Enemy Core - Pulsing Void */}
+      <mesh ref={coreRef as any} scale={[0.4, 0.4, 0.4]}>
+        <octahedronGeometry args={[0.5]} />
+        <meshBasicMaterial color="#220000" />
+      </mesh>
+      
       {/* Red Alert Light */}
       <pointLight ref={lightRef as any} color="#ff0000" intensity={3} distance={15} decay={2} />
     </group>
@@ -688,6 +706,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
 
   const isOnline = activeUsers.some((u: any) => u.userName === location.owner);
 
+  const [isLocalDragging, setIsLocalDragging] = useState(false);
   const localPos = useRef({ x: location.x, z: location.z });
   const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
 
@@ -815,6 +834,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
         setDragOffset(new THREE.Vector3(localPos.current.x - intersection.x, 0, localPos.current.z - intersection.z));
     }
     if (controls) (controls as any).enabled = false;
+    setIsLocalDragging(true);
     setIsDragging(true);
   };
 
@@ -833,6 +853,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
 
   const handlePointerUp = async (e: any) => {
     if (controls) (controls as any).enabled = true;
+    setIsLocalDragging(false);
     setIsDragging(false);
     
     // EVERYONE can open the info window with a click
@@ -852,6 +873,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   return (
     <group 
         ref={(group) => { 
+            groupRef.current = group as any;
             if (group) {
                 group.position.copy(visualPos.current);
             }
@@ -872,6 +894,19 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
           <meshBasicMaterial color={isSelected ? "#ffffff" : baseColor} />
         </mesh>
       </mesh>
+
+      {isLocalDragging && (
+          <mesh 
+              rotation={[-Math.PI / 2, 0, 0]} 
+              position={[0, -visualPos.current.y, 0]} 
+              scale={[10000, 10000, 1]} 
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+          >
+              <planeGeometry />
+              <meshBasicMaterial visible={false} />
+          </mesh>
+      )}
 
       <>
           <mesh ref={glowRef as any} scale={[1.2, 1.2, 1.2]} raycast={() => null}>
