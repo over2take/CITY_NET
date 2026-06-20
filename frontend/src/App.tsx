@@ -2592,7 +2592,14 @@ function AdminPanel({
 
   const executeDelete = async () => {
     if (!deleteTarget) return;
-    const idsToDelete = [deleteTarget.id, ...locations.filter(l => l.parent_id === deleteTarget.id).map(l => l.id)];
+    
+    let root = deleteTarget;
+    if (deleteTarget.parent_id) {
+        const foundRoot = locations.find((l: any) => l.id === deleteTarget.parent_id);
+        if (foundRoot) root = foundRoot;
+    }
+    
+    const idsToDelete = [root.id, ...locations.filter((l: any) => l.parent_id === root.id).map((l: any) => l.id)];
     const res = await fetch('/api/locations/batch-delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: idsToDelete }) });
     if (res.ok) { 
         refreshLocations(); 
@@ -2617,8 +2624,16 @@ function AdminPanel({
 
   const handleCopy = () => {
     if (!selectedLocation) return;
-    const children = locations.filter((l: any) => l.parent_id === selectedLocation.id);
-    setCopyBuffer({ root: selectedLocation, children });
+    
+    let root = selectedLocation;
+    // If the user selected a child part, resolve the root structure first
+    if (selectedLocation.parent_id) {
+        const foundRoot = locations.find((l: any) => l.id === selectedLocation.parent_id);
+        if (foundRoot) root = foundRoot;
+    }
+    
+    const children = locations.filter((l: any) => l.parent_id === root.id);
+    setCopyBuffer({ root, children });
     alert("DATA_LINK_COPIED");
   };
 
@@ -2658,10 +2673,12 @@ function AdminPanel({
     }
   };
 
+  const resolvedDeleteTarget = deleteTarget?.parent_id ? locations.find((l: any) => l.id === deleteTarget.parent_id) || deleteTarget : deleteTarget;
+
   return (
     <div className="panel admin-panel">
-      {deleteTarget && (
-        <div className="modal-overlay"><div className="panel critical-alert"><h2 className="alert-text">!! CRITICAL_WARNING !!</h2><p>CONFIRM DESTRUCTION OF {locations.filter(l => l.parent_id === deleteTarget.id).length > 0 ? 'STRUCTURE GROUP' : 'DATA POINT'}:</p><p className="highlight">[{isUserDefinedName(deleteTarget.name) ? deleteTarget.name : getStructLabel(deleteTarget)}]</p><div className="button-group" style={{marginTop: '20px'}}><button className="upload-btn danger-btn" onClick={executeDelete}>PURGE_DATA</button><button className="utility-btn" onClick={() => setDeleteTarget(null)}>ABORT_OPERATION</button></div></div></div>
+      {deleteTarget && resolvedDeleteTarget && (
+        <div className="modal-overlay"><div className="panel critical-alert"><h2 className="alert-text">!! CRITICAL_WARNING !!</h2><p>CONFIRM DESTRUCTION OF {locations.filter((l: any) => l.parent_id === resolvedDeleteTarget.id).length > 0 ? 'STRUCTURE GROUP' : 'DATA POINT'}:</p><p className="highlight">[{isUserDefinedName(resolvedDeleteTarget.name) ? resolvedDeleteTarget.name : getStructLabel(resolvedDeleteTarget)}]</p><div className="button-group" style={{marginTop: '20px'}}><button className="upload-btn danger-btn" onClick={executeDelete}>PURGE_DATA</button><button className="utility-btn" onClick={() => setDeleteTarget(null)}>ABORT_OPERATION</button></div></div></div>
       )}
       
       {view === 'list' && (
