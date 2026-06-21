@@ -39,23 +39,23 @@ body, html, #root {
 }
 
 .scanlines::before {
-  content: "";
-  display: block;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 0%, rgba(32, 255, 32, 0.1) 50%, rgba(18, 16, 16, 0) 100%);
-  background-size: 100% 800px;
-  animation: scanline 10s linear infinite;
-  pointer-events: none;
-}
-
+    content: "";
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 800px;
+    background: linear-gradient(rgba(18, 16, 16, 0) 0%, rgba(32, 255, 32, 0.05) 50%, rgba(18, 16, 16, 0) 100%);
+    animation: scanline 10s linear infinite;
+    pointer-events: none;
+    transform: translateZ(0);
+  }
+  
 @keyframes scanline {
-  0% { transform: translateY(-800px); }
-  100% { transform: translateY(800px); }
-}
+    0% { transform: translateY(-800px); }
+    100% { transform: translateY(100vh); }
+  }
 
 .ui-overlay {
   position: absolute;
