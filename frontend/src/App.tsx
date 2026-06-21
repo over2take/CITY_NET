@@ -1026,7 +1026,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
               <mesh 
                   ref={isRoot ? meshRef as any : null}
                   userData={{ id: p.id }}
-                  raycast={isDragging ? () => null : undefined}
+                  
                   onPointerDown={() => { dragDist.current = 0; }}
                   onPointerMove={(e) => { dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY); }}
                   onPointerUp={(e) => {
@@ -1148,7 +1148,7 @@ const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect, isDra
                 <instancedMesh 
                     ref={hitMeshRef} 
                     frustumCulled={false}
-                    raycast={isDragging ? () => null : undefined}
+                    
                     args={hitMeshArgs as any}
                     onPointerDown={() => { dragDist.current = 0; }}
                     onPointerMove={(e) => { dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY); }}
