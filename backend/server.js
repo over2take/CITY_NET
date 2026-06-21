@@ -479,56 +479,83 @@ app.post('/api/maps/load/:name', authenticate, (req, res) => {
     const districts = JSON.parse(row.districts_data || '[]');
     const roads = JSON.parse(row.roads_data || '[]');
 
-    db.serialize(() => {
-      db.run("DELETE FROM locations WHERE shape != 'rhombus' OR shape IS NULL");
-      db.run('DELETE FROM districts');
-      db.run('DELETE FROM roads');
+    db.all("SELECT * FROM locations WHERE shape = 'rhombus'", (errR, activeRhombuses) => {
+      db.serialize(() => {
+        db.run('DELETE FROM locations');
+        db.run('DELETE FROM districts');
+        db.run('DELETE FROM roads');
 
-      if (locations.length > 0) {
-        const stmtL = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, classification, polyCount) 
-                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-        locations.forEach(l => {
-          stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.is_target, l.isFavorite, l.isDanger, l.owner, l.notifications_enabled, l.rotation, l.classification, l.polyCount]);
+        if (locations.length > 0) {
+          const stmtL = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, classification, polyCount) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          locations.forEach(l => {
+            stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.is_target, l.isFavorite, l.isDanger, l.owner, l.notifications_enabled, l.rotation, l.classification, l.polyCount]);
+          });
+          stmtL.finalize();
+        }
+
+        if (districts.length > 0) {
+          const stmtD = db.prepare(`INSERT INTO districts (id, name, color) VALUES (?, ?, ?)`);
+          districts.forEach(d => {
+            stmtD.run([d.id, d.name, d.color]);
+          });
+          stmtD.finalize();
+        }
+
+        if (roads.length > 0) {
+          const stmtR = db.prepare(`INSERT INTO roads (id, x1, z1, x2, z2, width) VALUES (?, ?, ?, ?, ?, ?)`);
+          roads.forEach(r => {
+            stmtR.run([r.id, r.x1, r.z1, r.x2, r.z2, r.width]);
+          });
+          stmtR.finalize();
+        }
+
+        db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM locations) WHERE name="locations"');
+        db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM districts) WHERE name="districts"');
+        db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM roads) WHERE name="roads"');
+        
+        if (activeRhombuses && activeRhombuses.length > 0) {
+          const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, classification, polyCount) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          activeRhombuses.forEach(r => {
+            stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.classification, r.polyCount]);
+          });
+          stmtR.finalize();
+        }
+
+        db.run("SELECT 1", () => {
+          emitUpdate();
+          res.json({ message: 'Map loaded successfully' });
         });
-        stmtL.finalize();
-      }
-
-      if (districts.length > 0) {
-        const stmtD = db.prepare(`INSERT INTO districts (id, name, color) VALUES (?, ?, ?)`);
-        districts.forEach(d => {
-          stmtD.run([d.id, d.name, d.color]);
-        });
-        stmtD.finalize();
-      }
-
-      if (roads.length > 0) {
-        const stmtR = db.prepare(`INSERT INTO roads (id, x1, z1, x2, z2, width) VALUES (?, ?, ?, ?, ?, ?)`);
-        roads.forEach(r => {
-          stmtR.run([r.id, r.x1, r.z1, r.x2, r.z2, r.width]);
-        });
-        stmtR.finalize();
-      }
-
-      db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM locations) WHERE name="locations"');
-      db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM districts) WHERE name="districts"');
-      db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM roads) WHERE name="roads"', (err) => {
-        emitUpdate();
-        res.json({ message: 'Map loaded successfully' });
       });
     });
   });
 });
 
 app.post('/api/maps/clear', authenticate, (req, res) => {
-  db.serialize(() => {
-    db.run("DELETE FROM locations WHERE shape != 'rhombus' OR shape IS NULL");
-    db.run('DELETE FROM districts');
-    db.run('DELETE FROM roads');
+  db.all("SELECT * FROM locations WHERE shape = 'rhombus'", (errR, activeRhombuses) => {
+    db.serialize(() => {
+      db.run('DELETE FROM locations');
+      db.run('DELETE FROM districts');
+      db.run('DELETE FROM roads');
 
-    db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="districts"');
-    db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="roads"', (err) => {
-      emitUpdate();
-      res.json({ message: 'Map cleared completely' });
+      db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="locations"');
+      db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="districts"');
+      db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="roads"');
+
+      if (activeRhombuses && activeRhombuses.length > 0) {
+        const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, classification, polyCount) 
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        activeRhombuses.forEach(r => {
+          stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.classification, r.polyCount]);
+        });
+        stmtR.finalize();
+      }
+
+      db.run("SELECT 1", () => {
+        emitUpdate();
+        res.json({ message: 'Map cleared completely' });
+      });
     });
   });
 });
