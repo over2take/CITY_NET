@@ -2588,7 +2588,10 @@ function AdminPanel({
         if (!originalData) return;
 
         const worldPos = new THREE.Vector3(); mesh.getWorldPosition(worldPos);
-        mesh.getWorldScale(worldScale);
+          mesh.getWorldScale(worldScale);
+          const meshWorldQuat = new THREE.Quaternion();
+          mesh.getWorldQuaternion(meshWorldQuat);
+          const meshEuler = new THREE.Euler().setFromQuaternion(meshWorldQuat, 'YXZ');
         
         let w = worldScale.x;
         let h = worldScale.y;
@@ -2613,7 +2616,7 @@ function AdminPanel({
             mergedData.isDanger = editData.isDanger;
         }
 
-        updates.push({ ...mergedData, x: worldPos.x, y: worldPos.y - (h / 2), z: worldPos.z, width: w, height: h, depth: d, rotation: euler.y });
+        updates.push({ ...mergedData, x: worldPos.x, y: worldPos.y - (h / 2), z: worldPos.z, width: w, height: h, depth: d, rotation: meshEuler.y });
     });
     if (updates.length === 0) {
         // Fallback for objects that might not have children with IDs (like simple boxes)
