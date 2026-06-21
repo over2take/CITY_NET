@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh } from '@react-three/drei';
 import { io } from 'socket.io-client';
@@ -4109,7 +4110,7 @@ function CityDataBaseMenu({ token, emitUpdate }: any) {
         )}
       </div>
 
-      {confirmDialog && (
+      {confirmDialog && createPortal(
         <div className="modal-overlay" style={{ zIndex: 10000 }}>
           <div className="panel critical-alert">
             <h2 className="alert-text">{confirmDialog.title}</h2>
@@ -4121,7 +4122,8 @@ function CityDataBaseMenu({ token, emitUpdate }: any) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
