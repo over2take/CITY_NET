@@ -1024,8 +1024,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
           const localEuler = new THREE.Euler().setFromQuaternion(localQuat, 'YXZ');
           
           return (
-            <group key={p.id} position={[offset.x, offset.y, offset.z]} scale={[p.width, p.height, p.depth]}>
-              <group rotation={[localEuler.x, localEuler.y, localEuler.z]}>
+            <group key={p.id} position={[offset.x, offset.y, offset.z]} rotation={[localEuler.x, localEuler.y, localEuler.z]} scale={[p.width, p.height, p.depth]}>
               {/* Invisible Solid Hitbox (handles interactions) */}
               <mesh 
                   ref={isRoot ? meshRef as any : null}
@@ -1061,12 +1060,11 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
                   transparent={true}
                   opacity={(isSelected || isBatchSelected) ? 0.3 : (isOverlapped ? 0.0 : 0.05)}
                   depthTest={!isOverlapped}
-                />
-              </mesh>
-            </group>
-          </group>
-        );
-      })}
+                  />
+                </mesh>
+              </group>
+          );
+        })}
     </group>
   );
 });
