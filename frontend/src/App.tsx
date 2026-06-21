@@ -498,6 +498,19 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   
   const isAdmin = token !== '';
   const [isLocalDragging, setIsLocalDragging] = useState(false);
+    useEffect(() => {
+        const handleGlobalUp = () => {
+            setIsLocalDragging((prev) => {
+                if (prev) {
+                    if (controls) (controls as any).enabled = true;
+                    setIsDragging(false);
+                }
+                return false;
+            });
+        };
+        window.addEventListener('pointerup', handleGlobalUp);
+        return () => window.removeEventListener('pointerup', handleGlobalUp);
+    }, [controls, setIsDragging]);
   const localPos = useRef({ x: location.x, z: location.z });
   const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
 
@@ -609,7 +622,8 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   const dragDist = useRef(0);
 
   const handlePointerDown = (e: any) => {
-    e.stopPropagation();
+      console.log('Rhombus pointerDown!');
+      e.stopPropagation();
     dragDist.current = 0;
     
     // Only allow dragging if the user is an Admin
@@ -639,6 +653,8 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   };
 
   const handlePointerUp = async (e: any) => {
+      console.log('Rhombus pointerUp!');
+      try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
     setIsDragging(false);
@@ -673,18 +689,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
         <meshBasicMaterial color="#ff0000" transparent opacity={0.9} />
       </mesh>
       
-      {isLocalDragging && (
-          <mesh 
-              rotation={[-Math.PI / 2, 0, 0]} 
-              position={[0, -visualPos.current.y, 0]} 
-              scale={[10000, 10000, 1]} 
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-          >
-              <planeGeometry />
-              <meshBasicMaterial visible={false} />
-          </mesh>
-      )}
+      
 
       {/* Enemy Core - Pulsing Void */}
       <mesh ref={coreRef as any} scale={[0.4, 0.4, 0.4]}>
@@ -715,6 +720,19 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   const isOnline = activeUsers.some((u: any) => u.userName === location.owner);
 
   const [isLocalDragging, setIsLocalDragging] = useState(false);
+    useEffect(() => {
+        const handleGlobalUp = () => {
+            setIsLocalDragging((prev) => {
+                if (prev) {
+                    if (controls) (controls as any).enabled = true;
+                    setIsDragging(false);
+                }
+                return false;
+            });
+        };
+        window.addEventListener('pointerup', handleGlobalUp);
+        return () => window.removeEventListener('pointerup', handleGlobalUp);
+    }, [controls, setIsDragging]);
   const localPos = useRef({ x: location.x, z: location.z });
   const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
 
@@ -839,7 +857,8 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   const dragDist = useRef(0);
 
   const handlePointerDown = (e: any) => {
-    e.stopPropagation();
+      console.log('Rhombus pointerDown!');
+      e.stopPropagation();
     dragDist.current = 0;
     
     // Only allow dragging if the user has management rights (Owner or Admin)
@@ -869,6 +888,8 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   };
 
   const handlePointerUp = async (e: any) => {
+      console.log('Rhombus pointerUp!');
+      try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
     setIsDragging(false);
@@ -911,18 +932,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
         </mesh>
       </mesh>
 
-      {isLocalDragging && (
-          <mesh 
-              rotation={[-Math.PI / 2, 0, 0]} 
-              position={[0, -visualPos.current.y, 0]} 
-              scale={[10000, 10000, 1]} 
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-          >
-              <planeGeometry />
-              <meshBasicMaterial visible={false} />
-          </mesh>
-      )}
+      
 
       <>
           <mesh ref={glowRef as any} scale={[1.2, 1.2, 1.2]} raycast={() => null}>
@@ -1091,54 +1101,68 @@ const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect, isDra
             wireframeMeshRef.current!.setColorAt(i, threeColor);
             fillMeshRef.current!.setColorAt(i, threeColor);
         });
-        wireframeMeshRef.current.instanceMatrix.needsUpdate = true;
-        if (wireframeMeshRef.current.instanceColor) wireframeMeshRef.current.instanceColor.needsUpdate = true;
+        wireframeMeshRef.current!.instanceMatrix.needsUpdate = true;
+        if (wireframeMeshRef.current!.instanceColor) wireframeMeshRef.current!.instanceColor.needsUpdate = true;
         
-        fillMeshRef.current.instanceMatrix.needsUpdate = true;
-        if (fillMeshRef.current.instanceColor) fillMeshRef.current.instanceColor.needsUpdate = true;
+        fillMeshRef.current!.instanceMatrix.needsUpdate = true;
+        if (fillMeshRef.current!.instanceColor) fillMeshRef.current!.instanceColor.needsUpdate = true;
 
-        hitMeshRef.current.instanceMatrix.needsUpdate = true;
-        hitMeshRef.current.computeBoundingBox();
-        hitMeshRef.current.computeBoundingSphere();
+        hitMeshRef.current!.instanceMatrix.needsUpdate = true;
+        hitMeshRef.current!.computeBoundingBox();
+        hitMeshRef.current!.computeBoundingSphere();
     }, [elements]);
 
     const dragDist = useRef(0);
 
+    const hitGeometry = useMemo(() => {
+        const segs = Math.max(3, polyCount);
+        switch (shape) {
+            case 'none': return new THREE.BoxGeometry(0.001, 0.001, 0.001);
+            case 'cylinder': return new THREE.CylinderGeometry(0.5, 0.5, 1, segs);
+            case 'sphere': return new THREE.SphereGeometry(0.5, segs, segs);
+            case 'rhombus': return new THREE.OctahedronGeometry(0.5);
+            case 'pyramid': return new THREE.ConeGeometry(0.5, 1, segs);
+            default: return new THREE.BoxGeometry(1, 1, 1);
+        }
+    }, [shape, polyCount]);
+
+    const hitMeshArgs = useMemo(() => [hitGeometry, null, elements.length], [hitGeometry, elements.length]);
+    const visMeshArgs = useMemo(() => [null as any, null as any, elements.length], [elements.length]);
+
     return (
         <group>
             {/* Visual Wireframe - No raycasting */}
-            <instancedMesh ref={wireframeMeshRef} frustumCulled={false} args={[null as any, null as any, elements.length]} raycast={() => null}>
+            <instancedMesh ref={wireframeMeshRef} frustumCulled={false} args={visMeshArgs as any} raycast={() => null}>
                 {renderBaseGeometry(shape, polyCount)}
                 <meshBasicMaterial wireframe={true} />
             </instancedMesh>
             
             {/* Holographic Face Fill - No raycasting */}
-            <instancedMesh ref={fillMeshRef} frustumCulled={false} args={[null as any, null as any, elements.length]} raycast={() => null}>
+            <instancedMesh ref={fillMeshRef} frustumCulled={false} args={visMeshArgs as any} raycast={() => null}>
                 {renderBaseGeometry(shape, polyCount)}
                 <meshBasicMaterial color="#020202" />
             </instancedMesh>
 
             {/* Solid Hitbox - Low opacity is more reliable for R3F raycasting than colorWrite=false */}
-            <Bvh firstHitOnly>
-              <instancedMesh 
-                  ref={hitMeshRef} 
-                  frustumCulled={false}
-                  raycast={isDragging ? () => null : undefined}
-                  args={[null as any, null as any, elements.length]}
-                  onPointerDown={() => { dragDist.current = 0; }}
-                  onPointerMove={(e) => { dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY); }}
-                  onPointerUp={(e) => {
-                      if (dragDist.current < 10) {
-                          e.stopPropagation();
-                          if (e.instanceId !== undefined && elements[e.instanceId]) {
-                              onSelect(elements[e.instanceId].rootLoc);
-                          }
-                      }
-                  }}
-              >
-                  {renderBaseGeometry(shape, polyCount)}
-                  <meshBasicMaterial transparent opacity={0.01} depthWrite={false} />
-              </instancedMesh>
+            <Bvh>
+                <instancedMesh 
+                    ref={hitMeshRef} 
+                    frustumCulled={false}
+                    raycast={isDragging ? () => null : undefined}
+                    args={hitMeshArgs as any}
+                    onPointerDown={() => { dragDist.current = 0; }}
+                    onPointerMove={(e) => { dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY); }}
+                    onPointerUp={(e) => {
+                        if (dragDist.current < 10) {
+                            e.stopPropagation();
+                            if (e.instanceId !== undefined && elements[e.instanceId]) {
+                                onSelect(elements[e.instanceId].rootLoc);
+                            }
+                        }
+                    }}
+                >
+                    <meshBasicMaterial transparent opacity={0.01} depthWrite={false} />
+                </instancedMesh>
             </Bvh>
         </group>
     );
@@ -5008,6 +5032,11 @@ function App() {
 
   const [transformMode, setTransformMode] = useState<'translate' | 'scale'>('translate');
   const [isDragging, setIsDragging] = useState(false);
+  useEffect(() => {
+    const handleGlobalPointerUp = () => { console.log('Global pointerup! Forcing isDragging=false'); setIsDragging(false); };
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
+  }, []);
   const [editData, setEditData] = useState({ name: '', description: '', npcs: '', x: 0, y: 0, z: 0, width: 8, height: 16, depth: 8, baseWidth: 8, baseHeight: 16, baseDepth: 8, shape: 'box', color: '#00ff00', isFavorite: false, isDanger: false, owner: '', polyCount: 5 });
   const [editorGenParts, setEditorGenParts] = useState<any[]>([]);
   const [editorGenType, setEditorGenType] = useState<string>('');
