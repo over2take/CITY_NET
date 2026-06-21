@@ -3629,9 +3629,22 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
   // Dropdown UI
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
+      const scrollRef = useRef<HTMLDivElement>(null);
+    const lastMessageCountRef = useRef(messages.length);
+  
+    useEffect(() => {
+        if (messages.length > lastMessageCountRef.current) {
+            if (activeTab !== 'GLOBAL') {
+                const lastMsg = messages[messages.length - 1];
+                if (lastMsg.sender !== userName && lastMsg.sender !== sendAs) {
+                    setUnreadTabs(prev => new Set(prev).add('GLOBAL'));
+                }
+            }
+        }
+        lastMessageCountRef.current = messages.length;
+    }, [messages, activeTab, userName, sendAs]);
 
-  useEffect(() => {
+    useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, privateMessages, activeTab]);
 
@@ -3782,17 +3795,19 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
           {/* TABS BAR */}
           <div style={{ display: 'flex', background: 'var(--dark-green)', padding: '5px 5px 0 5px', gap: '5px', overflowX: 'auto' }}>
               <div 
-                  onClick={() => { setActiveTab('GLOBAL'); setSendAs(userName); }}
-                  style={{ padding: '8px 15px', background: activeTab === 'GLOBAL' ? 'var(--black)' : 'transparent', color: activeTab === 'GLOBAL' ? 'var(--green)' : '#888', borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
-              >
-                  [ GLOBAL ]
-              </div>
+                  className={unreadTabs.has('GLOBAL') ? 'unread-blink' : ''}
+                  onClick={() => { setActiveTab('GLOBAL'); setSendAs(userName); setUnreadTabs(prev => { const next = new Set(prev); next.delete('GLOBAL'); return next; }); }}
+                  style={{ padding: '8px 15px', background: activeTab === 'GLOBAL' ? 'var(--black)' : 'transparent', color: activeTab === 'GLOBAL' ? 'var(--green)' : (unreadTabs.has('GLOBAL') ? '#ffaa00' : '#888'), borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                  [ GLOBAL ] {unreadTabs.has('GLOBAL') && '*'}
+                </div>
               {openTabs.map(tab => (
-                  <div 
-                      key={tab}
-                      onClick={() => openTab(tab)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 15px', background: activeTab === tab ? 'var(--black)' : 'transparent', color: activeTab === tab ? 'var(--cyan)' : (unreadTabs.has(tab) ? '#ffaa00' : '#888'), borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
-                  >
+                    <div 
+                        key={tab}
+                        className={unreadTabs.has(tab) ? 'unread-blink' : ''}
+                        onClick={() => openTab(tab)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 15px', background: activeTab === tab ? 'var(--black)' : 'transparent', color: activeTab === tab ? 'var(--cyan)' : (unreadTabs.has(tab) ? '#ffaa00' : '#888'), borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
+                    >
                       {tab} {unreadTabs.has(tab) && '*'}
                       <span onClick={(e) => closeTab(e, tab)} style={{ color: '#ff0000', marginLeft: '5px', cursor: 'pointer' }}>×</span>
                   </div>
@@ -4646,6 +4661,7 @@ function App() {
   const [roadTrail, setRoadTrail] = useState<THREE.Vector3[][]>([]);
   const [roadDrawMode, setRoadDrawMode] = useState<'free' | 'straight'>('free');
   const [snapToGrid, setSnapToGrid] = useState(false);
+    const [snapRotation, setSnapRotation] = useState(false);
   const [drawingRoadWidth, setDrawingRoadWidth] = useState(2.4);
   const [citySectionType, setCitySectionType] = useState<'MIXED' | 'CORPO' | 'URBAN' | 'SLUMS' | 'INDUSTRIAL'>('MIXED');
   const [genExcludeRoads, setGenExcludeRoads] = useState(false);
@@ -4879,16 +4895,30 @@ function App() {
     } else if (view === 'district') {
       setDistrictSelection(prev => prev.includes(loc.id) ? prev.filter(i => i !== loc.id) : [...prev, loc.id]);
     } else if (view === 'join') {
-      setJoinSelection(prev => {
-        const next = prev.includes(loc.id) ? prev.filter(i => i !== loc.id) : [...prev, loc.id];
-        if (next.length === 1 && !prev.includes(loc.id)) {
-          setSelectedClassification(loc.classification || '');
-        } else if (next.length === 0) {
-          setSelectedClassification('');
-        }
-        return next;
-      });
-    } else {
+        const getAllDescendants = (id) => {
+          let ids = [id];
+          const childrenList = locations.filter(l => l.parent_id === id);
+          childrenList.forEach(c => {
+            ids = ids.concat(getAllDescendants(c.id));
+          });
+          return ids;
+        };
+        const locIds = getAllDescendants(loc.id);
+
+        setJoinSelection(prev => {
+          const isSelected = prev.includes(loc.id);
+          const next = isSelected 
+             ? prev.filter(i => !locIds.includes(i))
+             : Array.from(new Set([...prev, ...locIds]));
+
+          if (next.length === locIds.length && !isSelected) {
+            setSelectedClassification(loc.classification || '');
+          } else if (next.length === 0) {
+            setSelectedClassification('');
+          }
+          return next;
+        });
+      } else {
       setSelectedLocation(prev => prev?.id === loc.id ? null : loc);
     }
   };

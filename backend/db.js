@@ -119,6 +119,14 @@ db.serialize(() => {
     // Ignore error if column already exists
   });
 
+  db.run(`ALTER TABLE locations ADD COLUMN rotation_x REAL DEFAULT 0`, (err) => {
+    // Ignore error if column already exists
+  });
+
+  db.run(`ALTER TABLE locations ADD COLUMN rotation_z REAL DEFAULT 0`, (err) => {
+    // Ignore error if column already exists
+  });
+
   db.run(`ALTER TABLE locations ADD COLUMN classification TEXT`, (err) => {
     // Ignore error if column already exists
   });
@@ -133,6 +141,13 @@ db.serialize(() => {
     locations_data TEXT,
     districts_data TEXT,
     roads_data TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS structure_prefabs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    classification TEXT NOT NULL,
+    data TEXT NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 });

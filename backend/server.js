@@ -87,8 +87,8 @@ app.post('/api/locations', optionalAuthenticate, (req, res) => {
     }
   }
 
-  const sql = `INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const sql = `INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   
   db.serialize(() => {
     const results = [];
@@ -115,7 +115,11 @@ app.post('/api/locations', optionalAuthenticate, (req, res) => {
         loc.isFavorite ? 1 : 0,
         loc.isDanger ? 1 : 0,
         loc.owner || null,
-        loc.rotation || 0
+        loc.rotation || 0,
+        loc.rotation_x || 0,
+        loc.rotation_z || 0,
+        loc.classification || null,
+        loc.polyCount || 5
       ], function(err) {
         if (err) {
           console.error(`Database error during insert at index ${index}:`, err.message);
@@ -185,7 +189,7 @@ app.delete('/api/locations/:id', authenticate, (req, res) => {
 });
 
 app.put('/api/locations/:id', authenticate, (req, res) => {
-  const { name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation } = req.body;
+  const { name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount } = req.body;
   
   if (name === undefined || x === undefined || y === undefined || z === undefined) {
     console.error('PUT Error: Missing required fields in body:', req.body);
@@ -195,8 +199,8 @@ app.put('/api/locations/:id', authenticate, (req, res) => {
   db.get('SELECT * FROM locations WHERE id = ?', [req.params.id], (err, oldRow) => {
     if (err) return res.status(500).json({ error: err.message });
     
-    const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=? WHERE id=?`;
-    const params = [name, description, npcs, x, y, z, width, height, depth, shape || 'box', color, district_name || null, district_color || null, parent_id || null, isFavorite ? 1 : 0, isDanger ? 1 : 0, owner || null, rotation || 0, req.params.id];
+    const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=? WHERE id=?`;
+    const params = [name, description, npcs, x, y, z, width, height, depth, shape || 'box', color, district_name || null, district_color || null, parent_id || null, isFavorite ? 1 : 0, isDanger ? 1 : 0, owner || null, rotation || 0, rotation_x || 0, rotation_z || 0, classification || null, polyCount || 5, req.params.id];
     
     db.run(sql, params, function(err) {
       if (err) {
@@ -336,15 +340,15 @@ app.post('/api/undo', authenticate, (req, res) => {
         const placeholders = payload.ids.map(() => '?').join(',');
         db.run(`DELETE FROM locations WHERE id IN (${placeholders})`, payload.ids, finishUndo);
       } else if (action.type === 'location_delete') {
-        const stmt = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        const stmt = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
         payload.data.forEach(loc => {
-          stmt.run([loc.id, loc.name, loc.description, loc.npcs, loc.x, loc.y, loc.z, loc.width, loc.height, loc.depth, loc.shape, loc.color, loc.district_name, loc.district_color, loc.parent_id, loc.isFavorite, loc.isDanger, loc.owner]);
+          stmt.run([loc.id, loc.name, loc.description, loc.npcs, loc.x, loc.y, loc.z, loc.width, loc.height, loc.depth, loc.shape, loc.color, loc.district_name, loc.district_color, loc.parent_id, loc.isFavorite, loc.isDanger, loc.owner, loc.rotation, loc.rotation_x, loc.rotation_z, loc.classification, loc.polyCount]);
         });
         stmt.finalize(finishUndo);
       } else if (action.type === 'location_update') {
         const d = payload.old_data;
-        const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=? WHERE id=?`;
-        db.run(sql, [d.name, d.description, d.npcs, d.x, d.y, d.z, d.width, d.height, d.depth, d.shape, d.color, d.district_name, d.district_color, d.parent_id, d.isFavorite, d.isDanger, d.owner, payload.id], finishUndo);
+        const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=? WHERE id=?`;
+        db.run(sql, [d.name, d.description, d.npcs, d.x, d.y, d.z, d.width, d.height, d.depth, d.shape, d.color, d.district_name, d.district_color, d.parent_id, d.isFavorite, d.isDanger, d.owner, d.rotation, d.rotation_x, d.rotation_z, d.classification, d.polyCount, payload.id], finishUndo);
       } else if (action.type === 'location_update_batch') {
         const stmt = db.prepare('UPDATE locations SET district_name=?, district_color=?, parent_id=? WHERE id=?');
         payload.data.forEach(item => {
@@ -486,10 +490,10 @@ app.post('/api/maps/load/:name', authenticate, (req, res) => {
         db.run('DELETE FROM roads');
 
         if (locations.length > 0) {
-          const stmtL = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, classification, polyCount) 
+          const stmtL = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount) 
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
           locations.forEach(l => {
-            stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.is_target, l.isFavorite, l.isDanger, l.owner, l.notifications_enabled, l.rotation, l.classification, l.polyCount]);
+            stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.isFavorite, l.isDanger, l.owner, l.rotation, l.rotation_x, l.rotation_z, l.classification, l.polyCount]);
           });
           stmtL.finalize();
         }
@@ -515,10 +519,10 @@ app.post('/api/maps/load/:name', authenticate, (req, res) => {
         db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM roads) WHERE name="roads"');
         
         if (activeRhombuses && activeRhombuses.length > 0) {
-          const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, classification, polyCount) 
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
           activeRhombuses.forEach(r => {
-            stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.classification, r.polyCount]);
+            stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.rotation_x, r.rotation_z, r.classification, r.polyCount]);
           });
           stmtR.finalize();
         }
@@ -656,8 +660,11 @@ io.on('connection', (socket) => {
 
   socket.on('sendMessage', (data) => {
     // data: { sender, text }
-    if (data.sender !== socket.userName && !elevatedUsers.has(socket.userName)) {
-      data.sender = socket.userName; // Prevent spoofing
+    const actualInfo = userSockets.get(socket.id);
+    const actualUserName = actualInfo?.userName;
+    const isPrimaryAdmin = actualInfo?.isAdmin;
+    if (data.sender !== actualUserName && !elevatedUsers.has(actualUserName) && !isPrimaryAdmin) {
+      data.sender = actualUserName || 'Unknown'; // Prevent spoofing
     }
     const timestamp = new Date().toISOString();
     db.run('INSERT INTO chat_logs (sender, text, timestamp) VALUES (?, ?, ?)', [data.sender, data.text, timestamp], function(err) {
@@ -783,7 +790,7 @@ io.on('connection', (socket) => {
             
             // SECURITY: Only emit to sender, recipient, or Primary Admins
             const targetSockets = new Set();
-            const involvesNPC = activeNPCs.includes(data.sender) || activeNPCs.includes(data.recipient);
+            const involvesNPC = activeNPCs.some(n => n.userName === data.sender || n.userName === data.recipient);
             
             userSockets.forEach((info, socketId) => {
               if (info.userName === data.sender || info.userName === data.recipient) {
