@@ -444,7 +444,7 @@ app.post('/api/maps/save', authenticate, (req, res) => {
   if (!name) return res.status(400).json({ error: 'Map name required' });
 
   db.serialize(() => {
-    db.all('SELECT * FROM locations', (err1, locations) => {
+    db.all("SELECT * FROM locations WHERE shape != 'rhombus' OR shape IS NULL", (err1, locations) => {
       if (err1) return res.status(500).json({ error: err1.message });
       db.all('SELECT * FROM districts', (err2, districts) => {
         if (err2) return res.status(500).json({ error: err2.message });
@@ -480,7 +480,7 @@ app.post('/api/maps/load/:name', authenticate, (req, res) => {
     const roads = JSON.parse(row.roads_data || '[]');
 
     db.serialize(() => {
-      db.run('DELETE FROM locations');
+      db.run("DELETE FROM locations WHERE shape != 'rhombus' OR shape IS NULL");
       db.run('DELETE FROM districts');
       db.run('DELETE FROM roads');
 
@@ -521,10 +521,10 @@ app.post('/api/maps/load/:name', authenticate, (req, res) => {
 
 app.post('/api/maps/clear', authenticate, (req, res) => {
   db.serialize(() => {
-    db.run('DELETE FROM locations');
+    db.run("DELETE FROM locations WHERE shape != 'rhombus' OR shape IS NULL");
     db.run('DELETE FROM districts');
     db.run('DELETE FROM roads');
-    db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="locations"');
+
     db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="districts"');
     db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="roads"', (err) => {
       emitUpdate();
@@ -899,4 +899,5 @@ app.use((req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
+
 
