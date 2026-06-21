@@ -3986,7 +3986,7 @@ function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSele
           disabled={!!userRhombus}
           style={{ color: rhombusState.color }}
         >
-          <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="60" height="60" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
           </svg>
           <span style={{ fontSize: '0.6rem', marginTop: '10px', display: 'block' }}>
