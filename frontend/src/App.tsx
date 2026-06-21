@@ -1007,17 +1007,25 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
   return (
     <group 
         position={groupPos} 
-        rotation={[0, location.rotation || 0, 0]}
+        rotation={[location.rotation_x || 0, location.rotation || 0, location.rotation_z || 0]}
         ref={(group) => { if (isSelected && group) { setTargetObject(group); if (editMeshRef) editMeshRef.current = group; } }} 
     >
       {parts.map((p, idx) => {
         const isRoot = idx === 0;
-        const pX = p.x - groupPos[0];
-        const pZ = p.z - groupPos[2];
-        
-        return (
-          <group key={p.id} position={[pX, (p.y - groupPos[1]) + (p.height / 2), pZ]} scale={[p.width, p.height, p.depth]}>
-            <group rotation={[0, (p.rotation || 0) - (location.rotation || 0), 0]}>
+        const rootQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(location.rotation_x || 0, location.rotation || 0, location.rotation_z || 0, 'YXZ'));
+          const rootQuatInv = rootQuat.clone().invert();
+          
+          const absPos = new THREE.Vector3(p.x, p.y + p.height / 2, p.z);
+          const offset = absPos.sub(new THREE.Vector3(...groupPos));
+          offset.applyQuaternion(rootQuatInv);
+          
+          const partQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(p.rotation_x || 0, p.rotation || 0, p.rotation_z || 0, 'YXZ'));
+          const localQuat = rootQuatInv.clone().multiply(partQuat);
+          const localEuler = new THREE.Euler().setFromQuaternion(localQuat, 'YXZ');
+          
+          return (
+            <group key={p.id} position={[offset.x, offset.y, offset.z]} scale={[p.width, p.height, p.depth]}>
+              <group rotation={[localEuler.x, localEuler.y, localEuler.z]}>
               {/* Invisible Solid Hitbox (handles interactions) */}
               <mesh 
                   ref={isRoot ? meshRef as any : null}
@@ -1073,7 +1081,7 @@ const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect, isDra
         if (!wireframeMeshRef.current || !hitMeshRef.current || !fillMeshRef.current) return;
         elements.forEach((el, i) => {
             tempObj.position.set(el.x, el.y + el.height / 2, el.z);
-            tempObj.rotation.set(0, el.rotation || 0, 0);
+            tempObj.rotation.set(el.rotation_x || 0, el.rotation || 0, el.rotation_z || 0, 'YXZ');
             tempObj.scale.set(el.width, el.height, el.depth);
             tempObj.updateMatrix();
             
@@ -2524,21 +2532,28 @@ function AdminPanel({
                 const isRoot = !part.parent_name;
                 const pos = new THREE.Vector3(part.x, part.y, part.z);
                 pos.multiply(targetObject.scale);
-                pos.applyAxisAngle(new THREE.Vector3(0,1,0), targetObject.rotation.y);
-                pos.add(targetObject.position);
+                pos.applyEuler(new THREE.Euler(targetObject.rotation.x, targetObject.rotation.y, targetObject.rotation.z, 'YXZ'));
+                  pos.add(targetObject.position);
+                  
+                  const targetQuat = targetObject.quaternion;
+                  const partQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(part.rotation_x || 0, part.rotation || 0, part.rotation_z || 0, 'YXZ'));
+                  const finalQuat = targetQuat.clone().multiply(partQuat);
+                  const finalEuler = new THREE.Euler().setFromQuaternion(finalQuat, 'YXZ');
 
-                return {
-                    ...editData,
-                    name: isRoot ? editData.name : `${editData.name}_PART`,
-                    description: isRoot ? editData.description : '',
-                    npcs: isRoot ? editData.npcs : '',
-                    x: pos.x,
-                    y: pos.y,
-                    z: pos.z,
-                    width: part.shape === 'sphere' ? Math.min(part.width * targetObject.scale.x, part.depth * targetObject.scale.z) : part.width * targetObject.scale.x,
-                    height: part.shape === 'sphere' ? Math.min(part.width * targetObject.scale.x, part.depth * targetObject.scale.z) : part.height * targetObject.scale.y,
-                    depth: part.shape === 'sphere' ? Math.min(part.width * targetObject.scale.x, part.depth * targetObject.scale.z) : part.depth * targetObject.scale.z,
-                    rotation: targetObject.rotation.y + (part.rotation || 0),
+                  return {
+                      ...editData,
+                      name: isRoot ? editData.name : `${editData.name}_PART`,
+                      description: isRoot ? editData.description : '',
+                      npcs: isRoot ? editData.npcs : '',
+                      x: pos.x,
+                      y: pos.y,
+                      z: pos.z,
+                      width: part.shape === 'sphere' ? Math.min(part.width * targetObject.scale.x, part.depth * targetObject.scale.z) : part.width * targetObject.scale.x,
+                      height: part.shape === 'sphere' ? Math.min(part.width * targetObject.scale.x, part.depth * targetObject.scale.z) : part.height * targetObject.scale.y,
+                      depth: part.shape === 'sphere' ? Math.min(part.width * targetObject.scale.x, part.depth * targetObject.scale.z) : part.depth * targetObject.scale.z,
+                      rotation: finalEuler.y,
+                      rotation_x: finalEuler.x,
+                      rotation_z: finalEuler.z,
                     shape: part.shape,
                     color: part.color,
                     parent_name: part.parent_name,
@@ -2570,7 +2585,7 @@ function AdminPanel({
             const r = Math.min(finalW, finalD);
             finalW = r; finalH = r; finalD = r;
         }
-        const finalData = { ...editData, x: targetObject.position.x, z: targetObject.position.z, y: targetObject.position.y, width: finalW, height: finalH, depth: finalD, rotation: targetObject.rotation.y };
+        const finalData = { ...editData, x: targetObject.position.x, z: targetObject.position.z, y: targetObject.position.y, width: finalW, height: finalH, depth: finalD, rotation: targetObject.rotation.y, rotation_x: targetObject.rotation.x, rotation_z: targetObject.rotation.z };
         const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalData) });
         if (res.ok) { setAdminAlert("LOCATION_UPLOADED"); targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType(''); }
         return;
@@ -2616,7 +2631,7 @@ function AdminPanel({
             mergedData.isDanger = editData.isDanger;
         }
 
-        updates.push({ ...mergedData, x: worldPos.x, y: worldPos.y - (h / 2), z: worldPos.z, width: w, height: h, depth: d, rotation: meshEuler.y });
+        updates.push({ ...mergedData, x: worldPos.x, y: worldPos.y - (h / 2), z: worldPos.z, width: w, height: h, depth: d, rotation: meshEuler.y, rotation_x: meshEuler.x, rotation_z: meshEuler.z });
     });
     if (updates.length === 0) {
         // Fallback for objects that might not have children with IDs (like simple boxes)
@@ -2627,7 +2642,7 @@ function AdminPanel({
             const r = Math.min(finalW, finalD);
             finalW = r; finalH = r; finalD = r;
         }
-        updates.push({ ...editData, x: targetObject.position.x, z: targetObject.position.z, y: targetObject.position.y, width: finalW, height: finalH, depth: finalD, rotation: targetObject.rotation.y });
+        updates.push({ ...editData, x: targetObject.position.x, z: targetObject.position.z, y: targetObject.position.y, width: finalW, height: finalH, depth: finalD, rotation: targetObject.rotation.y, rotation_x: targetObject.rotation.x, rotation_z: targetObject.rotation.z });
     }
     const finalRoot = updates.find(u => u.id === editId) || updates[0];
     const res = await fetch(`/api/locations/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalRoot) });
@@ -5581,7 +5596,7 @@ function App() {
                     {editorGenParts.map((b, i) => {
                       const renderGenGeometry = () => { switch (b.shape) { case 'none': return <boxGeometry args={[0.001, 0.001, 0.001]} />; case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 5]} />; case 'sphere': return <sphereGeometry args={[0.5, 6, 6]} />; case 'pyramid': return <cylinderGeometry args={[0, 0.5, 1, 4]} />; default: return <boxGeometry args={[1, 1, 1]} />; } };
                       return (
-                        <mesh key={i} userData={{ id: b.id }} position={[b.x, b.y + (b.height / 2), b.z]} scale={[b.width, b.height, b.depth]} rotation={[0, b.rotation || 0, 0]}>
+                        <mesh key={i} userData={{ id: b.id }} position={[b.x, b.y + (b.height / 2), b.z]} scale={[b.width, b.height, b.depth]} rotation={[b.rotation_x || 0, b.rotation || 0, b.rotation_z || 0]}>
                           {renderGenGeometry()}
                           <meshBasicMaterial color={b.color || "#00ff00"} wireframe />
                         </mesh>
