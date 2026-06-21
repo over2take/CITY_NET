@@ -1007,7 +1007,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
   return (
     <group 
         position={groupPos} 
-        rotation={[location.rotation_x || 0, location.rotation || 0, location.rotation_z || 0]}
+        rotation={new THREE.Euler(location.rotation_x || 0, location.rotation || 0, location.rotation_z || 0, 'YXZ')}
         ref={(group) => { if (isSelected && group) { setTargetObject(group); if (editMeshRef) editMeshRef.current = group; } }} 
     >
       {parts.map((p, idx) => {
@@ -1024,7 +1024,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
           const localEuler = new THREE.Euler().setFromQuaternion(localQuat, 'YXZ');
           
           return (
-            <group key={p.id} position={[offset.x, offset.y, offset.z]} rotation={[localEuler.x, localEuler.y, localEuler.z]} scale={[p.width, p.height, p.depth]}>
+            <group key={p.id} position={[offset.x, offset.y, offset.z]} rotation={localEuler} scale={[p.width, p.height, p.depth]}>
               {/* Invisible Solid Hitbox (handles interactions) */}
               <mesh 
                   ref={isRoot ? meshRef as any : null}
@@ -5596,7 +5596,7 @@ function App() {
                     {editorGenParts.map((b, i) => {
                       const renderGenGeometry = () => { switch (b.shape) { case 'none': return <boxGeometry args={[0.001, 0.001, 0.001]} />; case 'cylinder': return <cylinderGeometry args={[0.5, 0.5, 1, 5]} />; case 'sphere': return <sphereGeometry args={[0.5, 6, 6]} />; case 'pyramid': return <cylinderGeometry args={[0, 0.5, 1, 4]} />; default: return <boxGeometry args={[1, 1, 1]} />; } };
                       return (
-                        <mesh key={i} userData={{ id: b.id }} position={[b.x, b.y + (b.height / 2), b.z]} scale={[b.width, b.height, b.depth]} rotation={[b.rotation_x || 0, b.rotation || 0, b.rotation_z || 0]}>
+                        <mesh key={i} userData={{ id: b.id }} position={[b.x, b.y + (b.height / 2), b.z]} scale={[b.width, b.height, b.depth]} rotation={new THREE.Euler(b.rotation_x || 0, b.rotation || 0, b.rotation_z || 0, 'YXZ')}>
                           {renderGenGeometry()}
                           <meshBasicMaterial color={b.color || "#00ff00"} wireframe />
                         </mesh>
