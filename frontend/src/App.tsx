@@ -2379,6 +2379,7 @@ function AdminPanel({
   }, []);
 
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [adminAlert, setAdminAlert] = useState<string | null>(null);
   const [showDefined, setShowDefined] = useState(false);
   const [showUndefined, setShowUndefined] = useState(false);
   const defined = locations.filter((l: any) => !l.parent_id && isUserDefinedName(l.name));
@@ -2491,7 +2492,7 @@ function AdminPanel({
     if (!targetObject) return;
     const finalBuildings = blockBuildings.map(b => ({ ...b, x: b.x + targetObject.position.x, z: b.z + targetObject.position.z, y: b.y + targetObject.position.y }));
     const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalBuildings) });
-    if (res.ok) { alert("BLOCK_COMMITTED"); refreshLocations(); setBlockBuildings([]); setView('list'); }
+    if (res.ok) { setAdminAlert("BLOCK_COMMITTED"); refreshLocations(); setBlockBuildings([]); setView('list'); }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -2536,7 +2537,7 @@ function AdminPanel({
                     childParts.forEach(c => c.parent_id = rootId);
                     await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(childParts) });
                 }
-                alert("LOCATION_UPLOADED"); 
+                setAdminAlert("LOCATION_UPLOADED"); 
                 targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType(''); 
             }
             return;
@@ -2551,7 +2552,7 @@ function AdminPanel({
         }
         const finalData = { ...editData, x: targetObject.position.x, z: targetObject.position.z, y: targetObject.position.y, width: finalW, height: finalH, depth: finalD, rotation: targetObject.rotation.y };
         const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalData) });
-        if (res.ok) { alert("LOCATION_UPLOADED"); targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType(''); }
+        if (res.ok) { setAdminAlert("LOCATION_UPLOADED"); targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType(''); }
         return;
     }
     const children = locations.filter(l => l.parent_id === editId);
@@ -2611,7 +2612,7 @@ function AdminPanel({
         for (const childUpdate of updates.filter(u => u.id !== editId)) {
             await fetch(`/api/locations/${childUpdate.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(childUpdate) });
         }
-        alert("DATA_UPDATED"); targetObject.scale.set(1, 1, 1); refreshLocations(); setView('list');
+        setAdminAlert("DATA_UPDATED"); targetObject.scale.set(1, 1, 1); refreshLocations(); setView('list');
     }
   };
 
@@ -2643,7 +2644,7 @@ function AdminPanel({
         refreshLocations();
     } else {
         const err = await res.json();
-        alert(err.error || "UNDO_FAILED");
+        setAdminAlert(err.error || "UNDO_FAILED");
     }
   };
 
@@ -2659,7 +2660,7 @@ function AdminPanel({
     
     const children = locations.filter((l: any) => String(l.parent_id) === String(root.id));
     setCopyBuffer({ root, children });
-    alert("DATA_LINK_COPIED");
+    setAdminAlert("DATA_LINK_COPIED");
   };
 
   const handlePaste = async () => {
@@ -2695,7 +2696,7 @@ function AdminPanel({
                 body: JSON.stringify(newChildren) 
             });
         }
-        alert("DATA_LINK_PASTED");
+        setAdminAlert("DATA_LINK_PASTED");
         refreshLocations();
     }
   };
@@ -2704,6 +2705,18 @@ function AdminPanel({
 
   return (
     <div className="panel admin-panel">
+      {adminAlert && createPortal(
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="panel critical-alert">
+            <h2 className="alert-text">!! SYSTEM_ALERT !!</h2>
+            <p>{adminAlert}</p>
+            <div className="button-group" style={{marginTop: '20px'}}>
+              <button className="upload-btn danger-btn" onClick={() => setAdminAlert(null)}>ACKNOWLEDGE</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       {deleteTarget && resolvedDeleteTarget && (
         <div className="modal-overlay"><div className="panel critical-alert"><h2 className="alert-text">!! CRITICAL_WARNING !!</h2><p>CONFIRM DESTRUCTION OF {locations.filter((l: any) => l.parent_id === resolvedDeleteTarget.id).length > 0 ? 'STRUCTURE GROUP' : 'DATA POINT'}:</p><p className="highlight">[{isUserDefinedName(resolvedDeleteTarget.name) ? resolvedDeleteTarget.name : getStructLabel(resolvedDeleteTarget)}]</p><div className="button-group" style={{marginTop: '20px'}}><button className="upload-btn danger-btn" onClick={executeDelete}>PURGE_DATA</button><button className="utility-btn" onClick={() => setDeleteTarget(null)}>ABORT_OPERATION</button></div></div></div>
       )}
@@ -2757,7 +2770,7 @@ function AdminPanel({
             if (confirm("PURGE ALL ROAD DATA?")) {
               const res = await fetch('/api/roads', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
               if (res.ok) {
-                alert("ALL ROADS PURGED FROM DATABASE");
+                setAdminAlert("ALL ROADS PURGED FROM DATABASE");
                 if (refreshRoads) refreshRoads();
               }
             }
@@ -2836,7 +2849,7 @@ function AdminPanel({
           </div>
           <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}><p>PATHS_DRAWN: {roadTrail.length}</p><p>TOTAL_NODES: {roadTrail.reduce((acc, curr) => acc + curr.length, 0)}</p><p style={{opacity: 0.7, marginTop: '5px'}}>HOLD LEFT-CLICK TO DRAW PATH</p><button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setRoadTrail([])}>CLEAR_ALL_DRAWINGS</button></div>
           <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => {
-                if (roadTrail.length === 0) return alert("DRAW A PATH FIRST");
+                if (roadTrail.length === 0) return setAdminAlert("DRAW A PATH FIRST");
                 const roadWidth = drawingRoadWidth;
                 let allNewSegments: any[] = [];
 
@@ -2871,11 +2884,11 @@ function AdminPanel({
                     }
                 }
 
-                if (allNewSegments.length === 0) return alert("NO VALID PATHS DRAWN");
+                if (allNewSegments.length === 0) return setAdminAlert("NO VALID PATHS DRAWN");
                 
                 const finalSegments = consolidateRoads(allNewSegments, roads);
                 await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalSegments) });
-                alert(`DRAWN NETWORK GENERATED: ${finalSegments.length} SEGMENTS`); refreshLocations(); setView('list'); setRoadTrail([]);
+                setAdminAlert(`DRAWN NETWORK GENERATED: ${finalSegments.length} SEGMENTS`); refreshLocations(); setView('list'); setRoadTrail([]);
             }}>GENERATE_FROM_DRAWINGS</button>
         </>
       )}
@@ -2912,7 +2925,7 @@ function AdminPanel({
             <label style={{fontSize: '0.7rem'}}>DISTRICT_COLOR</label>
             <input type="color" value={districtConfig.color} onChange={e => setDistrictConfig({...districtConfig, color: e.target.value})} style={{width: '100%', marginTop: '5px', height: '30px', padding: '0', background: 'none', border: '1px solid var(--green)'}} />
             <button className="upload-btn" style={{marginTop: '10px'}} onClick={async () => { 
-                if (!districtConfig.name.trim()) return alert("NAME REQUIRED"); 
+                if (!districtConfig.name.trim()) return setAdminAlert("NAME REQUIRED"); 
                 const res = await fetch('/api/districts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ name: districtConfig.name, color: districtConfig.color }) }); 
                 if (res.ok) { fetchDistricts(); setDistrictConfig({name: '', color: '#00ff00'}); } 
             }}>CREATE</button>
@@ -2928,7 +2941,7 @@ function AdminPanel({
           
           <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => { 
               const res = await fetch('/api/locations/batch-district', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: districtSelection, district_name: editingDistrict.name, district_color: editingDistrict.color }) }); 
-              if (res.ok) { alert("DISTRICT_SAVED"); refreshLocations(); setEditingDistrict(null); setDistrictSelection([]); } 
+              if (res.ok) { setAdminAlert("DISTRICT_SAVED"); refreshLocations(); setEditingDistrict(null); setDistrictSelection([]); } 
           }}>SAVE DISTRICT</button>
         </>
       )}
@@ -2955,7 +2968,7 @@ function AdminPanel({
           <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}>{roadSelectionBounds ? <p>AREA_SELECTED: {Math.round(Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x))}x{Math.round(Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z))} units</p> : <p style={{opacity: 0.7}}>DRAG ON MAP TO SELECT GENERATION AREA</p>}<p style={{opacity: 0.7, marginTop: '5px'}}>HIERARCHICAL BSP: ENABLED</p><p style={{opacity: 0.7}}>ZONING: {citySectionType}</p><p style={{opacity: 0.7}}>INFRASTRUCTURE: {genExcludeRoads ? 'BUILDINGS_ONLY' : 'ROADS_+_BUILDINGS'}</p></div>
           <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => {
               try {
-                if (!roadSelectionBounds) return alert("SELECT AREA FIRST");
+                if (!roadSelectionBounds) return setAdminAlert("SELECT AREA FIRST");
                 const minX = Math.min(roadSelectionBounds.min.x, roadSelectionBounds.max.x); const maxX = Math.max(roadSelectionBounds.min.x, roadSelectionBounds.max.x);
                 const minZ = Math.min(roadSelectionBounds.min.z, roadSelectionBounds.max.z); const maxZ = Math.max(roadSelectionBounds.min.z, roadSelectionBounds.max.z);
                 const cityW = maxX - minX; const cityD = maxZ - minZ;
@@ -3366,10 +3379,10 @@ function AdminPanel({
                   }
                 }
 
-                alert(`CITY GENERATED: ${blocks.length} SECTORS`); refreshLocations(); setView('list'); setRoadSelectionBounds(null);
+                setAdminAlert(`CITY GENERATED: ${blocks.length} SECTORS`); refreshLocations(); setView('list'); setRoadSelectionBounds(null);
             } catch (err: any) {
               console.error(err);
-              alert(`SYSTEM_ERROR: ${err.message}. Area might be too large or complex.`);
+              setAdminAlert(`SYSTEM_ERROR: ${err.message}. Area might be too large or complex.`);
             }
             }}>GENERATE_CITY_GRID</button>
         </>
@@ -3387,7 +3400,7 @@ function AdminPanel({
               ))}
             </div>
           </div>
-          <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => { if (joinSelection.length < 1) return alert("SELECT AT LEAST 1 UNIT"); const res = await fetch('/api/locations/join', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: joinSelection, classification: selectedClassification || undefined }) }); if (res.ok) { alert("STRUCTURES_CLASSIFIED/JOINED"); refreshLocations(); setView('list'); setJoinSelection([]); setSelectedClassification(''); } }}>JOIN_SELECTED</button>
+          <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => { if (joinSelection.length < 1) return setAdminAlert("SELECT AT LEAST 1 UNIT"); const res = await fetch('/api/locations/join', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: joinSelection, classification: selectedClassification || undefined }) }); if (res.ok) { setAdminAlert("STRUCTURES_CLASSIFIED/JOINED"); refreshLocations(); setView('list'); setJoinSelection([]); setSelectedClassification(''); } }}>JOIN_SELECTED</button>
         </>
       )}
 
