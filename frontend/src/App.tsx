@@ -2496,25 +2496,6 @@ function AdminPanel({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); if (!targetObject) return;
     
-    let activeToken = token;
-    let isSilentToken = false;
-    if (!activeToken) {
-        const tempRes = await fetch('/api/request-silent-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: userName }) });
-        if (tempRes.ok) {
-            const data = await tempRes.json();
-            activeToken = data.token;
-            isSilentToken = true;
-        } else {
-            alert("Failed to acquire temporary save rights");
-            return;
-        }
-    }
-    const revokeSilentToken = async () => {
-        if (isSilentToken) {
-            await fetch('/api/revoke-silent-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: userName }) });
-        }
-    };
-
     if (!editId) {
         if (editorGenParts && editorGenParts.length > 0) {
             const finalDataArray = editorGenParts.map(part => {
@@ -2546,18 +2527,17 @@ function AdminPanel({
             const rootParts = finalDataArray.filter(p => !p.parent_name);
             const childParts = finalDataArray.filter(p => p.parent_name);
             
-            const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeToken}` }, body: JSON.stringify(rootParts) });
+            const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(rootParts) });
             if (res.ok) { 
                 const rootData = await res.json();
                 if (rootData.data && childParts.length > 0) {
                     const rootId = rootData.data[0].id;
                     childParts.forEach(c => c.parent_id = rootId);
-                    await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeToken}` }, body: JSON.stringify(childParts) });
+                    await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(childParts) });
                 }
                 alert("LOCATION_UPLOADED"); 
                 targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType(''); 
             }
-            await revokeSilentToken();
             return;
         }
 
@@ -2569,9 +2549,8 @@ function AdminPanel({
             finalW = r; finalH = r; finalD = r;
         }
         const finalData = { ...editData, x: targetObject.position.x, z: targetObject.position.z, y: targetObject.position.y, width: finalW, height: finalH, depth: finalD, rotation: targetObject.rotation.y };
-        const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeToken}` }, body: JSON.stringify(finalData) });
+        const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalData) });
         if (res.ok) { alert("LOCATION_UPLOADED"); targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType(''); }
-        await revokeSilentToken();
         return;
     }
     const children = locations.filter(l => l.parent_id === editId);
@@ -2626,37 +2605,17 @@ function AdminPanel({
         updates.push({ ...editData, x: targetObject.position.x, z: targetObject.position.z, y: targetObject.position.y, width: finalW, height: finalH, depth: finalD, rotation: targetObject.rotation.y });
     }
     const finalRoot = updates.find(u => u.id === editId) || updates[0];
-    const res = await fetch(`/api/locations/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeToken}` }, body: JSON.stringify(finalRoot) });
+    const res = await fetch(`/api/locations/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalRoot) });
     if (res.ok) {
         for (const childUpdate of updates.filter(u => u.id !== editId)) {
-            await fetch(`/api/locations/${childUpdate.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeToken}` }, body: JSON.stringify(childUpdate) });
+            await fetch(`/api/locations/${childUpdate.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(childUpdate) });
         }
         alert("DATA_UPDATED"); targetObject.scale.set(1, 1, 1); refreshLocations(); setView('list');
     }
-    await revokeSilentToken();
   };
 
   const executeDelete = async () => {
     if (!deleteTarget) return;
-    
-    let activeToken = token;
-    let isSilentToken = false;
-    if (!activeToken) {
-        const tempRes = await fetch('/api/request-silent-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: userName }) });
-        if (tempRes.ok) {
-            const data = await tempRes.json();
-            activeToken = data.token;
-            isSilentToken = true;
-        } else {
-            alert("Failed to acquire temporary delete rights");
-            return;
-        }
-    }
-    const revokeSilentToken = async () => {
-        if (isSilentToken) {
-            await fetch('/api/revoke-silent-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: userName }) });
-        }
-    };
     
     let root = deleteTarget;
     if (deleteTarget.parent_id) {
@@ -2665,14 +2624,13 @@ function AdminPanel({
     }
     
     const idsToDelete = [root.id, ...locations.filter((l: any) => l.parent_id === root.id).map((l: any) => l.id)];
-    const res = await fetch('/api/locations/batch-delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeToken}` }, body: JSON.stringify({ ids: idsToDelete }) });
+    const res = await fetch('/api/locations/batch-delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: idsToDelete }) });
     if (res.ok) { 
         refreshLocations(); 
         setDeleteTarget(null); 
         // Force-deactivate Rhombus deployment state to prevent moving Admin character on next click
         setRhombusState((p: any) => ({ ...p, active: false }));
     }
-    await revokeSilentToken();
   };
 
   const handleUndo = async () => {
@@ -4785,6 +4743,7 @@ function App() {
   const genGroupRef = useRef<any>(null);
   const editMeshRef = useRef<any>(null);
   const socketRef = useRef<any>(null);
+  const wasGrantedForEditRef = useRef<boolean>(false);
 
   useEffect(() => {
     const savedName = localStorage.getItem('userName');
@@ -4847,6 +4806,9 @@ function App() {
         if (data.targetUser === userName) {
             setToken(data.token);
             setNotification("TEMPORARY_ADMIN_ACCESS_GRANTED");
+            if (data.forEditing) {
+                wasGrantedForEditRef.current = true;
+            }
         }
     });
 
@@ -4948,6 +4910,17 @@ function App() {
     }, 2500);
   };
 
+  const cleanupEditModal = () => {
+      setIsEditModalOpen(false);
+      if (socketRef.current) socketRef.current.emit('editingFinished');
+      if (wasGrantedForEditRef.current) {
+          if (socketRef.current) socketRef.current.emit('surrenderAccess', { token });
+          setToken('');
+          setIsAdmin(false);
+          wasGrantedForEditRef.current = false;
+      }
+  };
+
   return (
     <div className="crt-container">
       <div className="scanlines"></div>
@@ -4981,7 +4954,7 @@ function App() {
           <div className="ui-overlay">
             {notification && <div className="modal-overlay" onClick={() => setNotification(null)} style={{cursor: 'pointer'}}><div className="panel" style={{color: '#ff0000', borderColor: '#ff0000'}}><h2 style={{fontSize: '2rem'}}>{notification}</h2></div></div>}
             {isEditModalOpen && activeEditLocation && (
-              <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); setIsEditModalOpen(false); socketRef.current.emit('editingFinished'); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}>★</button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div><button type="submit" className="upload-btn">SAVE</button><button className="utility-btn" onClick={() => { setIsEditModalOpen(false); socketRef.current.emit('editingFinished'); }}>CLOSE</button></form></div></div>
+              <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); cleanupEditModal(); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}>★</button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div><button type="submit" className="upload-btn">SAVE</button><button type="button" className="utility-btn" onClick={() => { cleanupEditModal(); }}>CLOSE</button></form></div></div>
             )}
             <Sidebar
               activeMenu={activeSidebarMenu}

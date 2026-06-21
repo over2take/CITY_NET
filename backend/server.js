@@ -316,20 +316,6 @@ app.post('/api/login', (req, res) => {
   });
 });
 
-app.post('/api/request-silent-token', (req, res) => {
-  const { username } = req.body;
-  if (!username) return res.status(400).json({ error: 'Username required' });
-  elevatedUsers.add(username);
-  const tempToken = jwt.sign({ username, isTemporary: true }, SECRET, { expiresIn: '5m' });
-  res.json({ token: tempToken });
-});
-
-app.post('/api/revoke-silent-token', (req, res) => {
-  const { username } = req.body;
-  if (username) elevatedUsers.delete(username);
-  res.json({ message: 'Revoked' });
-});
-
 app.post('/api/undo', authenticate, (req, res) => {
   db.get('SELECT * FROM action_history ORDER BY timestamp DESC LIMIT 1', [], (err, action) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -577,6 +563,18 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('surrenderAccess', (data) => {
+    try {
+      const verified = jwt.verify(data.token, SECRET);
+      if (verified && verified.isTemporary) {
+        elevatedUsers.delete(verified.username);
+        console.log(`User ${verified.username} surrendered temporary access`);
+        io.emit('accessRevoked', { targetUser: verified.username });
+        broadcastActiveUsers();
+      }
+    } catch (err) {}
+  });
+
   socket.on('createNPC', (data) => {
     // data: { adminToken, npcName }
     try {
@@ -692,6 +690,10 @@ io.on('connection', (socket) => {
 
   socket.on('approveEditing', (data) => {
     // data: { userId, location }
+    elevatedUsers.add(data.userId);
+    const tempToken = jwt.sign({ username: data.userId, isTemporary: true }, SECRET, { expiresIn: '12h' });
+    io.emit('accessGranted', { targetUser: data.userId, token: tempToken, forEditing: true });
+
     io.emit('editingStarted', data);
     io.emit('editingApproved', data);
   });
