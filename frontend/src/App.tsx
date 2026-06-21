@@ -4563,7 +4563,7 @@ function App() {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [view, setView] = useState<'list' | 'editor' | 'generator' | 'district' | 'join' | 'draw_roads' | 'city_gen'>('list');
   const [editId, setEditId] = useState<number | null>(null);
-  const [showAdminPanel, setShowAdminPanel] = useState(true);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [userName, setUserName] = useState<string>('');
   const [tempUserName, setTempUserName] = useState('');
   const [currentController, setCurrentController] = useState<string>('');
@@ -5106,7 +5106,7 @@ function App() {
     e.preventDefault();
     const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(loginForm) });
     const data = await res.json();
-    if (data.token) { setToken(data.token); setIsAdmin(true); } else { setNotification("LOGIN_FAILED"); }
+    if (data.token) { setToken(data.token); setIsAdmin(true); setShowAdminPanel(true); } else { setNotification("LOGIN_FAILED"); }
   };
 
   const startBootSequence = () => { if (!tempUserName.trim()) return; localStorage.setItem('userName', tempUserName); setUserName(tempUserName); setIsLoggedIn(true); if (socketRef.current) socketRef.current.emit('identify', tempUserName); if (audioEnabled) { const startupSound = new Audio('/StartUp.mp3'); startupSound.volume = 0.20; startupSound.play().catch(() => {}); } };
