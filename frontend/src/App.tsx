@@ -5078,7 +5078,7 @@ function App() {
       newSocket.emit('identify', { userName, isAdmin: !!token, token });
     });
 
-    newSocket.on('dataUpdated', () => { fetchLocations(); fetchRoads(); fetchDistricts(); (window as any).hasUnsavedChanges = true; });
+    newSocket.on('dataUpdated', (payload: any) => { fetchLocations(); fetchRoads(); fetchDistricts(); if (!payload || !payload.isRhombusOnly) { (window as any).hasUnsavedChanges = true; } });
     newSocket.on('activeUsersUpdated', (users: any[]) => setActiveUsers(users));
     newSocket.on('editingRequested', (data: any) => {
       if (data.userId !== userName && notification === "REQUEST_SENT_TO_ADMIN") {

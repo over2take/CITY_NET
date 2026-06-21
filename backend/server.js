@@ -22,7 +22,7 @@ app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
 // Emit helper
-const emitUpdate = () => io.emit('dataUpdated');
+const emitUpdate = (payload = {}) => io.emit('dataUpdated', payload);
 
 const elevatedUsers = new Set();
 
@@ -140,7 +140,8 @@ app.post('/api/locations', optionalAuthenticate, (req, res) => {
           }
       });
     }
-    emitUpdate();
+    const isRhombusOnly = results.length > 0 && results.every(r => r.shape === 'rhombus');
+    emitUpdate({ isRhombusOnly });
       res.json({ 
         message: `Processed ${results.length} locations`, 
         data: results,
@@ -833,7 +834,7 @@ io.on('connection', (socket) => {
         db.run('DELETE FROM locations WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
             if (!err && this.changes > 0) {
                 recordAction('location_delete', { data: [{ id: data.id }] });
-                emitUpdate();
+                emitUpdate({ isRhombusOnly: true });
             }
         });
     }, 3000); // 3 second animation window
@@ -849,7 +850,7 @@ io.on('connection', (socket) => {
       if (info.isAdmin || info.userName === row.owner) {
         db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [data.x, data.z, data.id], function(updateErr) {
           if (!updateErr) {
-            emitUpdate();
+            emitUpdate({ isRhombusOnly: true });
           }
         });
       }
