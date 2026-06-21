@@ -3926,6 +3926,11 @@ function CityDataBaseMenu({ token, emitUpdate }: any) {
   const [maps, setMaps] = useState<any[]>([]);
   const [mapName, setMapName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void, confirmText?: string, isAlert?: boolean } | null>(null);
+
+  const showAlert = (message: string) => {
+    setConfirmDialog({ title: "!! SYSTEM_ALERT !!", message, onConfirm: () => setConfirmDialog(null), confirmText: "ACKNOWLEDGE", isAlert: true });
+  };
 
   const fetchMaps = async () => {
     try {
@@ -3942,94 +3947,132 @@ function CityDataBaseMenu({ token, emitUpdate }: any) {
   }, []);
 
   const handleSave = async () => {
-    if (!token) return alert("ADMIN_ACCESS_REQUIRED");
-    if (!mapName.trim()) return alert("MAP_NAME_REQUIRED");
+    if (!token) return showAlert("ADMIN_ACCESS_REQUIRED");
+    if (!mapName.trim()) return showAlert("MAP_NAME_REQUIRED");
 
     const existing = maps.find(m => m.name === mapName.trim());
-    if (existing) {
-      if (!window.confirm(`OVERWRITE_MAP: '${mapName.trim()}'?`)) return;
-    }
+    
+    const executeSave = async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch('/api/maps/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ name: mapName.trim() })
+        });
+        if (res.ok) {
+          fetchMaps();
+          window.dispatchEvent(new CustomEvent('clearUnsavedChanges'));
+        } else {
+          showAlert("SAVE_FAILED");
+        }
+      } catch (e) { console.error(e); }
+      setIsLoading(false);
+    };
 
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/maps/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ name: mapName.trim() })
+    if (existing) {
+      setConfirmDialog({
+        title: "!! CRITICAL_WARNING !!",
+        message: `OVERWRITE_MAP: '${mapName.trim()}'?`,
+        confirmText: "OVERWRITE_DATA",
+        onConfirm: () => { setConfirmDialog(null); executeSave(); }
       });
-      if (res.ok) {
-        fetchMaps();
-        // Clear unsaved changes flag (assuming we implement it via a global or passed prop, or we handle it in App.tsx)
-        window.dispatchEvent(new CustomEvent('clearUnsavedChanges'));
-      } else {
-        alert("SAVE_FAILED");
-      }
-    } catch (e) { console.error(e); }
-    setIsLoading(false);
+    } else {
+      executeSave();
+    }
   };
 
   const handleNewMap = async () => {
-    if (!token) return alert("ADMIN_ACCESS_REQUIRED");
+    if (!token) return showAlert("ADMIN_ACCESS_REQUIRED");
     
-    // Check global unsaved changes
-    if ((window as any).hasUnsavedChanges) {
-      if (!window.confirm("UNSAVED_CHANGES_DETECTED. PROCEED_WITH_NEW_MAP?")) return;
-    }
+    const executeClear = async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch('/api/maps/clear', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          setMapName("");
+          window.dispatchEvent(new CustomEvent('clearUnsavedChanges'));
+        }
+      } catch (e) { console.error(e); }
+      setIsLoading(false);
+    };
 
-    if (!window.confirm("WARNING: CLEAR_ACTIVE_MAP?")) return;
-
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/maps/clear', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+    const confirmClear = () => {
+      setConfirmDialog({
+        title: "!! CRITICAL_WARNING !!",
+        message: "CLEAR_ACTIVE_MAP?",
+        confirmText: "PURGE_MAP",
+        onConfirm: () => { setConfirmDialog(null); executeClear(); }
       });
-      if (res.ok) {
-        setMapName("");
-        window.dispatchEvent(new CustomEvent('clearUnsavedChanges'));
-      }
-    } catch (e) { console.error(e); }
-    setIsLoading(false);
+    };
+
+    if ((window as any).hasUnsavedChanges) {
+      setConfirmDialog({
+        title: "!! CRITICAL_WARNING !!",
+        message: "UNSAVED_CHANGES_DETECTED. PROCEED_WITH_NEW_MAP?",
+        confirmText: "PROCEED",
+        onConfirm: () => { setConfirmDialog(null); confirmClear(); }
+      });
+    } else {
+      confirmClear();
+    }
   };
 
   const handleLoad = async (name: string) => {
-    if (!token) return alert("ADMIN_ACCESS_REQUIRED");
+    if (!token) return showAlert("ADMIN_ACCESS_REQUIRED");
+
+    const executeLoad = async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch(`/api/maps/load/${encodeURIComponent(name)}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          setMapName(name);
+          window.dispatchEvent(new CustomEvent('clearUnsavedChanges'));
+        } else {
+          showAlert("LOAD_FAILED");
+        }
+      } catch (e) { console.error(e); }
+      setIsLoading(false);
+    };
 
     if ((window as any).hasUnsavedChanges) {
-      if (!window.confirm("UNSAVED_CHANGES_DETECTED. PROCEED_WITH_LOAD?")) return;
-    }
-
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/maps/load/${encodeURIComponent(name)}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+      setConfirmDialog({
+        title: "!! CRITICAL_WARNING !!",
+        message: "UNSAVED_CHANGES_DETECTED. PROCEED_WITH_LOAD?",
+        confirmText: "OVERWRITE_CURRENT",
+        onConfirm: () => { setConfirmDialog(null); executeLoad(); }
       });
-      if (res.ok) {
-        setMapName(name);
-        window.dispatchEvent(new CustomEvent('clearUnsavedChanges'));
-      } else {
-        alert("LOAD_FAILED");
-      }
-    } catch (e) { console.error(e); }
-    setIsLoading(false);
+    } else {
+      executeLoad();
+    }
   };
 
   const handleDelete = async (id: number, name: string) => {
-    if (!token) return alert("ADMIN_ACCESS_REQUIRED");
-    if (!window.confirm(`CONFIRM_DELETE_MAP: '${name}'?`)) return;
+    if (!token) return showAlert("ADMIN_ACCESS_REQUIRED");
 
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/maps/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        fetchMaps();
+    setConfirmDialog({
+      title: "!! CRITICAL_WARNING !!",
+      message: `CONFIRM_DELETE_MAP: '${name}'?`,
+      confirmText: "PURGE_DATA",
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setIsLoading(true);
+        try {
+          const res = await fetch(`/api/maps/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) fetchMaps();
+        } catch (e) { console.error(e); }
+        setIsLoading(false);
       }
-    } catch (e) { console.error(e); }
-    setIsLoading(false);
+    });
   };
 
   return (
@@ -4065,6 +4108,21 @@ function CityDataBaseMenu({ token, emitUpdate }: any) {
           ))
         )}
       </div>
+
+      {confirmDialog && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="panel critical-alert">
+            <h2 className="alert-text">{confirmDialog.title}</h2>
+            <p>{confirmDialog.message}</p>
+            <div className="button-group" style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+              <button className="upload-btn danger-btn" onClick={confirmDialog.onConfirm}>{confirmDialog.confirmText || 'PROCEED'}</button>
+              {!confirmDialog.isAlert && (
+                <button className="utility-btn" onClick={() => setConfirmDialog(null)}>ABORT_OPERATION</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -5416,6 +5474,7 @@ function App() {
 }
 
 export default App;
+
 
 
 
