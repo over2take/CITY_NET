@@ -4100,7 +4100,13 @@ function CityDataBaseMenu({ token, emitUpdate }: any) {
         ) : (
           maps.map(m => (
             <div key={m.id} className="list-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-              <span style={{ fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+              <span 
+                onClick={() => setMapName(m.name)} 
+                style={{ fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', flex: 1 }}
+                title="Populate Map Designation"
+              >
+                {m.name}
+              </span>
               <div style={{ display: 'flex', gap: '5px' }}>
                 <button className="utility-btn" onClick={() => handleLoad(m.name)} disabled={isLoading} style={{ fontSize: '0.6rem', padding: '2px 8px' }}>LOAD</button>
                 <button className="utility-btn danger-btn" onClick={() => handleDelete(m.id, m.name)} disabled={isLoading} style={{ fontSize: '0.6rem', padding: '2px 8px' }}>DELETE</button>
