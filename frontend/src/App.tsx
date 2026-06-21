@@ -4462,7 +4462,7 @@ function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation, isOpen
   const definedLocations = locations.filter((l: any) => !l.parent_id && (isUserDefinedName(l.name) || (l.description && l.description.trim() !== "")));
   const danger = definedLocations.filter(l => l.isDanger); const starred = definedLocations.filter(l => l.isFavorite); const others = definedLocations.filter(l => !l.isDanger && !l.isFavorite && !l.district_name);
   const ListItem = ({ loc }: any) => (
-    <div className={`list-item ${selectedLocation?.id === loc.id ? 'selected' : ''}`} onClick={() => onSelect(loc)} style={{ cursor: 'pointer', paddingLeft: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!!loc.isDanger && <span style={{ color: '#ff0000', marginRight: '5px' }}>!</span>}{!!loc.isFavorite && <span style={{ color: '#ff7b00', marginRight: '5px' }}>★</span>}{isUserDefinedName(loc.name) ? loc.name : getStructLabel(loc)}</span><button className="utility-btn" onClick={(e) => { e.stopPropagation(); onZoom({ pos: [loc.x, loc.y + loc.height/2, loc.z], size: Math.max(loc.width, loc.height, loc.depth) }); }} style={{ padding: '0 4px', fontSize: '0.6rem', marginLeft: '5px' }}>◎</button></div>
+    <div className={`list-item ${selectedLocation?.id === loc.id ? 'selected' : ''}`} onClick={() => onSelect(loc)} style={{ cursor: 'pointer', paddingLeft: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!!loc.isDanger && <span style={{ color: '#ff0000', marginRight: '5px' }}>!</span>}{!!loc.isFavorite && <span style={{ color: '#ff7b00', marginRight: '5px' }}>★</span>}{isUserDefinedName(loc.name) ? loc.name : getStructLabel(loc)}</span><button className="utility-btn" onClick={(e) => { e.stopPropagation(); onZoom({ pos: [loc.x, loc.y + loc.height/2, loc.z], size: Math.max(loc.width, loc.height, loc.depth) }); }} style={{ padding: '4px 10px', fontSize: '0.7rem', cursor: 'pointer', marginLeft: '5px' }}>◎</button></div>
   );
   return (
     <div className="panel quick-access-panel">
@@ -4470,7 +4470,7 @@ function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation, isOpen
       <div className="location-list" style={{ maxHeight: 'calc(100vh - 250px)' }}>
         {danger.length > 0 && (<><h4 className="category-header danger-text" onClick={() => setShowDanger(!showDanger)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ width: '20px', display: 'inline-block' }}>{showDanger ? '▼' : '▶'}</span>!! CRITICAL_SITES ({danger.length})</h4>{showDanger && danger.map(loc => <ListItem key={loc.id} loc={loc} />)}</>)}
         {starred.length > 0 && (<><h4 className="category-header starred-text" onClick={() => setShowStarred(!showStarred)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ width: '20px', display: 'inline-block' }}>{showStarred ? '▼' : '▶'}</span>★ PRIORITY_NODES ({starred.length})</h4>{showStarred && starred.map(loc => <ListItem key={loc.id} loc={loc} />)}</>)}
-        {Object.keys(districts).length > 0 && (<><h4 className="category-header" onClick={() => setShowDistricts(!showDistricts)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ width: '20px', display: 'inline-block' }}>{showDistricts ? '▼' : '▶'}</span>DISTRICT_ZONES</h4>{showDistricts && Object.entries(districts).map(([name, data]: any) => (<div key={name} style={{ marginBottom: '10px' }}><div style={{ color: data.color, fontSize: '0.65rem', fontWeight: 'bold', paddingLeft: '20px', marginBottom: '5px', borderLeft: `2px solid ${data.color}`, marginLeft: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{name.toUpperCase()}</span><button className="utility-btn" onClick={(e) => { e.stopPropagation(); onZoom({ pos: data.center, size: data.size }); }} style={{ padding: '0 4px', fontSize: '0.6rem', color: data.color, borderColor: data.color }}>◎</button></div>{data.locations.length > 0 ? data.locations.map((loc: any) => <ListItem key={loc.id} loc={loc} />) : <div style={{ fontSize: '0.6rem', opacity: 0.5, paddingLeft: '35px' }}>NO_DEFINED_DATA</div>}</div>))}</>)}
+        {Object.keys(districts).length > 0 && (<><h4 className="category-header" onClick={() => setShowDistricts(!showDistricts)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ width: '20px', display: 'inline-block' }}>{showDistricts ? '▼' : '▶'}</span>DISTRICT_ZONES</h4>{showDistricts && Object.entries(districts).map(([name, data]: any) => (<div key={name} style={{ marginBottom: '10px' }}><div style={{ color: data.color, fontSize: '0.65rem', fontWeight: 'bold', paddingLeft: '20px', marginBottom: '5px', borderLeft: `2px solid ${data.color}`, marginLeft: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{name.toUpperCase()}</span><button className="utility-btn" onClick={(e) => { e.stopPropagation(); onZoom({ pos: data.center, size: data.size }); }} style={{ padding: '4px 10px', fontSize: '0.7rem', cursor: 'pointer', color: data.color, borderColor: data.color }}>◎</button></div>{data.locations.length > 0 ? data.locations.map((loc: any) => <ListItem key={loc.id} loc={loc} />) : <div style={{ fontSize: '0.6rem', opacity: 0.5, paddingLeft: '35px' }}>NO_DEFINED_DATA</div>}</div>))}</>)}
         {others.length > 0 && (<><h4 className="category-header" onClick={() => setShowOthers(!showOthers)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ width: '20px', display: 'inline-block' }}>{showOthers ? '▼' : '▶'}</span>DEFINED_STRUCTURES ({others.length})</h4>{showOthers && others.map(loc => <ListItem key={loc.id} loc={loc} />)}</>)}
         {definedLocations.length === 0 && Object.keys(districts).length === 0 && (<p style={{ fontSize: '0.7rem', opacity: 0.5 }}>NO_DEFINED_DATA_POINTS</p>)}
       </div>
@@ -4512,76 +4512,109 @@ function CursorPivotControls() {
 }
 
 function CameraController({ target, onComplete }: { target: { pos: [number, number, number], size: number } | null, onComplete: () => void }) {
-  const { camera, controls } = useThree();
-  const startTime = useRef<number | null>(null);
-  const startPos = useRef<THREE.Vector3>(new THREE.Vector3());
-  const startTarget = useRef<THREE.Vector3>(new THREE.Vector3());
+    const { camera, controls, size } = useThree();
+    const startTime = useRef<number | null>(null);
+    const initialPos = useRef<THREE.Vector3>(new THREE.Vector3());
+    const initialTarget = useRef<THREE.Vector3>(new THREE.Vector3());
+    const destPos = useRef<THREE.Vector3>(new THREE.Vector3());
+    const destTarget = useRef<THREE.Vector3>(new THREE.Vector3());
+    const distanceRef = useRef<number>(0);
+    const isSetup = useRef<boolean>(false);
 
-  useFrame((state) => {
-    if (!target || !controls) {
-        startTime.current = null;
-        return;
-    }
-    
-    if (startTime.current === null) {
-        startTime.current = state.clock.elapsedTime;
-        startPos.current.copy(camera.position);
-        if ((controls as any).getTarget) {
-             (controls as any).getTarget(startTarget.current);
-        } else if ((controls as any).target) {
-             startTarget.current.copy((controls as any).target);
+    useFrame((state) => {
+        if (!target || !controls || !(camera as any).fov) return;
+        
+        if (!isSetup.current) {
+            isSetup.current = true;
+            startTime.current = state.clock.elapsedTime;
+            
+            // 1. Store initial state
+            initialPos.current.copy(camera.position);
+            if (typeof (controls as any).getTarget === 'function') {
+                (controls as any).getTarget(initialTarget.current);
+            } else if ((controls as any).target) {
+                initialTarget.current.copy((controls as any).target);
+            }
+
+            // 2. Compute exact mathematical framing distance
+            const [tx, ty, tz] = target.pos;
+            destTarget.current.set(tx, ty, tz);
+            
+            // Radius of the object's bounding sphere
+            const radius = Math.max(15, target.size * 1.5);
+            
+            // Calculate distance needed to fit radius in FOV
+            const fov = (camera as any).fov * (Math.PI / 180);
+            const aspect = size.width / size.height;
+            let fitDistance = radius / Math.sin(fov / 2);
+            
+            // If window is tall and narrow, increase distance to prevent cropping sides
+            if (aspect < 1) {
+                fitDistance = fitDistance / aspect;
+            }
+
+            // 3. Force 45-degree up and 45-degree right angle (Isometric)
+            // x: right, y: up, z: toward viewer
+            const isoDir = new THREE.Vector3(0.5, 0.7071, 0.5).normalize();
+            
+            // Dest position is exactly the target center + offset direction * fitDistance
+            destPos.current.copy(destTarget.current).add(isoDir.multiplyScalar(fitDistance));
+
+            distanceRef.current = initialPos.current.distanceTo(destPos.current);
         }
-    }
 
-    const duration = 2.0; // Slightly longer for more cinematic feel
-    const elapsed = state.clock.elapsedTime - startTime.current;
-    const progress = Math.min(1, elapsed / duration);
-    
-    // Smooth easing
-    const t = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+        if (startTime.current === null) return;
 
-    const [tx, ty, tz] = target.pos;
-    const size = target.size;
-    const destTarget = new THREE.Vector3(tx, ty, tz);
-    
-    // Calculate final position
-    const distance = Math.max(45, size * 3.8);
-    const destPos = new THREE.Vector3(tx + distance * 0.7, ty + distance * 0.6, tz + distance * 0.7);
+        const duration = 2.0; 
+        const elapsed = state.clock.elapsedTime - startTime.current;
+        const progress = Math.min(1, elapsed / duration);
+        
+        // Smooth easing
+        const t = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 
-    // --- CINEMATIC ARC & PAN ---
-    // 1. Linear interpolation for basic path
-    const currentPos = new THREE.Vector3().lerpVectors(startPos.current, destPos, t);
-    
-    // 2. Add an "Arc" (Swoop up in the middle)
-    const arcHeight = startPos.current.distanceTo(destPos) * 0.25;
-    const swoop = Math.sin(t * Math.PI) * arcHeight;
-    currentPos.y += swoop;
+        // 1. Linear interpolation for basic path
+        const currentPos = new THREE.Vector3().lerpVectors(initialPos.current, destPos.current, t);
+        
+        // 2. Add an "Arc" (Swoop up in the middle)
+        const arcHeight = distanceRef.current * 0.25;
+        const swoop = Math.sin(t * Math.PI) * arcHeight;
+        currentPos.y += swoop;
 
-    // 3. Add a "Pan" (Horizontal curve)
-    // We calculate a vector perpendicular to the movement and the up-axis
-    const moveDir = new THREE.Vector3().subVectors(destPos, startPos.current).normalize();
-    const panAxis = new THREE.Vector3(0, 1, 0).cross(moveDir).normalize();
-    const panAmount = Math.sin(t * Math.PI) * (distance * 0.4);
-    currentPos.add(panAxis.multiplyScalar(panAmount));
+        // 3. Add a "Pan" (Horizontal curve)
+        const moveDir = new THREE.Vector3().subVectors(destPos.current, initialPos.current).normalize();
+        if (moveDir.lengthSq() > 0.001) {
+            const panAxis = new THREE.Vector3(0, 1, 0).cross(moveDir).normalize();
+            const panAmount = Math.sin(t * Math.PI) * (distanceRef.current * 0.4);
+            currentPos.add(panAxis.multiplyScalar(panAmount));
+        }
 
-    // Apply to camera and controls
-    const currentTarget = new THREE.Vector3().lerpVectors(startTarget.current, destTarget, t);
-    if ((controls as any).setLookAt) {
-        (controls as any).setLookAt(currentPos.x, currentPos.y, currentPos.z, currentTarget.x, currentTarget.y, currentTarget.z, false);
-    } else {
-        camera.position.copy(currentPos);
-        (controls as any).target.lerpVectors(startTarget.current, destTarget, t);
-    }
-    
-    (controls as any).update();
+        // Apply to camera and controls
+        const currentTarget = new THREE.Vector3().lerpVectors(initialTarget.current, destTarget.current, t);
+        
+        if (typeof (controls as any).setLookAt === 'function') {
+            (controls as any).setLookAt(
+                currentPos.x, currentPos.y, currentPos.z, 
+                currentTarget.x, currentTarget.y, currentTarget.z, 
+                false
+            );
+        } else {
+            camera.position.copy(currentPos);
+            camera.lookAt(currentTarget);
+            if ((controls as any).target) (controls as any).target.copy(currentTarget);
+        }
+        
+        // Force sync controls to prevent internal tweening conflicts
+        (controls as any).update(0);
 
-    if (progress >= 1) {
-        onComplete();
-        startTime.current = null;
-    }
-  });
-  return null;
-}
+        if (progress >= 1) {
+            isSetup.current = false;
+            startTime.current = null;
+            onComplete();
+        }
+    });
+
+    return null;
+  }
 
 function App() {
   const controlsRef = useRef<any>(null);
