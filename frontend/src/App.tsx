@@ -4521,6 +4521,11 @@ function CameraController({ target, onComplete }: { target: { pos: [number, numb
     const initialTarget = useRef<THREE.Vector3>(new THREE.Vector3());
     const destPos = useRef<THREE.Vector3>(new THREE.Vector3());
     const destTarget = useRef<THREE.Vector3>(new THREE.Vector3());
+    const currentPos = useRef<THREE.Vector3>(new THREE.Vector3());
+    const currentTarget = useRef<THREE.Vector3>(new THREE.Vector3());
+    const moveDir = useRef<THREE.Vector3>(new THREE.Vector3());
+    const panAxis = useRef<THREE.Vector3>(new THREE.Vector3());
+    const upVec = useRef<THREE.Vector3>(new THREE.Vector3(0, 1, 0));
     const distanceRef = useRef<number>(0);
     const isSetup = useRef<boolean>(false);
 
@@ -4576,34 +4581,34 @@ function CameraController({ target, onComplete }: { target: { pos: [number, numb
         const t = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 
         // 1. Linear interpolation for basic path
-        const currentPos = new THREE.Vector3().lerpVectors(initialPos.current, destPos.current, t);
+        currentPos.current.lerpVectors(initialPos.current, destPos.current, t);
         
         // 2. Add an "Arc" (Swoop up in the middle)
         const arcHeight = distanceRef.current * 0.25;
         const swoop = Math.sin(t * Math.PI) * arcHeight;
-        currentPos.y += swoop;
+        currentPos.current.y += swoop;
 
         // 3. Add a "Pan" (Horizontal curve)
-        const moveDir = new THREE.Vector3().subVectors(destPos.current, initialPos.current).normalize();
-        if (moveDir.lengthSq() > 0.001) {
-            const panAxis = new THREE.Vector3(0, 1, 0).cross(moveDir).normalize();
+        moveDir.current.subVectors(destPos.current, initialPos.current).normalize();
+        if (moveDir.current.lengthSq() > 0.001) {
+            panAxis.current.copy(upVec.current).cross(moveDir.current).normalize();
             const panAmount = Math.sin(t * Math.PI) * (distanceRef.current * 0.4);
-            currentPos.add(panAxis.multiplyScalar(panAmount));
+            currentPos.current.add(panAxis.current.multiplyScalar(panAmount));
         }
 
         // Apply to camera and controls
-        const currentTarget = new THREE.Vector3().lerpVectors(initialTarget.current, destTarget.current, t);
+        currentTarget.current.lerpVectors(initialTarget.current, destTarget.current, t);
         
         if (typeof (controls as any).setLookAt === 'function') {
             (controls as any).setLookAt(
-                currentPos.x, currentPos.y, currentPos.z, 
-                currentTarget.x, currentTarget.y, currentTarget.z, 
+                currentPos.current.x, currentPos.current.y, currentPos.current.z, 
+                currentTarget.current.x, currentTarget.current.y, currentTarget.current.z, 
                 false
             );
         } else {
-            camera.position.copy(currentPos);
-            camera.lookAt(currentTarget);
-            if ((controls as any).target) (controls as any).target.copy(currentTarget);
+            camera.position.copy(currentPos.current);
+            camera.lookAt(currentTarget.current);
+            if ((controls as any).target) (controls as any).target.copy(currentTarget.current);
         }
         
         // Force sync controls to prevent internal tweening conflicts
