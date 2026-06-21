@@ -622,7 +622,6 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   const dragDist = useRef(0);
 
   const handlePointerDown = (e: any) => {
-      console.log('Rhombus pointerDown!');
       e.stopPropagation();
     dragDist.current = 0;
     
@@ -653,7 +652,6 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   };
 
   const handlePointerUp = async (e: any) => {
-      console.log('Rhombus pointerUp!');
       try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
@@ -857,7 +855,6 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   const dragDist = useRef(0);
 
   const handlePointerDown = (e: any) => {
-      console.log('Rhombus pointerDown!');
       e.stopPropagation();
     dragDist.current = 0;
     
@@ -888,7 +885,6 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   };
 
   const handlePointerUp = async (e: any) => {
-      console.log('Rhombus pointerUp!');
       try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
@@ -5033,7 +5029,7 @@ function App() {
   const [transformMode, setTransformMode] = useState<'translate' | 'scale'>('translate');
   const [isDragging, setIsDragging] = useState(false);
   useEffect(() => {
-    const handleGlobalPointerUp = () => { console.log('Global pointerup! Forcing isDragging=false'); setIsDragging(false); };
+    const handleGlobalPointerUp = () => { setIsDragging(false); };
     window.addEventListener('pointerup', handleGlobalPointerUp);
     return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
   }, []);
