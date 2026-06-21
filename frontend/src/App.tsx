@@ -2793,7 +2793,7 @@ function AdminPanel({
               <p style={{fontSize: '0.7rem'}}>TARGET: {isUserDefinedName(req.locationName) ? req.locationName : `STRUCT_${req.locationId}`}</p>
               <div className="button-group" style={{marginTop: '10px'}}>
                 <button className="upload-btn" onClick={() => {
-                  socketRef.current.emit('approveEditing', { userId: req.userId, location: locations.find((l: any) => l.id === req.locationId) });
+                  socketRef.current.emit('approveEditing', { userId: req.userId, location: locations.find((l: any) => String(l.id) === String(req.locationId)) });
                   setPendingRequests((prev: any[]) => prev.filter(r => r.userId !== req.userId));
                 }}>APPROVE</button>
                 <button className="upload-btn danger-btn" onClick={() => {
@@ -4805,9 +4805,12 @@ function App() {
     newSocket.on('accessGranted', (data: any) => {
         if (data.targetUser === userName) {
             setToken(data.token);
-            setNotification("TEMPORARY_ADMIN_ACCESS_GRANTED");
+            setIsAdmin(true);
             if (data.forEditing) {
                 wasGrantedForEditRef.current = true;
+                setNotification(null);
+            } else {
+                setNotification("TEMPORARY_ADMIN_ACCESS_GRANTED");
             }
         }
     });
