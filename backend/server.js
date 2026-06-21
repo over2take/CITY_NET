@@ -430,6 +430,115 @@ app.delete('/api/roads', authenticate, (req, res) => {
   });
 });
 
+// --- MAP MANAGER ROUTES ---
+app.get('/api/maps', (req, res) => {
+  db.all('SELECT id, name, timestamp FROM saved_maps ORDER BY timestamp DESC', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.post('/api/maps/save', authenticate, (req, res) => {
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'Map name required' });
+
+  db.serialize(() => {
+    db.all('SELECT * FROM locations', (err1, locations) => {
+      if (err1) return res.status(500).json({ error: err1.message });
+      db.all('SELECT * FROM districts', (err2, districts) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        db.all('SELECT * FROM roads', (err3, roads) => {
+          if (err3) return res.status(500).json({ error: err3.message });
+
+          const sql = `INSERT INTO saved_maps (name, locations_data, districts_data, roads_data) 
+                       VALUES (?, ?, ?, ?) 
+                       ON CONFLICT(name) DO UPDATE SET 
+                         locations_data=excluded.locations_data,
+                         districts_data=excluded.districts_data,
+                         roads_data=excluded.roads_data,
+                         timestamp=CURRENT_TIMESTAMP`;
+
+          db.run(sql, [name, JSON.stringify(locations), JSON.stringify(districts), JSON.stringify(roads)], function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Map saved successfully' });
+          });
+        });
+      });
+    });
+  });
+});
+
+app.post('/api/maps/load/:name', authenticate, (req, res) => {
+  const { name } = req.params;
+  db.get('SELECT * FROM saved_maps WHERE name = ?', [name], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Map not found' });
+
+    const locations = JSON.parse(row.locations_data || '[]');
+    const districts = JSON.parse(row.districts_data || '[]');
+    const roads = JSON.parse(row.roads_data || '[]');
+
+    db.serialize(() => {
+      db.run('DELETE FROM locations');
+      db.run('DELETE FROM districts');
+      db.run('DELETE FROM roads');
+
+      if (locations.length > 0) {
+        const stmtL = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, classification, polyCount) 
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        locations.forEach(l => {
+          stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.is_target, l.isFavorite, l.isDanger, l.owner, l.notifications_enabled, l.rotation, l.classification, l.polyCount]);
+        });
+        stmtL.finalize();
+      }
+
+      if (districts.length > 0) {
+        const stmtD = db.prepare(`INSERT INTO districts (id, name, color) VALUES (?, ?, ?)`);
+        districts.forEach(d => {
+          stmtD.run([d.id, d.name, d.color]);
+        });
+        stmtD.finalize();
+      }
+
+      if (roads.length > 0) {
+        const stmtR = db.prepare(`INSERT INTO roads (id, x1, z1, x2, z2, width) VALUES (?, ?, ?, ?, ?, ?)`);
+        roads.forEach(r => {
+          stmtR.run([r.id, r.x1, r.z1, r.x2, r.z2, r.width]);
+        });
+        stmtR.finalize();
+      }
+
+      db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM locations) WHERE name="locations"');
+      db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM districts) WHERE name="districts"');
+      db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM roads) WHERE name="roads"', (err) => {
+        emitUpdate();
+        res.json({ message: 'Map loaded successfully' });
+      });
+    });
+  });
+});
+
+app.post('/api/maps/clear', authenticate, (req, res) => {
+  db.serialize(() => {
+    db.run('DELETE FROM locations');
+    db.run('DELETE FROM districts');
+    db.run('DELETE FROM roads');
+    db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="locations"');
+    db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="districts"');
+    db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="roads"', (err) => {
+      emitUpdate();
+      res.json({ message: 'Map cleared completely' });
+    });
+  });
+});
+
+app.delete('/api/maps/:id', authenticate, (req, res) => {
+  db.run('DELETE FROM saved_maps WHERE id = ?', [req.params.id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Map deleted' });
+  });
+});
+
 app.post('/api/control', authenticate, (req, res) => {
   const { controller } = req.body;
   currentController = controller;
@@ -789,3 +898,4 @@ app.use((req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
+

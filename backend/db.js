@@ -126,6 +126,15 @@ db.serialize(() => {
   db.run(`ALTER TABLE locations ADD COLUMN polyCount INTEGER DEFAULT 5`, (err) => {
     // Ignore error if column already exists
   });
+
+  db.run(`CREATE TABLE IF NOT EXISTS saved_maps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    locations_data TEXT,
+    districts_data TEXT,
+    roads_data TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
 });
 
 module.exports = db;
