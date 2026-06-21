@@ -3624,6 +3624,7 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
   // NPC Creation UI
   const [npcNameInput, setNpcNameInput] = useState('');
   const [showNpcPrompt, setShowNpcPrompt] = useState(false);
+  const [lastNpcContext, setLastNpcContext] = useState<Record<string, string>>({});
 
   // Dropdown UI
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
@@ -3641,10 +3642,21 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
         const npcs = activeUsers.filter((u: any) => u.isNPC).map((u: any) => u.userName);
         let tabName = '';
         
-        if (msg.sender === userName || (isPrimaryAdmin && npcs.includes(msg.sender))) {
+        const senderIsNPC = npcs.includes(msg.sender);
+        const recipientIsNPC = npcs.includes(msg.recipient);
+
+        if (msg.sender === userName || (isPrimaryAdmin && senderIsNPC)) {
             tabName = msg.recipient;
-        } else if (msg.recipient === userName || (isPrimaryAdmin && npcs.includes(msg.recipient))) {
+            if (senderIsNPC) {
+                tabName = `${msg.recipient} (${msg.sender})`;
+                setLastNpcContext(prev => ({ ...prev, [tabName]: msg.sender }));
+            }
+        } else if (msg.recipient === userName || (isPrimaryAdmin && recipientIsNPC)) {
             tabName = msg.sender;
+            if (recipientIsNPC) {
+                tabName = `${msg.sender} (${msg.recipient})`;
+                setLastNpcContext(prev => ({ ...prev, [tabName]: msg.recipient }));
+            }
         } else {
             return;
         }
@@ -3689,9 +3701,14 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
     e.preventDefault();
     if (inputText.trim()) {
       if (activeTab === 'GLOBAL') {
-          onSendMessage(inputText);
+          onSendMessage(inputText, sendAs);
       } else {
-          socket.emit('sendPrivateMessage', { sender: sendAs, recipient: activeTab, text: inputText });
+          let realRecipient = activeTab;
+          const match = activeTab.match(/^(.+?) \((.+?)\)$/);
+          if (match) {
+              realRecipient = match[1];
+          }
+          socket.emit('sendPrivateMessage', { sender: sendAs, recipient: realRecipient, text: inputText });
       }
       setInputText('');
     }
@@ -3712,7 +3729,19 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
       setActiveTab(targetUser);
       setActiveDropdown(null);
       setUnreadTabs(prev => { const next = new Set(prev); next.delete(targetUser); return next; });
-      socket.emit('getPrivateHistory', { user1: userName, user2: targetUser });
+
+      let historyUser1 = userName;
+      let historyUser2 = targetUser;
+      const match = targetUser.match(/^(.+?) \((.+?)\)$/);
+      if (match) {
+          historyUser1 = match[2];
+          historyUser2 = match[1];
+          setSendAs(match[2]);
+      } else {
+          setSendAs(userName);
+      }
+      
+      socket.emit('getPrivateHistory', { user1: historyUser1, user2: historyUser2, originalTab: targetUser });
   };
   
   const closeTab = (e: React.MouseEvent, targetUser: string) => {
@@ -3728,7 +3757,7 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
 
   const displayMessages = activeTab === 'GLOBAL' ? messages : (privateMessages[activeTab] || []);
   const myNPCs = activeUsers.filter((u: any) => u.isNPC && u.isActive !== false).map((u: any) => u.userName);
-  const showSendAs = activeTab !== 'GLOBAL' && isPrimaryAdmin && myNPCs.length > 0;
+  const showSendAs = isPrimaryAdmin && myNPCs.length > 0;
 
   return (
     <div style={{ display: isChatOpen ? 'block' : 'none' }}>
@@ -3753,7 +3782,7 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
           {/* TABS BAR */}
           <div style={{ display: 'flex', background: 'var(--dark-green)', padding: '5px 5px 0 5px', gap: '5px', overflowX: 'auto' }}>
               <div 
-                  onClick={() => setActiveTab('GLOBAL')}
+                  onClick={() => { setActiveTab('GLOBAL'); setSendAs(userName); }}
                   style={{ padding: '8px 15px', background: activeTab === 'GLOBAL' ? 'var(--black)' : 'transparent', color: activeTab === 'GLOBAL' ? 'var(--green)' : '#888', borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
               >
                   [ GLOBAL ]
@@ -5111,9 +5140,9 @@ function App() {
 
   const startBootSequence = () => { if (!tempUserName.trim()) return; localStorage.setItem('userName', tempUserName); setUserName(tempUserName); setIsLoggedIn(true); if (socketRef.current) socketRef.current.emit('identify', tempUserName); if (audioEnabled) { const startupSound = new Audio('/StartUp.mp3'); startupSound.volume = 0.20; startupSound.play().catch(() => {}); } };
 
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = (text: string, senderOverride?: string) => {
     if (socketRef.current) {
-        socketRef.current.emit('sendMessage', { sender: userName, text });
+        socketRef.current.emit('sendMessage', { sender: senderOverride || userName, text });
     }
   };
 

@@ -656,6 +656,9 @@ io.on('connection', (socket) => {
 
   socket.on('sendMessage', (data) => {
     // data: { sender, text }
+    if (data.sender !== socket.userName && !elevatedUsers.has(socket.userName)) {
+      data.sender = socket.userName; // Prevent spoofing
+    }
     const timestamp = new Date().toISOString();
     db.run('INSERT INTO chat_logs (sender, text, timestamp) VALUES (?, ?, ?)', [data.sender, data.text, timestamp], function(err) {
       if (!err) {
@@ -799,14 +802,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('getPrivateHistory', (data) => {
-    // data: { user1, user2 }
+    // data: { user1, user2, originalTab? }
     db.all(`SELECT * FROM private_messages 
             WHERE (sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?) 
             ORDER BY timestamp DESC LIMIT 50`, 
             [data.user1, data.user2, data.user2, data.user1], (err, rows) => {
       if (!err) {
         socket.emit('privateHistory', {
-          targetUser: data.user2,
+          targetUser: data.originalTab || data.user2,
           history: rows.reverse().map(r => ({
             ...r,
             timestamp: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
