@@ -27,6 +27,15 @@ db.serialize(() => {
     owner TEXT
   )`);
 
+  db.run(`CREATE TABLE IF NOT EXISTS battle_maps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id INTEGER NOT NULL,
+    designation TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY(location_id) REFERENCES locations(id) ON DELETE CASCADE
+  )`);
+
   db.run(`CREATE TABLE IF NOT EXISTS districts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,

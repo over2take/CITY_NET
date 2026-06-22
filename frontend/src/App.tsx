@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh } from '@react-three/drei';
+import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh, Html, OrthographicCamera } from '@react-three/drei';
+import { BattleMapManager } from './BattleMapManager';
+import { BattleMapScene } from './BattleMapScene';
 import { io } from 'socket.io-client';
 import * as THREE from 'three';
 import rhombusIcon from './assets/rhombus.svg';
@@ -701,7 +703,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   );
 });
 
-const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, activeUsers, roads }: any) => {
+const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, activeUsers, roads, isBattleMap, battleMapPos }: any) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const haloRef = useRef<THREE.Mesh>(null);
@@ -735,7 +737,11 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
 
   // Smooth movement interpolation
-  const visualPos = useRef(new THREE.Vector3(location.x, location.y + (location.height / 2), location.z));
+  const visualPos = useRef(new THREE.Vector3(
+    isBattleMap && battleMapPos ? battleMapPos.x : location.x, 
+    isBattleMap ? 0.1 : location.y + (location.height / 2), 
+    isBattleMap && battleMapPos ? battleMapPos.z : location.z
+  ));
 
   useEffect(() => {
     localPos.current = { x: location.x, z: location.z };
@@ -4668,6 +4674,10 @@ function App() {
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [roads, setRoads] = useState<any[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
+  const [showBattleMapManager, setShowBattleMapManager] = useState(false);
+  const [activeBattleMapData, setActiveBattleMapData] = useState<any>(null);
+  const [battleMapPositions, setBattleMapPositions] = useState<Record<string, {x: number, z: number}>>({});
+  const [currentLocBattleMaps, setCurrentLocBattleMaps] = useState<any[]>([]);
   const [cameraTarget, setCameraTarget] = useState<{ pos: [number, number, number], size: number } | null>(null);
   const [showZoomComplete, setShowZoomComplete] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -4682,7 +4692,7 @@ function App() {
   }
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const [view, setView] = useState<'list' | 'editor' | 'generator' | 'district' | 'join' | 'draw_roads' | 'city_gen'>('list');
+  const [view, setView] = useState<'list' | 'editor' | 'generator' | 'district' | 'join' | 'draw_roads' | 'city_gen' | 'battle_map'>('list');
   const [editId, setEditId] = useState<number | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [userName, setUserName] = useState<string>('');
@@ -4842,6 +4852,39 @@ function App() {
   }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds]);
 
   const toggleSelection = (id: number) => { setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]); };
+
+  useEffect(() => {
+    if (selectedLocation && selectedLocation.shape !== 'rhombus' && selectedLocation.shape !== 'enemy_rhombus') {
+      fetch(`/api/locations/${selectedLocation.id}/battle_maps`)
+        .then(res => res.json())
+        .then(data => setCurrentLocBattleMaps(Array.isArray(data) ? data : []))
+        .catch(() => setCurrentLocBattleMaps([]));
+    } else {
+      setCurrentLocBattleMaps([]);
+    }
+  }, [selectedLocation?.id]);
+
+  const enterBattleMap = (locId: number) => {
+    if (currentLocBattleMaps.length === 0) return;
+    
+    let targetFloor = 0;
+    const adminInMap = activeUsers.find((u: any) => u.isAdmin && u.currentBattleMapId === locId);
+    if (adminInMap && adminInMap.currentFloorIndex !== undefined) {
+      targetFloor = adminInMap.currentFloorIndex;
+    }
+
+    setActiveBattleMapData({ locationId: locId, maps: currentLocBattleMaps, currentFloorIndex: targetFloor });
+    setView('battle_map');
+    setSelectedLocation(null);
+    if (socketRef.current) socketRef.current.emit('battle_map_enter', { locationId: locId, floorIndex: targetFloor });
+  };
+
+  const exitBattleMap = () => {
+    setActiveBattleMapData(null);
+    setView('list'); // or previous view
+    setBattleMapPositions({});
+    if (socketRef.current) socketRef.current.emit('battle_map_leave');
+  };
 
   const handleBuildingClick = (loc: any) => {
     if (isCopyingSize) {
@@ -5223,7 +5266,18 @@ function App() {
 
     newSocket.on('dataUpdated', (payload: any) => { fetchLocations(); fetchRoads(); fetchDistricts(); if (!payload || !payload.isRhombusOnly) { (window as any).hasUnsavedChanges = true; } });
     newSocket.on('activeUsersUpdated', (users: any[]) => setActiveUsers(users));
-    newSocket.on('editingRequested', (data: any) => {
+    newSocket.on('force_floor_change', (data: any) => {
+        setActiveBattleMapData((prev: any) => {
+          if (prev && prev.locationId === data.locationId) {
+             return { ...prev, currentFloorIndex: data.floorIndex };
+          }
+          return prev;
+        });
+      });
+      newSocket.on('battle_map_moved', (data: any) => {
+        setBattleMapPositions(prev => ({ ...prev, [data.userName]: { x: data.x, z: data.z } }));
+      });
+      newSocket.on('editingRequested', (data: any) => {
       if (data.userId !== userName && notification === "REQUEST_SENT_TO_ADMIN") {
         setNotification(`ANOTHER_USER_REQUESTING_ACCESS: ${data.userName}`);
       }
@@ -5349,6 +5403,38 @@ function App() {
       {isLoggedIn && (
         <>
           <div className="ui-overlay">
+      {showBattleMapManager && selectedLocation && (
+        <BattleMapManager locationId={selectedLocation.id} token={token} onClose={() => setShowBattleMapManager(false)} />
+      )}
+      {view === 'battle_map' && activeBattleMapData && (
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 100 }}>
+          <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'auto' }}>
+            <h2 style={{ margin: 0, textShadow: '0 0 10px #00ff00', fontSize: '2em' }}>{activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation?.toUpperCase() || 'UNKNOWN FLOOR'}</h2>
+            <button onClick={exitBattleMap} style={{ padding: '10px 30px', marginTop: '10px', backgroundColor: '#ff0000', color: 'white', border: '1px solid #ff0000', cursor: 'pointer', fontWeight: 'bold' }}>EXIT</button>
+          </div>
+          {isAdmin && isPrimaryAdmin && (
+            <div style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'auto' }}>
+              {activeBattleMapData.maps.map((m: any, idx: number) => {
+                let lbl = m.designation;
+                if (lbl === 'Lobby') lbl = 'Lby';
+                else if (lbl === 'Penthouse') lbl = 'PH';
+                else if (lbl.startsWith('Level ')) lbl = 'L' + lbl.split(' ')[1];
+                
+                return (
+                  <button key={m.id} 
+                    style={{ padding: '15px', backgroundColor: activeBattleMapData.currentFloorIndex === idx ? '#00ff00' : '#222', color: activeBattleMapData.currentFloorIndex === idx ? '#000' : '#00ff00', border: '1px solid #00ff00', cursor: 'pointer', fontWeight: 'bold' }}
+                    onClick={() => {
+                      setActiveBattleMapData((p: any) => ({ ...p, currentFloorIndex: idx }));
+                      if (socketRef.current) socketRef.current.emit('admin_force_floor_change', { locationId: activeBattleMapData.locationId, floorIndex: idx });
+                    }}>
+                    {lbl}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
             {notification && <div className="modal-overlay" onClick={() => setNotification(null)} style={{cursor: 'pointer'}}><div className="panel" style={{color: '#ff0000', borderColor: '#ff0000'}}><h2 style={{fontSize: '2rem'}}>{notification}</h2></div></div>}
             {isEditModalOpen && activeEditLocation && (
               <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); cleanupEditModal(); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}>★</button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div><button type="submit" className="upload-btn">SAVE</button><button type="button" className="utility-btn" onClick={() => { cleanupEditModal(); }}>CLOSE</button></form></div></div>
@@ -5515,7 +5601,13 @@ function App() {
                         if (res.ok) { setSelectedLocation(null); fetchLocations(); }
                       }}>PURGE_DATA_POINT</button>
                     )}
-                    {!token && !isRhombus && <button className="upload-btn" onClick={() => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } }}>REQUEST_EDITING_RIGHTS</button>}
+                    {isAdmin && isPrimaryAdmin && !isRhombus && (
+      <button className="upload-btn" onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>
+  )}
+  {currentLocBattleMaps.length > 0 && (
+      <button className="upload-btn" style={{backgroundColor: '#ff00ff', color: 'white'}} onClick={() => enterBattleMap(selectedLocation.id)}>ENTER BATTLE MAP</button>
+  )}
+  {!token && !isRhombus && <button className="upload-btn" onClick={() => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } }}>REQUEST_EDITING_RIGHTS</button>}
                   </DraggableWindow>
                 );
               }
@@ -5524,7 +5616,15 @@ function App() {
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : (<><span style={{ display: 'inline-block', width: '250px', textAlign: 'right' }}>{isWaiting ? 'SYSTEM READY // ' : `SYSTEM CHECKING ${throbber} // `}</span><span style={{ display: 'inline-block', width: '300px', textAlign: 'left', whiteSpace: 'nowrap' }}>{statusText}</span></>)}</p></div>
           </div>
           <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
-            <PerspectiveCamera makeDefault position={[0, 200, 250]} />
+            {view === 'battle_map' ? (
+              activeBattleMapData && activeBattleMapData.maps[activeBattleMapData.currentFloorIndex] && (
+                <BattleMapScene 
+                  mapUrl={activeBattleMapData.maps[activeBattleMapData.currentFloorIndex].image_url} 
+                />
+              )
+            ) : (
+              <>
+                <PerspectiveCamera makeDefault position={[0, 200, 250]} />
             <CameraControls ref={controlsRef} makeDefault enabled={!isDragging} dollyToCursor={true} />
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <GlobalCameraCapture />
@@ -5575,6 +5675,8 @@ function App() {
             {renderLists.interactive.map(({ loc, children, isSelected, isBatchSelected, isOverlapped }: any) => (
               <Building key={loc.id} location={loc} children={children} onClick={() => handleBuildingClick(loc)} isSelected={isSelected} isBatchSelected={isBatchSelected} isOverlapped={isOverlapped} setTargetObject={setTargetObject} editMeshRef={editMeshRef} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} isDragging={isDragging} socket={socket} activeUsers={activeUsers} />
             ))}
+            </>
+            )}
             {/* Dedicated Player Rhombus Rendering */}
             {locations.filter(l => l.shape === 'rhombus').map(loc => (
               <PlayerRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} roads={roads} />
