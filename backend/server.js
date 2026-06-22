@@ -99,7 +99,7 @@ app.get('/api/locations', (req, res) => {
 
 // --- BATTLE MAPS ROUTES ---
 app.post('/api/locations/:id/battle_maps', authenticate, upload.single('image'), (req, res) => {
-  if (!req.user.isAdmin || req.user.isTemporary) {
+  if (req.user.isTemporary) {
     if (req.file) fs.unlinkSync(req.file.path);
     return res.status(403).json({ error: 'Only main admin can manage battle maps' });
   }
@@ -160,7 +160,7 @@ app.get('/api/locations/:id/battle_maps', (req, res) => {
 });
 
 app.delete('/api/locations/:id/battle_maps/:mapId', authenticate, (req, res) => {
-  if (!req.user.isAdmin || req.user.isTemporary) {
+  if (req.user.isTemporary) {
     return res.status(403).json({ error: 'Only main admin can manage battle maps' });
   }
 

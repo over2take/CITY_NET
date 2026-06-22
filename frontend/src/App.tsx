@@ -2375,7 +2375,7 @@ function AdminPanel({
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
   genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu,
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
-  isCopyingSize, setIsCopyingSize,
+  isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName
 }: any) {
   const [density, setDensity] = useState(8);
@@ -3593,6 +3593,9 @@ function AdminPanel({
             <button type="submit" className="upload-btn">
                 {editData.shape === 'enemy_rhombus' ? (editId ? 'UPDATE_ENEMY_DATA' : 'UPLOAD_NEW_ENEMY') : (editId ? 'UPDATE_DATA_POINT' : 'UPLOAD_NEW')}
             </button>
+            {isAdmin && isPrimaryAdmin && editId && editData.shape !== 'enemy_rhombus' && (
+                <button type="button" className="upload-btn" style={{backgroundColor: '#5500ff', marginTop: '10px'}} onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>
+            )}
           </form>
         </>
       )}
@@ -5474,6 +5477,9 @@ function App() {
             {isAdmin && !token && <div className="panel admin-login"><form onSubmit={handleLogin}><input placeholder="USERNAME" onChange={e => setLoginForm({...loginForm, username: e.target.value})} /><input type="password" placeholder="PASSWORD" onChange={e => setLoginForm({...loginForm, password: e.target.value})} /><button type="submit">ACCESS_SYSTEM</button></form></div>}
             {token && showAdminPanel && (
               <AdminPanel
+                isAdmin={isAdmin}
+                isPrimaryAdmin={isPrimaryAdmin}
+                setShowBattleMapManager={setShowBattleMapManager}
                 isPlantingTrees={isPlantingTrees} setIsPlantingTrees={setIsPlantingTrees}
                 treeBatchSize={treeBatchSize} setTreeBatchSize={setTreeBatchSize}
                 socketRef={socketRef}
@@ -5602,7 +5608,7 @@ function App() {
                       }}>PURGE_DATA_POINT</button>
                     )}
                     {isAdmin && isPrimaryAdmin && !isRhombus && (
-      <button className="upload-btn" onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>
+      <></>
   )}
   {currentLocBattleMaps.length > 0 && (
       <button className="upload-btn" style={{backgroundColor: '#ff00ff', color: 'white'}} onClick={() => enterBattleMap(selectedLocation.id)}>ENTER BATTLE MAP</button>
