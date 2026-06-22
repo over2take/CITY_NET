@@ -4850,8 +4850,9 @@ function App() {
       const isSelected = !isBatchSelecting && view !== 'district' && view !== 'join' && selectedLocation?.id === loc.id;
       const isBatchSelected = selectedIds.includes(loc.id) || districtSelection.includes(loc.id) || joinSelection.includes(loc.id);
       const isOverlapped = overlapIds.includes(loc.id) || children.some((c: any) => overlapIds.includes(c.id));
+      const isBattleActive = activeUsers && activeUsers.some((user: any) => user.currentBattleMapId && Number(user.currentBattleMapId) === Number(loc.id));
       
-      if (!isSelected && !isBatchSelected && !isOverlapped) {
+      if (!isSelected && !isBatchSelected && !isOverlapped && !isBattleActive) {
         // Flatten parent and all its children into the simple (instanced) rendering list
         const pushSimple = (p: any) => {
           simple.push({
@@ -4866,9 +4867,9 @@ function App() {
             depth: p.depth,
             color: p.color,
             rotation: p.rotation,
-              rotation_x: p.rotation_x,
-              rotation_z: p.rotation_z,
-              district_color: p.district_color,
+            rotation_x: p.rotation_x,
+            rotation_z: p.rotation_z,
+            district_color: p.district_color,
             isFavorite: p.isFavorite,
             isDanger: p.isDanger,
             name: p.name,
@@ -4884,7 +4885,7 @@ function App() {
       }
     });
     return { simple, interactive };
-  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds]);
+  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers]);
 
   const toggleSelection = (id: number) => { setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]); };
 
