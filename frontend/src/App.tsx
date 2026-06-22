@@ -685,7 +685,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
       >
-        <octahedronGeometry args={[0.625]} />
+        <octahedronGeometry args={[0.5]} />
         <meshBasicMaterial color="#ff0000" transparent opacity={0.9} />
       </mesh>
       
@@ -693,7 +693,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
 
       {/* Enemy Core - Pulsing Void */}
       <mesh ref={coreRef as any} scale={[0.5, 0.5, 0.5]}>
-        <octahedronGeometry args={[0.625]} />
+        <octahedronGeometry args={[0.5]} />
         <meshBasicMaterial color="#220000" />
       </mesh>
       
