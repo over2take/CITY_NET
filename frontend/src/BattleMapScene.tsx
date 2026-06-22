@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
-import { OrthographicCamera } from '@react-three/drei';
+import { OrthographicCamera, MapControls } from '@react-three/drei';
 
 export const BattleMapScene = ({ mapUrl, onFloorChange, floors, isAdmin, activeFloorIndex, onExit }: any) => {
   const textureObj = useLoader(THREE.TextureLoader, mapUrl);
@@ -15,7 +15,8 @@ export const BattleMapScene = ({ mapUrl, onFloorChange, floors, isAdmin, activeF
 
   return (
     <>
-      <OrthographicCamera makeDefault position={[0, 10, 0]} zoom={4} near={0.1} far={1000} />
+      <OrthographicCamera makeDefault position={[0, 100, 0]} zoom={2} near={0.1} far={1000} />
+      <MapControls enableRotate={false} minZoom={0.5} maxZoom={20} />
       <ambientLight intensity={1} />
       
       {/* Map Background */}
