@@ -4905,9 +4905,9 @@ function App() {
     if (currentLocBattleMaps.length === 0) return;
     
     let targetFloor = 0;
-    const userInMap = activeUsers.find((u: any) => u.isAdmin && u.currentBattleMapId === locId) || activeUsers.find((u: any) => u.currentBattleMapId === locId);
+    const userInMap = activeUsers.find((u: any) => u.isAdmin && u.currentBattleMapId && Number(u.currentBattleMapId) === Number(locId)) || activeUsers.find((u: any) => u.currentBattleMapId && Number(u.currentBattleMapId) === Number(locId));
     if (userInMap && userInMap.currentFloorIndex !== undefined) {
-      targetFloor = userInMap.currentFloorIndex;
+      targetFloor = Number(userInMap.currentFloorIndex);
     }
 
     if (userName && socketRef.current) {

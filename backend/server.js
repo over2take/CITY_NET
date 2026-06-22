@@ -1052,12 +1052,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('admin_force_floor_change', (data) => {
-    // data: { locationId, floorIndex }
-    const info = userSockets.get(socket.id);
-    if (info && info.isAdmin) {
-      io.emit('force_floor_change', data);
-    }
-  });
+      // data: { locationId, floorIndex }
+      const info = userSockets.get(socket.id);
+      if (info && info.isAdmin) {
+        // Update the floor index for everyone currently in this map
+        userSockets.forEach(user => {
+            if (Number(user.currentBattleMapId) === Number(data.locationId)) {
+                user.currentFloorIndex = data.floorIndex;
+            }
+        });
+        io.emit('force_floor_change', data);
+        broadcastActiveUsers();
+      }
+    });
 
   socket.on('battle_map_move', (data) => {
     // data: { userName, x, z }
