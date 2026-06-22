@@ -283,11 +283,33 @@ app.delete('/api/locations/:id', authenticate, (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'Not found' });
 
-    db.run('DELETE FROM locations WHERE id = ?', req.params.id, (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      recordAction('location_delete', { data: [row] });
-      emitUpdate();
-      res.json({ message: 'Deleted' });
+    // Fetch all associated battle maps to delete their files
+    db.all('SELECT image_url FROM battle_maps WHERE location_id = ?', [req.params.id], (errMaps, mapRows) => {
+      if (errMaps) console.error("Error fetching battle maps for deletion:", errMaps.message);
+      
+      if (mapRows && mapRows.length > 0) {
+        mapRows.forEach(map => {
+          const fs = require('fs');
+          const path = require('path');
+          const filePath = path.join(__dirname, '..', map.image_url);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        });
+      }
+
+      // Delete battle map records
+      db.run('DELETE FROM battle_maps WHERE location_id = ?', [req.params.id], (errDelMaps) => {
+        if (errDelMaps) console.error("Error deleting battle maps:", errDelMaps.message);
+
+        // Finally delete the location
+        db.run('DELETE FROM locations WHERE id = ?', req.params.id, (errDelLoc) => {
+          if (errDelLoc) return res.status(500).json({ error: errDelLoc.message });
+          recordAction('location_delete', { data: [row] });
+          emitUpdate();
+          res.json({ message: 'Deleted' });
+        });
+      });
     });
   });
 });
