@@ -685,15 +685,15 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
       >
-        <octahedronGeometry args={[0.5]} />
+        <octahedronGeometry args={[0.625]} />
         <meshBasicMaterial color="#ff0000" transparent opacity={0.9} />
       </mesh>
       
       
 
       {/* Enemy Core - Pulsing Void */}
-      <mesh ref={coreRef as any} scale={[0.4, 0.4, 0.4]}>
-        <octahedronGeometry args={[0.5]} />
+      <mesh ref={coreRef as any} scale={[0.5, 0.5, 0.5]}>
+        <octahedronGeometry args={[0.625]} />
         <meshBasicMaterial color="#220000" />
       </mesh>
       
@@ -2376,20 +2376,14 @@ function AdminPanel({
   genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu,
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
-  isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName
-}: any) {
+  isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
+    isDeployingEnemy, setIsDeployingEnemy
+  }: any) {
   if (view === 'battle_map') {
     return (
       <div className="panel admin-panel" style={{ width: '300px', maxHeight: '90vh', overflowY: 'auto', pointerEvents: 'auto' }}>
         <h3 style={{ textShadow: '0 0 10px #00ff00', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
-        <button className="upload-btn" onClick={async () => {
-            const res = await fetch('/api/locations', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-              body: JSON.stringify({ x: 0, y: 0.1, z: 0, name: 'NEW ENEMY', description: '', npcs: '', isFavorite: false, isDanger: true, shape: 'enemy_rhombus', color: '#ff0000', width: 4, height: 4, depth: 4, owner: userName })
-            });
-            if (res.ok) refreshLocations();
-        }} style={{ width: '100%', marginBottom: '10px' }}>ADD_ENEMY</button>
+        <button className="upload-btn" onClick={() => setIsDeployingEnemy(!isDeployingEnemy)} style={{ width: '100%', marginBottom: '10px', backgroundColor: isDeployingEnemy ? '#ff0000' : '' }}>{isDeployingEnemy ? 'CANCEL_DEPLOY' : 'ADD_ENEMY'}</button>
         <button className="utility-btn danger-btn" onClick={() => {
             onLogout();
         }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>
@@ -5130,6 +5124,7 @@ function App() {
   const [editorStyleIndex, setEditorStyleIndex] = useState(0);
   const [isCopyingSize, setIsCopyingSize] = useState(false);
   const [isPlantingTrees, setIsPlantingTrees] = useState(false);
+  const [isDeployingEnemy, setIsDeployingEnemy] = useState(false);
   const [treeBatchSize, setTreeBatchSize] = useState(5);
   const [blockBuildings, setBlockBuildings] = useState<any[]>([]);
 
@@ -5508,8 +5503,9 @@ function App() {
                 isPrimaryAdmin={isPrimaryAdmin}
                 setShowBattleMapManager={setShowBattleMapManager}
                 isPlantingTrees={isPlantingTrees} setIsPlantingTrees={setIsPlantingTrees}
-                treeBatchSize={treeBatchSize} setTreeBatchSize={setTreeBatchSize}
-                socketRef={socketRef}
+                  treeBatchSize={treeBatchSize} setTreeBatchSize={setTreeBatchSize}
+                  isDeployingEnemy={isDeployingEnemy} setIsDeployingEnemy={setIsDeployingEnemy}
+                  socketRef={socketRef}
                 token={token}
                 userName={userName}
                 controlsRef={controlsRef}
