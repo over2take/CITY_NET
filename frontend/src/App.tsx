@@ -1009,6 +1009,13 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
     baseColor = "#00ff00"; // Neon green if it has no name, description, and residence
   }
 
+  let maxY = -Infinity;
+  parts.forEach(p => {
+    maxY = Math.max(maxY, p.y + p.height / 2);
+  });
+
+  const isBattleActive = activeUsers && activeUsers.some((user: any) => user.location_id === location.id);
+
   const dragDist = useRef(0);
 
   return (
@@ -1017,6 +1024,17 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
         rotation={new THREE.Euler(location.rotation_x || 0, location.rotation || 0, location.rotation_z || 0, 'YXZ')}
         ref={(group) => { if (isSelected && group) { setTargetObject(group); if (editMeshRef) editMeshRef.current = group; } }} 
     >
+      {isBattleActive && (
+          <Html position={[0, maxY - minY + 2, 0]} center zIndexRange={[100, 0]}>
+            <div style={{
+                fontSize: '24px', 
+                filter: 'drop-shadow(0 0 10px #ff0000)',
+                animation: 'pulse 1.5s infinite' 
+            }}>
+                ⚔️
+            </div>
+          </Html>
+        )}
       {parts.map((p, idx) => {
         const isRoot = idx === 0;
         const rootQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(location.rotation_x || 0, location.rotation || 0, location.rotation_z || 0, 'YXZ'));
