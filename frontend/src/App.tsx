@@ -1014,7 +1014,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
     maxY = Math.max(maxY, p.y + p.height / 2);
   });
 
-  const isBattleActive = activeUsers && activeUsers.some((user: any) => user.location_id === location.id);
+  const isBattleActive = activeUsers && activeUsers.some((user: any) => user.currentBattleMapId && Number(user.currentBattleMapId) === Number(location.id));
 
   const dragDist = useRef(0);
 
