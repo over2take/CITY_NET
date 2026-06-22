@@ -5653,6 +5653,27 @@ function App() {
               activeBattleMapData && activeBattleMapData.maps[activeBattleMapData.currentFloorIndex] && (
                 <BattleMapScene 
                   mapUrl={activeBattleMapData.maps[activeBattleMapData.currentFloorIndex].image_url} 
+                  onMapClick={(pos: any) => {
+                    if (rhombusState?.active && userName) {
+                      const newRhombus = {
+                          name: rhombusState.name || '',
+                          description: rhombusState.description || '',
+                          x: pos.x, y: 0.1, z: pos.z,
+                          width: 3.75, height: 3.75, depth: 3.75,
+                          shape: 'rhombus',
+                          color: rhombusState.color,
+                          owner: userName
+                      };
+                      fetch('/api/locations', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(newRhombus)
+                      }).then(() => {
+                          fetchLocations();
+                          setRhombusState((prev: any) => ({ ...prev, active: false }));
+                      });
+                    }
+                  }}
                 />
               )
             ) : (

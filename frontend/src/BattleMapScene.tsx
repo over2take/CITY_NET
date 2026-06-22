@@ -3,7 +3,7 @@ import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrthographicCamera, MapControls } from '@react-three/drei';
 
-export const BattleMapScene = ({ mapUrl, onFloorChange, floors, isAdmin, activeFloorIndex, onExit }: any) => {
+export const BattleMapScene = ({ mapUrl, onFloorChange, floors, isAdmin, activeFloorIndex, onExit, onMapClick }: any) => {
   const textureObj = useLoader(THREE.TextureLoader, mapUrl);
   const texture = (Array.isArray(textureObj) ? textureObj[0] : textureObj) as THREE.Texture;
   
@@ -20,7 +20,12 @@ export const BattleMapScene = ({ mapUrl, onFloorChange, floors, isAdmin, activeF
       <ambientLight intensity={1} />
       
       {/* Map Background */}
-      <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+      <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} onPointerDown={(e) => {
+        if (e.button === 0 && typeof onMapClick === 'function') {
+          e.stopPropagation();
+          onMapClick(e.point);
+        }
+      }}>
         <planeGeometry args={[mapWidth, mapHeight]} />
         <meshBasicMaterial map={texture} />
       </mesh>
