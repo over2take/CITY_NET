@@ -5650,7 +5650,28 @@ function App() {
                 <BattleMapScene 
                   mapUrl={activeBattleMapData.maps[activeBattleMapData.currentFloorIndex].image_url} 
                   onMapClick={(pos: any) => {
-                    if (rhombusState?.active && userName) {
+                    if (isDeployingEnemy && userName) {
+                      const newRhombus = {
+                          name: 'NEW ENEMY',
+                          description: '',
+                          x: pos.x, y: 0.1, z: pos.z,
+                          width: 4, height: 4, depth: 4,
+                          shape: 'enemy_rhombus',
+                          color: '#ff0000',
+                          owner: userName,
+                          isDanger: true,
+                          isFavorite: false,
+                          npcs: ''
+                      };
+                      fetch('/api/locations', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                          body: JSON.stringify(newRhombus)
+                      }).then(() => {
+                          fetchLocations();
+                          setIsDeployingEnemy(false);
+                      });
+                    } else if (rhombusState?.active && userName) {
                       const newRhombus = {
                           name: rhombusState.name || '',
                           description: rhombusState.description || '',
