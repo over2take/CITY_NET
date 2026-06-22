@@ -4876,6 +4876,14 @@ function App() {
       targetFloor = adminInMap.currentFloorIndex;
     }
 
+    if (userName && socketRef.current) {
+        const userLoc = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
+        if (userLoc) {
+            socketRef.current.emit('requestRhombusPurge', { id: userLoc.id, owner: userName });
+        }
+        setRhombusState((prev: any) => ({ ...prev, active: false }));
+    }
+
     setActiveBattleMapData({ locationId: locId, maps: currentLocBattleMaps, currentFloorIndex: targetFloor });
     setView('battle_map');
     setSelectedLocation(null);
