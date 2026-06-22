@@ -489,7 +489,7 @@ const getClosestPointOnRoads = (x: number, z: number, roadsList: any[], maxSnapD
     return { x, z };
 };
 
-const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads }: any) => {
+const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap }: any) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const coreRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.PointLight>(null);
@@ -590,9 +590,10 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
     }
 
     const finalScaleMult = scaleMult * zoomComp;
-    const scale = 1.875 * finalScaleMult;
-    
-    meshRef.current.scale.set(scale, scale, scale);
+      const battleMapScale = isBattleMap ? 2 : 1;
+      const scale = 1.875 * finalScaleMult * battleMapScale;
+      
+      meshRef.current.scale.set(scale, scale, scale);
     meshRef.current.rotation.y += 0.04 * rotationSpeed;
     meshRef.current.rotation.z += 0.02 * rotationSpeed;
 
@@ -606,7 +607,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
     
     if (coreRef.current) {
         coreRef.current.rotation.y -= 0.06 * rotationSpeed;
-        coreRef.current.scale.set((0.4 + pulse * 0.1) * scaleMult, (0.4 + pulse * 0.1) * scaleMult, (0.4 + pulse * 0.1) * scaleMult);
+        coreRef.current.scale.set((0.4 + pulse * 0.1) * scaleMult * battleMapScale, (0.4 + pulse * 0.1) * scaleMult * battleMapScale, (0.4 + pulse * 0.1) * scaleMult * battleMapScale);
     }
 
     if (!(window as any).activeRhombuses) (window as any).activeRhombuses = {};
@@ -5754,7 +5755,7 @@ function App() {
             ))}
             {/* Dedicated Enemy Rhombus Rendering */}
             {locations.filter(l => l.shape === 'enemy_rhombus').map(loc => (
-              <EnemyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} />
+              <EnemyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} />
             ))}
             {token && view === 'editor' && !editId && (
               <group ref={(group) => { if (group && targetObject !== group) { setTargetObject(group); editMeshRef.current = group; } }} position={[editData.x, editData.y, editData.z]}>
