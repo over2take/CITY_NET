@@ -76,9 +76,9 @@ export const BattleMapManager = ({ locationId, onClose, token }: { locationId: n
   };
 
   return (
-    <div style={{
+    <div className="panel" style={{
       position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-      backgroundColor: '#111', padding: '20px', border: '1px solid #00ff00', zIndex: 10000, color: '#00ff00'
+      backgroundColor: '#111', padding: '20px', border: '1px solid #00ff00', zIndex: 10000, color: '#00ff00', pointerEvents: 'auto'
     }}>
       <h3>BATTLE MAPS MANAGEMENT</h3>
       <button style={{ position: 'absolute', top: '10px', right: '10px' }} onClick={onClose}>X</button>
@@ -87,17 +87,29 @@ export const BattleMapManager = ({ locationId, onClose, token }: { locationId: n
         <h4>UPLOAD NEW MAP</h4>
         <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} style={{ display: 'block', marginBottom: '10px' }} />
         
-        <select value={designationType} onChange={(e) => setDesignationType(e.target.value)} style={{ marginRight: '10px' }}>
-          <option value="Lobby">Lobby</option>
-          <option value="Level">Level</option>
-          <option value="Penthouse">Penthouse</option>
-        </select>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+          {['Lobby', 'Level', 'Penthouse'].map(opt => (
+            <button 
+              key={opt}
+              type="button"
+              className="utility-btn"
+              onClick={() => setDesignationType(opt)}
+              style={{ 
+                margin: 0,
+                backgroundColor: designationType === opt ? '#00ff00' : '#111', 
+                color: designationType === opt ? '#000' : '#00ff00',
+                border: designationType === opt ? '1px solid #00ff00' : '1px solid #333'
+              }}
+            >
+              {opt.toUpperCase()}
+            </button>
+          ))}
+          {designationType === 'Level' && (
+            <input type="number" min="1" value={levelNumber} onChange={(e) => setLevelNumber(parseInt(e.target.value) || 1)} style={{ width: '50px', backgroundColor: '#000', border: '1px solid #00ff00', color: '#00ff00', padding: '4px', height: '100%' }} />
+          )}
+        </div>
 
-        {designationType === 'Level' && (
-          <input type="number" min="1" value={levelNumber} onChange={(e) => setLevelNumber(parseInt(e.target.value))} style={{ width: '50px', marginRight: '10px' }} />
-        )}
-
-        <button onClick={handleUpload} disabled={loading}>{loading ? 'UPLOADING...' : 'UPLOAD MAP'}</button>
+        <button className="upload-btn" onClick={handleUpload} disabled={loading}>{loading ? 'UPLOADING...' : 'UPLOAD MAP'}</button>
         {error && <p style={{ color: 'red' }}>{error}</p>}
       </div>
 
@@ -108,7 +120,7 @@ export const BattleMapManager = ({ locationId, onClose, token }: { locationId: n
             {maps.map(m => (
               <li key={m.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', padding: '5px', backgroundColor: '#222' }}>
                 <span>[{m.designation}]</span>
-                <button onClick={() => handleDelete(m.id)}>DELETE</button>
+                <button className="upload-btn danger-btn" onClick={() => handleDelete(m.id)}>DELETE</button>
               </li>
             ))}
           </ul>
