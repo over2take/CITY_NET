@@ -200,7 +200,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
         setRhombusState(p => ({ ...p, active: false }));
     };
 
-    const handleMouseDown = (e: MouseEvent) => {
+    const handlePointerDown = (e: PointerEvent) => {
         if (e.button !== 0) return;
         
         const pos = getMouseWorldPos(e);
@@ -220,7 +220,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
         }
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
         mouseScreenPos.current = { x: e.clientX, y: e.clientY };
         if (view === 'draw_roads' && isPainting && setRoadTrail) {
             const pos = getMouseWorldPos(e);
@@ -241,7 +241,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
         }
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
         mouseScreenPos.current = null;
         if (controls) (controls as any).enabled = true;
         if (view === 'draw_roads') { setIsPainting(false); return; }
@@ -259,13 +259,13 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
         setDragStart(null); setDragEnd(null);
     };
 
-    gl.domElement.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    gl.domElement.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
     return () => {
-        gl.domElement.removeEventListener('mousedown', handleMouseDown);
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
+        gl.domElement.removeEventListener('pointerdown', handlePointerDown);
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
     };
   }, [view, dragStart, dragEnd, isPainting, gl, camera, locations, onSelectionChange, controls, setRoadTrail, roadDrawMode, snapToGrid, rhombusState, setRhombusState, isBatchSelecting, userName, refreshLocations]);
 
@@ -2378,6 +2378,25 @@ function AdminPanel({
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName
 }: any) {
+  if (view === 'battle_map') {
+    return (
+      <div className="panel admin-panel" style={{ width: '300px', maxHeight: '90vh', overflowY: 'auto', pointerEvents: 'auto' }}>
+        <h3 style={{ textShadow: '0 0 10px #00ff00', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
+        <button className="upload-btn" onClick={async () => {
+            const res = await fetch('/api/locations', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ x: 0, y: 0.1, z: 0, name: 'NEW ENEMY', description: '', npcs: '', isFavorite: false, isDanger: true, shape: 'enemy_rhombus', color: '#ff0000', width: 4, height: 4, depth: 4, owner: userName })
+            });
+            if (res.ok) refreshLocations();
+        }} style={{ width: '100%', marginBottom: '10px' }}>ADD_ENEMY</button>
+        <button className="utility-btn danger-btn" onClick={() => {
+            onLogout();
+        }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>
+      </div>
+    );
+  }
+
   const [density, setDensity] = useState(8);
   const [allowedShapes, setAllowedShapes] = useState<string[]>(['box', 'cylinder', 'sphere']);
   const [activeUserEditing, setActiveUserEditing] = useState<any>(null);
@@ -4879,7 +4898,7 @@ function App() {
     if (userName && socketRef.current) {
         const userLoc = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
         if (userLoc) {
-            socketRef.current.emit('requestRhombusPurge', { id: userLoc.id, owner: userName });
+            socketRef.current.emit('requestInstantRhombusPurge', { id: userLoc.id, owner: userName });
         }
         setRhombusState((prev: any) => ({ ...prev, active: false }));
     }

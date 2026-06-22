@@ -981,6 +981,17 @@ io.on('connection', (socket) => {
     }, 3000); // 3 second animation window
   });
 
+  socket.on('requestInstantRhombusPurge', (data) => {
+    // data: { id, owner }
+    console.log(`Instant Purge Requested for ID: ${data.id}`);
+    db.run('DELETE FROM locations WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
+        if (!err && this.changes > 0) {
+            recordAction('location_delete', { data: [{ id: data.id }] });
+            emitUpdate({ isRhombusOnly: true });
+        }
+    });
+  });
+
   socket.on('moveRhombus', (data) => {
     // data: { id, x, z }
     const info = userSockets.get(socket.id);

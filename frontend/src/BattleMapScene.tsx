@@ -16,7 +16,7 @@ export const BattleMapScene = ({ mapUrl, onFloorChange, floors, isAdmin, activeF
   return (
     <>
       <OrthographicCamera makeDefault position={[0, 100, 0]} zoom={2} near={0.1} far={1000} />
-      <MapControls enableRotate={false} minZoom={0.5} maxZoom={20} />
+      <MapControls makeDefault enableRotate={false} minZoom={0.5} maxZoom={20} />
       <ambientLight intensity={1} />
       
       {/* Map Background */}
@@ -25,8 +25,7 @@ export const BattleMapScene = ({ mapUrl, onFloorChange, floors, isAdmin, activeF
         <meshBasicMaterial map={texture} />
       </mesh>
 
-      {/* Grid Helper for visual scale (optional) */}
-      <gridHelper args={[Math.max(mapWidth, mapHeight), 20, 0x00ff00, 0x003300]} position={[0, 0.01, 0]} />
+      {/* Removed gridHelper per user request */}
     </>
   );
 };
