@@ -15,7 +15,7 @@ export const BattleMapScene = ({ mapUrl, onFloorChange, floors, isAdmin, activeF
 
   return (
     <>
-      <OrthographicCamera makeDefault position={[0, 100, 0]} zoom={2} near={0.1} far={1000} />
+      <OrthographicCamera makeDefault position={[0, 100, 0]} up={[0, 0, -1]} zoom={2} near={0.1} far={1000} />
       <MapControls makeDefault enableRotate={false} minZoom={0.5} maxZoom={20} />
       <ambientLight intensity={1} />
       

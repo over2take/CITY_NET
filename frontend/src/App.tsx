@@ -167,8 +167,8 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
     };
 
     const deployRhombus = async (pos: THREE.Vector3) => {
-        // Enforce ONE rhombus per user
-        const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
+        // Enforce ONE rhombus per user per context
+        const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && l.battle_map_id == null);
         
         const newRhombus = {
             name: rhombusState.name || '',
@@ -590,7 +590,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
     }
 
     const finalScaleMult = scaleMult * zoomComp;
-      const battleMapScale = isBattleMap ? 2 : 1;
+      const battleMapScale = isBattleMap ? 4 : 1;
       const scale = 1.875 * finalScaleMult * battleMapScale;
       
       meshRef.current.scale.set(scale, scale, scale);
@@ -821,7 +821,8 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
     }
 
     const zoomComp = Math.max(1, d / 100); 
-    const finalScaleMult = scaleMult * zoomComp;
+    const battleMapScale = isBattleMap ? 2.8 : 1;
+    const finalScaleMult = scaleMult * zoomComp * battleMapScale;
 
     // Player Pulse Effect (Sync with their own color)
     const pulse = (0.7 + Math.sin(state.clock.elapsedTime * 4) * 0.3) * flicker;
@@ -2397,13 +2398,17 @@ function AdminPanel({
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
-    isDeployingEnemy, setIsDeployingEnemy
+    isDeployingEnemy, setIsDeployingEnemy, handleSaveDefault, handleLoadDefault
   }: any) {
   if (view === 'battle_map') {
     return (
       <div className="panel admin-panel" style={{ width: '300px', maxHeight: '90vh', overflowY: 'auto', pointerEvents: 'auto' }}>
         <h3 style={{ textShadow: '0 0 10px #00ff00', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
         <button className="upload-btn" onClick={() => setIsDeployingEnemy(!isDeployingEnemy)} style={{ width: '100%', marginBottom: '10px', backgroundColor: isDeployingEnemy ? '#ff0000' : '' }}>{isDeployingEnemy ? 'CANCEL_DEPLOY' : 'ADD_ENEMY'}</button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px', borderBottom: '1px solid #00ff00', paddingBottom: '10px' }}>
+           <button style={{ padding: '10px', backgroundColor: '#5500ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleSaveDefault}>SAVE_DEFAULT</button>
+           <button style={{ padding: '10px', backgroundColor: '#aa00ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleLoadDefault}>LOAD_DEFAULT</button>
+        </div>
         <button className="utility-btn danger-btn" onClick={() => {
             onLogout();
         }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>
@@ -4297,8 +4302,12 @@ function NavControlsMenu({ onToggleHelp }: any) {
   );
 }
 
-function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB }: any) {
-  const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
+function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData }: any) {
+  const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
+      view === 'battle_map' && activeBattleMapData 
+        ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex) 
+        : l.battle_map_id == null
+  ));
   const isSelectedRhombus = selectedLocation?.shape === 'rhombus';
   const isAdmin = token !== '';
   const isOwner = selectedLocation?.owner === userName;
@@ -4428,7 +4437,7 @@ function SystemInfoMenu({ userName, token }: any) {
   );
 }
 
-function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB }: any) {
+function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData }: any) {
   let isPrimaryAdmin = false;
   if (token) {
     try {
@@ -4509,7 +4518,7 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
           {activeMenu === 'system_info' && <SystemInfoMenu userName={userName} token={token} />}
           {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} />}
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
-          {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} />}
+          {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
 
         </div>
@@ -4812,15 +4821,13 @@ function App() {
 
   // Sync player configuration to DB whenever they change it in the sidebar
   const syncRhombusToDB = async (newState: any) => {
-    const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
-    if (existing) {
+    const existingList = locations.filter((l: any) => l.shape === 'rhombus' && l.owner === userName);
+    for (const existing of existingList) {
         await fetch(`/api/locations/${existing.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ ...existing, name: newState.name, description: newState.description, color: newState.color })
         });
-        // fetchLocations() is not strictly needed here as local state is ahead, 
-        // but it keeps everyone in sync via sockets
     }
   };
 
@@ -4924,7 +4931,40 @@ function App() {
     if (socketRef.current) socketRef.current.emit('battle_map_enter', { locationId: locId, floorIndex: targetFloor });
   };
 
-  const exitBattleMap = () => {
+  const handleSaveDefault = () => {
+    if (!socketRef.current || !activeBattleMapData) return;
+    const positions: any[] = [];
+    
+    locations.forEach((l: any) => {
+        if (l.shape === 'enemy_rhombus' && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) {
+            positions.push({ id: l.id, x: l.x, z: l.z, isEnemy: true });
+        }
+    });
+    
+    Object.keys(battleMapPositions).forEach(userName => {
+        const pos = battleMapPositions[userName];
+        positions.push({ userName, x: pos.x, z: pos.z, isEnemy: false });
+    });
+    
+    socketRef.current.emit('save_battle_map_default', { locationId: activeBattleMapData.locationId, floorIndex: activeBattleMapData.currentFloorIndex, positions });
+    setNotification('DEFAULT_STATE_SAVED');
+  };
+
+  const handleLoadDefault = () => {
+      if (!socketRef.current || !activeBattleMapData) return;
+      socketRef.current.emit('load_battle_map_default', { locationId: activeBattleMapData.locationId, floorIndex: activeBattleMapData.currentFloorIndex });
+      setNotification('LOADING_DEFAULT_STATE...');
+  };
+
+  const exitBattleMap = async () => {
+    if (userName && token) {
+        const battleMapRhombuses = locations.filter((l: any) => l.shape === 'rhombus' && l.owner === userName && l.battle_map_id != null);
+        for (const r of battleMapRhombuses) {
+            try { await fetch(`/api/locations/${r.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); } catch (e) {}
+        }
+        if (battleMapRhombuses.length > 0) fetchLocations();
+    }
+    
     setActiveBattleMapData(null);
     setView('list'); // or previous view
     setBattleMapPositions({});
@@ -5323,6 +5363,13 @@ function App() {
       newSocket.on('battle_map_moved', (data: any) => {
         setBattleMapPositions(prev => ({ ...prev, [data.userName]: { x: data.x, z: data.z } }));
       });
+      newSocket.on('default_loaded', (data: any) => {
+          data.updates.forEach((update: any) => {
+              if (!update.isEnemy) {
+                  setBattleMapPositions(prev => ({ ...prev, [update.userName]: { x: update.x, z: update.z } }));
+              }
+          });
+      });
       newSocket.on('editingRequested', (data: any) => {
       if (data.userId !== userName && notification === "REQUEST_SENT_TO_ADMIN") {
         setNotification(`ANOTHER_USER_REQUESTING_ACCESS: ${data.userName}`);
@@ -5483,7 +5530,7 @@ function App() {
       )}
             {notification && <div className="modal-overlay" onClick={() => setNotification(null)} style={{cursor: 'pointer'}}><div className="panel" style={{color: '#ff0000', borderColor: '#ff0000'}}><h2 style={{fontSize: '2rem'}}>{notification}</h2></div></div>}
             {isEditModalOpen && activeEditLocation && (
-              <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); cleanupEditModal(); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}>★</button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div>{isAdmin && isPrimaryAdmin && <button type="button" className="upload-btn" style={{backgroundColor: '#5500ff'}} onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>}<button type="submit" className="upload-btn">SAVE</button><button type="button" className="utility-btn" onClick={() => { cleanupEditModal(); }}>CLOSE</button></form></div></div>
+              <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); cleanupEditModal(); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}>☆</button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div>{isAdmin && isPrimaryAdmin && editData.shape !== 'enemy_rhombus' && <button type="button" className="upload-btn" style={{backgroundColor: '#5500ff'}} onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>}<button type="submit" className="upload-btn">SAVE</button><button type="button" className="utility-btn" onClick={() => { cleanupEditModal(); }}>CLOSE</button></form></div></div>
             )}
             <Sidebar
               activeMenu={activeSidebarMenu}
@@ -5505,6 +5552,8 @@ function App() {
               setIsChatOpen={setIsChatOpen}
               hasUnreadChat={hasUnreadChat}
               syncRhombusToDB={syncRhombusToDB}
+              view={view}
+              activeBattleMapData={activeBattleMapData}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -5526,6 +5575,7 @@ function App() {
                 isPlantingTrees={isPlantingTrees} setIsPlantingTrees={setIsPlantingTrees}
                   treeBatchSize={treeBatchSize} setTreeBatchSize={setTreeBatchSize}
                   isDeployingEnemy={isDeployingEnemy} setIsDeployingEnemy={setIsDeployingEnemy}
+                  handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
                   socketRef={socketRef}
                 token={token}
                 userName={userName}
@@ -5651,6 +5701,9 @@ function App() {
                         if (res.ok) { setSelectedLocation(null); fetchLocations(); }
                       }}>PURGE_DATA_POINT</button>
                     )}
+                    {isAdmin && selectedLocation.shape === 'enemy_rhombus' && (
+                      <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '' }); }}>EDIT_DATA_POINT</button>
+                    )}
                     {isAdmin && isPrimaryAdmin && !isRhombus && (
       <></>
   )}
@@ -5682,7 +5735,9 @@ function App() {
                           owner: userName,
                           isDanger: true,
                           isFavorite: false,
-                          npcs: ''
+                          npcs: '',
+                          battle_map_id: activeBattleMapData?.locationId || null,
+                          floor_index: activeBattleMapData?.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
                       };
                       fetch('/api/locations', {
                           method: 'POST',
@@ -5693,6 +5748,7 @@ function App() {
                           setIsDeployingEnemy(false);
                       });
                     } else if (rhombusState?.active && userName) {
+                      const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && l.battle_map_id == activeBattleMapData?.locationId && l.floor_index == activeBattleMapData?.currentFloorIndex);
                       const newRhombus = {
                           name: rhombusState.name || '',
                           description: rhombusState.description || '',
@@ -5700,16 +5756,29 @@ function App() {
                           width: 3.75, height: 3.75, depth: 3.75,
                           shape: 'rhombus',
                           color: rhombusState.color,
-                          owner: userName
+                          owner: userName,
+                          battle_map_id: activeBattleMapData?.locationId || null,
+                          floor_index: activeBattleMapData?.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
                       };
-                      fetch('/api/locations', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(newRhombus)
-                      }).then(() => {
-                          fetchLocations();
-                          setRhombusState((prev: any) => ({ ...prev, active: false }));
-                      });
+                      if (existing) {
+                          fetch(`/api/locations/${existing.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(newRhombus)
+                          }).then(() => {
+                              fetchLocations();
+                              setRhombusState((prev: any) => ({ ...prev, active: false }));
+                          });
+                      } else {
+                          fetch('/api/locations', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(newRhombus)
+                          }).then(() => {
+                              fetchLocations();
+                              setRhombusState((prev: any) => ({ ...prev, active: false }));
+                          });
+                      }
                     }
                   }}
                 />
@@ -5770,11 +5839,17 @@ function App() {
             </>
             )}
             {/* Dedicated Player Rhombus Rendering */}
-            {locations.filter(l => l.shape === 'rhombus').map(loc => (
-              <PlayerRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} roads={roads} />
+            {locations.filter(l => l.shape === 'rhombus' && (
+                (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
+                (view !== 'battle_map' && l.battle_map_id == null)
+            )).map(loc => (
+              <PlayerRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} roads={roads} isBattleMap={view === 'battle_map'} />
             ))}
             {/* Dedicated Enemy Rhombus Rendering */}
-            {locations.filter(l => l.shape === 'enemy_rhombus').map(loc => (
+            {locations.filter(l => l.shape === 'enemy_rhombus' && (
+                (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
+                (view !== 'battle_map' && l.battle_map_id == null)
+            )).map(loc => (
               <EnemyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} />
             ))}
             {token && view === 'editor' && !editId && (

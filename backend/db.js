@@ -144,6 +144,14 @@ db.serialize(() => {
     // Ignore error if column already exists
   });
 
+  db.run(`ALTER TABLE locations ADD COLUMN battle_map_id INTEGER`, (err) => {
+    // Ignore error if column already exists
+  });
+
+  db.run(`ALTER TABLE locations ADD COLUMN floor_index INTEGER`, (err) => {
+    // Ignore error if column already exists
+  });
+
   db.run(`CREATE TABLE IF NOT EXISTS saved_maps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
@@ -158,6 +166,17 @@ db.serialize(() => {
     classification TEXT NOT NULL,
     data TEXT NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS battle_map_defaults (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id INTEGER NOT NULL,
+    floor_index INTEGER NOT NULL,
+    rhombus_id INTEGER,
+    rhombus_owner TEXT,
+    is_enemy INTEGER DEFAULT 0,
+    x REAL NOT NULL,
+    z REAL NOT NULL
   )`);
 });
 
