@@ -1025,7 +1025,7 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
         ref={(group) => { if (isSelected && group) { setTargetObject(group); if (editMeshRef) editMeshRef.current = group; } }} 
     >
       {isBattleActive && (
-          <Html position={[0, maxY - minY + 2, 0]} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
+          <Html position={[0, maxY - minY + 2, 0]} center wrapperClass="battle-indicator" style={{ pointerEvents: 'none' }}>
             <div style={{
                 fontSize: '24px', 
                 filter: 'drop-shadow(0 0 10px #ff0000)',
