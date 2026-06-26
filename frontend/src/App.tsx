@@ -704,6 +704,201 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   );
 });
 
+const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap }: any) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const meshGroupRef = useRef<THREE.Group>(null);
+  const lightRef = useRef<THREE.PointLight>(null);
+  const { controls, raycaster } = useThree();
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+  const intersection = useMemo(() => new THREE.Vector3(), []);
+  
+  const isAdmin = token !== '';
+  const [isLocalDragging, setIsLocalDragging] = useState(false);
+  useEffect(() => {
+      const handleGlobalUp = () => {
+          setIsLocalDragging((prev) => {
+              if (prev) {
+                  if (controls) (controls as any).enabled = true;
+                  setIsDragging(false);
+              }
+              return false;
+          });
+      };
+      window.addEventListener('pointerup', handleGlobalUp);
+      return () => window.removeEventListener('pointerup', handleGlobalUp);
+  }, [controls, setIsDragging]);
+  const localPos = useRef({ x: location.x, z: location.z });
+  const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
+
+  const visualPos = useRef(new THREE.Vector3(location.x, location.y + (location.height / 4), location.z));
+
+  const [animState, setAnimState] = useState<'none' | 'appearing' | 'fading'>('none');
+  const animStartTime = useRef<number | null>(null);
+  const hasAppeared = useRef(false);
+
+  useEffect(() => {
+    if (!hasAppeared.current) {
+        setAnimState('appearing');
+        animStartTime.current = Date.now();
+        hasAppeared.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleFade = (data: any) => { if (data.id === location.id) { setAnimState('fading'); animStartTime.current = Date.now(); } };
+    const handleAppear = (data: any) => { if (data.id === location.id) { setAnimState('appearing'); animStartTime.current = Date.now(); } };
+    socket.on('rhombusFading', handleFade);
+    socket.on('rhombusAppearing', handleAppear);
+    return () => { socket.off('rhombusFading', handleFade); socket.off('rhombusAppearing', handleAppear); };
+  }, [location.id, socket]);
+
+  useEffect(() => { 
+    localPos.current = { x: location.x, z: location.z }; 
+  }, [location.x, location.z]);
+
+  useFrame((state, delta) => {
+    if (!meshGroupRef.current) return;
+    
+    const targetY = location.y + (location.height / 4);
+    visualPos.current.x = THREE.MathUtils.lerp(visualPos.current.x, localPos.current.x, 2.6 * delta);
+    visualPos.current.z = THREE.MathUtils.lerp(visualPos.current.z, localPos.current.z, 2.6 * delta);
+    visualPos.current.y = THREE.MathUtils.lerp(visualPos.current.y, targetY, 2.6 * delta);
+
+    if (groupRef.current) {
+        groupRef.current.position.copy(visualPos.current);
+    }
+
+    const d = state.camera.position.distanceTo(visualPos.current);
+    const zoomComp = Math.max(1, d / 120);
+    
+    let baseOpacity = 0.9;
+    let scaleMult = 1.0;
+    let rotationSpeed = 1.0;
+    let flicker = 1.0;
+
+    if (animState !== 'none' && animStartTime.current) {
+        const elapsed = (Date.now() - animStartTime.current) / 1000;
+        const progress = Math.min(1, elapsed / 3); 
+        if (animState === 'fading') {
+          baseOpacity = Math.max(0, 0.9 * (1 - Math.pow(progress, 2)));
+          if (progress > 0.5) flicker = Math.random() > 0.5 ? 1.2 : 0.2;
+          rotationSpeed = 1.0 + progress * 20;
+          scaleMult = (progress < 0.2 ? 1.0 + progress * 2 : (1.4 * (1 - (progress - 0.2) / 0.8)));
+          if (progress >= 1) { setAnimState('none'); baseOpacity = 0; scaleMult = 0.001; }
+        } else if (animState === 'appearing') {
+          baseOpacity = 0.9 * Math.pow(progress, 2);
+          if (progress < 0.5) flicker = Math.random() > 0.5 ? 1.2 : 0.2;
+          rotationSpeed = 20 * (1 - progress) + 1.0;
+          scaleMult = (progress > 0.8 ? 1.0 + (1 - progress) * 2 : (1.4 * progress / 0.8));
+          if (progress >= 1) { setAnimState('none'); baseOpacity = 0.9; scaleMult = 1.0; }
+        }
+    } else {
+        baseOpacity = 0.9;
+        scaleMult = 1.0;
+    }
+
+    const finalScaleMult = scaleMult * zoomComp;
+    const battleMapScale = isBattleMap ? 4 : 1;
+    const scale = 1.875 * finalScaleMult * battleMapScale;
+      
+    meshGroupRef.current.scale.set(scale, scale, scale);
+    const time = state.clock.elapsedTime;
+    meshGroupRef.current.rotation.y += 0.05 * rotationSpeed;
+    meshGroupRef.current.rotation.x = Math.sin(time * 1.5) * Math.PI * 0.2; 
+    meshGroupRef.current.rotation.z += 0.02 * rotationSpeed;
+    meshGroupRef.current.position.y = Math.sin(time * 3) * 0.2;
+
+    const pulse = (0.5 + Math.sin(state.clock.elapsedTime * 6) * 0.5) * flicker;
+    
+    meshGroupRef.current.children.forEach(child => {
+        if ((child as any).isMesh && (child as any).material) {
+            ((child as any).material as THREE.MeshBasicMaterial).color.setRGB(0, 0.2 + pulse * 0.8, 0.2 + pulse * 0.8);
+            ((child as any).material as any).opacity = baseOpacity;
+        }
+    });
+
+    if (lightRef.current) lightRef.current.intensity = (1.0 + pulse * 4.0) * (baseOpacity / 0.9);
+
+    if (!(window as any).activeRhombuses) (window as any).activeRhombuses = {};
+    (window as any).activeRhombuses[location.id] = visualPos.current;
+  });
+
+  useEffect(() => {
+    return () => {
+      if ((window as any).activeRhombuses) {
+        delete (window as any).activeRhombuses[location.id];
+      }
+    };
+  }, [location.id]);
+
+  const dragDist = useRef(0);
+
+  const handlePointerDown = (e: any) => {
+      e.stopPropagation();
+    dragDist.current = 0;
+    if (!isAdmin) return;
+    try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
+    const currentRaycaster = e.raycaster || raycaster;
+    if (currentRaycaster && currentRaycaster.ray) {
+        currentRaycaster.ray.intersectPlane(plane, intersection);
+        setDragOffset(new THREE.Vector3(localPos.current.x - intersection.x, 0, localPos.current.z - intersection.z));
+    }
+    if (controls) (controls as any).enabled = false;
+    setIsLocalDragging(true);
+    setIsDragging(true);
+  };
+
+  const handlePointerMove = (e: any) => {
+    if (!isAdmin || e.buttons !== 1) return;
+    dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY);
+    const currentRaycaster = e.raycaster || raycaster;
+    if (currentRaycaster && currentRaycaster.ray) {
+        currentRaycaster.ray.intersectPlane(plane, intersection);
+        const targetX = intersection.x + dragOffset.x;
+        const targetZ = intersection.z + dragOffset.z;
+        localPos.current = { x: targetX, z: targetZ };
+    }
+  };
+
+  const handlePointerUp = async (e: any) => {
+      try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
+    if (controls) (controls as any).enabled = true;
+    setIsLocalDragging(false);
+    setIsDragging(false);
+    
+    if (dragDist.current < 15) {
+        e.stopPropagation();
+        onClick(); 
+    } else if (isAdmin) {
+        socket.emit('moveRhombus', { id: location.id, x: localPos.current.x, z: localPos.current.z });
+    }
+  };
+
+  return (
+    <group 
+        ref={(group) => { 
+            groupRef.current = group as any;
+            if (group) group.position.copy(visualPos.current);
+            if (isSelected && group) setTargetObject(group);
+        }}
+    >
+      <group
+        ref={meshGroupRef as any}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
+        <mesh>
+          <coneGeometry args={[0.5, 0.8, 4]} />
+          <meshBasicMaterial color="#00ccff" transparent opacity={0.9} />
+        </mesh>
+      </group>
+      <pointLight ref={lightRef as any} color="#00ccff" intensity={3} distance={15} decay={2} />
+    </group>
+  );
+});
+
 const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, activeUsers, roads, isBattleMap, battleMapPos }: any) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
@@ -2398,13 +2593,16 @@ function AdminPanel({
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
-    isDeployingEnemy, setIsDeployingEnemy, handleSaveDefault, handleLoadDefault
+    isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault
   }: any) {
   if (view === 'battle_map') {
     return (
       <div className="panel admin-panel" style={{ width: '300px', maxHeight: '90vh', overflowY: 'auto', pointerEvents: 'auto' }}>
         <h3 style={{ textShadow: '0 0 10px #00ff00', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
-        <button className="upload-btn" onClick={() => setIsDeployingEnemy(!isDeployingEnemy)} style={{ width: '100%', marginBottom: '10px', backgroundColor: isDeployingEnemy ? '#ff0000' : '' }}>{isDeployingEnemy ? 'CANCEL_DEPLOY' : 'ADD_ENEMY'}</button>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+          <button className="upload-btn" onClick={() => { setIsDeployingEnemy(!isDeployingEnemy); setIsDeployingFriendly(false); }} style={{ flex: 1, backgroundColor: isDeployingEnemy ? '#ff0000' : '' }}>{isDeployingEnemy ? 'CANCEL_DEPLOY' : 'ADD_ENEMY'}</button>
+          <button className="upload-btn" onClick={() => { setIsDeployingFriendly(!isDeployingFriendly); setIsDeployingEnemy(false); }} style={{ flex: 1, backgroundColor: isDeployingFriendly ? '#00ccff' : '' }}>{isDeployingFriendly ? 'CANCEL_DEPLOY' : 'ADD_FRIENDLY'}</button>
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px', borderBottom: '1px solid #00ff00', paddingBottom: '10px' }}>
            <button style={{ padding: '10px', backgroundColor: '#5500ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleSaveDefault}>SAVE_DEFAULT</button>
            <button style={{ padding: '10px', backgroundColor: '#aa00ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleLoadDefault}>LOAD_DEFAULT</button>
@@ -2535,6 +2733,19 @@ function AdminPanel({
         width: 1.875, height: 1.875, depth: 1.875, 
         baseWidth: 1.875, baseHeight: 1.875, baseDepth: 1.875,
         shape: 'enemy_rhombus', color: '#ff0000', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5
+    });
+    setView('editor');
+  };
+
+  const startNewFriendly = () => {
+    setEditId(null); setSelectedLocation(null);
+    const { tx, tz } = getCenterGroundTarget();
+    setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
+    setEditData({ 
+        name: '', description: '', npcs: '', x: tx, y: 0, z: tz, 
+        width: 1.875, height: 1.875, depth: 1.875, 
+        baseWidth: 1.875, baseHeight: 1.875, baseDepth: 1.875,
+        shape: 'friendly_rhombus', color: '#00ccff', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5
     });
     setView('editor');
   };
@@ -2845,6 +3056,7 @@ function AdminPanel({
           </div>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
               <button className="utility-btn" style={{flex: 1, borderColor: '#ff0000', color: '#ff0000'}} onClick={startNewEnemy}>+ ADD_ENEMY</button>
+              <button className="utility-btn" style={{flex: 1, borderColor: '#00ccff', color: '#00ccff'}} onClick={startNewFriendly}>+ ADD_FRIENDLY</button>
           </div>
           <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={async () => {
             if (confirm("PURGE ALL ROAD DATA?")) {
@@ -3502,11 +3714,11 @@ function AdminPanel({
 
       {view === 'editor' && (
         <>
-          <header style={{marginBottom: '10px'}}><h3>{editData.shape === 'enemy_rhombus' ? (editId ? 'EDIT_ENEMY_DATA_POINT' : 'New_ENEMY_DATA_POINT') : (editId ? 'EDIT_DATA_POINT' : 'NEW_DATA_POINT')}</h3><button onClick={() => setView('list')} className="close-btn" style={{position: 'static'}}>X</button></header>
+          <header style={{marginBottom: '10px'}}><h3>{editData.shape === 'enemy_rhombus' ? (editId ? 'EDIT_ENEMY_DATA_POINT' : 'New_ENEMY_DATA_POINT') : (editData.shape === 'friendly_rhombus' ? (editId ? 'EDIT_FRIENDLY_NPC' : 'NEW_FRIENDLY_NPC') : (editId ? 'EDIT_DATA_POINT' : 'NEW_DATA_POINT'))}</h3><button onClick={() => setView('list')} className="close-btn" style={{position: 'static'}}>X</button></header>
           <div className="editor-controls">
             <div className="button-group">
                 <button className={transformMode === 'translate' ? 'active' : ''} onClick={() => setTransformMode('translate')}>MOVE</button>
-                {editData.shape !== 'enemy_rhombus' && <button className={transformMode === 'scale' ? 'active' : ''} onClick={() => setTransformMode('scale')}>STRETCH</button>}
+                {editData.shape !== 'enemy_rhombus' && editData.shape !== 'friendly_rhombus' && <button className={transformMode === 'scale' ? 'active' : ''} onClick={() => setTransformMode('scale')}>STRETCH</button>}
                 <button className={transformMode === 'rotate' ? 'active' : ''} onClick={() => setTransformMode('rotate')}>ROTATE</button>
             </div>
             <div style={{display: 'flex', gap: '5px', marginTop: '5px'}}>
@@ -3523,7 +3735,7 @@ function AdminPanel({
             <input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} />
             <textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} />
             
-            {editData.shape !== 'enemy_rhombus' && (
+            {editData.shape !== 'enemy_rhombus' && editData.shape !== 'friendly_rhombus' && (
                 <>
                     <textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} />
                     
@@ -3629,9 +3841,9 @@ function AdminPanel({
             )}
             
             <button type="submit" className="upload-btn">
-                {editData.shape === 'enemy_rhombus' ? (editId ? 'UPDATE_ENEMY_DATA' : 'UPLOAD_NEW_ENEMY') : (editId ? 'UPDATE_DATA_POINT' : 'UPLOAD_NEW')}
+                {editData.shape === 'enemy_rhombus' ? (editId ? 'UPDATE_ENEMY_DATA' : 'UPLOAD_NEW_ENEMY') : (editData.shape === 'friendly_rhombus' ? (editId ? 'UPDATE_FRIENDLY_NPC' : 'UPLOAD_NEW_FRIENDLY') : (editId ? 'UPDATE_DATA_POINT' : 'UPLOAD_NEW'))}
             </button>
-            {isAdmin && isPrimaryAdmin && editId && editData.shape !== 'enemy_rhombus' && (
+            {isAdmin && isPrimaryAdmin && editId && editData.shape !== 'enemy_rhombus' && editData.shape !== 'friendly_rhombus' && (
                 <button type="button" className="upload-btn" style={{backgroundColor: '#5500ff', marginTop: '10px'}} onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>
             )}
           </form>
@@ -4852,7 +5064,7 @@ function App() {
     const interactive: any[] = [];
 
     roots.forEach((loc: any) => {
-      if (loc.shape === 'rhombus' || loc.shape === 'enemy_rhombus') return; // Dedicated components handle these
+      if (loc.shape === 'rhombus' || loc.shape === 'enemy_rhombus' || loc.shape === 'friendly_rhombus') return; // Dedicated components handle these
 
       const children = groupedLocations[loc.id] || [];
       const isSelected = !isBatchSelecting && view !== 'district' && view !== 'join' && selectedLocation?.id === loc.id;
@@ -5186,6 +5398,7 @@ function App() {
   const [isCopyingSize, setIsCopyingSize] = useState(false);
   const [isPlantingTrees, setIsPlantingTrees] = useState(false);
   const [isDeployingEnemy, setIsDeployingEnemy] = useState(false);
+  const [isDeployingFriendly, setIsDeployingFriendly] = useState(false);
   const [treeBatchSize, setTreeBatchSize] = useState(5);
   const [blockBuildings, setBlockBuildings] = useState<any[]>([]);
 
@@ -5575,6 +5788,7 @@ function App() {
                 isPlantingTrees={isPlantingTrees} setIsPlantingTrees={setIsPlantingTrees}
                   treeBatchSize={treeBatchSize} setTreeBatchSize={setTreeBatchSize}
                   isDeployingEnemy={isDeployingEnemy} setIsDeployingEnemy={setIsDeployingEnemy}
+                  isDeployingFriendly={isDeployingFriendly} setIsDeployingFriendly={setIsDeployingFriendly}
                   handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
                   socketRef={socketRef}
                 token={token}
@@ -5667,7 +5881,7 @@ function App() {
                   isChatOpen={isChatOpen}
               />
             {(() => {
-              const isRhombus = selectedLocation?.shape === 'rhombus' || selectedLocation?.shape === 'enemy_rhombus';
+              const isRhombus = selectedLocation?.shape === 'rhombus' || selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus';
               const isOwner = selectedLocation?.owner === userName;
               const isAdmin = token !== '';
               const canManage = isRhombus && (isAdmin || isOwner);
@@ -5676,7 +5890,7 @@ function App() {
               if (selectedLocation && (!token || !showAdminPanel || canManage)) {
                 return (
                   <DraggableWindow 
-                    title={isUserDefinedName(selectedLocation.name) ? selectedLocation.name : (selectedLocation.shape === 'enemy_rhombus' ? 'HOSTILE_NODE' : (selectedLocation.shape === 'rhombus' ? 'TACTICAL_BEACON' : getStructLabel(selectedLocation)))} 
+                    title={isUserDefinedName(selectedLocation.name) ? selectedLocation.name : (selectedLocation.shape === 'enemy_rhombus' ? 'HOSTILE_NODE' : (selectedLocation.shape === 'friendly_rhombus' ? 'FRIENDLY_NPC' : (selectedLocation.shape === 'rhombus' ? 'TACTICAL_BEACON' : getStructLabel(selectedLocation))))}
                     pos={infoPanelPos} 
                     setPos={setInfoPanelPos} 
                     onClose={() => setSelectedLocation(null)}
@@ -5684,7 +5898,7 @@ function App() {
                     <div className="content">
                       {isRhombus ? (
                         <>
-                          <p><strong>ID_TAG:</strong> {selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : 'UNTAGGED')}</p>
+                          <p><strong>ID_TAG:</strong> {selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : (selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED'))}</p>
                           <p><strong>DATA_DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
                         </>
                       ) : (
@@ -5701,7 +5915,7 @@ function App() {
                         if (res.ok) { setSelectedLocation(null); fetchLocations(); }
                       }}>PURGE_DATA_POINT</button>
                     )}
-                    {isAdmin && selectedLocation.shape === 'enemy_rhombus' && (
+                    {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
                       <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '' }); }}>EDIT_DATA_POINT</button>
                     )}
                     {isAdmin && isPrimaryAdmin && !isRhombus && (
@@ -5733,7 +5947,7 @@ function App() {
                           shape: 'enemy_rhombus',
                           color: '#ff0000',
                           owner: userName,
-                          isDanger: true,
+                          isDanger: false,
                           isFavorite: false,
                           npcs: '',
                           battle_map_id: activeBattleMapData?.locationId || null,
@@ -5746,6 +5960,29 @@ function App() {
                       }).then(() => {
                           fetchLocations();
                           setIsDeployingEnemy(false);
+                      });
+                    } else if (isDeployingFriendly && userName) {
+                      const newRhombus = {
+                          name: 'NEW FRIENDLY',
+                          description: '',
+                          x: pos.x, y: 0.1, z: pos.z,
+                          width: 4, height: 4, depth: 4,
+                          shape: 'friendly_rhombus',
+                          color: '#00ccff',
+                          owner: userName,
+                          isDanger: false,
+                          isFavorite: false,
+                          npcs: '',
+                          battle_map_id: activeBattleMapData?.locationId || null,
+                          floor_index: activeBattleMapData?.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
+                      };
+                      fetch('/api/locations', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                          body: JSON.stringify(newRhombus)
+                      }).then(() => {
+                          fetchLocations();
+                          setIsDeployingFriendly(false);
                       });
                     } else if (rhombusState?.active && userName) {
                       const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && l.battle_map_id == activeBattleMapData?.locationId && l.floor_index == activeBattleMapData?.currentFloorIndex);
@@ -5852,6 +6089,13 @@ function App() {
             )).map(loc => (
               <EnemyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} />
             ))}
+            {/* Dedicated Friendly NPC Rendering */}
+            {locations.filter(l => l.shape === 'friendly_rhombus' && (
+                (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
+                (view !== 'battle_map' && l.battle_map_id == null)
+            )).map(loc => (
+              <FriendlyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} />
+            ))}
             {token && view === 'editor' && !editId && (
               <group ref={(group) => { if (group && targetObject !== group) { setTargetObject(group); editMeshRef.current = group; } }} position={[editData.x, editData.y, editData.z]}>
                 {editorGenParts.length > 0 ? (
@@ -5872,6 +6116,16 @@ function App() {
                       );
                     })}
                   </>
+                ) : editData.shape === 'enemy_rhombus' ? (
+                  <mesh position={[0, editData.height / 4, 0]} scale={[editData.width, editData.height, editData.depth]}>
+                    <octahedronGeometry args={[0.5]} />
+                    <meshBasicMaterial color="#ff0000" wireframe />
+                  </mesh>
+                ) : editData.shape === 'friendly_rhombus' ? (
+                  <mesh position={[0, editData.height / 4, 0]} scale={[editData.width, editData.height, editData.depth]}>
+                    <coneGeometry args={[0.5, 0.8, 4]} />
+                    <meshBasicMaterial color="#00ccff" wireframe />
+                  </mesh>
                 ) : (
                   <mesh position={[0, editData.height / 2, 0]} scale={[editData.width, editData.height, editData.depth]}>
                     {renderBaseGeometry(editData.shape, editData.polyCount || 5)}
