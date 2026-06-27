@@ -222,6 +222,9 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
             shape: 'rhombus',
             color: rhombusState.color,
             owner: userName,
+            hp_max: rhombusState.hp_max || 100,
+            hp_current: existing ? (rhombusState.hp_current ?? 100) : (rhombusState.hp_max || 100),
+            hp_temp: existing ? (rhombusState.hp_temp ?? 0) : 0,
             battle_map_id: null,
             floor_index: null
         };
@@ -1186,7 +1189,9 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
         </mesh>
       </mesh>
 
-      <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
+      {isOnline && (
+          <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
+      )}
 
       <>
           <mesh ref={glowRef as any} scale={[1.2, 1.2, 1.2]} raycast={() => null}>
@@ -3937,7 +3942,7 @@ function DraggableWindow({ title, children, pos, setPos, onClose, windowStyle = 
   return (
     <div className="win95-window" style={{ left: `${pos.x}px`, top: `${pos.y}px`, ...windowStyle }}>
       <div className="win95-title-bar" onMouseDown={handleMouseDown}>
-        <div className="win95-title-text">{title}</div>
+        <div className="win95-title-text" style={{ fontWeight: 'bold' }}>{title}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           {onToggleNotifications && (
             <button 
@@ -4014,13 +4019,13 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
         if (msg.sender === userName || (isPrimaryAdmin && senderIsNPC)) {
             tabName = msg.recipient;
             if (senderIsNPC) {
-                tabName = `${msg.recipient} (${msg.sender})`;
+                tabName = `${msg.recipient} [${msg.sender}]`;
                 setLastNpcContext(prev => ({ ...prev, [tabName]: msg.sender }));
             }
         } else if (msg.recipient === userName || (isPrimaryAdmin && recipientIsNPC)) {
             tabName = msg.sender;
             if (recipientIsNPC) {
-                tabName = `${msg.sender} (${msg.recipient})`;
+                tabName = `${msg.sender} [${msg.recipient}]`;
                 setLastNpcContext(prev => ({ ...prev, [tabName]: msg.recipient }));
             }
         } else {
@@ -4070,7 +4075,7 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
           onSendMessage(inputText, sendAs);
       } else {
           let realRecipient = activeTab;
-          const match = activeTab.match(/^(.+?) \((.+?)\)$/);
+          const match = activeTab.match(/^(.+?) \[(.+?)\]$/);
           if (match) {
               realRecipient = match[1];
           }
@@ -4098,7 +4103,7 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
 
       let historyUser1 = userName;
       let historyUser2 = targetUser;
-      const match = targetUser.match(/^(.+?) \((.+?)\)$/);
+      const match = targetUser.match(/^(.+?) \[(.+?)\]$/);
       if (match) {
           historyUser1 = match[2];
           historyUser2 = match[1];
@@ -4563,6 +4568,9 @@ function NavControlsMenu({ onToggleHelp }: any) {
         <div style={{ marginBottom: '10px', borderBottom: '1px solid var(--dark-green)', paddingBottom: '5px' }}>
           <span style={{ color: 'var(--green)', fontWeight: 'bold' }}>ZOOM IN/OUT</span><br />SCROLL WHEEL
         </div>
+        <div style={{ marginBottom: '10px', borderBottom: '1px solid var(--dark-green)', paddingBottom: '5px' }}>
+          <span style={{ color: 'var(--green)', fontWeight: 'bold' }}>SPOT / PING LOCATION</span><br />Q KEY (Targets Cursor)
+        </div>
         <div style={{ opacity: 0.7, fontSize: '0.65rem' }}>* Zoom targets your cursor position</div>
       </div>
     </div>
@@ -4734,7 +4742,7 @@ function SystemInfoMenu({ userName, token }: any) {
   );
 }
 
-function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen }: any) {
+function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers }: any) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
       view === 'battle_map' && activeBattleMapData 
         ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex) 
@@ -4826,7 +4834,7 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
       <div className="menu-container">
         <div className="menu-content">
           {activeMenu === 'system_info' && <SystemInfoMenu userName={userName} token={token} />}
-          {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} />}
+          {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} view={view} activeUsers={activeUsers} />}
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} />}
           {/* HitPointsMenu is now a popout window rendered in App.tsx */}
@@ -4838,13 +4846,20 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
   );
 }
 
-function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation, isOpen, setIsOpen }: any) {
+function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation, isOpen, setIsOpen, view, activeUsers }: any) {
   const [showDanger, setShowDanger] = useState(false);
   const [showStarred, setShowStarred] = useState(false);
   const [showDistricts, setShowDistricts] = useState(false);
   const [showOthers, setShowOthers] = useState(false);
+  
+  const filteredLocations = locations.filter((l: any) => {
+      if (l.shape === 'enemy_rhombus' || l.battle_map_id != null) return false;
+      if (l.shape === 'rhombus' && !activeUsers?.some((u: any) => u.userName === l.owner)) return false;
+      return true;
+  });
+
   const districts: any = {};
-  locations.forEach(loc => {
+  filteredLocations.forEach(loc => {
     if (loc.district_name) {
       if (!districts[loc.district_name]) districts[loc.district_name] = { color: loc.district_color || '#00ff00', locations: [], center: [0,0,0], size: 0 };
       const isDefined = isUserDefinedName(loc.name) || (loc.description && loc.description.trim() !== "");
@@ -4852,7 +4867,7 @@ function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation, isOpen
     }
   });
   Object.keys(districts).forEach(name => {
-    const members = locations.filter(l => l.district_name === name);
+    const members = filteredLocations.filter((l: any) => l.district_name === name);
     if (members.length > 0) {
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, minY = Infinity, maxY = -Infinity;
         members.forEach(l => { minX = Math.min(minX, l.x - l.width/2); maxX = Math.max(maxX, l.x + l.width/2); minZ = Math.min(minZ, l.z - l.depth/2); maxZ = Math.max(maxZ, l.z + l.depth/2); minY = Math.min(minY, l.y); maxY = Math.max(maxY, l.y + l.height); });
@@ -4860,10 +4875,10 @@ function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation, isOpen
         districts[name].size = Math.max(maxX - minX, maxY - minY, maxZ - minZ);
     }
   });
-  const definedLocations = locations.filter((l: any) => !l.parent_id && (isUserDefinedName(l.name) || (l.description && l.description.trim() !== "")));
-  const danger = definedLocations.filter(l => l.isDanger); const starred = definedLocations.filter(l => l.isFavorite); const others = definedLocations.filter(l => !l.isDanger && !l.isFavorite && !l.district_name);
+  const definedLocations = filteredLocations.filter((l: any) => !l.parent_id && (isUserDefinedName(l.name) || (l.description && l.description.trim() !== "")));
+  const danger = definedLocations.filter((l: any) => l.isDanger); const starred = definedLocations.filter((l: any) => l.isFavorite); const others = definedLocations.filter((l: any) => !l.isDanger && !l.isFavorite && !l.district_name);
   const ListItem = ({ loc }: any) => (
-    <div className={`list-item ${selectedLocation?.id === loc.id ? 'selected' : ''}`} onClick={() => onSelect(loc)} style={{ cursor: 'pointer', paddingLeft: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!!loc.isDanger && <span style={{ color: '#ff0000', marginRight: '5px' }}>!</span>}{!!loc.isFavorite && <span style={{ color: '#ff7b00', marginRight: '5px' }}>★</span>}{isUserDefinedName(loc.name) ? loc.name : getStructLabel(loc)}</span><button className="utility-btn" onClick={(e) => { e.stopPropagation(); onZoom({ pos: [loc.x, loc.y + loc.height/2, loc.z], size: Math.max(loc.width, loc.height, loc.depth) }); }} style={{ padding: '4px 10px', fontSize: '0.7rem', cursor: 'pointer', marginLeft: '5px' }}>◎</button></div>
+    <div className={`list-item ${selectedLocation?.id === loc.id ? 'selected' : ''}`} onClick={() => onSelect(loc)} style={{ cursor: 'pointer', paddingLeft: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!!loc.isDanger && <span style={{ color: '#ff0000', marginRight: '5px' }}>!</span>}{!!loc.isFavorite && <span style={{ color: '#ff7b00', marginRight: '5px' }}>★</span>}{isUserDefinedName(loc.name) ? loc.name : getStructLabel(loc)}</span>{view !== 'battle_map' && <button className="utility-btn" onClick={(e) => { e.stopPropagation(); onZoom({ pos: [loc.x, (loc.y || 0) + (loc.height || 2)/2, loc.z], size: Math.max(loc.width || 2, loc.height || 2, loc.depth || 2) }); }} style={{ padding: '4px 10px', fontSize: '0.7rem', cursor: 'pointer', marginLeft: '5px' }}>◎</button>}</div>
   );
   return (
     <div className="panel quick-access-panel">
@@ -4871,7 +4886,7 @@ function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation, isOpen
       <div className="location-list" style={{ maxHeight: 'calc(100vh - 250px)' }}>
         {danger.length > 0 && (<><h4 className="category-header danger-text" onClick={() => setShowDanger(!showDanger)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ width: '20px', display: 'inline-block' }}>{showDanger ? '▼' : '▶'}</span>!! CRITICAL_SITES ({danger.length})</h4>{showDanger && danger.map(loc => <ListItem key={loc.id} loc={loc} />)}</>)}
         {starred.length > 0 && (<><h4 className="category-header starred-text" onClick={() => setShowStarred(!showStarred)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ width: '20px', display: 'inline-block' }}>{showStarred ? '▼' : '▶'}</span>★ PRIORITY_NODES ({starred.length})</h4>{showStarred && starred.map(loc => <ListItem key={loc.id} loc={loc} />)}</>)}
-        {Object.keys(districts).length > 0 && (<><h4 className="category-header" onClick={() => setShowDistricts(!showDistricts)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ width: '20px', display: 'inline-block' }}>{showDistricts ? '▼' : '▶'}</span>DISTRICT_ZONES</h4>{showDistricts && Object.entries(districts).map(([name, data]: any) => (<div key={name} style={{ marginBottom: '10px' }}><div style={{ color: data.color, fontSize: '0.65rem', fontWeight: 'bold', paddingLeft: '20px', marginBottom: '5px', borderLeft: `2px solid ${data.color}`, marginLeft: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{name.toUpperCase()}</span><button className="utility-btn" onClick={(e) => { e.stopPropagation(); onZoom({ pos: data.center, size: data.size }); }} style={{ padding: '4px 10px', fontSize: '0.7rem', cursor: 'pointer', color: data.color, borderColor: data.color }}>◎</button></div>{data.locations.length > 0 ? data.locations.map((loc: any) => <ListItem key={loc.id} loc={loc} />) : <div style={{ fontSize: '0.6rem', opacity: 0.5, paddingLeft: '35px' }}>NO_DEFINED_DATA</div>}</div>))}</>)}
+        {Object.keys(districts).length > 0 && (<><h4 className="category-header" onClick={() => setShowDistricts(!showDistricts)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ width: '20px', display: 'inline-block' }}>{showDistricts ? '▼' : '▶'}</span>DISTRICT_ZONES</h4>{showDistricts && Object.entries(districts).map(([name, data]: any) => (<div key={name} style={{ marginBottom: '10px' }}><div style={{ color: data.color, fontSize: '0.65rem', fontWeight: 'bold', paddingLeft: '20px', marginBottom: '5px', borderLeft: `2px solid ${data.color}`, marginLeft: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{name.toUpperCase()}</span>{view !== 'battle_map' && <button className="utility-btn" onClick={(e) => { e.stopPropagation(); onZoom({ pos: data.center, size: data.size }); }} style={{ padding: '4px 10px', fontSize: '0.7rem', cursor: 'pointer', color: data.color, borderColor: data.color }}>◎</button>}</div>{data.locations.length > 0 ? data.locations.map((loc: any) => <ListItem key={loc.id} loc={loc} />) : <div style={{ fontSize: '0.6rem', opacity: 0.5, paddingLeft: '35px' }}>NO_DEFINED_DATA</div>}</div>))}</>)}
         {others.length > 0 && (<><h4 className="category-header" onClick={() => setShowOthers(!showOthers)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}><span style={{ width: '20px', display: 'inline-block' }}>{showOthers ? '▼' : '▶'}</span>DEFINED_STRUCTURES ({others.length})</h4>{showOthers && others.map(loc => <ListItem key={loc.id} loc={loc} />)}</>)}
         {definedLocations.length === 0 && Object.keys(districts).length === 0 && (<p style={{ fontSize: '0.7rem', opacity: 0.5 }}>NO_DEFINED_DATA_POINTS</p>)}
       </div>
@@ -5132,7 +5147,10 @@ function App() {
   const [activePings, setActivePings] = useState<any[]>([]);
   const [rhombusState, setRhombusState] = useState(() => {
     const savedColor = localStorage.getItem('rhombusColor') || '#00ff00';
-    return { active: false, color: savedColor, name: '', description: '', hp_max: 0 };
+    const savedHpMax = parseInt(localStorage.getItem('rhombusHpMax') || '100', 10);
+    const savedHpCurrent = parseInt(localStorage.getItem('rhombusHpCurrent') || '100', 10);
+    const savedHpTemp = parseInt(localStorage.getItem('rhombusHpTemp') || '0', 10);
+    return { active: false, color: savedColor, name: '', description: '', hp_max: savedHpMax, hp_current: savedHpCurrent, hp_temp: savedHpTemp };
   });
 
   // Load player configuration from the database when locations are fetched
@@ -5165,7 +5183,12 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem('rhombusColor', rhombusState.color);
-  }, [rhombusState.color]);
+    if (rhombusState.hp_max > 0) {
+      localStorage.setItem('rhombusHpMax', rhombusState.hp_max.toString());
+      localStorage.setItem('rhombusHpCurrent', (rhombusState.hp_current || rhombusState.hp_max).toString());
+      localStorage.setItem('rhombusHpTemp', (rhombusState.hp_temp || 0).toString());
+    }
+  }, [rhombusState.color, rhombusState.hp_max, rhombusState.hp_current, rhombusState.hp_temp]);
 
   const groupedLocations = useMemo(() => {
     const groups: any = {};
@@ -5902,6 +5925,7 @@ function App() {
               activeBattleMapData={activeBattleMapData}
               isHitPointsOpen={isHitPointsOpen}
               setIsHitPointsOpen={setIsHitPointsOpen}
+              activeUsers={activeUsers}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -6181,6 +6205,9 @@ function App() {
                           shape: 'rhombus',
                           color: rhombusState.color,
                           owner: userName,
+                          hp_max: rhombusState.hp_max || 100,
+                          hp_current: existing ? (rhombusState.hp_current ?? 100) : (rhombusState.hp_max || 100),
+                          hp_temp: existing ? (rhombusState.hp_temp ?? 0) : 0,
                           battle_map_id: activeBattleMapData?.locationId || null,
                           floor_index: activeBattleMapData?.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
                       };
