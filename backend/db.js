@@ -27,6 +27,15 @@ db.serialize(() => {
     owner TEXT
   )`);
 
+  db.run(`CREATE TABLE IF NOT EXISTS battle_maps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id INTEGER NOT NULL,
+    designation TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY(location_id) REFERENCES locations(id) ON DELETE CASCADE
+  )`);
+
   db.run(`CREATE TABLE IF NOT EXISTS districts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
@@ -135,6 +144,18 @@ db.serialize(() => {
     // Ignore error if column already exists
   });
 
+  db.run(`ALTER TABLE locations ADD COLUMN battle_map_id INTEGER`, (err) => {
+    // Ignore error if column already exists
+  });
+
+  db.run(`ALTER TABLE locations ADD COLUMN floor_index INTEGER`, (err) => {
+    // Ignore error if column already exists
+  });
+
+  db.run(`ALTER TABLE locations ADD COLUMN hp_current INTEGER`, (err) => {});
+  db.run(`ALTER TABLE locations ADD COLUMN hp_max INTEGER`, (err) => {});
+  db.run(`ALTER TABLE locations ADD COLUMN hp_temp INTEGER`, (err) => {});
+
   db.run(`CREATE TABLE IF NOT EXISTS saved_maps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
@@ -149,6 +170,17 @@ db.serialize(() => {
     classification TEXT NOT NULL,
     data TEXT NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS battle_map_defaults (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id INTEGER NOT NULL,
+    floor_index INTEGER NOT NULL,
+    rhombus_id INTEGER,
+    rhombus_owner TEXT,
+    is_enemy INTEGER DEFAULT 0,
+    x REAL NOT NULL,
+    z REAL NOT NULL
   )`);
 });
 
