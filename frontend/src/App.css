@@ -620,10 +620,11 @@ header {
 }
 
 .win95-title-text {
-  font-weight: bold;
+  font-weight: 900;
   font-size: 0.75rem;
   letter-spacing: 1px;
   text-transform: uppercase;
+  text-shadow: 0 0 1px currentColor, 0 0 1px currentColor;
 }
 
 .win95-close-btn {
