@@ -180,7 +180,7 @@ app.delete('/api/locations/:id/battle_maps/:mapId', authenticate, (req, res) => 
 });
 // ----------------------------
 
-app.post('/api/locations', optionalAuthenticate, (req, res) => {
+app.post('/api/locations', optionalAuthenticate, async (req, res) => {
   const locations = Array.isArray(req.body) ? req.body : [req.body];
   
   // Security check: If unauthenticated, ONLY allow creating Rhombuses.
@@ -191,8 +191,21 @@ app.post('/api/locations', optionalAuthenticate, (req, res) => {
     }
   }
 
-  const sql = `INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  for (let loc of locations) {
+      if (loc.shape === 'rhombus' && loc.owner) {
+          const inherited = await new Promise(resolve => {
+              db.get('SELECT hp_current, hp_max, hp_temp FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id IS NULL LIMIT 1', [loc.owner], (err, row) => resolve(row));
+          });
+          if (inherited) {
+              loc.hp_current = inherited.hp_current;
+              loc.hp_max = inherited.hp_max;
+              loc.hp_temp = inherited.hp_temp;
+          }
+      }
+  }
+
+  const sql = `INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   
   db.serialize(() => {
     const results = [];
@@ -211,7 +224,10 @@ app.post('/api/locations', optionalAuthenticate, (req, res) => {
         loc.color || '#00ff00', loc.district_name || null, loc.district_color || null, 
         loc.parent_id || null, loc.isFavorite ? 1 : 0, loc.isDanger ? 1 : 0, loc.owner || null,
         loc.rotation || 0, loc.rotation_x || 0, loc.rotation_z || 0, loc.classification || null, loc.polyCount || 5,
-        loc.battle_map_id || null, loc.floor_index !== undefined ? loc.floor_index : null
+        loc.battle_map_id || null, loc.floor_index !== undefined ? loc.floor_index : null,
+        loc.hp_current !== undefined ? loc.hp_current : null,
+        loc.hp_max !== undefined ? loc.hp_max : null,
+        loc.hp_temp !== undefined ? loc.hp_temp : null
       ], function(err) {
         if (err) {
           console.error(`Database error during insert at index ${index}:`, err.message);
@@ -302,7 +318,7 @@ app.delete('/api/locations/:id', authenticate, (req, res) => {
   });
 });
 
-app.put('/api/locations/:id', authenticate, (req, res) => {
+app.put('/api/locations/:id', optionalAuthenticate, (req, res) => {
   const { name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index } = req.body;
   
   if (name === undefined || x === undefined || y === undefined || z === undefined) {
@@ -312,6 +328,12 @@ app.put('/api/locations/:id', authenticate, (req, res) => {
 
   db.get('SELECT * FROM locations WHERE id = ?', [req.params.id], (err, oldRow) => {
     if (err) return res.status(500).json({ error: err.message });
+    if (!oldRow) return res.status(404).json({ error: 'Location not found' });
+    
+    // Security check: Unauthenticated users can only modify rhombuses
+    if (!req.user && (oldRow.shape !== 'rhombus' || (shape && shape !== 'rhombus'))) {
+      return res.status(401).json({ error: 'Access denied: Unauthenticated users can only update rhombuses.' });
+    }
     
     const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=?, battle_map_id=?, floor_index=? WHERE id=?`;
     const params = [name, description, npcs, x, y, z, width, height, depth, shape || 'box', color, district_name || null, district_color || null, parent_id || null, isFavorite ? 1 : 0, isDanger ? 1 : 0, owner || null, rotation || 0, rotation_x || 0, rotation_z || 0, classification || null, polyCount || 5, battle_map_id || null, floor_index !== undefined ? floor_index : null, req.params.id];
@@ -395,6 +417,64 @@ app.delete('/api/districts/:name', authenticate, (req, res) => {
       emitUpdate();
       res.json({ message: 'Deleted' });
     });
+  });
+});
+app.put('/api/locations/:id/health', optionalAuthenticate, (req, res) => {
+  const { id } = req.params;
+  const { hp_current, hp_max, hp_temp, action, amount } = req.body;
+  
+  db.get('SELECT shape, owner, hp_current, hp_max, hp_temp FROM locations WHERE id = ?', [id], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Location not found' });
+    
+    // Security check: Unauthenticated users can only modify rhombuses
+    if (!req.user && row.shape !== 'rhombus') {
+      return res.status(401).json({ error: 'Access denied: Unauthenticated users can only update rhombuses.' });
+    }
+    
+    let newCurrent = hp_current !== undefined ? hp_current : row.hp_current;
+    let newMax = hp_max !== undefined ? hp_max : row.hp_max;
+    let newTemp = hp_temp !== undefined ? hp_temp : row.hp_temp;
+
+    if (newCurrent === null) newCurrent = 0;
+    if (newMax === null) newMax = 0;
+    if (newTemp === null) newTemp = 0;
+
+    if (action === 'set_max' && (row.hp_current === null || row.hp_current === 0)) {
+        newCurrent = newMax;
+    }
+
+    if (action === 'damage' && amount > 0) {
+      let remainingDamage = amount;
+      if (newTemp > 0) {
+        if (newTemp >= remainingDamage) {
+          newTemp -= remainingDamage;
+          remainingDamage = 0;
+        } else {
+          remainingDamage -= newTemp;
+          newTemp = 0;
+        }
+      }
+      if (remainingDamage > 0 && newCurrent !== null) {
+        newCurrent = Math.max(0, newCurrent - remainingDamage);
+      }
+    } else if (action === 'heal' && amount > 0 && newCurrent !== null && newMax !== null) {
+      newCurrent = Math.min(newMax, newCurrent + amount);
+    }
+    
+    if (row.shape === 'rhombus' && row.owner) {
+        db.run('UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = "rhombus" AND owner = ?', [newCurrent, newMax, newTemp, row.owner], function(err2) {
+          if (err2) return res.status(500).json({ error: err2.message });
+          emitUpdate();
+          res.json({ id, hp_current: newCurrent, hp_max: newMax, hp_temp: newTemp });
+        });
+    } else {
+        db.run('UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE id = ?', [newCurrent, newMax, newTemp, id], function(err2) {
+          if (err2) return res.status(500).json({ error: err2.message });
+          emitUpdate();
+          res.json({ id, hp_current: newCurrent, hp_max: newMax, hp_temp: newTemp });
+        });
+    }
   });
 });
 
@@ -604,10 +684,10 @@ app.post('/api/maps/load/:name', authenticate, (req, res) => {
         db.run('DELETE FROM roads');
 
         if (locations.length > 0) {
-          const stmtL = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount) 
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          const stmtL = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
           locations.forEach(l => {
-            stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.isFavorite, l.isDanger, l.owner, l.rotation, l.rotation_x, l.rotation_z, l.classification, l.polyCount]);
+            stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.is_target, l.isFavorite, l.isDanger, l.owner, l.notifications_enabled, l.rotation, l.rotation_x, l.rotation_z, l.classification, l.polyCount, l.battle_map_id, l.floor_index, l.hp_current !== undefined ? l.hp_current : null, l.hp_max !== undefined ? l.hp_max : null, l.hp_temp !== undefined ? l.hp_temp : null]);
           });
           stmtL.finalize();
         }
@@ -633,10 +713,10 @@ app.post('/api/maps/load/:name', authenticate, (req, res) => {
         db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM roads) WHERE name="roads"');
         
         if (activeRhombuses && activeRhombuses.length > 0) {
-          const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount) 
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
           activeRhombuses.forEach(r => {
-            stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.rotation_x, r.rotation_z, r.classification, r.polyCount]);
+            stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.rotation_x, r.rotation_z, r.classification, r.polyCount, r.battle_map_id, r.floor_index, r.hp_current !== undefined ? r.hp_current : null, r.hp_max !== undefined ? r.hp_max : null, r.hp_temp !== undefined ? r.hp_temp : null]);
           });
           stmtR.finalize();
         }
@@ -662,10 +742,10 @@ app.post('/api/maps/clear', authenticate, (req, res) => {
       db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="roads"');
 
       if (activeRhombuses && activeRhombuses.length > 0) {
-        const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, classification, polyCount) 
-                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
         activeRhombuses.forEach(r => {
-          stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.classification, r.polyCount]);
+          stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.rotation_x, r.rotation_z, r.classification, r.polyCount, r.battle_map_id, r.floor_index, r.hp_current !== undefined ? r.hp_current : null, r.hp_max !== undefined ? r.hp_max : null, r.hp_temp !== undefined ? r.hp_temp : null]);
         });
         stmtR.finalize();
       }
@@ -994,9 +1074,9 @@ io.on('connection', (socket) => {
   socket.on('requestInstantRhombusPurge', (data) => {
     // data: { id, owner }
     console.log(`Instant Purge Requested for ID: ${data.id}`);
-    db.run('DELETE FROM locations WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
+    db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
         if (!err && this.changes > 0) {
-            recordAction('location_delete', { data: [{ id: data.id }] });
+            recordAction('location_update', { data: [{ id: data.id, battle_map_id: -1, floor_index: -1 }] });
             emitUpdate({ isRhombusOnly: true });
         }
     });
@@ -1063,7 +1143,10 @@ io.on('connection', (socket) => {
           
           const stmt = db.prepare('INSERT INTO battle_map_defaults (location_id, floor_index, rhombus_id, rhombus_owner, is_enemy, x, z) VALUES (?, ?, ?, ?, ?, ?, ?)');
           data.positions.forEach(pos => {
-            stmt.run([data.locationId, data.floorIndex, pos.id || null, pos.userName || null, pos.isEnemy ? 1 : 0, pos.x, pos.z]);
+            let enemyVal = 0;
+            if (pos.isEnemy) enemyVal = 1;
+            else if (pos.isFriendly) enemyVal = 2;
+            stmt.run([data.locationId, data.floorIndex, pos.id || null, pos.userName || null, enemyVal, pos.x, pos.z]);
           });
           stmt.finalize();
         });
@@ -1080,9 +1163,12 @@ io.on('connection', (socket) => {
           const updates = [];
           db.serialize(() => {
               rows.forEach(row => {
-                if (row.is_enemy) {
+                if (row.is_enemy === 1) {
                    db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [row.x, row.z, row.rhombus_id]);
-                   updates.push({ id: row.rhombus_id, x: row.x, z: row.z, isEnemy: true });
+                   updates.push({ id: row.rhombus_id, x: row.x, z: row.z, isEnemy: true, isFriendly: false });
+                } else if (row.is_enemy === 2) {
+                   db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [row.x, row.z, row.rhombus_id]);
+                   updates.push({ id: row.rhombus_id, x: row.x, z: row.z, isEnemy: false, isFriendly: true });
                 } else {
                    db.get('SELECT id FROM locations WHERE shape = "rhombus" AND owner = ?', [row.rhombus_owner], (err, pRow) => {
                      if (pRow) {
@@ -1092,7 +1178,7 @@ io.on('connection', (socket) => {
                          [row.rhombus_owner, row.x, 0.1, row.z, 'rhombus', row.rhombus_owner, '#00ff00', 3.75, 3.75, 3.75]);
                      }
                    });
-                   updates.push({ userName: row.rhombus_owner, x: row.x, z: row.z, isEnemy: false });
+                   updates.push({ userName: row.rhombus_owner, x: row.x, z: row.z, isEnemy: false, isFriendly: false });
                 }
               });
               db.run('SELECT 1', () => {

@@ -4,6 +4,7 @@ import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh, Html, OrthographicCamera } from '@react-three/drei';
 import { BattleMapManager } from './BattleMapManager';
 import { BattleMapScene } from './BattleMapScene';
+import { HealthBar } from './HealthBar';
 import { io } from 'socket.io-client';
 import * as THREE from 'three';
 import rhombusIcon from './assets/rhombus.svg';
@@ -168,7 +169,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
 
     const deployRhombus = async (pos: THREE.Vector3) => {
         // Enforce ONE rhombus per user per context
-        const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && l.battle_map_id == null);
+        const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
         
         const newRhombus = {
             name: rhombusState.name || '',
@@ -177,7 +178,9 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
             width: 3.75, height: 3.75, depth: 3.75,
             shape: 'rhombus',
             color: rhombusState.color,
-            owner: userName
+            owner: userName,
+            battle_map_id: null,
+            floor_index: null
         };
 
         if (existing) {
@@ -698,6 +701,10 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
         <meshBasicMaterial color="#220000" />
       </mesh>
       
+      {isAdmin && (
+          <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
+      )}
+
       {/* Red Alert Light */}
       <pointLight ref={lightRef as any} color="#ff0000" intensity={3} distance={15} decay={2} />
     </group>
@@ -894,6 +901,11 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
           <meshBasicMaterial color="#00ccff" transparent opacity={0.9} />
         </mesh>
       </group>
+      
+      {isAdmin && (
+          <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
+      )}
+      
       <pointLight ref={lightRef as any} color="#00ccff" intensity={3} distance={15} decay={2} />
     </group>
   );
@@ -1131,7 +1143,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
         </mesh>
       </mesh>
 
-      
+      <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
 
       <>
           <mesh ref={glowRef as any} scale={[1.2, 1.2, 1.2]} raycast={() => null}>
@@ -4602,6 +4614,36 @@ function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSele
                 style={{ width: '100%', height: '60px' }}
               />
             </div>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX HEALTH</label>
+              <div style={{ display: 'flex', gap: '5px' }}>
+                <input 
+                  type="number"
+                  placeholder="0" 
+                  value={rhombusState.hp_max || ''} 
+                  onChange={(e) => setRhombusState({ ...rhombusState, hp_max: parseInt(e.target.value) || 0 })}
+                  style={{ flex: 1, boxSizing: 'border-box', marginBottom: 0 }}
+                />
+                <button 
+                  className="upload-btn" 
+                  style={{ fontSize: '0.65rem', padding: '0 15px', minWidth: 'auto', margin: 0, height: 'auto' }}
+                  onClick={async () => {
+                      const anyUserRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
+                      if (anyUserRhombus) {
+                          await fetch(`/api/locations/${anyUserRhombus.id}/health`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                              body: JSON.stringify({ action: 'set_max', hp_max: rhombusState.hp_max })
+                          });
+                          refreshLocations();
+                      }
+                      syncRhombusToDB({ ...rhombusState, hp_max: rhombusState.hp_max });
+                  }}
+                >
+                  SET
+                </button>
+              </div>
+            </div>
             <div>
               <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>RHOMBUS_CHROMA_SYNC</label>
               <input 
@@ -4649,7 +4691,15 @@ function SystemInfoMenu({ userName, token }: any) {
   );
 }
 
-function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData }: any) {
+function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen }: any) {
+  const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
+      view === 'battle_map' && activeBattleMapData 
+        ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex) 
+        : l.battle_map_id == null
+  ));
+  const isSelectedRhombus = selectedLocation?.shape === 'rhombus' || selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus';
+  const targetRhombus = isSelectedRhombus ? selectedLocation : userRhombus;
+
   let isPrimaryAdmin = false;
   if (token) {
     try {
@@ -4696,6 +4746,11 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
                 <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
               </svg>
             </button>
+            <button className={`rail-btn ${isHitPointsOpen ? 'active' : ''}`} onClick={() => setIsHitPointsOpen(!isHitPointsOpen)} title="HIT_POINTS">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+              </svg>
+            </button>
             {isPrimaryAdmin && (
               <button className={`rail-btn ${activeMenu === 'city_data_base' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'city_data_base' ? 'none' : 'city_data_base')} title="CITY_DATA_BASE">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -4731,6 +4786,7 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
           {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} />}
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} />}
+          {/* HitPointsMenu is now a popout window rendered in App.tsx */}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
 
         </div>
@@ -4960,7 +5016,26 @@ function App() {
   const [activeEditLocation, setActiveEditLocation] = useState<any>(null);
   const [isSomeoneEditing, setIsSomeoneEditing] = useState(false);
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<'none' | 'quick_access' | 'nav_controls' | 'system_info' | 'geometry_protocols' | 'city_data_base'>('none');
+
+  const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
+  const [hitPointsPos, setHitPointsPos] = useState({ x: 250, y: 100 });
+
   const [infoPanelPos, setInfoPanelPos] = useState({ x: 100, y: 100 });
+  
+  // Prevent HitPointsMenu and InfoWindow from overlapping when opened
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (isHitPointsOpen && selectedLocation) {
+        const dx = Math.abs(hitPointsPos.x - infoPanelPos.x);
+        const dy = Math.abs(hitPointsPos.y - infoPanelPos.y);
+        if (dx < 320 && dy < 300) {
+            let newX = infoPanelPos.x + 320;
+            if (newX + 300 > window.innerWidth) newX = Math.max(0, infoPanelPos.x - 320);
+            setHitPointsPos({ x: newX, y: infoPanelPos.y });
+        }
+    }
+  }, [isHitPointsOpen, selectedLocation]);
+
   const [chatPos, setChatPos] = useState({ x: 400, y: 100 });
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   useEffect(() => {
@@ -5013,7 +5088,7 @@ function App() {
   const [activeUsers, setActiveUsers] = useState<any[]>([]);
   const [rhombusState, setRhombusState] = useState(() => {
     const savedColor = localStorage.getItem('rhombusColor') || '#00ff00';
-    return { active: false, color: savedColor, name: '', description: '' };
+    return { active: false, color: savedColor, name: '', description: '', hp_max: 0 };
   });
 
   // Load player configuration from the database when locations are fetched
@@ -5026,7 +5101,8 @@ function App() {
             // DO NOT set active: true here. That should only happen when the user clicks 'DEPLOY'
             color: existing.color || prev.color,
             name: existing.name || '',
-            description: existing.description || ''
+            description: existing.description || '',
+            hp_max: existing.hp_max || 0
         }));
     }
   }, [userName, locations.length]);
@@ -5149,13 +5225,15 @@ function App() {
     
     locations.forEach((l: any) => {
         if (l.shape === 'enemy_rhombus' && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) {
-            positions.push({ id: l.id, x: l.x, z: l.z, isEnemy: true });
+            positions.push({ id: l.id, x: l.x, z: l.z, isEnemy: true, isFriendly: false });
+        } else if (l.shape === 'friendly_rhombus' && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) {
+            positions.push({ id: l.id, x: l.x, z: l.z, isEnemy: false, isFriendly: true });
         }
     });
     
     Object.keys(battleMapPositions).forEach(userName => {
         const pos = battleMapPositions[userName];
-        positions.push({ userName, x: pos.x, z: pos.z, isEnemy: false });
+        positions.push({ userName, x: pos.x, z: pos.z, isEnemy: false, isFriendly: false });
     });
     
     socketRef.current.emit('save_battle_map_default', { locationId: activeBattleMapData.locationId, floorIndex: activeBattleMapData.currentFloorIndex, positions });
@@ -5578,7 +5656,7 @@ function App() {
       });
       newSocket.on('default_loaded', (data: any) => {
           data.updates.forEach((update: any) => {
-              if (!update.isEnemy) {
+              if (!update.isEnemy && !update.isFriendly) {
                   setBattleMapPositions(prev => ({ ...prev, [update.userName]: { x: update.x, z: update.z } }));
               }
           });
@@ -5767,6 +5845,8 @@ function App() {
               syncRhombusToDB={syncRhombusToDB}
               view={view}
               activeBattleMapData={activeBattleMapData}
+              isHitPointsOpen={isHitPointsOpen}
+              setIsHitPointsOpen={setIsHitPointsOpen}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -5880,11 +5960,22 @@ function App() {
                   token={token}
                   isChatOpen={isChatOpen}
               />
+            {isHitPointsOpen && (
+              <HitPointsMenu 
+                targetRhombus={locations.find((l: any) => l.id === ((selectedLocation?.shape === 'rhombus' || (token !== '' && (selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus'))) ? selectedLocation.id : locations.find((ul: any) => ul.shape === 'rhombus' && ul.owner === userName)?.id))} 
+                token={token} 
+                refreshLocations={fetchLocations}
+                pos={hitPointsPos}
+                setPos={setHitPointsPos}
+                onClose={() => setIsHitPointsOpen(false)}
+              />
+            )}
             {(() => {
               const isRhombus = selectedLocation?.shape === 'rhombus' || selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus';
+              const isPlayerRhombus = selectedLocation?.shape === 'rhombus';
               const isOwner = selectedLocation?.owner === userName;
               const isAdmin = token !== '';
-              const canManage = isRhombus && (isAdmin || isOwner);
+              const canManage = isRhombus && (isAdmin || (isPlayerRhombus && isOwner));
               
               // Show window if not admin OR if it's a rhombus that needs management OR just to view info
               if (selectedLocation && (!token || !showAdminPanel || canManage)) {
@@ -5917,6 +6008,14 @@ function App() {
                     )}
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
                       <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '' }); }}>EDIT_DATA_POINT</button>
+                    )}
+                    {isRhombus && (isAdmin || (isPlayerRhombus && selectedLocation.owner === userName)) && (
+                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--green)', color: '#000'}} onClick={() => {
+                            let newX = infoPanelPos.x + 320;
+                            if (newX + 300 > window.innerWidth) newX = Math.max(0, infoPanelPos.x - 320);
+                            setHitPointsPos({ x: newX, y: infoPanelPos.y });
+                            setIsHitPointsOpen(true);
+                        }}>UPDATE_HEALTH</button>
                     )}
                     {isAdmin && isPrimaryAdmin && !isRhombus && (
       <></>
@@ -5985,7 +6084,7 @@ function App() {
                           setIsDeployingFriendly(false);
                       });
                     } else if (rhombusState?.active && userName) {
-                      const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && l.battle_map_id == activeBattleMapData?.locationId && l.floor_index == activeBattleMapData?.currentFloorIndex);
+                      const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
                       const newRhombus = {
                           name: rhombusState.name || '',
                           description: rhombusState.description || '',
@@ -6159,6 +6258,75 @@ function App() {
         </>
       )}
     </div>
+  );
+}
+
+function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, setPos, onClose }: any) {
+  const [actionAmount, setActionAmount] = useState<number>(0);
+  const [tempAmount, setTempAmount] = useState<number>(0);
+  const [maxAmount, setMaxAmount] = useState<number>(0);
+
+  const updateHealth = async (action: string, amount: number) => {
+    if (!targetRhombus) return;
+    
+    let bodyData: any = { action, amount };
+    if (action === 'set_temp') bodyData.hp_temp = amount;
+    if (action === 'set_max') bodyData.hp_max = amount;
+
+    await fetch(`/api/locations/${targetRhombus.id}/health`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(bodyData)
+    });
+    refreshLocations();
+  };
+
+  if (!targetRhombus) return (
+      <DraggableWindow title="HIT_POINTS" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+          <div style={{ textAlign: 'center', opacity: 0.7, padding: '20px' }}>NO_TARGET_ACQUIRED</div>
+      </DraggableWindow>
+  );
+
+  return (
+    <DraggableWindow title={`HP: ${targetRhombus.name || 'UNKNOWN'}`} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '10px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '2rem', color: 'var(--green)', textShadow: 'var(--glow)', fontWeight: 'bold' }}>
+            {targetRhombus.hp_current || 0} / {targetRhombus.hp_max || 0}
+          </div>
+          {targetRhombus.hp_temp > 0 && (
+              <div style={{ color: '#00ccff', fontSize: '0.9rem', marginTop: '5px' }}>+ {targetRhombus.hp_temp} TEMP</div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <input type="number" placeholder="0" value={actionAmount || ''} onChange={e => setActionAmount(parseInt(e.target.value) || 0)} style={{ width: '100%' }} />
+            <div style={{ display: 'flex', gap: '10px' }}>
+                <button className="upload-btn" onClick={() => updateHealth('heal', actionAmount)} style={{ flex: 1 }}>HEAL</button>
+                <button className="upload-btn danger-btn" onClick={() => updateHealth('damage', actionAmount)} style={{ flex: 1 }}>DAMAGE</button>
+            </div>
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {token !== '' && (
+                <div>
+                    <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX_HP</label>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <input type="number" placeholder="0" value={maxAmount || ''} onChange={e => setMaxAmount(parseInt(e.target.value) || 0)} style={{ flex: 1 }} />
+                        <button className="upload-btn" style={{ minWidth: 'auto', padding: '0 15px' }} onClick={() => updateHealth('set_max', maxAmount)}>SET</button>
+                    </div>
+                </div>
+            )}
+            <div>
+                <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TEMP_HP</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <input type="number" placeholder="0" max="100" value={tempAmount || ''} onChange={e => { let val = parseInt(e.target.value) || 0; if(val > 100) val = 100; setTempAmount(val); }} style={{ flex: 1 }} />
+                    <button className="upload-btn" style={{ minWidth: 'auto', padding: '0 15px' }} onClick={() => updateHealth('set_temp', tempAmount)}>SET</button>
+                </div>
+            </div>
+        </div>
+      </div>
+    </DraggableWindow>
   );
 }
 

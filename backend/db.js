@@ -152,6 +152,10 @@ db.serialize(() => {
     // Ignore error if column already exists
   });
 
+  db.run(`ALTER TABLE locations ADD COLUMN hp_current INTEGER`, (err) => {});
+  db.run(`ALTER TABLE locations ADD COLUMN hp_max INTEGER`, (err) => {});
+  db.run(`ALTER TABLE locations ADD COLUMN hp_temp INTEGER`, (err) => {});
+
   db.run(`CREATE TABLE IF NOT EXISTS saved_maps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
