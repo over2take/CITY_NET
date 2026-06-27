@@ -89,6 +89,15 @@ db.serialize(() => {
     width REAL DEFAULT 4
   )`);
 
+  db.run(`CREATE TABLE IF NOT EXISTS dice_rolls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    total INTEGER NOT NULL,
+    results TEXT NOT NULL,
+    color TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   db.run(`CREATE TABLE IF NOT EXISTS action_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     type TEXT NOT NULL,
@@ -155,6 +164,8 @@ db.serialize(() => {
   db.run(`ALTER TABLE locations ADD COLUMN hp_current INTEGER`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN hp_max INTEGER`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN hp_temp INTEGER`, (err) => {});
+
+  db.run(`ALTER TABLE dice_rolls ADD COLUMN historyString TEXT`, (err) => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS saved_maps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
