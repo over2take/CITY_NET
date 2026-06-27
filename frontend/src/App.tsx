@@ -5,9 +5,52 @@ import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformContro
 import { BattleMapManager } from './BattleMapManager';
 import { BattleMapScene } from './BattleMapScene';
 import { HealthBar } from './HealthBar';
+import PingEffect from './PingEffect';
 import { io } from 'socket.io-client';
 import * as THREE from 'three';
 import rhombusIcon from './assets/rhombus.svg';
+
+function CursorPingListener({ socket, view, activeBattleMapData, pingColor }: any) {
+    const { raycaster, camera, scene, pointer } = useThree();
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key.toLowerCase() === 'q' && socket) {
+                if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+                
+                raycaster.setFromCamera(pointer, camera);
+                // Ignore helper planes or invisible meshes by intersecting the scene, but maybe prefer visible
+                const intersects = raycaster.intersectObjects(scene.children, true).filter((hit: any) => hit.object.visible);
+                
+                let hitPoint: THREE.Vector3 | null = null;
+                if (intersects.length > 0) {
+                    hitPoint = intersects[0].point;
+                } else {
+                    // Fallback: Intersect with Y=0 plane (ground) if no mesh is hit (e.g. empty City Map grid)
+                    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                    const target = new THREE.Vector3();
+                    if (raycaster.ray.intersectPlane(groundPlane, target)) {
+                        hitPoint = target;
+                    }
+                }
+                
+                if (hitPoint) {
+                    socket.emit('ping_location', {
+                        x: hitPoint.x,
+                        y: hitPoint.y + 0.5,
+                        z: hitPoint.z,
+                        color: pingColor,
+                        size: 2,
+                        battle_map_id: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
+                        floor_index: view === 'battle_map' && activeBattleMapData && activeBattleMapData.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
+                    });
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [socket, view, activeBattleMapData, pingColor, raycaster, pointer, camera, scene]);
+    return null;
+}
 import terminalIcon from './assets/terminal-thin.svg';
 import notifyOnIcon from './assets/Notification-on.svg';
 import notifyOffIcon from './assets/Notification-off.svg';
@@ -5086,6 +5129,7 @@ function App() {
   const [genExcludeRoads, setGenExcludeRoads] = useState(false);
   const [socket, setSocket] = useState<any>(null);
   const [activeUsers, setActiveUsers] = useState<any[]>([]);
+  const [activePings, setActivePings] = useState<any[]>([]);
   const [rhombusState, setRhombusState] = useState(() => {
     const savedColor = localStorage.getItem('rhombusColor') || '#00ff00';
     return { active: false, color: savedColor, name: '', description: '', hp_max: 0 };
@@ -5671,6 +5715,17 @@ function App() {
     newSocket.on('editingStopped', () => setIsSomeoneEditing(false));
     newSocket.on('editingDenied', (data: any) => { if (data.userId === userName) setNotification("EDITING_ACCESS_DENIED_BY_ADMIN"); });
     newSocket.on('editingRevoked', (data: any) => { setIsEditModalOpen(false); setActiveEditLocation(null); setIsSomeoneEditing(false); if (data.userId === userName) setNotification("ACCESS_TO_DATA_POINT_REVOKED"); });
+    newSocket.on('location_pinged', (pingData: any) => {
+        const pingId = Math.random().toString(36).substr(2, 9);
+        const newPing = { ...pingData, id: pingId };
+        setActivePings(prev => {
+            const filtered = pingData.owner ? prev.filter(p => p.owner !== pingData.owner) : prev;
+            return [...filtered, newPing];
+        });
+        setTimeout(() => {
+            setActivePings(prev => prev.filter(p => p.id !== pingId));
+        }, 4000); // 4 second duration
+    });
     return () => { newSocket.disconnect(); };
   }, [userName, isLoggedIn]);
 
@@ -6000,6 +6055,38 @@ function App() {
                         </>
                       )}
                     </div>
+                    <button className="upload-btn" style={{marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: 'var(--blue)', color: '#fff'}} onClick={() => {
+                        if (socketRef.current) {
+                            let pingX = selectedLocation.x;
+                            let pingY = (selectedLocation.y || 0) + (selectedLocation.height / 2);
+                            let pingZ = selectedLocation.z;
+                            
+                            if (targetObject) {
+                                const box = new THREE.Box3().setFromObject(targetObject);
+                                const center = new THREE.Vector3();
+                                box.getCenter(center);
+                                pingX = center.x;
+                                pingY = center.y;
+                                pingZ = center.z;
+                            }
+                            
+                            const size = Math.max(selectedLocation.width, selectedLocation.height, selectedLocation.depth);
+                            socketRef.current.emit('ping_location', {
+                                x: pingX,
+                                y: pingY,
+                                z: pingZ,
+                                color: rhombusState.color || '#00ccff',
+                                size: size,
+                                battle_map_id: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
+                                floor_index: view === 'battle_map' && activeBattleMapData && activeBattleMapData.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
+                            });
+                        }
+                    }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/>
+                        </svg>
+                        BROADCAST PING
+                    </button>
                     {canManage && (
                       <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={async () => {
                         const res = await fetch(`/api/locations/${selectedLocation.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
@@ -6032,6 +6119,7 @@ function App() {
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : (<><span style={{ display: 'inline-block', width: '250px', textAlign: 'right' }}>{isWaiting ? 'SYSTEM READY // ' : `SYSTEM CHECKING ${throbber} // `}</span><span style={{ display: 'inline-block', width: '300px', textAlign: 'left', whiteSpace: 'nowrap' }}>{statusText}</span></>)}</p></div>
           </div>
           <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
+            <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
             {view === 'battle_map' ? (
               activeBattleMapData && activeBattleMapData.maps[activeBattleMapData.currentFloorIndex] && (
                 <BattleMapScene 
@@ -6174,6 +6262,16 @@ function App() {
             ))}
             </>
             )}
+            {/* Ping Effects */}
+            {activePings.filter(ping => {
+                const currentBattleMapId = view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null;
+                const currentFloorIndex = view === 'battle_map' && activeBattleMapData && activeBattleMapData.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null;
+                // Strict comparison to ensure null === null or 1 === 1
+                return Number(ping.battle_map_id) === Number(currentBattleMapId) && Number(ping.floor_index) === Number(currentFloorIndex);
+            }).map(ping => (
+                <PingEffect key={ping.id} position={[ping.x, ping.y !== undefined ? ping.y : 0.5, ping.z]} color={ping.color} size={ping.size} />
+            ))}
+            
             {/* Dedicated Player Rhombus Rendering */}
             {locations.filter(l => l.shape === 'rhombus' && (
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||

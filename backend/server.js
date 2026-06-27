@@ -1200,6 +1200,20 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('ping_location', (data) => {
+    const info = userSockets.get(socket.id);
+    io.emit('location_pinged', {
+      owner: info ? info.userName : socket.id,
+      x: data.x,
+      y: data.y,
+      z: data.z,
+      color: data.color || '#ff0000',
+      size: data.size || 1,
+      battle_map_id: data.battle_map_id || null,
+      floor_index: data.floor_index !== undefined ? data.floor_index : null
+    });
+  });
+
   socket.on('disconnect', () => {
     const info = userSockets.get(socket.id);
     if (info) {
