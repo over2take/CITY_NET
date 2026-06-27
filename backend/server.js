@@ -1,6 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 const db = require('./db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -19,6 +22,23 @@ if (!process.env.JWT_SECRET) {
 const SECRET = process.env.JWT_SECRET;
 
 app.use(cors());
+
+// --- BATTLE MAPS UPLOAD SETUP ---
+const uploadsDir = path.join(__dirname, 'uploads', 'battle_maps');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + ext);
+  }
+});
+const upload = multer({ storage });
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// --------------------------------
 app.use(express.json({ limit: '2mb' }));
 
 // Emit helper
@@ -76,7 +96,91 @@ app.get('/api/locations', (req, res) => {
   });
 });
 
-app.post('/api/locations', optionalAuthenticate, (req, res) => {
+
+// --- BATTLE MAPS ROUTES ---
+app.post('/api/locations/:id/battle_maps', authenticate, upload.single('image'), (req, res) => {
+  if (req.user.isTemporary) {
+    if (req.file) fs.unlinkSync(req.file.path);
+    return res.status(403).json({ error: 'Only main admin can manage battle maps' });
+  }
+
+  const { designation } = req.body;
+  if (!req.file || !designation) {
+    if (req.file) fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: 'Image and designation are required' });
+  }
+
+  const locationId = req.params.id;
+  const imageUrl = '/uploads/battle_maps/' + req.file.filename;
+  
+  // Calculate order index based on designation
+  let orderIndex = 0;
+  if (designation === 'Lobby') {
+    orderIndex = 0;
+  } else if (designation === 'Penthouse') {
+    orderIndex = 999;
+  } else if (designation.startsWith('Level ')) {
+    const levelNum = parseInt(designation.split(' ')[1], 10);
+    orderIndex = isNaN(levelNum) ? 1 : levelNum;
+  }
+
+  // Check if designation already exists for this location
+  db.get('SELECT id, image_url FROM battle_maps WHERE location_id = ? AND designation = ?', [locationId, designation], (err, existing) => {
+    if (err) {
+      fs.unlinkSync(req.file.path);
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (existing) {
+      // Overwrite existing
+      const oldPath = path.join(__dirname, '..', existing.image_url);
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+
+      db.run('UPDATE battle_maps SET image_url = ?, order_index = ? WHERE id = ?', [imageUrl, orderIndex, existing.id], (err2) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        emitUpdate();
+        res.json({ message: 'Battle map updated', id: existing.id, imageUrl });
+      });
+    } else {
+      // Insert new
+      db.run('INSERT INTO battle_maps (location_id, designation, image_url, order_index) VALUES (?, ?, ?, ?)', [locationId, designation, imageUrl, orderIndex], function(err2) {
+        if (err2) return res.status(500).json({ error: err2.message });
+        emitUpdate();
+        res.json({ message: 'Battle map created', id: this.lastID, imageUrl });
+      });
+    }
+  });
+});
+
+app.get('/api/locations/:id/battle_maps', (req, res) => {
+  db.all('SELECT * FROM battle_maps WHERE location_id = ? ORDER BY order_index ASC', [req.params.id], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.delete('/api/locations/:id/battle_maps/:mapId', authenticate, (req, res) => {
+  if (req.user.isTemporary) {
+    return res.status(403).json({ error: 'Only main admin can manage battle maps' });
+  }
+
+  db.get('SELECT image_url FROM battle_maps WHERE id = ?', [req.params.mapId], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Map not found' });
+
+    const filePath = path.join(__dirname, '..', row.image_url);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    db.run('DELETE FROM battle_maps WHERE id = ?', [req.params.mapId], (err2) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      emitUpdate();
+      res.json({ message: 'Battle map deleted' });
+    });
+  });
+});
+// ----------------------------
+
+app.post('/api/locations', optionalAuthenticate, async (req, res) => {
   const locations = Array.isArray(req.body) ? req.body : [req.body];
   
   // Security check: If unauthenticated, ONLY allow creating Rhombuses.
@@ -87,8 +191,21 @@ app.post('/api/locations', optionalAuthenticate, (req, res) => {
     }
   }
 
-  const sql = `INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  for (let loc of locations) {
+      if (loc.shape === 'rhombus' && loc.owner) {
+          const inherited = await new Promise(resolve => {
+              db.get('SELECT hp_current, hp_max, hp_temp FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id IS NULL LIMIT 1', [loc.owner], (err, row) => resolve(row));
+          });
+          if (inherited) {
+              loc.hp_current = inherited.hp_current;
+              loc.hp_max = inherited.hp_max;
+              loc.hp_temp = inherited.hp_temp;
+          }
+      }
+  }
+
+  const sql = `INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   
   db.serialize(() => {
     const results = [];
@@ -102,24 +219,15 @@ app.post('/api/locations', optionalAuthenticate, (req, res) => {
       }
 
       stmt.run([
-        loc.name || '', 
-        loc.description || '', 
-        loc.npcs || '', 
-        loc.x, loc.y, loc.z, 
-        loc.width || 1, loc.height || 1, loc.depth || 1, 
-        loc.shape || 'box',
-        loc.color !== undefined ? loc.color : '#00ff00',
-        loc.district_name || null,
-        loc.district_color || null,
-        loc.parent_id || null,
-        loc.isFavorite ? 1 : 0,
-        loc.isDanger ? 1 : 0,
-        loc.owner || null,
-        loc.rotation || 0,
-        loc.rotation_x || 0,
-        loc.rotation_z || 0,
-        loc.classification || null,
-        loc.polyCount || 5
+        loc.name, loc.description || null, loc.npcs || null, loc.x, loc.y, loc.z, 
+        loc.width || 1, loc.height || 1, loc.depth || 1, loc.shape || 'box', 
+        loc.color || '#00ff00', loc.district_name || null, loc.district_color || null, 
+        loc.parent_id || null, loc.isFavorite ? 1 : 0, loc.isDanger ? 1 : 0, loc.owner || null,
+        loc.rotation || 0, loc.rotation_x || 0, loc.rotation_z || 0, loc.classification || null, loc.polyCount || 5,
+        loc.battle_map_id || null, loc.floor_index !== undefined ? loc.floor_index : null,
+        loc.hp_current !== undefined ? loc.hp_current : null,
+        loc.hp_max !== undefined ? loc.hp_max : null,
+        loc.hp_temp !== undefined ? loc.hp_temp : null
       ], function(err) {
         if (err) {
           console.error(`Database error during insert at index ${index}:`, err.message);
@@ -179,17 +287,39 @@ app.delete('/api/locations/:id', authenticate, (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'Not found' });
 
-    db.run('DELETE FROM locations WHERE id = ?', req.params.id, (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      recordAction('location_delete', { data: [row] });
-      emitUpdate();
-      res.json({ message: 'Deleted' });
+    // Fetch all associated battle maps to delete their files
+    db.all('SELECT image_url FROM battle_maps WHERE location_id = ?', [req.params.id], (errMaps, mapRows) => {
+      if (errMaps) console.error("Error fetching battle maps for deletion:", errMaps.message);
+      
+      if (mapRows && mapRows.length > 0) {
+        mapRows.forEach(map => {
+          const fs = require('fs');
+          const path = require('path');
+          const filePath = path.join(__dirname, '..', map.image_url);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        });
+      }
+
+      // Delete battle map records
+      db.run('DELETE FROM battle_maps WHERE location_id = ?', [req.params.id], (errDelMaps) => {
+        if (errDelMaps) console.error("Error deleting battle maps:", errDelMaps.message);
+
+        // Finally delete the location
+        db.run('DELETE FROM locations WHERE id = ?', req.params.id, (errDelLoc) => {
+          if (errDelLoc) return res.status(500).json({ error: errDelLoc.message });
+          recordAction('location_delete', { data: [row] });
+          emitUpdate();
+          res.json({ message: 'Deleted' });
+        });
+      });
     });
   });
 });
 
-app.put('/api/locations/:id', authenticate, (req, res) => {
-  const { name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount } = req.body;
+app.put('/api/locations/:id', optionalAuthenticate, (req, res) => {
+  const { name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index } = req.body;
   
   if (name === undefined || x === undefined || y === undefined || z === undefined) {
     console.error('PUT Error: Missing required fields in body:', req.body);
@@ -198,9 +328,15 @@ app.put('/api/locations/:id', authenticate, (req, res) => {
 
   db.get('SELECT * FROM locations WHERE id = ?', [req.params.id], (err, oldRow) => {
     if (err) return res.status(500).json({ error: err.message });
+    if (!oldRow) return res.status(404).json({ error: 'Location not found' });
     
-    const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=? WHERE id=?`;
-    const params = [name, description, npcs, x, y, z, width, height, depth, shape || 'box', color, district_name || null, district_color || null, parent_id || null, isFavorite ? 1 : 0, isDanger ? 1 : 0, owner || null, rotation || 0, rotation_x || 0, rotation_z || 0, classification || null, polyCount || 5, req.params.id];
+    // Security check: Unauthenticated users can only modify rhombuses
+    if (!req.user && (oldRow.shape !== 'rhombus' || (shape && shape !== 'rhombus'))) {
+      return res.status(401).json({ error: 'Access denied: Unauthenticated users can only update rhombuses.' });
+    }
+    
+    const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=?, battle_map_id=?, floor_index=? WHERE id=?`;
+    const params = [name, description, npcs, x, y, z, width, height, depth, shape || 'box', color, district_name || null, district_color || null, parent_id || null, isFavorite ? 1 : 0, isDanger ? 1 : 0, owner || null, rotation || 0, rotation_x || 0, rotation_z || 0, classification || null, polyCount || 5, battle_map_id || null, floor_index !== undefined ? floor_index : null, req.params.id];
     
     db.run(sql, params, function(err) {
       if (err) {
@@ -281,6 +417,64 @@ app.delete('/api/districts/:name', authenticate, (req, res) => {
       emitUpdate();
       res.json({ message: 'Deleted' });
     });
+  });
+});
+app.put('/api/locations/:id/health', optionalAuthenticate, (req, res) => {
+  const { id } = req.params;
+  const { hp_current, hp_max, hp_temp, action, amount } = req.body;
+  
+  db.get('SELECT shape, owner, hp_current, hp_max, hp_temp FROM locations WHERE id = ?', [id], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Location not found' });
+    
+    // Security check: Unauthenticated users can only modify rhombuses
+    if (!req.user && row.shape !== 'rhombus') {
+      return res.status(401).json({ error: 'Access denied: Unauthenticated users can only update rhombuses.' });
+    }
+    
+    let newCurrent = hp_current !== undefined ? hp_current : row.hp_current;
+    let newMax = hp_max !== undefined ? hp_max : row.hp_max;
+    let newTemp = hp_temp !== undefined ? hp_temp : row.hp_temp;
+
+    if (newCurrent === null) newCurrent = 0;
+    if (newMax === null) newMax = 0;
+    if (newTemp === null) newTemp = 0;
+
+    if (action === 'set_max' && (row.hp_current === null || row.hp_current === 0)) {
+        newCurrent = newMax;
+    }
+
+    if (action === 'damage' && amount > 0) {
+      let remainingDamage = amount;
+      if (newTemp > 0) {
+        if (newTemp >= remainingDamage) {
+          newTemp -= remainingDamage;
+          remainingDamage = 0;
+        } else {
+          remainingDamage -= newTemp;
+          newTemp = 0;
+        }
+      }
+      if (remainingDamage > 0 && newCurrent !== null) {
+        newCurrent = Math.max(0, newCurrent - remainingDamage);
+      }
+    } else if (action === 'heal' && amount > 0 && newCurrent !== null && newMax !== null) {
+      newCurrent = Math.min(newMax, newCurrent + amount);
+    }
+    
+    if (row.shape === 'rhombus' && row.owner) {
+        db.run('UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = "rhombus" AND owner = ?', [newCurrent, newMax, newTemp, row.owner], function(err2) {
+          if (err2) return res.status(500).json({ error: err2.message });
+          emitUpdate();
+          res.json({ id, hp_current: newCurrent, hp_max: newMax, hp_temp: newTemp });
+        });
+    } else {
+        db.run('UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE id = ?', [newCurrent, newMax, newTemp, id], function(err2) {
+          if (err2) return res.status(500).json({ error: err2.message });
+          emitUpdate();
+          res.json({ id, hp_current: newCurrent, hp_max: newMax, hp_temp: newTemp });
+        });
+    }
   });
 });
 
@@ -490,10 +684,10 @@ app.post('/api/maps/load/:name', authenticate, (req, res) => {
         db.run('DELETE FROM roads');
 
         if (locations.length > 0) {
-          const stmtL = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount) 
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          const stmtL = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
           locations.forEach(l => {
-            stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.isFavorite, l.isDanger, l.owner, l.rotation, l.rotation_x, l.rotation_z, l.classification, l.polyCount]);
+            stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.is_target, l.isFavorite, l.isDanger, l.owner, l.notifications_enabled, l.rotation, l.rotation_x, l.rotation_z, l.classification, l.polyCount, l.battle_map_id, l.floor_index, l.hp_current !== undefined ? l.hp_current : null, l.hp_max !== undefined ? l.hp_max : null, l.hp_temp !== undefined ? l.hp_temp : null]);
           });
           stmtL.finalize();
         }
@@ -519,10 +713,10 @@ app.post('/api/maps/load/:name', authenticate, (req, res) => {
         db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM roads) WHERE name="roads"');
         
         if (activeRhombuses && activeRhombuses.length > 0) {
-          const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount) 
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
           activeRhombuses.forEach(r => {
-            stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.rotation_x, r.rotation_z, r.classification, r.polyCount]);
+            stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.rotation_x, r.rotation_z, r.classification, r.polyCount, r.battle_map_id, r.floor_index, r.hp_current !== undefined ? r.hp_current : null, r.hp_max !== undefined ? r.hp_max : null, r.hp_temp !== undefined ? r.hp_temp : null]);
           });
           stmtR.finalize();
         }
@@ -548,10 +742,10 @@ app.post('/api/maps/clear', authenticate, (req, res) => {
       db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="roads"');
 
       if (activeRhombuses && activeRhombuses.length > 0) {
-        const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, classification, polyCount) 
-                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
         activeRhombuses.forEach(r => {
-          stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.classification, r.polyCount]);
+          stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.rotation_x, r.rotation_z, r.classification, r.polyCount, r.battle_map_id, r.floor_index, r.hp_current !== undefined ? r.hp_current : null, r.hp_max !== undefined ? r.hp_max : null, r.hp_temp !== undefined ? r.hp_temp : null]);
         });
         stmtR.finalize();
       }
@@ -877,6 +1071,17 @@ io.on('connection', (socket) => {
     }, 3000); // 3 second animation window
   });
 
+  socket.on('requestInstantRhombusPurge', (data) => {
+    // data: { id, owner }
+    console.log(`Instant Purge Requested for ID: ${data.id}`);
+    db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
+        if (!err && this.changes > 0) {
+            recordAction('location_update', { data: [{ id: data.id, battle_map_id: -1, floor_index: -1 }] });
+            emitUpdate({ isRhombusOnly: true });
+        }
+    });
+  });
+
   socket.on('moveRhombus', (data) => {
     // data: { id, x, z }
     const info = userSockets.get(socket.id);
@@ -891,6 +1096,121 @@ io.on('connection', (socket) => {
           }
         });
       }
+    });
+  });
+
+  
+  socket.on('battle_map_enter', (data) => {
+    // data: { locationId, floorIndex }
+    const info = userSockets.get(socket.id);
+    if (info) {
+      info.currentBattleMapId = data.locationId;
+      info.currentFloorIndex = data.floorIndex;
+      broadcastActiveUsers();
+    }
+  });
+
+  socket.on('battle_map_leave', () => {
+    const info = userSockets.get(socket.id);
+    if (info) {
+      info.currentBattleMapId = null;
+      info.currentFloorIndex = null;
+      broadcastActiveUsers();
+    }
+  });
+
+  socket.on('admin_force_floor_change', (data) => {
+      // data: { locationId, floorIndex }
+      const info = userSockets.get(socket.id);
+      if (info && info.isAdmin) {
+        // Update the floor index for everyone currently in this map
+        userSockets.forEach(user => {
+            if (Number(user.currentBattleMapId) === Number(data.locationId)) {
+                user.currentFloorIndex = data.floorIndex;
+            }
+        });
+        io.emit('force_floor_change', data);
+        broadcastActiveUsers();
+      }
+    });
+
+    socket.on('save_battle_map_default', (data) => {
+      // data: { locationId, floorIndex, positions: [{ userName, id, x, z, isEnemy }] }
+      const info = userSockets.get(socket.id);
+      if (info && info.isAdmin) {
+        db.serialize(() => {
+          db.run('DELETE FROM battle_map_defaults WHERE location_id = ? AND floor_index = ?', [data.locationId, data.floorIndex]);
+          
+          const stmt = db.prepare('INSERT INTO battle_map_defaults (location_id, floor_index, rhombus_id, rhombus_owner, is_enemy, x, z) VALUES (?, ?, ?, ?, ?, ?, ?)');
+          data.positions.forEach(pos => {
+            let enemyVal = 0;
+            if (pos.isEnemy) enemyVal = 1;
+            else if (pos.isFriendly) enemyVal = 2;
+            stmt.run([data.locationId, data.floorIndex, pos.id || null, pos.userName || null, enemyVal, pos.x, pos.z]);
+          });
+          stmt.finalize();
+        });
+      }
+    });
+
+    socket.on('load_battle_map_default', (data) => {
+      // data: { locationId, floorIndex }
+      const info = userSockets.get(socket.id);
+      if (info && info.isAdmin) {
+        db.all('SELECT * FROM battle_map_defaults WHERE location_id = ? AND floor_index = ?', [data.locationId, data.floorIndex], (err, rows) => {
+          if (err || !rows) return;
+          
+          const updates = [];
+          db.serialize(() => {
+              rows.forEach(row => {
+                if (row.is_enemy === 1) {
+                   db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [row.x, row.z, row.rhombus_id]);
+                   updates.push({ id: row.rhombus_id, x: row.x, z: row.z, isEnemy: true, isFriendly: false });
+                } else if (row.is_enemy === 2) {
+                   db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [row.x, row.z, row.rhombus_id]);
+                   updates.push({ id: row.rhombus_id, x: row.x, z: row.z, isEnemy: false, isFriendly: true });
+                } else {
+                   db.get('SELECT id FROM locations WHERE shape = "rhombus" AND owner = ?', [row.rhombus_owner], (err, pRow) => {
+                     if (pRow) {
+                       db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [row.x, row.z, pRow.id]);
+                     } else {
+                       db.run('INSERT INTO locations (name, x, y, z, shape, owner, color, width, height, depth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                         [row.rhombus_owner, row.x, 0.1, row.z, 'rhombus', row.rhombus_owner, '#00ff00', 3.75, 3.75, 3.75]);
+                     }
+                   });
+                   updates.push({ userName: row.rhombus_owner, x: row.x, z: row.z, isEnemy: false, isFriendly: false });
+                }
+              });
+              db.run('SELECT 1', () => {
+                  io.emit('default_loaded', { locationId: data.locationId, floorIndex: data.floorIndex, updates });
+                  emitUpdate({ isRhombusOnly: true });
+              });
+          });
+        });
+      }
+    });
+
+  socket.on('battle_map_move', (data) => {
+    // data: { userName, x, z }
+    const info = userSockets.get(socket.id);
+    if (info && info.currentBattleMapId) {
+      // Broadcast to all users in this specific battle map and floor? 
+      // Or just broadcast to everyone in battle_map.
+      io.emit('battle_map_moved', { userName: info.userName, x: data.x, z: data.z, locationId: info.currentBattleMapId, floorIndex: info.currentFloorIndex });
+    }
+  });
+
+  socket.on('ping_location', (data) => {
+    const info = userSockets.get(socket.id);
+    io.emit('location_pinged', {
+      owner: info ? info.userName : socket.id,
+      x: data.x,
+      y: data.y,
+      z: data.z,
+      color: data.color || '#ff0000',
+      size: data.size || 1,
+      battle_map_id: data.battle_map_id || null,
+      floor_index: data.floor_index !== undefined ? data.floor_index : null
     });
   });
 
@@ -925,7 +1245,6 @@ app.post('/api/chat/purge', authenticate, (req, res) => {
   });
 });
 
-const path = require('path');
 const frontendDist = path.join(__dirname, '../frontend/dist');
 app.use(express.static(frontendDist));
 // Fallback for SPA routing - using app.use catches all unmatched routes safely

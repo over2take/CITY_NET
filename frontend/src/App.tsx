@@ -1,10 +1,56 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh } from '@react-three/drei';
+import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh, Html, OrthographicCamera } from '@react-three/drei';
+import { BattleMapManager } from './BattleMapManager';
+import { BattleMapScene } from './BattleMapScene';
+import { HealthBar } from './HealthBar';
+import PingEffect from './PingEffect';
 import { io } from 'socket.io-client';
 import * as THREE from 'three';
 import rhombusIcon from './assets/rhombus.svg';
+
+function CursorPingListener({ socket, view, activeBattleMapData, pingColor }: any) {
+    const { raycaster, camera, scene, pointer } = useThree();
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key.toLowerCase() === 'q' && socket) {
+                if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+                
+                raycaster.setFromCamera(pointer, camera);
+                // Ignore helper planes or invisible meshes by intersecting the scene, but maybe prefer visible
+                const intersects = raycaster.intersectObjects(scene.children, true).filter((hit: any) => hit.object.visible);
+                
+                let hitPoint: THREE.Vector3 | null = null;
+                if (intersects.length > 0) {
+                    hitPoint = intersects[0].point;
+                } else {
+                    // Fallback: Intersect with Y=0 plane (ground) if no mesh is hit (e.g. empty City Map grid)
+                    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                    const target = new THREE.Vector3();
+                    if (raycaster.ray.intersectPlane(groundPlane, target)) {
+                        hitPoint = target;
+                    }
+                }
+                
+                if (hitPoint) {
+                    socket.emit('ping_location', {
+                        x: hitPoint.x,
+                        y: hitPoint.y + 0.5,
+                        z: hitPoint.z,
+                        color: pingColor,
+                        size: 2,
+                        battle_map_id: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
+                        floor_index: view === 'battle_map' && activeBattleMapData && activeBattleMapData.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
+                    });
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [socket, view, activeBattleMapData, pingColor, raycaster, pointer, camera, scene]);
+    return null;
+}
 import terminalIcon from './assets/terminal-thin.svg';
 import notifyOnIcon from './assets/Notification-on.svg';
 import notifyOffIcon from './assets/Notification-off.svg';
@@ -165,7 +211,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
     };
 
     const deployRhombus = async (pos: THREE.Vector3) => {
-        // Enforce ONE rhombus per user
+        // Enforce ONE rhombus per user per context
         const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
         
         const newRhombus = {
@@ -175,7 +221,9 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
             width: 3.75, height: 3.75, depth: 3.75,
             shape: 'rhombus',
             color: rhombusState.color,
-            owner: userName
+            owner: userName,
+            battle_map_id: null,
+            floor_index: null
         };
 
         if (existing) {
@@ -198,7 +246,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
         setRhombusState(p => ({ ...p, active: false }));
     };
 
-    const handleMouseDown = (e: MouseEvent) => {
+    const handlePointerDown = (e: PointerEvent) => {
         if (e.button !== 0) return;
         
         const pos = getMouseWorldPos(e);
@@ -218,7 +266,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
         }
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
         mouseScreenPos.current = { x: e.clientX, y: e.clientY };
         if (view === 'draw_roads' && isPainting && setRoadTrail) {
             const pos = getMouseWorldPos(e);
@@ -239,7 +287,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
         }
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
         mouseScreenPos.current = null;
         if (controls) (controls as any).enabled = true;
         if (view === 'draw_roads') { setIsPainting(false); return; }
@@ -257,13 +305,13 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
         setDragStart(null); setDragEnd(null);
     };
 
-    gl.domElement.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    gl.domElement.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
     return () => {
-        gl.domElement.removeEventListener('mousedown', handleMouseDown);
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
+        gl.domElement.removeEventListener('pointerdown', handlePointerDown);
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
     };
   }, [view, dragStart, dragEnd, isPainting, gl, camera, locations, onSelectionChange, controls, setRoadTrail, roadDrawMode, snapToGrid, rhombusState, setRhombusState, isBatchSelecting, userName, refreshLocations]);
 
@@ -487,7 +535,7 @@ const getClosestPointOnRoads = (x: number, z: number, roadsList: any[], maxSnapD
     return { x, z };
 };
 
-const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads }: any) => {
+const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap }: any) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const coreRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.PointLight>(null);
@@ -588,9 +636,10 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
     }
 
     const finalScaleMult = scaleMult * zoomComp;
-    const scale = 1.875 * finalScaleMult;
-    
-    meshRef.current.scale.set(scale, scale, scale);
+      const battleMapScale = isBattleMap ? 4 : 1;
+      const scale = 1.875 * finalScaleMult * battleMapScale;
+      
+      meshRef.current.scale.set(scale, scale, scale);
     meshRef.current.rotation.y += 0.04 * rotationSpeed;
     meshRef.current.rotation.z += 0.02 * rotationSpeed;
 
@@ -604,7 +653,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
     
     if (coreRef.current) {
         coreRef.current.rotation.y -= 0.06 * rotationSpeed;
-        coreRef.current.scale.set((0.4 + pulse * 0.1) * scaleMult, (0.4 + pulse * 0.1) * scaleMult, (0.4 + pulse * 0.1) * scaleMult);
+        coreRef.current.scale.set((0.4 + pulse * 0.1) * scaleMult * battleMapScale, (0.4 + pulse * 0.1) * scaleMult * battleMapScale, (0.4 + pulse * 0.1) * scaleMult * battleMapScale);
     }
 
     if (!(window as any).activeRhombuses) (window as any).activeRhombuses = {};
@@ -690,18 +739,222 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
       
 
       {/* Enemy Core - Pulsing Void */}
-      <mesh ref={coreRef as any} scale={[0.4, 0.4, 0.4]}>
+      <mesh ref={coreRef as any} scale={[0.5, 0.5, 0.5]}>
         <octahedronGeometry args={[0.5]} />
         <meshBasicMaterial color="#220000" />
       </mesh>
       
+      {isAdmin && (
+          <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
+      )}
+
       {/* Red Alert Light */}
       <pointLight ref={lightRef as any} color="#ff0000" intensity={3} distance={15} decay={2} />
     </group>
   );
 });
 
-const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, activeUsers, roads }: any) => {
+const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap }: any) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const meshGroupRef = useRef<THREE.Group>(null);
+  const lightRef = useRef<THREE.PointLight>(null);
+  const { controls, raycaster } = useThree();
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+  const intersection = useMemo(() => new THREE.Vector3(), []);
+  
+  const isAdmin = token !== '';
+  const [isLocalDragging, setIsLocalDragging] = useState(false);
+  useEffect(() => {
+      const handleGlobalUp = () => {
+          setIsLocalDragging((prev) => {
+              if (prev) {
+                  if (controls) (controls as any).enabled = true;
+                  setIsDragging(false);
+              }
+              return false;
+          });
+      };
+      window.addEventListener('pointerup', handleGlobalUp);
+      return () => window.removeEventListener('pointerup', handleGlobalUp);
+  }, [controls, setIsDragging]);
+  const localPos = useRef({ x: location.x, z: location.z });
+  const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
+
+  const visualPos = useRef(new THREE.Vector3(location.x, location.y + (location.height / 4), location.z));
+
+  const [animState, setAnimState] = useState<'none' | 'appearing' | 'fading'>('none');
+  const animStartTime = useRef<number | null>(null);
+  const hasAppeared = useRef(false);
+
+  useEffect(() => {
+    if (!hasAppeared.current) {
+        setAnimState('appearing');
+        animStartTime.current = Date.now();
+        hasAppeared.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleFade = (data: any) => { if (data.id === location.id) { setAnimState('fading'); animStartTime.current = Date.now(); } };
+    const handleAppear = (data: any) => { if (data.id === location.id) { setAnimState('appearing'); animStartTime.current = Date.now(); } };
+    socket.on('rhombusFading', handleFade);
+    socket.on('rhombusAppearing', handleAppear);
+    return () => { socket.off('rhombusFading', handleFade); socket.off('rhombusAppearing', handleAppear); };
+  }, [location.id, socket]);
+
+  useEffect(() => { 
+    localPos.current = { x: location.x, z: location.z }; 
+  }, [location.x, location.z]);
+
+  useFrame((state, delta) => {
+    if (!meshGroupRef.current) return;
+    
+    const targetY = location.y + (location.height / 4);
+    visualPos.current.x = THREE.MathUtils.lerp(visualPos.current.x, localPos.current.x, 2.6 * delta);
+    visualPos.current.z = THREE.MathUtils.lerp(visualPos.current.z, localPos.current.z, 2.6 * delta);
+    visualPos.current.y = THREE.MathUtils.lerp(visualPos.current.y, targetY, 2.6 * delta);
+
+    if (groupRef.current) {
+        groupRef.current.position.copy(visualPos.current);
+    }
+
+    const d = state.camera.position.distanceTo(visualPos.current);
+    const zoomComp = Math.max(1, d / 120);
+    
+    let baseOpacity = 0.9;
+    let scaleMult = 1.0;
+    let rotationSpeed = 1.0;
+    let flicker = 1.0;
+
+    if (animState !== 'none' && animStartTime.current) {
+        const elapsed = (Date.now() - animStartTime.current) / 1000;
+        const progress = Math.min(1, elapsed / 3); 
+        if (animState === 'fading') {
+          baseOpacity = Math.max(0, 0.9 * (1 - Math.pow(progress, 2)));
+          if (progress > 0.5) flicker = Math.random() > 0.5 ? 1.2 : 0.2;
+          rotationSpeed = 1.0 + progress * 20;
+          scaleMult = (progress < 0.2 ? 1.0 + progress * 2 : (1.4 * (1 - (progress - 0.2) / 0.8)));
+          if (progress >= 1) { setAnimState('none'); baseOpacity = 0; scaleMult = 0.001; }
+        } else if (animState === 'appearing') {
+          baseOpacity = 0.9 * Math.pow(progress, 2);
+          if (progress < 0.5) flicker = Math.random() > 0.5 ? 1.2 : 0.2;
+          rotationSpeed = 20 * (1 - progress) + 1.0;
+          scaleMult = (progress > 0.8 ? 1.0 + (1 - progress) * 2 : (1.4 * progress / 0.8));
+          if (progress >= 1) { setAnimState('none'); baseOpacity = 0.9; scaleMult = 1.0; }
+        }
+    } else {
+        baseOpacity = 0.9;
+        scaleMult = 1.0;
+    }
+
+    const finalScaleMult = scaleMult * zoomComp;
+    const battleMapScale = isBattleMap ? 4 : 1;
+    const scale = 1.875 * finalScaleMult * battleMapScale;
+      
+    meshGroupRef.current.scale.set(scale, scale, scale);
+    const time = state.clock.elapsedTime;
+    meshGroupRef.current.rotation.y += 0.05 * rotationSpeed;
+    meshGroupRef.current.rotation.x = Math.sin(time * 1.5) * Math.PI * 0.2; 
+    meshGroupRef.current.rotation.z += 0.02 * rotationSpeed;
+    meshGroupRef.current.position.y = Math.sin(time * 3) * 0.2;
+
+    const pulse = (0.5 + Math.sin(state.clock.elapsedTime * 6) * 0.5) * flicker;
+    
+    meshGroupRef.current.children.forEach(child => {
+        if ((child as any).isMesh && (child as any).material) {
+            ((child as any).material as THREE.MeshBasicMaterial).color.setRGB(0, 0.2 + pulse * 0.8, 0.2 + pulse * 0.8);
+            ((child as any).material as any).opacity = baseOpacity;
+        }
+    });
+
+    if (lightRef.current) lightRef.current.intensity = (1.0 + pulse * 4.0) * (baseOpacity / 0.9);
+
+    if (!(window as any).activeRhombuses) (window as any).activeRhombuses = {};
+    (window as any).activeRhombuses[location.id] = visualPos.current;
+  });
+
+  useEffect(() => {
+    return () => {
+      if ((window as any).activeRhombuses) {
+        delete (window as any).activeRhombuses[location.id];
+      }
+    };
+  }, [location.id]);
+
+  const dragDist = useRef(0);
+
+  const handlePointerDown = (e: any) => {
+      e.stopPropagation();
+    dragDist.current = 0;
+    if (!isAdmin) return;
+    try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
+    const currentRaycaster = e.raycaster || raycaster;
+    if (currentRaycaster && currentRaycaster.ray) {
+        currentRaycaster.ray.intersectPlane(plane, intersection);
+        setDragOffset(new THREE.Vector3(localPos.current.x - intersection.x, 0, localPos.current.z - intersection.z));
+    }
+    if (controls) (controls as any).enabled = false;
+    setIsLocalDragging(true);
+    setIsDragging(true);
+  };
+
+  const handlePointerMove = (e: any) => {
+    if (!isAdmin || e.buttons !== 1) return;
+    dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY);
+    const currentRaycaster = e.raycaster || raycaster;
+    if (currentRaycaster && currentRaycaster.ray) {
+        currentRaycaster.ray.intersectPlane(plane, intersection);
+        const targetX = intersection.x + dragOffset.x;
+        const targetZ = intersection.z + dragOffset.z;
+        localPos.current = { x: targetX, z: targetZ };
+    }
+  };
+
+  const handlePointerUp = async (e: any) => {
+      try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
+    if (controls) (controls as any).enabled = true;
+    setIsLocalDragging(false);
+    setIsDragging(false);
+    
+    if (dragDist.current < 15) {
+        e.stopPropagation();
+        onClick(); 
+    } else if (isAdmin) {
+        socket.emit('moveRhombus', { id: location.id, x: localPos.current.x, z: localPos.current.z });
+    }
+  };
+
+  return (
+    <group 
+        ref={(group) => { 
+            groupRef.current = group as any;
+            if (group) group.position.copy(visualPos.current);
+            if (isSelected && group) setTargetObject(group);
+        }}
+    >
+      <group
+        ref={meshGroupRef as any}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
+        <mesh>
+          <coneGeometry args={[0.5, 0.8, 4]} />
+          <meshBasicMaterial color="#00ccff" transparent opacity={0.9} />
+        </mesh>
+      </group>
+      
+      {isAdmin && (
+          <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
+      )}
+      
+      <pointLight ref={lightRef as any} color="#00ccff" intensity={3} distance={15} decay={2} />
+    </group>
+  );
+});
+
+const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, activeUsers, roads, isBattleMap, battleMapPos }: any) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const haloRef = useRef<THREE.Mesh>(null);
@@ -735,7 +988,11 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
 
   // Smooth movement interpolation
-  const visualPos = useRef(new THREE.Vector3(location.x, location.y + (location.height / 2), location.z));
+  const visualPos = useRef(new THREE.Vector3(
+    isBattleMap && battleMapPos ? battleMapPos.x : location.x, 
+    isBattleMap ? 0.1 : location.y + (location.height / 2), 
+    isBattleMap && battleMapPos ? battleMapPos.z : location.z
+  ));
 
   useEffect(() => {
     localPos.current = { x: location.x, z: location.z };
@@ -814,7 +1071,8 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
     }
 
     const zoomComp = Math.max(1, d / 100); 
-    const finalScaleMult = scaleMult * zoomComp;
+    const battleMapScale = isBattleMap ? 2.8 : 1;
+    const finalScaleMult = scaleMult * zoomComp * battleMapScale;
 
     // Player Pulse Effect (Sync with their own color)
     const pulse = (0.7 + Math.sin(state.clock.elapsedTime * 4) * 0.3) * flicker;
@@ -928,7 +1186,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
         </mesh>
       </mesh>
 
-      
+      <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
 
       <>
           <mesh ref={glowRef as any} scale={[1.2, 1.2, 1.2]} raycast={() => null}>
@@ -1002,6 +1260,13 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
     baseColor = "#00ff00"; // Neon green if it has no name, description, and residence
   }
 
+  let maxY = -Infinity;
+  parts.forEach(p => {
+    maxY = Math.max(maxY, p.y + p.height / 2);
+  });
+
+  const isBattleActive = activeUsers && activeUsers.some((user: any) => user.currentBattleMapId && Number(user.currentBattleMapId) === Number(location.id));
+
   const dragDist = useRef(0);
 
   return (
@@ -1010,6 +1275,18 @@ const Building = React.memo(({ location, children, onClick, isSelected, isBatchS
         rotation={new THREE.Euler(location.rotation_x || 0, location.rotation || 0, location.rotation_z || 0, 'YXZ')}
         ref={(group) => { if (isSelected && group) { setTargetObject(group); if (editMeshRef) editMeshRef.current = group; } }} 
     >
+      {isBattleActive && (
+          <Html position={[0, maxY - minY + 2, 0]} center wrapperClass="battle-indicator" style={{ pointerEvents: 'none' }}>
+            <div style={{
+                fontSize: '24px', 
+                filter: 'drop-shadow(0 0 10px #ff0000)',
+                animation: 'pulse 1.5s infinite',
+                pointerEvents: 'none'
+            }}>
+                ⚔️
+            </div>
+          </Html>
+        )}
       {parts.map((p, idx) => {
         const isRoot = idx === 0;
         const rootQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(location.rotation_x || 0, location.rotation || 0, location.rotation_z || 0, 'YXZ'));
@@ -2369,9 +2646,29 @@ function AdminPanel({
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
   genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu,
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
-  isCopyingSize, setIsCopyingSize,
-  isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName
-}: any) {
+  isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
+  isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
+    isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault
+  }: any) {
+  if (view === 'battle_map') {
+    return (
+      <div className="panel admin-panel" style={{ width: '300px', maxHeight: '90vh', overflowY: 'auto', pointerEvents: 'auto' }}>
+        <h3 style={{ textShadow: '0 0 10px #00ff00', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+          <button className="upload-btn" onClick={() => { setIsDeployingEnemy(!isDeployingEnemy); setIsDeployingFriendly(false); }} style={{ flex: 1, backgroundColor: isDeployingEnemy ? '#ff0000' : '' }}>{isDeployingEnemy ? 'CANCEL_DEPLOY' : 'ADD_ENEMY'}</button>
+          <button className="upload-btn" onClick={() => { setIsDeployingFriendly(!isDeployingFriendly); setIsDeployingEnemy(false); }} style={{ flex: 1, backgroundColor: isDeployingFriendly ? '#00ccff' : '' }}>{isDeployingFriendly ? 'CANCEL_DEPLOY' : 'ADD_FRIENDLY'}</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px', borderBottom: '1px solid #00ff00', paddingBottom: '10px' }}>
+           <button style={{ padding: '10px', backgroundColor: '#5500ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleSaveDefault}>SAVE_DEFAULT</button>
+           <button style={{ padding: '10px', backgroundColor: '#aa00ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleLoadDefault}>LOAD_DEFAULT</button>
+        </div>
+        <button className="utility-btn danger-btn" onClick={() => {
+            onLogout();
+        }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>
+      </div>
+    );
+  }
+
   const [density, setDensity] = useState(8);
   const [allowedShapes, setAllowedShapes] = useState<string[]>(['box', 'cylinder', 'sphere']);
   const [activeUserEditing, setActiveUserEditing] = useState<any>(null);
@@ -2491,6 +2788,19 @@ function AdminPanel({
         width: 1.875, height: 1.875, depth: 1.875, 
         baseWidth: 1.875, baseHeight: 1.875, baseDepth: 1.875,
         shape: 'enemy_rhombus', color: '#ff0000', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5
+    });
+    setView('editor');
+  };
+
+  const startNewFriendly = () => {
+    setEditId(null); setSelectedLocation(null);
+    const { tx, tz } = getCenterGroundTarget();
+    setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
+    setEditData({ 
+        name: '', description: '', npcs: '', x: tx, y: 0, z: tz, 
+        width: 1.875, height: 1.875, depth: 1.875, 
+        baseWidth: 1.875, baseHeight: 1.875, baseDepth: 1.875,
+        shape: 'friendly_rhombus', color: '#00ccff', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5
     });
     setView('editor');
   };
@@ -2801,6 +3111,7 @@ function AdminPanel({
           </div>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
               <button className="utility-btn" style={{flex: 1, borderColor: '#ff0000', color: '#ff0000'}} onClick={startNewEnemy}>+ ADD_ENEMY</button>
+              <button className="utility-btn" style={{flex: 1, borderColor: '#00ccff', color: '#00ccff'}} onClick={startNewFriendly}>+ ADD_FRIENDLY</button>
           </div>
           <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={async () => {
             if (confirm("PURGE ALL ROAD DATA?")) {
@@ -3458,11 +3769,11 @@ function AdminPanel({
 
       {view === 'editor' && (
         <>
-          <header style={{marginBottom: '10px'}}><h3>{editData.shape === 'enemy_rhombus' ? (editId ? 'EDIT_ENEMY_DATA_POINT' : 'New_ENEMY_DATA_POINT') : (editId ? 'EDIT_DATA_POINT' : 'NEW_DATA_POINT')}</h3><button onClick={() => setView('list')} className="close-btn" style={{position: 'static'}}>X</button></header>
+          <header style={{marginBottom: '10px'}}><h3>{editData.shape === 'enemy_rhombus' ? (editId ? 'EDIT_ENEMY_DATA_POINT' : 'New_ENEMY_DATA_POINT') : (editData.shape === 'friendly_rhombus' ? (editId ? 'EDIT_FRIENDLY_NPC' : 'NEW_FRIENDLY_NPC') : (editId ? 'EDIT_DATA_POINT' : 'NEW_DATA_POINT'))}</h3><button onClick={() => setView('list')} className="close-btn" style={{position: 'static'}}>X</button></header>
           <div className="editor-controls">
             <div className="button-group">
                 <button className={transformMode === 'translate' ? 'active' : ''} onClick={() => setTransformMode('translate')}>MOVE</button>
-                {editData.shape !== 'enemy_rhombus' && <button className={transformMode === 'scale' ? 'active' : ''} onClick={() => setTransformMode('scale')}>STRETCH</button>}
+                {editData.shape !== 'enemy_rhombus' && editData.shape !== 'friendly_rhombus' && <button className={transformMode === 'scale' ? 'active' : ''} onClick={() => setTransformMode('scale')}>STRETCH</button>}
                 <button className={transformMode === 'rotate' ? 'active' : ''} onClick={() => setTransformMode('rotate')}>ROTATE</button>
             </div>
             <div style={{display: 'flex', gap: '5px', marginTop: '5px'}}>
@@ -3479,7 +3790,7 @@ function AdminPanel({
             <input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} />
             <textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} />
             
-            {editData.shape !== 'enemy_rhombus' && (
+            {editData.shape !== 'enemy_rhombus' && editData.shape !== 'friendly_rhombus' && (
                 <>
                     <textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} />
                     
@@ -3585,8 +3896,11 @@ function AdminPanel({
             )}
             
             <button type="submit" className="upload-btn">
-                {editData.shape === 'enemy_rhombus' ? (editId ? 'UPDATE_ENEMY_DATA' : 'UPLOAD_NEW_ENEMY') : (editId ? 'UPDATE_DATA_POINT' : 'UPLOAD_NEW')}
+                {editData.shape === 'enemy_rhombus' ? (editId ? 'UPDATE_ENEMY_DATA' : 'UPLOAD_NEW_ENEMY') : (editData.shape === 'friendly_rhombus' ? (editId ? 'UPDATE_FRIENDLY_NPC' : 'UPLOAD_NEW_FRIENDLY') : (editId ? 'UPDATE_DATA_POINT' : 'UPLOAD_NEW'))}
             </button>
+            {isAdmin && isPrimaryAdmin && editId && editData.shape !== 'enemy_rhombus' && editData.shape !== 'friendly_rhombus' && (
+                <button type="button" className="upload-btn" style={{backgroundColor: '#5500ff', marginTop: '10px'}} onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>
+            )}
           </form>
         </>
       )}
@@ -4255,8 +4569,12 @@ function NavControlsMenu({ onToggleHelp }: any) {
   );
 }
 
-function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB }: any) {
-  const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
+function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData }: any) {
+  const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
+      view === 'battle_map' && activeBattleMapData 
+        ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex) 
+        : l.battle_map_id == null
+  ));
   const isSelectedRhombus = selectedLocation?.shape === 'rhombus';
   const isAdmin = token !== '';
   const isOwner = selectedLocation?.owner === userName;
@@ -4339,6 +4657,36 @@ function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSele
                 style={{ width: '100%', height: '60px' }}
               />
             </div>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX HEALTH</label>
+              <div style={{ display: 'flex', gap: '5px' }}>
+                <input 
+                  type="number"
+                  placeholder="0" 
+                  value={rhombusState.hp_max || ''} 
+                  onChange={(e) => setRhombusState({ ...rhombusState, hp_max: parseInt(e.target.value) || 0 })}
+                  style={{ flex: 1, boxSizing: 'border-box', marginBottom: 0 }}
+                />
+                <button 
+                  className="upload-btn" 
+                  style={{ fontSize: '0.65rem', padding: '0 15px', minWidth: 'auto', margin: 0, height: 'auto' }}
+                  onClick={async () => {
+                      const anyUserRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
+                      if (anyUserRhombus) {
+                          await fetch(`/api/locations/${anyUserRhombus.id}/health`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                              body: JSON.stringify({ action: 'set_max', hp_max: rhombusState.hp_max })
+                          });
+                          refreshLocations();
+                      }
+                      syncRhombusToDB({ ...rhombusState, hp_max: rhombusState.hp_max });
+                  }}
+                >
+                  SET
+                </button>
+              </div>
+            </div>
             <div>
               <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>RHOMBUS_CHROMA_SYNC</label>
               <input 
@@ -4386,7 +4734,15 @@ function SystemInfoMenu({ userName, token }: any) {
   );
 }
 
-function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB }: any) {
+function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen }: any) {
+  const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
+      view === 'battle_map' && activeBattleMapData 
+        ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex) 
+        : l.battle_map_id == null
+  ));
+  const isSelectedRhombus = selectedLocation?.shape === 'rhombus' || selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus';
+  const targetRhombus = isSelectedRhombus ? selectedLocation : userRhombus;
+
   let isPrimaryAdmin = false;
   if (token) {
     try {
@@ -4433,6 +4789,11 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
                 <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
               </svg>
             </button>
+            <button className={`rail-btn ${isHitPointsOpen ? 'active' : ''}`} onClick={() => setIsHitPointsOpen(!isHitPointsOpen)} title="HIT_POINTS">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+              </svg>
+            </button>
             {isPrimaryAdmin && (
               <button className={`rail-btn ${activeMenu === 'city_data_base' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'city_data_base' ? 'none' : 'city_data_base')} title="CITY_DATA_BASE">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -4467,7 +4828,8 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
           {activeMenu === 'system_info' && <SystemInfoMenu userName={userName} token={token} />}
           {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} />}
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
-          {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} />}
+          {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} />}
+          {/* HitPointsMenu is now a popout window rendered in App.tsx */}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
 
         </div>
@@ -4668,6 +5030,10 @@ function App() {
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [roads, setRoads] = useState<any[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
+  const [showBattleMapManager, setShowBattleMapManager] = useState(false);
+  const [activeBattleMapData, setActiveBattleMapData] = useState<any>(null);
+  const [battleMapPositions, setBattleMapPositions] = useState<Record<string, {x: number, z: number}>>({});
+  const [currentLocBattleMaps, setCurrentLocBattleMaps] = useState<any[]>([]);
   const [cameraTarget, setCameraTarget] = useState<{ pos: [number, number, number], size: number } | null>(null);
   const [showZoomComplete, setShowZoomComplete] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -4682,7 +5048,7 @@ function App() {
   }
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const [view, setView] = useState<'list' | 'editor' | 'generator' | 'district' | 'join' | 'draw_roads' | 'city_gen'>('list');
+  const [view, setView] = useState<'list' | 'editor' | 'generator' | 'district' | 'join' | 'draw_roads' | 'city_gen' | 'battle_map'>('list');
   const [editId, setEditId] = useState<number | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [userName, setUserName] = useState<string>('');
@@ -4693,7 +5059,26 @@ function App() {
   const [activeEditLocation, setActiveEditLocation] = useState<any>(null);
   const [isSomeoneEditing, setIsSomeoneEditing] = useState(false);
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<'none' | 'quick_access' | 'nav_controls' | 'system_info' | 'geometry_protocols' | 'city_data_base'>('none');
+
+  const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
+  const [hitPointsPos, setHitPointsPos] = useState({ x: 250, y: 100 });
+
   const [infoPanelPos, setInfoPanelPos] = useState({ x: 100, y: 100 });
+  
+  // Prevent HitPointsMenu and InfoWindow from overlapping when opened
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (isHitPointsOpen && selectedLocation) {
+        const dx = Math.abs(hitPointsPos.x - infoPanelPos.x);
+        const dy = Math.abs(hitPointsPos.y - infoPanelPos.y);
+        if (dx < 320 && dy < 300) {
+            let newX = infoPanelPos.x + 320;
+            if (newX + 300 > window.innerWidth) newX = Math.max(0, infoPanelPos.x - 320);
+            setHitPointsPos({ x: newX, y: infoPanelPos.y });
+        }
+    }
+  }, [isHitPointsOpen, selectedLocation]);
+
   const [chatPos, setChatPos] = useState({ x: 400, y: 100 });
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   useEffect(() => {
@@ -4744,9 +5129,10 @@ function App() {
   const [genExcludeRoads, setGenExcludeRoads] = useState(false);
   const [socket, setSocket] = useState<any>(null);
   const [activeUsers, setActiveUsers] = useState<any[]>([]);
+  const [activePings, setActivePings] = useState<any[]>([]);
   const [rhombusState, setRhombusState] = useState(() => {
     const savedColor = localStorage.getItem('rhombusColor') || '#00ff00';
-    return { active: false, color: savedColor, name: '', description: '' };
+    return { active: false, color: savedColor, name: '', description: '', hp_max: 0 };
   });
 
   // Load player configuration from the database when locations are fetched
@@ -4759,22 +5145,21 @@ function App() {
             // DO NOT set active: true here. That should only happen when the user clicks 'DEPLOY'
             color: existing.color || prev.color,
             name: existing.name || '',
-            description: existing.description || ''
+            description: existing.description || '',
+            hp_max: existing.hp_max || 0
         }));
     }
   }, [userName, locations.length]);
 
   // Sync player configuration to DB whenever they change it in the sidebar
   const syncRhombusToDB = async (newState: any) => {
-    const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
-    if (existing) {
+    const existingList = locations.filter((l: any) => l.shape === 'rhombus' && l.owner === userName);
+    for (const existing of existingList) {
         await fetch(`/api/locations/${existing.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ ...existing, name: newState.name, description: newState.description, color: newState.color })
         });
-        // fetchLocations() is not strictly needed here as local state is ahead, 
-        // but it keeps everyone in sync via sockets
     }
   };
 
@@ -4799,14 +5184,15 @@ function App() {
     const interactive: any[] = [];
 
     roots.forEach((loc: any) => {
-      if (loc.shape === 'rhombus' || loc.shape === 'enemy_rhombus') return; // Dedicated components handle these
+      if (loc.shape === 'rhombus' || loc.shape === 'enemy_rhombus' || loc.shape === 'friendly_rhombus') return; // Dedicated components handle these
 
       const children = groupedLocations[loc.id] || [];
       const isSelected = !isBatchSelecting && view !== 'district' && view !== 'join' && selectedLocation?.id === loc.id;
       const isBatchSelected = selectedIds.includes(loc.id) || districtSelection.includes(loc.id) || joinSelection.includes(loc.id);
       const isOverlapped = overlapIds.includes(loc.id) || children.some((c: any) => overlapIds.includes(c.id));
+      const isBattleActive = activeUsers && activeUsers.some((user: any) => user.currentBattleMapId && Number(user.currentBattleMapId) === Number(loc.id));
       
-      if (!isSelected && !isBatchSelected && !isOverlapped) {
+      if (!isSelected && !isBatchSelected && !isOverlapped && !isBattleActive) {
         // Flatten parent and all its children into the simple (instanced) rendering list
         const pushSimple = (p: any) => {
           simple.push({
@@ -4821,9 +5207,9 @@ function App() {
             depth: p.depth,
             color: p.color,
             rotation: p.rotation,
-              rotation_x: p.rotation_x,
-              rotation_z: p.rotation_z,
-              district_color: p.district_color,
+            rotation_x: p.rotation_x,
+            rotation_z: p.rotation_z,
+            district_color: p.district_color,
             isFavorite: p.isFavorite,
             isDanger: p.isDanger,
             name: p.name,
@@ -4839,9 +5225,85 @@ function App() {
       }
     });
     return { simple, interactive };
-  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds]);
+  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers]);
 
   const toggleSelection = (id: number) => { setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]); };
+
+  useEffect(() => {
+    if (selectedLocation && selectedLocation.shape !== 'rhombus' && selectedLocation.shape !== 'enemy_rhombus') {
+      fetch(`/api/locations/${selectedLocation.id}/battle_maps`)
+        .then(res => res.json())
+        .then(data => setCurrentLocBattleMaps(Array.isArray(data) ? data : []))
+        .catch(() => setCurrentLocBattleMaps([]));
+    } else {
+      setCurrentLocBattleMaps([]);
+    }
+  }, [selectedLocation?.id]);
+
+  const enterBattleMap = (locId: number) => {
+    if (currentLocBattleMaps.length === 0) return;
+    
+    let targetFloor = 0;
+    const userInMap = activeUsers.find((u: any) => u.isAdmin && u.currentBattleMapId && Number(u.currentBattleMapId) === Number(locId)) || activeUsers.find((u: any) => u.currentBattleMapId && Number(u.currentBattleMapId) === Number(locId));
+    if (userInMap && userInMap.currentFloorIndex !== undefined) {
+      targetFloor = Number(userInMap.currentFloorIndex);
+    }
+
+    if (userName && socketRef.current) {
+        const userLoc = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
+        if (userLoc) {
+            socketRef.current.emit('requestInstantRhombusPurge', { id: userLoc.id, owner: userName });
+        }
+        setRhombusState((prev: any) => ({ ...prev, active: false }));
+    }
+
+    setActiveBattleMapData({ locationId: locId, maps: currentLocBattleMaps, currentFloorIndex: targetFloor });
+    setView('battle_map');
+    setSelectedLocation(null);
+    if (socketRef.current) socketRef.current.emit('battle_map_enter', { locationId: locId, floorIndex: targetFloor });
+  };
+
+  const handleSaveDefault = () => {
+    if (!socketRef.current || !activeBattleMapData) return;
+    const positions: any[] = [];
+    
+    locations.forEach((l: any) => {
+        if (l.shape === 'enemy_rhombus' && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) {
+            positions.push({ id: l.id, x: l.x, z: l.z, isEnemy: true, isFriendly: false });
+        } else if (l.shape === 'friendly_rhombus' && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) {
+            positions.push({ id: l.id, x: l.x, z: l.z, isEnemy: false, isFriendly: true });
+        }
+    });
+    
+    Object.keys(battleMapPositions).forEach(userName => {
+        const pos = battleMapPositions[userName];
+        positions.push({ userName, x: pos.x, z: pos.z, isEnemy: false, isFriendly: false });
+    });
+    
+    socketRef.current.emit('save_battle_map_default', { locationId: activeBattleMapData.locationId, floorIndex: activeBattleMapData.currentFloorIndex, positions });
+    setNotification('DEFAULT_STATE_SAVED');
+  };
+
+  const handleLoadDefault = () => {
+      if (!socketRef.current || !activeBattleMapData) return;
+      socketRef.current.emit('load_battle_map_default', { locationId: activeBattleMapData.locationId, floorIndex: activeBattleMapData.currentFloorIndex });
+      setNotification('LOADING_DEFAULT_STATE...');
+  };
+
+  const exitBattleMap = async () => {
+    if (userName && token) {
+        const battleMapRhombuses = locations.filter((l: any) => l.shape === 'rhombus' && l.owner === userName && l.battle_map_id != null);
+        for (const r of battleMapRhombuses) {
+            try { await fetch(`/api/locations/${r.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); } catch (e) {}
+        }
+        if (battleMapRhombuses.length > 0) fetchLocations();
+    }
+    
+    setActiveBattleMapData(null);
+    setView('list'); // or previous view
+    setBattleMapPositions({});
+    if (socketRef.current) socketRef.current.emit('battle_map_leave');
+  };
 
   const handleBuildingClick = (loc: any) => {
     if (isCopyingSize) {
@@ -5057,6 +5519,8 @@ function App() {
   const [editorStyleIndex, setEditorStyleIndex] = useState(0);
   const [isCopyingSize, setIsCopyingSize] = useState(false);
   const [isPlantingTrees, setIsPlantingTrees] = useState(false);
+  const [isDeployingEnemy, setIsDeployingEnemy] = useState(false);
+  const [isDeployingFriendly, setIsDeployingFriendly] = useState(false);
   const [treeBatchSize, setTreeBatchSize] = useState(5);
   const [blockBuildings, setBlockBuildings] = useState<any[]>([]);
 
@@ -5223,7 +5687,25 @@ function App() {
 
     newSocket.on('dataUpdated', (payload: any) => { fetchLocations(); fetchRoads(); fetchDistricts(); if (!payload || !payload.isRhombusOnly) { (window as any).hasUnsavedChanges = true; } });
     newSocket.on('activeUsersUpdated', (users: any[]) => setActiveUsers(users));
-    newSocket.on('editingRequested', (data: any) => {
+    newSocket.on('force_floor_change', (data: any) => {
+        setActiveBattleMapData((prev: any) => {
+          if (prev && prev.locationId === data.locationId) {
+             return { ...prev, currentFloorIndex: data.floorIndex };
+          }
+          return prev;
+        });
+      });
+      newSocket.on('battle_map_moved', (data: any) => {
+        setBattleMapPositions(prev => ({ ...prev, [data.userName]: { x: data.x, z: data.z } }));
+      });
+      newSocket.on('default_loaded', (data: any) => {
+          data.updates.forEach((update: any) => {
+              if (!update.isEnemy && !update.isFriendly) {
+                  setBattleMapPositions(prev => ({ ...prev, [update.userName]: { x: update.x, z: update.z } }));
+              }
+          });
+      });
+      newSocket.on('editingRequested', (data: any) => {
       if (data.userId !== userName && notification === "REQUEST_SENT_TO_ADMIN") {
         setNotification(`ANOTHER_USER_REQUESTING_ACCESS: ${data.userName}`);
       }
@@ -5233,6 +5715,17 @@ function App() {
     newSocket.on('editingStopped', () => setIsSomeoneEditing(false));
     newSocket.on('editingDenied', (data: any) => { if (data.userId === userName) setNotification("EDITING_ACCESS_DENIED_BY_ADMIN"); });
     newSocket.on('editingRevoked', (data: any) => { setIsEditModalOpen(false); setActiveEditLocation(null); setIsSomeoneEditing(false); if (data.userId === userName) setNotification("ACCESS_TO_DATA_POINT_REVOKED"); });
+    newSocket.on('location_pinged', (pingData: any) => {
+        const pingId = Math.random().toString(36).substr(2, 9);
+        const newPing = { ...pingData, id: pingId };
+        setActivePings(prev => {
+            const filtered = pingData.owner ? prev.filter(p => p.owner !== pingData.owner) : prev;
+            return [...filtered, newPing];
+        });
+        setTimeout(() => {
+            setActivePings(prev => prev.filter(p => p.id !== pingId));
+        }, 4000); // 4 second duration
+    });
     return () => { newSocket.disconnect(); };
   }, [userName, isLoggedIn]);
 
@@ -5349,9 +5842,41 @@ function App() {
       {isLoggedIn && (
         <>
           <div className="ui-overlay">
+      {showBattleMapManager && (selectedLocation || activeEditLocation || editId) && (
+        <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : editId)} token={token} onClose={() => setShowBattleMapManager(false)} />
+      )}
+      {view === 'battle_map' && activeBattleMapData && (
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 100 }}>
+          <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'auto' }}>
+            <h2 style={{ margin: 0, textShadow: '0 0 10px #00ff00', fontSize: '2em' }}>{activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation?.toUpperCase() || 'UNKNOWN FLOOR'}</h2>
+            <button onClick={exitBattleMap} style={{ padding: '10px 30px', marginTop: '10px', backgroundColor: '#ff0000', color: 'white', border: '1px solid #ff0000', cursor: 'pointer', fontWeight: 'bold' }}>EXIT</button>
+          </div>
+          {isAdmin && isPrimaryAdmin && (
+            <div style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'auto' }}>
+              {activeBattleMapData.maps.map((m: any, idx: number) => {
+                let lbl = m.designation;
+                if (lbl === 'Lobby') lbl = 'Lby';
+                else if (lbl === 'Penthouse') lbl = 'PH';
+                else if (lbl.startsWith('Level ')) lbl = 'L' + lbl.split(' ')[1];
+                
+                return (
+                  <button key={m.id} 
+                    style={{ padding: '15px', backgroundColor: activeBattleMapData.currentFloorIndex === idx ? '#00ff00' : '#222', color: activeBattleMapData.currentFloorIndex === idx ? '#000' : '#00ff00', border: '1px solid #00ff00', cursor: 'pointer', fontWeight: 'bold' }}
+                    onClick={() => {
+                      setActiveBattleMapData((p: any) => ({ ...p, currentFloorIndex: idx }));
+                      if (socketRef.current) socketRef.current.emit('admin_force_floor_change', { locationId: activeBattleMapData.locationId, floorIndex: idx });
+                    }}>
+                    {lbl}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
             {notification && <div className="modal-overlay" onClick={() => setNotification(null)} style={{cursor: 'pointer'}}><div className="panel" style={{color: '#ff0000', borderColor: '#ff0000'}}><h2 style={{fontSize: '2rem'}}>{notification}</h2></div></div>}
             {isEditModalOpen && activeEditLocation && (
-              <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); cleanupEditModal(); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}>★</button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div><button type="submit" className="upload-btn">SAVE</button><button type="button" className="utility-btn" onClick={() => { cleanupEditModal(); }}>CLOSE</button></form></div></div>
+              <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); cleanupEditModal(); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}>☆</button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div>{isAdmin && isPrimaryAdmin && editData.shape !== 'enemy_rhombus' && <button type="button" className="upload-btn" style={{backgroundColor: '#5500ff'}} onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>}<button type="submit" className="upload-btn">SAVE</button><button type="button" className="utility-btn" onClick={() => { cleanupEditModal(); }}>CLOSE</button></form></div></div>
             )}
             <Sidebar
               activeMenu={activeSidebarMenu}
@@ -5373,6 +5898,10 @@ function App() {
               setIsChatOpen={setIsChatOpen}
               hasUnreadChat={hasUnreadChat}
               syncRhombusToDB={syncRhombusToDB}
+              view={view}
+              activeBattleMapData={activeBattleMapData}
+              isHitPointsOpen={isHitPointsOpen}
+              setIsHitPointsOpen={setIsHitPointsOpen}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -5388,9 +5917,15 @@ function App() {
             {isAdmin && !token && <div className="panel admin-login"><form onSubmit={handleLogin}><input placeholder="USERNAME" onChange={e => setLoginForm({...loginForm, username: e.target.value})} /><input type="password" placeholder="PASSWORD" onChange={e => setLoginForm({...loginForm, password: e.target.value})} /><button type="submit">ACCESS_SYSTEM</button></form></div>}
             {token && showAdminPanel && (
               <AdminPanel
+                isAdmin={isAdmin}
+                isPrimaryAdmin={isPrimaryAdmin}
+                setShowBattleMapManager={setShowBattleMapManager}
                 isPlantingTrees={isPlantingTrees} setIsPlantingTrees={setIsPlantingTrees}
-                treeBatchSize={treeBatchSize} setTreeBatchSize={setTreeBatchSize}
-                socketRef={socketRef}
+                  treeBatchSize={treeBatchSize} setTreeBatchSize={setTreeBatchSize}
+                  isDeployingEnemy={isDeployingEnemy} setIsDeployingEnemy={setIsDeployingEnemy}
+                  isDeployingFriendly={isDeployingFriendly} setIsDeployingFriendly={setIsDeployingFriendly}
+                  handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
+                  socketRef={socketRef}
                 token={token}
                 userName={userName}
                 controlsRef={controlsRef}
@@ -5480,17 +6015,28 @@ function App() {
                   token={token}
                   isChatOpen={isChatOpen}
               />
+            {isHitPointsOpen && (
+              <HitPointsMenu 
+                targetRhombus={locations.find((l: any) => l.id === ((selectedLocation?.shape === 'rhombus' || (token !== '' && (selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus'))) ? selectedLocation.id : locations.find((ul: any) => ul.shape === 'rhombus' && ul.owner === userName)?.id))} 
+                token={token} 
+                refreshLocations={fetchLocations}
+                pos={hitPointsPos}
+                setPos={setHitPointsPos}
+                onClose={() => setIsHitPointsOpen(false)}
+              />
+            )}
             {(() => {
-              const isRhombus = selectedLocation?.shape === 'rhombus' || selectedLocation?.shape === 'enemy_rhombus';
+              const isRhombus = selectedLocation?.shape === 'rhombus' || selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus';
+              const isPlayerRhombus = selectedLocation?.shape === 'rhombus';
               const isOwner = selectedLocation?.owner === userName;
               const isAdmin = token !== '';
-              const canManage = isRhombus && (isAdmin || isOwner);
+              const canManage = isRhombus && (isAdmin || (isPlayerRhombus && isOwner));
               
               // Show window if not admin OR if it's a rhombus that needs management OR just to view info
               if (selectedLocation && (!token || !showAdminPanel || canManage)) {
                 return (
                   <DraggableWindow 
-                    title={isUserDefinedName(selectedLocation.name) ? selectedLocation.name : (selectedLocation.shape === 'enemy_rhombus' ? 'HOSTILE_NODE' : (selectedLocation.shape === 'rhombus' ? 'TACTICAL_BEACON' : getStructLabel(selectedLocation)))} 
+                    title={isUserDefinedName(selectedLocation.name) ? selectedLocation.name : (selectedLocation.shape === 'enemy_rhombus' ? 'HOSTILE_NODE' : (selectedLocation.shape === 'friendly_rhombus' ? 'FRIENDLY_NPC' : (selectedLocation.shape === 'rhombus' ? 'TACTICAL_BEACON' : getStructLabel(selectedLocation))))}
                     pos={infoPanelPos} 
                     setPos={setInfoPanelPos} 
                     onClose={() => setSelectedLocation(null)}
@@ -5498,7 +6044,7 @@ function App() {
                     <div className="content">
                       {isRhombus ? (
                         <>
-                          <p><strong>ID_TAG:</strong> {selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : 'UNTAGGED')}</p>
+                          <p><strong>ID_TAG:</strong> {selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : (selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED'))}</p>
                           <p><strong>DATA_DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
                         </>
                       ) : (
@@ -5509,13 +6055,62 @@ function App() {
                         </>
                       )}
                     </div>
+                    <button className="upload-btn" style={{marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: 'var(--blue)', color: '#fff'}} onClick={() => {
+                        if (socketRef.current) {
+                            let pingX = selectedLocation.x;
+                            let pingY = (selectedLocation.y || 0) + (selectedLocation.height / 2);
+                            let pingZ = selectedLocation.z;
+                            
+                            if (targetObject) {
+                                const box = new THREE.Box3().setFromObject(targetObject);
+                                const center = new THREE.Vector3();
+                                box.getCenter(center);
+                                pingX = center.x;
+                                pingY = center.y;
+                                pingZ = center.z;
+                            }
+                            
+                            const size = Math.max(selectedLocation.width, selectedLocation.height, selectedLocation.depth);
+                            socketRef.current.emit('ping_location', {
+                                x: pingX,
+                                y: pingY,
+                                z: pingZ,
+                                color: rhombusState.color || '#00ccff',
+                                size: size,
+                                battle_map_id: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
+                                floor_index: view === 'battle_map' && activeBattleMapData && activeBattleMapData.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
+                            });
+                        }
+                    }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/>
+                        </svg>
+                        BROADCAST PING
+                    </button>
                     {canManage && (
                       <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={async () => {
                         const res = await fetch(`/api/locations/${selectedLocation.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
                         if (res.ok) { setSelectedLocation(null); fetchLocations(); }
                       }}>PURGE_DATA_POINT</button>
                     )}
-                    {!token && !isRhombus && <button className="upload-btn" onClick={() => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } }}>REQUEST_EDITING_RIGHTS</button>}
+                    {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
+                      <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '' }); }}>EDIT_DATA_POINT</button>
+                    )}
+                    {isRhombus && (isAdmin || (isPlayerRhombus && selectedLocation.owner === userName)) && (
+                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--green)', color: '#000'}} onClick={() => {
+                            let newX = infoPanelPos.x + 320;
+                            if (newX + 300 > window.innerWidth) newX = Math.max(0, infoPanelPos.x - 320);
+                            setHitPointsPos({ x: newX, y: infoPanelPos.y });
+                            setIsHitPointsOpen(true);
+                        }}>UPDATE_HEALTH</button>
+                    )}
+                    {isAdmin && isPrimaryAdmin && !isRhombus && (
+      <></>
+  )}
+  {currentLocBattleMaps.length > 0 && (
+      <button className="upload-btn" style={{backgroundColor: '#ff00ff', color: 'white'}} onClick={() => enterBattleMap(selectedLocation.id)}>ENTER BATTLE MAP</button>
+  )}
+  {!token && !isRhombus && <button className="upload-btn" onClick={() => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } }}>REQUEST_EDITING_RIGHTS</button>}
                   </DraggableWindow>
                 );
               }
@@ -5524,7 +6119,97 @@ function App() {
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : (<><span style={{ display: 'inline-block', width: '250px', textAlign: 'right' }}>{isWaiting ? 'SYSTEM READY // ' : `SYSTEM CHECKING ${throbber} // `}</span><span style={{ display: 'inline-block', width: '300px', textAlign: 'left', whiteSpace: 'nowrap' }}>{statusText}</span></>)}</p></div>
           </div>
           <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
-            <PerspectiveCamera makeDefault position={[0, 200, 250]} />
+            <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
+            {view === 'battle_map' ? (
+              activeBattleMapData && activeBattleMapData.maps[activeBattleMapData.currentFloorIndex] && (
+                <BattleMapScene 
+                  mapUrl={activeBattleMapData.maps[activeBattleMapData.currentFloorIndex].image_url} 
+                  onMapClick={(pos: any) => {
+                    if (isDeployingEnemy && userName) {
+                      const newRhombus = {
+                          name: 'NEW ENEMY',
+                          description: '',
+                          x: pos.x, y: 0.1, z: pos.z,
+                          width: 4, height: 4, depth: 4,
+                          shape: 'enemy_rhombus',
+                          color: '#ff0000',
+                          owner: userName,
+                          isDanger: false,
+                          isFavorite: false,
+                          npcs: '',
+                          battle_map_id: activeBattleMapData?.locationId || null,
+                          floor_index: activeBattleMapData?.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
+                      };
+                      fetch('/api/locations', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                          body: JSON.stringify(newRhombus)
+                      }).then(() => {
+                          fetchLocations();
+                          setIsDeployingEnemy(false);
+                      });
+                    } else if (isDeployingFriendly && userName) {
+                      const newRhombus = {
+                          name: 'NEW FRIENDLY',
+                          description: '',
+                          x: pos.x, y: 0.1, z: pos.z,
+                          width: 4, height: 4, depth: 4,
+                          shape: 'friendly_rhombus',
+                          color: '#00ccff',
+                          owner: userName,
+                          isDanger: false,
+                          isFavorite: false,
+                          npcs: '',
+                          battle_map_id: activeBattleMapData?.locationId || null,
+                          floor_index: activeBattleMapData?.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
+                      };
+                      fetch('/api/locations', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                          body: JSON.stringify(newRhombus)
+                      }).then(() => {
+                          fetchLocations();
+                          setIsDeployingFriendly(false);
+                      });
+                    } else if (rhombusState?.active && userName) {
+                      const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
+                      const newRhombus = {
+                          name: rhombusState.name || '',
+                          description: rhombusState.description || '',
+                          x: pos.x, y: 0.1, z: pos.z,
+                          width: 3.75, height: 3.75, depth: 3.75,
+                          shape: 'rhombus',
+                          color: rhombusState.color,
+                          owner: userName,
+                          battle_map_id: activeBattleMapData?.locationId || null,
+                          floor_index: activeBattleMapData?.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
+                      };
+                      if (existing) {
+                          fetch(`/api/locations/${existing.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(newRhombus)
+                          }).then(() => {
+                              fetchLocations();
+                              setRhombusState((prev: any) => ({ ...prev, active: false }));
+                          });
+                      } else {
+                          fetch('/api/locations', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(newRhombus)
+                          }).then(() => {
+                              fetchLocations();
+                              setRhombusState((prev: any) => ({ ...prev, active: false }));
+                          });
+                      }
+                    }
+                  }}
+                />
+              )
+            ) : (
+              <>
+                <PerspectiveCamera makeDefault position={[0, 200, 250]} />
             <CameraControls ref={controlsRef} makeDefault enabled={!isDragging} dollyToCursor={true} />
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <GlobalCameraCapture />
@@ -5575,13 +6260,38 @@ function App() {
             {renderLists.interactive.map(({ loc, children, isSelected, isBatchSelected, isOverlapped }: any) => (
               <Building key={loc.id} location={loc} children={children} onClick={() => handleBuildingClick(loc)} isSelected={isSelected} isBatchSelected={isBatchSelected} isOverlapped={isOverlapped} setTargetObject={setTargetObject} editMeshRef={editMeshRef} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} isDragging={isDragging} socket={socket} activeUsers={activeUsers} />
             ))}
+            </>
+            )}
+            {/* Ping Effects */}
+            {activePings.filter(ping => {
+                const currentBattleMapId = view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null;
+                const currentFloorIndex = view === 'battle_map' && activeBattleMapData && activeBattleMapData.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null;
+                // Strict comparison to ensure null === null or 1 === 1
+                return Number(ping.battle_map_id) === Number(currentBattleMapId) && Number(ping.floor_index) === Number(currentFloorIndex);
+            }).map(ping => (
+                <PingEffect key={ping.id} position={[ping.x, ping.y !== undefined ? ping.y : 0.5, ping.z]} color={ping.color} size={ping.size} />
+            ))}
+            
             {/* Dedicated Player Rhombus Rendering */}
-            {locations.filter(l => l.shape === 'rhombus').map(loc => (
-              <PlayerRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} roads={roads} />
+            {locations.filter(l => l.shape === 'rhombus' && (
+                (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
+                (view !== 'battle_map' && l.battle_map_id == null)
+            )).map(loc => (
+              <PlayerRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} roads={roads} isBattleMap={view === 'battle_map'} />
             ))}
             {/* Dedicated Enemy Rhombus Rendering */}
-            {locations.filter(l => l.shape === 'enemy_rhombus').map(loc => (
-              <EnemyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} />
+            {locations.filter(l => l.shape === 'enemy_rhombus' && (
+                (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
+                (view !== 'battle_map' && l.battle_map_id == null)
+            )).map(loc => (
+              <EnemyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} />
+            ))}
+            {/* Dedicated Friendly NPC Rendering */}
+            {locations.filter(l => l.shape === 'friendly_rhombus' && (
+                (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
+                (view !== 'battle_map' && l.battle_map_id == null)
+            )).map(loc => (
+              <FriendlyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} />
             ))}
             {token && view === 'editor' && !editId && (
               <group ref={(group) => { if (group && targetObject !== group) { setTargetObject(group); editMeshRef.current = group; } }} position={[editData.x, editData.y, editData.z]}>
@@ -5603,6 +6313,16 @@ function App() {
                       );
                     })}
                   </>
+                ) : editData.shape === 'enemy_rhombus' ? (
+                  <mesh position={[0, editData.height / 4, 0]} scale={[editData.width, editData.height, editData.depth]}>
+                    <octahedronGeometry args={[0.5]} />
+                    <meshBasicMaterial color="#ff0000" wireframe />
+                  </mesh>
+                ) : editData.shape === 'friendly_rhombus' ? (
+                  <mesh position={[0, editData.height / 4, 0]} scale={[editData.width, editData.height, editData.depth]}>
+                    <coneGeometry args={[0.5, 0.8, 4]} />
+                    <meshBasicMaterial color="#00ccff" wireframe />
+                  </mesh>
                 ) : (
                   <mesh position={[0, editData.height / 2, 0]} scale={[editData.width, editData.height, editData.depth]}>
                     {renderBaseGeometry(editData.shape, editData.polyCount || 5)}
@@ -5636,6 +6356,75 @@ function App() {
         </>
       )}
     </div>
+  );
+}
+
+function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, setPos, onClose }: any) {
+  const [actionAmount, setActionAmount] = useState<number>(0);
+  const [tempAmount, setTempAmount] = useState<number>(0);
+  const [maxAmount, setMaxAmount] = useState<number>(0);
+
+  const updateHealth = async (action: string, amount: number) => {
+    if (!targetRhombus) return;
+    
+    let bodyData: any = { action, amount };
+    if (action === 'set_temp') bodyData.hp_temp = amount;
+    if (action === 'set_max') bodyData.hp_max = amount;
+
+    await fetch(`/api/locations/${targetRhombus.id}/health`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(bodyData)
+    });
+    refreshLocations();
+  };
+
+  if (!targetRhombus) return (
+      <DraggableWindow title="HIT_POINTS" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+          <div style={{ textAlign: 'center', opacity: 0.7, padding: '20px' }}>NO_TARGET_ACQUIRED</div>
+      </DraggableWindow>
+  );
+
+  return (
+    <DraggableWindow title={`HP: ${targetRhombus.name || 'UNKNOWN'}`} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '10px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '2rem', color: 'var(--green)', textShadow: 'var(--glow)', fontWeight: 'bold' }}>
+            {targetRhombus.hp_current || 0} / {targetRhombus.hp_max || 0}
+          </div>
+          {targetRhombus.hp_temp > 0 && (
+              <div style={{ color: '#00ccff', fontSize: '0.9rem', marginTop: '5px' }}>+ {targetRhombus.hp_temp} TEMP</div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <input type="number" placeholder="0" value={actionAmount || ''} onChange={e => setActionAmount(parseInt(e.target.value) || 0)} style={{ width: '100%' }} />
+            <div style={{ display: 'flex', gap: '10px' }}>
+                <button className="upload-btn" onClick={() => updateHealth('heal', actionAmount)} style={{ flex: 1 }}>HEAL</button>
+                <button className="upload-btn danger-btn" onClick={() => updateHealth('damage', actionAmount)} style={{ flex: 1 }}>DAMAGE</button>
+            </div>
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {token !== '' && (
+                <div>
+                    <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX_HP</label>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <input type="number" placeholder="0" value={maxAmount || ''} onChange={e => setMaxAmount(parseInt(e.target.value) || 0)} style={{ flex: 1 }} />
+                        <button className="upload-btn" style={{ minWidth: 'auto', padding: '0 15px' }} onClick={() => updateHealth('set_max', maxAmount)}>SET</button>
+                    </div>
+                </div>
+            )}
+            <div>
+                <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TEMP_HP</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <input type="number" placeholder="0" max="100" value={tempAmount || ''} onChange={e => { let val = parseInt(e.target.value) || 0; if(val > 100) val = 100; setTempAmount(val); }} style={{ flex: 1 }} />
+                    <button className="upload-btn" style={{ minWidth: 'auto', padding: '0 15px' }} onClick={() => updateHealth('set_temp', tempAmount)}>SET</button>
+                </div>
+            </div>
+        </div>
+      </div>
+    </DraggableWindow>
   );
 }
 
