@@ -54,6 +54,10 @@ function CursorPingListener({ socket, view, activeBattleMapData, pingColor }: an
 import terminalIcon from './assets/terminal-thin.svg';
 import notifyOnIcon from './assets/Notification-on.svg';
 import notifyOffIcon from './assets/Notification-off.svg';
+import paperFillIcon from './assets/lets-icons--paper-fill.svg';
+import paperLightIcon from './assets/lets-icons--paper-light.svg';
+import eyeIcon from './assets/oui--eye.svg';
+import eyeClosedIcon from './assets/oui--eye-closed.svg';
 import './App.css';
 
 const messages = [
@@ -3128,6 +3132,7 @@ function AdminPanel({
             }
           }}>PURGE_ALL_ROADS</button>
           <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={async () => { if (confirm("PURGE ALL CHAT HISTORY?")) { await fetch('/api/chat/purge', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); } }}>PURGE_CHAT_HISTORY</button>
+          <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={() => { if (confirm("PURGE ALL DICE ROLL HISTORY?")) { socketRef.current.emit('purgeDiceHistory', { token }); setAdminAlert("DICE ROLL HISTORY PURGED"); } }}>PURGE_ROLL_HISTORY</button>
           <button className={`utility-btn ${isBatchSelecting ? 'active' : ''}`} style={{marginTop: '10px', width: '100%'}} onClick={() => { if (isBatchSelecting) setSelectedIds([]); setIsBatchSelecting(!isBatchSelecting); }}>{isBatchSelecting ? 'CANCEL_BATCH_DELETE' : 'BATCH_DELETE_MODE'}</button>
           {isBatchSelecting && <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={batchDelete}>PURGE_SELECTED ({selectedIds.length})</button>}
           {!isBatchSelecting && (selectedLocation || copyBuffer) && (
@@ -3913,7 +3918,7 @@ function AdminPanel({
   );
 }
 
-function DraggableWindow({ title, children, pos, setPos, onClose, windowStyle = {}, contentStyle = {}, notificationsEnabled, onToggleNotifications }: any) {
+function DraggableWindow({ title, children, pos, setPos, onClose, windowStyle = {}, contentStyle = {}, notificationsEnabled, onToggleNotifications, titleControls }: any) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
@@ -3944,6 +3949,7 @@ function DraggableWindow({ title, children, pos, setPos, onClose, windowStyle = 
       <div className="win95-title-bar" onMouseDown={handleMouseDown}>
         <div className="win95-title-text" style={{ fontWeight: 'bold' }}>{title}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          {titleControls}
           {onToggleNotifications && (
             <button 
               onClick={onToggleNotifications} 
@@ -3966,6 +3972,508 @@ function DraggableWindow({ title, children, pos, setPos, onClose, windowStyle = 
         {children}
       </div>
     </div>
+  );
+}
+
+function DiceScene({ latestRoll }: any) {
+    const { scene, camera } = useThree();
+    
+    useEffect(() => {
+        camera.lookAt(0, 0, 0);
+        const diceObjects: THREE.Mesh[] = [];
+        if (latestRoll && latestRoll.results) {
+            const material = new THREE.MeshBasicMaterial({ color: latestRoll.color, wireframe: true });
+            
+            let xOffset = -2.5;
+            for (const [sides, rolls] of Object.entries(latestRoll.results)) {
+                const s = parseInt(sides);
+                let geometry;
+                switch(s) {
+                    case 4: geometry = new THREE.TetrahedronGeometry(1); break;
+                    case 6: geometry = new THREE.BoxGeometry(1.2, 1.2, 1.2); break;
+                    case 8: geometry = new THREE.OctahedronGeometry(1); break;
+                    case 12: geometry = new THREE.DodecahedronGeometry(1); break;
+                    case 20: geometry = new THREE.IcosahedronGeometry(1); break;
+                    default: geometry = new THREE.SphereGeometry(1, Math.max(3, s/2), Math.max(3, s/2)); break;
+                }
+                
+                (rolls as number[]).forEach(val => {
+                    const mesh = new THREE.Mesh(geometry, material);
+                    mesh.position.set((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, 0);
+                    mesh.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+                    
+                    let typeFriction = 0.88;
+                    let rotMult = 1.5;
+                    if (s === 2) { typeFriction = 0.60; rotMult = 0.2; }
+                    else if (s === 4) { typeFriction = 0.70; rotMult = 0.5; }
+                    else if (s === 6) { typeFriction = 0.80; rotMult = 0.8; }
+                    else if (s === 8) { typeFriction = 0.84; rotMult = 1.0; }
+                    else if (s === 10 || s === 100) { typeFriction = 0.86; rotMult = 1.2; }
+                    else if (s === 12) { typeFriction = 0.88; rotMult = 1.3; }
+                    else if (s === 20) { typeFriction = 0.90; rotMult = 1.5; }
+
+                    const speed = 15 + Math.random() * 10;
+                    const angle = Math.random() * Math.PI * 2;
+                    mesh.userData = {
+                        velocity: new THREE.Vector3(Math.cos(angle) * speed, Math.sin(angle) * speed, 10 + Math.random() * 10),
+                        stopped: false,
+                        typeFriction: typeFriction,
+                        rotMult: rotMult
+                    };
+                    scene.add(mesh);
+                    diceObjects.push(mesh);
+                    xOffset += 1.5;
+                    if (xOffset > 2.5) xOffset = -2.5;
+                });
+            }
+        }
+        
+        return () => {
+            diceObjects.forEach(d => {
+                scene.remove(d);
+                d.geometry.dispose();
+            });
+            if (diceObjects.length > 0 && diceObjects[0].material) {
+                (diceObjects[0].material as THREE.Material).dispose();
+            }
+        };
+    }, [latestRoll, scene]);
+
+    useFrame((state, delta) => {
+        const dt = Math.min(delta, 0.1);
+        const bounds = { minX: -5.4, maxX: 5.4, minY: -3.2, maxY: 3.2 };
+        const restitution = 0.8;
+        const friction = 0.88;
+        const gravity = 60;
+
+        const diceList: THREE.Mesh[] = [];
+
+        scene.children.forEach(c => {
+            if (c.userData.velocity !== undefined) {
+                diceList.push(c as THREE.Mesh);
+                
+                if (!c.userData.stopped) {
+                    // Apply Z-gravity
+                    c.userData.velocity.z -= gravity * dt;
+                    
+                    // Apply sliding friction only when on the table (Z=0)
+                    if (c.position.z <= 0) {
+                        const drag = c.userData.typeFriction || 0.88;
+                        c.userData.velocity.x *= drag;
+                        c.userData.velocity.y *= drag;
+                    }
+                    
+                    c.position.addScaledVector(c.userData.velocity, dt);
+
+                    if (c.position.z <= 0) {
+                        c.position.z = 0;
+                        // Only bounce if it hits the ground hard
+                        if (c.userData.velocity.z < -2.0) {
+                            c.userData.velocity.z *= -restitution;
+                            c.userData.velocity.x += (Math.random() - 0.5) * 4; // chaotic veer on bounce
+                            c.userData.velocity.y += (Math.random() - 0.5) * 4;
+                        } else {
+                            c.userData.velocity.z = 0;
+                        }
+                    }
+
+                    if (c.position.x < bounds.minX) { c.position.x = bounds.minX; c.userData.velocity.x *= -restitution; }
+                    if (c.position.x > bounds.maxX) { c.position.x = bounds.maxX; c.userData.velocity.x *= -restitution; }
+                    if (c.position.y < bounds.minY) { c.position.y = bounds.minY; c.userData.velocity.y *= -restitution; }
+                    if (c.position.y > bounds.maxY) { c.position.y = bounds.maxY; c.userData.velocity.y *= -restitution; }
+
+                    const speedSq = c.userData.velocity.lengthSq();
+                    if (speedSq < 0.2 && c.position.z === 0) {
+                        c.userData.stopped = true;
+                    }
+
+                    if (!c.userData.stopped) {
+                        const speed = Math.sqrt(speedSq);
+                        // Roll proportionally to velocity, utilizing Z for true 3D tumble
+                        const rotAxis = new THREE.Vector3(-c.userData.velocity.y, c.userData.velocity.x, c.userData.velocity.z).normalize();
+                        if (rotAxis.lengthSq() > 0.1) {
+                            c.rotateOnWorldAxis(rotAxis, speed * dt * (c.userData.rotMult || 1.5));
+                        }
+                    }
+                }
+            }
+        });
+
+        // Dice Collisions
+        for (let i = 0; i < diceList.length; i++) {
+            for (let j = i + 1; j < diceList.length; j++) {
+                const c1 = diceList[i];
+                const c2 = diceList[j];
+                const dx = c2.position.x - c1.position.x;
+                const dy = c2.position.y - c1.position.y;
+                const dz = c2.position.z - c1.position.z;
+                const distSq = dx*dx + dy*dy + dz*dz;
+                const radius = 1.0;
+                const minDist = radius * 2;
+                
+                if (distSq < minDist * minDist && distSq > 0) {
+                    const dist = Math.sqrt(distSq);
+                    const overlap = minDist - dist;
+                    const nx = dx / dist;
+                    const ny = dy / dist;
+                    const nz = dz / dist;
+                    
+                    // Stopped dice simulate high static friction (more mass)
+                    const m1 = c1.userData.stopped ? 8.0 : 1.0;
+                    const m2 = c2.userData.stopped ? 8.0 : 1.0;
+                    const sumInvMass = (1/m1) + (1/m2);
+                    
+                    const pushRatio1 = (1/m1) / sumInvMass;
+                    const pushRatio2 = (1/m2) / sumInvMass;
+                    
+                    // Push apart based on mass
+                    c1.position.x -= nx * overlap * pushRatio1;
+                    c1.position.y -= ny * overlap * pushRatio1;
+                    c1.position.z -= nz * overlap * pushRatio1;
+                    c2.position.x += nx * overlap * pushRatio2;
+                    c2.position.y += ny * overlap * pushRatio2;
+                    c2.position.z += nz * overlap * pushRatio2;
+
+                    const v1 = c1.userData.velocity;
+                    const v2 = c2.userData.velocity;
+                    const rvx = v2.x - v1.x;
+                    const rvy = v2.y - v1.y;
+                    const rvz = v2.z - v1.z;
+                    const velAlongNormal = rvx * nx + rvy * ny + rvz * nz;
+                    
+                    if (velAlongNormal < 0) {
+                        const bounceRestitution = 0.7;
+                        const jImpulse = -(1 + bounceRestitution) * velAlongNormal / sumInvMass;
+                        const impulseX = nx * jImpulse;
+                        const impulseY = ny * jImpulse;
+                        const impulseZ = nz * jImpulse;
+                        
+                        c1.userData.velocity.x -= impulseX * (1/m1);
+                        c1.userData.velocity.y -= impulseY * (1/m1);
+                        c1.userData.velocity.z -= impulseZ * (1/m1);
+                        
+                        c2.userData.velocity.x += impulseX * (1/m2);
+                        c2.userData.velocity.y += impulseY * (1/m2);
+                        c2.userData.velocity.z += impulseZ * (1/m2);
+
+                        // Only wake up a stopped die if it was hit hard enough to overcome static friction
+                        if (c1.userData.stopped && c1.userData.velocity.lengthSq() > 5.0) {
+                            c1.userData.stopped = false;
+                        }
+                        if (c2.userData.stopped && c2.userData.velocity.lengthSq() > 5.0) {
+                            c2.userData.stopped = false;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    return null;
+}
+
+const DOT_MATRIX_3x5: Record<string, number[][]> = {
+  '0': [[1,1,1],[1,0,1],[1,0,1],[1,0,1],[1,1,1]],
+  '1': [[0,1,0],[1,1,0],[0,1,0],[0,1,0],[1,1,1]],
+  '2': [[1,1,1],[0,0,1],[1,1,1],[1,0,0],[1,1,1]],
+  '3': [[1,1,1],[0,0,1],[1,1,1],[0,0,1],[1,1,1]],
+  '4': [[1,0,1],[1,0,1],[1,1,1],[0,0,1],[0,0,1]],
+  '5': [[1,1,1],[1,0,0],[1,1,1],[0,0,1],[1,1,1]],
+  '6': [[1,1,1],[1,0,0],[1,1,1],[1,0,1],[1,1,1]],
+  '7': [[1,1,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1]],
+  '8': [[1,1,1],[1,0,1],[1,1,1],[1,0,1],[1,1,1]],
+  '9': [[1,1,1],[1,0,1],[1,1,1],[0,0,1],[1,1,1]],
+  '-': [[0,0,0],[0,0,0],[1,1,1],[0,0,0],[0,0,0]],
+  ' ': [[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
+};
+
+function DotMatrixScoreboard({ value, timestamp, isRolling }: { value: string, timestamp: number, isRolling?: boolean }) {
+    const cols = 25;
+    const rows = 5;
+    const [idleMode, setIdleMode] = useState(!value && !isRolling);
+    const [animFrame, setAnimFrame] = useState(0);
+    const [animType, setAnimType] = useState('matrix');
+
+    // 10 second idle timer (goes idle 10s after a roll, or immediately if empty)
+    useEffect(() => {
+        const pickRandomAnim = (current: string) => {
+            const types = ['matrix', 'pingpong', 'sinewave', 'scanner'];
+            const others = types.filter(t => t !== current);
+            return others[Math.floor(Math.random() * others.length)];
+        };
+
+        if (!value && !isRolling) {
+            setIdleMode(true);
+            setAnimType(t => pickRandomAnim(''));
+            return;
+        }
+
+        setIdleMode(false);
+        if (isRolling) return; // Don't trigger idle timeout while rolling
+        
+        const timer = setTimeout(() => {
+            setAnimType(t => pickRandomAnim(t));
+            setIdleMode(true);
+        }, 10000);
+        
+        return () => clearTimeout(timer);
+    }, [value, timestamp, isRolling]);
+
+    // Animation loop
+    useEffect(() => {
+        if (!idleMode && !isRolling) return;
+        const interval = setInterval(() => {
+            setAnimFrame(f => f + 1);
+        }, 100);
+        return () => clearInterval(interval);
+    }, [idleMode, isRolling]);
+
+    let grid = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+    if (isRolling) {
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                grid[r][c] = Math.random() > 0.8 ? 1 : Math.random() > 0.8 ? 2 : 0;
+            }
+        }
+    } else if (idleMode || !value) {
+        if (animType === 'matrix') {
+            for (let c = 0; c < cols; c++) {
+                const dropSpeed = (c % 3) + 1;
+                const y = (Math.floor(animFrame / dropSpeed) + (c * 7)) % (rows + 4) - 2;
+                for (let r = 0; r < rows; r++) {
+                    if (r === y) grid[r][c] = 1;
+                    else if (r === y - 1) grid[r][c] = 2;
+                    else if (r === y - 2) grid[r][c] = 3;
+                }
+            }
+        } else if (animType === 'pingpong') {
+            const cycleX = (cols - 1) * 2;
+            const cycleY = (rows - 1) * 2;
+            let bx = animFrame % cycleX; if (bx >= cols) bx = cycleX - bx;
+            let by = Math.floor(animFrame * 0.7) % cycleY; if (by >= rows) by = cycleY - by;
+            grid[by][bx] = 1;
+            
+            // Paddles
+            const p1y = Math.min(Math.max(by, 1), rows - 2);
+            grid[p1y - 1][0] = 2; grid[p1y][0] = 1; grid[p1y + 1][0] = 2;
+            
+            const p2y = Math.min(Math.max(by, 1), rows - 2);
+            grid[p2y - 1][cols - 1] = 2; grid[p2y][cols - 1] = 1; grid[p2y + 1][cols - 1] = 2;
+        } else if (animType === 'sinewave') {
+            for (let c = 0; c < cols; c++) {
+                const y = Math.floor((Math.sin((c + animFrame) * 0.5) + 1) * (rows - 1) / 2);
+                grid[y][c] = 1;
+                if (y + 1 < rows) grid[y+1][c] = 2;
+                if (y - 1 >= 0) grid[y-1][c] = 2;
+            }
+        } else if (animType === 'scanner') {
+            const cycle = (cols - 1) * 2;
+            let pos = animFrame % cycle;
+            if (pos >= cols) pos = cycle - pos;
+            for (let r = 0; r < rows; r++) {
+                grid[r][pos] = 1;
+                if (pos - 1 >= 0) grid[r][pos - 1] = 2;
+                if (pos - 2 >= 0) grid[r][pos - 2] = 3;
+                if (pos + 1 < cols) grid[r][pos + 1] = 2;
+                if (pos + 2 < cols) grid[r][pos + 2] = 3;
+            }
+        }
+    } else {
+        const valStr = value.toString();
+        const totalWidth = valStr.length * 4 - 1;
+        let currentCol = Math.floor((cols - totalWidth) / 2) + totalWidth - 1;
+        
+        for (let i = valStr.length - 1; i >= 0; i--) {
+            const char = valStr[i];
+            const charMatrix = DOT_MATRIX_3x5[char] || DOT_MATRIX_3x5[' '];
+            
+            for (let r = 0; r < rows; r++) {
+                for (let c = 2; c >= 0; c--) {
+                    const targetCol = currentCol - (2 - c);
+                    if (targetCol >= 0 && targetCol < cols) {
+                        grid[r][targetCol] = charMatrix[r][c];
+                    }
+                }
+            }
+            currentCol -= 4;
+            if (currentCol < 0) break;
+        }
+    }
+
+    const getColor = (val: number) => {
+        if (val === 1) return { bg: 'var(--green)', shadow: '0 0 5px var(--green), 0 0 10px var(--green)' };
+        if (val === 2) return { bg: 'rgba(0,255,0,0.5)', shadow: '0 0 2px var(--green)' };
+        if (val === 3) return { bg: 'rgba(0,255,0,0.2)', shadow: 'none' };
+        return { bg: 'rgba(0,255,0,0.05)', shadow: 'none' };
+    };
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+            {grid.map((row, rIdx) => (
+                <div key={rIdx} style={{ display: 'flex', gap: '4px' }}>
+                    {row.map((val, cIdx) => {
+                        const style = getColor(val);
+                        return (
+                            <div key={cIdx} style={{
+                                width: '10px',
+                                height: '10px',
+                                borderRadius: '50%',
+                                backgroundColor: style.bg,
+                                boxShadow: style.shadow,
+                                transition: 'background-color 0.1s, box-shadow 0.1s'
+                            }} />
+                        );
+                    })}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function DiceTrayWindow({ pos, setPos, onClose, socketRef }: any) {
+  const [history, setHistory] = useState<any[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [latestRoll, setLatestRoll] = useState<{ total: number, results: any, color: string, timestamp: number } | null>(null);
+  const [displayRoll, setDisplayRoll] = useState<{ total: number, results: any, color: string, timestamp: number } | null>(null);
+  const [isRolling, setIsRolling] = useState(false);
+  const historyContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!socketRef.current) return;
+    
+    // Request initial history on mount
+    socketRef.current.emit('requestDiceHistory');
+
+    const handleBroadcast = (data: any) => {
+        // Start physical dice rolling immediately
+        setLatestRoll({ total: data.total, results: data.results, color: data.color, timestamp: Date.now() });
+        setIsRolling(true);
+        setDisplayRoll(null);
+
+        // Delay showing results by 5 seconds
+        setTimeout(() => {
+            setIsRolling(false);
+            setDisplayRoll({ total: data.total, results: data.results, color: data.color, timestamp: Date.now() });
+            setHistory(prev => {
+                const newHistory = [...prev, data];
+                setTimeout(() => {
+                    if (historyContainerRef.current) {
+                        historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight;
+                    }
+                }, 50);
+                return newHistory;
+            });
+        }, 5000);
+    };
+    const handleHistory = (data: any[]) => {
+        setHistory(data);
+        if (data.length > 0) {
+            const last = data[data.length - 1];
+            setLatestRoll({ total: last.total, results: last.results, color: last.color, timestamp: Date.now() });
+            setDisplayRoll({ total: last.total, results: last.results, color: last.color, timestamp: Date.now() });
+            setTimeout(() => {
+                if (historyContainerRef.current) {
+                    historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight;
+                }
+            }, 50);
+        }
+    };
+    socketRef.current.on('diceRollBroadcast', handleBroadcast);
+    socketRef.current.on('diceRollHistory', handleHistory);
+    return () => {
+        socketRef.current.off('diceRollBroadcast', handleBroadcast);
+        socketRef.current.off('diceRollHistory', handleHistory);
+    };
+  }, [socketRef]);
+
+  const titleControls = (
+      <>
+          <button 
+              onClick={() => setIsHistoryOpen(!isHistoryOpen)} 
+              className="win95-close-btn"
+              style={{ background: 'var(--black)', padding: '2px', width: '22px', height: '22px' }}
+              title="TOGGLE_HISTORY"
+          >
+              <img src={isHistoryOpen ? paperFillIcon : paperLightIcon} width="14" height="14" alt="Paper" style={{ filter: 'brightness(0) invert(1)' }} />
+          </button>
+      </>
+  );
+
+  return (
+        <DraggableWindow 
+            title="DICE_TRAY.exe" 
+            pos={pos} 
+            setPos={setPos} 
+            onClose={onClose} 
+            windowStyle={{ width: '480px', display: 'flex', flexDirection: 'column' }}
+            contentStyle={{ maxHeight: 'none', padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'visible' }}
+            titleControls={titleControls}
+        >
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, background: 'var(--black)' }}>
+                {/* Scoreboard */}
+                <div style={{ padding: '20px', background: '#0a0a0a', borderBottom: '2px solid var(--dark-green)', textAlign: 'center', overflow: 'hidden' }}>
+                    <DotMatrixScoreboard 
+                        value={displayRoll !== null ? displayRoll.total.toString() : ''} 
+                        timestamp={displayRoll?.timestamp || 0} 
+                        isRolling={isRolling}
+                    />
+                </div>
+
+                {/* 3D Canvas */}
+                <div style={{ height: '320px', width: '100%', position: 'relative' }}>
+                    <Canvas camera={{ position: [0, 0, 13], fov: 35, near: 0.1, far: 100 }}>
+                        <ambientLight intensity={1} />
+                        <DiceScene latestRoll={latestRoll} />
+                    </Canvas>
+                </div>
+
+                {/* History Flyout */}
+                {isHistoryOpen && (
+                    <div 
+                        ref={historyContainerRef}
+                        style={{ 
+                        position: 'absolute',
+                        left: '-252px',
+                        top: 0,
+                        bottom: 0,
+                        width: '250px',
+                        boxSizing: 'border-box',
+                        border: '2px solid var(--green)', 
+                        background: 'rgba(0,15,0,0.95)', 
+                        overflowY: 'auto',
+                        padding: '10px',
+                        fontSize: '0.75rem',
+                        textAlign: 'left',
+                    }}>
+                        {history.map((h, i) => {
+                            const match = h.historyString.match(/^(.*?) rolled (.*)$/);
+                            return (
+                                <React.Fragment key={i}>
+                                    <div style={{ 
+                                        marginBottom: '8px', 
+                                        color: h.color,
+                                        textShadow: '1px 1px 2px #000, 0 0 8px #000, 0 0 4px #000',
+                                        wordBreak: 'break-word'
+                                    }}>
+                                        {match ? (
+                                            <>
+                                                <strong style={{ fontWeight: 800 }}>{match[1]}:</strong> rolled {match[2]}
+                                            </>
+                                        ) : (
+                                            h.historyString
+                                        )}
+                                    </div>
+                                    {i < history.length - 1 && (
+                                        <div style={{ borderBottom: '1px solid var(--green)', opacity: 0.4, margin: '12px 0' }} />
+                                    )}
+                                </React.Fragment>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+            </DraggableWindow>
   );
 }
 
@@ -4742,7 +5250,99 @@ function SystemInfoMenu({ userName, token }: any) {
   );
 }
 
-function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers }: any) {
+function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen, setNotification }: any) {
+  const diceTypes = [2, 4, 6, 8, 10, 12, 20, 100];
+  const [diceCounts, setDiceCounts] = useState<Record<number, number>>({});
+  const [workingMod, setWorkingMod] = useState<number>(0);
+  const [modifiers, setModifiers] = useState<number[]>([]);
+
+  const totalDice = Object.values(diceCounts).reduce((a, b) => a + b, 0);
+  const canRoll = totalDice > 0;
+
+  const handleAddDice = (sides: number) => {
+    setDiceCounts(prev => ({ ...prev, [sides]: (prev[sides] || 0) + 1 }));
+  };
+
+  const handleSubDice = (sides: number) => {
+    setDiceCounts(prev => {
+      const current = prev[sides] || 0;
+      if (current <= 0) return prev;
+      return { ...prev, [sides]: current - 1 };
+    });
+  };
+
+  const handleRoll = () => {
+    if (!canRoll) {
+      setNotification("INVALID_ROLL: SELECT_DICE");
+      return;
+    }
+    
+    const color = rhombusState?.color || '#00ff00';
+    
+    if (socketRef.current) {
+        socketRef.current.emit('requestDiceRoll', {
+            userName,
+            diceCounts,
+            modifiers,
+            color
+        });
+    }
+    setDiceCounts({});
+    setModifiers([]);
+    setIsDiceTrayOpen(true);
+  };
+
+  return (
+    <div className="panel sidebar-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', maxHeight: '100%' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexShrink: 0 }}>
+        <h3 style={{ margin: 0 }}>DICE_ROLLER</h3>
+      </header>
+      
+      {/* Scrollable Dice List */}
+      <div style={{ flex: '0 1 auto', overflowY: 'auto', marginBottom: '10px', paddingRight: '5px' }}>
+        {diceTypes.map(sides => (
+            <div key={sides} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,10,0,0.5)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid var(--dark-green)' }}>
+                <span style={{ fontWeight: 'bold', color: 'var(--cyan)', width: '40px' }}>d{sides}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleSubDice(sides)}>-</button>
+                    <span style={{ width: '20px', textAlign: 'center' }}>{diceCounts[sides] || 0}</span>
+                    <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleAddDice(sides)}>+</button>
+                </div>
+            </div>
+        ))}
+      </div>
+      
+      {/* Modifiers Section */}
+      <div style={{ borderTop: '2px solid var(--dark-green)', paddingTop: '10px', marginBottom: '10px', flexShrink: 0 }}>
+        <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--green)', marginBottom: '5px' }}>MODIFIERS</div>
+        <div style={{ display: 'flex', gap: '5px', alignItems: 'center', marginBottom: '5px' }}>
+            <button className="upload-btn" style={{ flex: 1, padding: '5px' }} onClick={() => setWorkingMod(p => p - 1)}>-</button>
+            <span style={{ flex: 2, textAlign: 'center', fontSize: '1.2rem', fontWeight: 'bold' }}>{workingMod > 0 ? `+${workingMod}` : workingMod}</span>
+            <button className="upload-btn" style={{ flex: 1, padding: '5px' }} onClick={() => setWorkingMod(p => p + 1)}>+</button>
+        </div>
+        <div style={{ display: 'flex', gap: '5px' }}>
+            <button className="upload-btn" style={{ flex: 1 }} onClick={() => { if(workingMod !== 0) { setModifiers(p => [...p, workingMod]); setWorkingMod(0); } }}>ADD</button>
+            <button className="upload-btn" style={{ flex: 1 }} onClick={() => { setModifiers(p => p.slice(0, -1)); }}>DELETE LAST</button>
+        </div>
+        <div style={{ minHeight: '20px', background: 'rgba(0,0,0,0.5)', marginTop: '5px', padding: '5px', fontSize: '0.75rem', wordBreak: 'break-all' }}>
+            {modifiers.length > 0 ? modifiers.map(m => m > 0 ? `+${m}` : m).join(' ') : 'No Modifiers'}
+        </div>
+      </div>
+      
+      {/* Roll Button */}
+      <button className="upload-btn" style={{ flexShrink: 0, padding: '15px', fontSize: '1.2rem', background: canRoll ? 'var(--green)' : 'var(--dark-green)', color: 'var(--black)', width: '100%', marginBottom: '10px' }} onClick={handleRoll}>
+        ROLL DICE
+      </button>
+
+      {/* Tray Toggle */}
+      <button className="upload-btn" style={{ flexShrink: 0, padding: '10px', fontSize: '0.8rem', width: '100%' }} onClick={() => setIsDiceTrayOpen((prev: any) => !prev)}>
+        DICE_TRAY.exe
+      </button>
+    </div>
+  );
+}
+
+function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification }: any) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
       view === 'battle_map' && activeBattleMapData 
         ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex) 
@@ -4802,6 +5402,18 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
             </button>
+            <button className={`rail-btn ${activeMenu === 'dice_menu' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'dice_menu' ? 'none' : 'dice_menu')} title="DICE_ROLLER">
+              <svg width="24" height="24" viewBox="-5 -10 110 135" fill="currentColor" style={{ transform: 'scale(1.5)' }}>
+                <path d="m32.19,44.88s-.07,0-.1,0l-25.59-5.16c-.18-.04-.33-.17-.38-.35-.05-.18,0-.37.13-.5L40.46,4.83c.16-.16.4-.19.59-.08.19.11.3.33.25.55l-8.62,39.19c-.05.23-.26.39-.49.39Zm-24.58-5.96l24.19,4.87L39.96,6.74,7.61,38.91Z" />
+                <path d="m32.19,44.88c-.13,0-.25-.05-.35-.14-.13-.12-.18-.3-.14-.47L40.32,5.08c.03-.15.14-.28.28-.35.14-.06.31-.06.45.02l44.72,25.03c.18.1.28.3.25.5s-.17.37-.37.42l-53.34,14.16s-.09.02-.13.02ZM41.16,5.95l-8.3,37.73,51.36-13.63L41.16,5.95Z" />
+                <path d="m85.53,30.72c-.08,0-.17-.02-.24-.06L40.57,5.63c-.22-.12-.32-.4-.22-.63.1-.23.36-.36.6-.28l41.45,12.44c.17.05.3.18.34.35l3.26,12.59c.05.19-.02.4-.18.52-.09.07-.2.1-.31.1ZM45.03,6.98l39.72,22.24-2.9-11.19L45.03,6.98Z" />
+                <path d="m72.31,87.15c-.14,0-.27-.06-.36-.16L31.83,44.72c-.12-.13-.17-.31-.12-.48.05-.17.18-.3.35-.35l53.34-14.16c.17-.05.35,0,.48.12.13.12.18.3.14.47l-13.22,56.44c-.04.18-.18.32-.36.37-.04.01-.09.02-.13.02Zm-39.18-42.51l38.9,41,12.82-54.72-51.72,13.73Z" />
+                <path d="m23.28,88.37c-.15,0-.29-.07-.38-.18-.1-.12-.14-.27-.11-.42l8.91-43.5c.04-.18.17-.33.35-.38.18-.05.37,0,.5.14l40.12,42.28c.14.14.17.35.1.54-.08.18-.25.3-.45.31l-49.03,1.22h-.01Zm9.2-42.96l-8.59,41.94,47.28-1.17-38.69-40.77Z" />
+                <path d="m23.28,88.37c-.21,0-.4-.13-.47-.34L6.12,39.38c-.06-.17-.02-.36.1-.49.12-.13.3-.19.47-.16l25.59,5.16c.13.03.24.1.32.21.07.11.1.25.07.38l-8.91,43.5c-.04.22-.23.38-.46.4-.01,0-.02,0-.03,0ZM7.35,39.88l15.81,46.09,8.44-41.21-24.25-4.89Z" />
+                <path d="m62.66,95.31s-.06,0-.09,0l-39.37-6.94c-.25-.04-.43-.27-.41-.53.02-.26.23-.46.49-.46l49.03-1.22c.2,0,.4.12.48.32.08.2.02.42-.14.56l-9.66,8.16c-.09.08-.21.12-.32.12Zm-34.36-7.06l34.22,6.03,8.39-7.09-42.61,1.06Z" />
+                <path d="m72.31,87.15c-.08,0-.16-.02-.23-.05-.2-.1-.31-.34-.26-.56l13.22-56.44c.05-.23.25-.38.48-.39.2-.04.43.16.49.38l7.87,32.15c.04.16,0,.32-.11.45l-21.09,24.28c-.1.11-.24.17-.38.17Zm13.23-54.79l-12.28,52.44,19.6-22.56-7.32-29.88Z" />
+              </svg>
+            </button>
             {isPrimaryAdmin && (
               <button className={`rail-btn ${activeMenu === 'city_data_base' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'city_data_base' ? 'none' : 'city_data_base')} title="CITY_DATA_BASE">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -4839,6 +5451,7 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
           {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} />}
           {/* HitPointsMenu is now a popout window rendered in App.tsx */}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
+          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} />}
 
         </div>
       </div>
@@ -5053,6 +5666,8 @@ function App() {
   const [showZoomComplete, setShowZoomComplete] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [token, setToken] = useState('');
+  const tokenRef = useRef(token);
+  useEffect(() => { tokenRef.current = token; }, [token]);
   
   let isPrimaryAdmin = false;
   if (token) {
@@ -5067,18 +5682,22 @@ function App() {
   const [editId, setEditId] = useState<number | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [userName, setUserName] = useState<string>('');
+  const userNameRef = useRef(userName);
+  useEffect(() => { userNameRef.current = userName; }, [userName]);
   const [tempUserName, setTempUserName] = useState('');
   const [currentController, setCurrentController] = useState<string>('');
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [activeEditLocation, setActiveEditLocation] = useState<any>(null);
   const [isSomeoneEditing, setIsSomeoneEditing] = useState(false);
-  const [activeSidebarMenu, setActiveSidebarMenu] = useState<'none' | 'quick_access' | 'nav_controls' | 'system_info' | 'geometry_protocols' | 'city_data_base'>('none');
+  const [activeSidebarMenu, setActiveSidebarMenu] = useState<'none' | 'quick_access' | 'nav_controls' | 'system_info' | 'geometry_protocols' | 'city_data_base' | 'dice_menu'>('none');
+  const [isDiceTrayOpen, setIsDiceTrayOpen] = useState(false);
 
   const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
   const [hitPointsPos, setHitPointsPos] = useState({ x: 250, y: 100 });
 
   const [infoPanelPos, setInfoPanelPos] = useState({ x: 100, y: 100 });
+  const [diceTrayPos, setDiceTrayPos] = useState({ x: window.innerWidth - 400, y: window.innerHeight - 450 });
   
   // Prevent HitPointsMenu and InfoWindow from overlapping when opened
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5704,8 +6323,8 @@ function App() {
     });
 
     newSocket.on('connect', () => {
-      console.log("Socket connected, identifying as:", userName);
-      newSocket.emit('identify', { userName, isAdmin: !!token, token });
+      console.log("Socket connected, identifying as:", userNameRef.current);
+      newSocket.emit('identify', { userName: userNameRef.current, isAdmin: !!tokenRef.current, token: tokenRef.current });
     });
 
     newSocket.on('dataUpdated', (payload: any) => { fetchLocations(); fetchRoads(); fetchDistricts(); if (!payload || !payload.isRhombusOnly) { (window as any).hasUnsavedChanges = true; } });
@@ -5791,6 +6410,7 @@ function App() {
   const handleLogout = () => {
     // 1. Immediately close all UI elements for a clean fade-out
     setIsChatOpen(false);
+    setIsDiceTrayOpen(false);
     setActiveSidebarMenu('none');
     setSelectedLocation(null);
     setTargetObject(null);
@@ -5926,6 +6546,7 @@ function App() {
               isHitPointsOpen={isHitPointsOpen}
               setIsHitPointsOpen={setIsHitPointsOpen}
               activeUsers={activeUsers}
+              setIsDiceTrayOpen={setIsDiceTrayOpen}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -6048,6 +6669,14 @@ function App() {
                 setPos={setHitPointsPos}
                 onClose={() => setIsHitPointsOpen(false)}
               />
+            )}
+            {isDiceTrayOpen && (
+                <DiceTrayWindow 
+                    pos={diceTrayPos} 
+                    setPos={setDiceTrayPos} 
+                    onClose={() => setIsDiceTrayOpen(false)}
+                    socketRef={socketRef}
+                />
             )}
             {(() => {
               const isRhombus = selectedLocation?.shape === 'rhombus' || selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus';

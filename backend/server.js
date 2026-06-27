@@ -805,7 +805,21 @@ const broadcastActiveUsers = () => {
 };
 
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+  // Send initial dice roll history when requested
+  socket.on('requestDiceHistory', () => {
+      db.all('SELECT * FROM dice_rolls ORDER BY timestamp DESC LIMIT 5', (err, rows) => {
+          if (!err && rows) {
+              const history = rows.reverse().map(r => ({
+                  userName: r.username,
+                  total: r.total,
+                  results: JSON.parse(r.results),
+                  color: r.color,
+                  historyString: r.historyString || ''
+              }));
+              socket.emit('diceRollHistory', history);
+          }
+      });
+  });
 
   socket.on('identify', (data) => {
     let info = typeof data === 'string' ? { userName: data, isAdmin: false } : data;
@@ -1214,6 +1228,73 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('requestDiceRoll', (data) => {
+    const { userName, diceCounts, modifiers, color } = data;
+    
+    const results = {};
+    let diceTotal = 0;
+    let rollParts = [];
+    let allRolls = [];
+    
+    for (const [sides, count] of Object.entries(diceCounts)) {
+        const s = parseInt(sides);
+        const c = parseInt(count);
+        if (c > 0) {
+            rollParts.push(`${c}d${s}`);
+            results[s] = [];
+            for (let i = 0; i < c; i++) {
+                const roll = Math.floor(Math.random() * s) + 1;
+                results[s].push(roll);
+                allRolls.push(roll);
+                diceTotal += roll;
+            }
+        }
+    }
+    
+    const modTotal = modifiers.reduce((a, b) => a + b, 0);
+    const grandTotal = diceTotal + modTotal;
+    
+    let mathExpression = rollParts.join('+');
+    if (modifiers.length > 0) {
+        mathExpression += ' ' + modifiers.map((m) => m > 0 ? `+ ${m}` : `- ${Math.abs(m)}`).join(' ');
+    }
+    
+    const diceBreakdown = allRolls.join('+');
+    let finalString = `${userName} rolled ${mathExpression} [(${diceBreakdown})`;
+    if (modTotal !== 0) {
+        finalString += ` ${modTotal > 0 ? '+' : '-'} ${Math.abs(modTotal)}`;
+    }
+    finalString += ` = ${grandTotal}]`;
+
+    const broadcastData = {
+        userName,
+        results,
+        modifiers,
+        color,
+        total: grandTotal,
+        historyString: finalString
+    };
+
+    db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
+        [userName, grandTotal, JSON.stringify(results), color, finalString],
+        (err) => {
+            if (err) console.error('Error saving dice roll:', err);
+            io.emit('diceRollBroadcast', broadcastData);
+        }
+    );
+  });
+
+  socket.on('purgeDiceHistory', (data) => {
+      const token = data.token;
+      if (!token) return;
+      jwt.verify(token, process.env.JWT_SECRET || 'cyberpunk_secret', (err, decoded) => {
+          if (err || decoded.role !== 'admin') return;
+          db.run('DELETE FROM dice_rolls', (err) => {
+              if (err) console.error('Error purging dice rolls:', err);
+              io.emit('diceRollHistory', []); // Clear frontend history
+          });
+      });
+  });
   socket.on('disconnect', () => {
     const info = userSockets.get(socket.id);
     if (info) {
