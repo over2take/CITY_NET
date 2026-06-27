@@ -4137,8 +4137,8 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
             pos={pos} 
             setPos={setPos} 
             onClose={onClose}
-            windowStyle={{ maxWidth: 'none', width: '850px' }}
-            contentStyle={{ maxHeight: 'none', padding: 0, overflow: 'visible' }}
+            windowStyle={{ maxWidth: 'none', width: '600px', height: '400px', minWidth: '400px', minHeight: '300px', resize: 'both', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            contentStyle={{ maxHeight: 'none', padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
             notificationsEnabled={notificationsEnabled}
             onToggleNotifications={onToggleNotifications}
         >
@@ -4151,7 +4151,7 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
           )}
 
           {/* TABS BAR */}
-          <div style={{ display: 'flex', background: 'var(--dark-green)', padding: '5px 5px 0 5px', gap: '5px', overflowX: 'auto' }}>
+          <div style={{ display: 'flex', background: 'var(--dark-green)', padding: '5px 5px 0 5px', gap: '5px', overflowX: 'auto', flexShrink: 0 }}>
               <div 
                   className={unreadTabs.has('GLOBAL') ? 'unread-blink' : ''}
                   onClick={() => { setActiveTab('GLOBAL'); setSendAs(userName); setUnreadTabs(prev => { const next = new Set(prev); next.delete('GLOBAL'); return next; }); }}
@@ -4172,12 +4172,12 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
               ))}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'row', height: '560px', background: 'var(--black)' }}>
+          <div style={{ display: 'flex', flexDirection: 'row', flex: 1, background: 'var(--black)', minHeight: 0 }}>
             {/* Main Section: History & Input */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '2px solid var(--dark-green)' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '2px solid var(--dark-green)', minWidth: 0 }}>
               <div 
                 ref={scrollRef}
-                style={{ flex: 1, overflowY: 'auto', padding: '15px', fontSize: '0.8rem' }}
+                style={{ flex: 1, overflowY: 'auto', padding: '15px', fontSize: '0.8rem', textAlign: 'left' }}
               >
                 {displayMessages.map((msg: any) => (
                   <div key={msg.id || Math.random()} style={{ marginBottom: '10px', opacity: msg.sender === 'SYSTEM' ? 0.6 : 1 }}>
@@ -4189,7 +4189,7 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
                   </div>
                 ))}
               </div>
-              <form onSubmit={handleSubmit} style={{ padding: '15px', display: 'flex', gap: '10px', background: 'rgba(0,25,0,0.5)', borderTop: '2px solid var(--dark-green)', alignItems: 'center' }}>
+              <form onSubmit={handleSubmit} style={{ padding: '10px', display: 'flex', gap: '5px', background: 'rgba(0,25,0,0.5)', borderTop: '2px solid var(--dark-green)', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
                 {showSendAs && (
                   <select 
                     value={sendAs} 
@@ -4213,8 +4213,8 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
             </div>
 
             {/* User Roster: Right Side */}
-            <div style={{ width: '220px', display: 'flex', flexDirection: 'column', background: 'rgba(0,10,0,0.3)' }}>
-              <div style={{ padding: '12px', fontSize: '0.75rem', fontWeight: 'bold', borderBottom: '2px solid var(--dark-green)', color: 'var(--green)', textShadow: 'var(--glow)' }}>OPERATORS_ONLINE</div>
+            <div style={{ width: '160px', display: 'flex', flexDirection: 'column', background: 'rgba(0,10,0,0.3)', flexShrink: 0 }}>
+              <div style={{ padding: '8px', fontSize: '0.7rem', fontWeight: 'bold', borderBottom: '2px solid var(--dark-green)', color: 'var(--green)', textShadow: 'var(--glow)', textAlign: 'center' }}>OPERATORS_ONLINE</div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '10px', position: 'relative' }}>
                 {activeUsers.map((user: any) => {
                   const dotColor = user.isAdmin ? '#ff0000' : (user.isTemporaryAdmin ? '#ffaa00' : (user.isNPC ? (user.isActive === false ? '#555' : '#aa00ff') : 'var(--green)'));
