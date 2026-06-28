@@ -701,6 +701,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   const intersection = useMemo(() => new THREE.Vector3(), []);
   
   const isAdmin = token !== '';
+  const [isHovered, setIsHovered] = useState(false);
   const [isLocalDragging, setIsLocalDragging] = useState(false);
     useEffect(() => {
         const handleGlobalUp = () => {
@@ -888,6 +889,8 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onPointerOver={(e) => { e.stopPropagation(); setIsHovered(true); }}
+          onPointerOut={(e) => { e.stopPropagation(); setIsHovered(false); }}
       >
         <octahedronGeometry args={[0.5]} />
         <meshBasicMaterial color="#ff0000" transparent opacity={0.9} />
@@ -905,7 +908,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
       
-      {location.name && (
+      {location.name && (isHovered || isSelected) && (
           <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} style={{ pointerEvents: 'none', userSelect: 'none' }}>
             <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #ff0000`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
                 {location.name}
@@ -928,6 +931,7 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
   const intersection = useMemo(() => new THREE.Vector3(), []);
   
   const isAdmin = token !== '';
+  const [isHovered, setIsHovered] = useState(false);
   const [isLocalDragging, setIsLocalDragging] = useState(false);
   useEffect(() => {
       const handleGlobalUp = () => {
@@ -1104,6 +1108,8 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerOver={(e) => { e.stopPropagation(); setIsHovered(true); }}
+        onPointerOut={(e) => { e.stopPropagation(); setIsHovered(false); }}
       >
         <mesh>
           <coneGeometry args={[0.5, 0.8, 4]} />
@@ -1115,7 +1121,7 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
       
-      {location.name && (
+      {location.name && (isHovered || isSelected) && (
           <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} style={{ pointerEvents: 'none', userSelect: 'none' }}>
             <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #00ccff`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
                 {location.name}
@@ -1143,6 +1149,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   const canManage = isAdmin || isOwner;
 
   const isOnline = activeUsers.some((u: any) => u.userName === location.owner);
+  const [isHovered, setIsHovered] = useState(false);
 
   const [isLocalDragging, setIsLocalDragging] = useState(false);
     useEffect(() => {
@@ -1351,6 +1358,8 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onPointerOver={(e) => { e.stopPropagation(); setIsHovered(true); }}
+          onPointerOut={(e) => { e.stopPropagation(); setIsHovered(false); }}
       >
         <octahedronGeometry args={[0.5]} />
         <meshBasicMaterial transparent opacity={0.8} color={isSelected ? "#00ffff" : baseColor} />
@@ -1365,7 +1374,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
       
-      {location.name && (
+      {location.name && (isOnline || isHovered || isSelected) && (
           <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} style={{ pointerEvents: 'none', userSelect: 'none' }}>
             <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid ${baseColor}`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
                 {location.name}
