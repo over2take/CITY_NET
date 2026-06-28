@@ -1610,6 +1610,27 @@ server.listen(PORT, '0.0.0.0', () => {
         report('preserve health during location PUT update', false, 'Insert failed: ' + err.message);
       }
     });
+
+    // Test 8: Preserve health during rhombus purge (logout/cinematic purge)
+    db.run('INSERT INTO locations (name, x, y, z, shape, hp_current, hp_max, hp_temp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', ['PurgeTest', 0, 0, 0, 'rhombus', 88, 100, 0], function(err) {
+      if (!err) {
+        const testId = this.lastID;
+        db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE id = ? AND shape = "rhombus"', [testId], function(updateErr) {
+          if (!updateErr && this.changes > 0) {
+            db.get('SELECT hp_current, battle_map_id FROM locations WHERE id = ?', [testId], (err3, row3) => {
+              const success = !err3 && row3 && row3.hp_current === 88 && row3.battle_map_id === -1;
+              report('preserve health during cinematic purge', success, err3 ? err3.message : `Row state: ${JSON.stringify(row3)}`);
+              db.run('DELETE FROM locations WHERE id = ?', [testId]);
+            });
+          } else {
+            report('preserve health during cinematic purge', false, 'Purge update failed or row not found');
+            db.run('DELETE FROM locations WHERE id = ?', [testId]);
+          }
+        });
+      } else {
+        report('preserve health during cinematic purge', false, 'Insert failed: ' + err.message);
+      }
+    });
   };
 
   runSanityChecks();
