@@ -846,8 +846,8 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   const dragDist = useRef(0);
 
   const handlePointerDown = (e: any) => {
-      e.stopPropagation();
       if (measureMode) return;
+      e.stopPropagation();
     dragDist.current = 0;
     
     // Only allow dragging if the user is an Admin
@@ -865,6 +865,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   };
 
   const handlePointerMove = (e: any) => {
+    if (measureMode) return;
     if (!isAdmin || e.buttons !== 1) return;
     dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY);
     const currentRaycaster = e.raycaster || raycaster;
@@ -877,6 +878,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   };
 
   const handlePointerUp = async (e: any) => {
+      if (measureMode) return;
       try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
@@ -1072,8 +1074,8 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
   const dragDist = useRef(0);
 
   const handlePointerDown = (e: any) => {
-      e.stopPropagation();
       if (measureMode) return;
+      e.stopPropagation();
     dragDist.current = 0;
     if (!isAdmin) return;
     try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
@@ -1088,6 +1090,7 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
   };
 
   const handlePointerMove = (e: any) => {
+    if (measureMode) return;
     if (!isAdmin || e.buttons !== 1) return;
     dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY);
     const currentRaycaster = e.raycaster || raycaster;
@@ -1100,6 +1103,7 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
   };
 
   const handlePointerUp = async (e: any) => {
+      if (measureMode) return;
       try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
@@ -1312,8 +1316,8 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   const dragDist = useRef(0);
 
   const handlePointerDown = (e: any) => {
-      e.stopPropagation();
       if (measureMode) return;
+      e.stopPropagation();
     dragDist.current = 0;
     
     // Only allow dragging if the user has management rights (Owner or Admin)
@@ -1331,6 +1335,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   };
 
   const handlePointerMove = (e: any) => {
+    if (measureMode) return;
     if (!canManage || e.buttons !== 1) return;
     dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY);
     const currentRaycaster = e.raycaster || raycaster;
@@ -1343,6 +1348,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   };
 
   const handlePointerUp = async (e: any) => {
+      if (measureMode) return;
       try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
@@ -6455,6 +6461,7 @@ function App() {
   };
 
   const handleBuildingClick = (loc: any) => {
+    if (measureMode) return;
     if (isCopyingSize) {
         const rootId = loc.parent_id || loc.id;
         
