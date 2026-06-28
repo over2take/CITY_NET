@@ -1255,6 +1255,9 @@ io.on('connection', (socket) => {
       size: data.size || 1,
       battle_map_id: data.battle_map_id || null,
       floor_index: data.floor_index !== undefined ? data.floor_index : null
+    });
+  });
+
   socket.on('drawMeasurement', (data) => {
     const info = userSockets.get(socket.id);
     io.emit('measurementUpdated', formatMeasurementPayload(data, info ? info.userName : null, socket.id));
