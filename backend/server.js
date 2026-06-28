@@ -1256,7 +1256,8 @@ io.on('connection', (socket) => {
       floor_index: data.floor_index !== undefined ? data.floor_index : null,
       map_scale_multiplier: data.map_scale_multiplier || 5,
       view: data.view,
-      locationId: data.locationId
+      locationId: data.locationId,
+      isFinal: data.isFinal
     });
   });
 
