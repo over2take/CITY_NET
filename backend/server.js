@@ -887,9 +887,15 @@ io.on('connection', (socket) => {
       }
     });
 
-    // Check for user's existing rhombus to trigger appearing animation
-    db.get('SELECT id FROM locations WHERE shape = "rhombus" AND owner = ?', [info.userName], (err, row) => {
+    // Check for user's existing rhombus to restore it and trigger appearing animation
+    db.get('SELECT id, battle_map_id FROM locations WHERE shape = "rhombus" AND owner = ?', [info.userName], (err, row) => {
       if (row) {
+        // If they were purged on logout, automatically restore them to the city map
+        if (row.battle_map_id === -1) {
+            db.run('UPDATE locations SET battle_map_id = NULL, floor_index = NULL WHERE id = ?', [row.id], function(updateErr) {
+                if (!updateErr) emitUpdate({ isRhombusOnly: true });
+            });
+        }
         console.log(`Broadcasting rhombusAppearing for ID: ${row.id}, Owner: ${info.userName}`);
         io.emit('rhombusAppearing', { id: row.id, owner: info.userName });
       }
