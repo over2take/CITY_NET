@@ -37,10 +37,26 @@ function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapSc
             const hit = getHitPoint();
             if (hit) setStartPoint(hit);
         };
+        let lastEmit = 0;
         const onPointerMove = (e: PointerEvent) => {
             if (startPoint) {
                 const hit = getHitPoint();
-                if (hit) setCurrentPoint(hit);
+                if (hit) {
+                    setCurrentPoint(hit);
+                    const now = Date.now();
+                    if (socket && now - lastEmit > 50) {
+                        lastEmit = now;
+                        socket.emit('drawMeasurement', {
+                            start: { x: startPoint.x, z: startPoint.z },
+                            end: { x: hit.x, z: hit.z },
+                            color: color,
+                            owner: userName,
+                            map_scale_multiplier: mapScaleMultiplier,
+                            view: view,
+                            locationId: activeBattleMapData?.locationId
+                        });
+                    }
+                }
             }
         };
         const onPointerUp = (e: PointerEvent) => {
