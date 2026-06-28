@@ -164,6 +164,7 @@ db.serialize(() => {
   db.run(`ALTER TABLE locations ADD COLUMN hp_current INTEGER`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN hp_max INTEGER`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN hp_temp INTEGER`, (err) => {});
+  db.run(`ALTER TABLE locations ADD COLUMN map_scale_multiplier REAL DEFAULT 5`, (err) => {});
 
   db.run(`ALTER TABLE dice_rolls ADD COLUMN historyString TEXT`, (err) => {});
 
@@ -189,9 +190,14 @@ db.serialize(() => {
     floor_index INTEGER NOT NULL,
     rhombus_id INTEGER,
     rhombus_owner TEXT,
-    is_enemy INTEGER DEFAULT 0,
     x REAL NOT NULL,
-    z REAL NOT NULL
+    z REAL NOT NULL,
+    is_enemy INTEGER DEFAULT 0
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS global_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
   )`);
 });
 
