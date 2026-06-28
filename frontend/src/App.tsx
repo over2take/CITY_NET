@@ -69,7 +69,8 @@ function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapSc
                         owner: userName,
                         map_scale_multiplier: mapScaleMultiplier,
                         view: view,
-                        locationId: activeBattleMapData?.locationId
+                        locationId: activeBattleMapData?.locationId,
+                        isFinal: true
                     });
                 }
             }
@@ -123,7 +124,7 @@ function MeasurementVisualizer({ socket, view, activeBattleMapData, userName }: 
     useEffect(() => {
         if (!socket) return;
         const handleMeasurement = (data: any) => {
-            if (data.owner === userName) return; // Prevent duplicating own line and crashing Html portal
+            if (data.owner === userName && !data.isFinal) return; // Prevent duplicating own line and crashing Html portal during drawing
             if (data.view !== view) return;
             if (view === 'battle_map' && data.locationId !== activeBattleMapData?.locationId) return;
             setMeasurements(prev => {
