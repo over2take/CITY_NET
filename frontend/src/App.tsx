@@ -6885,6 +6885,9 @@ function App() {
     setRoadTrail([]);
     setCameraTarget(null);
     setShowAdminPanel(false);
+    setIsBankOpen(false);
+    setIsAdminPayOpen(false);
+    setAdminBankPlayer(null);
     
     // Reset Rhombus state but keep color for next login preference
     setRhombusState((p: any) => ({ ...p, active: false }));
