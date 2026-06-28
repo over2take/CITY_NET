@@ -1475,22 +1475,76 @@ app.use((req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   
-  // Sanity check for map_scale_multiplier persistence
-  db.run('INSERT INTO locations (name, x, y, z, map_scale_multiplier) VALUES (?, ?, ?, ?, ?)', ['StartupTest', 0, 0, 0, '[999]'], function(err) {
-    if (!err) {
-      const testId = this.lastID;
-      db.get('SELECT map_scale_multiplier FROM locations WHERE id = ?', [testId], (err2, row) => {
-        if (!err2 && row && row.map_scale_multiplier === '[999]') {
-          console.log('[SYSTEM_CHECK] map_scale_multiplier persistence passed.');
-        } else {
-          console.error('[SYSTEM_CHECK] map_scale_multiplier persistence FAILED! Received:', row ? row.map_scale_multiplier : 'undefined');
-        }
-        db.run('DELETE FROM locations WHERE id = ?', [testId]);
-      });
-    } else {
-      console.error('[SYSTEM_CHECK] Database insertion failed during sanity check:', err.message);
-    }
-  });
+  // Sanity checks on startup
+  const runSanityChecks = () => {
+    let passed = 0;
+    let failed = 0;
+    const report = (name, success, info = '') => {
+      if (success) {
+        console.log(`[SYSTEM_CHECK] PASS: ${name}`);
+        passed++;
+      } else {
+        console.error(`[SYSTEM_CHECK] FAIL: ${name} ${info}`);
+        failed++;
+      }
+    };
+
+    // Test 1: map_scale_multiplier persistence
+    db.run('INSERT INTO locations (name, x, y, z, map_scale_multiplier) VALUES (?, ?, ?, ?, ?)', ['StartupTest', 0, 0, 0, '[999]'], function(err) {
+      if (!err) {
+        const testId = this.lastID;
+        db.get('SELECT map_scale_multiplier FROM locations WHERE id = ?', [testId], (err2, row) => {
+          report('map_scale_multiplier persistence', !err2 && row && row.map_scale_multiplier === '[999]', err2 ? err2.message : `Received: ${row ? row.map_scale_multiplier : 'undefined'}`);
+          db.run('DELETE FROM locations WHERE id = ?', [testId]);
+        });
+      } else {
+        report('map_scale_multiplier persistence', false, 'Insert failed: ' + err.message);
+      }
+    });
+
+    // Test 2: hit points persistence
+    db.run('INSERT INTO locations (name, x, y, z, hp_current, hp_max, hp_temp) VALUES (?, ?, ?, ?, ?, ?, ?)', ['StartupTestHP', 0, 0, 0, 50, 100, 15], function(err) {
+      if (!err) {
+        const testId = this.lastID;
+        db.get('SELECT hp_current, hp_max, hp_temp FROM locations WHERE id = ?', [testId], (err2, row) => {
+          const success = !err2 && row && row.hp_current === 50 && row.hp_max === 100 && row.hp_temp === 15;
+          report('hit points persistence (hp_current, hp_max, hp_temp)', success, err2 ? err2.message : `Received: ${JSON.stringify(row)}`);
+          db.run('DELETE FROM locations WHERE id = ?', [testId]);
+        });
+      } else {
+        report('hit points persistence', false, 'Insert failed: ' + err.message);
+      }
+    });
+
+    // Test 3: user banking persistence
+    db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)', ['StartupTestUser', 5000.5, 125.25], function(err) {
+      if (!err) {
+        db.get('SELECT balance, debt FROM player_banks WHERE username = ?', ['StartupTestUser'], (err2, row) => {
+          const success = !err2 && row && row.balance === 5000.5 && row.debt === 125.25;
+          report('player banking persistence (balance, debt)', success, err2 ? err2.message : `Received: ${JSON.stringify(row)}`);
+          db.run('DELETE FROM player_banks WHERE username = ?', ['StartupTestUser']);
+        });
+      } else {
+        report('player banking persistence', false, 'Insert failed: ' + err.message);
+      }
+    });
+    
+    // Test 4: Battle Map constraints
+    db.run('INSERT INTO battle_maps (name, dimensions, is_active) VALUES (?, ?, ?)', ['StartupTestMap', '[10,10]', 0], function(err) {
+      if (!err) {
+        const testId = this.lastID;
+        db.get('SELECT name, dimensions, is_active FROM battle_maps WHERE id = ?', [testId], (err2, row) => {
+          const success = !err2 && row && row.name === 'StartupTestMap' && row.dimensions === '[10,10]';
+          report('battle_maps persistence (name, dimensions)', success, err2 ? err2.message : `Received: ${JSON.stringify(row)}`);
+          db.run('DELETE FROM battle_maps WHERE id = ?', [testId]);
+        });
+      } else {
+        report('battle_maps persistence', false, 'Insert failed: ' + err.message);
+      }
+    });
+  };
+
+  runSanityChecks();
 });
 
 
