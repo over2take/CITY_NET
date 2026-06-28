@@ -393,9 +393,9 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
             shape: 'rhombus',
             color: rhombusState.color,
             owner: userName,
-            hp_max: rhombusState.hp_max || 100,
-            hp_current: existing ? (rhombusState.hp_current ?? 100) : (rhombusState.hp_max || 100),
-            hp_temp: existing ? (rhombusState.hp_temp ?? 0) : 0,
+            hp_max: existing ? (existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
+            hp_current: existing ? (existing.hp_current ?? existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
+            hp_temp: existing ? (existing.hp_temp ?? 0) : 0,
             battle_map_id: null,
             floor_index: null
         };
@@ -7426,9 +7426,9 @@ function App() {
                           shape: 'rhombus',
                           color: rhombusState.color,
                           owner: userName,
-                          hp_max: rhombusState.hp_max || 100,
-                          hp_current: existing ? (rhombusState.hp_current ?? 100) : (rhombusState.hp_max || 100),
-                          hp_temp: existing ? (rhombusState.hp_temp ?? 0) : 0,
+                          hp_max: existing ? (existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
+                          hp_current: existing ? (existing.hp_current ?? existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
+                          hp_temp: existing ? (existing.hp_temp ?? 0) : 0,
                           battle_map_id: activeBattleMapData?.locationId || null,
                           floor_index: activeBattleMapData?.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
                       };
