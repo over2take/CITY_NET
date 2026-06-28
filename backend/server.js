@@ -1103,15 +1103,23 @@ io.on('connection', (socket) => {
     console.log(`Cinematic Purge Requested for ID: ${data.id}`);
     io.emit('rhombusFading', { id: data.id, owner: data.owner });
     
-    // Delay the actual deletion to allow the animation to play
+    // Delay the actual "hide" to allow the animation to play
     setTimeout(() => {
-        // SECURITY FIX: Enforce shape = 'rhombus' to prevent arbitrary building deletion
-        db.run('DELETE FROM locations WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
-            if (!err && this.changes > 0) {
-                recordAction('location_delete', { data: [{ id: data.id }] });
-                emitUpdate({ isRhombusOnly: true });
-            }
-        });
+        // SECURITY FIX: Hide the rhombus instead of deleting it to preserve health/banking data
+        if (data.id) {
+            db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
+                if (!err && this.changes > 0) {
+                    recordAction('location_update', { data: [{ id: data.id, battle_map_id: -1, floor_index: -1 }] });
+                    emitUpdate({ isRhombusOnly: true });
+                }
+            });
+        } else if (data.owner) {
+            db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE owner = ? AND shape = "rhombus"', [data.owner], function(err) {
+                if (!err && this.changes > 0) {
+                    emitUpdate({ isRhombusOnly: true });
+                }
+            });
+        }
     }, 3000); // 3 second animation window
   });
 
