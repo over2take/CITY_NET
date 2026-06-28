@@ -1318,7 +1318,7 @@ io.on('connection', (socket) => {
       const token = data.token;
       if (!token) return;
       jwt.verify(token, process.env.JWT_SECRET || 'cyberpunk_secret', (err, decoded) => {
-          if (err || decoded.role !== 'admin') return;
+          if (err || decoded.isTemporary) return;
           db.run('DELETE FROM dice_rolls', (err) => {
               if (err) console.error('Error purging dice rolls:', err);
               io.emit('diceRollHistory', []); // Clear frontend history
@@ -1386,7 +1386,7 @@ io.on('connection', (socket) => {
       if (!data || !data.token || !data.usernames || !data.totalAmount) return;
       
       jwt.verify(data.token, process.env.JWT_SECRET || 'cyberpunk_secret', (err, decoded) => {
-          if (err || decoded.role !== 'admin') return;
+          if (err || decoded.isTemporary) return;
           
           const count = data.usernames.length;
           if (count === 0) return;
@@ -1414,7 +1414,7 @@ io.on('connection', (socket) => {
       if (!data || !data.token || !data.username) return;
       
       jwt.verify(data.token, process.env.JWT_SECRET || 'cyberpunk_secret', (err, decoded) => {
-          if (err || decoded.role !== 'admin') return;
+          if (err || decoded.isTemporary) return;
           
           const balance = parseFloat(data.balance);
           const debt = parseFloat(data.debt);
