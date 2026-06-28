@@ -199,6 +199,12 @@ db.serialize(() => {
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS player_banks (
+    username TEXT PRIMARY KEY,
+    balance REAL DEFAULT 0.00,
+    debt REAL DEFAULT 0.00
+  )`);
 });
 
 module.exports = db;
