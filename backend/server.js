@@ -1492,10 +1492,10 @@ server.listen(PORT, '0.0.0.0', () => {
     let failed = 0;
     const report = (name, success, info = '') => {
       if (success) {
-        console.log(`[SYSTEM_CHECK] PASS: ${name}`);
+        console.log(`\x1b[32m[SYSTEM_CHECK] PASS:\x1b[0m ${name}`);
         passed++;
       } else {
-        console.error(`[SYSTEM_CHECK] FAIL: ${name} ${info}`);
+        console.error(`\x1b[31m[SYSTEM_CHECK] FAIL:\x1b[0m ${name} ${info}`);
         failed++;
       }
     };
@@ -1580,6 +1580,28 @@ server.listen(PORT, '0.0.0.0', () => {
     } else {
       report('measurement relay constraints', false, 'formatMeasurementPayload function not found in scope');
     }
+
+    // Test 7: Preserve health during generic location update (simulating PUT /api/locations/:id)
+    db.run('INSERT INTO locations (name, x, y, z, hp_current, hp_max, hp_temp) VALUES (?, ?, ?, ?, ?, ?, ?)', ['HealthPutTest', 0, 0, 0, 42, 100, 5], function(err) {
+      if (!err) {
+        const testId = this.lastID;
+        const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=?, battle_map_id=?, floor_index=?, map_scale_multiplier=? WHERE id=?`;
+        db.run(sql, ['HealthPutTest', '', '', 10, 0, 10, 3.75, 3.75, 3.75, 'box', '#ffffff', null, null, null, 0, 0, null, 0, 0, 0, null, 5, null, null, 5, testId], function(updateErr) {
+          if (!updateErr) {
+            db.get('SELECT hp_current, hp_max, hp_temp FROM locations WHERE id = ?', [testId], (err3, row3) => {
+              const success = !err3 && row3 && row3.hp_current === 42 && row3.hp_max === 100 && row3.hp_temp === 5;
+              report('preserve health during location PUT update', success, err3 ? err3.message : `Received: ${JSON.stringify(row3)}`);
+              db.run('DELETE FROM locations WHERE id = ?', [testId]);
+            });
+          } else {
+            report('preserve health during location PUT update', false, 'Update failed: ' + updateErr.message);
+            db.run('DELETE FROM locations WHERE id = ?', [testId]);
+          }
+        });
+      } else {
+        report('preserve health during location PUT update', false, 'Insert failed: ' + err.message);
+      }
+    });
   };
 
   runSanityChecks();
