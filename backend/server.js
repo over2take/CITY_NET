@@ -319,8 +319,9 @@ app.delete('/api/locations/:id', authenticate, (req, res) => {
 });
 
 app.put('/api/locations/:id', optionalAuthenticate, (req, res) => {
-  const { name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index } = req.body;
+  const { name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, map_scale_multiplier } = req.body;
   
+  console.log(`[DEBUG] PUT /api/locations/${req.params.id} map_scale_multiplier:`, map_scale_multiplier);
   if (name === undefined || x === undefined || y === undefined || z === undefined) {
     console.error('PUT Error: Missing required fields in body:', req.body);
     return res.status(400).json({ error: 'Missing required fields (name, x, y, z)' });
@@ -335,8 +336,8 @@ app.put('/api/locations/:id', optionalAuthenticate, (req, res) => {
       return res.status(401).json({ error: 'Access denied: Unauthenticated users can only update rhombuses.' });
     }
     
-    const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=?, battle_map_id=?, floor_index=? WHERE id=?`;
-    const params = [name, description, npcs, x, y, z, width, height, depth, shape || 'box', color, district_name || null, district_color || null, parent_id || null, isFavorite ? 1 : 0, isDanger ? 1 : 0, owner || null, rotation || 0, rotation_x || 0, rotation_z || 0, classification || null, polyCount || 5, battle_map_id || null, floor_index !== undefined ? floor_index : null, req.params.id];
+    const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=?, battle_map_id=?, floor_index=?, map_scale_multiplier=? WHERE id=?`;
+    const params = [name, description, npcs, x, y, z, width, height, depth, shape || 'box', color, district_name || null, district_color || null, parent_id || null, isFavorite ? 1 : 0, isDanger ? 1 : 0, owner || null, rotation || 0, rotation_x || 0, rotation_z || 0, classification || null, polyCount || 5, battle_map_id || null, floor_index !== undefined ? floor_index : null, map_scale_multiplier !== undefined ? map_scale_multiplier : oldRow.map_scale_multiplier, req.params.id];
     
     db.run(sql, params, function(err) {
       if (err) {
@@ -498,6 +499,21 @@ app.post('/api/locations/batch-district', authenticate, (req, res) => {
       emitUpdate();
       res.json({ message: 'District updated' });
     });
+  });
+});
+
+app.get('/api/settings', (req, res) => {
+  db.all('SELECT * FROM global_settings', (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.post('/api/settings', authenticate, (req, res) => {
+  const { key, value } = req.body;
+  db.run('INSERT INTO global_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=?', [key, value, value], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Settings updated' });
   });
 });
 
@@ -1225,6 +1241,20 @@ io.on('connection', (socket) => {
       size: data.size || 1,
       battle_map_id: data.battle_map_id || null,
       floor_index: data.floor_index !== undefined ? data.floor_index : null
+    });
+  });
+
+  socket.on('drawMeasurement', (data) => {
+    // data: { start: {x,y,z}, end: {x,y,z}, color, battle_map_id, floor_index, map_scale_multiplier }
+    const info = userSockets.get(socket.id);
+    io.emit('measurementUpdated', {
+      owner: info ? info.userName : socket.id,
+      start: data.start,
+      end: data.end,
+      color: data.color || '#00ff00',
+      battle_map_id: data.battle_map_id || null,
+      floor_index: data.floor_index !== undefined ? data.floor_index : null,
+      map_scale_multiplier: data.map_scale_multiplier || 5
     });
   });
 
