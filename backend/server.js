@@ -527,7 +527,7 @@ app.post('/api/login', (req, res) => {
     const validPass = await bcrypt.compare(password, user.password);
     if (!validPass) return res.status(400).json({ error: 'Invalid password' });
 
-    const token = jwt.sign({ id: user.id, username: user.username }, SECRET);
+    const token = jwt.sign({ id: user.id, username: user.username, role: 'admin', isTemporary: false }, SECRET);
     res.json({ token });
   });
 });
@@ -1390,7 +1390,8 @@ io.on('connection', (socket) => {
       
       jwt.verify(data.token, process.env.JWT_SECRET || 'cyberpunk_secret', (err, decoded) => {
           if (err) { console.error('adminPayPlayers JWT error:', err.message); return; }
-          if (decoded.isTemporary || decoded.role !== 'admin') { console.warn('adminPayPlayers rejected: temporary admin or invalid role'); return; }
+          // Legacy tokens don't have role or isTemporary. Only temporary tokens explicitly have isTemporary: true.
+          if (decoded.isTemporary || (decoded.role && decoded.role !== 'admin')) { console.warn('adminPayPlayers rejected: temporary admin or invalid role'); return; }
           
           const count = data.usernames.length;
           if (count === 0) return;
