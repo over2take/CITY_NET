@@ -909,7 +909,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
       )}
       
       {location.name && (isHovered || isSelected) && (
-          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
             <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #ff0000`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
                 {location.name}
             </div>
@@ -1122,7 +1122,7 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
       )}
       
       {location.name && (isHovered || isSelected) && (
-          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
             <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #00ccff`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
                 {location.name}
             </div>
@@ -1374,8 +1374,8 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
       
-      {location.name && (isOnline || isHovered || isSelected) && (
-          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+      {location.name && (isHovered || isSelected) && (
+          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
             <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid ${baseColor}`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
                 {location.name}
             </div>
