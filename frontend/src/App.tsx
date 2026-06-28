@@ -689,7 +689,7 @@ const getClosestPointOnRoads = (x: number, z: number, roadsList: any[], maxSnapD
     return { x, z };
 };
 
-const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap }: any) => {
+const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap, measureMode }: any) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const coreRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.PointLight>(null);
@@ -826,6 +826,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
 
   const handlePointerDown = (e: any) => {
       e.stopPropagation();
+      if (measureMode) return;
     dragDist.current = 0;
     
     // Only allow dragging if the user is an Admin
@@ -908,7 +909,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   );
 });
 
-const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap }: any) => {
+const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap, measureMode }: any) => {
   const groupRef = useRef<THREE.Group>(null);
   const meshGroupRef = useRef<THREE.Group>(null);
   const lightRef = useRef<THREE.PointLight>(null);
@@ -1040,6 +1041,7 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
 
   const handlePointerDown = (e: any) => {
       e.stopPropagation();
+      if (measureMode) return;
     dragDist.current = 0;
     if (!isAdmin) return;
     try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
@@ -1108,7 +1110,7 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
   );
 });
 
-const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, activeUsers, roads, isBattleMap, battleMapPos }: any) => {
+const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, activeUsers, roads, isBattleMap, battleMapPos, measureMode }: any) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const haloRef = useRef<THREE.Mesh>(null);
@@ -1268,6 +1270,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
 
   const handlePointerDown = (e: any) => {
       e.stopPropagation();
+      if (measureMode) return;
     dragDist.current = 0;
     
     // Only allow dragging if the user has management rights (Owner or Admin)
@@ -4228,7 +4231,7 @@ function DiceScene({ latestRoll }: any) {
                 
                 (rolls as number[]).forEach(val => {
                     const mesh = new THREE.Mesh(geometry, material);
-                    mesh.position.set((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, 0);
+                    mesh.position.set(xOffset + (Math.random() - 0.5), (Math.random() - 0.5), 2 + Math.random() * 2);
                     mesh.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
                     
                     let typeFriction = 0.88;
@@ -4299,8 +4302,9 @@ function DiceScene({ latestRoll }: any) {
                         // Only bounce if it hits the ground hard
                         if (c.userData.velocity.z < -2.0) {
                             c.userData.velocity.z *= -restitution;
-                            c.userData.velocity.x += (Math.random() - 0.5) * 4; // chaotic veer on bounce
-                            c.userData.velocity.y += (Math.random() - 0.5) * 4;
+                            const veer = Math.abs(c.userData.velocity.z) * 0.2;
+                            c.userData.velocity.x += (Math.random() - 0.5) * veer;
+                            c.userData.velocity.y += (Math.random() - 0.5) * veer;
                         } else {
                             c.userData.velocity.z = 0;
                         }
@@ -4347,9 +4351,8 @@ function DiceScene({ latestRoll }: any) {
                     const ny = dy / dist;
                     const nz = dz / dist;
                     
-                    // Stopped dice simulate high static friction (more mass)
-                    const m1 = c1.userData.stopped ? 8.0 : 1.0;
-                    const m2 = c2.userData.stopped ? 8.0 : 1.0;
+                    const m1 = 1.0;
+                    const m2 = 1.0;
                     const sumInvMass = (1/m1) + (1/m2);
                     
                     const pushRatio1 = (1/m1) / sumInvMass;
@@ -4385,11 +4388,11 @@ function DiceScene({ latestRoll }: any) {
                         c2.userData.velocity.y += impulseY * (1/m2);
                         c2.userData.velocity.z += impulseZ * (1/m2);
 
-                        // Only wake up a stopped die if it was hit hard enough to overcome static friction
-                        if (c1.userData.stopped && c1.userData.velocity.lengthSq() > 5.0) {
+                        // Wake up stopped dice if they get bumped
+                        if (c1.userData.stopped && c1.userData.velocity.lengthSq() > 0.5) {
                             c1.userData.stopped = false;
                         }
-                        if (c2.userData.stopped && c2.userData.velocity.lengthSq() > 5.0) {
+                        if (c2.userData.stopped && c2.userData.velocity.lengthSq() > 0.5) {
                             c2.userData.stopped = false;
                         }
                     }
@@ -7227,21 +7230,21 @@ function App() {
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
                 (view !== 'battle_map' && l.battle_map_id == null)
             )).map(loc => (
-              <PlayerRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} roads={roads} isBattleMap={view === 'battle_map'} />
+              <PlayerRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
             ))}
             {/* Dedicated Enemy Rhombus Rendering */}
             {locations.filter(l => l.shape === 'enemy_rhombus' && (
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
                 (view !== 'battle_map' && l.battle_map_id == null)
             )).map(loc => (
-              <EnemyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} />
+              <EnemyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
             ))}
             {/* Dedicated Friendly NPC Rendering */}
             {locations.filter(l => l.shape === 'friendly_rhombus' && (
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
                 (view !== 'battle_map' && l.battle_map_id == null)
             )).map(loc => (
-              <FriendlyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} />
+              <FriendlyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
             ))}
             {token && view === 'editor' && !editId && (
               <group ref={(group) => { if (group && targetObject !== group) { setTargetObject(group); editMeshRef.current = group; } }} position={[editData.x, editData.y, editData.z]}>
