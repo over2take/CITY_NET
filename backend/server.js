@@ -204,8 +204,8 @@ app.post('/api/locations', optionalAuthenticate, async (req, res) => {
       }
   }
 
-  const sql = `INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const sql = `INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp, map_scale_multiplier) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   
   db.serialize(() => {
     const results = [];
@@ -227,7 +227,8 @@ app.post('/api/locations', optionalAuthenticate, async (req, res) => {
         loc.battle_map_id || null, loc.floor_index !== undefined ? loc.floor_index : null,
         loc.hp_current !== undefined ? loc.hp_current : null,
         loc.hp_max !== undefined ? loc.hp_max : null,
-        loc.hp_temp !== undefined ? loc.hp_temp : null
+        loc.hp_temp !== undefined ? loc.hp_temp : null,
+        loc.map_scale_multiplier !== undefined ? loc.map_scale_multiplier : 5
       ], function(err) {
         if (err) {
           console.error(`Database error during insert at index ${index}:`, err.message);
@@ -526,7 +527,7 @@ app.post('/api/login', (req, res) => {
     const validPass = await bcrypt.compare(password, user.password);
     if (!validPass) return res.status(400).json({ error: 'Invalid password' });
 
-    const token = jwt.sign({ id: user.id, username: user.username }, SECRET);
+    const token = jwt.sign({ id: user.id, username: user.username, role: 'admin', isTemporary: false }, SECRET);
     res.json({ token });
   });
 });
@@ -550,15 +551,15 @@ app.post('/api/undo', authenticate, (req, res) => {
         const placeholders = payload.ids.map(() => '?').join(',');
         db.run(`DELETE FROM locations WHERE id IN (${placeholders})`, payload.ids, finishUndo);
       } else if (action.type === 'location_delete') {
-        const stmt = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        const stmt = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, map_scale_multiplier) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
         payload.data.forEach(loc => {
-          stmt.run([loc.id, loc.name, loc.description, loc.npcs, loc.x, loc.y, loc.z, loc.width, loc.height, loc.depth, loc.shape, loc.color, loc.district_name, loc.district_color, loc.parent_id, loc.isFavorite, loc.isDanger, loc.owner, loc.rotation, loc.rotation_x, loc.rotation_z, loc.classification, loc.polyCount]);
+          stmt.run([loc.id, loc.name, loc.description, loc.npcs, loc.x, loc.y, loc.z, loc.width, loc.height, loc.depth, loc.shape, loc.color, loc.district_name, loc.district_color, loc.parent_id, loc.isFavorite, loc.isDanger, loc.owner, loc.rotation, loc.rotation_x, loc.rotation_z, loc.classification, loc.polyCount, loc.map_scale_multiplier]);
         });
         stmt.finalize(finishUndo);
       } else if (action.type === 'location_update') {
         const d = payload.old_data;
-        const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=? WHERE id=?`;
-        db.run(sql, [d.name, d.description, d.npcs, d.x, d.y, d.z, d.width, d.height, d.depth, d.shape, d.color, d.district_name, d.district_color, d.parent_id, d.isFavorite, d.isDanger, d.owner, d.rotation, d.rotation_x, d.rotation_z, d.classification, d.polyCount, payload.id], finishUndo);
+        const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=?, map_scale_multiplier=? WHERE id=?`;
+        db.run(sql, [d.name, d.description, d.npcs, d.x, d.y, d.z, d.width, d.height, d.depth, d.shape, d.color, d.district_name, d.district_color, d.parent_id, d.isFavorite, d.isDanger, d.owner, d.rotation, d.rotation_x, d.rotation_z, d.classification, d.polyCount, d.map_scale_multiplier, payload.id], finishUndo);
       } else if (action.type === 'location_update_batch') {
         const stmt = db.prepare('UPDATE locations SET district_name=?, district_color=?, parent_id=? WHERE id=?');
         payload.data.forEach(item => {
@@ -700,10 +701,10 @@ app.post('/api/maps/load/:name', authenticate, (req, res) => {
         db.run('DELETE FROM roads');
 
         if (locations.length > 0) {
-          const stmtL = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          const stmtL = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp, map_scale_multiplier) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
           locations.forEach(l => {
-            stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.is_target, l.isFavorite, l.isDanger, l.owner, l.notifications_enabled, l.rotation, l.rotation_x, l.rotation_z, l.classification, l.polyCount, l.battle_map_id, l.floor_index, l.hp_current !== undefined ? l.hp_current : null, l.hp_max !== undefined ? l.hp_max : null, l.hp_temp !== undefined ? l.hp_temp : null]);
+            stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.is_target, l.isFavorite, l.isDanger, l.owner, l.notifications_enabled, l.rotation, l.rotation_x, l.rotation_z, l.classification, l.polyCount, l.battle_map_id, l.floor_index, l.hp_current !== undefined ? l.hp_current : null, l.hp_max !== undefined ? l.hp_max : null, l.hp_temp !== undefined ? l.hp_temp : null, l.map_scale_multiplier !== undefined ? l.map_scale_multiplier : 5]);
           });
           stmtL.finalize();
         }
@@ -729,10 +730,10 @@ app.post('/api/maps/load/:name', authenticate, (req, res) => {
         db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM roads) WHERE name="roads"');
         
         if (activeRhombuses && activeRhombuses.length > 0) {
-          const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp, map_scale_multiplier) 
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
           activeRhombuses.forEach(r => {
-            stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.rotation_x, r.rotation_z, r.classification, r.polyCount, r.battle_map_id, r.floor_index, r.hp_current !== undefined ? r.hp_current : null, r.hp_max !== undefined ? r.hp_max : null, r.hp_temp !== undefined ? r.hp_temp : null]);
+            stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.rotation_x, r.rotation_z, r.classification, r.polyCount, r.battle_map_id, r.floor_index, r.hp_current !== undefined ? r.hp_current : null, r.hp_max !== undefined ? r.hp_max : null, r.hp_temp !== undefined ? r.hp_temp : null, r.map_scale_multiplier !== undefined ? r.map_scale_multiplier : 5]);
           });
           stmtR.finalize();
         }
@@ -758,10 +759,10 @@ app.post('/api/maps/clear', authenticate, (req, res) => {
       db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="roads"');
 
       if (activeRhombuses && activeRhombuses.length > 0) {
-        const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp) 
-                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        const stmtR = db.prepare(`INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp, map_scale_multiplier) 
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
         activeRhombuses.forEach(r => {
-          stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.rotation_x, r.rotation_z, r.classification, r.polyCount, r.battle_map_id, r.floor_index, r.hp_current !== undefined ? r.hp_current : null, r.hp_max !== undefined ? r.hp_max : null, r.hp_temp !== undefined ? r.hp_temp : null]);
+          stmtR.run([r.name, r.description, r.npcs, r.x, r.y, r.z, r.width, r.height, r.depth, r.shape, r.color, r.district_name, r.district_color, r.parent_id, r.is_target, r.isFavorite, r.isDanger, r.owner, r.notifications_enabled, r.rotation, r.rotation_x, r.rotation_z, r.classification, r.polyCount, r.battle_map_id, r.floor_index, r.hp_current !== undefined ? r.hp_current : null, r.hp_max !== undefined ? r.hp_max : null, r.hp_temp !== undefined ? r.hp_temp : null, r.map_scale_multiplier !== undefined ? r.map_scale_multiplier : 5]);
         });
         stmtR.finalize();
       }
@@ -820,6 +821,19 @@ const broadcastActiveUsers = () => {
   io.emit('activeUsersUpdated', activeUsers);
 };
 
+const formatMeasurementPayload = (data, userName, socketId) => ({
+  owner: userName ? userName : socketId,
+  start: data.start,
+  end: data.end,
+  color: data.color || '#00ff00',
+  battle_map_id: data.battle_map_id || null,
+  floor_index: data.floor_index !== undefined ? data.floor_index : null,
+  map_scale_multiplier: data.map_scale_multiplier || 5,
+  view: data.view,
+  locationId: data.locationId,
+  isFinal: data.isFinal
+});
+
 io.on('connection', (socket) => {
   // Send initial dice roll history when requested
   socket.on('requestDiceHistory', () => {
@@ -873,9 +887,15 @@ io.on('connection', (socket) => {
       }
     });
 
-    // Check for user's existing rhombus to trigger appearing animation
-    db.get('SELECT id FROM locations WHERE shape = "rhombus" AND owner = ?', [info.userName], (err, row) => {
+    // Check for user's existing rhombus to restore it and trigger appearing animation
+    db.get('SELECT id, battle_map_id FROM locations WHERE shape = "rhombus" AND owner = ?', [info.userName], (err, row) => {
       if (row) {
+        // If they were purged on logout, automatically restore them to the city map
+        if (row.battle_map_id === -1) {
+            db.run('UPDATE locations SET battle_map_id = NULL, floor_index = NULL WHERE id = ?', [row.id], function(updateErr) {
+                if (!updateErr) emitUpdate({ isRhombusOnly: true });
+            });
+        }
         console.log(`Broadcasting rhombusAppearing for ID: ${row.id}, Owner: ${info.userName}`);
         io.emit('rhombusAppearing', { id: row.id, owner: info.userName });
       }
@@ -1089,15 +1109,23 @@ io.on('connection', (socket) => {
     console.log(`Cinematic Purge Requested for ID: ${data.id}`);
     io.emit('rhombusFading', { id: data.id, owner: data.owner });
     
-    // Delay the actual deletion to allow the animation to play
+    // Delay the actual "hide" to allow the animation to play
     setTimeout(() => {
-        // SECURITY FIX: Enforce shape = 'rhombus' to prevent arbitrary building deletion
-        db.run('DELETE FROM locations WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
-            if (!err && this.changes > 0) {
-                recordAction('location_delete', { data: [{ id: data.id }] });
-                emitUpdate({ isRhombusOnly: true });
-            }
-        });
+        // SECURITY FIX: Hide the rhombus instead of deleting it to preserve health/banking data
+        if (data.id) {
+            db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
+                if (!err && this.changes > 0) {
+                    recordAction('location_update', { data: [{ id: data.id, battle_map_id: -1, floor_index: -1 }] });
+                    emitUpdate({ isRhombusOnly: true });
+                }
+            });
+        } else if (data.owner) {
+            db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE owner = ? AND shape = "rhombus"', [data.owner], function(err) {
+                if (!err && this.changes > 0) {
+                    emitUpdate({ isRhombusOnly: true });
+                }
+            });
+        }
     }, 3000); // 3 second animation window
   });
 
@@ -1245,17 +1273,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('drawMeasurement', (data) => {
-    // data: { start: {x,y,z}, end: {x,y,z}, color, battle_map_id, floor_index, map_scale_multiplier }
     const info = userSockets.get(socket.id);
-    io.emit('measurementUpdated', {
-      owner: info ? info.userName : socket.id,
-      start: data.start,
-      end: data.end,
-      color: data.color || '#00ff00',
-      battle_map_id: data.battle_map_id || null,
-      floor_index: data.floor_index !== undefined ? data.floor_index : null,
-      map_scale_multiplier: data.map_scale_multiplier || 5
-    });
+    io.emit('measurementUpdated', formatMeasurementPayload(data, info ? info.userName : null, socket.id));
   });
 
   socket.on('requestDiceRoll', (data) => {
@@ -1318,10 +1337,125 @@ io.on('connection', (socket) => {
       const token = data.token;
       if (!token) return;
       jwt.verify(token, process.env.JWT_SECRET || 'cyberpunk_secret', (err, decoded) => {
-          if (err || decoded.role !== 'admin') return;
+          if (err || decoded.isTemporary) return;
           db.run('DELETE FROM dice_rolls', (err) => {
               if (err) console.error('Error purging dice rolls:', err);
               io.emit('diceRollHistory', []); // Clear frontend history
+          });
+      });
+  });
+
+  // --- BANKING SYSTEM ---
+  const sendBankUpdate = (username) => {
+      db.get('SELECT balance, debt FROM player_banks WHERE username = ?', [username], (err, row) => {
+          if (!err && row) {
+              io.emit('bankUpdate', { username, balance: row.balance, debt: row.debt });
+          } else if (!err && !row) {
+              db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, 0, 0)', [username], () => {
+                  io.emit('bankUpdate', { username, balance: 0, debt: 0 });
+              });
+          }
+      });
+  };
+
+  socket.on('requestBankBalance', (data) => {
+      if (data && data.username) {
+          sendBankUpdate(data.username);
+      }
+  });
+
+  socket.on('withdrawFunds', (data) => {
+      if (!data || !data.username || !data.amount) return;
+      const amount = parseFloat(data.amount);
+      if (isNaN(amount) || amount <= 0) return;
+      
+      db.run('UPDATE player_banks SET balance = balance - ? WHERE username = ?', [amount, data.username], (err) => {
+          if (!err) sendBankUpdate(data.username);
+      });
+  });
+
+  socket.on('borrowFunds', (data) => {
+      if (!data || !data.username || !data.amount) return;
+      const amount = parseFloat(data.amount);
+      if (isNaN(amount) || amount <= 0) return;
+      
+      db.run('UPDATE player_banks SET debt = debt + ? WHERE username = ?', [amount, data.username], (err) => {
+          if (!err) sendBankUpdate(data.username);
+      });
+  });
+
+  socket.on('payDebt', (data) => {
+      if (!data || !data.username || !data.amount) return;
+      let amount = parseFloat(data.amount);
+      if (isNaN(amount) || amount <= 0) return;
+      
+      db.get('SELECT balance, debt FROM player_banks WHERE username = ?', [data.username], (err, row) => {
+          if (err || !row) return;
+          if (amount > row.balance) amount = row.balance;
+          if (amount > row.debt) amount = row.debt;
+          if (amount <= 0) return;
+
+          db.run('UPDATE player_banks SET balance = balance - ?, debt = debt - ? WHERE username = ?', [amount, amount, data.username], (err2) => {
+              if (!err2) sendBankUpdate(data.username);
+          });
+      });
+  });
+
+  socket.on('adminPayPlayers', (data) => {
+      console.log('adminPayPlayers called with data:', data);
+      if (!data || !data.token || !Array.isArray(data.usernames) || data.totalAmount === undefined) return;
+      
+      jwt.verify(data.token, process.env.JWT_SECRET || 'cyberpunk_secret', (err, decoded) => {
+          if (err) { console.error('adminPayPlayers JWT error:', err.message); return; }
+          // Legacy tokens don't have role or isTemporary. Only temporary tokens explicitly have isTemporary: true.
+          if (decoded.isTemporary || (decoded.role && decoded.role !== 'admin')) { console.warn('adminPayPlayers rejected: temporary admin or invalid role'); return; }
+          
+          const count = data.usernames.length;
+          if (count === 0) return;
+          
+          const amountPerPlayer = Math.ceil((parseFloat(data.totalAmount) / count) * 100) / 100;
+          console.log(`adminPayPlayers paying ${amountPerPlayer} to each of ${count} players`);
+
+          if (isNaN(amountPerPlayer) || amountPerPlayer <= 0) return;
+          
+          data.usernames.forEach(uname => {
+              db.get('SELECT username FROM player_banks WHERE username = ?', [uname], (err, row) => {
+                  if (row) {
+                      db.run('UPDATE player_banks SET balance = COALESCE(balance, 0) + ? WHERE username = ?', [amountPerPlayer, uname], (err) => {
+                          if (err) console.error('adminPayPlayers UPDATE error:', err);
+                          sendBankUpdate(uname);
+                      });
+                  } else {
+                      db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, 0)', [uname, amountPerPlayer], (err) => {
+                          if (err) console.error('adminPayPlayers INSERT error:', err);
+                          sendBankUpdate(uname);
+                      });
+                  }
+              });
+          });
+      });
+  });
+
+  socket.on('adminUpdateBank', (data) => {
+      if (!data || !data.token || !data.username) return;
+      
+      jwt.verify(data.token, process.env.JWT_SECRET || 'cyberpunk_secret', (err, decoded) => {
+          if (err || decoded.isTemporary) return;
+          
+          const balance = parseFloat(data.balance);
+          const debt = parseFloat(data.debt);
+          if (isNaN(balance) || isNaN(debt)) return;
+          
+          db.get('SELECT username FROM player_banks WHERE username = ?', [data.username], (err2, row) => {
+              if (row) {
+                  db.run('UPDATE player_banks SET balance = ?, debt = ? WHERE username = ?', [balance, debt, data.username], () => {
+                      sendBankUpdate(data.username);
+                  });
+              } else {
+                  db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)', [data.username, balance, debt], () => {
+                      sendBankUpdate(data.username);
+                  });
+              }
           });
       });
   });
@@ -1365,6 +1499,147 @@ app.use((req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // Sanity checks on startup
+  const runSanityChecks = () => {
+    let passed = 0;
+    let failed = 0;
+    const report = (name, success, info = '') => {
+      if (success) {
+        console.log(`\x1b[32m[SYSTEM_CHECK] PASS:\x1b[0m ${name}`);
+        passed++;
+      } else {
+        console.error(`\x1b[31m[SYSTEM_CHECK] FAIL:\x1b[0m ${name} ${info}`);
+        failed++;
+      }
+    };
+
+    // Test 1: map_scale_multiplier persistence
+    db.run('INSERT INTO locations (name, x, y, z, map_scale_multiplier) VALUES (?, ?, ?, ?, ?)', ['StartupTest', 0, 0, 0, '[999]'], function(err) {
+      if (!err) {
+        const testId = this.lastID;
+        db.get('SELECT map_scale_multiplier FROM locations WHERE id = ?', [testId], (err2, row) => {
+          report('map_scale_multiplier persistence', !err2 && row && row.map_scale_multiplier === '[999]', err2 ? err2.message : `Received: ${row ? row.map_scale_multiplier : 'undefined'}`);
+          db.run('DELETE FROM locations WHERE id = ?', [testId]);
+        });
+      } else {
+        report('map_scale_multiplier persistence', false, 'Insert failed: ' + err.message);
+      }
+    });
+
+    // Test 2: hit points persistence
+    db.run('INSERT INTO locations (name, x, y, z, hp_current, hp_max, hp_temp) VALUES (?, ?, ?, ?, ?, ?, ?)', ['StartupTestHP', 0, 0, 0, 50, 100, 15], function(err) {
+      if (!err) {
+        const testId = this.lastID;
+        db.get('SELECT hp_current, hp_max, hp_temp FROM locations WHERE id = ?', [testId], (err2, row) => {
+          const success = !err2 && row && row.hp_current === 50 && row.hp_max === 100 && row.hp_temp === 15;
+          report('hit points persistence (hp_current, hp_max, hp_temp)', success, err2 ? err2.message : `Received: ${JSON.stringify(row)}`);
+          db.run('DELETE FROM locations WHERE id = ?', [testId]);
+        });
+      } else {
+        report('hit points persistence', false, 'Insert failed: ' + err.message);
+      }
+    });
+
+    // Test 3: user banking persistence & payment math
+    db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)', ['StartupTestUser', 5000.5, 125.25], function(err) {
+      if (!err) {
+        db.run('UPDATE player_banks SET balance = COALESCE(balance, 0) + ? WHERE username = ?', [200.25, 'StartupTestUser'], (updateErr) => {
+          if (!updateErr) {
+            db.get('SELECT balance, debt FROM player_banks WHERE username = ?', ['StartupTestUser'], (err2, row) => {
+              const success = !err2 && row && row.balance === 5200.75 && row.debt === 125.25;
+              report('player banking math & persistence (COALESCE)', success, err2 ? err2.message : `Received balance: ${row?.balance}`);
+              db.run('DELETE FROM player_banks WHERE username = ?', ['StartupTestUser']);
+            });
+          } else {
+            report('player banking math & persistence (COALESCE)', false, 'Update math failed: ' + updateErr.message);
+            db.run('DELETE FROM player_banks WHERE username = ?', ['StartupTestUser']);
+          }
+        });
+      } else {
+        report('player banking persistence', false, 'Insert failed: ' + err.message);
+      }
+    });
+    
+    // Test 4: Battle Map constraints
+    db.run('INSERT INTO battle_maps (location_id, designation, image_url, order_index) VALUES (?, ?, ?, ?)', [99999, 'TestLevel', 'http://test.com', 0], function(err) {
+      if (!err) {
+        const testId = this.lastID;
+        db.get('SELECT designation, image_url FROM battle_maps WHERE id = ?', [testId], (err2, row) => {
+          const success = !err2 && row && row.designation === 'TestLevel' && row.image_url === 'http://test.com';
+          report('battle_maps persistence (designation, image_url)', success, err2 ? err2.message : `Received: ${JSON.stringify(row)}`);
+          db.run('DELETE FROM battle_maps WHERE id = ?', [testId]);
+        });
+      } else {
+        report('battle_maps persistence', false, 'Insert failed: ' + err.message);
+      }
+    });
+
+    // Test 5: Admin Login JWT generation
+    try {
+      const testToken = jwt.sign({ id: 999, username: 'testadmin', role: 'admin', isTemporary: false }, SECRET);
+      const decoded = jwt.verify(testToken, process.env.JWT_SECRET || 'cyberpunk_secret');
+      const success = decoded && decoded.role === 'admin' && decoded.isTemporary === false;
+      report('admin login JWT payload constraints', success, success ? '' : 'Token missing required role or isTemporary flags');
+    } catch (e) {
+      report('admin login JWT payload constraints', false, 'JWT verification threw an error: ' + e.message);
+    }
+    
+    // Test 6: Measurement formatting (isFinal propagation)
+    const mockMeasurement = { start: {x: 0, z: 0}, end: {x: 10, z: 10}, isFinal: true, map_scale_multiplier: 5 };
+    if (typeof formatMeasurementPayload === 'function') {
+      const formatted = formatMeasurementPayload(mockMeasurement, 'tester', 'socket123');
+      const mSuccess = formatted.owner === 'tester' && formatted.isFinal === true && formatted.color === '#00ff00';
+      report('measurement relay constraints (isFinal, formatting)', mSuccess, mSuccess ? '' : `Failed relay formatting: ${JSON.stringify(formatted)}`);
+    } else {
+      report('measurement relay constraints', false, 'formatMeasurementPayload function not found in scope');
+    }
+
+    // Test 7: Preserve health during generic location update (simulating PUT /api/locations/:id)
+    db.run('INSERT INTO locations (name, x, y, z, hp_current, hp_max, hp_temp) VALUES (?, ?, ?, ?, ?, ?, ?)', ['HealthPutTest', 0, 0, 0, 42, 100, 5], function(err) {
+      if (!err) {
+        const testId = this.lastID;
+        const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=?, battle_map_id=?, floor_index=?, map_scale_multiplier=? WHERE id=?`;
+        db.run(sql, ['HealthPutTest', '', '', 10, 0, 10, 3.75, 3.75, 3.75, 'box', '#ffffff', null, null, null, 0, 0, null, 0, 0, 0, null, 5, null, null, 5, testId], function(updateErr) {
+          if (!updateErr) {
+            db.get('SELECT hp_current, hp_max, hp_temp FROM locations WHERE id = ?', [testId], (err3, row3) => {
+              const success = !err3 && row3 && row3.hp_current === 42 && row3.hp_max === 100 && row3.hp_temp === 5;
+              report('preserve health during location PUT update', success, err3 ? err3.message : `Received: ${JSON.stringify(row3)}`);
+              db.run('DELETE FROM locations WHERE id = ?', [testId]);
+            });
+          } else {
+            report('preserve health during location PUT update', false, 'Update failed: ' + updateErr.message);
+            db.run('DELETE FROM locations WHERE id = ?', [testId]);
+          }
+        });
+      } else {
+        report('preserve health during location PUT update', false, 'Insert failed: ' + err.message);
+      }
+    });
+
+    // Test 8: Preserve health during rhombus purge (logout/cinematic purge)
+    db.run('INSERT INTO locations (name, x, y, z, shape, hp_current, hp_max, hp_temp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', ['PurgeTest', 0, 0, 0, 'rhombus', 88, 100, 0], function(err) {
+      if (!err) {
+        const testId = this.lastID;
+        db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE id = ? AND shape = "rhombus"', [testId], function(updateErr) {
+          if (!updateErr && this.changes > 0) {
+            db.get('SELECT hp_current, battle_map_id FROM locations WHERE id = ?', [testId], (err3, row3) => {
+              const success = !err3 && row3 && row3.hp_current === 88 && row3.battle_map_id === -1;
+              report('preserve health during cinematic purge', success, err3 ? err3.message : `Row state: ${JSON.stringify(row3)}`);
+              db.run('DELETE FROM locations WHERE id = ?', [testId]);
+            });
+          } else {
+            report('preserve health during cinematic purge', false, 'Purge update failed or row not found');
+            db.run('DELETE FROM locations WHERE id = ?', [testId]);
+          }
+        });
+      } else {
+        report('preserve health during cinematic purge', false, 'Insert failed: ' + err.message);
+      }
+    });
+  };
+
+  runSanityChecks();
 });
 
 
