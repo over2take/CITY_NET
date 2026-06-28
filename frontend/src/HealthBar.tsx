@@ -109,7 +109,8 @@ export const HealthBar: React.FC<HealthBarProps> = ({ hpCurrent, hpMax, hpTemp =
           fragmentShader={fragmentShader}
           uniforms={uniforms}
           transparent={true}
-          depthTest={false}
+          depthTest={true}
+          depthWrite={false}
         />
       </mesh>
 
@@ -122,7 +123,8 @@ export const HealthBar: React.FC<HealthBarProps> = ({ hpCurrent, hpMax, hpTemp =
             fragmentShader={fragmentShader}
             uniforms={tempUniforms}
             transparent={true}
-            depthTest={false}
+            depthTest={true}
+            depthWrite={false}
           />
         </mesh>
       )}
