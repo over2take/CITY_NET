@@ -1474,6 +1474,23 @@ app.use((req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // Sanity check for map_scale_multiplier persistence
+  db.run('INSERT INTO locations (name, x, y, z, map_scale_multiplier) VALUES (?, ?, ?, ?, ?)', ['StartupTest', 0, 0, 0, '[999]'], function(err) {
+    if (!err) {
+      const testId = this.lastID;
+      db.get('SELECT map_scale_multiplier FROM locations WHERE id = ?', [testId], (err2, row) => {
+        if (!err2 && row && row.map_scale_multiplier === '[999]') {
+          console.log('[SYSTEM_CHECK] map_scale_multiplier persistence passed.');
+        } else {
+          console.error('[SYSTEM_CHECK] map_scale_multiplier persistence FAILED! Received:', row ? row.map_scale_multiplier : 'undefined');
+        }
+        db.run('DELETE FROM locations WHERE id = ?', [testId]);
+      });
+    } else {
+      console.error('[SYSTEM_CHECK] Database insertion failed during sanity check:', err.message);
+    }
+  });
 });
 
 
