@@ -1530,12 +1530,12 @@ server.listen(PORT, '0.0.0.0', () => {
     });
     
     // Test 4: Battle Map constraints
-    db.run('INSERT INTO battle_maps (name, dimensions, is_active) VALUES (?, ?, ?)', ['StartupTestMap', '[10,10]', 0], function(err) {
+    db.run('INSERT INTO battle_maps (location_id, designation, image_url, order_index) VALUES (?, ?, ?, ?)', [99999, 'TestLevel', 'http://test.com', 0], function(err) {
       if (!err) {
         const testId = this.lastID;
-        db.get('SELECT name, dimensions, is_active FROM battle_maps WHERE id = ?', [testId], (err2, row) => {
-          const success = !err2 && row && row.name === 'StartupTestMap' && row.dimensions === '[10,10]';
-          report('battle_maps persistence (name, dimensions)', success, err2 ? err2.message : `Received: ${JSON.stringify(row)}`);
+        db.get('SELECT designation, image_url FROM battle_maps WHERE id = ?', [testId], (err2, row) => {
+          const success = !err2 && row && row.designation === 'TestLevel' && row.image_url === 'http://test.com';
+          report('battle_maps persistence (designation, image_url)', success, err2 ? err2.message : `Received: ${JSON.stringify(row)}`);
           db.run('DELETE FROM battle_maps WHERE id = ?', [testId]);
         });
       } else {
