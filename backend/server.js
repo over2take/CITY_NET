@@ -1385,25 +1385,31 @@ io.on('connection', (socket) => {
   });
 
   socket.on('adminPayPlayers', (data) => {
-      if (!data || !data.token || !data.usernames || !data.totalAmount) return;
+      console.log('adminPayPlayers called with data:', data);
+      if (!data || !data.token || !Array.isArray(data.usernames) || data.totalAmount === undefined) return;
       
       jwt.verify(data.token, process.env.JWT_SECRET || 'cyberpunk_secret', (err, decoded) => {
-          if (err || decoded.isTemporary) return;
+          if (err) { console.error('adminPayPlayers JWT error:', err.message); return; }
+          if (decoded.isTemporary || decoded.role !== 'admin') { console.warn('adminPayPlayers rejected: temporary admin or invalid role'); return; }
           
           const count = data.usernames.length;
           if (count === 0) return;
           
           const amountPerPlayer = Math.ceil((parseFloat(data.totalAmount) / count) * 100) / 100;
+          console.log(`adminPayPlayers paying ${amountPerPlayer} to each of ${count} players`);
+
           if (isNaN(amountPerPlayer) || amountPerPlayer <= 0) return;
           
           data.usernames.forEach(uname => {
               db.get('SELECT username FROM player_banks WHERE username = ?', [uname], (err, row) => {
                   if (row) {
-                      db.run('UPDATE player_banks SET balance = balance + ? WHERE username = ?', [amountPerPlayer, uname], () => {
+                      db.run('UPDATE player_banks SET balance = COALESCE(balance, 0) + ? WHERE username = ?', [amountPerPlayer, uname], (err) => {
+                          if (err) console.error('adminPayPlayers UPDATE error:', err);
                           sendBankUpdate(uname);
                       });
                   } else {
-                      db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, 0)', [uname, amountPerPlayer], () => {
+                      db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, 0)', [uname, amountPerPlayer], (err) => {
+                          if (err) console.error('adminPayPlayers INSERT error:', err);
                           sendBankUpdate(uname);
                       });
                   }
