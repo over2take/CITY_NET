@@ -5849,7 +5849,7 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
               </svg>
             </button>
             <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} title="CITY_NET // BANK">
-              <img src={creditsIcon} alt="BANK" style={{ width: '24px', height: '24px', filter: 'brightness(0) invert(1)' }} />
+              <div style={{ width: '24px', height: '24px', backgroundColor: 'currentColor', WebkitMaskImage: `url(${creditsIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }} />
             </button>
         </div>
         <div className="rail-bottom" style={{ paddingBottom: '20px', display: 'flex', justifyContent: 'center' }}>
