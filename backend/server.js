@@ -1524,13 +1524,20 @@ server.listen(PORT, '0.0.0.0', () => {
       }
     });
 
-    // Test 3: user banking persistence
+    // Test 3: user banking persistence & payment math
     db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)', ['StartupTestUser', 5000.5, 125.25], function(err) {
       if (!err) {
-        db.get('SELECT balance, debt FROM player_banks WHERE username = ?', ['StartupTestUser'], (err2, row) => {
-          const success = !err2 && row && row.balance === 5000.5 && row.debt === 125.25;
-          report('player banking persistence (balance, debt)', success, err2 ? err2.message : `Received: ${JSON.stringify(row)}`);
-          db.run('DELETE FROM player_banks WHERE username = ?', ['StartupTestUser']);
+        db.run('UPDATE player_banks SET balance = COALESCE(balance, 0) + ? WHERE username = ?', [200.25, 'StartupTestUser'], (updateErr) => {
+          if (!updateErr) {
+            db.get('SELECT balance, debt FROM player_banks WHERE username = ?', ['StartupTestUser'], (err2, row) => {
+              const success = !err2 && row && row.balance === 5200.75 && row.debt === 125.25;
+              report('player banking math & persistence (COALESCE)', success, err2 ? err2.message : `Received balance: ${row?.balance}`);
+              db.run('DELETE FROM player_banks WHERE username = ?', ['StartupTestUser']);
+            });
+          } else {
+            report('player banking math & persistence (COALESCE)', false, 'Update math failed: ' + updateErr.message);
+            db.run('DELETE FROM player_banks WHERE username = ?', ['StartupTestUser']);
+          }
         });
       } else {
         report('player banking persistence', false, 'Insert failed: ' + err.message);
@@ -1550,6 +1557,16 @@ server.listen(PORT, '0.0.0.0', () => {
         report('battle_maps persistence', false, 'Insert failed: ' + err.message);
       }
     });
+
+    // Test 5: Admin Login JWT generation
+    try {
+      const testToken = jwt.sign({ id: 999, username: 'testadmin', role: 'admin', isTemporary: false }, SECRET);
+      const decoded = jwt.verify(testToken, process.env.JWT_SECRET || 'cyberpunk_secret');
+      const success = decoded && decoded.role === 'admin' && decoded.isTemporary === false;
+      report('admin login JWT payload constraints', success, success ? '' : 'Token missing required role or isTemporary flags');
+    } catch (e) {
+      report('admin login JWT payload constraints', false, 'JWT verification threw an error: ' + e.message);
+    }
   };
 
   runSanityChecks();
