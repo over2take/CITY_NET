@@ -821,6 +821,19 @@ const broadcastActiveUsers = () => {
   io.emit('activeUsersUpdated', activeUsers);
 };
 
+const formatMeasurementPayload = (data, userName, socketId) => ({
+  owner: userName ? userName : socketId,
+  start: data.start,
+  end: data.end,
+  color: data.color || '#00ff00',
+  battle_map_id: data.battle_map_id || null,
+  floor_index: data.floor_index !== undefined ? data.floor_index : null,
+  map_scale_multiplier: data.map_scale_multiplier || 5,
+  view: data.view,
+  locationId: data.locationId,
+  isFinal: data.isFinal
+});
+
 io.on('connection', (socket) => {
   // Send initial dice roll history when requested
   socket.on('requestDiceHistory', () => {
@@ -1242,22 +1255,6 @@ io.on('connection', (socket) => {
       size: data.size || 1,
       battle_map_id: data.battle_map_id || null,
       floor_index: data.floor_index !== undefined ? data.floor_index : null
-    });
-  });
-
-  const formatMeasurementPayload = (data, userName, socketId) => ({
-    owner: userName ? userName : socketId,
-    start: data.start,
-    end: data.end,
-    color: data.color || '#00ff00',
-    battle_map_id: data.battle_map_id || null,
-    floor_index: data.floor_index !== undefined ? data.floor_index : null,
-    map_scale_multiplier: data.map_scale_multiplier || 5,
-    view: data.view,
-    locationId: data.locationId,
-    isFinal: data.isFinal
-  });
-
   socket.on('drawMeasurement', (data) => {
     const info = userSockets.get(socket.id);
     io.emit('measurementUpdated', formatMeasurementPayload(data, info ? info.userName : null, socket.id));
