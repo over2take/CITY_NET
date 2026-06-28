@@ -205,6 +205,7 @@ import paperFillIcon from './assets/lets-icons--paper-fill.svg';
 import paperLightIcon from './assets/lets-icons--paper-light.svg';
 import eyeIcon from './assets/oui--eye.svg';
 import eyeClosedIcon from './assets/oui--eye-closed.svg';
+import creditsIcon from './assets/Credits.svg';
 import './App.css';
 
 const messages = [
@@ -2808,7 +2809,7 @@ function AdminPanel({
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
-    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData
+    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -2879,6 +2880,7 @@ function AdminPanel({
            <button style={{ padding: '10px', backgroundColor: '#5500ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleSaveDefault}>SAVE_DEFAULT</button>
            <button style={{ padding: '10px', backgroundColor: '#aa00ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleLoadDefault}>LOAD_DEFAULT</button>
         </div>
+        <button className="utility-btn" onClick={() => setIsAdminPayOpen(true)} style={{ width: '100%', marginBottom: '10px' }}>PAY_PLAYERS</button>
         <button className="utility-btn danger-btn" onClick={() => {
             onLogout();
         }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>
@@ -3417,6 +3419,7 @@ function AdminPanel({
               <div key={loc.id} className={`list-item ${selectedLocation?.id === loc.id ? 'selected' : ''}`} onClick={() => setSelectedLocation(loc)} style={{cursor: 'pointer', paddingLeft: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px'}}><div style={{display: 'flex', alignItems: 'center', gap: '10px', flex: 1, overflow: 'hidden'}}><input type="checkbox" checked={selectedIds.includes(loc.id)} onChange={() => toggleSelection(loc.id)} onClick={(e) => e.stopPropagation()} /><span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{getStructLabel(loc)}</span></div>{!isBatchSelecting && <div style={{display: 'flex', gap: '5px'}}><button className="upload-btn" style={{padding: '2px 5px', fontSize: '0.6rem', width: 'auto'}} onClick={(e) => { e.stopPropagation(); startEdit(loc); }}>EDIT</button><button className="upload-btn danger-btn" style={{padding: '2px 5px', fontSize: '0.6rem', width: 'auto'}} onClick={(e) => { e.stopPropagation(); setDeleteTarget(loc); }}>DEL</button></div>}</div>
             ))}
           </div>
+          <button onClick={() => setIsAdminPayOpen(true)} className="upload-btn" style={{ width: '100%', marginBottom: '10px', backgroundColor: '#00ff66', color: '#000' }}>PAY_PLAYERS</button>
           <button onClick={onLogout} className="logout-btn">EXIT_ADMIN_MODE</button>
         </>
       )}
@@ -4709,6 +4712,170 @@ function DiceTrayWindow({ pos, setPos, onClose, socketRef }: any) {
   );
 }
 
+function AdminBankWindow({ pos, setPos, onClose, targetUser, socket, token }: any) {
+    const [bankData, setBankData] = useState({ balance: 0, debt: 0 });
+    const [balInput, setBalInput] = useState('');
+    const [debtInput, setDebtInput] = useState('');
+    
+    useEffect(() => {
+        const handleUpdate = (data: any) => {
+            if (data.username === targetUser) {
+                setBankData({ balance: data.balance, debt: data.debt });
+                setBalInput(data.balance.toString());
+                setDebtInput(data.debt.toString());
+            }
+        };
+        socket.on('bankUpdate', handleUpdate);
+        socket.emit('requestBankBalance', { username: targetUser });
+        return () => socket.off('bankUpdate', handleUpdate);
+    }, [targetUser, socket]);
+
+    const handleSave = () => {
+        const balance = parseFloat(balInput);
+        const debt = parseFloat(debtInput);
+        if (!isNaN(balance) && !isNaN(debt)) {
+            socket.emit('adminUpdateBank', { token, username: targetUser, balance, debt });
+            onClose();
+        }
+    };
+
+    return (
+        <DraggableWindow title={`ADMIN BANK: ${targetUser}`} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+            <div style={{ padding: '10px' }}>
+                <div style={{ marginBottom: '10px' }}>
+                    <label style={{ color: '#00ff66', display: 'block', marginBottom: '5px' }}>Balance</label>
+                    <input type="number" step="1" value={balInput} onChange={e => setBalInput(e.target.value)} style={{ width: '100%', padding: '5px', background: '#000', color: '#fff', border: '1px solid #333' }} />
+                </div>
+                <div style={{ marginBottom: '15px' }}>
+                    <label style={{ color: '#ff0044', display: 'block', marginBottom: '5px' }}>Debt</label>
+                    <input type="number" step="1" value={debtInput} onChange={e => setDebtInput(e.target.value)} style={{ width: '100%', padding: '5px', background: '#000', color: '#fff', border: '1px solid #333' }} />
+                </div>
+                <button className="panel-btn" style={{ width: '100%' }} onClick={handleSave}>SAVE CHANGES</button>
+            </div>
+        </DraggableWindow>
+    );
+}
+
+function AdminPayWindow({ pos, setPos, onClose, socket, token, activeUsers }: any) {
+    const [amount, setAmount] = useState('');
+    const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+    
+    const allUsers = (activeUsers || []).map((u: any) => u.userName).filter(Boolean);
+
+    const toggleUser = (u: string) => {
+        setSelectedUsers(prev => prev.includes(u) ? prev.filter(x => x !== u) : [...prev, u]);
+    };
+
+    const handlePay = () => {
+        const total = parseFloat(amount);
+        if (!isNaN(total) && total > 0 && selectedUsers.length > 0) {
+            socket.emit('adminPayPlayers', { token, usernames: selectedUsers, totalAmount: total });
+            onClose();
+        }
+    };
+
+    const handleDivideAll = () => {
+        const total = parseFloat(amount);
+        if (!isNaN(total) && total > 0 && allUsers.length > 0) {
+            socket.emit('adminPayPlayers', { token, usernames: allUsers, totalAmount: total });
+            onClose();
+        }
+    };
+
+    return (
+        <DraggableWindow title="ADMIN // PAY_PLAYERS" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+            <div style={{ padding: '10px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', color: '#00ff66' }}>Total Amount</label>
+                <input type="number" step="1" min="1" value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '15px', background: '#000', color: '#fff', border: '1px solid #333' }} />
+                
+                <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #333', padding: '5px', marginBottom: '10px', background: 'rgba(0,0,0,0.5)' }}>
+                    {allUsers.length === 0 ? <div style={{ color: '#888', fontSize: '12px' }}>No users online.</div> : allUsers.map((u: string) => (
+                        <div key={u} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
+                            <input type="checkbox" checked={selectedUsers.includes(u)} onChange={() => toggleUser(u)} />
+                            <span style={{ color: '#fff' }}>{u}</span>
+                        </div>
+                    ))}
+                </div>
+                
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button className="panel-btn" style={{ flex: 1 }} onClick={handleDivideAll} disabled={allUsers.length === 0}>DIVIDE_ALL</button>
+                    <button className="panel-btn" style={{ flex: 1 }} onClick={handlePay} disabled={selectedUsers.length === 0}>PAY_SELECTED</button>
+                </div>
+            </div>
+        </DraggableWindow>
+    );
+}
+
+function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOpen }: any) {
+  const [activePrompt, setActivePrompt] = useState<'withdraw' | 'borrow' | 'pay' | null>(null);
+  const [promptAmount, setPromptAmount] = useState('');
+
+  if (!isBankOpen) return null;
+
+  const handleAction = () => {
+      const amount = parseFloat(promptAmount);
+      if (isNaN(amount) || amount <= 0) {
+          setActivePrompt(null);
+          setPromptAmount('');
+          return;
+      }
+      
+      if (activePrompt === 'withdraw') {
+          socket.emit('withdrawFunds', { username: userName, amount });
+      } else if (activePrompt === 'borrow') {
+          socket.emit('borrowFunds', { username: userName, amount });
+      } else if (activePrompt === 'pay') {
+          socket.emit('payDebt', { username: userName, amount });
+      }
+      
+      setActivePrompt(null);
+      setPromptAmount('');
+  };
+
+  const balanceColor = bankData.balance > 0 ? '#00ff66' : bankData.balance < 0 ? '#ff0044' : '#fff';
+  const debtColor = bankData.debt > 0 ? '#ff0044' : '#fff';
+
+  return (
+    <DraggableWindow title="CITY_NET // BANK" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '400px' }}>
+      <div style={{ display: 'flex', gap: '20px', padding: '10px' }}>
+        <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>Balance</div>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: balanceColor, marginBottom: '15px' }}>
+            <img src={creditsIcon} alt="Creds" style={{ width: '24px', height: '24px', filter: balanceColor !== '#fff' ? (balanceColor === '#00ff66' ? 'invert(60%) sepia(100%) saturate(10000%) hue-rotate(90deg) brightness(1.2)' : 'invert(20%) sepia(100%) saturate(7400%) hue-rotate(345deg)') : 'brightness(0) invert(1)' }} />
+            {bankData.balance.toFixed(2)}
+          </div>
+          <button className="panel-btn" style={{ width: '100%' }} onClick={() => setActivePrompt('withdraw')}>withdraw</button>
+        </div>
+        
+        <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>Debt</div>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: debtColor, marginBottom: '15px' }}>
+            <img src={creditsIcon} alt="Creds" style={{ width: '24px', height: '24px', filter: debtColor === '#ff0044' ? 'invert(20%) sepia(100%) saturate(7400%) hue-rotate(345deg)' : 'brightness(0) invert(1)' }} />
+            {bankData.debt.toFixed(2)}
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt('borrow')}>borrow</button>
+            <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt('pay')}>pay</button>
+          </div>
+        </div>
+      </div>
+
+      {activePrompt && (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10 }}>
+              <div style={{ background: '#111', border: '1px solid #444', padding: '20px', width: '200px' }}>
+                  <div style={{ color: '#00ff66', marginBottom: '10px', textTransform: 'uppercase', textAlign: 'center' }}>Amount to {activePrompt}?</div>
+                  <input type="number" step="1" min="1" value={promptAmount} onChange={(e) => setPromptAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '10px', background: '#000', color: '#fff', border: '1px solid #333', outline: 'none', textAlign: 'center' }} autoFocus />
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                      <button className="panel-btn" style={{ flex: 1 }} onClick={handleAction}>Okay</button>
+                      <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt(null)}>Cancel</button>
+                  </div>
+              </div>
+          </div>
+      )}
+    </DraggableWindow>
+  );
+}
+
 function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isPrimaryAdmin, onGrantAccess, onRevokeAccess, socket, token, isChatOpen }: any) {
   const [inputText, setInputText] = useState('');
   
@@ -5582,7 +5749,7 @@ function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen, setNot
   );
 }
 
-function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode }: any) {
+function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen }: any) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
       view === 'battle_map' && activeBattleMapData 
         ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex) 
@@ -5671,6 +5838,13 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
             <button className={`rail-btn ${isChatOpen ? 'active' : ''} ${hasUnreadChat && !isChatOpen ? 'unread-flash' : ''}`} onClick={() => setIsChatOpen(!isChatOpen)} title="GLOBAL_CHAT">
               <svg width="24" height="24" viewBox="0 0 256 256" fill="none" stroke="currentColor" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
                 <path fill="currentColor" d="M122.5 124.88a4 4 0 0 1 0 6.24l-40 32a4 4 0 0 1-5-6.24L113.6 128L77.5 99.12a4 4 0 0 1 5-6.24ZM176 156h-40a4 4 0 0 0 0 8h40a4 4 0 0 0 0-8m52-100v144a12 12 0 0 1-12 12H40a12 12 0 0 1-12-12V56a12 12 0 0 1 12-12h176a12 12 0 0 1 12 12m-8 0a4 4 0 0 0-4-4H40a4 4 0 0 0-4 4v144a4 4 0 0 0 4 4h176a4 4 0 0 0 4-4Z" />
+              </svg>
+            </button>
+            <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} title="CITY_NET // BANK">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="10" width="18" height="10" rx="2" ry="2"></rect>
+                <circle cx="12" cy="15" r="2"></circle>
+                <path d="M7 10V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4"></path>
               </svg>
             </button>
         </div>
@@ -5981,7 +6155,12 @@ function App() {
     }
   }, [isHitPointsOpen, selectedLocation]);
 
-  const [chatPos, setChatPos] = useState({ x: 400, y: 100 });
+  const [chatPos, setChatPos] = useState({ x: window.innerWidth - 380, y: window.innerHeight - 340 });
+  const [bankPos, setBankPos] = useState({ x: window.innerWidth / 2 - 200, y: window.innerHeight / 2 - 150 });
+  const [adminBankPlayer, setAdminBankPlayer] = useState<string | null>(null);
+  const [adminBankPos, setAdminBankPos] = useState({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 100 });
+  const [isAdminPayOpen, setIsAdminPayOpen] = useState(false);
+  const [adminPayPos, setAdminPayPos] = useState({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 });
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   useEffect(() => {
     const handleClear = () => { (window as any).hasUnsavedChanges = false; };
@@ -5990,6 +6169,8 @@ function App() {
   }, []);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
+  const [isBankOpen, setIsBankOpen] = useState(false);
+  const [bankData, setBankData] = useState<{ balance: number, debt: number }>({ balance: 0, debt: 0 });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   // Load notification preference from the user's rhombus data
@@ -6558,11 +6739,17 @@ function App() {
     newSocket.on('chatHistory', (history: any[]) => setChatMessages(history));
     newSocket.on('receiveMessage', (msg: any) => {
         setChatMessages(prev => [...prev, msg]);
-        // Trigger notification flash if window is closed AND notifications are enabled AND message is not from self
         if (!isChatOpenRef.current && notificationsEnabledRef.current && msg.sender !== userName) {
             setHasUnreadChat(true);
         }
     });
+    
+    newSocket.on('bankUpdate', (data: any) => {
+        if (data.username === userName) {
+            setBankData({ balance: data.balance, debt: data.debt });
+        }
+    });
+    newSocket.emit('requestBankBalance', { username: userName });
 
     newSocket.on('receivePrivateMessage', (msg: any) => {
         if (!isChatOpenRef.current && notificationsEnabledRef.current && msg.sender !== userName) {
@@ -6793,6 +6980,8 @@ function App() {
               activeMenu={activeSidebarMenu}
               setActiveMenu={setActiveSidebarMenu}
               locations={locations}
+              isBankOpen={isBankOpen}
+              setIsBankOpen={setIsBankOpen}
               onSelect={setSelectedLocation}
               onZoom={setCameraTarget}
               selectedLocation={selectedLocation}
@@ -6834,6 +7023,7 @@ function App() {
             {token && showAdminPanel && (
               <AdminPanel
                 isAdmin={isAdmin}
+                setIsAdminPayOpen={setIsAdminPayOpen}
                 isPrimaryAdmin={isPrimaryAdmin}
                 setShowBattleMapManager={setShowBattleMapManager}
                 isPlantingTrees={isPlantingTrees} setIsPlantingTrees={setIsPlantingTrees}
@@ -6920,6 +7110,37 @@ function App() {
                 isCopyingSize={isCopyingSize}
                 setIsCopyingSize={setIsCopyingSize}
                 />
+            )}
+            {adminBankPlayer && (
+              <AdminBankWindow
+                  pos={adminBankPos}
+                  setPos={setAdminBankPos}
+                  onClose={() => setAdminBankPlayer(null)}
+                  targetUser={adminBankPlayer}
+                  socket={socket}
+                  token={token}
+              />
+            )}
+            {isAdminPayOpen && (
+              <AdminPayWindow
+                  pos={adminPayPos}
+                  setPos={setAdminPayPos}
+                  onClose={() => setIsAdminPayOpen(false)}
+                  socket={socket}
+                  token={token}
+                  activeUsers={activeUsers}
+              />
+            )}
+            {isBankOpen && (
+              <BankWindow 
+                  pos={bankPos} 
+                  setPos={setBankPos} 
+                  onClose={() => setIsBankOpen(false)} 
+                  bankData={bankData} 
+                  socket={socket} 
+                  userName={userName} 
+                  isBankOpen={isBankOpen}
+              />
             )}
               <ChatWindow 
                   pos={chatPos} 
@@ -7018,6 +7239,11 @@ function App() {
                         </svg>
                         BROADCAST PING
                     </button>
+                    {isAdmin && isPlayerRhombus && (
+                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#00ff66', color: '#000'}} onClick={() => {
+                          setAdminBankPlayer(selectedLocation.owner);
+                      }}>VIEW_BANK</button>
+                    )}
                     {canManage && (
                       <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={async () => {
                         const res = await fetch(`/api/locations/${selectedLocation.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });

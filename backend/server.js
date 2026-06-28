@@ -1325,6 +1325,114 @@ io.on('connection', (socket) => {
           });
       });
   });
+
+  // --- BANKING SYSTEM ---
+  const sendBankUpdate = (username) => {
+      db.get('SELECT balance, debt FROM player_banks WHERE username = ?', [username], (err, row) => {
+          if (!err && row) {
+              io.emit('bankUpdate', { username, balance: row.balance, debt: row.debt });
+          } else if (!err && !row) {
+              db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, 0, 0)', [username], () => {
+                  io.emit('bankUpdate', { username, balance: 0, debt: 0 });
+              });
+          }
+      });
+  };
+
+  socket.on('requestBankBalance', (data) => {
+      if (data && data.username) {
+          sendBankUpdate(data.username);
+      }
+  });
+
+  socket.on('withdrawFunds', (data) => {
+      if (!data || !data.username || !data.amount) return;
+      const amount = parseFloat(data.amount);
+      if (isNaN(amount) || amount <= 0) return;
+      
+      db.run('UPDATE player_banks SET balance = balance - ? WHERE username = ?', [amount, data.username], (err) => {
+          if (!err) sendBankUpdate(data.username);
+      });
+  });
+
+  socket.on('borrowFunds', (data) => {
+      if (!data || !data.username || !data.amount) return;
+      const amount = parseFloat(data.amount);
+      if (isNaN(amount) || amount <= 0) return;
+      
+      db.run('UPDATE player_banks SET debt = debt + ? WHERE username = ?', [amount, data.username], (err) => {
+          if (!err) sendBankUpdate(data.username);
+      });
+  });
+
+  socket.on('payDebt', (data) => {
+      if (!data || !data.username || !data.amount) return;
+      let amount = parseFloat(data.amount);
+      if (isNaN(amount) || amount <= 0) return;
+      
+      db.get('SELECT balance, debt FROM player_banks WHERE username = ?', [data.username], (err, row) => {
+          if (err || !row) return;
+          if (amount > row.balance) amount = row.balance;
+          if (amount > row.debt) amount = row.debt;
+          if (amount <= 0) return;
+
+          db.run('UPDATE player_banks SET balance = balance - ?, debt = debt - ? WHERE username = ?', [amount, amount, data.username], (err2) => {
+              if (!err2) sendBankUpdate(data.username);
+          });
+      });
+  });
+
+  socket.on('adminPayPlayers', (data) => {
+      if (!data || !data.token || !data.usernames || !data.totalAmount) return;
+      
+      jwt.verify(data.token, process.env.JWT_SECRET || 'cyberpunk_secret', (err, decoded) => {
+          if (err || decoded.role !== 'admin') return;
+          
+          const count = data.usernames.length;
+          if (count === 0) return;
+          
+          const amountPerPlayer = Math.ceil((parseFloat(data.totalAmount) / count) * 100) / 100;
+          if (isNaN(amountPerPlayer) || amountPerPlayer <= 0) return;
+          
+          data.usernames.forEach(uname => {
+              db.get('SELECT username FROM player_banks WHERE username = ?', [uname], (err, row) => {
+                  if (row) {
+                      db.run('UPDATE player_banks SET balance = balance + ? WHERE username = ?', [amountPerPlayer, uname], () => {
+                          sendBankUpdate(uname);
+                      });
+                  } else {
+                      db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, 0)', [uname, amountPerPlayer], () => {
+                          sendBankUpdate(uname);
+                      });
+                  }
+              });
+          });
+      });
+  });
+
+  socket.on('adminUpdateBank', (data) => {
+      if (!data || !data.token || !data.username) return;
+      
+      jwt.verify(data.token, process.env.JWT_SECRET || 'cyberpunk_secret', (err, decoded) => {
+          if (err || decoded.role !== 'admin') return;
+          
+          const balance = parseFloat(data.balance);
+          const debt = parseFloat(data.debt);
+          if (isNaN(balance) || isNaN(debt)) return;
+          
+          db.get('SELECT username FROM player_banks WHERE username = ?', [data.username], (err2, row) => {
+              if (row) {
+                  db.run('UPDATE player_banks SET balance = ?, debt = ? WHERE username = ?', [balance, debt, data.username], () => {
+                      sendBankUpdate(data.username);
+                  });
+              } else {
+                  db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)', [data.username, balance, debt], () => {
+                      sendBankUpdate(data.username);
+                  });
+              }
+          });
+      });
+  });
   socket.on('disconnect', () => {
     const info = userSockets.get(socket.id);
     if (info) {
