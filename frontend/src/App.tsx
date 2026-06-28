@@ -4841,8 +4841,10 @@ function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOp
       setPromptAmount('');
   };
 
-  const balanceColor = bankData.balance > 0 ? '#00ff66' : bankData.balance < 0 ? '#ff0044' : '#fff';
-  const debtColor = bankData.debt > 0 ? '#ff0044' : '#fff';
+    const roundedBalance = Math.round(bankData.balance * 100) / 100;
+    const roundedDebt = Math.round(bankData.debt * 100) / 100;
+    const balanceColor = roundedBalance > 0 ? '#00ff66' : roundedBalance < 0 ? '#ff0044' : '#fff';
+    const debtColor = roundedDebt > 0 ? '#ff0044' : '#fff';
 
   return (
     <DraggableWindow title="CITY_NET // BANK" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '400px' }}>
@@ -4850,7 +4852,7 @@ function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOp
         <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>Balance</div>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: balanceColor, marginBottom: '15px' }}>
-            <img src={creditsIcon} alt="Creds" style={{ width: '18px', height: '18px', filter: balanceColor !== '#fff' ? (balanceColor === '#00ff66' ? 'invert(60%) sepia(100%) saturate(10000%) hue-rotate(90deg) brightness(1.2)' : 'invert(20%) sepia(100%) saturate(7400%) hue-rotate(345deg)') : 'brightness(0) invert(1)' }} />
+            <div style={{ width: '18px', height: '18px', backgroundColor: balanceColor, WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }} />
             {formatBankValue(bankData.balance)}
           </div>
           <button className="panel-btn" style={{ width: '100%' }} onClick={() => setActivePrompt('withdraw')}>withdraw</button>
@@ -4859,7 +4861,7 @@ function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOp
         <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>Debt</div>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: debtColor, marginBottom: '15px' }}>
-            <img src={creditsIcon} alt="Creds" style={{ width: '18px', height: '18px', filter: debtColor === '#ff0044' ? 'invert(20%) sepia(100%) saturate(7400%) hue-rotate(345deg)' : 'brightness(0) invert(1)' }} />
+            <div style={{ width: '18px', height: '18px', backgroundColor: debtColor, WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }} />
             {formatBankValue(bankData.debt)}
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
