@@ -904,6 +904,14 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
       {isAdmin && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
+      
+      {location.name && (
+          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #ff0000`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
+                {location.name}
+            </div>
+          </Html>
+      )}
 
       {/* Red Alert Light */}
       <pointLight ref={lightRef as any} color="#ff0000" intensity={3} distance={15} decay={2} />
@@ -1105,6 +1113,14 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
       
       {isAdmin && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
+      )}
+      
+      {location.name && (
+          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #00ccff`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
+                {location.name}
+            </div>
+          </Html>
       )}
       
       <pointLight ref={lightRef as any} color="#00ccff" intensity={3} distance={15} decay={2} />
@@ -1347,6 +1363,14 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
 
       {isOnline && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
+      )}
+      
+      {location.name && (
+          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid ${baseColor}`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
+                {location.name}
+            </div>
+          </Html>
       )}
 
       <>
