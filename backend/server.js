@@ -1245,20 +1245,22 @@ io.on('connection', (socket) => {
     });
   });
 
+  const formatMeasurementPayload = (data, userName, socketId) => ({
+    owner: userName ? userName : socketId,
+    start: data.start,
+    end: data.end,
+    color: data.color || '#00ff00',
+    battle_map_id: data.battle_map_id || null,
+    floor_index: data.floor_index !== undefined ? data.floor_index : null,
+    map_scale_multiplier: data.map_scale_multiplier || 5,
+    view: data.view,
+    locationId: data.locationId,
+    isFinal: data.isFinal
+  });
+
   socket.on('drawMeasurement', (data) => {
     const info = userSockets.get(socket.id);
-    io.emit('measurementUpdated', {
-      owner: info ? info.userName : socket.id,
-      start: data.start,
-      end: data.end,
-      color: data.color || '#00ff00',
-      battle_map_id: data.battle_map_id || null,
-      floor_index: data.floor_index !== undefined ? data.floor_index : null,
-      map_scale_multiplier: data.map_scale_multiplier || 5,
-      view: data.view,
-      locationId: data.locationId,
-      isFinal: data.isFinal
-    });
+    io.emit('measurementUpdated', formatMeasurementPayload(data, info ? info.userName : null, socket.id));
   });
 
   socket.on('requestDiceRoll', (data) => {
@@ -1567,6 +1569,16 @@ server.listen(PORT, '0.0.0.0', () => {
       report('admin login JWT payload constraints', success, success ? '' : 'Token missing required role or isTemporary flags');
     } catch (e) {
       report('admin login JWT payload constraints', false, 'JWT verification threw an error: ' + e.message);
+    }
+    
+    // Test 6: Measurement formatting (isFinal propagation)
+    const mockMeasurement = { start: {x: 0, z: 0}, end: {x: 10, z: 10}, isFinal: true, map_scale_multiplier: 5 };
+    if (typeof formatMeasurementPayload === 'function') {
+      const formatted = formatMeasurementPayload(mockMeasurement, 'tester', 'socket123');
+      const mSuccess = formatted.owner === 'tester' && formatted.isFinal === true && formatted.color === '#00ff00';
+      report('measurement relay constraints (isFinal, formatting)', mSuccess, mSuccess ? '' : `Failed relay formatting: ${JSON.stringify(formatted)}`);
+    } else {
+      report('measurement relay constraints', false, 'formatMeasurementPayload function not found in scope');
     }
   };
 
