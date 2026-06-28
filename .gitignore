@@ -29,3 +29,6 @@ cert.pem
 cloudflared/
 cloudflared_token.txt
 cloudflared.exe
+
+# User Uploads
+backend/uploads/

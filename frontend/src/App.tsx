@@ -37,10 +37,26 @@ function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapSc
             const hit = getHitPoint();
             if (hit) setStartPoint(hit);
         };
+        let lastEmit = 0;
         const onPointerMove = (e: PointerEvent) => {
             if (startPoint) {
                 const hit = getHitPoint();
-                if (hit) setCurrentPoint(hit);
+                if (hit) {
+                    setCurrentPoint(hit);
+                    const now = Date.now();
+                    if (socket && now - lastEmit > 50) {
+                        lastEmit = now;
+                        socket.emit('drawMeasurement', {
+                            start: { x: startPoint.x, z: startPoint.z },
+                            end: { x: hit.x, z: hit.z },
+                            color: color,
+                            owner: userName,
+                            map_scale_multiplier: mapScaleMultiplier,
+                            view: view,
+                            locationId: activeBattleMapData?.locationId
+                        });
+                    }
+                }
             }
         };
         const onPointerUp = (e: PointerEvent) => {
@@ -53,7 +69,8 @@ function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapSc
                         owner: userName,
                         map_scale_multiplier: mapScaleMultiplier,
                         view: view,
-                        locationId: activeBattleMapData?.locationId
+                        locationId: activeBattleMapData?.locationId,
+                        isFinal: true
                     });
                 }
             }
@@ -101,12 +118,13 @@ function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapSc
     );
 }
 
-function MeasurementVisualizer({ socket, view, activeBattleMapData }: any) {
+function MeasurementVisualizer({ socket, view, activeBattleMapData, userName }: any) {
     const [measurements, setMeasurements] = useState<any[]>([]);
 
     useEffect(() => {
         if (!socket) return;
         const handleMeasurement = (data: any) => {
+            if (data.owner === userName && !data.isFinal) return; // Prevent duplicating own line and crashing Html portal during drawing
             if (data.view !== view) return;
             if (view === 'battle_map' && data.locationId !== activeBattleMapData?.locationId) return;
             setMeasurements(prev => {
@@ -116,7 +134,7 @@ function MeasurementVisualizer({ socket, view, activeBattleMapData }: any) {
         };
         socket.on('measurementUpdated', handleMeasurement);
         return () => socket.off('measurementUpdated', handleMeasurement);
-    }, [socket, view, activeBattleMapData]);
+    }, [socket, view, activeBattleMapData, userName]);
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -205,6 +223,8 @@ import paperFillIcon from './assets/lets-icons--paper-fill.svg';
 import paperLightIcon from './assets/lets-icons--paper-light.svg';
 import eyeIcon from './assets/oui--eye.svg';
 import eyeClosedIcon from './assets/oui--eye-closed.svg';
+import creditsIcon from './assets/Credits.svg';
+import creditsPngIcon from './assets/Credits.png';
 import './App.css';
 
 const messages = [
@@ -373,9 +393,9 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
             shape: 'rhombus',
             color: rhombusState.color,
             owner: userName,
-            hp_max: rhombusState.hp_max || 100,
-            hp_current: existing ? (rhombusState.hp_current ?? 100) : (rhombusState.hp_max || 100),
-            hp_temp: existing ? (rhombusState.hp_temp ?? 0) : 0,
+            hp_max: existing ? (existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
+            hp_current: existing ? (existing.hp_current ?? existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
+            hp_temp: existing ? (existing.hp_temp ?? 0) : 0,
             battle_map_id: null,
             floor_index: null
         };
@@ -699,6 +719,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   const intersection = useMemo(() => new THREE.Vector3(), []);
   
   const isAdmin = token !== '';
+  const [isHovered, setIsHovered] = useState(false);
   const [isLocalDragging, setIsLocalDragging] = useState(false);
     useEffect(() => {
         const handleGlobalUp = () => {
@@ -825,8 +846,8 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   const dragDist = useRef(0);
 
   const handlePointerDown = (e: any) => {
-      e.stopPropagation();
       if (measureMode) return;
+      e.stopPropagation();
     dragDist.current = 0;
     
     // Only allow dragging if the user is an Admin
@@ -844,6 +865,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   };
 
   const handlePointerMove = (e: any) => {
+    if (measureMode) return;
     if (!isAdmin || e.buttons !== 1) return;
     dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY);
     const currentRaycaster = e.raycaster || raycaster;
@@ -856,6 +878,7 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
   };
 
   const handlePointerUp = async (e: any) => {
+      if (measureMode) return;
       try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
@@ -886,6 +909,8 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onPointerOver={(e) => { e.stopPropagation(); setIsHovered(true); }}
+          onPointerOut={(e) => { e.stopPropagation(); setIsHovered(false); }}
       >
         <octahedronGeometry args={[0.5]} />
         <meshBasicMaterial color="#ff0000" transparent opacity={0.9} />
@@ -901,6 +926,14 @@ const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObjec
       
       {isAdmin && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
+      )}
+      
+      {location.name && (isHovered || isSelected) && (
+          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
+            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #ff0000`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
+                {location.name}
+            </div>
+          </Html>
       )}
 
       {/* Red Alert Light */}
@@ -918,6 +951,7 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
   const intersection = useMemo(() => new THREE.Vector3(), []);
   
   const isAdmin = token !== '';
+  const [isHovered, setIsHovered] = useState(false);
   const [isLocalDragging, setIsLocalDragging] = useState(false);
   useEffect(() => {
       const handleGlobalUp = () => {
@@ -1040,8 +1074,8 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
   const dragDist = useRef(0);
 
   const handlePointerDown = (e: any) => {
-      e.stopPropagation();
       if (measureMode) return;
+      e.stopPropagation();
     dragDist.current = 0;
     if (!isAdmin) return;
     try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
@@ -1056,6 +1090,7 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
   };
 
   const handlePointerMove = (e: any) => {
+    if (measureMode) return;
     if (!isAdmin || e.buttons !== 1) return;
     dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY);
     const currentRaycaster = e.raycaster || raycaster;
@@ -1068,6 +1103,7 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
   };
 
   const handlePointerUp = async (e: any) => {
+      if (measureMode) return;
       try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
@@ -1094,6 +1130,8 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerOver={(e) => { e.stopPropagation(); setIsHovered(true); }}
+        onPointerOut={(e) => { e.stopPropagation(); setIsHovered(false); }}
       >
         <mesh>
           <coneGeometry args={[0.5, 0.8, 4]} />
@@ -1103,6 +1141,14 @@ const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetOb
       
       {isAdmin && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
+      )}
+      
+      {location.name && (isHovered || isSelected) && (
+          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
+            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #00ccff`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
+                {location.name}
+            </div>
+          </Html>
       )}
       
       <pointLight ref={lightRef as any} color="#00ccff" intensity={3} distance={15} decay={2} />
@@ -1125,6 +1171,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   const canManage = isAdmin || isOwner;
 
   const isOnline = activeUsers.some((u: any) => u.userName === location.owner);
+  const [isHovered, setIsHovered] = useState(false);
 
   const [isLocalDragging, setIsLocalDragging] = useState(false);
     useEffect(() => {
@@ -1269,8 +1316,8 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   const dragDist = useRef(0);
 
   const handlePointerDown = (e: any) => {
-      e.stopPropagation();
       if (measureMode) return;
+      e.stopPropagation();
     dragDist.current = 0;
     
     // Only allow dragging if the user has management rights (Owner or Admin)
@@ -1288,6 +1335,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   };
 
   const handlePointerMove = (e: any) => {
+    if (measureMode) return;
     if (!canManage || e.buttons !== 1) return;
     dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY);
     const currentRaycaster = e.raycaster || raycaster;
@@ -1300,6 +1348,7 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
   };
 
   const handlePointerUp = async (e: any) => {
+      if (measureMode) return;
       try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
@@ -1333,6 +1382,8 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onPointerOver={(e) => { e.stopPropagation(); setIsHovered(true); }}
+          onPointerOut={(e) => { e.stopPropagation(); setIsHovered(false); }}
       >
         <octahedronGeometry args={[0.5]} />
         <meshBasicMaterial transparent opacity={0.8} color={isSelected ? "#00ffff" : baseColor} />
@@ -1345,6 +1396,14 @@ const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObje
 
       {isOnline && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
+      )}
+      
+      {location.name && (isHovered || isSelected) && (
+          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
+            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid ${baseColor}`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
+                {location.name}
+            </div>
+          </Html>
       )}
 
       <>
@@ -2808,7 +2867,7 @@ function AdminPanel({
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
-    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData
+    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -2879,6 +2938,7 @@ function AdminPanel({
            <button style={{ padding: '10px', backgroundColor: '#5500ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleSaveDefault}>SAVE_DEFAULT</button>
            <button style={{ padding: '10px', backgroundColor: '#aa00ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleLoadDefault}>LOAD_DEFAULT</button>
         </div>
+        <button className="utility-btn" onClick={() => setIsAdminPayOpen(true)} style={{ width: '100%', marginBottom: '10px' }}>PAY_PLAYERS</button>
         <button className="utility-btn danger-btn" onClick={() => {
             onLogout();
         }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>
@@ -3417,6 +3477,7 @@ function AdminPanel({
               <div key={loc.id} className={`list-item ${selectedLocation?.id === loc.id ? 'selected' : ''}`} onClick={() => setSelectedLocation(loc)} style={{cursor: 'pointer', paddingLeft: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px'}}><div style={{display: 'flex', alignItems: 'center', gap: '10px', flex: 1, overflow: 'hidden'}}><input type="checkbox" checked={selectedIds.includes(loc.id)} onChange={() => toggleSelection(loc.id)} onClick={(e) => e.stopPropagation()} /><span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{getStructLabel(loc)}</span></div>{!isBatchSelecting && <div style={{display: 'flex', gap: '5px'}}><button className="upload-btn" style={{padding: '2px 5px', fontSize: '0.6rem', width: 'auto'}} onClick={(e) => { e.stopPropagation(); startEdit(loc); }}>EDIT</button><button className="upload-btn danger-btn" style={{padding: '2px 5px', fontSize: '0.6rem', width: 'auto'}} onClick={(e) => { e.stopPropagation(); setDeleteTarget(loc); }}>DEL</button></div>}</div>
             ))}
           </div>
+          <button onClick={() => setIsAdminPayOpen(true)} className="upload-btn" style={{ width: '100%', marginBottom: '10px', backgroundColor: '#00ff66', color: '#000' }}>PAY_PLAYERS</button>
           <button onClick={onLogout} className="logout-btn">EXIT_ADMIN_MODE</button>
         </>
       )}
@@ -4709,6 +4770,180 @@ function DiceTrayWindow({ pos, setPos, onClose, socketRef }: any) {
   );
 }
 
+function AdminBankWindow({ pos, setPos, onClose, targetUser, socket, token }: any) {
+    const [bankData, setBankData] = useState({ balance: 0, debt: 0 });
+    const [balInput, setBalInput] = useState('');
+    const [debtInput, setDebtInput] = useState('');
+    
+    useEffect(() => {
+        const handleUpdate = (data: any) => {
+            if (data.username === targetUser) {
+                setBankData({ balance: data.balance, debt: data.debt });
+                setBalInput(data.balance.toString());
+                setDebtInput(data.debt.toString());
+            }
+        };
+        socket.on('bankUpdate', handleUpdate);
+        socket.emit('requestBankBalance', { username: targetUser });
+        return () => socket.off('bankUpdate', handleUpdate);
+    }, [targetUser, socket]);
+
+    const handleSave = () => {
+        const balance = parseFloat(balInput);
+        const debt = parseFloat(debtInput);
+        if (!isNaN(balance) && !isNaN(debt)) {
+            socket.emit('adminUpdateBank', { token, username: targetUser, balance, debt });
+            onClose();
+        }
+    };
+
+    return (
+        <DraggableWindow title={`ADMIN BANK: ${targetUser}`} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+            <div style={{ padding: '10px' }}>
+                <div style={{ marginBottom: '10px' }}>
+                    <label style={{ color: '#00ff66', display: 'block', marginBottom: '5px' }}>Balance</label>
+                    <input type="number" step="1" value={balInput} onChange={e => setBalInput(e.target.value)} style={{ width: '100%', padding: '5px', background: '#000', color: '#fff', border: '1px solid #333' }} />
+                </div>
+                <div style={{ marginBottom: '15px' }}>
+                    <label style={{ color: '#ff0044', display: 'block', marginBottom: '5px' }}>Debt</label>
+                    <input type="number" step="1" value={debtInput} onChange={e => setDebtInput(e.target.value)} style={{ width: '100%', padding: '5px', background: '#000', color: '#fff', border: '1px solid #333' }} />
+                </div>
+                <button className="panel-btn" style={{ width: '100%' }} onClick={handleSave}>SAVE CHANGES</button>
+            </div>
+        </DraggableWindow>
+    );
+}
+
+function AdminPayWindow({ pos, setPos, onClose, socket, token, activeUsers }: any) {
+    const [amount, setAmount] = useState('');
+    const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+    
+    const allUsers = (activeUsers || [])
+        .filter((u: any) => !u.isNPC && !(u.isAdmin && !u.isTemporaryAdmin))
+        .map((u: any) => u.userName)
+        .filter(Boolean);
+
+    const toggleUser = (u: string) => {
+        setSelectedUsers(prev => prev.includes(u) ? prev.filter(x => x !== u) : [...prev, u]);
+    };
+
+    const handlePay = () => {
+        const total = parseFloat(amount);
+        if (!isNaN(total) && total > 0 && selectedUsers.length > 0) {
+            socket.emit('adminPayPlayers', { token, usernames: selectedUsers, totalAmount: total });
+            onClose();
+        }
+    };
+
+    const handleDivideAll = () => {
+        const total = parseFloat(amount);
+        if (!isNaN(total) && total > 0 && allUsers.length > 0) {
+            socket.emit('adminPayPlayers', { token, usernames: allUsers, totalAmount: total });
+            onClose();
+        }
+    };
+
+    return (
+        <DraggableWindow title="ADMIN // PAY_PLAYERS" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+            <div style={{ padding: '10px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', color: '#00ff66' }}>Total Amount</label>
+                <input type="number" step="1" min="1" value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '15px', background: '#000', color: '#fff', border: '1px solid #333' }} />
+                
+                <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #333', padding: '5px', marginBottom: '10px', background: 'rgba(0,0,0,0.5)' }}>
+                    {allUsers.length === 0 ? <div style={{ color: '#888', fontSize: '12px' }}>No users online.</div> : allUsers.map((u: string) => (
+                        <div key={u} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
+                            <input type="checkbox" checked={selectedUsers.includes(u)} onChange={() => toggleUser(u)} />
+                            <span style={{ color: '#fff' }}>{u}</span>
+                        </div>
+                    ))}
+                </div>
+                
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button className="panel-btn" style={{ flex: 1 }} onClick={handleDivideAll} disabled={allUsers.length === 0}>DIVIDE_ALL</button>
+                    <button className="panel-btn" style={{ flex: 1 }} onClick={handlePay} disabled={selectedUsers.length === 0}>PAY_SELECTED</button>
+                </div>
+            </div>
+        </DraggableWindow>
+    );
+}
+
+const formatBankValue = (val: number) => {
+    const rounded = Math.round(val * 100) / 100;
+    return (rounded === 0 ? 0 : rounded).toFixed(2);
+};
+
+function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOpen }: any) {
+  const [activePrompt, setActivePrompt] = useState<'withdraw' | 'borrow' | 'pay' | null>(null);
+  const [promptAmount, setPromptAmount] = useState('');
+
+  if (!isBankOpen) return null;
+
+  const handleAction = () => {
+      const amount = parseFloat(promptAmount);
+      if (isNaN(amount) || amount <= 0) {
+          setActivePrompt(null);
+          setPromptAmount('');
+          return;
+      }
+      
+      if (activePrompt === 'withdraw') {
+          socket.emit('withdrawFunds', { username: userName, amount });
+      } else if (activePrompt === 'borrow') {
+          socket.emit('borrowFunds', { username: userName, amount });
+      } else if (activePrompt === 'pay') {
+          socket.emit('payDebt', { username: userName, amount });
+      }
+      
+      setActivePrompt(null);
+      setPromptAmount('');
+  };
+
+    const roundedBalance = Math.round(bankData.balance * 100) / 100;
+    const roundedDebt = Math.round(bankData.debt * 100) / 100;
+    const balanceColor = roundedBalance > 0 ? '#00ff66' : roundedBalance < 0 ? '#ff0044' : '#fff';
+    const debtColor = roundedDebt > 0 ? '#ff0044' : '#fff';
+
+  return (
+    <DraggableWindow title="CITY_NET // BANK" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '400px' }}>
+      <div style={{ display: 'flex', gap: '20px', padding: '10px' }}>
+        <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>Balance</div>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: balanceColor, marginBottom: '15px' }}>
+            <div style={{ width: '18px', height: '18px', backgroundColor: balanceColor, WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }} />
+            {formatBankValue(bankData.balance)}
+          </div>
+          <button className="panel-btn" style={{ width: '100%' }} onClick={() => setActivePrompt('withdraw')}>withdraw</button>
+        </div>
+        
+        <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>Debt</div>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: debtColor, marginBottom: '15px' }}>
+            <div style={{ width: '18px', height: '18px', backgroundColor: debtColor, WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }} />
+            {formatBankValue(bankData.debt)}
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt('borrow')}>borrow</button>
+            <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt('pay')}>pay</button>
+          </div>
+        </div>
+      </div>
+
+      {activePrompt && (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10 }}>
+              <div style={{ background: '#111', border: '1px solid #444', padding: '20px', width: '200px' }}>
+                  <div style={{ color: '#00ff66', marginBottom: '10px', textTransform: 'uppercase', textAlign: 'center' }}>Amount to {activePrompt}?</div>
+                  <input type="number" step="1" min="1" value={promptAmount} onChange={(e) => setPromptAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '10px', background: '#000', color: '#fff', border: '1px solid #333', outline: 'none', textAlign: 'center' }} autoFocus />
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                      <button className="panel-btn" style={{ flex: 1 }} onClick={handleAction}>Okay</button>
+                      <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt(null)}>Cancel</button>
+                  </div>
+              </div>
+          </div>
+      )}
+    </DraggableWindow>
+  );
+}
+
 function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isPrimaryAdmin, onGrantAccess, onRevokeAccess, socket, token, isChatOpen }: any) {
   const [inputText, setInputText] = useState('');
   
@@ -5582,7 +5817,7 @@ function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen, setNot
   );
 }
 
-function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode }: any) {
+function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen }: any) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
       view === 'battle_map' && activeBattleMapData 
         ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex) 
@@ -5672,6 +5907,9 @@ function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selec
               <svg width="24" height="24" viewBox="0 0 256 256" fill="none" stroke="currentColor" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
                 <path fill="currentColor" d="M122.5 124.88a4 4 0 0 1 0 6.24l-40 32a4 4 0 0 1-5-6.24L113.6 128L77.5 99.12a4 4 0 0 1 5-6.24ZM176 156h-40a4 4 0 0 0 0 8h40a4 4 0 0 0 0-8m52-100v144a12 12 0 0 1-12 12H40a12 12 0 0 1-12-12V56a12 12 0 0 1 12-12h176a12 12 0 0 1 12 12m-8 0a4 4 0 0 0-4-4H40a4 4 0 0 0-4 4v144a4 4 0 0 0 4 4h176a4 4 0 0 0 4-4Z" />
               </svg>
+            </button>
+            <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} title="CITY_NET // BANK">
+              <div style={{ width: '24px', height: '24px', backgroundColor: 'currentColor', WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }} />
             </button>
         </div>
         <div className="rail-bottom" style={{ paddingBottom: '20px', display: 'flex', justifyContent: 'center' }}>
@@ -5981,7 +6219,12 @@ function App() {
     }
   }, [isHitPointsOpen, selectedLocation]);
 
-  const [chatPos, setChatPos] = useState({ x: 400, y: 100 });
+  const [chatPos, setChatPos] = useState({ x: window.innerWidth - 380, y: window.innerHeight - 340 });
+  const [bankPos, setBankPos] = useState({ x: window.innerWidth / 2 - 200, y: window.innerHeight / 2 - 150 });
+  const [adminBankPlayer, setAdminBankPlayer] = useState<string | null>(null);
+  const [adminBankPos, setAdminBankPos] = useState({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 100 });
+  const [isAdminPayOpen, setIsAdminPayOpen] = useState(false);
+  const [adminPayPos, setAdminPayPos] = useState({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 });
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   useEffect(() => {
     const handleClear = () => { (window as any).hasUnsavedChanges = false; };
@@ -5990,6 +6233,8 @@ function App() {
   }, []);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
+  const [isBankOpen, setIsBankOpen] = useState(false);
+  const [bankData, setBankData] = useState<{ balance: number, debt: number }>({ balance: 0, debt: 0 });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   // Load notification preference from the user's rhombus data
@@ -6216,6 +6461,7 @@ function App() {
   };
 
   const handleBuildingClick = (loc: any) => {
+    if (measureMode) return;
     if (isCopyingSize) {
         const rootId = loc.parent_id || loc.id;
         
@@ -6558,11 +6804,17 @@ function App() {
     newSocket.on('chatHistory', (history: any[]) => setChatMessages(history));
     newSocket.on('receiveMessage', (msg: any) => {
         setChatMessages(prev => [...prev, msg]);
-        // Trigger notification flash if window is closed AND notifications are enabled AND message is not from self
         if (!isChatOpenRef.current && notificationsEnabledRef.current && msg.sender !== userName) {
             setHasUnreadChat(true);
         }
     });
+    
+    newSocket.on('bankUpdate', (data: any) => {
+        if (data.username === userName) {
+            setBankData({ balance: data.balance, debt: data.debt });
+        }
+    });
+    newSocket.emit('requestBankBalance', { username: userName });
 
     newSocket.on('receivePrivateMessage', (msg: any) => {
         if (!isChatOpenRef.current && notificationsEnabledRef.current && msg.sender !== userName) {
@@ -6691,6 +6943,9 @@ function App() {
     setRoadTrail([]);
     setCameraTarget(null);
     setShowAdminPanel(false);
+    setIsBankOpen(false);
+    setIsAdminPayOpen(false);
+    setAdminBankPlayer(null);
     
     // Reset Rhombus state but keep color for next login preference
     setRhombusState((p: any) => ({ ...p, active: false }));
@@ -6757,7 +7012,7 @@ function App() {
         <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : editId)} token={token} onClose={() => setShowBattleMapManager(false)} />
       )}
       {view === 'battle_map' && activeBattleMapData && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 100 }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 2000 }}>
           <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'auto' }}>
             <h2 style={{ margin: 0, textShadow: '0 0 10px #00ff00', fontSize: '2em' }}>{activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation?.toUpperCase() || 'UNKNOWN FLOOR'}</h2>
             <button onClick={exitBattleMap} style={{ padding: '10px 30px', marginTop: '10px', backgroundColor: '#ff0000', color: 'white', border: '1px solid #ff0000', cursor: 'pointer', fontWeight: 'bold' }}>EXIT</button>
@@ -6793,6 +7048,8 @@ function App() {
               activeMenu={activeSidebarMenu}
               setActiveMenu={setActiveSidebarMenu}
               locations={locations}
+              isBankOpen={isBankOpen}
+              setIsBankOpen={setIsBankOpen}
               onSelect={setSelectedLocation}
               onZoom={setCameraTarget}
               selectedLocation={selectedLocation}
@@ -6827,6 +7084,7 @@ function App() {
                 {showZoomComplete && !cameraTarget && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_STATUS: ZOOM COMPLETE`}</div>}
                 {view === 'city_gen' && !roadSelectionBounds && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: LEFT-CLICK + DRAG TO SELECT GENERATION AREA`}</div>}
                 {view === 'draw_roads' && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: HOLD LEFT-CLICK + DRAG TO DRAW PATH`}</div>}
+                {measureMode && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: view === 'battle_map' ? '140px' : '20px', color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 5px #ff0000', padding: '5px 15px', background: 'rgba(20, 0, 0, 0.6)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300, border: '1px solid #ff4444' }}>{`SYSTEM_ALERT: MAP CAMERA LOCKED // MEASUREMENT ACTIVE`}</div>}
                 <div style={{display: 'flex', gap: '10px'}}>{token && <button className={`admin-toggle ${pendingRequests.length > 0 && !showAdminPanel ? 'unread-flash' : ''}`} onClick={() => setShowAdminPanel(!showAdminPanel)}>{showAdminPanel ? 'HIDE_DASHBOARD' : 'SHOW_DASHBOARD'}</button>}<button className="admin-toggle" onClick={() => !token && setIsAdmin(!isAdmin)}>{token ? 'ADMIN_MODE' : (isAdmin ? 'CANCEL' : 'ADMIN_LOGIN')}</button></div>
               </div>
             </header>
@@ -6834,6 +7092,7 @@ function App() {
             {token && showAdminPanel && (
               <AdminPanel
                 isAdmin={isAdmin}
+                setIsAdminPayOpen={setIsAdminPayOpen}
                 isPrimaryAdmin={isPrimaryAdmin}
                 setShowBattleMapManager={setShowBattleMapManager}
                 isPlantingTrees={isPlantingTrees} setIsPlantingTrees={setIsPlantingTrees}
@@ -6920,6 +7179,37 @@ function App() {
                 isCopyingSize={isCopyingSize}
                 setIsCopyingSize={setIsCopyingSize}
                 />
+            )}
+            {adminBankPlayer && (
+              <AdminBankWindow
+                  pos={adminBankPos}
+                  setPos={setAdminBankPos}
+                  onClose={() => setAdminBankPlayer(null)}
+                  targetUser={adminBankPlayer}
+                  socket={socket}
+                  token={token}
+              />
+            )}
+            {isAdminPayOpen && (
+              <AdminPayWindow
+                  pos={adminPayPos}
+                  setPos={setAdminPayPos}
+                  onClose={() => setIsAdminPayOpen(false)}
+                  socket={socket}
+                  token={token}
+                  activeUsers={activeUsers}
+              />
+            )}
+            {isBankOpen && (
+              <BankWindow 
+                  pos={bankPos} 
+                  setPos={setBankPos} 
+                  onClose={() => setIsBankOpen(false)} 
+                  bankData={bankData} 
+                  socket={socket} 
+                  userName={userName} 
+                  isBankOpen={isBankOpen}
+              />
             )}
               <ChatWindow 
                   pos={chatPos} 
@@ -7018,6 +7308,11 @@ function App() {
                         </svg>
                         BROADCAST PING
                     </button>
+                    {isAdmin && isPlayerRhombus && (
+                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#00ff66', color: '#000'}} onClick={() => {
+                          setAdminBankPlayer(selectedLocation.owner);
+                      }}>VIEW_BANK</button>
+                    )}
                     {canManage && (
                       <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={async () => {
                         const res = await fetch(`/api/locations/${selectedLocation.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
@@ -7068,7 +7363,7 @@ function App() {
                 }
                 return finalScale;
             })() : (globalSettings?.map_scale_multiplier || 5)} color={rhombusState.color || '#00ff00'} userName={userName} />
-            <MeasurementVisualizer socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} />
+            <MeasurementVisualizer socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} userName={userName} />
             {view === 'battle_map' ? (
               activeBattleMapData && activeBattleMapData.maps[activeBattleMapData.currentFloorIndex] && (
                 <BattleMapScene 
@@ -7131,9 +7426,9 @@ function App() {
                           shape: 'rhombus',
                           color: rhombusState.color,
                           owner: userName,
-                          hp_max: rhombusState.hp_max || 100,
-                          hp_current: existing ? (rhombusState.hp_current ?? 100) : (rhombusState.hp_max || 100),
-                          hp_temp: existing ? (rhombusState.hp_temp ?? 0) : 0,
+                          hp_max: existing ? (existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
+                          hp_current: existing ? (existing.hp_current ?? existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
+                          hp_temp: existing ? (existing.hp_temp ?? 0) : 0,
                           battle_map_id: activeBattleMapData?.locationId || null,
                           floor_index: activeBattleMapData?.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
                       };
