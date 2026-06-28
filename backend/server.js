@@ -1246,7 +1246,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('drawMeasurement', (data) => {
-    // data: { start: {x,y,z}, end: {x,y,z}, color, battle_map_id, floor_index, map_scale_multiplier }
     const info = userSockets.get(socket.id);
     io.emit('measurementUpdated', {
       owner: info ? info.userName : socket.id,
@@ -1255,7 +1254,9 @@ io.on('connection', (socket) => {
       color: data.color || '#00ff00',
       battle_map_id: data.battle_map_id || null,
       floor_index: data.floor_index !== undefined ? data.floor_index : null,
-      map_scale_multiplier: data.map_scale_multiplier || 5
+      map_scale_multiplier: data.map_scale_multiplier || 5,
+      view: data.view,
+      locationId: data.locationId
     });
   });
 
