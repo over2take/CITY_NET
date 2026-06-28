@@ -117,12 +117,13 @@ function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapSc
     );
 }
 
-function MeasurementVisualizer({ socket, view, activeBattleMapData }: any) {
+function MeasurementVisualizer({ socket, view, activeBattleMapData, userName }: any) {
     const [measurements, setMeasurements] = useState<any[]>([]);
 
     useEffect(() => {
         if (!socket) return;
         const handleMeasurement = (data: any) => {
+            if (data.owner === userName) return; // Prevent duplicating own line and crashing Html portal
             if (data.view !== view) return;
             if (view === 'battle_map' && data.locationId !== activeBattleMapData?.locationId) return;
             setMeasurements(prev => {
@@ -132,7 +133,7 @@ function MeasurementVisualizer({ socket, view, activeBattleMapData }: any) {
         };
         socket.on('measurementUpdated', handleMeasurement);
         return () => socket.off('measurementUpdated', handleMeasurement);
-    }, [socket, view, activeBattleMapData]);
+    }, [socket, view, activeBattleMapData, userName]);
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -7354,7 +7355,7 @@ function App() {
                 }
                 return finalScale;
             })() : (globalSettings?.map_scale_multiplier || 5)} color={rhombusState.color || '#00ff00'} userName={userName} />
-            <MeasurementVisualizer socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} />
+            <MeasurementVisualizer socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} userName={userName} />
             {view === 'battle_map' ? (
               activeBattleMapData && activeBattleMapData.maps[activeBattleMapData.currentFloorIndex] && (
                 <BattleMapScene 
