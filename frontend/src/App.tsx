@@ -16,6 +16,8 @@ import type {
   RhombusState, MeasurementData, GlobalSettings, PendingRequest,
 } from './types';
 import rhombusIcon from './assets/rhombus.svg';
+import { useMapData } from './hooks/useMapData';
+import { useSocket } from './hooks/useSocket';
 function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapScaleMultiplier, color, userName }: any) {
     const { raycaster, camera, scene, pointer, gl } = useThree();
     const [startPoint, setStartPoint] = useState<THREE.Vector3 | null>(null);
@@ -6317,15 +6319,11 @@ function CameraController({ target, onComplete }: { target: { pos: [number, numb
 
 function App() {
   const controlsRef = useRef<any>(null);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [districts, setDistricts] = useState<District[]>([]);
+  const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchAll } = useMapData();
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
-  const [roads, setRoads] = useState<Road[]>([]);
-  const [waterBodies, setWaterBodies] = useState<WaterBody[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [showBattleMapManager, setShowBattleMapManager] = useState(false);
-  const [activeBattleMapData, setActiveBattleMapData] = useState<BattleMapSessionData | null>(null);
   const [tempBattleMapScale, setTempBattleMapScale] = useState<number | string | null>(null);
   const [tempCityMapScale, setTempCityMapScale] = useState<number | string | null>(null);
   const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({});
@@ -6348,14 +6346,11 @@ function App() {
   useEffect(() => {
       fetchGlobalSettings();
   }, []);
-  const [battleMapPositions, setBattleMapPositions] = useState<Record<string, BattleMapPosition>>({});
   const [currentLocBattleMaps, setCurrentLocBattleMaps] = useState<BattleMap[]>([]);
   const [cameraTarget, setCameraTarget] = useState<CameraTarget | null>(null);
   const [showZoomComplete, setShowZoomComplete] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [token, setToken] = useState('');
-  const tokenRef = useRef(token);
-  useEffect(() => { tokenRef.current = token; }, [token]);
   
   let isPrimaryAdmin = false;
   if (token) {
@@ -6371,14 +6366,8 @@ function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [measureMode, setMeasureMode] = useState(false);
   const [userName, setUserName] = useState<string>('');
-  const userNameRef = useRef(userName);
-  useEffect(() => { userNameRef.current = userName; }, [userName]);
   const [tempUserName, setTempUserName] = useState('');
   const [currentController, setCurrentController] = useState<string>('');
-  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [activeEditLocation, setActiveEditLocation] = useState<Location | null>(null);
-  const [isSomeoneEditing, setIsSomeoneEditing] = useState(false);
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<SidebarMenu>('none');
   const [isDiceTrayOpen, setIsDiceTrayOpen] = useState(false);
 
@@ -6408,7 +6397,6 @@ function App() {
   const [adminBankPos, setAdminBankPos] = useState({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 100 });
   const [isAdminPayOpen, setIsAdminPayOpen] = useState(false);
   const [adminPayPos, setAdminPayPos] = useState({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 });
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   useEffect(() => {
     const handleClear = () => { (window as any).hasUnsavedChanges = false; };
     window.addEventListener('clearUnsavedChanges', handleClear);
@@ -6428,14 +6416,6 @@ function App() {
         setNotificationsEnabled(existing.notifications_enabled !== 0);
     }
   }, [userName, locations.length]);
-
-  const toggleNotifications = () => {
-    const nextState = !notificationsEnabled;
-    setNotificationsEnabled(nextState);
-    if (socketRef.current) {
-        socketRef.current.emit('updateNotifications', { userName, enabled: nextState });
-    }
-  };
 
   useEffect(() => {
     if (isChatOpen) setHasUnreadChat(false);
@@ -6458,9 +6438,6 @@ function App() {
   const [drawingRoadWidth, setDrawingRoadWidth] = useState(2.4);
   const [citySectionType, setCitySectionType] = useState<'MIXED' | 'CORPO' | 'URBAN' | 'SLUMS' | 'INDUSTRIAL'>('MIXED');
   const [genExcludeRoads, setGenExcludeRoads] = useState(false);
-  const [socket, setSocket] = useState<ReturnType<typeof io> | null>(null);
-  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
-  const [activePings, setActivePings] = useState<{ id: string; x: number; y: number; z: number; color: string }[]>([]);
   const [rhombusState, setRhombusState] = useState(() => {
     const savedColor = localStorage.getItem('rhombusColor') || '#00ff00';
     const savedHpMax = parseInt(localStorage.getItem('rhombusHpMax') || '100', 10);
@@ -6805,6 +6782,38 @@ function App() {
   };
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  const {
+    socketRef, tokenRef, userNameRef, wasGrantedForEditRef,
+    activeUsers, chatMessages, setChatMessages,
+    activePings, battleMapPositions, setBattleMapPositions,
+    activeBattleMapData, setActiveBattleMapData,
+    pendingRequests, setPendingRequests,
+    isSomeoneEditing, setIsSomeoneEditing,
+    isEditModalOpen, setIsEditModalOpen,
+    activeEditLocation, setActiveEditLocation,
+    emit,
+  } = useSocket({
+    userName, token, isLoggedIn,
+    notificationsEnabled, isChatOpen,
+    onFetchAll: fetchAll,
+    onFetchLocations: fetchLocations,
+    onFetchRoads: fetchRoads,
+    onFetchDistricts: fetchDistricts,
+    onFetchWaterBodies: fetchWaterBodies,
+    onBankUpdate: (balance, debt) => setBankData({ balance, debt }),
+    onNotification: setNotification,
+    onHasUnreadChat: setHasUnreadChat,
+    onTokenUpdate: setToken,
+    onIsAdminUpdate: setIsAdmin,
+  });
+
+  const toggleNotifications = () => {
+    const nextState = !notificationsEnabled;
+    setNotificationsEnabled(nextState);
+    emit('updateNotifications', { userName, enabled: nextState });
+  };
+
   const startupPlayed = useRef(false);
 
   useEffect(() => {
@@ -6940,9 +6949,6 @@ function App() {
   const [targetObject, setTargetObject] = useState<any>(null);
   const genGroupRef = useRef<any>(null);
   const editMeshRef = useRef<any>(null);
-  const socketRef = useRef<any>(null);
-  const wasGrantedForEditRef = useRef<boolean>(false);
-
   useEffect(() => {
     const savedName = localStorage.getItem('userName');
     if (savedName) { setUserName(savedName); setTempUserName(savedName); }
@@ -6956,11 +6962,6 @@ function App() {
 
   useEffect(() => { if (view !== 'generator') setTargetObject(null); if (view !== 'editor') { setEditorGenParts([]); setEditorGenType(''); setIsCopyingSize(false); } }, [view]);
 
-  const fetchLocations = () => { fetch(`/api/locations?_t=${Date.now()}`).then(res => res.json()).then(data => setLocations(data)).catch(err => console.error("Error fetching locations:", err)); };
-  const fetchDistricts = () => { fetch(`/api/districts?_t=${Date.now()}`).then(res => res.json()).then(data => setDistricts(data)).catch(err => console.error("Error fetching districts:", err)); };
-  const fetchRoads = () => { fetch(`/api/roads?_t=${Date.now()}`).then(res => res.json()).then(data => setRoads(data)).catch(err => console.error("Error fetching roads:", err)); };
-  const fetchWaterBodies = () => { fetch(`/api/water?_t=${Date.now()}`).then(res => res.json()).then(data => setWaterBodies(data)).catch(err => console.error("Error fetching water:", err)); };
-  
   const handleWaterDrawn = async (points: THREE.Vector3[]) => {
       try {
           const res = await fetch('/api/water', {
@@ -6989,116 +6990,6 @@ function App() {
         setRhombusState((p: any) => ({ ...p, active: false }));
     }
   };
-
-  const isChatOpenRef = useRef(isChatOpen);
-  const notificationsEnabledRef = useRef(notificationsEnabled);
-  
-  useEffect(() => { isChatOpenRef.current = isChatOpen; }, [isChatOpen]);
-  useEffect(() => { notificationsEnabledRef.current = notificationsEnabled; }, [notificationsEnabled]);
-
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    fetchLocations(); fetchRoads(); fetchDistricts(); fetchWaterBodies();
-    const newSocket = io();
-    socketRef.current = newSocket;
-    setSocket(newSocket);
-
-    newSocket.on('chatHistory', (history: any[]) => setChatMessages(history));
-    newSocket.on('receiveMessage', (msg: any) => {
-        setChatMessages(prev => [...prev, msg]);
-        if (!isChatOpenRef.current && notificationsEnabledRef.current && msg.sender !== userName) {
-            setHasUnreadChat(true);
-        }
-    });
-    
-    newSocket.on('bankUpdate', (data: any) => {
-        if (data.username === userName) {
-            setBankData({ balance: data.balance, debt: data.debt });
-        }
-    });
-    newSocket.emit('requestBankBalance', { username: userName });
-
-    newSocket.on('receivePrivateMessage', (msg: any) => {
-        if (!isChatOpenRef.current && notificationsEnabledRef.current && msg.sender !== userName) {
-            setHasUnreadChat(true);
-        }
-    });
-
-    newSocket.on('accessGranted', (data: any) => {
-        if (data.targetUser === userName) {
-            setToken(data.token);
-            setIsAdmin(true);
-            if (data.forEditing) {
-                wasGrantedForEditRef.current = true;
-                setNotification(null);
-            } else {
-                setNotification("TEMPORARY_ADMIN_ACCESS_GRANTED");
-            }
-        }
-    });
-
-    newSocket.on('accessRevoked', (data: any) => {
-        if (data.targetUser === userName) {
-            setToken('');
-            setNotification("TEMPORARY_ADMIN_ACCESS_REVOKED");
-        }
-    });
-
-    newSocket.on('connect', () => {
-      console.log("Socket connected, identifying as:", userNameRef.current);
-      newSocket.emit('identify', { userName: userNameRef.current, isAdmin: !!tokenRef.current, token: tokenRef.current });
-    });
-
-    newSocket.on('dataUpdated', (payload: any) => { fetchLocations(); fetchRoads(); fetchDistricts(); fetchWaterBodies(); if (!payload || !payload.isRhombusOnly) { (window as any).hasUnsavedChanges = true; } });
-    newSocket.on('activeUsersUpdated', (users: any[]) => setActiveUsers(users));
-    newSocket.on('force_floor_change', (data: any) => {
-        setActiveBattleMapData((prev: any) => {
-          if (prev && prev.locationId === data.locationId) {
-             return { ...prev, currentFloorIndex: data.floorIndex };
-          }
-          return prev;
-        });
-      });
-      newSocket.on('battle_map_moved', (data: any) => {
-        setBattleMapPositions(prev => ({ ...prev, [data.userName]: { x: data.x, z: data.z } }));
-      });
-      newSocket.on('default_loaded', (data: any) => {
-          data.updates.forEach((update: any) => {
-              if (!update.isEnemy && !update.isFriendly) {
-                  setBattleMapPositions(prev => ({ ...prev, [update.userName]: { x: update.x, z: update.z } }));
-              }
-          });
-      });
-      newSocket.on('editingRequested', (data: any) => {
-      if (data.userId !== userName && notification === "REQUEST_SENT_TO_ADMIN") {
-        setNotification(`ANOTHER_USER_REQUESTING_ACCESS: ${data.userName}`);
-      }
-      setPendingRequests(prev => [...prev, data]);
-    });
-    newSocket.on('editingStarted', (data: any) => { setIsSomeoneEditing(true); if (data.userId === userName) { setActiveEditLocation(data.location); setIsEditModalOpen(true); } });
-    newSocket.on('editingStopped', () => setIsSomeoneEditing(false));
-    newSocket.on('editingDenied', (data: any) => { if (data.userId === userName) setNotification("EDITING_ACCESS_DENIED_BY_ADMIN"); });
-    newSocket.on('editingRevoked', (data: any) => { setIsEditModalOpen(false); setActiveEditLocation(null); setIsSomeoneEditing(false); if (data.userId === userName) setNotification("ACCESS_TO_DATA_POINT_REVOKED"); });
-    newSocket.on('location_pinged', (pingData: any) => {
-        const pingId = Math.random().toString(36).substr(2, 9);
-        const newPing = { ...pingData, id: pingId };
-        setActivePings(prev => {
-            const filtered = pingData.owner ? prev.filter(p => p.owner !== pingData.owner) : prev;
-            return [...filtered, newPing];
-        });
-        setTimeout(() => {
-            setActivePings(prev => prev.filter(p => p.id !== pingId));
-        }, 4000); // 4 second duration
-    });
-    return () => { newSocket.disconnect(); };
-  }, [userName, isLoggedIn]);
-
-  // Re-identify when admin token changes to update roster rank
-  useEffect(() => {
-    if (socket && userName) {
-        socket.emit('identify', { userName, isAdmin: !!token, token });
-    }
-  }, [token, socket, userName]);
 
   useEffect(() => { if (isEditModalOpen && activeEditLocation) setEditData({ ...activeEditLocation, baseWidth: activeEditLocation.width, baseHeight: activeEditLocation.height, baseDepth: activeEditLocation.depth, polyCount: activeEditLocation.polyCount || 5 }); }, [isEditModalOpen, activeEditLocation]);
 
@@ -7391,7 +7282,7 @@ function App() {
                   setPos={setAdminBankPos}
                   onClose={() => setAdminBankPlayer(null)}
                   targetUser={adminBankPlayer}
-                  socket={socket}
+                  socket={socketRef.current}
                   token={token}
               />
             )}
@@ -7400,7 +7291,7 @@ function App() {
                   pos={adminPayPos}
                   setPos={setAdminPayPos}
                   onClose={() => setIsAdminPayOpen(false)}
-                  socket={socket}
+                  socket={socketRef.current}
                   token={token}
                   activeUsers={activeUsers}
               />
@@ -7411,7 +7302,7 @@ function App() {
                   setPos={setBankPos} 
                   onClose={() => setIsBankOpen(false)} 
                   bankData={bankData} 
-                  socket={socket} 
+                  socket={socketRef.current} 
                   userName={userName} 
                   isBankOpen={isBankOpen}
               />
@@ -7712,7 +7603,7 @@ function App() {
             )}
 <InstancedBuildings buildings={renderLists.simple} onSelect={handleBuildingClick} isDragging={isDragging} />
             {renderLists.interactive.map(({ loc, children, isSelected, isBatchSelected, isOverlapped }: any) => (
-              <Building key={loc.id} location={loc} children={children} onClick={() => handleBuildingClick(loc)} isSelected={isSelected} isBatchSelected={isBatchSelected} isOverlapped={isOverlapped} setTargetObject={setTargetObject} editMeshRef={editMeshRef} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} isDragging={isDragging} socket={socket} activeUsers={activeUsers} />
+              <Building key={loc.id} location={loc} children={children} onClick={() => handleBuildingClick(loc)} isSelected={isSelected} isBatchSelected={isBatchSelected} isOverlapped={isOverlapped} setTargetObject={setTargetObject} editMeshRef={editMeshRef} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} isDragging={isDragging} socket={socketRef.current} activeUsers={activeUsers} />
             ))}
             </>
             )}
@@ -7731,21 +7622,21 @@ function App() {
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
                 (view !== 'battle_map' && l.battle_map_id == null)
             )).map(loc => (
-              <PlayerRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} activeUsers={activeUsers} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
+              <PlayerRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} activeUsers={activeUsers} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
             ))}
             {/* Dedicated Enemy Rhombus Rendering */}
             {locations.filter(l => l.shape === 'enemy_rhombus' && (
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
                 (view !== 'battle_map' && l.battle_map_id == null)
             )).map(loc => (
-              <EnemyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
+              <EnemyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
             ))}
             {/* Dedicated Friendly NPC Rendering */}
             {locations.filter(l => l.shape === 'friendly_rhombus' && (
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
                 (view !== 'battle_map' && l.battle_map_id == null)
             )).map(loc => (
-              <FriendlyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socket} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
+              <FriendlyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
             ))}
             {token && view === 'editor' && !editId && (
               <group ref={(group) => { if (group && targetObject !== group) { setTargetObject(group); editMeshRef.current = group; } }} position={[editData.x, editData.y, editData.z]}>
