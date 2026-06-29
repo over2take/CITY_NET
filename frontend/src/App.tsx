@@ -3208,7 +3208,7 @@ function AdminPanel({
 
   const startEdit = (loc: any) => {
     setEditId(loc.id);
-    setEditData({ ...loc, baseWidth: loc.width, baseHeight: loc.height, baseDepth: loc.depth, shape: loc.shape || 'box', polyCount: loc.polyCount || 5 });
+    setEditData({ ...loc, description: loc.description ?? '', npcs: loc.npcs ?? '', owner: loc.owner ?? '', baseWidth: loc.width, baseHeight: loc.height, baseDepth: loc.depth, shape: loc.shape || 'box', polyCount: loc.polyCount || 5 });
     if (targetObject) targetObject.scale.set(1, 1, 1);
     setView('editor');
   };
@@ -6920,7 +6920,7 @@ function App() {
     }
   };
 
-  useEffect(() => { if (isEditModalOpen && activeEditLocation) setEditData({ ...activeEditLocation, baseWidth: activeEditLocation.width, baseHeight: activeEditLocation.height, baseDepth: activeEditLocation.depth, polyCount: activeEditLocation.polyCount || 5 }); }, [isEditModalOpen, activeEditLocation]);
+  useEffect(() => { if (isEditModalOpen && activeEditLocation) setEditData({ ...activeEditLocation, description: activeEditLocation.description ?? '', npcs: activeEditLocation.npcs ?? '', owner: activeEditLocation.owner ?? '', baseWidth: activeEditLocation.width, baseHeight: activeEditLocation.height, baseDepth: activeEditLocation.depth, polyCount: activeEditLocation.polyCount || 5 }); }, [isEditModalOpen, activeEditLocation]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
