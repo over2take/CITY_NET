@@ -205,6 +205,12 @@ db.serialize(() => {
     balance REAL DEFAULT 0.00,
     debt REAL DEFAULT 0.00
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS water_bodies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    points_json TEXT NOT NULL,
+    map_scale_multiplier TEXT DEFAULT '[1]'
+  )`);
 });
 
 module.exports = db;
