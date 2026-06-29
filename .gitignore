@@ -10,7 +10,13 @@ dist/
 build/
 
 # SQLite databases
-backend/city.db
+backend/*.db
+backend/*.db.bak
+backend/*.sqlite
+
+# Backend environment and dev config
+backend/.env
+backend/nodemon.json
 
 # Large archives
 *.zip
@@ -32,3 +38,9 @@ cloudflared.exe
 
 # User Uploads
 backend/uploads/
+
+# Frontend dev scripts and build artifacts
+frontend/*.cjs
+frontend/test.js
+frontend/test_output.txt
+frontend/src/*.bak
