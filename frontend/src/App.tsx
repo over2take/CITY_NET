@@ -6490,56 +6490,6 @@ function App() {
     return groups;
   }, [locations]);
 
-  // High-performance render list split
-  const renderLists = useMemo(() => {
-    const roots = groupedLocations['root'] || [];
-    const simple: any[] = [];
-    const interactive: any[] = [];
-
-    roots.forEach((loc: any) => {
-      if (loc.shape === 'rhombus' || loc.shape === 'enemy_rhombus' || loc.shape === 'friendly_rhombus') return; // Dedicated components handle these
-
-      const children = groupedLocations[loc.id] || [];
-      const isSelected = !isBatchSelecting && view !== 'district' && view !== 'join' && selectedLocation?.id === loc.id;
-      const isBatchSelected = selectedIds.includes(loc.id) || districtSelection.includes(loc.id) || joinSelection.includes(loc.id);
-      const isOverlapped = overlapIds.includes(loc.id) || children.some((c: any) => overlapIds.includes(c.id));
-      const isBattleActive = activeUsers && activeUsers.some((user: any) => user.currentBattleMapId && Number(user.currentBattleMapId) === Number(loc.id));
-      
-      if (!isSelected && !isBatchSelected && !isOverlapped && !isBattleActive) {
-        // Flatten parent and all its children into the simple (instanced) rendering list
-        const pushSimple = (p: any) => {
-          simple.push({
-            id: p.id,
-            shape: p.shape,
-            polyCount: p.polyCount,
-            x: p.x,
-            y: p.y,
-            z: p.z,
-            width: p.width,
-            height: p.height,
-            depth: p.depth,
-            color: p.color,
-            rotation: p.rotation,
-            rotation_x: p.rotation_x,
-            rotation_z: p.rotation_z,
-            district_color: p.district_color,
-            isFavorite: p.isFavorite,
-            isDanger: p.isDanger,
-            name: p.name,
-            description: p.description,
-            npcs: p.npcs,
-            rootLoc: loc // Pointer to root parent location for click selection
-          });
-        };
-        pushSimple(loc);
-        children.forEach((c: any) => pushSimple(c));
-      } else {
-        interactive.push({ loc, children, isSelected, isBatchSelected, isOverlapped });
-      }
-    });
-    return { simple, interactive };
-  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers]);
-
   const toggleSelection = (id: number) => { setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]); };
 
   useEffect(() => {
@@ -6814,6 +6764,42 @@ function App() {
     setNotificationsEnabled(nextState);
     emit('updateNotifications', { userName, enabled: nextState });
   };
+
+  // High-performance render list split
+  const renderLists = useMemo(() => {
+    const roots = groupedLocations['root'] || [];
+    const simple: any[] = [];
+    const interactive: any[] = [];
+
+    roots.forEach((loc: any) => {
+      if (loc.shape === 'rhombus' || loc.shape === 'enemy_rhombus' || loc.shape === 'friendly_rhombus') return;
+
+      const children = groupedLocations[loc.id] || [];
+      const isSelected = !isBatchSelecting && view !== 'district' && view !== 'join' && selectedLocation?.id === loc.id;
+      const isBatchSelected = selectedIds.includes(loc.id) || districtSelection.includes(loc.id) || joinSelection.includes(loc.id);
+      const isOverlapped = overlapIds.includes(loc.id) || children.some((c: any) => overlapIds.includes(c.id));
+      const isBattleActive = activeUsers && activeUsers.some((user: any) => user.currentBattleMapId && Number(user.currentBattleMapId) === Number(loc.id));
+
+      if (!isSelected && !isBatchSelected && !isOverlapped && !isBattleActive) {
+        const pushSimple = (p: any) => {
+          simple.push({
+            id: p.id, shape: p.shape, polyCount: p.polyCount,
+            x: p.x, y: p.y, z: p.z,
+            width: p.width, height: p.height, depth: p.depth,
+            color: p.color, rotation: p.rotation, rotation_x: p.rotation_x, rotation_z: p.rotation_z,
+            district_color: p.district_color, isFavorite: p.isFavorite, isDanger: p.isDanger,
+            name: p.name, description: p.description, npcs: p.npcs,
+            rootLoc: loc,
+          });
+        };
+        pushSimple(loc);
+        children.forEach((c: any) => pushSimple(c));
+      } else {
+        interactive.push({ loc, children, isSelected, isBatchSelected, isOverlapped });
+      }
+    });
+    return { simple, interactive };
+  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers]);
 
   const startupPlayed = useRef(false);
 
