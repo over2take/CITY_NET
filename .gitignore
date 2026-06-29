@@ -10,7 +10,13 @@ dist/
 build/
 
 # SQLite databases
-backend/city.db
+backend/*.db
+backend/*.db.bak
+backend/*.sqlite
+
+# Backend environment and dev config
+backend/.env
+backend/nodemon.json
 
 # Large archives
 *.zip
