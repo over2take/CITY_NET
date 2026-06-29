@@ -283,13 +283,14 @@ const renderBaseGeometry = (shape: string, polyCount: number = 5) => {
   }
 };
 
-const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token }: any) => {
+const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token }: any) => {
   const { camera, gl, controls } = useThree();
   const [dragStart, setDragStart] = useState<THREE.Vector3 | null>(null);
   const [dragEnd, setDragEnd] = useState<THREE.Vector3 | null>(null);
   const [isPainting, setIsPainting] = useState(false);
   const raycaster = useRef(new THREE.Raycaster());
   const mouseScreenPos = useRef<{ x: number, y: number } | null>(null);
+  const waterTrailRef = useRef<THREE.Vector3[]>([]);
 
   useFrame((state, delta) => {
     if (view === 'draw_roads' && isPainting && mouseScreenPos.current && controls) {
@@ -349,7 +350,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
   });
 
   useEffect(() => {
-    if ((view === 'district' || view === 'draw_roads' || view === 'city_gen' || isBatchSelecting) && controls) {
+    if ((view === 'district' || view === 'draw_roads' || view === 'draw_water' || view === 'city_gen' || isBatchSelecting) && controls) {
       if ((controls as any).setLookAt) {
           (controls as any).setLookAt(0, 100, 0.1, 0, 0, 0, false);
       } else {
@@ -366,7 +367,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
   }, [view, controls, camera]);
 
   useEffect(() => {
-    if (view !== 'district' && view !== 'draw_roads' && view !== 'city_gen' && !isBatchSelecting && !rhombusState?.active) return;
+    if (view !== 'district' && view !== 'draw_roads' && view !== 'draw_water' && view !== 'city_gen' && !isBatchSelecting && !rhombusState?.active) return;
 
     const getMouseWorldPos = (e: MouseEvent) => {
         const rect = gl.domElement.getBoundingClientRect();
@@ -434,6 +435,12 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
             if (controls) (controls as any).enabled = false;
             setIsPainting(true); 
             setRoadTrail((prev: any) => [...prev, [pos.clone(), pos.clone()]]);
+        } else if (view === 'draw_water' && setWaterTrail) {
+            if (controls) (controls as any).enabled = false;
+            setIsPainting(true);
+            const initialPath = [pos.clone()];
+            setWaterTrail(initialPath);
+            waterTrailRef.current = initialPath;
         } else if (view === 'district' || view === 'city_gen' || isBatchSelecting) {
             if (controls) (controls as any).enabled = false;
             setDragStart(pos.clone()); setDragEnd(pos.clone());
@@ -456,6 +463,13 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
                 newPaths[newPaths.length - 1] = currentPath;
                 return newPaths;
             });
+        } else if (view === 'draw_water' && isPainting && setWaterTrail) {
+            const pos = getMouseWorldPos(e);
+            const lastPos = waterTrailRef.current[waterTrailRef.current.length - 1];
+            if (!lastPos || pos.distanceTo(lastPos) > 0.8) {
+                waterTrailRef.current.push(pos.clone());
+                setWaterTrail([...waterTrailRef.current]);
+            }
         } else if (dragStart) {
             const pos = getMouseWorldPos(e); setDragEnd(pos.clone());
         }
@@ -465,6 +479,15 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
         mouseScreenPos.current = null;
         if (controls) (controls as any).enabled = true;
         if (view === 'draw_roads') { setIsPainting(false); return; }
+        if (view === 'draw_water') {
+            setIsPainting(false);
+            if (onWaterDrawEnd && waterTrailRef.current.length > 2) {
+                onWaterDrawEnd([...waterTrailRef.current]);
+            }
+            if (setWaterTrail) setWaterTrail([]);
+            waterTrailRef.current = [];
+            return;
+        }
         if (!dragStart || !dragEnd) return;
         const minX = Math.min(dragStart.x, dragEnd.x); const maxX = Math.max(dragStart.x, dragEnd.x);
         const minZ = Math.min(dragStart.z, dragEnd.z); const maxZ = Math.max(dragStart.z, dragEnd.z);
@@ -487,7 +510,7 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
         window.removeEventListener('pointermove', handlePointerMove);
         window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [view, dragStart, dragEnd, isPainting, gl, camera, locations, onSelectionChange, controls, setRoadTrail, roadDrawMode, snapToGrid, rhombusState, setRhombusState, isBatchSelecting, userName, refreshLocations]);
+  }, [view, dragStart, dragEnd, isPainting, gl, camera, locations, onSelectionChange, controls, setRoadTrail, setWaterTrail, roadDrawMode, snapToGrid, rhombusState, setRhombusState, isBatchSelecting, userName, refreshLocations]);
 
   return (
     <>
@@ -521,7 +544,134 @@ const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, r
               ))}
           </group>
       )}
+      {view === 'draw_water' && waterTrail && waterTrail.length > 0 && (
+          <group>
+              {waterTrail.map((p: any, i: number) => {
+                  if (i === waterTrail.length - 1) return null;
+                  const pNext = waterTrail[i+1];
+                  const dist = p.distanceTo(pNext);
+                  if (dist < 0.1) return null;
+                  const linePos = p.clone().lerp(pNext, 0.5);
+                  linePos.y = 0.02;
+                  return (
+                      <group key={i} position={linePos} onUpdate={(self) => self.lookAt(pNext)}>
+                          <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]}>
+                              <planeGeometry args={[dist, 0.5]} />
+                              <meshBasicMaterial color="#0088ff" transparent opacity={0.6} side={THREE.DoubleSide} />
+                          </mesh>
+                      </group>
+                  );
+              })}
+              {waterTrail.length > 2 && (
+                  // Draw closing line preview
+                  <group position={waterTrail[waterTrail.length - 1].clone().lerp(waterTrail[0], 0.5)} onUpdate={(self) => self.lookAt(waterTrail[0])}>
+                      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]}>
+                          <planeGeometry args={[waterTrail[waterTrail.length - 1].distanceTo(waterTrail[0]), 0.5]} />
+                          <meshBasicMaterial color="#0088ff" transparent opacity={0.3} side={THREE.DoubleSide} />
+                      </mesh>
+                  </group>
+              )}
+          </group>
+      )}
     </>
+  );
+});
+
+const WaterBody = ({ body }: { body: any }) => {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+  const shape = useMemo(() => {
+    try {
+      const points = JSON.parse(body.points_json);
+      if (!points || points.length < 3) return null;
+      const s = new THREE.Shape();
+      s.moveTo(points[0].x, -points[0].z);
+      for (let i = 1; i < points.length; i++) {
+        s.lineTo(points[i].x, -points[i].z);
+      }
+      s.lineTo(points[0].x, -points[0].z);
+      return s;
+    } catch (e) {
+      return null;
+    }
+  }, [body.points_json]);
+
+  const uniforms = useMemo(() => ({
+    time: { value: 0 },
+    baseColor: { value: new THREE.Color("#0055aa") },
+    waveColor: { value: new THREE.Color("#33aaff") },
+  }), []);
+
+  const phaseOffset = useMemo(() => Math.random() * Math.PI * 2, []);
+  
+  useFrame((state) => {
+    if (meshRef.current) {
+      const wave = Math.sin(state.clock.elapsedTime * 1.5 + phaseOffset);
+      meshRef.current.position.y = 0.035 + wave * 0.005; // slight bobbing
+    }
+    if (materialRef.current) {
+      materialRef.current.uniforms.time.value = state.clock.elapsedTime;
+    }
+  });
+
+  if (!shape) return null;
+
+  return (
+    <mesh ref={meshRef} position={[0, 0.035, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <shapeGeometry args={[shape]} />
+      <shaderMaterial 
+        ref={materialRef}
+        transparent={true}
+        side={THREE.DoubleSide}
+        uniforms={uniforms}
+        vertexShader={`
+          varying vec2 vUv;
+          varying vec3 vPos;
+          void main() {
+            vUv = uv;
+            vPos = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `}
+        fragmentShader={`
+          uniform float time;
+          uniform vec3 baseColor;
+          uniform vec3 waveColor;
+          varying vec2 vUv;
+          varying vec3 vPos;
+          
+          void main() {
+            // Organic, broken-up wavy lines traveling left to right
+            
+            // Base wavy movement
+            float wave = sin(vPos.x * 2.5 - time * 1.5 + sin(vPos.y * 3.0) * 1.2);
+            
+            // Secondary noise/wave to break the lines into dashes and offset them
+            float dashMask = sin(vPos.x * 4.0 - time * 1.0 + vPos.y * 8.0);
+            
+            // Cylinder gradient running right to left (+ time moves it left)
+            float cylinder = sin(vPos.x * 1.5 + time * 2.0) * 0.5 + 0.5;
+            
+            // Combine and sharpen to create small, disconnected wave ripples
+            // Multiply by cylinder gradient to sweep the opacity
+            float lines = smoothstep(0.8, 1.0, wave) * smoothstep(0.2, 0.8, dashMask) * cylinder;
+            
+            vec3 finalColor = mix(baseColor, waveColor, lines * 0.8);
+            float alpha = 0.5 + lines * 0.5;
+            
+            gl_FragColor = vec4(finalColor, alpha);
+          }
+        `}
+      />
+    </mesh>
+  );
+};
+
+const WaterBodies = React.memo(({ waterBodies }: { waterBodies: any[] }) => {
+  return (
+    <group>
+      {waterBodies.map(body => <WaterBody key={body.id} body={body} />)}
+    </group>
   );
 });
 
@@ -2860,7 +3010,7 @@ function AdminPanel({
   districtSelection, setDistrictSelection, districtConfig, setDistrictConfig,
   districts, fetchDistricts, editingDistrict, setEditingDistrict,
   joinSelection, setJoinSelection, selectedClassification, setSelectedClassification, roadSelectionBounds, setRoadSelectionBounds,
-  roadTrail, setRoadTrail, roadDrawMode, setRoadDrawMode, snapToGrid, setSnapToGrid, snapRotation, setSnapRotation,
+  roadTrail, setRoadTrail, waterTrail, setWaterTrail, fetchWaterBodies, roadDrawMode, setRoadDrawMode, snapToGrid, setSnapToGrid, snapRotation, setSnapRotation,
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
   genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu,
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
@@ -3383,6 +3533,9 @@ function AdminPanel({
           </div>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setRoadTrail([]); setView('draw_roads'); }}>+ DRAW_ROADS</button>
+              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setWaterTrail([]); setView('draw_water'); }}>+ DRAW_WATER</button>
+          </div>
+          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setDistrictSelection([]); setEditingDistrict(null); setView('district'); }}>+ MNG_DISTRICT</button>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setJoinSelection([]); setView('join'); }}>+ JOIN_STRUCTS</button>
           </div>
@@ -3423,6 +3576,15 @@ function AdminPanel({
               }
             }
           }}>PURGE_ALL_ROADS</button>
+          <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={async () => {
+            if (confirm("PURGE ALL WATER DATA?")) {
+              const res = await fetch('/api/water', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+              if (res.ok) {
+                setAdminAlert("ALL WATER PURGED FROM DATABASE");
+                if (fetchWaterBodies) fetchWaterBodies();
+              }
+            }
+          }}>PURGE_ALL_WATER</button>
           <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={async () => { if (confirm("PURGE ALL CHAT HISTORY?")) { await fetch('/api/chat/purge', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); } }}>PURGE_CHAT_HISTORY</button>
           <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={() => { if (confirm("PURGE ALL DICE ROLL HISTORY?")) { socketRef.current.emit('purgeDiceHistory', { token }); setAdminAlert("DICE ROLL HISTORY PURGED"); } }}>PURGE_ROLL_HISTORY</button>
           <button className={`utility-btn ${isBatchSelecting ? 'active' : ''}`} style={{marginTop: '10px', width: '100%'}} onClick={() => { if (isBatchSelecting) setSelectedIds([]); setIsBatchSelecting(!isBatchSelecting); }}>{isBatchSelecting ? 'CANCEL_BATCH_DELETE' : 'BATCH_DELETE_MODE'}</button>
@@ -3540,6 +3702,19 @@ function AdminPanel({
                 await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalSegments) });
                 setAdminAlert(`DRAWN NETWORK GENERATED: ${finalSegments.length} SEGMENTS`); refreshLocations(); setView('list'); setRoadTrail([]);
             }}>GENERATE_FROM_DRAWINGS</button>
+        </>
+      )}
+
+      {view === 'draw_water' && (
+        <>
+          <header style={{marginBottom: '10px'}}><h3>DRAW_WATER</h3><button onClick={() => { setView('list'); setWaterTrail([]); }} className="close-btn" style={{position: 'static'}}>X</button></header>
+          <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}><p>WATER_POINTS: {waterTrail.length}</p><p style={{opacity: 0.7, marginTop: '5px'}}>HOLD LEFT-CLICK TO TRACE BOUNDARY</p><button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setWaterTrail([])}>CLEAR_DRAWING</button></div>
+          <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => {
+                if (waterTrail.length < 3) return setAdminAlert("DRAW A POLYGON WITH AT LEAST 3 POINTS");
+                const points = waterTrail.map((p: any) => ({ x: p.x, z: p.z }));
+                await fetch('/api/water', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ points }) });
+                setAdminAlert(`WATER BODY SAVED`); fetchWaterBodies(); setView('list'); setWaterTrail([]);
+            }}>SAVE_WATER_BODY</button>
         </>
       )}
 
@@ -6140,6 +6315,7 @@ function App() {
   const [editingDistrict, setEditingDistrict] = useState<any>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [roads, setRoads] = useState<any[]>([]);
+  const [waterBodies, setWaterBodies] = useState<any[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
   const [showBattleMapManager, setShowBattleMapManager] = useState(false);
   const [activeBattleMapData, setActiveBattleMapData] = useState<any>(null);
@@ -6183,7 +6359,7 @@ function App() {
   }
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const [view, setView] = useState<'list' | 'editor' | 'generator' | 'district' | 'join' | 'draw_roads' | 'city_gen' | 'battle_map'>('list');
+  const [view, setView] = useState<'list' | 'editor' | 'generator' | 'district' | 'join' | 'draw_roads' | 'draw_water' | 'city_gen' | 'battle_map'>('list');
   const [editId, setEditId] = useState<number | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [measureMode, setMeasureMode] = useState(false);
@@ -6268,6 +6444,7 @@ function App() {
   const [selectedClassification, setSelectedClassification] = useState<string>('');
   const [roadSelectionBounds, setRoadSelectionBounds] = useState<{ min: THREE.Vector3, max: THREE.Vector3 } | null>(null);
   const [roadTrail, setRoadTrail] = useState<THREE.Vector3[][]>([]);
+  const [waterTrail, setWaterTrail] = useState<THREE.Vector3[]>([]);
   const [roadDrawMode, setRoadDrawMode] = useState<'free' | 'straight'>('free');
   const [snapToGrid, setSnapToGrid] = useState(false);
     const [snapRotation, setSnapRotation] = useState(false);
@@ -6775,6 +6952,24 @@ function App() {
   const fetchLocations = () => { fetch(`/api/locations?_t=${Date.now()}`).then(res => res.json()).then(data => setLocations(data)).catch(err => console.error("Error fetching locations:", err)); };
   const fetchDistricts = () => { fetch(`/api/districts?_t=${Date.now()}`).then(res => res.json()).then(data => setDistricts(data)).catch(err => console.error("Error fetching districts:", err)); };
   const fetchRoads = () => { fetch(`/api/roads?_t=${Date.now()}`).then(res => res.json()).then(data => setRoads(data)).catch(err => console.error("Error fetching roads:", err)); };
+  const fetchWaterBodies = () => { fetch(`/api/water?_t=${Date.now()}`).then(res => res.json()).then(data => setWaterBodies(data)).catch(err => console.error("Error fetching water:", err)); };
+  
+  const handleWaterDrawn = async (points: THREE.Vector3[]) => {
+      try {
+          const res = await fetch('/api/water', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ points })
+          });
+          if (res.ok) {
+              fetchWaterBodies();
+          } else {
+              console.error("Failed to save water body");
+          }
+      } catch (err) {
+          console.error("Error saving water body:", err);
+      }
+  };
 
   const batchDelete = async () => {
     if (selectedIds.length === 0) return;
@@ -6796,7 +6991,7 @@ function App() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    fetchLocations(); fetchRoads(); fetchDistricts();
+    fetchLocations(); fetchRoads(); fetchDistricts(); fetchWaterBodies();
     const newSocket = io();
     socketRef.current = newSocket;
     setSocket(newSocket);
@@ -6847,7 +7042,7 @@ function App() {
       newSocket.emit('identify', { userName: userNameRef.current, isAdmin: !!tokenRef.current, token: tokenRef.current });
     });
 
-    newSocket.on('dataUpdated', (payload: any) => { fetchLocations(); fetchRoads(); fetchDistricts(); if (!payload || !payload.isRhombusOnly) { (window as any).hasUnsavedChanges = true; } });
+    newSocket.on('dataUpdated', (payload: any) => { fetchLocations(); fetchRoads(); fetchDistricts(); fetchWaterBodies(); if (!payload || !payload.isRhombusOnly) { (window as any).hasUnsavedChanges = true; } });
     newSocket.on('activeUsersUpdated', (users: any[]) => setActiveUsers(users));
     newSocket.on('force_floor_change', (data: any) => {
         setActiveBattleMapData((prev: any) => {
@@ -7154,6 +7349,9 @@ function App() {
                 setRoadSelectionBounds={setRoadSelectionBounds} 
                 roadTrail={roadTrail} 
                 setRoadTrail={setRoadTrail} 
+                waterTrail={waterTrail}
+                setWaterTrail={setWaterTrail}
+                fetchWaterBodies={fetchWaterBodies}
                 roadDrawMode={roadDrawMode} 
                 setRoadDrawMode={setRoadDrawMode} 
                 snapToGrid={snapToGrid} 
@@ -7496,8 +7694,9 @@ function App() {
             )}
             <CameraController target={cameraTarget} onComplete={() => { setCameraTarget(null); setShowZoomComplete(true); setTimeout(() => setShowZoomComplete(false), 3000); }} />
             <Roads roads={roads} />
+            <WaterBodies waterBodies={waterBodies} />
             <GhostTraffic roads={roads} />
-            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} />
+            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} />
             {roadSelectionBounds && view === 'city_gen' && (
               <mesh position={[(roadSelectionBounds.min.x + roadSelectionBounds.max.x) / 2, 0.02, (roadSelectionBounds.min.z + roadSelectionBounds.max.z) / 2]}>
                 <boxGeometry args={[Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x), 0.05, Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z)]} />

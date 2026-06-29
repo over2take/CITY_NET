@@ -654,6 +654,50 @@ app.get('/api/maps', (req, res) => {
   });
 });
 
+// Water Routes
+app.get('/api/water', (req, res) => {
+  db.all('SELECT * FROM water_bodies', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    // Parse points_json
+    const parsedRows = rows.map(r => {
+      try {
+        r.points = JSON.parse(r.points_json);
+      } catch (e) {
+        r.points = [];
+      }
+      return r;
+    });
+    res.json(parsedRows);
+  });
+});
+
+app.post('/api/water', authenticate, (req, res) => {
+  const { points } = req.body;
+  if (!points || !Array.isArray(points)) return res.status(400).json({ error: 'Invalid points array' });
+  
+  db.run('INSERT INTO water_bodies (points_json) VALUES (?)', [JSON.stringify(points)], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    emitUpdate();
+    res.json({ id: this.lastID, message: 'Water body saved' });
+  });
+});
+
+app.delete('/api/water/:id', authenticate, (req, res) => {
+  db.run('DELETE FROM water_bodies WHERE id = ?', [req.params.id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    emitUpdate();
+    res.json({ message: 'Water body deleted' });
+  });
+});
+
+app.delete('/api/water', authenticate, (req, res) => {
+  db.run('DELETE FROM water_bodies', function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    emitUpdate();
+    res.json({ message: 'All water purged' });
+  });
+});
+
 app.post('/api/maps/save', authenticate, (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Map name required' });
