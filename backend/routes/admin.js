@@ -92,6 +92,9 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           const stmt = db.prepare(`INSERT INTO roads (id, x1, z1, x2, z2, width) VALUES (?, ?, ?, ?, ?, ?)`);
           payload.data.forEach(r => stmt.run([r.id, r.x1, r.z1, r.x2, r.z2, r.width]));
           stmt.finalize(finishUndo);
+        } else if (action.type === 'water_create') {
+          const placeholders = payload.ids.map(() => '?').join(',');
+          db.run(`DELETE FROM water_bodies WHERE id IN (${placeholders})`, payload.ids, finishUndo);
         } else {
           res.status(400).json({ error: 'Unknown action type' });
         }
@@ -145,8 +148,10 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     if (!points || !Array.isArray(points)) return res.status(400).json({ error: 'Invalid points array' });
     db.run('INSERT INTO water_bodies (points_json) VALUES (?)', [JSON.stringify(points)], function(err) {
       if (err) return res.status(500).json({ error: err.message });
+      const newId = this.lastID;
+      db.run('INSERT INTO action_history (type, payload) VALUES (?, ?)', ['water_create', JSON.stringify({ ids: [newId] })], () => {});
       emitUpdate();
-      res.json({ id: this.lastID, message: 'Water body saved' });
+      res.json({ id: newId, message: 'Water body saved' });
     });
   });
 
