@@ -19,12 +19,14 @@ interface UseSocketOptions {
   onBankUpdate: (balance: number, debt: number) => void;
   onNotification: (msg: string | null) => void;
   onHasUnreadChat: (val: boolean) => void;
+  onTokenUpdate: (token: string) => void;
+  onIsAdminUpdate: (isAdmin: boolean) => void;
 }
 
 export function useSocket({
   userName, token, isLoggedIn, notificationsEnabled, isChatOpen,
   onFetchAll, onFetchLocations, onFetchRoads, onFetchDistricts, onFetchWaterBodies,
-  onBankUpdate, onNotification, onHasUnreadChat,
+  onBankUpdate, onNotification, onHasUnreadChat, onTokenUpdate, onIsAdminUpdate,
 }: UseSocketOptions) {
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const tokenRef = useRef(token);
@@ -92,6 +94,8 @@ export function useSocket({
     newSocket.on('accessGranted', (data: { targetUser: string; token: string; forEditing?: boolean }) => {
       if (data.targetUser === userNameRef.current) {
         tokenRef.current = data.token;
+        onTokenUpdate(data.token);
+        onIsAdminUpdate(true);
         if (data.forEditing) {
           wasGrantedForEditRef.current = true;
           onNotification(null);
@@ -104,6 +108,8 @@ export function useSocket({
     newSocket.on('accessRevoked', (data: { targetUser: string }) => {
       if (data.targetUser === userNameRef.current) {
         tokenRef.current = '';
+        onTokenUpdate('');
+        onIsAdminUpdate(false);
         onNotification('TEMPORARY_ADMIN_ACCESS_REVOKED');
       }
     });
