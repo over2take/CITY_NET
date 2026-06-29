@@ -6341,9 +6341,6 @@ function App() {
     } catch(e) {}
   };
   useEffect(() => {
-      setTempBattleMapScale(null);
-  }, [activeBattleMapData?.locationId, activeBattleMapData?.currentFloorIndex]);
-  useEffect(() => {
       fetchGlobalSettings();
   }, []);
   const [currentLocBattleMaps, setCurrentLocBattleMaps] = useState<BattleMap[]>([]);
@@ -6807,6 +6804,10 @@ function App() {
     onTokenUpdate: setToken,
     onIsAdminUpdate: setIsAdmin,
   });
+
+  useEffect(() => {
+    setTempBattleMapScale(null);
+  }, [activeBattleMapData?.locationId, activeBattleMapData?.currentFloorIndex]);
 
   const toggleNotifications = () => {
     const nextState = !notificationsEnabled;
