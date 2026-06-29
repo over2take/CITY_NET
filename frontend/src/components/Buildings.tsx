@@ -345,9 +345,9 @@ export const generateThemedBuildingsForPlot = (
   if (zoneTypeVal <= 0.25 && zoneTypeVal >= 0) {
     let rootShack: any = null;
 
-    if (bw > 8 || bd > 8) {
-      const shackArea = 50.0;
-      const shackCount = Math.max(1, Math.floor((bw * bd) / shackArea));
+    if (bw >= 8 || bd >= 8) {
+      const shackArea = 16.0;
+      const shackCount = Math.max(2, Math.floor((bw * bd) / shackArea));
       const radiusX = bw / 2;
       const radiusZ = bd / 2;
       for (let i = 0; i < shackCount; i++) {
