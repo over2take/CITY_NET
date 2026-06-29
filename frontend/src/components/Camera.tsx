@@ -50,6 +50,11 @@ export function CameraController({ target, onComplete }: { target: { pos: [numbe
     const distanceRef = useRef<number>(0);
     const isSetup = useRef<boolean>(false);
 
+    useEffect(() => {
+        isSetup.current = false;
+        startTime.current = null;
+    }, [target]);
+
     useFrame((state) => {
         if (!target || !controls || !(camera as any).fov) return;
         

@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
+import { resolveDeployHealth } from '../utils/rhombusHelpers';
 
 export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token }: any) => {
   const { camera, gl, controls } = useThree();
@@ -114,9 +115,7 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
             shape: 'rhombus',
             color: rhombusState.color,
             owner: userName,
-            hp_max: existing ? (existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
-            hp_current: existing ? (existing.hp_current ?? existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
-            hp_temp: existing ? (existing.hp_temp ?? 0) : 0,
+            ...resolveDeployHealth(existing, rhombusState),
             battle_map_id: null,
             floor_index: null
         };

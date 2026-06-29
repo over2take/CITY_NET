@@ -414,9 +414,8 @@ export function AdminPanel({
     const res = await fetch('/api/undo', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
     if (res.ok) {
         const data = await res.json();
-        // Option to show what was undone
-        console.log("Undone:", data.type);
         refreshLocations();
+        if (data.type === 'water_create') fetchWaterBodies();
     } else {
         const err = await res.json();
         setAdminAlert(err.error || "UNDO_FAILED");

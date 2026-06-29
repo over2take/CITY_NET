@@ -39,6 +39,7 @@ import './App.css';
 
 import { ZONE_TYPE_NAMES, isUserDefinedName, getStructLabel } from './utils/locationHelpers';
 import { renderBaseGeometry } from './utils/threeHelpers';
+import { mergeRhombusHealthFromLocation } from './utils/rhombusHelpers';
 import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './components/Buildings';
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } from './components/MapElements';
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
@@ -178,14 +179,8 @@ function App() {
     if (!userName || !locations.length) return;
     const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
     if (existing) {
-        setRhombusState(prev => ({
-            ...prev,
-            // DO NOT set active: true here. That should only happen when the user clicks 'DEPLOY'
-            color: existing.color || prev.color,
-            name: existing.name || '',
-            description: existing.description || '',
-            hp_max: existing.hp_max || 0
-        }));
+        // DO NOT set active: true here. That should only happen when the user clicks 'DEPLOY'
+        setRhombusState(prev => ({ ...prev, ...mergeRhombusHealthFromLocation(existing, prev) }));
     }
   }, [userName, locations.length]);
 
@@ -1216,9 +1211,7 @@ function App() {
                           shape: 'rhombus',
                           color: rhombusState.color,
                           owner: userName,
-                          hp_max: existing ? (existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
-                          hp_current: existing ? (existing.hp_current ?? existing.hp_max ?? 100) : (rhombusState.hp_max || 100),
-                          hp_temp: existing ? (existing.hp_temp ?? 0) : 0,
+                          ...resolveDeployHealth(existing, rhombusState),
                           battle_map_id: activeBattleMapData?.locationId || null,
                           floor_index: activeBattleMapData?.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
                       };
