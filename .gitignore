@@ -38,3 +38,9 @@ cloudflared.exe
 
 # User Uploads
 backend/uploads/
+
+# Frontend dev scripts and build artifacts
+frontend/*.cjs
+frontend/test.js
+frontend/test_output.txt
+frontend/src/*.bak
