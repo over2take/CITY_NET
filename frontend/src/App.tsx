@@ -8,6 +8,13 @@ import { HealthBar } from './HealthBar';
 import PingEffect from './PingEffect';
 import { io } from 'socket.io-client';
 import * as THREE from 'three';
+import type {
+  Location, District, Road, WaterBody, BattleMap, SavedMap,
+  ActiveUser, ChatMessage, PrivateMessage, BankData, DiceRoll,
+  BattleMapSessionData, BattleMapPosition, AnimState,
+  ViewMode, SidebarMenu, CameraTarget, ConfirmDialog,
+  RhombusState, MeasurementData, GlobalSettings, PendingRequest,
+} from './types';
 import rhombusIcon from './assets/rhombus.svg';
 function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapScaleMultiplier, color, userName }: any) {
     const { raycaster, camera, scene, pointer, gl } = useThree();
@@ -119,7 +126,7 @@ function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapSc
 }
 
 function MeasurementVisualizer({ socket, view, activeBattleMapData, userName }: any) {
-    const [measurements, setMeasurements] = useState<any[]>([]);
+    const [measurements, setMeasurements] = useState<MeasurementData[]>([]);
 
     useEffect(() => {
         if (!socket) return;
@@ -4800,7 +4807,7 @@ function DotMatrixScoreboard({ value, timestamp, isRolling }: { value: string, t
 }
 
 function DiceTrayWindow({ pos, setPos, onClose, socketRef }: any) {
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<DiceRoll[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [latestRoll, setLatestRoll] = useState<{ total: number, results: any, color: string, timestamp: number } | null>(null);
   const [displayRoll, setDisplayRoll] = useState<{ total: number, results: any, color: string, timestamp: number } | null>(null);
@@ -5489,7 +5496,7 @@ function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onS
 }
 
 function CityDataBaseMenu({ token, emitUpdate }: any) {
-  const [maps, setMaps] = useState<any[]>([]);
+  const [maps, setMaps] = useState<SavedMap[]>([]);
   const [mapName, setMapName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ title: string, message: string, onConfirm: () => void, confirmText?: string, isAlert?: boolean } | null>(null);
@@ -6310,18 +6317,18 @@ function CameraController({ target, onComplete }: { target: { pos: [number, numb
 
 function App() {
   const controlsRef = useRef<any>(null);
-  const [locations, setLocations] = useState<any[]>([]);
-  const [districts, setDistricts] = useState<any[]>([]);
-  const [editingDistrict, setEditingDistrict] = useState<any>(null);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
-  const [roads, setRoads] = useState<any[]>([]);
-  const [waterBodies, setWaterBodies] = useState<any[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
+  const [roads, setRoads] = useState<Road[]>([]);
+  const [waterBodies, setWaterBodies] = useState<WaterBody[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [showBattleMapManager, setShowBattleMapManager] = useState(false);
-  const [activeBattleMapData, setActiveBattleMapData] = useState<any>(null);
+  const [activeBattleMapData, setActiveBattleMapData] = useState<BattleMapSessionData | null>(null);
   const [tempBattleMapScale, setTempBattleMapScale] = useState<number | string | null>(null);
   const [tempCityMapScale, setTempCityMapScale] = useState<number | string | null>(null);
-  const [globalSettings, setGlobalSettings] = useState<any>({});
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({});
   const fetchGlobalSettings = async () => {
     try {
         const res = await fetch('/api/settings');
@@ -6341,9 +6348,9 @@ function App() {
   useEffect(() => {
       fetchGlobalSettings();
   }, []);
-  const [battleMapPositions, setBattleMapPositions] = useState<Record<string, {x: number, z: number}>>({});
-  const [currentLocBattleMaps, setCurrentLocBattleMaps] = useState<any[]>([]);
-  const [cameraTarget, setCameraTarget] = useState<{ pos: [number, number, number], size: number } | null>(null);
+  const [battleMapPositions, setBattleMapPositions] = useState<Record<string, BattleMapPosition>>({});
+  const [currentLocBattleMaps, setCurrentLocBattleMaps] = useState<BattleMap[]>([]);
+  const [cameraTarget, setCameraTarget] = useState<CameraTarget | null>(null);
   const [showZoomComplete, setShowZoomComplete] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [token, setToken] = useState('');
@@ -6359,7 +6366,7 @@ function App() {
   }
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const [view, setView] = useState<'list' | 'editor' | 'generator' | 'district' | 'join' | 'draw_roads' | 'draw_water' | 'city_gen' | 'battle_map'>('list');
+  const [view, setView] = useState<ViewMode>('list');
   const [editId, setEditId] = useState<number | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [measureMode, setMeasureMode] = useState(false);
@@ -6368,11 +6375,11 @@ function App() {
   useEffect(() => { userNameRef.current = userName; }, [userName]);
   const [tempUserName, setTempUserName] = useState('');
   const [currentController, setCurrentController] = useState<string>('');
-  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [activeEditLocation, setActiveEditLocation] = useState<any>(null);
+  const [activeEditLocation, setActiveEditLocation] = useState<Location | null>(null);
   const [isSomeoneEditing, setIsSomeoneEditing] = useState(false);
-  const [activeSidebarMenu, setActiveSidebarMenu] = useState<'none' | 'quick_access' | 'nav_controls' | 'system_info' | 'geometry_protocols' | 'city_data_base' | 'dice_menu'>('none');
+  const [activeSidebarMenu, setActiveSidebarMenu] = useState<SidebarMenu>('none');
   const [isDiceTrayOpen, setIsDiceTrayOpen] = useState(false);
 
   const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
@@ -6401,7 +6408,7 @@ function App() {
   const [adminBankPos, setAdminBankPos] = useState({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 100 });
   const [isAdminPayOpen, setIsAdminPayOpen] = useState(false);
   const [adminPayPos, setAdminPayPos] = useState({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 });
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   useEffect(() => {
     const handleClear = () => { (window as any).hasUnsavedChanges = false; };
     window.addEventListener('clearUnsavedChanges', handleClear);
@@ -6451,9 +6458,9 @@ function App() {
   const [drawingRoadWidth, setDrawingRoadWidth] = useState(2.4);
   const [citySectionType, setCitySectionType] = useState<'MIXED' | 'CORPO' | 'URBAN' | 'SLUMS' | 'INDUSTRIAL'>('MIXED');
   const [genExcludeRoads, setGenExcludeRoads] = useState(false);
-  const [socket, setSocket] = useState<any>(null);
-  const [activeUsers, setActiveUsers] = useState<any[]>([]);
-  const [activePings, setActivePings] = useState<any[]>([]);
+  const [socket, setSocket] = useState<ReturnType<typeof io> | null>(null);
+  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
+  const [activePings, setActivePings] = useState<{ id: string; x: number; y: number; z: number; color: string }[]>([]);
   const [rhombusState, setRhombusState] = useState(() => {
     const savedColor = localStorage.getItem('rhombusColor') || '#00ff00';
     const savedHpMax = parseInt(localStorage.getItem('rhombusHpMax') || '100', 10);
