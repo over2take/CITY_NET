@@ -19,6 +19,9 @@ import rhombusIcon from './assets/rhombus.svg';
 import { useMapData } from './hooks/useMapData';
 import { useSocket } from './hooks/useSocket';
 import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
+import { CursorPingListener } from './components/CursorPing';
+import { DraggableWindow } from './components/DraggableWindow';
+import { HitPointsMenu } from './components/HitPoints';
 function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapScaleMultiplier, color, userName }: any) {
     const { raycaster, camera, scene, pointer, gl } = useThree();
     const [startPoint, setStartPoint] = useState<THREE.Vector3 | null>(null);
@@ -185,50 +188,7 @@ function MeasurementVisualizer({ socket, view, activeBattleMapData, userName }: 
     );
 }
 
-function CursorPingListener({ socket, view, activeBattleMapData, pingColor }: any) {
-    const { raycaster, camera, scene, pointer } = useThree();
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key.toLowerCase() === 'q' && socket) {
-                if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
-                
-                raycaster.setFromCamera(pointer, camera);
-                // Ignore helper planes or invisible meshes by intersecting the scene, but maybe prefer visible
-                const intersects = raycaster.intersectObjects(scene.children, true).filter((hit: any) => hit.object.visible);
-                
-                let hitPoint: THREE.Vector3 | null = null;
-                if (intersects.length > 0) {
-                    hitPoint = intersects[0].point;
-                } else {
-                    // Fallback: Intersect with Y=0 plane (ground) if no mesh is hit (e.g. empty City Map grid)
-                    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-                    const target = new THREE.Vector3();
-                    if (raycaster.ray.intersectPlane(groundPlane, target)) {
-                        hitPoint = target;
-                    }
-                }
-                
-                if (hitPoint) {
-                    socket.emit('ping_location', {
-                        x: hitPoint.x,
-                        y: hitPoint.y + 0.5,
-                        z: hitPoint.z,
-                        color: pingColor,
-                        size: 2,
-                        battle_map_id: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
-                        floor_index: view === 'battle_map' && activeBattleMapData && activeBattleMapData.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
-                    });
-                }
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [socket, view, activeBattleMapData, pingColor, raycaster, pointer, camera, scene]);
-    return null;
-}
 import terminalIcon from './assets/terminal-thin.svg';
-import notifyOnIcon from './assets/Notification-on.svg';
-import notifyOffIcon from './assets/Notification-off.svg';
 import paperFillIcon from './assets/lets-icons--paper-fill.svg';
 import paperLightIcon from './assets/lets-icons--paper-light.svg';
 import eyeIcon from './assets/oui--eye.svg';
@@ -4360,62 +4320,6 @@ function AdminPanel({
   );
 }
 
-function DraggableWindow({ title, children, pos, setPos, onClose, windowStyle = {}, contentStyle = {}, notificationsEnabled, onToggleNotifications, titleControls }: any) {
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    setDragOffset({ x: e.clientX - pos.x, y: e.clientY - pos.y });
-  };
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) {
-        setPos({ x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y });
-      }
-    };
-    const handleMouseUp = () => setIsDragging(false);
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, dragOffset, setPos]);
-
-  return (
-    <div className="win95-window" style={{ left: `${pos.x}px`, top: `${pos.y}px`, ...windowStyle }}>
-      <div className="win95-title-bar" onMouseDown={handleMouseDown}>
-        <div className="win95-title-text" style={{ fontWeight: 'bold' }}>{title}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          {titleControls}
-          {onToggleNotifications && (
-            <button 
-              onClick={onToggleNotifications} 
-              className="win95-close-btn"
-              style={{ background: 'var(--black)', padding: '2px', width: '22px', height: '22px' }}
-              title="TOGGLE_NOTIFICATIONS"
-            >
-              <img 
-                src={notificationsEnabled ? notifyOnIcon : notifyOffIcon} 
-                width="14" height="14" 
-                alt="Notify"
-                style={{ filter: 'brightness(0) invert(1)' }}
-              />
-            </button>
-          )}
-          <button className="win95-close-btn" onClick={onClose} style={{ width: '22px', height: '22px' }}>×</button>
-        </div>
-      </div>
-      <div className="win95-content" style={contentStyle}>
-        {children}
-      </div>
-    </div>
-  );
-}
 
 function DiceScene({ latestRoll }: any) {
     const { scene, camera } = useThree();
@@ -7630,75 +7534,6 @@ function App() {
         </>
       )}
     </div>
-  );
-}
-
-function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, setPos, onClose }: any) {
-  const [actionAmount, setActionAmount] = useState<number>(0);
-  const [tempAmount, setTempAmount] = useState<number>(0);
-  const [maxAmount, setMaxAmount] = useState<number>(0);
-
-  const updateHealth = async (action: string, amount: number) => {
-    if (!targetRhombus) return;
-    
-    let bodyData: any = { action, amount };
-    if (action === 'set_temp') bodyData.hp_temp = amount;
-    if (action === 'set_max') bodyData.hp_max = amount;
-
-    await fetch(`/api/locations/${targetRhombus.id}/health`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(bodyData)
-    });
-    refreshLocations();
-  };
-
-  if (!targetRhombus) return (
-      <DraggableWindow title="HIT_POINTS" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
-          <div style={{ textAlign: 'center', opacity: 0.7, padding: '20px' }}>NO_TARGET_ACQUIRED</div>
-      </DraggableWindow>
-  );
-
-  return (
-    <DraggableWindow title={`HP: ${targetRhombus.name || 'UNKNOWN'}`} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '10px' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', color: 'var(--green)', textShadow: 'var(--glow)', fontWeight: 'bold' }}>
-            {targetRhombus.hp_current || 0} / {targetRhombus.hp_max || 0}
-          </div>
-          {targetRhombus.hp_temp > 0 && (
-              <div style={{ color: '#00ccff', fontSize: '0.9rem', marginTop: '5px' }}>+ {targetRhombus.hp_temp} TEMP</div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <input type="number" placeholder="0" value={actionAmount || ''} onChange={e => setActionAmount(parseInt(e.target.value) || 0)} style={{ width: '100%' }} />
-            <div style={{ display: 'flex', gap: '10px' }}>
-                <button className="upload-btn" onClick={() => updateHealth('heal', actionAmount)} style={{ flex: 1 }}>HEAL</button>
-                <button className="upload-btn danger-btn" onClick={() => updateHealth('damage', actionAmount)} style={{ flex: 1 }}>DAMAGE</button>
-            </div>
-        </div>
-
-        <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {token !== '' && (
-                <div>
-                    <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX_HP</label>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <input type="number" placeholder="0" value={maxAmount || ''} onChange={e => setMaxAmount(parseInt(e.target.value) || 0)} style={{ flex: 1 }} />
-                        <button className="upload-btn" style={{ minWidth: 'auto', padding: '0 15px' }} onClick={() => updateHealth('set_max', maxAmount)}>SET</button>
-                    </div>
-                </div>
-            )}
-            <div>
-                <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TEMP_HP</label>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                    <input type="number" placeholder="0" max="100" value={tempAmount || ''} onChange={e => { let val = parseInt(e.target.value) || 0; if(val > 100) val = 100; setTempAmount(val); }} style={{ flex: 1 }} />
-                    <button className="upload-btn" style={{ minWidth: 'auto', padding: '0 15px' }} onClick={() => updateHealth('set_temp', tempAmount)}>SET</button>
-                </div>
-            </div>
-        </div>
-      </div>
-    </DraggableWindow>
   );
 }
 
