@@ -6756,6 +6756,10 @@ function App() {
   });
 
   useEffect(() => {
+    if (isLoggedIn) fetchAll();
+  }, [isLoggedIn]);
+
+  useEffect(() => {
     setTempBattleMapScale(null);
   }, [activeBattleMapData?.locationId, activeBattleMapData?.currentFloorIndex]);
 
