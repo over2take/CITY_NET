@@ -1,0 +1,229 @@
+import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { NavControlsMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, GeometryMenu } from '../Sidebar';
+
+vi.mock('../../assets/Credits.png', () => ({ default: 'credits.png' }));
+vi.mock('../CityDatabase', () => ({
+  CityDataBaseMenu: () => <div>CITY_DATA_BASE_MOCK</div>,
+}));
+
+const makeSocketRef = () => ({ current: { emit: vi.fn(), on: vi.fn(), off: vi.fn() } });
+
+beforeEach(() => vi.clearAllMocks());
+
+// ─── NavControlsMenu ─────────────────────────────────────────────────────────
+
+describe('NavControlsMenu', () => {
+  it('renders NAV_CONTROLS header', () => {
+    render(<NavControlsMenu onToggleHelp={vi.fn()} />);
+    expect(screen.getByText('NAV_CONTROLS')).toBeInTheDocument();
+  });
+
+  it('renders all four control entries', () => {
+    render(<NavControlsMenu onToggleHelp={vi.fn()} />);
+    expect(screen.getByText('GIMBALL / ROTATE')).toBeInTheDocument();
+    expect(screen.getByText('PAN / MOVE VIEW')).toBeInTheDocument();
+    expect(screen.getByText('ZOOM IN/OUT')).toBeInTheDocument();
+    expect(screen.getByText('SPOT / PING LOCATION')).toBeInTheDocument();
+  });
+
+  it('calls onToggleHelp(false) on back button click', async () => {
+    const onToggleHelp = vi.fn();
+    render(<NavControlsMenu onToggleHelp={onToggleHelp} />);
+    await userEvent.click(screen.getByText('◀'));
+    expect(onToggleHelp).toHaveBeenCalledWith(false);
+  });
+});
+
+// ─── SystemInfoMenu ───────────────────────────────────────────────────────────
+
+describe('SystemInfoMenu', () => {
+  it('renders operator name', () => {
+    render(<SystemInfoMenu userName="GHOST" token="" />);
+    expect(screen.getByText('GHOST')).toBeInTheDocument();
+  });
+
+  it('shows UNPRIVILEGED_USER when no token', () => {
+    render(<SystemInfoMenu userName="GHOST" token="" />);
+    expect(screen.getByText('UNPRIVILEGED_USER')).toBeInTheDocument();
+  });
+
+  it('shows ADMIN_PRIVILEGES when token present', () => {
+    render(<SystemInfoMenu userName="GHOST" token="sometoken" />);
+    expect(screen.getByText('ADMIN_PRIVILEGES')).toBeInTheDocument();
+  });
+});
+
+// ─── DiceMenu ─────────────────────────────────────────────────────────────────
+
+describe('DiceMenu', () => {
+  it('renders DICE_ROLLER header', () => {
+    render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} />);
+    expect(screen.getByText('DICE_ROLLER')).toBeInTheDocument();
+  });
+
+  it('renders all 8 dice types', () => {
+    render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} />);
+    [2, 4, 6, 8, 10, 12, 20, 100].forEach(d => {
+      expect(screen.getByText(`d${d}`)).toBeInTheDocument();
+    });
+  });
+
+  it('increments dice count on + click', async () => {
+    render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} />);
+    const plusBtns = screen.getAllByText('+');
+    await userEvent.click(plusBtns[0]); // d2
+    expect(screen.getByText('1')).toBeInTheDocument();
+  });
+
+  it('sets notification when rolling with no dice selected', async () => {
+    const setNotification = vi.fn();
+    render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={setNotification} />);
+    await userEvent.click(screen.getByText('ROLL DICE'));
+    expect(setNotification).toHaveBeenCalledWith('INVALID_ROLL: SELECT_DICE');
+  });
+
+  it('emits requestDiceRoll and opens tray after rolling', async () => {
+    const socketRef = makeSocketRef();
+    const setIsDiceTrayOpen = vi.fn();
+    render(<DiceMenu userName="GHOST" socketRef={socketRef} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={vi.fn()} />);
+    await userEvent.click(screen.getAllByText('+')[0]); // add a d2
+    await userEvent.click(screen.getByText('ROLL DICE'));
+    expect(socketRef.current.emit).toHaveBeenCalledWith('requestDiceRoll', expect.objectContaining({ userName: 'GHOST' }));
+    expect(setIsDiceTrayOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('shows No Modifiers by default', () => {
+    render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} />);
+    expect(screen.getByText('No Modifiers')).toBeInTheDocument();
+  });
+
+  it('adds modifier on ADD click', async () => {
+    render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} />);
+    const modPlusBtns = screen.getAllByText('+');
+    await userEvent.click(modPlusBtns[modPlusBtns.length - 1]); // modifier +1 btn in modifier section
+    await userEvent.click(screen.getByText('ADD'));
+    expect(screen.queryByText('No Modifiers')).not.toBeInTheDocument();
+  });
+
+  it('toggles dice tray on DICE_TRAY.exe click', async () => {
+    const setIsDiceTrayOpen = vi.fn();
+    render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={vi.fn()} />);
+    await userEvent.click(screen.getByText('DICE_TRAY.exe'));
+    expect(setIsDiceTrayOpen).toHaveBeenCalled();
+  });
+});
+
+// ─── QuickAccessMenu ──────────────────────────────────────────────────────────
+
+const makeLocation = (overrides = {}): any => ({
+  id: 1, name: 'GHOST_HQ', shape: 'box', x: 0, y: 0, z: 0, width: 2, height: 2, depth: 2,
+  isDanger: false, isFavorite: false, district_name: null, parent_id: null, battle_map_id: null,
+  description: 'Some desc',
+  ...overrides,
+});
+
+describe('QuickAccessMenu', () => {
+  it('renders QUICK_ACCESS header', () => {
+    render(<QuickAccessMenu locations={[]} onSelect={vi.fn()} onZoom={vi.fn()} selectedLocation={null} isOpen={true} setIsOpen={vi.fn()} view="list" activeUsers={[]} />);
+    expect(screen.getByText('QUICK_ACCESS')).toBeInTheDocument();
+  });
+
+  it('shows NO_DEFINED_DATA_POINTS when empty', () => {
+    render(<QuickAccessMenu locations={[]} onSelect={vi.fn()} onZoom={vi.fn()} selectedLocation={null} isOpen={true} setIsOpen={vi.fn()} view="list" activeUsers={[]} />);
+    expect(screen.getByText('NO_DEFINED_DATA_POINTS')).toBeInTheDocument();
+  });
+
+  it('shows DEFINED_STRUCTURES section for named locations', async () => {
+    const locs = [makeLocation()];
+    render(<QuickAccessMenu locations={locs} onSelect={vi.fn()} onZoom={vi.fn()} selectedLocation={null} isOpen={true} setIsOpen={vi.fn()} view="list" activeUsers={[]} />);
+    expect(screen.getByText(/DEFINED_STRUCTURES/)).toBeInTheDocument();
+    await userEvent.click(screen.getByText(/DEFINED_STRUCTURES/));
+    expect(screen.getByText('GHOST_HQ')).toBeInTheDocument();
+  });
+
+  it('shows CRITICAL_SITES for danger locations', async () => {
+    const locs = [makeLocation({ isDanger: true })];
+    render(<QuickAccessMenu locations={locs} onSelect={vi.fn()} onZoom={vi.fn()} selectedLocation={null} isOpen={true} setIsOpen={vi.fn()} view="list" activeUsers={[]} />);
+    expect(screen.getByText(/CRITICAL_SITES/)).toBeInTheDocument();
+  });
+
+  it('shows PRIORITY_NODES for starred locations', async () => {
+    const locs = [makeLocation({ isFavorite: true })];
+    render(<QuickAccessMenu locations={locs} onSelect={vi.fn()} onZoom={vi.fn()} selectedLocation={null} isOpen={true} setIsOpen={vi.fn()} view="list" activeUsers={[]} />);
+    expect(screen.getByText(/PRIORITY_NODES/)).toBeInTheDocument();
+  });
+
+  it('calls setIsOpen(false) on back button', async () => {
+    const setIsOpen = vi.fn();
+    render(<QuickAccessMenu locations={[]} onSelect={vi.fn()} onZoom={vi.fn()} selectedLocation={null} isOpen={true} setIsOpen={setIsOpen} view="list" activeUsers={[]} />);
+    await userEvent.click(screen.getByText('◀'));
+    expect(setIsOpen).toHaveBeenCalledWith(false);
+  });
+
+  it('calls onSelect when a location is clicked', async () => {
+    const onSelect = vi.fn();
+    const locs = [makeLocation()];
+    render(<QuickAccessMenu locations={locs} onSelect={onSelect} onZoom={vi.fn()} selectedLocation={null} isOpen={true} setIsOpen={vi.fn()} view="list" activeUsers={[]} />);
+    await userEvent.click(screen.getByText(/DEFINED_STRUCTURES/));
+    await userEvent.click(screen.getByText('GHOST_HQ'));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
+  });
+});
+
+// ─── GeometryMenu ─────────────────────────────────────────────────────────────
+
+const baseRhombus = { active: false, color: '#00ff00', name: '', description: '', hp_max: 0 };
+
+describe('GeometryMenu', () => {
+  it('renders GEOMETRY_PROTOCOLS header', () => {
+    render(
+      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+    );
+    expect(screen.getByText('GEOMETRY_PROTOCOLS')).toBeInTheDocument();
+  });
+
+  it('shows INITIALIZE_RHOMBUS when no active rhombus', () => {
+    render(
+      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+    );
+    expect(screen.getByText('INITIALIZE_RHOMBUS')).toBeInTheDocument();
+  });
+
+  it('shows RHOMBUS_ACTIVE when user has deployed rhombus', () => {
+    const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
+    render(
+      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+    );
+    expect(screen.getByText('RHOMBUS_ACTIVE')).toBeInTheDocument();
+  });
+
+  it('shows PURGE_YOUR_RHOMBUS button when rhombus is active', () => {
+    const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
+    render(
+      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+    );
+    expect(screen.getByText('PURGE_YOUR_RHOMBUS')).toBeInTheDocument();
+  });
+
+  it('emits requestRhombusPurge on purge click', async () => {
+    const socketRef = makeSocketRef();
+    const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
+    render(
+      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={socketRef} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+    );
+    await userEvent.click(screen.getByText('PURGE_YOUR_RHOMBUS'));
+    expect(socketRef.current.emit).toHaveBeenCalledWith('requestRhombusPurge', expect.objectContaining({ id: 10 }));
+  });
+
+  it('calls syncRhombusToDB on name input change', async () => {
+    const syncRhombusToDB = vi.fn();
+    render(
+      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={syncRhombusToDB} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+    );
+    await userEvent.type(screen.getByPlaceholderText('ID_TAG'), 'X');
+    expect(syncRhombusToDB).toHaveBeenCalled();
+  });
+});
