@@ -9,7 +9,7 @@ import PingEffect from './PingEffect';
 import { io } from 'socket.io-client';
 import * as THREE from 'three';
 import type {
-  Location, District, Road, WaterBody, BattleMap, SavedMap,
+  Location, District, Road, BattleMap, SavedMap,
   ActiveUser, ChatMessage, PrivateMessage, BankData, DiceRoll,
   BattleMapSessionData, BattleMapPosition, AnimState,
   ViewMode, SidebarMenu, CameraTarget, ConfirmDialog,

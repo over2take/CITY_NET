@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
+import { generateThemedBuildingsForPlot } from './Buildings';
 
 export function AdminPanel({
   socketRef, token, onLogout, refreshLocations, refreshRoads, locations, roads, editData, setEditData, editId, setEditId,
