@@ -29,6 +29,7 @@ app.use('/api/locations', require('./routes/locations')(db, io, helpers));
 app.use('/api/locations/:id/battle_maps', require('./routes/battle_maps')(db, io, helpers));
 app.use('/api/maps', require('./routes/maps')(db, io, helpers));
 app.use('/api/roads', require('./routes/roads')(db, io, helpers));
+app.use('/api/player', require('./routes/player')(db));
 app.use('/api', require('./routes/admin')(db, io, helpers));
 
 // Frontend static serving
@@ -41,5 +42,8 @@ require('./sockets')(io, db, { elevatedUsers, ...helpers });
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
+  if (process.env.ADMIN_PASS === 'cyberpunk_password' || !process.env.ADMIN_PASS) {
+    console.warn('\x1b[33m⚠️  WARNING: Default admin password in use. Set ADMIN_PASS in your .env file.\x1b[0m');
+  }
   require('./startup/sanity_checks')();
 });
