@@ -44,6 +44,10 @@ Images/
 Computer sounds/
 docs/
 
+# Local launcher scripts (machine-specific, not needed in repo)
+*.bat
+*.ps1
+
 # Frontend dev scripts and build artifacts
 frontend/*.cjs
 frontend/test.js
