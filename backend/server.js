@@ -38,6 +38,21 @@ app.use(express.json({ limit: '2mb' }));
 // Routes
 app.use('/api/locations', require('./routes/locations')(db, io, helpers));
 app.use('/api/locations/:id/battle_maps', require('./routes/battle_maps')(db, io, helpers));
+
+// Global battle map image listing (not location-scoped).
+const { authenticate: _auth } = require('./middleware/auth');
+const _bmUploadsDir = require('path').join(__dirname, 'uploads/battle_maps');
+app.get('/api/battle_maps/images', _auth, (req, res) => {
+  const fs = require('fs');
+  try {
+    const files = require('fs').existsSync(_bmUploadsDir)
+      ? fs.readdirSync(_bmUploadsDir).filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f))
+      : [];
+    res.json(files.map(f => ({ filename: f, url: '/uploads/battle_maps/' + f })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.use('/api/maps', require('./routes/maps')(db, io, helpers));
 app.use('/api/roads', require('./routes/roads')(db, io, helpers));
 const adminRouter = require('./routes/admin')(db, io, helpers);

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
+import type { BankSoundKey } from './BankWindows';
+import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
 
 export function AdminPanel({
   socketRef, token, onLogout, refreshLocations, refreshRoads, locations, roads, editData, setEditData, editId, setEditId,
@@ -478,7 +480,7 @@ export function AdminPanel({
   const resolvedDeleteTarget = deleteTarget?.parent_id ? locations.find((l: any) => l.id === deleteTarget.parent_id) || deleteTarget : deleteTarget;
 
   return (
-    <div className="panel admin-panel">
+    <div className="panel admin-panel" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
       {adminAlert && createPortal(
         <div className="modal-overlay" style={{ zIndex: 10000 }}>
           <div className="panel critical-alert">
@@ -568,6 +570,12 @@ export function AdminPanel({
                   }}>APPLY</button>
               </div>
           </div>
+
+          <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
+
+          {/* BANK SOUNDS TEST PANEL */}
+          <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
+
           <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={async () => {
             if (confirm("PURGE ALL ROAD DATA?")) {
               const res = await fetch('/api/roads', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
@@ -640,7 +648,6 @@ export function AdminPanel({
               <div key={loc.id} className={`list-item ${selectedLocation?.id === loc.id ? 'selected' : ''}`} onClick={() => setSelectedLocation(loc)} style={{cursor: 'pointer', paddingLeft: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px'}}><div style={{display: 'flex', alignItems: 'center', gap: '10px', flex: 1, overflow: 'hidden'}}><input type="checkbox" checked={selectedIds.includes(loc.id)} onChange={() => toggleSelection(loc.id)} onClick={(e) => e.stopPropagation()} /><span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{getStructLabel(loc)}</span></div>{!isBatchSelecting && <div style={{display: 'flex', gap: '5px'}}><button className="upload-btn" style={{padding: '2px 5px', fontSize: '0.6rem', width: 'auto'}} onClick={(e) => { e.stopPropagation(); startEdit(loc); }}>EDIT</button><button className="upload-btn danger-btn" style={{padding: '2px 5px', fontSize: '0.6rem', width: 'auto'}} onClick={(e) => { e.stopPropagation(); setDeleteTarget(loc); }}>DEL</button></div>}</div>
             ))}
           </div>
-          <button onClick={() => setIsAdminPayOpen(true)} className="upload-btn" style={{ width: '100%', marginBottom: '10px', backgroundColor: '#00ff66', color: '#000' }}>PAY_PLAYERS</button>
           <button onClick={onLogout} className="logout-btn">EXIT_ADMIN_MODE</button>
         </>
       )}
@@ -1382,6 +1389,93 @@ export function AdminPanel({
             )}
           </form>
         </>
+      )}
+    </div>
+  );
+}
+
+const BANK_SOUND_KEYS: BankSoundKey[] = ['cashregister', 'debtpaid', 'highroller', 'firstpay', 'overdraft'];
+const BANK_SOUND_LABELS: Record<BankSoundKey, string> = {
+  cashregister: 'Cash Register',
+  debtpaid: 'Debt Paid Off',
+  highroller: 'High Roller 🐋',
+  firstpay: 'First Payday 🎊',
+  overdraft: 'Overdraft 😢',
+};
+const BANK_SOUND_TESTERS: Record<BankSoundKey, (vol: number) => void> = {
+  cashregister: playCashRegister,
+  debtpaid: playProudFanfare,
+  highroller: playHighRollerSound,
+  firstpay: playCalibration,
+  overdraft: playWompWomp,
+};
+
+function BankSoundsPanel({ token, globalSettings, fetchGlobalSettings }: { token: string; globalSettings: any; fetchGlobalSettings: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [volumes, setVolumes] = useState<Record<BankSoundKey, number>>({
+    cashregister: 1, debtpaid: 1, highroller: 1, firstpay: 1, overdraft: 1,
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!globalSettings) return;
+    setVolumes({
+      cashregister: parseFloat(globalSettings.bank_vol_cashregister ?? '1'),
+      debtpaid: parseFloat(globalSettings.bank_vol_debtpaid ?? '1'),
+      highroller: parseFloat(globalSettings.bank_vol_highroller ?? '1'),
+      firstpay: parseFloat(globalSettings.bank_vol_firstpay ?? '1'),
+      overdraft: parseFloat(globalSettings.bank_vol_overdraft ?? '1'),
+    });
+  }, [globalSettings]);
+
+  const saveVolumes = async () => {
+    setSaving(true);
+    await Promise.all(BANK_SOUND_KEYS.map(key =>
+      fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ key: `bank_vol_${key}`, value: volumes[key] }),
+      })
+    ));
+    setSaving(false);
+    fetchGlobalSettings();
+  };
+
+  return (
+    <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+      <button
+        className="utility-btn"
+        style={{ width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}
+        onClick={() => setOpen(o => !o)}
+      >
+        <span>BANK SOUNDS</span>
+        <span>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {BANK_SOUND_KEYS.map(key => (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                className="utility-btn"
+                style={{ minWidth: '36px', padding: '4px 8px' }}
+                onClick={() => BANK_SOUND_TESTERS[key](volumes[key])}
+              >▶</button>
+              <span style={{ minWidth: '130px', fontSize: '0.75rem' }}>{BANK_SOUND_LABELS[key]}</span>
+              <input
+                type="range" min="0" max="2" step="0.05"
+                value={volumes[key]}
+                onChange={e => setVolumes(v => ({ ...v, [key]: parseFloat(e.target.value) }))}
+                style={{ flex: 1 }}
+              />
+              <span style={{ minWidth: '32px', fontSize: '0.75rem', textAlign: 'right' }}>
+                {Math.round(volumes[key] * 100)}%
+              </span>
+            </div>
+          ))}
+          <button className="utility-btn" onClick={saveVolumes} disabled={saving} style={{ marginTop: '4px' }}>
+            {saving ? 'SAVING...' : 'SAVE VOLUMES'}
+          </button>
+        </div>
       )}
     </div>
   );
