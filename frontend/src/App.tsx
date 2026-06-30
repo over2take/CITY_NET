@@ -21,7 +21,7 @@ import { useSocket } from './hooks/useSocket';
 import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
-import { HitPointsMenu } from './components/HitPoints';
+import { HitPointsMenu, HealthReviewWindow } from './components/HitPoints';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
 import { CityDataBaseMenu } from './components/CityDatabase';
 import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './components/BankWindows';
@@ -101,6 +101,9 @@ function App() {
 
   const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
   const [hitPointsPos, setHitPointsPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
+
+  const [reviewHealthOwner, setReviewHealthOwner] = useState<string | null>(null);
+  const [reviewHealthPos, setReviewHealthPos] = useState(() => ({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 }));
 
   const [infoPanelPos, setInfoPanelPos] = useState(() => ({ x: window.innerWidth / 2 - 175, y: window.innerHeight / 2 - 200 }));
   const [diceTrayPos, setDiceTrayPos] = useState(() => ({ x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 250 }));
@@ -454,9 +457,13 @@ function App() {
           }
           return next;
         });
+      } else if (loc.shape === 'rhombus' && loc.owner !== userName && !token) {
+        // Non-admin player clicking another player's token — open read-only health review
+        setReviewHealthOwner(prev => prev === loc.owner ? null : loc.owner);
+        setReviewHealthPos({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 });
       } else {
-      setSelectedLocation(prev => prev?.id === loc.id ? null : loc);
-    }
+        setSelectedLocation(prev => prev?.id === loc.id ? null : loc);
+      }
   };
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -723,6 +730,7 @@ function App() {
     setIsChatOpen(false);
     setIsDiceTrayOpen(false);
     setIsHitPointsOpen(false);
+    setReviewHealthOwner(null);
     setActiveSidebarMenu('none');
     setSelectedLocation(null);
     setTargetObject(null);
@@ -1040,8 +1048,19 @@ function App() {
                 onClose={() => setIsHitPointsOpen(false)}
               />
             )}
+            {reviewHealthOwner && (() => {
+              const reviewLoc = locations.find((l: any) => l.shape === 'rhombus' && l.owner === reviewHealthOwner);
+              return reviewLoc ? (
+                <HealthReviewWindow
+                  location={reviewLoc}
+                  pos={reviewHealthPos}
+                  setPos={setReviewHealthPos}
+                  onClose={() => setReviewHealthOwner(null)}
+                />
+              ) : null;
+            })()}
             {isDiceTrayOpen && (
-                <DiceTrayWindow 
+                <DiceTrayWindow
                     pos={diceTrayPos} 
                     setPos={setDiceTrayPos} 
                     onClose={() => setIsDiceTrayOpen(false)}

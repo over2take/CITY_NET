@@ -246,3 +246,162 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
     </>
   );
 }
+
+// ─── Read-only health review window ───────────────────────────────────────────
+
+interface HealthReviewWindowProps {
+  location: Location & { injuries?: string };
+  pos: { x: number; y: number };
+  setPos: (p: { x: number; y: number }) => void;
+  onClose: () => void;
+}
+
+function HeartMonitor({ color, flatline }: { color: string; flatline: boolean }) {
+  return (
+    <div style={{ width: '100%', height: '50px', overflow: 'hidden', background: '#000', borderRadius: '3px', border: '1px solid #0a2a0a' }}>
+      <style>{`
+        @keyframes ekg-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        .ekg-live { animation: ekg-scroll 2.4s linear infinite; width: 200%; display: block; }
+        .ekg-dead { width: 100%; display: block; }
+      `}</style>
+      {flatline ? (
+        <svg className="ekg-dead" height="50" viewBox="0 0 280 50"
+          style={{ filter: `drop-shadow(0 0 2px ${color})` }}>
+          <line x1="0" y1="25" x2="280" y2="25" stroke={color} strokeWidth="1.5" />
+        </svg>
+      ) : (
+        <svg className="ekg-live" height="50" viewBox="0 0 560 50" preserveAspectRatio="none"
+          style={{ filter: `drop-shadow(0 0 3px ${color})` }}>
+          <polyline points="0,25 27,25 34,20 42,25 49,25 56,5 60,45 64,5 68,25 80,30 87,25 127,25 280,25"
+            fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+          <polyline points="280,25 307,25 314,20 322,25 329,25 336,5 340,45 344,5 348,25 360,30 367,25 407,25 560,25"
+            fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+        </svg>
+      )}
+    </div>
+  );
+}
+
+const INJURY_ZONES: Record<string, React.CSSProperties> = {
+  head:      { left: '38%', top: '9%',  width: '24%', height: '20%' },
+  torso:     { left: '33%', top: '29%', width: '34%', height: '35%' },
+  right_arm: { left: '6%',  top: '29%', width: '26%', height: '35%' },
+  left_arm:  { left: '68%', top: '29%', width: '26%', height: '35%' },
+  right_leg: { left: '26%', top: '65%', width: '22%', height: '30%' },
+  left_leg:  { left: '52%', top: '65%', width: '22%', height: '30%' },
+};
+
+export function HealthReviewWindow({ location, pos, setPos, onClose }: HealthReviewWindowProps) {
+  const [reviewInjuriesOpen, setReviewInjuriesOpen] = useState(false);
+
+  const injuries: Record<string, boolean> = (() => {
+    try { return JSON.parse((location as any).injuries || '{}'); } catch { return {}; }
+  })();
+
+  const hpCurrent = location.hp_current ?? 0;
+  const hpMax = location.hp_max ?? 0;
+  const hpTemp = location.hp_temp ?? 0;
+  const hpPct = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
+  const isDead = hpCurrent <= 0;
+  const hpColor = isDead ? '#ff3333' : hpPct > 0.5 ? 'var(--green)' : hpPct > 0.25 ? '#ffaa00' : '#ff3333';
+
+  return (
+    <DraggableWindow
+      title={`HEALTH: ${(location.owner || 'UNKNOWN').toUpperCase()}`}
+      pos={pos} setPos={setPos} onClose={onClose}
+      windowStyle={{ width: '280px' }}
+      contentStyle={{ overflowY: 'visible' }}
+    >
+      <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+        {/* HP number row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          <div style={{ fontSize: '2rem', color: hpColor, textShadow: `0 0 8px ${hpColor}`, fontWeight: 'bold' }}>
+            {hpCurrent} / {hpMax}
+          </div>
+          <button
+            onClick={() => setReviewInjuriesOpen(o => !o)}
+            title="VIEW INJURIES"
+            style={{
+              background: reviewInjuriesOpen ? 'var(--green)' : 'transparent',
+              border: '1px solid var(--green)',
+              borderRadius: '3px', padding: '4px 6px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <PersonSVG color={reviewInjuriesOpen ? '#000' : 'var(--green)'} style={{ width: 16, height: 16, display: 'block' }} />
+          </button>
+        </div>
+
+        {/* HP bar */}
+        <div style={{ height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
+          <div style={{ width: `${hpPct * 100}%`, height: '100%', background: hpColor, transition: 'width 0.3s, background 0.3s' }} />
+        </div>
+
+        {/* Heart monitor — flatlines at 0 HP */}
+        <HeartMonitor color={hpColor} flatline={isDead} />
+
+        {/* Temp HP */}
+        {hpTemp > 0 && (
+          <div style={{ textAlign: 'center', color: '#00ccff', fontSize: '0.8rem', textShadow: '0 0 6px #00ccff' }}>
+            + {hpTemp} TEMP
+          </div>
+        )}
+
+        {/* Injury map — slides open below, same width as window */}
+        <div style={{
+          overflow: 'hidden',
+          maxHeight: reviewInjuriesOpen ? '400px' : '0px',
+          transition: 'max-height 0.3s ease',
+        }}>
+          <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ fontSize: '9px', color: '#555', fontFamily: 'monospace', letterSpacing: '1px', textAlign: 'center' }}>
+              INJURY_MAP
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'center' }}>
+              {/* Body silhouette */}
+              <div style={{ position: 'relative', width: '110px', height: '128px', flexShrink: 0 }}>
+                <PersonSVG color="var(--green)" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.5, pointerEvents: 'none' }} />
+                {Object.keys(INJURY_ZONES).map(zone => (
+                  <div key={zone} title={zone.replace('_', ' ').toUpperCase()} style={{
+                    position: 'absolute',
+                    background: injuries[zone] ? 'rgba(255,0,0,0.25)' : 'transparent',
+                    border: injuries[zone] ? '1px solid rgba(255,50,50,0.6)' : '1px solid transparent',
+                    borderRadius: '3px',
+                    pointerEvents: 'none',
+                    ...INJURY_ZONES[zone],
+                  }} />
+                ))}
+              </div>
+
+              {/* BLIND / BLEED vertically centered alongside body */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {(['blind', 'bleeding'] as const).map(cond => {
+                  const active = !!injuries[cond];
+                  return (
+                    <div key={cond} style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+                      padding: '6px 10px',
+                      border: `1px solid ${active ? '#ff3333' : 'var(--green)'}`,
+                      background: active ? '#3a0000' : '#001a00',
+                      borderRadius: '3px',
+                    }}>
+                      {cond === 'blind'
+                        ? <EyeSVG color={active ? '#ff3333' : 'var(--green)'} />
+                        : <BloodSVG color={active ? '#ff3333' : 'var(--green)'} />}
+                      <span style={{ fontSize: '8px', color: active ? '#ff3333' : 'var(--green)', fontFamily: 'monospace' }}>
+                        {cond === 'blind' ? 'BLIND' : 'BLEED'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </DraggableWindow>
+  );
+}
