@@ -78,7 +78,22 @@ cd backend
 node server.js
 ```
 
-Everything runs on port `5000`. Point a reverse proxy (Nginx, Cloudflare Tunnel, ngrok) at it to expose it publicly.
+Everything runs on port `5000`. To expose it publicly you need a reverse proxy or tunnel pointing at `localhost:5000`. Three common options:
+
+**Cloudflare Tunnel** (recommended — free, no port forwarding, works behind NAT)
+1. Install [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+2. `cloudflared tunnel --url http://localhost:5000`
+3. Cloudflare prints a public `https://` URL — share that with your players
+
+**ngrok** (quick and easy, free tier has session limits)
+1. Sign up at [ngrok.com](https://ngrok.com) and install the CLI
+2. `ngrok http 5000`
+3. ngrok prints a public URL good for the session
+
+**Nginx** (self-hosted, requires a domain and a VPS/home server with open ports)
+- An `nginx.conf` is included in the repo — it proxies HTTP and WebSocket traffic to port `5000`
+- Point your domain's DNS at your server, install [Nginx](https://nginx.org/en/docs/install.html), drop the config in `/etc/nginx/sites-available/`, and enable it
+- Pair with [Certbot](https://certbot.eff.org/) for free HTTPS via Let's Encrypt
 
 ### 6. Docker (optional)
 
