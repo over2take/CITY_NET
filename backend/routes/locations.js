@@ -238,6 +238,26 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     });
   });
 
+  router.put('/:id/injuries', optionalAuthenticate, (req, res) => {
+    const { id } = req.params;
+    const { injuries } = req.body;
+    if (typeof injuries !== 'object') return res.status(400).json({ error: 'injuries must be an object' });
+    const json = JSON.stringify(injuries);
+    db.get('SELECT shape, owner FROM locations WHERE id = ?', [id], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      if (!req.user && row.shape !== 'rhombus') return res.status(401).json({ error: 'Access denied' });
+      const query = row.shape === 'rhombus' && row.owner
+        ? ['UPDATE locations SET injuries = ? WHERE shape = "rhombus" AND owner = ?', [json, row.owner]]
+        : ['UPDATE locations SET injuries = ? WHERE id = ?', [json, id]];
+      db.run(query[0], query[1], (err2) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        emitUpdate();
+        res.json({ id, injuries });
+      });
+    });
+  });
+
   router.delete('/:id', authenticate, (req, res) => {
     db.get('SELECT * FROM locations WHERE id = ?', [req.params.id], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
