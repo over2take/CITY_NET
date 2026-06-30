@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh, Html, OrthographicCamera } from '@react-three/drei';
@@ -133,7 +133,7 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
-  const [bankData, setBankData] = useState<{ balance: number, debt: number }>({ balance: 0, debt: 0 });
+  const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean }>({ balance: 0, debt: 0 });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   // Load notification preference from the user's rhombus data
@@ -217,12 +217,18 @@ function App() {
 
   const toggleSelection = (id: number) => { setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]); };
 
-  useEffect(() => {
+  const fetchCurrentLocBattleMaps = useCallback(() => {
     if (selectedLocation && selectedLocation.shape !== 'rhombus' && selectedLocation.shape !== 'enemy_rhombus') {
       fetch(`/api/locations/${selectedLocation.id}/battle_maps`)
         .then(res => res.json())
         .then(data => setCurrentLocBattleMaps(Array.isArray(data) ? data : []))
         .catch(() => setCurrentLocBattleMaps([]));
+    }
+  }, [selectedLocation?.id]);
+
+  useEffect(() => {
+    if (selectedLocation && selectedLocation.shape !== 'rhombus' && selectedLocation.shape !== 'enemy_rhombus') {
+      fetchCurrentLocBattleMaps();
     } else {
       setCurrentLocBattleMaps([]);
     }
@@ -469,11 +475,14 @@ function App() {
     userName, token, isLoggedIn,
     notificationsEnabled, isChatOpen,
     onFetchAll: fetchAll,
+    onFetchGlobalSettings: fetchGlobalSettings,
     onFetchLocations: fetchLocations,
     onFetchRoads: fetchRoads,
     onFetchDistricts: fetchDistricts,
     onFetchWaterBodies: fetchWaterBodies,
-    onBankUpdate: (balance, debt) => setBankData({ balance, debt }),
+    onFetchBattleMaps: fetchCurrentLocBattleMaps,
+    onBankUpdate: (balance, debt, firstPayDone) => setBankData({ balance, debt, firstPayDone }),
+    onBalancePaid: (balance, debt, firstPayDone) => { setBankData({ balance, debt, firstPayDone }); setIsBankOpen(true); },
     onNotification: setNotification,
     onHasUnreadChat: setHasUnreadChat,
     onTokenUpdate: setToken,
@@ -740,7 +749,7 @@ function App() {
     
     // 2. Wait for animation to finish before unmounting map
     setTimeout(() => {
-        if (socket) socket.disconnect();
+        if (socketRef.current) socketRef.current.disconnect();
         setToken('');
         setIsAdmin(false);
         setIsLoggedIn(false);
@@ -791,7 +800,7 @@ function App() {
         <>
           <div className="ui-overlay">
       {showBattleMapManager && (selectedLocation || activeEditLocation || editId) && (
-        <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : editId)} token={token} onClose={() => setShowBattleMapManager(false)} />
+        <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : editId)} token={token} onClose={() => setShowBattleMapManager(false)} onMapsChanged={fetchCurrentLocBattleMaps} />
       )}
       {view === 'battle_map' && activeBattleMapData && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 2000 }}>
@@ -985,17 +994,24 @@ function App() {
                   activeUsers={activeUsers}
               />
             )}
-            {isBankOpen && (
-              <BankWindow 
-                  pos={bankPos} 
-                  setPos={setBankPos} 
-                  onClose={() => setIsBankOpen(false)} 
-                  bankData={bankData} 
-                  socket={socketRef.current} 
-                  userName={userName} 
-                  isBankOpen={isBankOpen}
-              />
-            )}
+            <BankWindow
+                pos={bankPos}
+                setPos={setBankPos}
+                onClose={() => setIsBankOpen(false)}
+                bankData={bankData}
+                socket={socketRef.current}
+                userName={userName}
+                isBankOpen={isBankOpen}
+                firstPayDone={bankData.firstPayDone}
+                audioEnabled={audioEnabled}
+                soundVolumes={{
+                  cashregister: parseFloat(globalSettings?.bank_vol_cashregister ?? '1'),
+                  debtpaid: parseFloat(globalSettings?.bank_vol_debtpaid ?? '1'),
+                  highroller: parseFloat(globalSettings?.bank_vol_highroller ?? '1'),
+                  firstpay: parseFloat(globalSettings?.bank_vol_firstpay ?? '1'),
+                  overdraft: parseFloat(globalSettings?.bank_vol_overdraft ?? '1'),
+                }}
+            />
               <ChatWindow 
                   pos={chatPos} 
                   setPos={setChatPos} 

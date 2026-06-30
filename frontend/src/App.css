@@ -391,6 +391,7 @@ header {
   background: #330000 !important;
   border-color: #ff0000 !important;
   color: #ff0000 !important;
+  text-shadow: 1px 1px 2px #000, 2px 2px 4px #000 !important;
 }
 
 .danger-btn:hover {
@@ -650,6 +651,7 @@ header {
 }
 
 .win95-content {
+  position: relative;
   padding: 15px;
   color: var(--green);
   font-size: 0.8rem;
