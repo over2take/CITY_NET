@@ -103,7 +103,7 @@ A `docker-compose.yml` is included. Copy `.env.example` to `backend/.env`, fill 
 docker-compose up -d
 ```
 
-See [`docs/docker-deployment.md`](docs/docker-deployment.md) for the full deployment plan including auto-updates via Watchtower.
+The compose file includes [Watchtower](https://containrrr.dev/watchtower/) — it watches your containers and automatically pulls updated images when you push a new build to Docker Hub.
 
 ---
 
