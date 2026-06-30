@@ -1,31 +1,207 @@
-# CITY_NET // MapSystem
+# CITY_NET
 
-Welcome to the MapSystem project. This is a full-stack real-time 3D interactive mapping application built with React, Three.js, Node.js, and SQLite.
+A real-time 3D city map for tabletop RPG sessions. The GM builds and manages the city; players connect and explore it live. Built with React + Three.js on the front, Node.js + SQLite on the back, and Socket.IO stitching it all together.
 
-## Setup & Deployment Instructions
+---
 
-### 1. Security Configuration (Required)
-Before running the application in a production or public environment, you must securely configure the backend server. The application uses JSON Web Tokens (JWT) to secure administrative actions like creating, editing, and deleting map objects.
+## For Game Masters — Getting Started
 
-**Instructions:**
-1. Navigate to the `backend` folder.
-2. Locate the `.env.example` file.
-3. Make a copy of `.env.example` and rename the copy to exactly `.env` (it should have no file extension).
-4. Open the new `.env` file in a text editor and change the `JWT_SECRET` value to a secure, random string (like a long password). 
-5. In that same `.env` file, change `ADMIN_USER` and `ADMIN_PASS` to your desired primary administrator login credentials. 
+### Prerequisites
 
-*Note: Do not commit the `.env` file to public repositories. If you do not configure your credentials, the system will use the default (`admin` / `cyberpunk_password`) which is insecure for production.*
+- [Node.js](https://nodejs.org/) v18 or newer
+- A terminal (PowerShell, bash, etc.)
 
-### 2. Running the Servers
-We use simple batch files to handle dependencies, booting, and tunneling.
+### 1. Clone the repo
 
-**Local Development:**
-Double-click `run_map.bat` or `run_map_local.bat` to install any missing dependencies and boot the servers for local use.
+```bash
+git clone https://github.com/over2take/CITY_NET.git
+cd CITY_NET
+```
 
-**Production Deployment:**
-Double-click `start_prod.bat`. This will automatically:
-1. Pull the latest code from GitHub (`main` branch).
-2. Install any missing dependencies.
-3. Build the highly-optimized frontend production bundle.
-4. Start the Node.js backend server on Port 5000.
-5. Initialize Cloudflare/Ngrok persistent tunnels to securely broadcast your server to the internet.
+### 2. Configure the backend
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Open `backend/.env` and set your values:
+
+```env
+ADMIN_USER=your_admin_name
+ADMIN_PASS=your_secure_password
+JWT_SECRET=some_long_random_string
+
+PORT=5000
+
+# Optional — require players to register accounts before joining
+SECURE_MODE=false
+```
+
+> **Never commit `.env`.** It's already in `.gitignore`.
+
+### 3. Install dependencies
+
+```bash
+# From the repo root
+cd backend && npm install
+cd ../frontend && npm install
+```
+
+### 4. Run in development
+
+Open two terminals:
+
+```bash
+# Terminal 1 — backend
+cd backend
+node server.js
+
+# Terminal 2 — frontend
+cd frontend
+npm run dev
+```
+
+Frontend is at `http://localhost:5173`, backend at `http://localhost:5000`.
+
+### 5. Build for production
+
+```bash
+cd frontend
+npm run build
+```
+
+Then start the backend — it serves the built frontend automatically:
+
+```bash
+cd backend
+node server.js
+```
+
+Everything runs on port `5000`. Point a reverse proxy (Nginx, Cloudflare Tunnel, ngrok) at it to expose it publicly.
+
+### 6. Docker (optional)
+
+A `docker-compose.yml` is included. Copy `.env.example` to `backend/.env`, fill it in, then:
+
+```bash
+docker-compose up -d
+```
+
+See [`docs/docker-deployment.md`](docs/docker-deployment.md) for the full deployment plan including auto-updates via Watchtower.
+
+---
+
+## Secure Mode
+
+When `SECURE_MODE=false` (default), players just enter a name to join — no password required.
+
+When `SECURE_MODE=true`, players must register an account before they can access the map. Registration is self-service from the login screen.
+
+**Admin first login with Secure Mode ON:**
+Enter your `.env` admin credentials on the player login screen. The app will recognise them as admin credentials, log you in, and open the admin dashboard automatically — no separate player account needed.
+
+---
+
+## Admin Panel
+
+Click `ADMIN_LOGIN` in the top bar once you're on the map. Enter your `.env` `ADMIN_USER` / `ADMIN_PASS`. This gives you access to:
+
+- Full map editing (create, move, edit, delete locations)
+- Player token management (place and move player characters)
+- HP / injury tracking for all players
+- Bank ledger and scheduled pay
+- Dice roll history
+- Battle map uploads
+- City database and district management
+
+---
+
+## Project Structure
+
+```
+CITY_NET/
+├── backend/
+│   ├── server.js               # Express entrypoint — mounts routes, starts Socket.IO
+│   ├── db.js                   # SQLite schema and migrations
+│   ├── middleware/
+│   │   └── auth.js             # JWT verify middleware (admin + elevated users)
+│   ├── routes/
+│   │   ├── admin.js            # Admin-only REST endpoints
+│   │   ├── locations.js        # Location CRUD
+│   │   ├── battle_maps.js      # Battle map image upload/management
+│   │   ├── maps.js             # Saved map snapshots
+│   │   ├── roads.js            # Road CRUD
+│   │   └── player.js           # Player auth (register, login, forgot, reset)
+│   ├── sockets/
+│   │   └── index.js            # All Socket.IO event handlers
+│   └── startup/
+│       └── sanity_checks.js    # In-memory DB checks on boot
+│
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx             # Root component — state, routing, socket wiring
+│   │   ├── App.css / index.css # Global styles and CSS variables
+│   │   ├── components/
+│   │   │   ├── AdminPanel.tsx      # GM dashboard
+│   │   │   ├── HitPoints.tsx       # HP tracking + injury panel + HealthReviewWindow
+│   │   │   ├── BankWindows.tsx     # Player bank UI
+│   │   │   ├── ChatWindow.tsx      # In-game chat
+│   │   │   ├── DiceTray.tsx        # Dice roller
+│   │   │   ├── Buildings.tsx       # 3D building meshes
+│   │   │   ├── Rhombuses.tsx       # Player token meshes
+│   │   │   ├── MapElements.tsx     # Roads, water, overlays
+│   │   │   ├── Sidebar.tsx         # Location info panel
+│   │   │   ├── CityDatabase.tsx    # Location search/browse
+│   │   │   ├── DraggableWindow.tsx # Reusable draggable panel wrapper
+│   │   │   └── ...
+│   │   ├── hooks/
+│   │   │   ├── useSocket.ts    # Socket.IO connection and all event listeners
+│   │   │   ├── useApi.ts       # Fetch helpers
+│   │   │   └── useMapData.ts   # Location/district/road data fetching
+│   │   └── utils/
+│   │       ├── locationHelpers.ts  # Location geometry utilities
+│   │       ├── rhombusHelpers.ts   # Player token position math
+│   │       └── threeHelpers.tsx    # Three.js scene utilities
+│   └── public/                 # Static assets (audio, icons)
+│
+├── docs/                       # Reference docs (deployment plans, feature notes)
+├── Dockerfile.backend
+├── Dockerfile.frontend
+├── docker-compose.yml
+├── nginx.conf
+└── .env.example
+```
+
+### Tech stack
+
+| Layer | Tech |
+|---|---|
+| Frontend | React 19, TypeScript, Three.js, @react-three/fiber, Vite |
+| Backend | Node.js, Express 5, SQLite3 |
+| Realtime | Socket.IO |
+| Auth | JWT (admin) + bcrypt (player accounts) |
+| Deployment | Docker, Nginx, Watchtower |
+
+### Key architectural patterns
+
+- **Socket.IO is the source of truth for live state.** REST endpoints handle persistence; sockets broadcast `dataUpdated` events so all clients re-fetch.
+- **`useSocket.ts` owns all socket subscriptions.** Adding a new real-time event means adding it there and nowhere else.
+- **`DraggableWindow` is the UI primitive.** Every floating panel wraps it.
+- **Inline SVG components instead of `<img>` tags** for icons that need CSS-variable colour control.
+- **Secure Mode is a pure opt-in.** When `SECURE_MODE=false`, the player auth routes return 404 and the frontend shows the simple name-only login — existing behaviour is unchanged.
+
+---
+
+## Contributing
+
+1. Fork the repo and create a branch off `main`
+2. `npm run dev` (frontend) + `node server.js` (backend) for local development
+3. Run tests: `cd frontend && npm test`
+4. Open a PR against `main` — describe what changed and why
+
+---
+
+## License
+
+MIT
