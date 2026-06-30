@@ -223,8 +223,10 @@ db.serialize(() => {
     security_question TEXT,
     security_answer_hash TEXT,
     temp_password INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+  db.run(`ALTER TABLE player_accounts ADD COLUMN status TEXT DEFAULT 'pending'`, () => {});
 });
 
 module.exports = db;

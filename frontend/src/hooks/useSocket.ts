@@ -24,12 +24,15 @@ interface UseSocketOptions {
   onHasUnreadChat: (val: boolean) => void;
   onTokenUpdate: (token: string) => void;
   onIsAdminUpdate: (isAdmin: boolean) => void;
+  onRegistrationPending?: (username: string) => void;
+  onRegistrationUpdated?: (username: string, action: 'approved' | 'denied') => void;
 }
 
 export function useSocket({
   userName, token, isLoggedIn, notificationsEnabled, isChatOpen,
   onFetchAll, onFetchGlobalSettings, onFetchLocations, onFetchRoads, onFetchDistricts, onFetchWaterBodies, onFetchBattleMaps,
   onBankUpdate, onBalancePaid, onNotification, onHasUnreadChat, onTokenUpdate, onIsAdminUpdate,
+  onRegistrationPending, onRegistrationUpdated,
 }: UseSocketOptions) {
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const tokenRef = useRef(token);
@@ -128,6 +131,14 @@ export function useSocket({
         onIsAdminUpdate(false);
         onNotification('TEMPORARY_ADMIN_ACCESS_REVOKED');
       }
+    });
+
+    newSocket.on('registrationPending', (data: { username: string }) => {
+      onRegistrationPending?.(data.username);
+    });
+
+    newSocket.on('registrationUpdated', (data: { username: string; action: 'approved' | 'denied' }) => {
+      onRegistrationUpdated?.(data.username, data.action);
     });
 
     newSocket.on('force_floor_change', (data: { locationId: number; floorIndex: number }) => {

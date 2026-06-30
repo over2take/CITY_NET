@@ -29,7 +29,7 @@ app.use('/api/locations', require('./routes/locations')(db, io, helpers));
 app.use('/api/locations/:id/battle_maps', require('./routes/battle_maps')(db, io, helpers));
 app.use('/api/maps', require('./routes/maps')(db, io, helpers));
 app.use('/api/roads', require('./routes/roads')(db, io, helpers));
-app.use('/api/player', require('./routes/player')(db));
+app.use('/api/player', require('./routes/player')(db, io));
 app.use('/api', require('./routes/admin')(db, io, helpers));
 
 // Frontend static serving
