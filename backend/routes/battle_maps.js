@@ -110,5 +110,13 @@ module.exports = (db, io, { emitUpdate }) => {
     });
   });
 
+  // List all uploaded battle map image filenames (admin use)
+  router.get('/images', authenticate, (req, res) => {
+    const files = fs.existsSync(uploadsDir)
+      ? fs.readdirSync(uploadsDir).filter(f => /\.(png|jpe?g|webp|gif)$/i.test(f))
+      : [];
+    res.json(files);
+  });
+
   return router;
 };
