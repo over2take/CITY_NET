@@ -216,6 +216,15 @@ db.serialize(() => {
     points_json TEXT NOT NULL,
     map_scale_multiplier TEXT DEFAULT '[1]'
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS player_accounts (
+    username TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL,
+    security_question TEXT,
+    security_answer_hash TEXT,
+    temp_password INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
 });
 
 module.exports = db;

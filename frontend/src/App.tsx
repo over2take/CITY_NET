@@ -88,7 +88,15 @@ function App() {
     } catch (e) { }
   }
 
+  const [secureModeEnabled, setSecureModeEnabled] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [loginView, setLoginView] = useState<'login' | 'register' | 'forgot' | 'reset'>('login');
+  const [registerForm, setRegisterForm] = useState({ username: '', password: '', confirmPassword: '', security_question: '', security_answer: '', customQuestion: '' });
+  const [forgotForm, setForgotForm] = useState({ username: '', security_answer: '' });
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [playerToken, setPlayerToken] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('list');
   const [editId, setEditId] = useState<number | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -657,6 +665,7 @@ function App() {
   useEffect(() => {
     const savedName = localStorage.getItem('userName');
     if (savedName) { setUserName(savedName); setTempUserName(savedName); }
+    fetch('/api/player/secure-mode').then(r => r.json()).then(d => setSecureModeEnabled(d.enabled)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -705,7 +714,74 @@ function App() {
     if (data.token) { setToken(data.token); setIsAdmin(true); setShowAdminPanel(true); } else { setNotification("LOGIN_FAILED"); }
   };
 
-  const startBootSequence = () => { if (!tempUserName.trim()) return; localStorage.setItem('userName', tempUserName); setUserName(tempUserName); setIsLoggedIn(true); if (socketRef.current) socketRef.current.emit('identify', tempUserName); if (audioEnabled) { const startupSound = new Audio('/StartUp.mp3'); startupSound.volume = 0.20; startupSound.play().catch(() => {}); } };
+  const startBootSequence = (name = tempUserName, token?: string) => {
+    if (!name.trim()) return;
+    localStorage.setItem('userName', name);
+    setUserName(name);
+    setIsLoggedIn(true);
+    if (socketRef.current) socketRef.current.emit('identify', token ? { userName: name, playerToken: token } : name);
+    if (audioEnabled) { const s = new Audio('/StartUp.mp3'); s.volume = 0.20; s.play().catch(() => {}); }
+  };
+
+  const handleSecureLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    // Try player account first
+    const playerRes = await fetch('/api/player/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginForm.username, password: loginForm.password }) });
+    if (playerRes.ok) {
+      const data = await playerRes.json();
+      if (data.tempPassword) { setPlayerToken(data.playerToken); setResetToken(data.playerToken); setLoginView('reset'); return; }
+      setPlayerToken(data.playerToken);
+      startBootSequence(loginForm.username, data.playerToken);
+      return;
+    }
+    // Fall through: try admin credentials
+    const adminRes = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(loginForm) });
+    const adminData = await adminRes.json();
+    if (adminRes.ok && adminData.token) {
+      setToken(adminData.token);
+      setIsAdmin(true);
+      setShowAdminPanel(true);
+      startBootSequence(loginForm.username);
+      return;
+    }
+    setLoginError('Invalid credentials');
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    if (registerForm.password !== registerForm.confirmPassword) return setLoginError('Passwords do not match');
+    if (!registerForm.security_question) return setLoginError('Please select a security question');
+    const finalQuestion = registerForm.security_question === 'custom' ? registerForm.customQuestion.trim() : registerForm.security_question;
+    if (!finalQuestion) return setLoginError('Please enter your custom security question');
+    const { customQuestion: _cq, confirmPassword: _cp, ...rest } = registerForm;
+    const res = await fetch('/api/player/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rest, security_question: finalQuestion }) });
+    const data = await res.json();
+    if (!res.ok) return setLoginError(data.error || 'Registration failed');
+    setLoginView('login');
+    setLoginError('Account created — please log in');
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    const res = await fetch('/api/player/forgot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(forgotForm) });
+    const data = await res.json();
+    if (!res.ok) return setLoginError(data.error || 'Failed');
+    setResetToken(data.resetToken);
+    setLoginView('reset');
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    const res = await fetch('/api/player/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: resetToken, newPassword }) });
+    const data = await res.json();
+    if (!res.ok) return setLoginError(data.error || 'Failed');
+    setLoginView('login');
+    setLoginError('Password updated — please log in');
+  };
 
   const handleSendMessage = (text: string, senderOverride?: string) => {
     if (socketRef.current) {
@@ -799,7 +875,76 @@ function App() {
               </div>
               <h1 style={{fontSize: '3rem', margin: '0', textShadow: 'var(--glow)'}}>CITY_NET</h1>
               <div style={{ fontSize: '0.65rem', opacity: 0.5, letterSpacing: '4px', marginTop: '35px', marginBottom: '15px' }}>NAV_OS_v1.0.4</div>
-              <div><input value={tempUserName} onChange={e => setTempUserName(e.target.value)} placeholder="OPERATOR_ID" style={{fontSize: '1.2rem', textAlign: 'center'}} /><button className="upload-btn" onClick={startBootSequence} style={{fontSize: '1.2rem', padding: '10px'}}>LOGIN</button></div>
+
+              {loginError && (
+                <div style={{ fontSize: '0.7rem', color: loginError.includes('created') || loginError.includes('updated') ? 'var(--green)' : '#ff3333', marginBottom: '10px', letterSpacing: '1px' }}>
+                  {loginError}
+                </div>
+              )}
+
+              {/* ── Secure Mode OFF — simple username entry ── */}
+              {!secureModeEnabled && (
+                <div>
+                  <input value={tempUserName} onChange={e => setTempUserName(e.target.value)} onKeyDown={e => e.key === 'Enter' && startBootSequence()} placeholder="OPERATOR_ID" style={{fontSize: '1.2rem', textAlign: 'center'}} />
+                  <button className="upload-btn" onClick={() => startBootSequence()} style={{fontSize: '1.2rem', padding: '10px'}}>LOGIN</button>
+                </div>
+              )}
+
+              {/* ── Secure Mode ON — login ── */}
+              {secureModeEnabled && loginView === 'login' && (
+                <form onSubmit={handleSecureLogin} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                  <input value={loginForm.username} onChange={e => setLoginForm(f => ({...f, username: e.target.value}))} placeholder="OPERATOR_ID" style={{ textAlign: 'center', width: '100%' }} />
+                  <input type="password" value={loginForm.password} onChange={e => setLoginForm(f => ({...f, password: e.target.value}))} placeholder="ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
+                  <button type="submit" className="upload-btn" style={{ fontSize: '1.1rem', padding: '10px' }}>LOGIN</button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                    <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('register'); setLoginError(''); }}>REGISTER</button>
+                    <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('forgot'); setLoginError(''); }}>FORGOT_PASSWORD</button>
+                  </div>
+                </form>
+              )}
+
+              {/* ── Secure Mode ON — register ── */}
+              {secureModeEnabled && loginView === 'register' && (
+                <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                  <input value={registerForm.username} onChange={e => setRegisterForm(f => ({...f, username: e.target.value}))} placeholder="OPERATOR_ID" style={{ textAlign: 'center', width: '100%' }} />
+                  <input type="password" value={registerForm.password} onChange={e => setRegisterForm(f => ({...f, password: e.target.value}))} placeholder="ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
+                  <input type="password" value={registerForm.confirmPassword} onChange={e => setRegisterForm(f => ({...f, confirmPassword: e.target.value}))} placeholder="CONFIRM_ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
+                  <select value={registerForm.security_question} onChange={e => setRegisterForm(f => ({...f, security_question: e.target.value}))} style={{ width: '100%' }}>
+                    <option value="">SELECT_SECURITY_QUESTION</option>
+                    <option>What was the color of your first car?</option>
+                    <option>What is your favorite movie?</option>
+                    <option>What was the name of your first pet?</option>
+                    <option>What city were you born in?</option>
+                    <option>What is your mother's maiden name?</option>
+                    <option value="custom">Other (write your own)</option>
+                  </select>
+                  {registerForm.security_question === 'custom' && (
+                    <input value={registerForm.customQuestion} onChange={e => setRegisterForm(f => ({...f, customQuestion: e.target.value}))} placeholder="CUSTOM_QUESTION" style={{ textAlign: 'center', width: '100%' }} />
+                  )}
+                  <input value={registerForm.security_answer} onChange={e => setRegisterForm(f => ({...f, security_answer: e.target.value}))} placeholder="SECURITY_ANSWER" style={{ textAlign: 'center', width: '100%' }} />
+                  <button type="submit" className="upload-btn">CREATE_ACCOUNT</button>
+                  <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('login'); setLoginError(''); }}>BACK_TO_LOGIN</button>
+                </form>
+              )}
+
+              {/* ── Secure Mode ON — forgot password ── */}
+              {secureModeEnabled && loginView === 'forgot' && (
+                <form onSubmit={handleForgot} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                  <input value={forgotForm.username} onChange={e => setForgotForm(f => ({...f, username: e.target.value}))} placeholder="OPERATOR_ID" style={{ textAlign: 'center', width: '100%' }} />
+                  <input value={forgotForm.security_answer} onChange={e => setForgotForm(f => ({...f, security_answer: e.target.value}))} placeholder="SECURITY_ANSWER" style={{ textAlign: 'center', width: '100%' }} />
+                  <button type="submit" className="upload-btn">VERIFY</button>
+                  <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('login'); setLoginError(''); }}>BACK_TO_LOGIN</button>
+                </form>
+              )}
+
+              {/* ── Secure Mode ON — reset/change password ── */}
+              {secureModeEnabled && loginView === 'reset' && (
+                <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                  <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>SET_NEW_ACCESS_CODE</div>
+                  <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="NEW_ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
+                  <button type="submit" className="upload-btn">CONFIRM</button>
+                </form>
+              )}
             </div>
             <StatusLogDisplay />
           </div>

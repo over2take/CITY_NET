@@ -66,6 +66,24 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('identify', (data) => {
       let info = typeof data === 'string' ? { userName: data, isAdmin: false } : data;
 
+      // Secure Mode: verify player token before allowing connection
+      if (process.env.SECURE_MODE === 'true' && !info.isAdmin) {
+        if (!info.playerToken) {
+          socket.emit('authError', { message: 'Player token required' });
+          socket.disconnect(true);
+          return;
+        }
+        try {
+          const verified = jwt.verify(info.playerToken, SECRET);
+          if (verified.role !== 'player' || verified.username !== info.userName) throw new Error('Invalid token');
+        } catch {
+          socket.emit('authError', { message: 'Invalid or expired player token' });
+          socket.disconnect(true);
+          return;
+        }
+      }
+      delete info.playerToken;
+
       if (info.isAdmin && info.token) {
         try {
           const verified = jwt.verify(info.token, SECRET);
