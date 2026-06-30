@@ -31,12 +31,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   };
 
   const sendBankUpdate = (username) => {
-    db.get('SELECT balance, debt FROM player_banks WHERE username = ?', [username], (err, row) => {
+    db.get('SELECT balance, debt, first_pay_done FROM player_banks WHERE username = ?', [username], (err, row) => {
       if (!err && row) {
-        io.emit('bankUpdate', { username, balance: row.balance, debt: row.debt });
+        io.emit('bankUpdate', { username, balance: row.balance, debt: row.debt, firstPayDone: !!row.first_pay_done });
       } else if (!err && !row) {
         db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, 0, 0)', [username], () => {
-          io.emit('bankUpdate', { username, balance: 0, debt: 0 });
+          io.emit('bankUpdate', { username, balance: 0, debt: 0, firstPayDone: false });
         });
       }
     });
@@ -292,6 +292,30 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
+    // moveRhombusPath: saves the final position and broadcasts waypoints to
+    // all OTHER clients so they animate along the same path.
+    socket.on('moveRhombusPath', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info) return;
+      const { id, waypoints } = data; // waypoints: [{x,z}, ...], last entry is the final position
+      if (!Array.isArray(waypoints) || waypoints.length === 0) return;
+      const final = waypoints[waypoints.length - 1];
+      db.get('SELECT owner FROM locations WHERE id = ?', [id], (err, row) => {
+        if (err || !row) return;
+        if (info.isAdmin || info.userName === row.owner) {
+          db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [final.x, final.z, id], function(updateErr) {
+            if (!updateErr) {
+              // Broadcast path to everyone else; mover already animated locally.
+              // emitUpdate is intentionally omitted here — it would snap localPos to the
+              // final position on observer clients, killing the path animation mid-flight.
+              // The DB is already correct; late-joiners get the right position on initial load.
+              socket.broadcast.emit('rhombusPath', { id, waypoints });
+            }
+          });
+        }
+      });
+    });
+
     socket.on('battle_map_enter', (data) => {
       const info = userSockets.get(socket.id);
       if (info) { info.currentBattleMapId = data.locationId; info.currentFloorIndex = data.floorIndex; broadcastActiveUsers(); }
@@ -443,6 +467,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     // --- Banking ---
     socket.on('requestBankBalance', (data) => {
       if (data && data.username) sendBankUpdate(data.username);
+    });
+
+    socket.on('markFirstPayDone', (data) => {
+      if (!data || !data.username) return;
+      db.run('UPDATE player_banks SET first_pay_done = 1 WHERE username = ?', [data.username]);
     });
 
     socket.on('withdrawFunds', (data) => {
