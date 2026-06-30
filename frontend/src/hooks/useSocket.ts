@@ -12,11 +12,14 @@ interface UseSocketOptions {
   notificationsEnabled: boolean;
   isChatOpen: boolean;
   onFetchAll: () => void;
+  onFetchGlobalSettings?: () => void;
   onFetchLocations: () => void;
   onFetchRoads: () => void;
   onFetchDistricts: () => void;
   onFetchWaterBodies: () => void;
-  onBankUpdate: (balance: number, debt: number) => void;
+  onFetchBattleMaps?: () => void;
+  onBankUpdate: (balance: number, debt: number, firstPayDone?: boolean) => void;
+  onBalancePaid?: (balance: number, debt: number, firstPayDone?: boolean) => void;
   onNotification: (msg: string | null) => void;
   onHasUnreadChat: (val: boolean) => void;
   onTokenUpdate: (token: string) => void;
@@ -25,8 +28,8 @@ interface UseSocketOptions {
 
 export function useSocket({
   userName, token, isLoggedIn, notificationsEnabled, isChatOpen,
-  onFetchAll, onFetchLocations, onFetchRoads, onFetchDistricts, onFetchWaterBodies,
-  onBankUpdate, onNotification, onHasUnreadChat, onTokenUpdate, onIsAdminUpdate,
+  onFetchAll, onFetchGlobalSettings, onFetchLocations, onFetchRoads, onFetchDistricts, onFetchWaterBodies, onFetchBattleMaps,
+  onBankUpdate, onBalancePaid, onNotification, onHasUnreadChat, onTokenUpdate, onIsAdminUpdate,
 }: UseSocketOptions) {
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const tokenRef = useRef(token);
@@ -61,12 +64,19 @@ export function useSocket({
       newSocket.emit('identify', { userName: userNameRef.current, isAdmin: !!tokenRef.current, token: tokenRef.current });
     });
 
+    newSocket.on('settingsUpdated', () => {
+      onFetchGlobalSettings?.();
+    });
+
     newSocket.on('dataUpdated', (payload: { isRhombusOnly?: boolean }) => {
       onFetchLocations();
       onFetchRoads();
       onFetchDistricts();
       onFetchWaterBodies();
-      if (!payload?.isRhombusOnly) (window as any).hasUnsavedChanges = true;
+      if (!payload?.isRhombusOnly) {
+        (window as any).hasUnsavedChanges = true;
+        onFetchBattleMaps?.();
+      }
     });
 
     newSocket.on('activeUsersUpdated', (users: ActiveUser[]) => setActiveUsers(users));
@@ -86,8 +96,14 @@ export function useSocket({
       }
     });
 
-    newSocket.on('bankUpdate', (data: { username: string; balance: number; debt: number }) => {
-      if (data.username === userNameRef.current) onBankUpdate(data.balance, data.debt);
+    let lastKnownBalance: number | null = null;
+    newSocket.on('bankUpdate', (data: { username: string; balance: number; debt: number; firstPayDone?: boolean }) => {
+      if (data.username !== userNameRef.current) return;
+      onBankUpdate(data.balance, data.debt, data.firstPayDone);
+      if (lastKnownBalance !== null && data.balance > lastKnownBalance) {
+        onBalancePaid?.(data.balance, data.debt, data.firstPayDone);
+      }
+      lastKnownBalance = data.balance;
     });
     newSocket.emit('requestBankBalance', { username: userName });
 

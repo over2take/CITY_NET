@@ -32,6 +32,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     const { key, value } = req.body;
     db.run('INSERT INTO global_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=?', [key, value, value], (err) => {
       if (err) return res.status(500).json({ error: err.message });
+      io.emit('settingsUpdated');
       res.json({ message: 'Settings updated' });
     });
   });

@@ -30,6 +30,7 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
         return () => window.removeEventListener('pointerup', handleGlobalUp);
     }, [controls, setIsDragging]);
   const localPos = useRef({ x: location.x, z: location.z });
+  const pathPoints = useRef<{ x: number; z: number }[]>([]);
   const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
 
   // Smooth movement interpolation
@@ -38,6 +39,8 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
   const [animState, setAnimState] = useState<'none' | 'appearing' | 'fading'>('none');
   const animStartTime = useRef<number | null>(null);
   const hasAppeared = useRef(false);
+  const waypointTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const isAnimatingPath = useRef(false);
 
   const isOnline = true; // Enemies are system-owned and always 'online'
 
@@ -54,18 +57,40 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
     if (!socket) return;
     const handleFade = (data: any) => { if (data.id === location.id) { setAnimState('fading'); animStartTime.current = Date.now(); } };
     const handleAppear = (data: any) => { if (data.id === location.id) { setAnimState('appearing'); animStartTime.current = Date.now(); } };
+    const handlePath = (data: any) => {
+      if (data.id !== location.id || !Array.isArray(data.waypoints)) return;
+      waypointTimers.current.forEach(clearTimeout);
+      waypointTimers.current = [];
+      isAnimatingPath.current = true;
+      const interval = 80; // ms between waypoints
+      data.waypoints.forEach((wp: { x: number; z: number }, i: number) => {
+        const t = setTimeout(() => {
+          localPos.current = { x: wp.x, z: wp.z };
+          if (i === data.waypoints.length - 1) isAnimatingPath.current = false;
+        }, i * interval);
+        waypointTimers.current.push(t);
+      });
+    };
     socket.on('rhombusFading', handleFade);
     socket.on('rhombusAppearing', handleAppear);
-    return () => { socket.off('rhombusFading', handleFade); socket.off('rhombusAppearing', handleAppear); };
+    socket.on('rhombusPath', handlePath);
+    return () => {
+      socket.off('rhombusFading', handleFade);
+      socket.off('rhombusAppearing', handleAppear);
+      socket.off('rhombusPath', handlePath);
+      waypointTimers.current.forEach(clearTimeout);
+      isAnimatingPath.current = false;
+    };
   }, [location.id, socket]);
 
-  useEffect(() => { 
-    localPos.current = { x: location.x, z: location.z }; 
+  useEffect(() => {
+    if (isAnimatingPath.current) return;
+    localPos.current = { x: location.x, z: location.z };
   }, [location.x, location.z]);
 
   useFrame((state, delta) => {
     if (!meshRef.current) return;
-    
+
     // Interpolate towards localPos (35% slower + frame-rate independent)
     const targetY = location.y + (location.height / 4);
     visualPos.current.x = THREE.MathUtils.lerp(visualPos.current.x, localPos.current.x, 2.6 * delta);
@@ -144,10 +169,11 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
       if (measureMode) return;
       e.stopPropagation();
     dragDist.current = 0;
-    
+
     // Only allow dragging if the user is an Admin
     if (!isAdmin) return;
 
+    pathPoints.current = [{ x: localPos.current.x, z: localPos.current.z }];
     try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
     const currentRaycaster = e.raycaster || raycaster;
     if (currentRaycaster && currentRaycaster.ray) {
@@ -169,6 +195,7 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
         const targetX = intersection.x + dragOffset.x;
         const targetZ = intersection.z + dragOffset.z;
         localPos.current = { x: targetX, z: targetZ };
+        pathPoints.current.push({ x: targetX, z: targetZ });
     }
   };
 
@@ -178,25 +205,29 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
     setIsDragging(false);
-    
+
     // EVERYONE can open the info window with a click
     if (dragDist.current < 15) {
         e.stopPropagation();
         onClick(); // Stationary click -> open info window
     } else if (isAdmin) {
-        // Only admins can actually SAVE the new position after a drag
-        socket.emit('moveRhombus', { id: location.id, x: localPos.current.x, z: localPos.current.z });
+        const pts = pathPoints.current;
+        const waypoints = Array.from({ length: 30 }, (_, i) => {
+          const idx = Math.round(i * (pts.length - 1) / 29);
+          return pts[idx];
+        });
+        socket.emit('moveRhombusPath', { id: location.id, waypoints });
     }
   };
 
   return (
-    <group 
-        ref={(group) => { 
+    <group
+        ref={(group) => {
             groupRef.current = group as any;
             if (group) {
                 if (group.position) group.position.copy(visualPos.current);
             }
-            if (isSelected && group) { setTargetObject(group); } 
+            if (isSelected && group) { setTargetObject(group); }
         }}
     >
       <mesh 
@@ -262,13 +293,16 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
       return () => window.removeEventListener('pointerup', handleGlobalUp);
   }, [controls, setIsDragging]);
   const localPos = useRef({ x: location.x, z: location.z });
+  const pathPoints = useRef<{ x: number; z: number }[]>([]);
   const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
+  const waypointTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const visualPos = useRef(new THREE.Vector3(location.x, location.y + (location.height / 4), location.z));
 
   const [animState, setAnimState] = useState<'none' | 'appearing' | 'fading'>('none');
   const animStartTime = useRef<number | null>(null);
   const hasAppeared = useRef(false);
+  const isAnimatingPath = useRef(false);
 
   useEffect(() => {
     if (!hasAppeared.current) {
@@ -282,13 +316,35 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
     if (!socket) return;
     const handleFade = (data: any) => { if (data.id === location.id) { setAnimState('fading'); animStartTime.current = Date.now(); } };
     const handleAppear = (data: any) => { if (data.id === location.id) { setAnimState('appearing'); animStartTime.current = Date.now(); } };
+    const handlePath = (data: any) => {
+      if (data.id !== location.id || !Array.isArray(data.waypoints)) return;
+      waypointTimers.current.forEach(clearTimeout);
+      waypointTimers.current = [];
+      isAnimatingPath.current = true;
+      const interval = 80;
+      data.waypoints.forEach((wp: { x: number; z: number }, i: number) => {
+        const t = setTimeout(() => {
+          localPos.current = { x: wp.x, z: wp.z };
+          if (i === data.waypoints.length - 1) isAnimatingPath.current = false;
+        }, i * interval);
+        waypointTimers.current.push(t);
+      });
+    };
     socket.on('rhombusFading', handleFade);
     socket.on('rhombusAppearing', handleAppear);
-    return () => { socket.off('rhombusFading', handleFade); socket.off('rhombusAppearing', handleAppear); };
+    socket.on('rhombusPath', handlePath);
+    return () => {
+      socket.off('rhombusFading', handleFade);
+      socket.off('rhombusAppearing', handleAppear);
+      socket.off('rhombusPath', handlePath);
+      waypointTimers.current.forEach(clearTimeout);
+      isAnimatingPath.current = false;
+    };
   }, [location.id, socket]);
 
-  useEffect(() => { 
-    localPos.current = { x: location.x, z: location.z }; 
+  useEffect(() => {
+    if (isAnimatingPath.current) return;
+    localPos.current = { x: location.x, z: location.z };
   }, [location.x, location.z]);
 
   useFrame((state, delta) => {
@@ -373,6 +429,7 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
       e.stopPropagation();
     dragDist.current = 0;
     if (!isAdmin) return;
+    pathPoints.current = [{ x: localPos.current.x, z: localPos.current.z }];
     try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
     const currentRaycaster = e.raycaster || raycaster;
     if (currentRaycaster && currentRaycaster.ray) {
@@ -394,6 +451,7 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
         const targetX = intersection.x + dragOffset.x;
         const targetZ = intersection.z + dragOffset.z;
         localPos.current = { x: targetX, z: targetZ };
+        pathPoints.current.push({ x: targetX, z: targetZ });
     }
   };
 
@@ -403,12 +461,17 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
     setIsDragging(false);
-    
+
     if (dragDist.current < 15) {
         e.stopPropagation();
-        onClick(); 
+        onClick();
     } else if (isAdmin) {
-        socket.emit('moveRhombus', { id: location.id, x: localPos.current.x, z: localPos.current.z });
+        const pts = pathPoints.current;
+        const waypoints = Array.from({ length: 30 }, (_, i) => {
+          const idx = Math.round(i * (pts.length - 1) / 29);
+          return pts[idx];
+        });
+        socket.emit('moveRhombusPath', { id: location.id, waypoints });
     }
   };
 
@@ -483,7 +546,10 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
         return () => window.removeEventListener('pointerup', handleGlobalUp);
     }, [controls, setIsDragging]);
   const localPos = useRef({ x: location.x, z: location.z });
+  const pathPoints = useRef<{ x: number; z: number }[]>([]);
   const [dragOffset, setDragOffset] = useState(new THREE.Vector3());
+  const waypointTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const isAnimatingPath = useRef(false);
 
   // Smooth movement interpolation
   const visualPos = useRef(new THREE.Vector3(
@@ -493,6 +559,7 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
   ));
 
   useEffect(() => {
+    if (isAnimatingPath.current) return;
     localPos.current = { x: location.x, z: location.z };
   }, [location.x, location.z]);
 
@@ -513,9 +580,30 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
     if (!socket) return;
     const handleFade = (data: any) => { if (data.id === location.id) { setAnimState('fading'); animStartTime.current = Date.now(); } };
     const handleAppear = (data: any) => { if (data.id === location.id) { setAnimState('appearing'); animStartTime.current = Date.now(); } };
+    const handlePath = (data: any) => {
+      if (data.id !== location.id || !Array.isArray(data.waypoints)) return;
+      waypointTimers.current.forEach(clearTimeout);
+      waypointTimers.current = [];
+      isAnimatingPath.current = true;
+      const interval = 80;
+      data.waypoints.forEach((wp: { x: number; z: number }, i: number) => {
+        const t = setTimeout(() => {
+          localPos.current = { x: wp.x, z: wp.z };
+          if (i === data.waypoints.length - 1) isAnimatingPath.current = false;
+        }, i * interval);
+        waypointTimers.current.push(t);
+      });
+    };
     socket.on('rhombusFading', handleFade);
     socket.on('rhombusAppearing', handleAppear);
-    return () => { socket.off('rhombusFading', handleFade); socket.off('rhombusAppearing', handleAppear); };
+    socket.on('rhombusPath', handlePath);
+    return () => {
+      socket.off('rhombusFading', handleFade);
+      socket.off('rhombusAppearing', handleAppear);
+      socket.off('rhombusPath', handlePath);
+      waypointTimers.current.forEach(clearTimeout);
+      isAnimatingPath.current = false;
+    };
   }, [location.id, socket]);
 
   useFrame((state, delta) => {
@@ -614,10 +702,11 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
       if (measureMode) return;
       e.stopPropagation();
     dragDist.current = 0;
-    
+
     // Only allow dragging if the user has management rights (Owner or Admin)
     if (!canManage) return;
 
+    pathPoints.current = [{ x: localPos.current.x, z: localPos.current.z }];
     try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
     const currentRaycaster = e.raycaster || raycaster;
     if (currentRaycaster && currentRaycaster.ray) {
@@ -639,6 +728,7 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
         const targetX = intersection.x + dragOffset.x;
         const targetZ = intersection.z + dragOffset.z;
         localPos.current = { x: targetX, z: targetZ };
+        pathPoints.current.push({ x: targetX, z: targetZ });
     }
   };
 
@@ -648,14 +738,18 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
     if (controls) (controls as any).enabled = true;
     setIsLocalDragging(false);
     setIsDragging(false);
-    
+
     // EVERYONE can open the info window with a click
     if (dragDist.current < 15) {
         e.stopPropagation();
         onClick(); // Stationary click -> open info window
     } else if (canManage) {
-        // Only owners/admins can actually SAVE the new position after a drag
-        socket.emit('moveRhombus', { id: location.id, x: localPos.current.x, z: localPos.current.z });
+        const pts = pathPoints.current;
+        const waypoints = Array.from({ length: 30 }, (_, i) => {
+          const idx = Math.round(i * (pts.length - 1) / 29);
+          return pts[idx];
+        });
+        socket.emit('moveRhombusPath', { id: location.id, waypoints });
     }
   };
 
