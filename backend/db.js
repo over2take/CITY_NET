@@ -24,8 +24,10 @@ db.serialize(() => {
     is_target INTEGER DEFAULT 0,
     isFavorite INTEGER DEFAULT 0,
     isDanger INTEGER DEFAULT 0,
-    owner TEXT
+    owner TEXT,
+    injuries TEXT DEFAULT '{}'
   )`);
+  db.run(`ALTER TABLE locations ADD COLUMN injuries TEXT DEFAULT '{}'`, () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS battle_maps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

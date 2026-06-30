@@ -722,6 +722,7 @@ function App() {
     // 1. Immediately close all UI elements for a clean fade-out
     setIsChatOpen(false);
     setIsDiceTrayOpen(false);
+    setIsHitPointsOpen(false);
     setActiveSidebarMenu('none');
     setSelectedLocation(null);
     setTargetObject(null);
