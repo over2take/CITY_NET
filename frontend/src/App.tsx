@@ -90,13 +90,15 @@ function App() {
 
   const [secureModeEnabled, setSecureModeEnabled] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const [loginView, setLoginView] = useState<'login' | 'register' | 'forgot' | 'reset'>('login');
+  const [loginView, setLoginView] = useState<'login' | 'register' | 'forgot' | 'reset' | 'pending'>('login');
   const [registerForm, setRegisterForm] = useState({ username: '', password: '', confirmPassword: '', security_question: '', security_answer: '', customQuestion: '' });
   const [forgotForm, setForgotForm] = useState({ username: '', security_answer: '' });
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [playerToken, setPlayerToken] = useState<string | null>(null);
+  const [pendingRegistrations, setPendingRegistrations] = useState<{ username: string; created_at: string }[]>([]);
+  const [showPendingPanel, setShowPendingPanel] = useState(false);
   const [view, setView] = useState<ViewMode>('list');
   const [editId, setEditId] = useState<number | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -502,6 +504,12 @@ function App() {
     onHasUnreadChat: setHasUnreadChat,
     onTokenUpdate: setToken,
     onIsAdminUpdate: setIsAdmin,
+    onRegistrationPending: (username) => {
+      setPendingRegistrations(prev => prev.find(p => p.username === username) ? prev : [...prev, { username, created_at: new Date().toISOString() }]);
+    },
+    onRegistrationUpdated: (username) => {
+      setPendingRegistrations(prev => prev.filter(p => p.username !== username));
+    },
   });
 
   useEffect(() => {
@@ -711,7 +719,11 @@ function App() {
     e.preventDefault();
     const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(loginForm) });
     const data = await res.json();
-    if (data.token) { setToken(data.token); setIsAdmin(true); setShowAdminPanel(true); } else { setNotification("LOGIN_FAILED"); }
+    if (data.token) {
+      setToken(data.token); setIsAdmin(true); setShowAdminPanel(true);
+      fetch('/api/player/admin/players/pending', { headers: { Authorization: `Bearer ${data.token}` } })
+        .then(r => r.json()).then(rows => setPendingRegistrations(rows)).catch(() => {});
+    } else { setNotification("LOGIN_FAILED"); }
   };
 
   const startBootSequence = (name = tempUserName, token?: string) => {
@@ -743,6 +755,8 @@ function App() {
       setIsAdmin(true);
       setShowAdminPanel(true);
       startBootSequence(loginForm.username);
+      fetch('/api/player/admin/players/pending', { headers: { Authorization: `Bearer ${adminData.token}` } })
+        .then(r => r.json()).then(rows => setPendingRegistrations(rows)).catch(() => {});
       return;
     }
     setLoginError('Invalid credentials');
@@ -759,8 +773,7 @@ function App() {
     const res = await fetch('/api/player/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rest, security_question: finalQuestion }) });
     const data = await res.json();
     if (!res.ok) return setLoginError(data.error || 'Registration failed');
-    setLoginView('login');
-    setLoginError('Account created — please log in');
+    setLoginView('pending');
   };
 
   const handleForgot = async (e: React.FormEvent) => {
@@ -771,6 +784,14 @@ function App() {
     if (!res.ok) return setLoginError(data.error || 'Failed');
     setResetToken(data.resetToken);
     setLoginView('reset');
+  };
+
+  const handleApprovePlayer = async (username: string) => {
+    await fetch(`/api/player/admin/players/${username}/approve`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  };
+
+  const handleDenyPlayer = async (username: string) => {
+    await fetch(`/api/player/admin/players/${username}/deny`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -937,6 +958,15 @@ function App() {
                 </form>
               )}
 
+              {/* ── Awaiting admin approval ── */}
+              {secureModeEnabled && loginView === 'pending' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
+                  <div style={{ fontSize: '0.75rem', letterSpacing: '2px', color: 'var(--green)' }}>REGISTRATION_SUBMITTED</div>
+                  <div style={{ fontSize: '0.65rem', opacity: 0.6, textAlign: 'center', lineHeight: '1.6' }}>Your account is awaiting admin approval.<br />You will be able to log in once approved.</div>
+                  <button className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('login'); setLoginError(''); }}>BACK_TO_LOGIN</button>
+                </div>
+              )}
+
               {/* ── Secure Mode ON — reset/change password ── */}
               {secureModeEnabled && loginView === 'reset' && (
                 <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
@@ -1030,10 +1060,38 @@ function App() {
                 {view === 'city_gen' && !roadSelectionBounds && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: LEFT-CLICK + DRAG TO SELECT GENERATION AREA`}</div>}
                 {view === 'draw_roads' && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: HOLD LEFT-CLICK + DRAG TO DRAW PATH`}</div>}
                 {measureMode && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: view === 'battle_map' ? '140px' : '20px', color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 5px #ff0000', padding: '5px 15px', background: 'rgba(20, 0, 0, 0.6)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300, border: '1px solid #ff4444' }}>{`SYSTEM_ALERT: MAP CAMERA LOCKED // MEASUREMENT ACTIVE`}</div>}
-                <div style={{display: 'flex', gap: '10px'}}>{token && <button className={`admin-toggle ${pendingRequests.length > 0 && !showAdminPanel ? 'unread-flash' : ''}`} onClick={() => setShowAdminPanel(!showAdminPanel)}>{showAdminPanel ? 'HIDE_DASHBOARD' : 'SHOW_DASHBOARD'}</button>}<button className="admin-toggle" onClick={() => !token && setIsAdmin(!isAdmin)}>{token ? 'ADMIN_MODE' : (isAdmin ? 'CANCEL' : 'ADMIN_LOGIN')}</button></div>
+                <div style={{display: 'flex', gap: '10px'}}>
+                  {token && <button className={`admin-toggle ${pendingRequests.length > 0 && !showAdminPanel ? 'unread-flash' : ''}`} onClick={() => setShowAdminPanel(!showAdminPanel)}>{showAdminPanel ? 'HIDE_DASHBOARD' : 'SHOW_DASHBOARD'}</button>}
+                  {token && pendingRegistrations.length > 0 && (
+                    <button className={`admin-toggle unread-flash`} onClick={() => setShowPendingPanel(p => !p)}>
+                      PENDING_APPROVALS [{pendingRegistrations.length}]
+                    </button>
+                  )}
+                  <button className="admin-toggle" onClick={() => !token && setIsAdmin(!isAdmin)}>{token ? 'ADMIN_MODE' : (isAdmin ? 'CANCEL' : 'ADMIN_LOGIN')}</button>
+                </div>
               </div>
             </header>
             {isAdmin && !token && <div className="panel admin-login"><form onSubmit={handleLogin}><input placeholder="USERNAME" onChange={e => setLoginForm({...loginForm, username: e.target.value})} /><input type="password" placeholder="PASSWORD" onChange={e => setLoginForm({...loginForm, password: e.target.value})} /><button type="submit">ACCESS_SYSTEM</button></form></div>}
+            {token && showPendingPanel && (
+              <div className="panel" style={{ position: 'absolute', top: '60px', right: '10px', zIndex: 500, minWidth: '280px', maxHeight: '400px', overflowY: 'auto' }}>
+                <div style={{ fontSize: '0.7rem', letterSpacing: '3px', marginBottom: '10px', borderBottom: '1px solid var(--green)', paddingBottom: '6px' }}>PENDING_APPROVALS</div>
+                {pendingRegistrations.length === 0
+                  ? <div style={{ fontSize: '0.65rem', opacity: 0.5 }}>No pending registrations</div>
+                  : pendingRegistrations.map(p => (
+                    <div key={p.username} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid rgba(0,255,0,0.1)' }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem' }}>{p.username}</div>
+                        <div style={{ fontSize: '0.6rem', opacity: 0.5 }}>{new Date(p.created_at).toLocaleString()}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button className="upload-btn" style={{ fontSize: '0.65rem', padding: '4px 8px' }} onClick={() => handleApprovePlayer(p.username)}>APPROVE</button>
+                        <button className="utility-btn" style={{ fontSize: '0.65rem', padding: '4px 8px', color: '#ff3333', borderColor: '#ff3333' }} onClick={() => handleDenyPlayer(p.username)}>DENY</button>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
             {token && showAdminPanel && (
               <AdminPanel
                 isAdmin={isAdmin}
