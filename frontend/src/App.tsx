@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh, Html, OrthographicCamera } from '@react-three/drei';
@@ -22,6 +22,7 @@ import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
 import { HitPointsMenu, HealthReviewWindow } from './components/HitPoints';
+import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
 import { CityDataBaseMenu } from './components/CityDatabase';
 import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './components/BankWindows';
@@ -90,12 +91,6 @@ function App() {
 
   const [secureModeEnabled, setSecureModeEnabled] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const [loginView, setLoginView] = useState<'login' | 'register' | 'forgot' | 'reset' | 'pending'>('login');
-  const [registerForm, setRegisterForm] = useState({ username: '', password: '', confirmPassword: '', security_question: '', security_answer: '', customQuestion: '' });
-  const [forgotForm, setForgotForm] = useState({ username: '', security_answer: '' });
-  const [resetToken, setResetToken] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
   const [playerToken, setPlayerToken] = useState<string | null>(null);
   const [pendingRegistrations, setPendingRegistrations] = useState<{ username: string; created_at: string }[]>([]);
   const [showPendingPanel, setShowPendingPanel] = useState(false);
@@ -468,7 +463,7 @@ function App() {
           return next;
         });
       } else if (loc.shape === 'rhombus' && loc.owner !== userName && !token) {
-        // Non-admin player clicking another player's token — open read-only health review
+        // Non-admin player clicking another player's token â€” open read-only health review
         setReviewHealthOwner(prev => prev === loc.owner ? null : loc.owner);
         setReviewHealthPos({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 });
       } else {
@@ -735,73 +730,12 @@ function App() {
     if (audioEnabled) { const s = new Audio('/StartUp.mp3'); s.volume = 0.20; s.play().catch(() => {}); }
   };
 
-  const handleSecureLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    // Try player account first
-    const playerRes = await fetch('/api/player/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginForm.username, password: loginForm.password }) });
-    if (playerRes.ok) {
-      const data = await playerRes.json();
-      if (data.tempPassword) { setPlayerToken(data.playerToken); setResetToken(data.playerToken); setLoginView('reset'); return; }
-      setPlayerToken(data.playerToken);
-      startBootSequence(loginForm.username, data.playerToken);
-      return;
-    }
-    // Fall through: try admin credentials
-    const adminRes = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(loginForm) });
-    const adminData = await adminRes.json();
-    if (adminRes.ok && adminData.token) {
-      setToken(adminData.token);
-      setIsAdmin(true);
-      setShowAdminPanel(true);
-      startBootSequence(loginForm.username);
-      fetch('/api/player/admin/players/pending', { headers: { Authorization: `Bearer ${adminData.token}` } })
-        .then(r => r.json()).then(rows => setPendingRegistrations(rows)).catch(() => {});
-      return;
-    }
-    setLoginError('Invalid credentials');
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    if (registerForm.password !== registerForm.confirmPassword) return setLoginError('Passwords do not match');
-    if (!registerForm.security_question) return setLoginError('Please select a security question');
-    const finalQuestion = registerForm.security_question === 'custom' ? registerForm.customQuestion.trim() : registerForm.security_question;
-    if (!finalQuestion) return setLoginError('Please enter your custom security question');
-    const { customQuestion: _cq, confirmPassword: _cp, ...rest } = registerForm;
-    const res = await fetch('/api/player/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rest, security_question: finalQuestion }) });
-    const data = await res.json();
-    if (!res.ok) return setLoginError(data.error || 'Registration failed');
-    setLoginView('pending');
-  };
-
-  const handleForgot = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    const res = await fetch('/api/player/forgot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(forgotForm) });
-    const data = await res.json();
-    if (!res.ok) return setLoginError(data.error || 'Failed');
-    setResetToken(data.resetToken);
-    setLoginView('reset');
-  };
-
   const handleApprovePlayer = async (username: string) => {
     await fetch(`/api/player/admin/players/${username}/approve`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
   };
 
   const handleDenyPlayer = async (username: string) => {
     await fetch(`/api/player/admin/players/${username}/deny`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-  };
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    const res = await fetch('/api/player/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: resetToken, newPassword }) });
-    const data = await res.json();
-    if (!res.ok) return setLoginError(data.error || 'Failed');
-    setLoginView('login');
-    setLoginError('Password updated — please log in');
   };
 
   const handleSendMessage = (text: string, senderOverride?: string) => {
@@ -878,107 +812,16 @@ function App() {
     <div className="crt-container">
       <div className="scanlines"></div>
       {!isLoggedIn && (
-        <div className="modal-overlay">
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <div className="panel login-panel" style={{textAlign: 'center', minWidth: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-              <div style={{ position: 'absolute', top: '10px', right: '10px' }}>
-                <button className={`admin-toggle ${!audioEnabled ? 'muted' : ''}`} onClick={() => setAudioEnabled(!audioEnabled)} style={{padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                  {audioEnabled ? (
-                    <svg width="16" height="16" viewBox="0 0 512 512" fill="none" stroke="currentColor" strokeWidth="32" strokeLinecap="round" strokeLinejoin="round">
-                      <path fill="currentColor" fillRule="evenodd" d="m403.966 426.944l-33.285-26.63c74.193-81.075 74.193-205.015-.001-286.09l33.285-26.628c86.612 96.712 86.61 242.635.001 339.348M319.58 155.105l-33.324 26.659c39.795 42.568 39.794 108.444.001 151.012l33.324 26.658c52.205-58.22 52.205-146.109-.001-204.329m-85.163-69.772l-110.854 87.23H42.667v170.666h81.02l110.73 85.458z" />
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 512 512" fill="none" stroke="currentColor" strokeWidth="32" strokeLinecap="round" strokeLinejoin="round">
-                      <path fill="currentColor" fillRule="evenodd" d="m403.375 257.27l59.584 59.584l-30.167 30.166l-59.583-59.583l-59.584 59.583l-30.166-30.166l59.583-59.584l-59.583-59.583l30.166-30.166l59.584 59.583l59.583-59.583l30.167 30.166zM234.417 85.333l-110.854 87.23H42.667v170.666h81.02l110.73 85.458z" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-              <h1 style={{fontSize: '3rem', margin: '0', textShadow: 'var(--glow)'}}>CITY_NET</h1>
-              <div style={{ fontSize: '0.65rem', opacity: 0.5, letterSpacing: '4px', marginTop: '35px', marginBottom: '15px' }}>NAV_OS_v1.0.4</div>
-
-              {loginError && (
-                <div style={{ fontSize: '0.7rem', color: loginError.includes('created') || loginError.includes('updated') ? 'var(--green)' : '#ff3333', marginBottom: '10px', letterSpacing: '1px' }}>
-                  {loginError}
-                </div>
-              )}
-
-              {/* ── Secure Mode OFF — simple username entry ── */}
-              {!secureModeEnabled && (
-                <div>
-                  <input value={tempUserName} onChange={e => setTempUserName(e.target.value)} onKeyDown={e => e.key === 'Enter' && startBootSequence()} placeholder="OPERATOR_ID" style={{fontSize: '1.2rem', textAlign: 'center'}} />
-                  <button className="upload-btn" onClick={() => startBootSequence()} style={{fontSize: '1.2rem', padding: '10px'}}>LOGIN</button>
-                </div>
-              )}
-
-              {/* ── Secure Mode ON — login ── */}
-              {secureModeEnabled && loginView === 'login' && (
-                <form onSubmit={handleSecureLogin} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
-                  <input value={loginForm.username} onChange={e => setLoginForm(f => ({...f, username: e.target.value}))} placeholder="OPERATOR_ID" style={{ textAlign: 'center', width: '100%' }} />
-                  <input type="password" value={loginForm.password} onChange={e => setLoginForm(f => ({...f, password: e.target.value}))} placeholder="ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
-                  <button type="submit" className="upload-btn" style={{ fontSize: '1.1rem', padding: '10px' }}>LOGIN</button>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                    <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('register'); setLoginError(''); }}>REGISTER</button>
-                    <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('forgot'); setLoginError(''); }}>FORGOT_PASSWORD</button>
-                  </div>
-                </form>
-              )}
-
-              {/* ── Secure Mode ON — register ── */}
-              {secureModeEnabled && loginView === 'register' && (
-                <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
-                  <input value={registerForm.username} onChange={e => setRegisterForm(f => ({...f, username: e.target.value}))} placeholder="OPERATOR_ID" style={{ textAlign: 'center', width: '100%' }} />
-                  <input type="password" value={registerForm.password} onChange={e => setRegisterForm(f => ({...f, password: e.target.value}))} placeholder="ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
-                  <input type="password" value={registerForm.confirmPassword} onChange={e => setRegisterForm(f => ({...f, confirmPassword: e.target.value}))} placeholder="CONFIRM_ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
-                  <select value={registerForm.security_question} onChange={e => setRegisterForm(f => ({...f, security_question: e.target.value}))} style={{ width: '100%' }}>
-                    <option value="">SELECT_SECURITY_QUESTION</option>
-                    <option>What was the color of your first car?</option>
-                    <option>What is your favorite movie?</option>
-                    <option>What was the name of your first pet?</option>
-                    <option>What city were you born in?</option>
-                    <option>What is your mother's maiden name?</option>
-                    <option value="custom">Other (write your own)</option>
-                  </select>
-                  {registerForm.security_question === 'custom' && (
-                    <input value={registerForm.customQuestion} onChange={e => setRegisterForm(f => ({...f, customQuestion: e.target.value}))} placeholder="CUSTOM_QUESTION" style={{ textAlign: 'center', width: '100%' }} />
-                  )}
-                  <input value={registerForm.security_answer} onChange={e => setRegisterForm(f => ({...f, security_answer: e.target.value}))} placeholder="SECURITY_ANSWER" style={{ textAlign: 'center', width: '100%' }} />
-                  <button type="submit" className="upload-btn">CREATE_ACCOUNT</button>
-                  <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('login'); setLoginError(''); }}>BACK_TO_LOGIN</button>
-                </form>
-              )}
-
-              {/* ── Secure Mode ON — forgot password ── */}
-              {secureModeEnabled && loginView === 'forgot' && (
-                <form onSubmit={handleForgot} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
-                  <input value={forgotForm.username} onChange={e => setForgotForm(f => ({...f, username: e.target.value}))} placeholder="OPERATOR_ID" style={{ textAlign: 'center', width: '100%' }} />
-                  <input value={forgotForm.security_answer} onChange={e => setForgotForm(f => ({...f, security_answer: e.target.value}))} placeholder="SECURITY_ANSWER" style={{ textAlign: 'center', width: '100%' }} />
-                  <button type="submit" className="upload-btn">VERIFY</button>
-                  <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('login'); setLoginError(''); }}>BACK_TO_LOGIN</button>
-                </form>
-              )}
-
-              {/* ── Awaiting admin approval ── */}
-              {secureModeEnabled && loginView === 'pending' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
-                  <div style={{ fontSize: '0.75rem', letterSpacing: '2px', color: 'var(--green)' }}>REGISTRATION_SUBMITTED</div>
-                  <div style={{ fontSize: '0.65rem', opacity: 0.6, textAlign: 'center', lineHeight: '1.6' }}>Your account is awaiting admin approval.<br />You will be able to log in once approved.</div>
-                  <button className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('login'); setLoginError(''); }}>BACK_TO_LOGIN</button>
-                </div>
-              )}
-
-              {/* ── Secure Mode ON — reset/change password ── */}
-              {secureModeEnabled && loginView === 'reset' && (
-                <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
-                  <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>SET_NEW_ACCESS_CODE</div>
-                  <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="NEW_ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
-                  <button type="submit" className="upload-btn">CONFIRM</button>
-                </form>
-              )}
-            </div>
-            <StatusLogDisplay />
-          </div>
-        </div>
+        <SecureLogin
+          secureModeEnabled={secureModeEnabled}
+          audioEnabled={audioEnabled}
+          onToggleAudio={() => setAudioEnabled(a => !a)}
+          onSimpleLogin={(name) => startBootSequence(name)}
+          onSecureLogin={(name, pToken) => { setPlayerToken(pToken); startBootSequence(name, pToken); }}
+          onAdminLogin={(name, adminToken) => { setToken(adminToken); setIsAdmin(true); setShowAdminPanel(true); startBootSequence(name); }}
+          onPendingsFetched={setPendingRegistrations}
+          StatusLogDisplay={StatusLogDisplay}
+        />
       )}
       {isLoggedIn && (
         <>
@@ -1017,7 +860,7 @@ function App() {
       )}
             {notification && <div className="modal-overlay" onClick={() => setNotification(null)} style={{cursor: 'pointer'}}><div className="panel" style={{color: '#ff0000', borderColor: '#ff0000'}}><h2 style={{fontSize: '2rem'}}>{notification}</h2></div></div>}
             {isEditModalOpen && activeEditLocation && (
-              <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); cleanupEditModal(); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}>☆</button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div>{isAdmin && isPrimaryAdmin && editData.shape !== 'enemy_rhombus' && <button type="button" className="upload-btn" style={{backgroundColor: '#5500ff'}} onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>}<button type="submit" className="upload-btn">SAVE</button><button type="button" className="utility-btn" onClick={() => { cleanupEditModal(); }}>CLOSE</button></form></div></div>
+              <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); cleanupEditModal(); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}>â˜†</button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div>{isAdmin && isPrimaryAdmin && editData.shape !== 'enemy_rhombus' && <button type="button" className="upload-btn" style={{backgroundColor: '#5500ff'}} onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>}<button type="submit" className="upload-btn">SAVE</button><button type="button" className="utility-btn" onClick={() => { cleanupEditModal(); }}>CLOSE</button></form></div></div>
             )}
             <Sidebar
               activeMenu={activeSidebarMenu}
