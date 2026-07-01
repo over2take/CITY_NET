@@ -119,6 +119,8 @@ export function SecureLogin({
     if (!res.ok) return setLoginError(data.error || 'Failed');
     setResetUsername(forgotForm.username);
     setRequestId(data.requestId);
+    setForgotForm({ username: '', security_answer: '' });
+    setSecurityQuestion('');
     setLoginView('forgot_awaiting');
   };
 
