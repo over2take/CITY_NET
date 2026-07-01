@@ -205,10 +205,12 @@ export function useSocket({
     return () => { newSocket.disconnect(); };
   }, [userName, isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-identify when token changes (updates roster rank)
+  // Re-identify when token changes (updates roster rank, e.g. after access grant/revoke).
+  // Only fires on an already-connected socket so we don't buffer a tokenless identify
+  // that would trip SECURE_MODE on initial connect (the connect handler covers that case).
   useEffect(() => {
-    if (socketRef.current && userName) {
-      socketRef.current.emit('identify', { userName, isAdmin: !!token, token });
+    if (socketRef.current?.connected && userName) {
+      socketRef.current.emit('identify', { userName, isAdmin: !!token, token, playerToken: playerTokenRef.current });
     }
   }, [token, userName]);
 
