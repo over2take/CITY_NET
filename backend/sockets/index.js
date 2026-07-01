@@ -567,11 +567,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const info = userSockets.get(socket.id);
       if (info) {
         console.log('User disconnected:', socket.id, 'Username:', info.userName);
-        db.get('SELECT id FROM locations WHERE shape = "rhombus" AND owner = ?', [info.userName], (err, row) => {
-          if (row) io.emit('rhombusFading', { id: row.id, owner: info.userName });
-        });
         userSockets.delete(socket.id);
-        broadcastActiveUsers();
+        // Emit rhombusFading first, then broadcastActiveUsers so clients start
+        // the fade animation before isOnline flips to false in their useFrame loop.
+        db.get('SELECT id FROM locations WHERE shape = "rhombus" AND owner = ?', [info.userName], (err, row) => {
+          if (!err && row) io.emit('rhombusFading', { id: row.id, owner: info.userName });
+          broadcastActiveUsers();
+        });
       }
     });
   });
