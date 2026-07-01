@@ -127,10 +127,12 @@ export function AdminPanel({
   }, []);
 
   useEffect(() => {
-    socketRef.current.on('editingStarted', (data: any) => setActiveUserEditing(data));
-    socketRef.current.on('editingStopped', () => setActiveUserEditing(null));
-    return () => { socketRef.current.off('editingStarted'); socketRef.current.off('editingStopped'); };
-  }, []);
+    const socket = socketRef.current;
+    if (!socket) return;
+    socket.on('editingStarted', (data: any) => setActiveUserEditing(data));
+    socket.on('editingStopped', () => setActiveUserEditing(null));
+    return () => { socket.off('editingStarted'); socket.off('editingStopped'); };
+  }, [socketRef.current]);
 
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [adminAlert, setAdminAlert] = useState<string | null>(null);
