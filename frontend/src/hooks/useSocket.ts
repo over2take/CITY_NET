@@ -27,6 +27,8 @@ interface UseSocketOptions {
   onIsAdminUpdate: (isAdmin: boolean) => void;
   onRegistrationPending?: (username: string) => void;
   onRegistrationUpdated?: (username: string, action: 'approved' | 'denied') => void;
+  onPasswordResetRequested?: (username: string, requestId: string) => void;
+  onPasswordResetResolved?: (username: string, action: 'approved' | 'denied') => void;
 }
 
 export function useSocket({
@@ -34,6 +36,7 @@ export function useSocket({
   onFetchAll, onFetchGlobalSettings, onFetchLocations, onFetchRoads, onFetchDistricts, onFetchWaterBodies, onFetchBattleMaps,
   onBankUpdate, onBalancePaid, onNotification, onHasUnreadChat, onTokenUpdate, onIsAdminUpdate,
   onRegistrationPending, onRegistrationUpdated,
+  onPasswordResetRequested, onPasswordResetResolved,
 }: UseSocketOptions) {
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const tokenRef = useRef(token);
@@ -146,6 +149,14 @@ export function useSocket({
 
     newSocket.on('registrationUpdated', (data: { username: string; action: 'approved' | 'denied' }) => {
       onRegistrationUpdated?.(data.username, data.action);
+    });
+
+    newSocket.on('passwordResetRequested', (data: { username: string; requestId: string }) => {
+      onPasswordResetRequested?.(data.username, data.requestId);
+    });
+
+    newSocket.on('passwordResetResolved', (data: { username: string; action: 'approved' | 'denied' }) => {
+      onPasswordResetResolved?.(data.username, data.action);
     });
 
     newSocket.on('force_floor_change', (data: { locationId: number; floorIndex: number }) => {

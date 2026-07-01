@@ -1,11 +1,23 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { authenticate } = require('../middleware/auth');
 
 const SECURE_MODE = process.env.SECURE_MODE === 'true';
 const SECRET = process.env.JWT_SECRET;
 const SALT_ROUNDS = 10;
+
+// In-memory store for pending password reset requests (short-lived, 15 min TTL)
+const pendingResets = new Map(); // requestId -> { username, status, resetToken, expiresAt }
+
+// Prune expired entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, entry] of pendingResets) {
+    if (entry.expiresAt < now) pendingResets.delete(id);
+  }
+}, 60_000);
 
 let _io = null;
 
@@ -71,7 +83,18 @@ module.exports = (db, io) => {
     });
   });
 
-  // Forgot password — verify security answer, return a reset token
+  // Fetch the security question for a username (public — question text is not sensitive)
+  router.get('/question', requireSecureMode, (req, res) => {
+    const { username } = req.query;
+    if (!username) return res.status(400).json({ error: 'Username required' });
+    db.get('SELECT security_question FROM player_accounts WHERE username = ?', [username], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Account not found' });
+      res.json({ question: row.security_question });
+    });
+  });
+
+  // Forgot password — verify security answer, queue reset request for admin approval
   router.post('/forgot', requireSecureMode, async (req, res) => {
     const { username, security_answer } = req.body;
     if (!username || !security_answer) return res.status(400).json({ error: 'Username and security answer required' });
@@ -83,9 +106,49 @@ module.exports = (db, io) => {
       const match = await bcrypt.compare(security_answer.toLowerCase().trim(), row.security_answer_hash);
       if (!match) return res.status(401).json({ error: 'Incorrect security answer' });
 
-      const resetToken = jwt.sign({ username: row.username, role: 'player_reset' }, SECRET, { expiresIn: '15m' });
-      res.json({ resetToken });
+      const requestId = crypto.randomBytes(16).toString('hex');
+      pendingResets.set(requestId, {
+        username: row.username,
+        status: 'pending',
+        resetToken: null,
+        expiresAt: Date.now() + 15 * 60 * 1000,
+      });
+
+      if (_io) _io.emit('passwordResetRequested', { username: row.username, requestId });
+      res.json({ requestId });
     });
+  });
+
+  // Poll endpoint — player checks whether admin has approved or denied their reset
+  router.get('/reset-status/:requestId', requireSecureMode, (req, res) => {
+    const entry = pendingResets.get(req.params.requestId);
+    if (!entry || entry.expiresAt < Date.now()) return res.status(404).json({ error: 'Request not found or expired' });
+    res.json({ status: entry.status, resetToken: entry.resetToken || undefined });
+  });
+
+  // Admin: approve a password reset request
+  router.post('/admin/reset-request/:requestId/approve', authenticate, (req, res) => {
+    const entry = pendingResets.get(req.params.requestId);
+    if (!entry || entry.expiresAt < Date.now()) return res.status(404).json({ error: 'Request not found or expired' });
+    if (entry.status !== 'pending') return res.status(409).json({ error: 'Already resolved' });
+
+    const resetToken = jwt.sign({ username: entry.username, role: 'player_reset' }, SECRET, { expiresIn: '15m' });
+    entry.status = 'approved';
+    entry.resetToken = resetToken;
+    if (_io) _io.emit('passwordResetResolved', { username: entry.username, action: 'approved' });
+    res.json({ message: 'Reset approved' });
+  });
+
+  // Admin: deny a password reset request
+  router.post('/admin/reset-request/:requestId/deny', authenticate, (req, res) => {
+    const entry = pendingResets.get(req.params.requestId);
+    if (!entry || entry.expiresAt < Date.now()) return res.status(404).json({ error: 'Request not found or expired' });
+    if (entry.status !== 'pending') return res.status(409).json({ error: 'Already resolved' });
+
+    entry.status = 'denied';
+    pendingResets.delete(req.params.requestId);
+    if (_io) _io.emit('passwordResetResolved', { username: entry.username, action: 'denied' });
+    res.json({ message: 'Reset denied' });
   });
 
   // Reset password — requires a valid player JWT (login or reset token)
