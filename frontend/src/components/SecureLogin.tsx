@@ -217,14 +217,14 @@ export function SecureLogin({
           {/* ── Secure Mode ON — forgot password ── */}
           {secureModeEnabled && loginView === 'forgot' && (
             <form onSubmit={handleForgot} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
-              <input value={forgotForm.username} onChange={e => { setForgotForm(f => ({ ...f, username: e.target.value })); setSecurityQuestion(''); }} placeholder="OPERATOR_ID" style={{ textAlign: 'center', width: '100%' }} />
+              <input value={forgotForm.username} onChange={e => { setForgotForm(f => ({ ...f, username: e.target.value })); setSecurityQuestion(''); }} placeholder="OPERATOR_ID" style={{ textAlign: 'center', width: '100%' }} autoComplete="off" />
               <button type="button" className="utility-btn" style={{ fontSize: '0.65rem', alignSelf: 'flex-end', padding: '4px 14px' }} onClick={fetchSecurityQuestion} disabled={questionLoading || !forgotForm.username.trim()}>
                 {questionLoading ? 'SEARCHING...' : 'LOOKUP_QUESTION'}
               </button>
               {securityQuestion && (
                 <>
                   <div style={{ fontSize: '0.65rem', opacity: 0.7, textAlign: 'center', letterSpacing: '1px', padding: '4px 0' }}>{securityQuestion}</div>
-                  <input value={forgotForm.security_answer} onChange={e => setForgotForm(f => ({ ...f, security_answer: e.target.value }))} placeholder="SECURITY_ANSWER" style={{ textAlign: 'center', width: '100%' }} />
+                  <input value={forgotForm.security_answer} onChange={e => setForgotForm(f => ({ ...f, security_answer: e.target.value }))} placeholder="SECURITY_ANSWER" style={{ textAlign: 'center', width: '100%' }} autoComplete="new-password" />
                   <button type="submit" className="upload-btn">VERIFY</button>
                 </>
               )}
