@@ -578,7 +578,12 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
 
   useEffect(() => {
     if (!socket) return;
-    const handleFade = (data: any) => { if (data.id === location.id) { animStateRef.current = 'fading'; animStartTime.current = Date.now(); } };
+    const handleFade = (data: any) => {
+      if (data.id === location.id && animStateRef.current !== 'fading') {
+        animStateRef.current = 'fading';
+        animStartTime.current = Date.now();
+      }
+    };
     const handleAppear = (data: any) => { if (data.id === location.id) { animStateRef.current = 'appearing'; animStartTime.current = Date.now(); } };
     const handlePath = (data: any) => {
       if (data.id !== location.id || !Array.isArray(data.waypoints)) return;

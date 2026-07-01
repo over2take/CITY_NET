@@ -269,22 +269,30 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('editingFinished', () => { io.emit('editingStopped'); });
 
     socket.on('requestRhombusPurge', (data) => {
-      console.log(`Cinematic Purge Requested for ID: ${data.id}`);
-      io.emit('rhombusFading', { id: data.id, owner: data.owner });
-      setTimeout(() => {
-        if (data.id) {
-          db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
-            if (!err && this.changes > 0) {
-              recordAction('location_update', { data: [{ id: data.id, battle_map_id: -1, floor_index: -1 }] });
-              emitUpdate({ isRhombusOnly: true });
-            }
-          });
-        } else if (data.owner) {
-          db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE owner = ? AND shape = "rhombus"', [data.owner], function(err) {
-            if (!err && this.changes > 0) emitUpdate({ isRhombusOnly: true });
-          });
+      console.log(`Cinematic Purge Requested for owner: ${data.owner}, id: ${data.id}`);
+      // Look up the real rhombus id so the fade event matches on all clients.
+      const lookupCol = data.id ? 'id' : 'owner';
+      const lookupVal = data.id || data.owner;
+      db.get(`SELECT id, owner FROM locations WHERE shape = "rhombus" AND ${lookupCol} = ?`, [lookupVal], (err, row) => {
+        if (!err && row) {
+          io.emit('rhombusFading', { id: row.id, owner: row.owner });
         }
-      }, 3000);
+        // Give the 3s animation time to finish before unmounting via dataUpdated.
+        setTimeout(() => {
+          if (data.id) {
+            db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE id = ? AND shape = "rhombus"', [data.id], function(err2) {
+              if (!err2 && this.changes > 0) {
+                recordAction('location_update', { data: [{ id: data.id, battle_map_id: -1, floor_index: -1 }] });
+                emitUpdate({ isRhombusOnly: true });
+              }
+            });
+          } else if (data.owner) {
+            db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE owner = ? AND shape = "rhombus"', [data.owner], function(err2) {
+              if (!err2 && this.changes > 0) emitUpdate({ isRhombusOnly: true });
+            });
+          }
+        }, 3500);
+      });
     });
 
     socket.on('requestInstantRhombusPurge', (data) => {
