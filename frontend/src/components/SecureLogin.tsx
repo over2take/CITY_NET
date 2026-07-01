@@ -199,7 +199,7 @@ export function SecureLogin({
               {registerForm.security_question === 'custom' && (
                 <input value={registerForm.customQuestion} onChange={e => setRegisterForm(f => ({ ...f, customQuestion: e.target.value }))} placeholder="CUSTOM_QUESTION" style={{ textAlign: 'center', width: '100%' }} />
               )}
-              <input value={registerForm.security_answer} onChange={e => setRegisterForm(f => ({ ...f, security_answer: e.target.value }))} placeholder="SECURITY_ANSWER" style={{ textAlign: 'center', width: '100%' }} />
+              <input value={registerForm.security_answer} onChange={e => setRegisterForm(f => ({ ...f, security_answer: e.target.value }))} placeholder="SECURITY_ANSWER" style={{ textAlign: 'center', width: '100%' }} autoComplete="new-password" />
               <button type="submit" className="upload-btn">CREATE_ACCOUNT</button>
               <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('login'); setLoginError(''); }}>BACK_TO_LOGIN</button>
             </form>
