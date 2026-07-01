@@ -5,8 +5,10 @@ services:
       dockerfile: Dockerfile.backend
     env_file:
       - ./backend/.env
+    environment:
+      - DB_PATH=/app/data/city.db
     volumes:
-      - ./backend/city.db:/app/city.db
+      - ./backend/data:/app/data
       - ./backend/uploads:/app/uploads
     restart: unless-stopped
 
