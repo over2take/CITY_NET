@@ -503,7 +503,11 @@ function App() {
       setPendingRegistrations(prev => prev.find(p => p.username === username) ? prev : [...prev, { username, created_at: new Date().toISOString() }]);
     },
     onRegistrationUpdated: (username) => {
-      setPendingRegistrations(prev => prev.filter(p => p.username !== username));
+      setPendingRegistrations(prev => {
+        const next = prev.filter(p => p.username !== username);
+        if (next.length === 0) setShowPendingPanel(false);
+        return next;
+      });
     },
   });
 
@@ -917,7 +921,10 @@ function App() {
             {isAdmin && !token && <div className="panel admin-login"><form onSubmit={handleLogin}><input placeholder="USERNAME" onChange={e => setLoginForm({...loginForm, username: e.target.value})} /><input type="password" placeholder="PASSWORD" onChange={e => setLoginForm({...loginForm, password: e.target.value})} /><button type="submit">ACCESS_SYSTEM</button></form></div>}
             {token && showPendingPanel && (
               <div className="panel" style={{ position: 'absolute', top: '60px', right: '10px', zIndex: 500, minWidth: '280px', maxHeight: '400px', overflowY: 'auto' }}>
-                <div style={{ fontSize: '0.7rem', letterSpacing: '3px', marginBottom: '10px', borderBottom: '1px solid var(--green)', paddingBottom: '6px' }}>PENDING_APPROVALS</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', letterSpacing: '3px', marginBottom: '10px', borderBottom: '1px solid var(--green)', paddingBottom: '6px' }}>
+                  <span>PENDING_APPROVALS</span>
+                  <button className="admin-toggle" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setShowPendingPanel(false)}>×</button>
+                </div>
                 {pendingRegistrations.length === 0
                   ? <div style={{ fontSize: '0.65rem', opacity: 0.5 }}>No pending registrations</div>
                   : pendingRegistrations.map(p => (
