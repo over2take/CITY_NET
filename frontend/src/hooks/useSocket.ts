@@ -8,6 +8,7 @@ import type {
 interface UseSocketOptions {
   userName: string;
   token: string;
+  playerToken?: string | null;
   isLoggedIn: boolean;
   notificationsEnabled: boolean;
   isChatOpen: boolean;
@@ -29,13 +30,14 @@ interface UseSocketOptions {
 }
 
 export function useSocket({
-  userName, token, isLoggedIn, notificationsEnabled, isChatOpen,
+  userName, token, playerToken, isLoggedIn, notificationsEnabled, isChatOpen,
   onFetchAll, onFetchGlobalSettings, onFetchLocations, onFetchRoads, onFetchDistricts, onFetchWaterBodies, onFetchBattleMaps,
   onBankUpdate, onBalancePaid, onNotification, onHasUnreadChat, onTokenUpdate, onIsAdminUpdate,
   onRegistrationPending, onRegistrationUpdated,
 }: UseSocketOptions) {
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const tokenRef = useRef(token);
+  const playerTokenRef = useRef(playerToken);
   const userNameRef = useRef(userName);
   const isChatOpenRef = useRef(isChatOpen);
   const notificationsEnabledRef = useRef(notificationsEnabled);
@@ -53,6 +55,7 @@ export function useSocket({
 
   // Keep refs in sync for use inside stable socket callbacks
   useEffect(() => { tokenRef.current = token; }, [token]);
+  useEffect(() => { playerTokenRef.current = playerToken; }, [playerToken]);
   useEffect(() => { userNameRef.current = userName; }, [userName]);
   useEffect(() => { isChatOpenRef.current = isChatOpen; }, [isChatOpen]);
   useEffect(() => { notificationsEnabledRef.current = notificationsEnabled; }, [notificationsEnabled]);
@@ -64,7 +67,11 @@ export function useSocket({
     socketRef.current = newSocket;
 
     newSocket.on('connect', () => {
-      newSocket.emit('identify', { userName: userNameRef.current, isAdmin: !!tokenRef.current, token: tokenRef.current });
+      newSocket.emit('identify', { userName: userNameRef.current, isAdmin: !!tokenRef.current, token: tokenRef.current, playerToken: playerTokenRef.current });
+    });
+
+    newSocket.on('authError', (data: { message: string }) => {
+      onNotification(data.message || 'SESSION_INVALID // PLEASE_LOG_IN_AGAIN');
     });
 
     newSocket.on('settingsUpdated', () => {
