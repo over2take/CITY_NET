@@ -132,7 +132,10 @@ describe('Admin approval flow', () => {
 
 describe('Successful secure login', () => {
   it('calls onSecureLogin with username and token on valid credentials', async () => {
-    mockFetch({ 'POST /api/player/login': { ok: true, body: { playerToken: 'tok-abc', tempPassword: false } } });
+    mockFetch({
+      'POST /api/login': { ok: false, body: { error: 'Unauthorized' } },
+      'POST /api/player/login': { ok: true, body: { playerToken: 'tok-abc', tempPassword: false } },
+    });
     const props = baseProps();
     render(<SecureLogin {...props} />);
     await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), 'GHOST');

@@ -78,19 +78,19 @@ export function SecureLogin({
   const handleSecureLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
-    const playerRes = await fetch('/api/player/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginForm.username, password: loginForm.password }) });
-    if (playerRes.ok) {
-      const data = await playerRes.json();
-      if (data.tempPassword) { setResetToken(data.playerToken); setResetUsername(loginForm.username); setLoginView('reset'); return; }
-      onSecureLogin(loginForm.username, data.playerToken);
-      return;
-    }
     const adminRes = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(loginForm) });
     const adminData = await adminRes.json();
     if (adminRes.ok && adminData.token) {
       onAdminLogin(loginForm.username, adminData.token);
       fetch('/api/player/admin/players/pending', { headers: { Authorization: `Bearer ${adminData.token}` } })
         .then(r => r.json()).then(rows => onPendingsFetched(rows)).catch(() => {});
+      return;
+    }
+    const playerRes = await fetch('/api/player/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginForm.username, password: loginForm.password }) });
+    if (playerRes.ok) {
+      const data = await playerRes.json();
+      if (data.tempPassword) { setResetToken(data.playerToken); setResetUsername(loginForm.username); setLoginView('reset'); return; }
+      onSecureLogin(loginForm.username, data.playerToken);
       return;
     }
     setLoginError('Invalid credentials');
