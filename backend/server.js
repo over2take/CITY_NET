@@ -27,6 +27,7 @@ app.use(express.json({ limit: '2mb' }));
 // Routes
 app.use('/api/locations', require('./routes/locations')(db, io, helpers));
 app.use('/api/locations/:id/battle_maps', require('./routes/battle_maps')(db, io, helpers));
+app.use('/api/battle_maps', require('./routes/battle_maps')(db, io, helpers));
 app.use('/api/maps', require('./routes/maps')(db, io, helpers));
 app.use('/api/roads', require('./routes/roads')(db, io, helpers));
 app.use('/api/player', require('./routes/player')(db, io));
