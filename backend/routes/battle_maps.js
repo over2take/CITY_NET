@@ -12,7 +12,7 @@ module.exports = (db, io, { emitUpdate }) => {
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
   // Memory storage so we can hash before writing to disk.
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
   // List maps for a specific location.
   router.get('/', (req, res) => {
