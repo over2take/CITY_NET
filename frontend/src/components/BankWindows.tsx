@@ -386,6 +386,11 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
   const hasFirstPayFiredRef = useRef(!!firstPayDone);
   const bankInitializedRef = useRef(false);
 
+  // Sync the guard when the DB value arrives after mount (firstPayDone starts undefined).
+  useEffect(() => {
+    if (firstPayDone) hasFirstPayFiredRef.current = true;
+  }, [firstPayDone]);
+
   const confettiPieces = useMemo(() => Array.from({ length: 45 }, (_, i) => ({
     left: Math.random() * 96,
     size: 5 + Math.random() * 9,
