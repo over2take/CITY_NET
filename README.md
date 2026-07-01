@@ -80,14 +80,16 @@ node server.js
 
 Everything runs on port `5000`. To expose it publicly you need a reverse proxy or tunnel pointing at `localhost:5000`. Three common options:
 
+> **Note:** if you're running the [Docker stack](#6-docker-optional) instead of this manual setup, the app is served by Nginx on port `80`, not `5000` — point your tunnel at `localhost:80` instead. The backend container isn't reachable directly from the host.
+
 **Cloudflare Tunnel** (recommended — free, no port forwarding, works behind NAT)
 1. Install [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
-2. `cloudflared tunnel --url http://localhost:5000`
+2. `cloudflared tunnel --url http://localhost:5000` (or `:80` for Docker)
 3. Cloudflare prints a public `https://` URL — share that with your players
 
 **ngrok** (quick and easy, free tier has session limits)
 1. Sign up at [ngrok.com](https://ngrok.com) and install the CLI
-2. `ngrok http 5000`
+2. `ngrok http 5000` (or `80` for Docker)
 3. ngrok prints a public URL good for the session
 
 **Nginx** (self-hosted, requires a domain and a VPS/home server with open ports)
