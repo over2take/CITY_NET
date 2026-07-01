@@ -101,7 +101,7 @@ describe('ChatWindow', () => {
   it('opens a private tab when receivePrivateMessage is received from another user', () => {
     const socket = makeSocket();
     render(<ChatWindow {...baseProps} socket={socket} />);
-    const pmHandler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find(([e]: [string]) => e === 'receivePrivateMessage')[1];
+    const pmHandler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'receivePrivateMessage')[1];
     act(() => {
       pmHandler({ sender: 'VIPER', recipient: 'GHOST', text: 'hey', timestamp: '12:00' });
     });
@@ -147,8 +147,8 @@ describe('ChatWindow', () => {
   it('purges private messages on purgePrivateMessages event', () => {
     const socket = makeSocket();
     render(<ChatWindow {...baseProps} socket={socket} />);
-    const pmHandler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find(([e]: [string]) => e === 'receivePrivateMessage')[1];
-    const purgeHandler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find(([e]: [string]) => e === 'purgePrivateMessages')[1];
+    const pmHandler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'receivePrivateMessage')[1];
+    const purgeHandler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'purgePrivateMessages')[1];
     act(() => {
       pmHandler({ sender: 'VIPER', recipient: 'GHOST', text: 'hey', timestamp: '12:00' });
     });

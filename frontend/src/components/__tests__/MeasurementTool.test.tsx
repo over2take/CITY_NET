@@ -155,7 +155,7 @@ describe('MeasurementVisualizer', () => {
     render(<MeasurementVisualizer socket={socket} view="list" activeBattleMapData={null} userName="OTHER" />);
 
     // Grab the registered handler and call it directly
-    const handler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find(([e]: [string]) => e === 'measurementUpdated')[1];
+    const handler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'measurementUpdated')[1];
     act(() => {
       handler({ owner: 'OTHER', view: 'list', start: { x: 0, z: 0 }, end: { x: 4, z: 0 }, color: '#0f0', map_scale_multiplier: '5', isFinal: true });
     });
@@ -167,7 +167,7 @@ describe('MeasurementVisualizer', () => {
   it('ignores events from own user that are not final', () => {
     const socket = makeSocket();
     render(<MeasurementVisualizer socket={socket} view="list" activeBattleMapData={null} userName="GHOST" />);
-    const handler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find(([e]: [string]) => e === 'measurementUpdated')[1];
+    const handler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'measurementUpdated')[1];
     act(() => {
       handler({ owner: 'GHOST', view: 'list', start: { x: 0, z: 0 }, end: { x: 4, z: 0 }, color: '#0f0', map_scale_multiplier: '5', isFinal: false });
     });
@@ -177,7 +177,7 @@ describe('MeasurementVisualizer', () => {
   it('ignores events from a different view', () => {
     const socket = makeSocket();
     render(<MeasurementVisualizer socket={socket} view="list" activeBattleMapData={null} userName="OTHER" />);
-    const handler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find(([e]: [string]) => e === 'measurementUpdated')[1];
+    const handler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'measurementUpdated')[1];
     act(() => {
       handler({ owner: 'OTHER', view: 'battle_map', start: { x: 0, z: 0 }, end: { x: 4, z: 0 }, color: '#0f0', map_scale_multiplier: '5' });
     });

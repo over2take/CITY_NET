@@ -134,7 +134,7 @@ export function MeasurementVisualizer({ socket, view, activeBattleMapData, userN
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
-      setMeasurements(prev => prev.filter(m => now - m.timestamp < 5000));
+      setMeasurements(prev => prev.filter(m => now - (m.timestamp ?? 0) < 5000));
     }, 500);
     return () => clearInterval(interval);
   }, []);

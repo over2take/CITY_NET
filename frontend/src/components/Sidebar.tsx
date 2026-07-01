@@ -441,7 +441,7 @@ export function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation,
 
 interface SidebarProps {
   activeMenu: string;
-  setActiveMenu: (v: string) => void;
+  setActiveMenu: (v: any) => void;
   locations: any[];
   onSelect: (loc: any) => void;
   onZoom: (target: any) => void;
