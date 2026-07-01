@@ -160,9 +160,18 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
         {tab === 'upload' && (
           <div style={{ marginBottom: '16px', borderBottom: '1px solid #333', paddingBottom: '16px' }}>
             <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-              style={{ display: 'block', marginBottom: '10px', color: '#00ff00' }} />
+              style={{ display: 'block', marginBottom: '6px', color: '#00ff00' }} />
+            {selectedFile && (() => {
+              const mb = selectedFile.size / (1024 * 1024);
+              const tooBig = mb > 25;
+              return (
+                <div style={{ fontSize: '0.65rem', marginBottom: '10px', letterSpacing: '1px', color: tooBig ? '#ff3333' : '#00ff00' }}>
+                  {mb.toFixed(2)}MB / 25MB{tooBig ? ' — FILE_TOO_LARGE' : ''}
+                </div>
+              );
+            })()}
             {designationControls}
-            <button className="upload-btn" onClick={handleUpload} disabled={loading}>
+            <button className="upload-btn" onClick={handleUpload} disabled={loading || (!!selectedFile && selectedFile.size > 25 * 1024 * 1024)}>
               {loading ? 'UPLOADING...' : 'UPLOAD MAP'}
             </button>
           </div>
