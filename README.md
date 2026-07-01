@@ -100,7 +100,7 @@ Everything runs on port `5000`. To expose it publicly you need a reverse proxy o
 A `docker-compose.yml` is included. Copy `.env.example` to `backend/.env`, fill it in, then:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 The compose file includes [Watchtower](https://containrrr.dev/watchtower/) — it watches your containers and automatically pulls updated images when you push a new build to Docker Hub.
