@@ -115,7 +115,7 @@ module.exports = (db, io, { emitUpdate }) => {
     const files = fs.existsSync(uploadsDir)
       ? fs.readdirSync(uploadsDir).filter(f => /\.(png|jpe?g|webp|gif)$/i.test(f))
       : [];
-    res.json(files);
+    res.json(files.map(f => ({ filename: f, url: '/uploads/battle_maps/' + f })));
   });
 
   return router;
