@@ -484,7 +484,7 @@ function App() {
     activeEditLocation, setActiveEditLocation,
     emit,
   } = useSocket({
-    userName, token, isLoggedIn,
+    userName, token, playerToken, isLoggedIn,
     notificationsEnabled, isChatOpen,
     onFetchAll: fetchAll,
     onFetchGlobalSettings: fetchGlobalSettings,
