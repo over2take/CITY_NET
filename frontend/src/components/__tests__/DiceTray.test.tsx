@@ -96,7 +96,7 @@ describe('DiceTrayWindow', () => {
   it('populates history when diceRollHistory event fires', () => {
     const socketRef = makeSocketRef();
     render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);
-    const histHandler = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find(([e]: [string]) => e === 'diceRollHistory')[1];
+    const histHandler = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollHistory')[1];
     act(() => {
       histHandler([{ total: 17, results: { 20: [17] }, color: '#0f0', historyString: 'GHOST rolled d20: 17 = 17' }]);
     });

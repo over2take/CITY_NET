@@ -43,7 +43,7 @@ export function useSocket({
 
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [activePings, setActivePings] = useState<{ id: string; x: number; y: number; z: number; color: string; owner?: string }[]>([]);
+  const [activePings, setActivePings] = useState<{ id: string; x: number; y: number; z: number; color: string; owner?: string; battle_map_id?: number | null; floor_index?: number | null; size?: number }[]>([]);
   const [battleMapPositions, setBattleMapPositions] = useState<Record<string, BattleMapPosition>>({});
   const [activeBattleMapData, setActiveBattleMapData] = useState<BattleMapSessionData | null>(null);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);

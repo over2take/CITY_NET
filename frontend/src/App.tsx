@@ -40,7 +40,7 @@ import './App.css';
 
 import { ZONE_TYPE_NAMES, isUserDefinedName, getStructLabel } from './utils/locationHelpers';
 import { renderBaseGeometry } from './utils/threeHelpers';
-import { mergeRhombusHealthFromLocation } from './utils/rhombusHelpers';
+import { mergeRhombusHealthFromLocation, resolveDeployHealth } from './utils/rhombusHelpers';
 import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './components/Buildings';
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } from './components/MapElements';
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
@@ -708,7 +708,7 @@ function App() {
     }
   };
 
-  useEffect(() => { if (isEditModalOpen && activeEditLocation) setEditData({ ...activeEditLocation, description: activeEditLocation.description ?? '', npcs: activeEditLocation.npcs ?? '', owner: activeEditLocation.owner ?? '', baseWidth: activeEditLocation.width, baseHeight: activeEditLocation.height, baseDepth: activeEditLocation.depth, polyCount: activeEditLocation.polyCount || 5 }); }, [isEditModalOpen, activeEditLocation]);
+  useEffect(() => { if (isEditModalOpen && activeEditLocation) setEditData({ ...activeEditLocation, description: activeEditLocation.description ?? '', npcs: activeEditLocation.npcs ?? '', owner: activeEditLocation.owner ?? '', baseWidth: activeEditLocation.width, baseHeight: activeEditLocation.height, baseDepth: activeEditLocation.depth, polyCount: activeEditLocation.polyCount || 5, isFavorite: !!activeEditLocation.isFavorite, isDanger: !!activeEditLocation.isDanger }); }, [isEditModalOpen, activeEditLocation]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -827,7 +827,7 @@ function App() {
         <>
           <div className="ui-overlay">
       {showBattleMapManager && (selectedLocation || activeEditLocation || editId) && (
-        <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : editId)} token={token} onClose={() => setShowBattleMapManager(false)} onMapsChanged={fetchCurrentLocBattleMaps} />
+        <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : (editId as number))} token={token} onClose={() => setShowBattleMapManager(false)} onMapsChanged={fetchCurrentLocBattleMaps} />
       )}
       {view === 'battle_map' && activeBattleMapData && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 2000 }}>
@@ -1086,7 +1086,7 @@ function App() {
               />
             {isHitPointsOpen && (
               <HitPointsMenu 
-                targetRhombus={locations.find((l: any) => l.id === ((selectedLocation?.shape === 'rhombus' || (token !== '' && (selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus'))) ? selectedLocation.id : locations.find((ul: any) => ul.shape === 'rhombus' && ul.owner === userName)?.id))} 
+                targetRhombus={locations.find((l: any) => l.id === ((selectedLocation?.shape === 'rhombus' || (token !== '' && (selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus'))) ? selectedLocation.id : locations.find((ul: any) => ul.shape === 'rhombus' && ul.owner === userName)?.id)) ?? null}
                 token={token} 
                 refreshLocations={fetchLocations}
                 pos={hitPointsPos}
@@ -1187,7 +1187,7 @@ function App() {
                       }}>PURGE_DATA_POINT</button>
                     )}
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
-                      <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '' }); }}>EDIT_DATA_POINT</button>
+                      <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
                     )}
                     {isRhombus && (isAdmin || (isPlayerRhombus && selectedLocation.owner === userName)) && (
                         <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--green)', color: '#000'}} onClick={() => {
@@ -1203,7 +1203,7 @@ function App() {
   {currentLocBattleMaps.length > 0 && (
       <button className="upload-btn" style={{backgroundColor: '#ff00ff', color: 'white'}} onClick={() => enterBattleMap(selectedLocation.id)}>ENTER BATTLE MAP</button>
   )}
-  {!token && !isRhombus && <button className="upload-btn" onClick={() => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } }}>REQUEST_EDITING_RIGHTS</button>}
+  {!token && !isRhombus && <button className="upload-btn" onClick={() => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current?.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } }}>REQUEST_EDITING_RIGHTS</button>}
                   </DraggableWindow>
                 );
               }
@@ -1216,7 +1216,7 @@ function App() {
             <MeasurementTool measureMode={measureMode} socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} mapScaleMultiplier={view === 'battle_map' ? (() => {
                 const loc = locations.find((l:any) => l.id === activeBattleMapData?.locationId);
                 if (!loc) return 5;
-                let scaleData = loc.map_scale_multiplier;
+                let scaleData: any = loc.map_scale_multiplier;
                 let finalScale = 5;
                 if (typeof scaleData === 'string' && scaleData.startsWith('[')) {
                     try {
@@ -1383,7 +1383,7 @@ function App() {
                 // Strict comparison to ensure null === null or 1 === 1
                 return Number(ping.battle_map_id) === Number(currentBattleMapId) && Number(ping.floor_index) === Number(currentFloorIndex);
             }).map(ping => (
-                <PingEffect key={ping.id} position={[ping.x, ping.y !== undefined ? ping.y : 0.5, ping.z]} color={ping.color} size={ping.size} />
+                <PingEffect key={ping.id} position={[ping.x, ping.y !== undefined ? ping.y : 0.5, ping.z]} color={ping.color} size={ping.size ?? 1} />
             ))}
             
             {/* Dedicated Player Rhombus Rendering */}
