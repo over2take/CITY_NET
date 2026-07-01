@@ -176,7 +176,7 @@ export function SecureLogin({
               <button type="submit" className="upload-btn" style={{ fontSize: '1.1rem', padding: '10px' }}>LOGIN</button>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
                 <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('register'); setLoginError(''); }}>REGISTER</button>
-                <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('forgot'); setLoginError(''); }}>FORGOT_PASSWORD</button>
+                <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setForgotForm({ username: '', security_answer: '' }); setSecurityQuestion(''); setLoginView('forgot'); setLoginError(''); }}>FORGOT_PASSWORD</button>
               </div>
             </form>
           )}
@@ -228,7 +228,7 @@ export function SecureLogin({
                   <button type="submit" className="upload-btn">VERIFY</button>
                 </>
               )}
-              <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('login'); setLoginError(''); setSecurityQuestion(''); }}>BACK_TO_LOGIN</button>
+              <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setForgotForm({ username: '', security_answer: '' }); setSecurityQuestion(''); setLoginView('login'); setLoginError(''); }}>BACK_TO_LOGIN</button>
             </form>
           )}
 
