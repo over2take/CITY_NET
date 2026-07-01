@@ -94,6 +94,7 @@ function App() {
   const [playerToken, setPlayerToken] = useState<string | null>(null);
   const [pendingRegistrations, setPendingRegistrations] = useState<{ username: string; created_at: string }[]>([]);
   const [showPendingPanel, setShowPendingPanel] = useState(false);
+  const [pendingResets, setPendingResets] = useState<{ username: string; requestId: string }[]>([]);
   const [view, setView] = useState<ViewMode>('list');
   const [editId, setEditId] = useState<number | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -509,6 +510,12 @@ function App() {
         return next;
       });
     },
+    onPasswordResetRequested: (username, requestId) => {
+      setPendingResets(prev => prev.find(r => r.requestId === requestId) ? prev : [...prev, { username, requestId }]);
+    },
+    onPasswordResetResolved: (_username, _action) => {
+      // resolved entries are removed by the approve/deny handlers below
+    },
   });
 
   useEffect(() => {
@@ -760,6 +767,16 @@ function App() {
     }
   };
 
+  const handleApproveReset = async (requestId: string) => {
+    await fetch(`/api/player/admin/reset-request/${requestId}/approve`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    setPendingResets(prev => prev.filter(r => r.requestId !== requestId));
+  };
+
+  const handleDenyReset = async (requestId: string) => {
+    await fetch(`/api/player/admin/reset-request/${requestId}/deny`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    setPendingResets(prev => prev.filter(r => r.requestId !== requestId));
+  };
+
   const handleLogout = () => {
     // 1. Immediately close all UI elements for a clean fade-out
     setIsChatOpen(false);
@@ -942,6 +959,16 @@ function App() {
                 }
               </div>
             )}
+            {token && pendingResets.map((r, i) => (
+              <div key={r.requestId} className="panel" style={{ position: 'absolute', top: `${70 + i * 120}px`, right: '10px', zIndex: 501, minWidth: '280px', border: '1px solid #ffaa00' }}>
+                <div style={{ fontSize: '0.65rem', letterSpacing: '3px', marginBottom: '8px', color: '#ffaa00' }}>PASSWORD_RESET_REQUESTED</div>
+                <div style={{ fontSize: '0.8rem', marginBottom: '10px' }}>{r.username}</div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button className="upload-btn" style={{ flex: 1, fontSize: '0.65rem', padding: '4px 8px' }} onClick={() => handleApproveReset(r.requestId)}>APPROVE</button>
+                  <button className="utility-btn" style={{ flex: 1, fontSize: '0.65rem', padding: '4px 8px', color: '#ff3333', borderColor: '#ff3333' }} onClick={() => handleDenyReset(r.requestId)}>DENY</button>
+                </div>
+              </div>
+            ))}
             {token && showAdminPanel && (
               <AdminPanel
                 isAdmin={isAdmin}
