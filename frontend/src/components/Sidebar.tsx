@@ -371,7 +371,7 @@ export function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation,
     <div className={`list-item ${selectedLocation?.id === loc.id ? 'selected' : ''}`} onClick={() => onSelect(loc)} style={{ cursor: 'pointer', paddingLeft: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {!!loc.isDanger && <span style={{ color: '#ff0000', marginRight: '5px' }}>!</span>}
-        {!!loc.isFavorite && <span style={{ color: '#ff7b00', marginRight: '5px' }}>★</span>}
+        {!!loc.isFavorite && <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="#ff7b00" style={{marginRight:'5px',verticalAlign:'middle',flexShrink:0}}><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>}
         {isUserDefinedName(loc.name) ? loc.name : getStructLabel(loc)}
       </span>
       {view !== 'battle_map' && (
@@ -398,7 +398,7 @@ export function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation,
         {starred.length > 0 && (
           <>
             <h4 className="category-header starred-text" onClick={() => setShowStarred(!showStarred)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-              <span style={{ width: '20px', display: 'inline-block' }}>{showStarred ? '▼' : '▶'}</span>★ PRIORITY_NODES ({starred.length})
+              <span style={{ width: '20px', display: 'inline-block' }}>{showStarred ? '▼' : '▶'}</span><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{marginRight:'5px',verticalAlign:'middle'}}><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg> PRIORITY_NODES ({starred.length})
             </h4>
             {showStarred && starred.map((loc: any) => <ListItem key={loc.id} loc={loc} />)}
           </>
