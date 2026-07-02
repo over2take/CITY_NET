@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh, Html, OrthographicCamera } from '@react-three/drei';
@@ -22,6 +22,7 @@ import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
 import { HitPointsMenu, HealthReviewWindow } from './components/HitPoints';
+import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
 import { CityDataBaseMenu } from './components/CityDatabase';
 import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './components/BankWindows';
@@ -39,7 +40,7 @@ import './App.css';
 
 import { ZONE_TYPE_NAMES, isUserDefinedName, getStructLabel } from './utils/locationHelpers';
 import { renderBaseGeometry } from './utils/threeHelpers';
-import { mergeRhombusHealthFromLocation } from './utils/rhombusHelpers';
+import { mergeRhombusHealthFromLocation, resolveDeployHealth } from './utils/rhombusHelpers';
 import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './components/Buildings';
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } from './components/MapElements';
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
@@ -88,7 +89,12 @@ function App() {
     } catch (e) { }
   }
 
+  const [secureModeEnabled, setSecureModeEnabled] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [playerToken, setPlayerToken] = useState<string | null>(null);
+  const [pendingRegistrations, setPendingRegistrations] = useState<{ username: string; created_at: string }[]>([]);
+  const [showPendingPanel, setShowPendingPanel] = useState(false);
+  const [pendingResets, setPendingResets] = useState<{ username: string; requestId: string }[]>([]);
   const [view, setView] = useState<ViewMode>('list');
   const [editId, setEditId] = useState<number | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -136,7 +142,7 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
-  const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean }>({ balance: 0, debt: 0 });
+  const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean }>({ balance: 0, debt: 0 });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   // Load notification preference from the user's rhombus data
@@ -154,6 +160,7 @@ function App() {
 
   const [notification, setNotification] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(() => { const saved = localStorage.getItem('audioEnabled'); return saved !== null ? JSON.parse(saved) : true; });
+  const [masterVolume, setMasterVolume] = useState(() => { const saved = localStorage.getItem('masterVolume'); return saved !== null ? parseFloat(saved) : 0.5; });
   const [isBatchSelecting, setIsBatchSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [districtSelection, setDistrictSelection] = useState<number[]>([]);
@@ -458,7 +465,7 @@ function App() {
           return next;
         });
       } else if (loc.shape === 'rhombus' && loc.owner !== userName && !token) {
-        // Non-admin player clicking another player's token — open read-only health review
+        // Non-admin player clicking another player's token â€” open read-only health review
         setReviewHealthOwner(prev => prev === loc.owner ? null : loc.owner);
         setReviewHealthPos({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 });
       } else {
@@ -479,7 +486,7 @@ function App() {
     activeEditLocation, setActiveEditLocation,
     emit,
   } = useSocket({
-    userName, token, isLoggedIn,
+    userName, token, playerToken, isLoggedIn,
     notificationsEnabled, isChatOpen,
     onFetchAll: fetchAll,
     onFetchGlobalSettings: fetchGlobalSettings,
@@ -488,12 +495,28 @@ function App() {
     onFetchDistricts: fetchDistricts,
     onFetchWaterBodies: fetchWaterBodies,
     onFetchBattleMaps: fetchCurrentLocBattleMaps,
-    onBankUpdate: (balance, debt, firstPayDone) => setBankData({ balance, debt, firstPayDone }),
-    onBalancePaid: (balance, debt, firstPayDone) => { setBankData({ balance, debt, firstPayDone }); setIsBankOpen(true); },
+    onBankUpdate: (balance, debt, firstPayDone, highRollerDone) => setBankData({ balance, debt, firstPayDone, highRollerDone }),
+    onBalancePaid: (balance, debt, firstPayDone, highRollerDone) => { setBankData({ balance, debt, firstPayDone, highRollerDone }); setIsBankOpen(true); },
     onNotification: setNotification,
     onHasUnreadChat: setHasUnreadChat,
     onTokenUpdate: setToken,
     onIsAdminUpdate: setIsAdmin,
+    onRegistrationPending: (username) => {
+      setPendingRegistrations(prev => prev.find(p => p.username === username) ? prev : [...prev, { username, created_at: new Date().toISOString() }]);
+    },
+    onRegistrationUpdated: (username) => {
+      setPendingRegistrations(prev => {
+        const next = prev.filter(p => p.username !== username);
+        if (next.length === 0) setShowPendingPanel(false);
+        return next;
+      });
+    },
+    onPasswordResetRequested: (username, requestId) => {
+      setPendingResets(prev => prev.find(r => r.requestId === requestId) ? prev : [...prev, { username, requestId }]);
+    },
+    onPasswordResetResolved: (_username, _action) => {
+      // resolved entries are removed by the approve/deny handlers below
+    },
   });
 
   useEffect(() => {
@@ -549,14 +572,19 @@ function App() {
   const startupPlayed = useRef(false);
 
   useEffect(() => {
+    localStorage.setItem('masterVolume', String(masterVolume));
+    (window as any).masterVolume = masterVolume;
+  }, [masterVolume]);
+
+  useEffect(() => {
     localStorage.setItem('audioEnabled', JSON.stringify(audioEnabled));
     const loopSound = new Audio('/Loop_seamless_fixed.mp3');
-    loopSound.loop = true; loopSound.volume = 0.01;
+    loopSound.loop = true; loopSound.volume = 0.01 * ((window as any).masterVolume ?? 0.5);
     const playAudio = async () => { if (audioEnabled) { try { await loopSound.play(); } catch (e) {} } };
     if (!audioEnabled) loopSound.pause();
     document.addEventListener('click', playAudio, { once: true });
     return () => { document.removeEventListener('click', playAudio); loopSound.pause(); };
-  }, [audioEnabled]);
+  }, [audioEnabled, masterVolume]);
 
   const [isGeneratingMap, setIsGeneratingMap] = useState(false);
 
@@ -657,6 +685,7 @@ function App() {
   useEffect(() => {
     const savedName = localStorage.getItem('userName');
     if (savedName) { setUserName(savedName); setTempUserName(savedName); }
+    fetch('/api/player/secure-mode').then(r => r.json()).then(d => setSecureModeEnabled(d.enabled)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -696,16 +725,35 @@ function App() {
     }
   };
 
-  useEffect(() => { if (isEditModalOpen && activeEditLocation) setEditData({ ...activeEditLocation, description: activeEditLocation.description ?? '', npcs: activeEditLocation.npcs ?? '', owner: activeEditLocation.owner ?? '', baseWidth: activeEditLocation.width, baseHeight: activeEditLocation.height, baseDepth: activeEditLocation.depth, polyCount: activeEditLocation.polyCount || 5 }); }, [isEditModalOpen, activeEditLocation]);
+  useEffect(() => { if (isEditModalOpen && activeEditLocation) setEditData({ ...activeEditLocation, description: activeEditLocation.description ?? '', npcs: activeEditLocation.npcs ?? '', owner: activeEditLocation.owner ?? '', baseWidth: activeEditLocation.width, baseHeight: activeEditLocation.height, baseDepth: activeEditLocation.depth, polyCount: activeEditLocation.polyCount || 5, isFavorite: !!activeEditLocation.isFavorite, isDanger: !!activeEditLocation.isDanger }); }, [isEditModalOpen, activeEditLocation]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(loginForm) });
     const data = await res.json();
-    if (data.token) { setToken(data.token); setIsAdmin(true); setShowAdminPanel(true); } else { setNotification("LOGIN_FAILED"); }
+    if (data.token) {
+      setToken(data.token); setIsAdmin(true); setShowAdminPanel(true);
+      fetch('/api/player/admin/players/pending', { headers: { Authorization: `Bearer ${data.token}` } })
+        .then(r => r.json()).then(rows => setPendingRegistrations(rows)).catch(() => {});
+    } else { setNotification("LOGIN_FAILED"); }
   };
 
-  const startBootSequence = () => { if (!tempUserName.trim()) return; localStorage.setItem('userName', tempUserName); setUserName(tempUserName); setIsLoggedIn(true); if (socketRef.current) socketRef.current.emit('identify', tempUserName); if (audioEnabled) { const startupSound = new Audio('/StartUp.mp3'); startupSound.volume = 0.20; startupSound.play().catch(() => {}); } };
+  const startBootSequence = (name = tempUserName, token?: string) => {
+    if (!name.trim()) return;
+    localStorage.setItem('userName', name);
+    setUserName(name);
+    setIsLoggedIn(true);
+    if (socketRef.current) socketRef.current.emit('identify', token ? { userName: name, playerToken: token } : name);
+    if (audioEnabled) { const s = new Audio('/StartUp.mp3'); s.volume = 0.20 * ((window as any).masterVolume ?? 0.5); s.play().catch(() => {}); }
+  };
+
+  const handleApprovePlayer = async (username: string) => {
+    await fetch(`/api/player/admin/players/${username}/approve`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  };
+
+  const handleDenyPlayer = async (username: string) => {
+    await fetch(`/api/player/admin/players/${username}/deny`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+  };
 
   const handleSendMessage = (text: string, senderOverride?: string) => {
     if (socketRef.current) {
@@ -723,6 +771,16 @@ function App() {
     if (socketRef.current && token) {
       socketRef.current.emit('revokeElevatedAccess', { adminToken: token, targetUser });
     }
+  };
+
+  const handleApproveReset = async (requestId: string) => {
+    await fetch(`/api/player/admin/reset-request/${requestId}/approve`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    setPendingResets(prev => prev.filter(r => r.requestId !== requestId));
+  };
+
+  const handleDenyReset = async (requestId: string) => {
+    await fetch(`/api/player/admin/reset-request/${requestId}/deny`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    setPendingResets(prev => prev.filter(r => r.requestId !== requestId));
   };
 
   const handleLogout = () => {
@@ -781,35 +839,22 @@ function App() {
     <div className="crt-container">
       <div className="scanlines"></div>
       {!isLoggedIn && (
-        <div className="modal-overlay">
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <div className="panel login-panel" style={{textAlign: 'center', minWidth: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-              <div style={{ position: 'absolute', top: '10px', right: '10px' }}>
-                <button className={`admin-toggle ${!audioEnabled ? 'muted' : ''}`} onClick={() => setAudioEnabled(!audioEnabled)} style={{padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                  {audioEnabled ? (
-                    <svg width="16" height="16" viewBox="0 0 512 512" fill="none" stroke="currentColor" strokeWidth="32" strokeLinecap="round" strokeLinejoin="round">
-                      <path fill="currentColor" fillRule="evenodd" d="m403.966 426.944l-33.285-26.63c74.193-81.075 74.193-205.015-.001-286.09l33.285-26.628c86.612 96.712 86.61 242.635.001 339.348M319.58 155.105l-33.324 26.659c39.795 42.568 39.794 108.444.001 151.012l33.324 26.658c52.205-58.22 52.205-146.109-.001-204.329m-85.163-69.772l-110.854 87.23H42.667v170.666h81.02l110.73 85.458z" />
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 512 512" fill="none" stroke="currentColor" strokeWidth="32" strokeLinecap="round" strokeLinejoin="round">
-                      <path fill="currentColor" fillRule="evenodd" d="m403.375 257.27l59.584 59.584l-30.167 30.166l-59.583-59.583l-59.584 59.583l-30.166-30.166l59.583-59.584l-59.583-59.583l30.166-30.166l59.584 59.583l59.583-59.583l30.167 30.166zM234.417 85.333l-110.854 87.23H42.667v170.666h81.02l110.73 85.458z" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-              <h1 style={{fontSize: '3rem', margin: '0', textShadow: 'var(--glow)'}}>CITY_NET</h1>
-              <div style={{ fontSize: '0.65rem', opacity: 0.5, letterSpacing: '4px', marginTop: '35px', marginBottom: '15px' }}>NAV_OS_v1.0.4</div>
-              <div><input value={tempUserName} onChange={e => setTempUserName(e.target.value)} placeholder="OPERATOR_ID" style={{fontSize: '1.2rem', textAlign: 'center'}} /><button className="upload-btn" onClick={startBootSequence} style={{fontSize: '1.2rem', padding: '10px'}}>LOGIN</button></div>
-            </div>
-            <StatusLogDisplay />
-          </div>
-        </div>
+        <SecureLogin
+          secureModeEnabled={secureModeEnabled}
+          audioEnabled={audioEnabled}
+          onToggleAudio={() => setAudioEnabled(a => !a)}
+          onSimpleLogin={(name) => startBootSequence(name)}
+          onSecureLogin={(name, pToken) => { setPlayerToken(pToken); startBootSequence(name, pToken); }}
+          onAdminLogin={(name, adminToken) => { setToken(adminToken); setIsAdmin(true); setShowAdminPanel(true); startBootSequence(name); }}
+          onPendingsFetched={setPendingRegistrations}
+          StatusLogDisplay={StatusLogDisplay}
+        />
       )}
       {isLoggedIn && (
         <>
           <div className="ui-overlay">
       {showBattleMapManager && (selectedLocation || activeEditLocation || editId) && (
-        <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : editId)} token={token} onClose={() => setShowBattleMapManager(false)} onMapsChanged={fetchCurrentLocBattleMaps} />
+        <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : (editId as number))} token={token} onClose={() => setShowBattleMapManager(false)} onMapsChanged={fetchCurrentLocBattleMaps} />
       )}
       {view === 'battle_map' && activeBattleMapData && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 2000 }}>
@@ -842,7 +887,7 @@ function App() {
       )}
             {notification && <div className="modal-overlay" onClick={() => setNotification(null)} style={{cursor: 'pointer'}}><div className="panel" style={{color: '#ff0000', borderColor: '#ff0000'}}><h2 style={{fontSize: '2rem'}}>{notification}</h2></div></div>}
             {isEditModalOpen && activeEditLocation && (
-              <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); cleanupEditModal(); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}>☆</button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div>{isAdmin && isPrimaryAdmin && editData.shape !== 'enemy_rhombus' && <button type="button" className="upload-btn" style={{backgroundColor: '#5500ff'}} onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>}<button type="submit" className="upload-btn">SAVE</button><button type="button" className="utility-btn" onClick={() => { cleanupEditModal(); }}>CLOSE</button></form></div></div>
+              <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); cleanupEditModal(); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg></button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div>{isAdmin && isPrimaryAdmin && editData.shape !== 'enemy_rhombus' && <button type="button" className="upload-btn" style={{backgroundColor: '#5500ff'}} onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>}<button type="submit" className="upload-btn">SAVE</button><button type="button" className="utility-btn" onClick={() => { cleanupEditModal(); }}>CLOSE</button></form></div></div>
             )}
             <Sidebar
               activeMenu={activeSidebarMenu}
@@ -858,6 +903,8 @@ function App() {
               onLogout={handleLogout}
               audioEnabled={audioEnabled}
               setAudioEnabled={setAudioEnabled}
+              masterVolume={masterVolume}
+              setMasterVolume={setMasterVolume}
               rhombusState={rhombusState}
               setRhombusState={setRhombusState}
               refreshLocations={fetchLocations}
@@ -885,10 +932,51 @@ function App() {
                 {view === 'city_gen' && !roadSelectionBounds && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: LEFT-CLICK + DRAG TO SELECT GENERATION AREA`}</div>}
                 {view === 'draw_roads' && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: HOLD LEFT-CLICK + DRAG TO DRAW PATH`}</div>}
                 {measureMode && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: view === 'battle_map' ? '140px' : '20px', color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 5px #ff0000', padding: '5px 15px', background: 'rgba(20, 0, 0, 0.6)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300, border: '1px solid #ff4444' }}>{`SYSTEM_ALERT: MAP CAMERA LOCKED // MEASUREMENT ACTIVE`}</div>}
-                <div style={{display: 'flex', gap: '10px'}}>{token && <button className={`admin-toggle ${pendingRequests.length > 0 && !showAdminPanel ? 'unread-flash' : ''}`} onClick={() => setShowAdminPanel(!showAdminPanel)}>{showAdminPanel ? 'HIDE_DASHBOARD' : 'SHOW_DASHBOARD'}</button>}<button className="admin-toggle" onClick={() => !token && setIsAdmin(!isAdmin)}>{token ? 'ADMIN_MODE' : (isAdmin ? 'CANCEL' : 'ADMIN_LOGIN')}</button></div>
+                <div style={{display: 'flex', gap: '10px'}}>
+                  {token && <button className={`admin-toggle ${pendingRequests.length > 0 && !showAdminPanel ? 'unread-flash' : ''}`} onClick={() => setShowAdminPanel(!showAdminPanel)}>{showAdminPanel ? 'HIDE_DASHBOARD' : 'SHOW_DASHBOARD'}</button>}
+                  {token && pendingRegistrations.length > 0 && (
+                    <button className={`admin-toggle unread-flash`} onClick={() => setShowPendingPanel(p => !p)}>
+                      PENDING_APPROVALS [{pendingRegistrations.length}]
+                    </button>
+                  )}
+                  {(!secureModeEnabled || token) && <button className="admin-toggle" onClick={() => !token && setIsAdmin(!isAdmin)}>{token ? 'ADMIN_MODE' : (isAdmin ? 'CANCEL' : 'ADMIN_LOGIN')}</button>}
+                </div>
               </div>
             </header>
             {isAdmin && !token && <div className="panel admin-login"><form onSubmit={handleLogin}><input placeholder="USERNAME" onChange={e => setLoginForm({...loginForm, username: e.target.value})} /><input type="password" placeholder="PASSWORD" onChange={e => setLoginForm({...loginForm, password: e.target.value})} /><button type="submit">ACCESS_SYSTEM</button></form></div>}
+            {token && showPendingPanel && (
+              <div className="panel" style={{ position: 'absolute', top: '60px', right: '10px', zIndex: 500, minWidth: '280px', maxHeight: '400px', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem', letterSpacing: '3px', marginBottom: '10px', borderBottom: '1px solid var(--green)', paddingBottom: '6px' }}>
+                  <span>PENDING_APPROVALS</span>
+                  <button className="admin-toggle" style={{ padding: '2px 8px', fontSize: '0.7rem' }} onClick={() => setShowPendingPanel(false)}>×</button>
+                </div>
+                {pendingRegistrations.length === 0
+                  ? <div style={{ fontSize: '0.65rem', opacity: 0.5 }}>No pending registrations</div>
+                  : pendingRegistrations.map(p => (
+                    <div key={p.username} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid rgba(0,255,0,0.1)' }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem' }}>{p.username}</div>
+                        <div style={{ fontSize: '0.6rem', opacity: 0.5 }}>{new Date(p.created_at).toLocaleString()}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button className="upload-btn" style={{ fontSize: '0.65rem', padding: '4px 8px' }} onClick={() => handleApprovePlayer(p.username)}>APPROVE</button>
+                        <button className="utility-btn" style={{ fontSize: '0.65rem', padding: '4px 8px', color: '#ff3333', borderColor: '#ff3333' }} onClick={() => handleDenyPlayer(p.username)}>DENY</button>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+            {token && pendingResets.map((r, i) => (
+              <div key={r.requestId} className="panel" style={{ position: 'absolute', top: `${70 + i * 120}px`, right: '10px', zIndex: 501, minWidth: '280px', border: '1px solid #ffaa00' }}>
+                <div style={{ fontSize: '0.65rem', letterSpacing: '3px', marginBottom: '8px', color: '#ffaa00' }}>PASSWORD_RESET_REQUESTED</div>
+                <div style={{ fontSize: '0.8rem', marginBottom: '10px' }}>{r.username}</div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button className="upload-btn" style={{ flex: 1, fontSize: '0.65rem', padding: '4px 8px' }} onClick={() => handleApproveReset(r.requestId)}>APPROVE</button>
+                  <button className="utility-btn" style={{ flex: 1, fontSize: '0.65rem', padding: '4px 8px', color: '#ff3333', borderColor: '#ff3333' }} onClick={() => handleDenyReset(r.requestId)}>DENY</button>
+                </div>
+              </div>
+            ))}
             {token && showAdminPanel && (
               <AdminPanel
                 isAdmin={isAdmin}
@@ -981,6 +1069,7 @@ function App() {
                 setEditorStyleIndex={setEditorStyleIndex}
                 isCopyingSize={isCopyingSize}
                 setIsCopyingSize={setIsCopyingSize}
+                secureModeEnabled={secureModeEnabled}
                 />
             )}
             {adminBankPlayer && (
@@ -1012,6 +1101,7 @@ function App() {
                 userName={userName}
                 isBankOpen={isBankOpen}
                 firstPayDone={bankData.firstPayDone}
+                highRollerDone={bankData.highRollerDone}
                 audioEnabled={audioEnabled}
                 soundVolumes={{
                   cashregister: parseFloat(globalSettings?.bank_vol_cashregister ?? '1'),
@@ -1034,13 +1124,30 @@ function App() {
                   isPrimaryAdmin={isPrimaryAdmin}
                   onGrantAccess={handleGrantAccess}
                   onRevokeAccess={handleRevokeAccess}
+                  onOpenPlayerInfo={(targetUserName) => {
+                    const rhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === targetUserName);
+                    if (rhombus) {
+                      setSelectedLocation(rhombus);
+                    } else {
+                      const isOnline = activeUsers.some((u: any) => u.userName === targetUserName);
+                      setSelectedLocation({ id: -1, shape: 'rhombus', owner: targetUserName, name: targetUserName, description: isOnline ? 'OPERATOR_ONLINE — beacon not yet deployed' : 'OPERATOR_OFFLINE — no beacon on map', x: 0, y: 0, z: 0, width: 0, height: 0, depth: 0 } as any);
+                    }
+                  }}
                   socket={socketRef.current}
                   token={token}
                   isChatOpen={isChatOpen}
               />
             {isHitPointsOpen && (
               <HitPointsMenu 
-                targetRhombus={locations.find((l: any) => l.id === ((selectedLocation?.shape === 'rhombus' || (token !== '' && (selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus'))) ? selectedLocation.id : locations.find((ul: any) => ul.shape === 'rhombus' && ul.owner === userName)?.id))} 
+                targetRhombus={(() => {
+                  if (selectedLocation && selectedLocation.id !== -1) {
+                    return locations.find((l: any) => l.id === selectedLocation.id) ?? null;
+                  }
+                  if (selectedLocation?.owner) {
+                    return locations.find((l: any) => l.shape === 'rhombus' && l.owner === selectedLocation.owner) ?? null;
+                  }
+                  return locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName) ?? null;
+                })()}
                 token={token} 
                 refreshLocations={fetchLocations}
                 pos={hitPointsPos}
@@ -1049,7 +1156,8 @@ function App() {
               />
             )}
             {reviewHealthOwner && (() => {
-              const reviewLoc = locations.find((l: any) => l.shape === 'rhombus' && l.owner === reviewHealthOwner);
+              const reviewLoc = locations.find((l: any) => l.shape === 'rhombus' && l.owner === reviewHealthOwner)
+                ?? (selectedLocation?.owner === reviewHealthOwner ? selectedLocation : null);
               return reviewLoc ? (
                 <HealthReviewWindow
                   location={reviewLoc}
@@ -1141,13 +1249,31 @@ function App() {
                       }}>PURGE_DATA_POINT</button>
                     )}
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
-                      <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '' }); }}>EDIT_DATA_POINT</button>
+                      <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
+                    )}
+                    {isRhombus && !isAdmin && !isOwner && (
+                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
+                            setReviewHealthOwner(selectedLocation.owner);
+                            setReviewHealthPos({ x: infoPanelPos.x + 320 > window.innerWidth - 300 ? Math.max(0, infoPanelPos.x - 320) : infoPanelPos.x + 320, y: infoPanelPos.y });
+                        }}>CHECK_HEALTH</button>
                     )}
                     {isRhombus && (isAdmin || (isPlayerRhombus && selectedLocation.owner === userName)) && (
-                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--green)', color: '#000'}} onClick={() => {
+                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--green)', color: '#000'}} onClick={async () => {
                             let newX = infoPanelPos.x + 320;
                             if (newX + 300 > window.innerWidth) newX = Math.max(0, infoPanelPos.x - 320);
                             setHitPointsPos({ x: newX, y: infoPanelPos.y });
+                            // If no real rhombus exists yet (synthetic location), create a default one
+                            if (selectedLocation.id === -1 && selectedLocation.owner) {
+                                const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === selectedLocation.owner);
+                                if (!existing) {
+                                    await fetch('/api/locations', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                        body: JSON.stringify({ name: selectedLocation.owner, description: '', shape: 'rhombus', owner: selectedLocation.owner, x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1, hp_current: 100, hp_max: 100, hp_temp: 0, battle_map_id: -1, floor_index: -1 })
+                                    });
+                                    await fetchLocations();
+                                }
+                            }
                             setIsHitPointsOpen(true);
                         }}>UPDATE_HEALTH</button>
                     )}
@@ -1157,7 +1283,7 @@ function App() {
   {currentLocBattleMaps.length > 0 && (
       <button className="upload-btn" style={{backgroundColor: '#ff00ff', color: 'white'}} onClick={() => enterBattleMap(selectedLocation.id)}>ENTER BATTLE MAP</button>
   )}
-  {!token && !isRhombus && <button className="upload-btn" onClick={() => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } }}>REQUEST_EDITING_RIGHTS</button>}
+  {!token && !isRhombus && <button className="upload-btn" onClick={() => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current?.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } }}>REQUEST_EDITING_RIGHTS</button>}
                   </DraggableWindow>
                 );
               }
@@ -1170,7 +1296,7 @@ function App() {
             <MeasurementTool measureMode={measureMode} socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} mapScaleMultiplier={view === 'battle_map' ? (() => {
                 const loc = locations.find((l:any) => l.id === activeBattleMapData?.locationId);
                 if (!loc) return 5;
-                let scaleData = loc.map_scale_multiplier;
+                let scaleData: any = loc.map_scale_multiplier;
                 let finalScale = 5;
                 if (typeof scaleData === 'string' && scaleData.startsWith('[')) {
                     try {
@@ -1277,7 +1403,7 @@ function App() {
             ) : (
               <>
                 <PerspectiveCamera makeDefault position={[0, 200, 250]} />
-            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode} dollyToCursor={true} />
+            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode} dollyToCursor={true} mouseButtons={{ left: 2, right: 1, middle: 16, wheel: 16 }} />
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <GlobalCameraCapture />
             <CursorPivotControls />
@@ -1337,7 +1463,7 @@ function App() {
                 // Strict comparison to ensure null === null or 1 === 1
                 return Number(ping.battle_map_id) === Number(currentBattleMapId) && Number(ping.floor_index) === Number(currentFloorIndex);
             }).map(ping => (
-                <PingEffect key={ping.id} position={[ping.x, ping.y !== undefined ? ping.y : 0.5, ping.z]} color={ping.color} size={ping.size} />
+                <PingEffect key={ping.id} position={[ping.x, ping.y !== undefined ? ping.y : 0.5, ping.z]} color={ping.color} size={ping.size ?? 1} />
             ))}
             
             {/* Dedicated Player Rhombus Rendering */}

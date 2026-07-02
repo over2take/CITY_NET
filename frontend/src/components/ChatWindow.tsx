@@ -14,12 +14,13 @@ interface ChatWindowProps {
   isPrimaryAdmin: boolean;
   onGrantAccess: (userName: string) => void;
   onRevokeAccess: (userName: string) => void;
+  onOpenPlayerInfo: (userName: string) => void;
   socket: any;
   token: string;
   isChatOpen: boolean;
 }
 
-export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isPrimaryAdmin, onGrantAccess, onRevokeAccess, socket, token, isChatOpen }: ChatWindowProps) {
+export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isPrimaryAdmin, onGrantAccess, onRevokeAccess, onOpenPlayerInfo, socket, token, isChatOpen }: ChatWindowProps) {
   const [inputText, setInputText] = useState('');
 
   const [activeTab, setActiveTab] = useState('GLOBAL');
@@ -33,6 +34,14 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
   const [lastNpcContext, setLastNpcContext] = useState<Record<string, string>>({});
 
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (!activeDropdown) return;
+    const close = () => setActiveDropdown(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [activeDropdown]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessageCountRef = useRef(messages.length);
@@ -166,8 +175,10 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
     if (activeTab === targetUser) setActiveTab('GLOBAL');
   };
 
-  const handleUserClick = (user: any) => {
+  const handleUserClick = (user: any, e: React.MouseEvent) => {
     if (user.userName === userName) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setDropdownPos({ x: rect.left, y: rect.bottom });
     setActiveDropdown(activeDropdown === user.userName ? null : user.userName);
   };
 
@@ -263,7 +274,7 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                 return (
                   <div key={user.userName} style={{ position: 'relative' }}>
                     <div
-                      onClick={() => handleUserClick(user)}
+                      onClick={(e) => { e.stopPropagation(); handleUserClick(user, e); }}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -285,14 +296,14 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                       <div style={{ width: '6px', height: '6px', background: dotColor, borderRadius: '50%', boxShadow: dotShadow }}></div>
                       <span style={{ color: user.userName === userName ? 'var(--cyan)' : '#888', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
                         {user.userName}
-                        {user.isAdmin && <span title="Primary Admin">⭐</span>}
-                        {user.isTemporaryAdmin && <span title="Temporary Admin">🌟</span>}
+                        {user.isAdmin && <span title="Primary Admin"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="#ff7b00" style={{verticalAlign:'middle'}}><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg></span>}
+                        {user.isTemporaryAdmin && <span title="Temporary Admin"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="#ffaa00" style={{verticalAlign:'middle'}}><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg></span>}
                         {user.isNPC && <span title="NPC" style={{ color: user.isActive === false ? '#555' : '#aa00ff' }}>[NPC]</span>}
                       </span>
                     </div>
 
                     {activeDropdown === user.userName && (
-                      <div style={{ position: 'absolute', top: '25px', left: '15px', background: 'var(--black)', border: '1px solid var(--green)', padding: '5px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '150px' }}>
+                      <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', top: `${dropdownPos.y}px`, left: `${dropdownPos.x}px`, background: 'var(--black)', border: '1px solid var(--green)', padding: '5px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '160px' }}>
                         <button
                           className="utility-btn"
                           style={{ margin: 0, textAlign: 'left', width: '100%' }}
@@ -300,6 +311,16 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                         >
                           PRIVATE_MESSAGE
                         </button>
+
+                        {!user.isNPC && (
+                          <button
+                            className="utility-btn"
+                            style={{ margin: 0, textAlign: 'left', width: '100%' }}
+                            onClick={() => { onOpenPlayerInfo(user.userName); setActiveDropdown(null); }}
+                          >
+                            VIEW_PLAYER_INFO
+                          </button>
+                        )}
 
                         {isPrimaryAdmin && !user.isAdmin && !user.isNPC && (
                           <button

@@ -8,6 +8,7 @@ import type {
 interface UseSocketOptions {
   userName: string;
   token: string;
+  playerToken?: string | null;
   isLoggedIn: boolean;
   notificationsEnabled: boolean;
   isChatOpen: boolean;
@@ -18,21 +19,28 @@ interface UseSocketOptions {
   onFetchDistricts: () => void;
   onFetchWaterBodies: () => void;
   onFetchBattleMaps?: () => void;
-  onBankUpdate: (balance: number, debt: number, firstPayDone?: boolean) => void;
-  onBalancePaid?: (balance: number, debt: number, firstPayDone?: boolean) => void;
+  onBankUpdate: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean) => void;
+  onBalancePaid?: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean) => void;
   onNotification: (msg: string | null) => void;
   onHasUnreadChat: (val: boolean) => void;
   onTokenUpdate: (token: string) => void;
   onIsAdminUpdate: (isAdmin: boolean) => void;
+  onRegistrationPending?: (username: string) => void;
+  onRegistrationUpdated?: (username: string, action: 'approved' | 'denied') => void;
+  onPasswordResetRequested?: (username: string, requestId: string) => void;
+  onPasswordResetResolved?: (username: string, action: 'approved' | 'denied') => void;
 }
 
 export function useSocket({
-  userName, token, isLoggedIn, notificationsEnabled, isChatOpen,
+  userName, token, playerToken, isLoggedIn, notificationsEnabled, isChatOpen,
   onFetchAll, onFetchGlobalSettings, onFetchLocations, onFetchRoads, onFetchDistricts, onFetchWaterBodies, onFetchBattleMaps,
   onBankUpdate, onBalancePaid, onNotification, onHasUnreadChat, onTokenUpdate, onIsAdminUpdate,
+  onRegistrationPending, onRegistrationUpdated,
+  onPasswordResetRequested, onPasswordResetResolved,
 }: UseSocketOptions) {
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const tokenRef = useRef(token);
+  const playerTokenRef = useRef(playerToken);
   const userNameRef = useRef(userName);
   const isChatOpenRef = useRef(isChatOpen);
   const notificationsEnabledRef = useRef(notificationsEnabled);
@@ -40,7 +48,7 @@ export function useSocket({
 
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [activePings, setActivePings] = useState<{ id: string; x: number; y: number; z: number; color: string; owner?: string }[]>([]);
+  const [activePings, setActivePings] = useState<{ id: string; x: number; y: number; z: number; color: string; owner?: string; battle_map_id?: number | null; floor_index?: number | null; size?: number }[]>([]);
   const [battleMapPositions, setBattleMapPositions] = useState<Record<string, BattleMapPosition>>({});
   const [activeBattleMapData, setActiveBattleMapData] = useState<BattleMapSessionData | null>(null);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
@@ -50,6 +58,7 @@ export function useSocket({
 
   // Keep refs in sync for use inside stable socket callbacks
   useEffect(() => { tokenRef.current = token; }, [token]);
+  useEffect(() => { playerTokenRef.current = playerToken; }, [playerToken]);
   useEffect(() => { userNameRef.current = userName; }, [userName]);
   useEffect(() => { isChatOpenRef.current = isChatOpen; }, [isChatOpen]);
   useEffect(() => { notificationsEnabledRef.current = notificationsEnabled; }, [notificationsEnabled]);
@@ -61,7 +70,11 @@ export function useSocket({
     socketRef.current = newSocket;
 
     newSocket.on('connect', () => {
-      newSocket.emit('identify', { userName: userNameRef.current, isAdmin: !!tokenRef.current, token: tokenRef.current });
+      newSocket.emit('identify', { userName: userNameRef.current, isAdmin: !!tokenRef.current, token: tokenRef.current, playerToken: playerTokenRef.current });
+    });
+
+    newSocket.on('authError', (data: { message: string }) => {
+      onNotification(data.message || 'SESSION_INVALID // PLEASE_LOG_IN_AGAIN');
     });
 
     newSocket.on('settingsUpdated', () => {
@@ -97,11 +110,11 @@ export function useSocket({
     });
 
     let lastKnownBalance: number | null = null;
-    newSocket.on('bankUpdate', (data: { username: string; balance: number; debt: number; firstPayDone?: boolean }) => {
+    newSocket.on('bankUpdate', (data: { username: string; balance: number; debt: number; firstPayDone?: boolean; highRollerDone?: boolean }) => {
       if (data.username !== userNameRef.current) return;
-      onBankUpdate(data.balance, data.debt, data.firstPayDone);
+      onBankUpdate(data.balance, data.debt, data.firstPayDone, data.highRollerDone);
       if (lastKnownBalance !== null && data.balance > lastKnownBalance) {
-        onBalancePaid?.(data.balance, data.debt, data.firstPayDone);
+        onBalancePaid?.(data.balance, data.debt, data.firstPayDone, data.highRollerDone);
       }
       lastKnownBalance = data.balance;
     });
@@ -128,6 +141,22 @@ export function useSocket({
         onIsAdminUpdate(false);
         onNotification('TEMPORARY_ADMIN_ACCESS_REVOKED');
       }
+    });
+
+    newSocket.on('registrationPending', (data: { username: string }) => {
+      onRegistrationPending?.(data.username);
+    });
+
+    newSocket.on('registrationUpdated', (data: { username: string; action: 'approved' | 'denied' }) => {
+      onRegistrationUpdated?.(data.username, data.action);
+    });
+
+    newSocket.on('passwordResetRequested', (data: { username: string; requestId: string }) => {
+      onPasswordResetRequested?.(data.username, data.requestId);
+    });
+
+    newSocket.on('passwordResetResolved', (data: { username: string; action: 'approved' | 'denied' }) => {
+      onPasswordResetResolved?.(data.username, data.action);
     });
 
     newSocket.on('force_floor_change', (data: { locationId: number; floorIndex: number }) => {
@@ -187,10 +216,12 @@ export function useSocket({
     return () => { newSocket.disconnect(); };
   }, [userName, isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-identify when token changes (updates roster rank)
+  // Re-identify when token changes (updates roster rank, e.g. after access grant/revoke).
+  // Only fires on an already-connected socket so we don't buffer a tokenless identify
+  // that would trip SECURE_MODE on initial connect (the connect handler covers that case).
   useEffect(() => {
-    if (socketRef.current && userName) {
-      socketRef.current.emit('identify', { userName, isAdmin: !!token, token });
+    if (socketRef.current?.connected && userName) {
+      socketRef.current.emit('identify', { userName, isAdmin: !!token, token, playerToken: playerTokenRef.current });
     }
   }, [token, userName]);
 

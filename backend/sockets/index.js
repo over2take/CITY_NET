@@ -31,12 +31,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   };
 
   const sendBankUpdate = (username) => {
-    db.get('SELECT balance, debt, first_pay_done FROM player_banks WHERE username = ?', [username], (err, row) => {
+    db.get('SELECT balance, debt, first_pay_done, high_roller_done FROM player_banks WHERE username = ?', [username], (err, row) => {
       if (!err && row) {
-        io.emit('bankUpdate', { username, balance: row.balance, debt: row.debt, firstPayDone: !!row.first_pay_done });
+        io.emit('bankUpdate', { username, balance: row.balance, debt: row.debt, firstPayDone: !!row.first_pay_done, highRollerDone: !!row.high_roller_done });
       } else if (!err && !row) {
         db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, 0, 0)', [username], () => {
-          io.emit('bankUpdate', { username, balance: 0, debt: 0, firstPayDone: false });
+          io.emit('bankUpdate', { username, balance: 0, debt: 0, firstPayDone: false, highRollerDone: false });
         });
       }
     });
@@ -65,6 +65,24 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
     socket.on('identify', (data) => {
       let info = typeof data === 'string' ? { userName: data, isAdmin: false } : data;
+
+      // Secure Mode: verify player token before allowing connection
+      if (process.env.SECURE_MODE === 'true' && !info.isAdmin) {
+        if (!info.playerToken) {
+          socket.emit('authError', { message: 'Player token required' });
+          socket.disconnect(true);
+          return;
+        }
+        try {
+          const verified = jwt.verify(info.playerToken, SECRET);
+          if (verified.role !== 'player' || verified.username !== info.userName) throw new Error('Invalid token');
+        } catch {
+          socket.emit('authError', { message: 'Invalid or expired player token' });
+          socket.disconnect(true);
+          return;
+        }
+      }
+      delete info.playerToken;
 
       if (info.isAdmin && info.token) {
         try {
@@ -251,22 +269,30 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('editingFinished', () => { io.emit('editingStopped'); });
 
     socket.on('requestRhombusPurge', (data) => {
-      console.log(`Cinematic Purge Requested for ID: ${data.id}`);
-      io.emit('rhombusFading', { id: data.id, owner: data.owner });
-      setTimeout(() => {
-        if (data.id) {
-          db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE id = ? AND shape = "rhombus"', [data.id], function(err) {
-            if (!err && this.changes > 0) {
-              recordAction('location_update', { data: [{ id: data.id, battle_map_id: -1, floor_index: -1 }] });
-              emitUpdate({ isRhombusOnly: true });
-            }
-          });
-        } else if (data.owner) {
-          db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE owner = ? AND shape = "rhombus"', [data.owner], function(err) {
-            if (!err && this.changes > 0) emitUpdate({ isRhombusOnly: true });
-          });
+      console.log(`Cinematic Purge Requested for owner: ${data.owner}, id: ${data.id}`);
+      // Look up the real rhombus id so the fade event matches on all clients.
+      const lookupCol = data.id ? 'id' : 'owner';
+      const lookupVal = data.id || data.owner;
+      db.get(`SELECT id, owner FROM locations WHERE shape = "rhombus" AND ${lookupCol} = ?`, [lookupVal], (err, row) => {
+        if (!err && row) {
+          io.emit('rhombusFading', { id: row.id, owner: row.owner });
         }
-      }, 3000);
+        // Give the 3s animation time to finish before unmounting via dataUpdated.
+        setTimeout(() => {
+          if (data.id) {
+            db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE id = ? AND shape = "rhombus"', [data.id], function(err2) {
+              if (!err2 && this.changes > 0) {
+                recordAction('location_update', { data: [{ id: data.id, battle_map_id: -1, floor_index: -1 }] });
+                emitUpdate({ isRhombusOnly: true });
+              }
+            });
+          } else if (data.owner) {
+            db.run('UPDATE locations SET battle_map_id = -1, floor_index = -1 WHERE owner = ? AND shape = "rhombus"', [data.owner], function(err2) {
+              if (!err2 && this.changes > 0) emitUpdate({ isRhombusOnly: true });
+            });
+          }
+        }, 3500);
+      });
     });
 
     socket.on('requestInstantRhombusPurge', (data) => {
@@ -474,6 +500,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       db.run('UPDATE player_banks SET first_pay_done = 1 WHERE username = ?', [data.username]);
     });
 
+    socket.on('markHighRollerDone', (data) => {
+      if (!data || !data.username) return;
+      db.run('UPDATE player_banks SET high_roller_done = 1 WHERE username = ?', [data.username]);
+    });
+
     socket.on('withdrawFunds', (data) => {
       if (!data || !data.username || !data.amount) return;
       const amount = parseFloat(data.amount);
@@ -549,11 +580,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const info = userSockets.get(socket.id);
       if (info) {
         console.log('User disconnected:', socket.id, 'Username:', info.userName);
-        db.get('SELECT id FROM locations WHERE shape = "rhombus" AND owner = ?', [info.userName], (err, row) => {
-          if (row) io.emit('rhombusFading', { id: row.id, owner: info.userName });
-        });
         userSockets.delete(socket.id);
-        broadcastActiveUsers();
+        // Emit rhombusFading first, then broadcastActiveUsers so clients start
+        // the fade animation before isOnline flips to false in their useFrame loop.
+        db.get('SELECT id FROM locations WHERE shape = "rhombus" AND owner = ?', [info.userName], (err, row) => {
+          if (!err && row) io.emit('rhombusFading', { id: row.id, owner: info.userName });
+          broadcastActiveUsers();
+        });
       }
     });
   });

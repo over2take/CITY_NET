@@ -12,7 +12,7 @@ module.exports = (db, io, { emitUpdate }) => {
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
   // Memory storage so we can hash before writing to disk.
-  const upload = multer({ storage: multer.memoryStorage() });
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
   // List maps for a specific location.
   router.get('/', (req, res) => {
@@ -108,6 +108,14 @@ module.exports = (db, io, { emitUpdate }) => {
         });
       });
     });
+  });
+
+  // List all uploaded battle map image filenames (admin use)
+  router.get('/images', authenticate, (req, res) => {
+    const files = fs.existsSync(uploadsDir)
+      ? fs.readdirSync(uploadsDir).filter(f => /\.(png|jpe?g|webp|gif)$/i.test(f))
+      : [];
+    res.json(files.map(f => ({ filename: f, url: '/uploads/battle_maps/' + f })));
   });
 
   return router;
