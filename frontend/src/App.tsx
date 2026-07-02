@@ -1257,10 +1257,22 @@ function App() {
                         }}>CHECK_HEALTH</button>
                     )}
                     {isRhombus && (isAdmin || (isPlayerRhombus && selectedLocation.owner === userName)) && (
-                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--green)', color: '#000'}} onClick={() => {
+                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--green)', color: '#000'}} onClick={async () => {
                             let newX = infoPanelPos.x + 320;
                             if (newX + 300 > window.innerWidth) newX = Math.max(0, infoPanelPos.x - 320);
                             setHitPointsPos({ x: newX, y: infoPanelPos.y });
+                            // If no real rhombus exists yet (synthetic location), create a default one
+                            if (selectedLocation.id === -1 && selectedLocation.owner) {
+                                const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === selectedLocation.owner);
+                                if (!existing) {
+                                    await fetch('/api/locations', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                        body: JSON.stringify({ name: selectedLocation.owner, description: '', shape: 'rhombus', owner: selectedLocation.owner, x: 0, y: 0, z: 0, width: 10, height: 10, depth: 10, hp_current: 100, hp_max: 100, hp_temp: 0 })
+                                    });
+                                    await fetchLocations();
+                                }
+                            }
                             setIsHitPointsOpen(true);
                         }}>UPDATE_HEALTH</button>
                     )}
