@@ -160,6 +160,7 @@ function App() {
 
   const [notification, setNotification] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(() => { const saved = localStorage.getItem('audioEnabled'); return saved !== null ? JSON.parse(saved) : true; });
+  const [masterVolume, setMasterVolume] = useState(() => { const saved = localStorage.getItem('masterVolume'); return saved !== null ? parseFloat(saved) : 0.5; });
   const [isBatchSelecting, setIsBatchSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [districtSelection, setDistrictSelection] = useState<number[]>([]);
@@ -571,14 +572,19 @@ function App() {
   const startupPlayed = useRef(false);
 
   useEffect(() => {
+    localStorage.setItem('masterVolume', String(masterVolume));
+    (window as any).masterVolume = masterVolume;
+  }, [masterVolume]);
+
+  useEffect(() => {
     localStorage.setItem('audioEnabled', JSON.stringify(audioEnabled));
     const loopSound = new Audio('/Loop_seamless_fixed.mp3');
-    loopSound.loop = true; loopSound.volume = 0.01;
+    loopSound.loop = true; loopSound.volume = 0.01 * ((window as any).masterVolume ?? 0.5);
     const playAudio = async () => { if (audioEnabled) { try { await loopSound.play(); } catch (e) {} } };
     if (!audioEnabled) loopSound.pause();
     document.addEventListener('click', playAudio, { once: true });
     return () => { document.removeEventListener('click', playAudio); loopSound.pause(); };
-  }, [audioEnabled]);
+  }, [audioEnabled, masterVolume]);
 
   const [isGeneratingMap, setIsGeneratingMap] = useState(false);
 
@@ -738,7 +744,7 @@ function App() {
     setUserName(name);
     setIsLoggedIn(true);
     if (socketRef.current) socketRef.current.emit('identify', token ? { userName: name, playerToken: token } : name);
-    if (audioEnabled) { const s = new Audio('/StartUp.mp3'); s.volume = 0.20; s.play().catch(() => {}); }
+    if (audioEnabled) { const s = new Audio('/StartUp.mp3'); s.volume = 0.20 * ((window as any).masterVolume ?? 0.5); s.play().catch(() => {}); }
   };
 
   const handleApprovePlayer = async (username: string) => {
@@ -897,6 +903,8 @@ function App() {
               onLogout={handleLogout}
               audioEnabled={audioEnabled}
               setAudioEnabled={setAudioEnabled}
+              masterVolume={masterVolume}
+              setMasterVolume={setMasterVolume}
               rhombusState={rhombusState}
               setRhombusState={setRhombusState}
               refreshLocations={fetchLocations}

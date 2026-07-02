@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { CityDataBaseMenu } from './CityDatabase';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import creditsPngIcon from '../assets/Credits.png';
@@ -451,6 +451,8 @@ interface SidebarProps {
   onLogout: () => void;
   audioEnabled: boolean;
   setAudioEnabled: (v: boolean) => void;
+  masterVolume: number;
+  setMasterVolume: (v: number) => void;
   rhombusState: any;
   setRhombusState: (s: any) => void;
   refreshLocations: () => void;
@@ -472,7 +474,7 @@ interface SidebarProps {
   setIsBankOpen: (v: boolean) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -480,6 +482,11 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
   ));
   const isSelectedRhombus = selectedLocation?.shape === 'rhombus' || selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus';
   const targetRhombus = isSelectedRhombus ? selectedLocation : userRhombus;
+
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const volumeHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleVolumeEnter = () => { if (volumeHideTimer.current) clearTimeout(volumeHideTimer.current); setShowVolumeSlider(true); };
+  const handleVolumeLeave = () => { volumeHideTimer.current = setTimeout(() => setShowVolumeSlider(false), 300); };
 
   let isPrimaryAdmin = false;
   if (token) {
@@ -568,17 +575,31 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           </button>
         </div>
         <div className="rail-bottom" style={{ paddingBottom: '20px', display: 'flex', justifyContent: 'center' }}>
-          <button className={`rail-btn ${!audioEnabled ? 'muted' : ''}`} onClick={() => setAudioEnabled(!audioEnabled)} title={audioEnabled ? "MUTE_AUDIO" : "UNMUTE_AUDIO"}>
-            {audioEnabled ? (
-              <svg width="24" height="24" viewBox="0 0 512 512" fill="none" stroke="currentColor" strokeWidth="32" strokeLinecap="round" strokeLinejoin="round">
-                <path fill="currentColor" fillRule="evenodd" d="m403.966 426.944l-33.285-26.63c74.193-81.075 74.193-205.015-.001-286.09l33.285-26.628c86.612 96.712 86.61 242.635.001 339.348M319.58 155.105l-33.324 26.659c39.795 42.568 39.794 108.444.001 151.012l33.324 26.658c52.205-58.22 52.205-146.109-.001-204.329m-85.163-69.772l-110.854 87.23H42.667v170.666h81.02l110.73 85.458z" />
-              </svg>
-            ) : (
-              <svg width="24" height="24" viewBox="0 0 512 512" fill="none" stroke="currentColor" strokeWidth="32" strokeLinecap="round" strokeLinejoin="round">
-                <path fill="currentColor" fillRule="evenodd" d="m403.375 257.27l59.584 59.584l-30.167 30.166l-59.583-59.583l-59.584 59.583l-30.166-30.166l59.583-59.584l-59.583-59.583l30.166-30.166l59.584 59.583l59.583-59.583l30.167 30.166zM234.417 85.333l-110.854 87.23H42.667v170.666h81.02l110.73 85.458z" />
-              </svg>
+          <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }} onMouseEnter={handleVolumeEnter} onMouseLeave={handleVolumeLeave}>
+            {showVolumeSlider && (
+              <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', background: '#0a0a0a', border: '1px solid var(--green)', padding: '8px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginBottom: '6px', zIndex: 1000, minWidth: '36px' }}>
+                <span style={{ fontSize: '0.5rem', letterSpacing: '1px', color: 'var(--green)', whiteSpace: 'nowrap' }}>{Math.round(masterVolume * 100)}%</span>
+                <input
+                  type="range" min="0" max="1" step="0.05"
+                  value={masterVolume}
+                  onChange={e => setMasterVolume(parseFloat(e.target.value))}
+                  style={{ writingMode: 'vertical-lr', direction: 'rtl', height: '80px', cursor: 'pointer', accentColor: 'var(--green)', background: 'transparent' } as React.CSSProperties}
+                />
+                <span style={{ fontSize: '0.45rem', letterSpacing: '1px', color: 'var(--green)', opacity: 0.6, whiteSpace: 'nowrap' }}>VOL</span>
+              </div>
             )}
-          </button>
+            <button className={`rail-btn ${!audioEnabled ? 'muted' : ''}`} onClick={() => setAudioEnabled(!audioEnabled)} title={`${audioEnabled ? 'CLICK: MUTE_AUDIO' : 'CLICK: UNMUTE_AUDIO'} // HOVER: MASTER_VOLUME`}>
+              {audioEnabled ? (
+                <svg width="24" height="24" viewBox="0 0 512 512" fill="none" stroke="currentColor" strokeWidth="32" strokeLinecap="round" strokeLinejoin="round">
+                  <path fill="currentColor" fillRule="evenodd" d="m403.966 426.944l-33.285-26.63c74.193-81.075 74.193-205.015-.001-286.09l33.285-26.628c86.612 96.712 86.61 242.635.001 339.348M319.58 155.105l-33.324 26.659c39.795 42.568 39.794 108.444.001 151.012l33.324 26.658c52.205-58.22 52.205-146.109-.001-204.329m-85.163-69.772l-110.854 87.23H42.667v170.666h81.02l110.73 85.458z" />
+                </svg>
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 512 512" fill="none" stroke="currentColor" strokeWidth="32" strokeLinecap="round" strokeLinejoin="round">
+                  <path fill="currentColor" fillRule="evenodd" d="m403.375 257.27l59.584 59.584l-30.167 30.166l-59.583-59.583l-59.584 59.583l-30.166-30.166l59.583-59.584l-59.583-59.583l30.166-30.166l59.584 59.583l59.583-59.583l30.167 30.166zM234.417 85.333l-110.854 87.23H42.667v170.666h81.02l110.73 85.458z" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       </div>
       <div className="menu-container">
