@@ -206,10 +206,12 @@ db.serialize(() => {
     username TEXT PRIMARY KEY,
     balance REAL DEFAULT 0.00,
     debt REAL DEFAULT 0.00,
-    first_pay_done INTEGER DEFAULT 0
+    first_pay_done INTEGER DEFAULT 0,
+    high_roller_done INTEGER DEFAULT 0
   )`);
   // Migrate existing rows that predate the first_pay_done column
   db.run(`ALTER TABLE player_banks ADD COLUMN first_pay_done INTEGER DEFAULT 0`, () => {});
+  db.run(`ALTER TABLE player_banks ADD COLUMN high_roller_done INTEGER DEFAULT 0`, () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS water_bodies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

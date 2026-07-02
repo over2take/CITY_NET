@@ -19,8 +19,8 @@ interface UseSocketOptions {
   onFetchDistricts: () => void;
   onFetchWaterBodies: () => void;
   onFetchBattleMaps?: () => void;
-  onBankUpdate: (balance: number, debt: number, firstPayDone?: boolean) => void;
-  onBalancePaid?: (balance: number, debt: number, firstPayDone?: boolean) => void;
+  onBankUpdate: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean) => void;
+  onBalancePaid?: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean) => void;
   onNotification: (msg: string | null) => void;
   onHasUnreadChat: (val: boolean) => void;
   onTokenUpdate: (token: string) => void;
@@ -110,11 +110,11 @@ export function useSocket({
     });
 
     let lastKnownBalance: number | null = null;
-    newSocket.on('bankUpdate', (data: { username: string; balance: number; debt: number; firstPayDone?: boolean }) => {
+    newSocket.on('bankUpdate', (data: { username: string; balance: number; debt: number; firstPayDone?: boolean; highRollerDone?: boolean }) => {
       if (data.username !== userNameRef.current) return;
-      onBankUpdate(data.balance, data.debt, data.firstPayDone);
+      onBankUpdate(data.balance, data.debt, data.firstPayDone, data.highRollerDone);
       if (lastKnownBalance !== null && data.balance > lastKnownBalance) {
-        onBalancePaid?.(data.balance, data.debt, data.firstPayDone);
+        onBalancePaid?.(data.balance, data.debt, data.firstPayDone, data.highRollerDone);
       }
       lastKnownBalance = data.balance;
     });
