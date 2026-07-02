@@ -931,7 +931,7 @@ function App() {
                       PENDING_APPROVALS [{pendingRegistrations.length}]
                     </button>
                   )}
-                  <button className="admin-toggle" onClick={() => !token && setIsAdmin(!isAdmin)}>{token ? 'ADMIN_MODE' : (isAdmin ? 'CANCEL' : 'ADMIN_LOGIN')}</button>
+                  {(!secureModeEnabled || token) && <button className="admin-toggle" onClick={() => !token && setIsAdmin(!isAdmin)}>{token ? 'ADMIN_MODE' : (isAdmin ? 'CANCEL' : 'ADMIN_LOGIN')}</button>}
                 </div>
               </div>
             </header>
@@ -1061,6 +1061,7 @@ function App() {
                 setEditorStyleIndex={setEditorStyleIndex}
                 isCopyingSize={isCopyingSize}
                 setIsCopyingSize={setIsCopyingSize}
+                secureModeEnabled={secureModeEnabled}
                 />
             )}
             {adminBankPlayer && (
