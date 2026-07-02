@@ -1,0 +1,11 @@
+**/node_modules
+**/.git
+frontend/dist
+backend/city.db
+backend/uploads
+backend/.env
+*.bat
+*.ps1
+docs/
+Images/
+Computer sounds/

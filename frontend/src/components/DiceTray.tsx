@@ -335,13 +335,15 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
       }
     };
 
-    socketRef.current.on('diceRollBroadcast', handleBroadcast);
-    socketRef.current.on('diceRollHistory', handleHistory);
+    const socket = socketRef.current;
+    if (!socket) return;
+    socket.on('diceRollBroadcast', handleBroadcast);
+    socket.on('diceRollHistory', handleHistory);
     return () => {
-      socketRef.current.off('diceRollBroadcast', handleBroadcast);
-      socketRef.current.off('diceRollHistory', handleHistory);
+      socket.off('diceRollBroadcast', handleBroadcast);
+      socket.off('diceRollHistory', handleHistory);
     };
-  }, [socketRef]);
+  }, [socketRef.current]);
 
   const titleControls = (
     <button

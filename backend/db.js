@@ -1,7 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
-const dbPath = path.resolve(__dirname, 'city.db');
+const dbPath = process.env.DB_PATH || path.resolve(__dirname, 'city.db');
 const db = new sqlite3.Database(dbPath);
 
 db.serialize(() => {
@@ -206,16 +206,29 @@ db.serialize(() => {
     username TEXT PRIMARY KEY,
     balance REAL DEFAULT 0.00,
     debt REAL DEFAULT 0.00,
-    first_pay_done INTEGER DEFAULT 0
+    first_pay_done INTEGER DEFAULT 0,
+    high_roller_done INTEGER DEFAULT 0
   )`);
   // Migrate existing rows that predate the first_pay_done column
   db.run(`ALTER TABLE player_banks ADD COLUMN first_pay_done INTEGER DEFAULT 0`, () => {});
+  db.run(`ALTER TABLE player_banks ADD COLUMN high_roller_done INTEGER DEFAULT 0`, () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS water_bodies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     points_json TEXT NOT NULL,
     map_scale_multiplier TEXT DEFAULT '[1]'
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS player_accounts (
+    username TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL,
+    security_question TEXT,
+    security_answer_hash TEXT,
+    temp_password INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.run(`ALTER TABLE player_accounts ADD COLUMN status TEXT DEFAULT 'pending'`, () => {});
 });
 
 module.exports = db;

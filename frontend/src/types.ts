@@ -205,6 +205,7 @@ export interface MeasurementData {
   view: ViewMode;
   locationId: number | null;
   isFinal: boolean;
+  timestamp?: number;
 }
 
 // ─── Global Settings ──────────────────────────────────────────────────────────

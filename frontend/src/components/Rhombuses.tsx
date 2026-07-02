@@ -563,14 +563,15 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
     localPos.current = { x: location.x, z: location.z };
   }, [location.x, location.z]);
 
-  const [animState, setAnimState] = useState<'none' | 'appearing' | 'fading'>('none');
+  const animStateRef = useRef<'none' | 'appearing' | 'fading'>('none');
   const animStartTime = useRef<number | null>(null);
   const hasAppeared = useRef(false);
+  const isOnlineRef = useRef(false);
 
   // Trigger appearing animation on first session mount ONLY if online
   useEffect(() => {
     if (!hasAppeared.current && isOnline) {
-        setAnimState('appearing');
+        animStateRef.current = 'appearing';
         animStartTime.current = Date.now();
         hasAppeared.current = true;
     }
@@ -578,8 +579,15 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
 
   useEffect(() => {
     if (!socket) return;
-    const handleFade = (data: any) => { if (data.id === location.id) { setAnimState('fading'); animStartTime.current = Date.now(); } };
-    const handleAppear = (data: any) => { if (data.id === location.id) { setAnimState('appearing'); animStartTime.current = Date.now(); } };
+    const handleFade = (data: any) => {
+      if (data.id === location.id && animStateRef.current !== 'fading') {
+        // Only animate if rhombus is currently visible (online or mid-appear)
+        if (!isOnlineRef.current && animStateRef.current !== 'appearing') return;
+        animStateRef.current = 'fading';
+        animStartTime.current = Date.now();
+      }
+    };
+    const handleAppear = (data: any) => { if (data.id === location.id) { animStateRef.current = 'appearing'; animStartTime.current = Date.now(); } };
     const handlePath = (data: any) => {
       if (data.id !== location.id || !Array.isArray(data.waypoints)) return;
       waypointTimers.current.forEach(clearTimeout);
@@ -629,6 +637,8 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
     if (lightRef.current) lightRef.current.visible = isClose;
     
     const isOnline = activeUsers.some((u: any) => u.userName === location.owner);
+    isOnlineRef.current = isOnline;
+    const animState = animStateRef.current;
     let baseOpacity = isOnline ? 0.8 : 0;
     let scaleMult = 1.0;
     let rotationSpeed = 1.0;
@@ -636,19 +646,19 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
 
     if (animState !== 'none' && animStartTime.current) {
         const elapsed = (Date.now() - animStartTime.current) / 1000;
-        const progress = Math.min(1, elapsed / 3); 
+        const progress = Math.min(1, elapsed / 3);
         if (animState === 'fading') {
           baseOpacity = Math.max(0, 0.8 * (1 - Math.pow(progress, 2)));
           if (progress > 0.5) flicker = Math.random() > 0.5 ? 1.2 : 0.2;
           rotationSpeed = 1.0 + progress * 20;
           scaleMult = (progress < 0.2 ? 1.0 + progress * 2 : (1.4 * (1 - (progress - 0.2) / 0.8)));
-          if (progress >= 1) { setAnimState('none'); baseOpacity = 0; scaleMult = 0.001; }
+          if (progress >= 1) { animStateRef.current = 'none'; baseOpacity = 0; scaleMult = 0.001; }
         } else if (animState === 'appearing') {
           baseOpacity = 0.8 * Math.pow(progress, 2);
           if (progress < 0.5) flicker = Math.random() > 0.5 ? 1.2 : 0.2;
           rotationSpeed = 20 * (1 - progress) + 1.0;
           scaleMult = (progress > 0.8 ? 1.0 + (1 - progress) * 2 : (1.4 * progress / 0.8));
-          if (progress >= 1) { setAnimState('none'); baseOpacity = 0.8; scaleMult = 1.0; }
+          if (progress >= 1) { animStateRef.current = 'none'; baseOpacity = 0.8; scaleMult = 1.0; }
         }
     } else {
         // Standard online state (if not animating)

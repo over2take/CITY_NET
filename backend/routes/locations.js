@@ -211,6 +211,9 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         newCurrent = newMax;
       }
 
+      // Always clamp current to max — current can never exceed max
+      if (newMax > 0 && newCurrent > newMax) newCurrent = newMax;
+
       if (action === 'damage' && amount > 0) {
         let remainingDamage = amount;
         if (newTemp > 0) {

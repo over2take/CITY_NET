@@ -335,6 +335,7 @@ interface BankWindowProps {
   userName: string;
   isBankOpen: boolean;
   firstPayDone?: boolean;
+  highRollerDone?: boolean;
   audioEnabled?: boolean;
   soundVolumes?: Record<string, number>;
 }
@@ -370,7 +371,7 @@ const CELEBRATION_CSS = `
 }
 `;
 
-export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOpen, firstPayDone, audioEnabled, soundVolumes }: BankWindowProps) {
+export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOpen, firstPayDone, highRollerDone, audioEnabled, soundVolumes }: BankWindowProps) {
   const vol = (key: string) => (soundVolumes?.[key] ?? 1);
   const audioEnabledRef = useRef(audioEnabled);
   useEffect(() => { audioEnabledRef.current = audioEnabled; }, [audioEnabled]);
@@ -382,9 +383,22 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
   const [showOverdraft, setShowOverdraft] = useState(false);
   const prevDebtRef = useRef(bankData.debt);
   const prevBalanceRef = useRef(bankData.balance);
-  const hasHighRollerFiredRef = useRef(false);
+  const hasHighRollerFiredRef = useRef(!!highRollerDone);
   const hasFirstPayFiredRef = useRef(!!firstPayDone);
   const bankInitializedRef = useRef(false);
+  const isBankOpenRef = useRef(isBankOpen);
+  useEffect(() => { isBankOpenRef.current = isBankOpen; }, [isBankOpen]);
+  // Suppress bank sounds for 5s after mount so they don't overlap the login chime
+  const startupGraceRef = useRef(true);
+  useEffect(() => { const t = setTimeout(() => { startupGraceRef.current = false; }, 5000); return () => clearTimeout(t); }, []);
+
+  // Sync the guard when the DB value arrives after mount (firstPayDone starts undefined).
+  useEffect(() => {
+    if (firstPayDone) hasFirstPayFiredRef.current = true;
+  }, [firstPayDone]);
+  useEffect(() => {
+    if (highRollerDone) hasHighRollerFiredRef.current = true;
+  }, [highRollerDone]);
 
   const confettiPieces = useMemo(() => Array.from({ length: 45 }, (_, i) => ({
     left: Math.random() * 96,
@@ -406,7 +420,8 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
   useEffect(() => {
     if (!bankInitializedRef.current) return;
     if (prevDebtRef.current > 0 && bankData.debt === 0) {
-      if (audioEnabledRef.current) playProudFanfare(vol('debtpaid'));
+      if (audioEnabledRef.current && !startupGraceRef.current) playProudFanfare(vol('debtpaid'));
+      if (!isBankOpenRef.current) { prevDebtRef.current = bankData.debt; return; }
       setShowCelebration(true);
       const t = setTimeout(() => setShowCelebration(false), 7000);
       return () => clearTimeout(t);
@@ -426,34 +441,44 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
     const prev = prevBalanceRef.current;
     const curr = bankData.balance;
 
+    const canPlaySound = audioEnabledRef.current && !startupGraceRef.current;
+    const bankIsOpen = isBankOpenRef.current;
+
     if (curr > prev) {
-      if (audioEnabledRef.current) playCashRegister(vol('cashregister'));
+      if (canPlaySound) playCashRegister(vol('cashregister'));
 
       // First Paycheck: balance was ≤ 0, now positive
       if (prev <= 0 && curr > 0 && !hasFirstPayFiredRef.current) {
         hasFirstPayFiredRef.current = true; socket.emit("markFirstPayDone", { username: userName });
-        if (audioEnabledRef.current) playCalibration(vol('firstpay'));
-        setShowFirstPay(true);
-        const t = setTimeout(() => setShowFirstPay(false), 6000);
-        return () => clearTimeout(t);
+        if (canPlaySound) playCalibration(vol('firstpay'));
+        if (bankIsOpen) {
+          setShowFirstPay(true);
+          const t = setTimeout(() => setShowFirstPay(false), 6000);
+          return () => clearTimeout(t);
+        }
       }
 
       // High Roller: balance crosses threshold for first time this session
       if (curr >= HIGH_ROLLER_THRESHOLD && !hasHighRollerFiredRef.current) {
         hasHighRollerFiredRef.current = true;
-        if (audioEnabledRef.current) playHighRollerSound(vol('highroller'));
-        setShowHighRoller(true);
-        const t = setTimeout(() => setShowHighRoller(false), 7000);
-        return () => clearTimeout(t);
+        socket.emit('markHighRollerDone', { username: userName });
+        if (canPlaySound) playHighRollerSound(vol('highroller'));
+        if (bankIsOpen) {
+          setShowHighRoller(true);
+          const t = setTimeout(() => setShowHighRoller(false), 7000);
+          return () => clearTimeout(t);
+        }
       }
     }
 
     // Overdraft: balance just went negative
     if (prev >= 0 && curr < 0) {
-      if (audioEnabledRef.current) playWompWomp(vol('overdraft'));
-      setShowOverdraft(true);
-      const t = setTimeout(() => setShowOverdraft(false), 7000);
-      return () => clearTimeout(t);
+      if (canPlaySound) playWompWomp(vol('overdraft'));
+      if (bankIsOpen) {
+        setShowOverdraft(true);
+        const t = setTimeout(() => setShowOverdraft(false), 7000);
+        return () => clearTimeout(t);
+      }
     }
 
     prevBalanceRef.current = curr;

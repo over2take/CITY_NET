@@ -21,7 +21,8 @@ export function AdminPanel({
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
-    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen
+    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
+    secureModeEnabled
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -93,9 +94,7 @@ export function AdminPanel({
            <button style={{ padding: '10px', backgroundColor: '#aa00ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleLoadDefault}>LOAD_DEFAULT</button>
         </div>
         <button className="utility-btn" onClick={() => setIsAdminPayOpen(true)} style={{ width: '100%', marginBottom: '10px' }}>PAY_PLAYERS</button>
-        <button className="utility-btn danger-btn" onClick={() => {
-            onLogout();
-        }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>
+        {!secureModeEnabled && <button className="utility-btn danger-btn" onClick={() => { onLogout(); }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>}
       </div>
     );
   }
@@ -127,10 +126,12 @@ export function AdminPanel({
   }, []);
 
   useEffect(() => {
-    socketRef.current.on('editingStarted', (data: any) => setActiveUserEditing(data));
-    socketRef.current.on('editingStopped', () => setActiveUserEditing(null));
-    return () => { socketRef.current.off('editingStarted'); socketRef.current.off('editingStopped'); };
-  }, []);
+    const socket = socketRef.current;
+    if (!socket) return;
+    socket.on('editingStarted', (data: any) => setActiveUserEditing(data));
+    socket.on('editingStopped', () => setActiveUserEditing(null));
+    return () => { socket.off('editingStarted'); socket.off('editingStopped'); };
+  }, [socketRef.current]);
 
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [adminAlert, setAdminAlert] = useState<string | null>(null);
@@ -648,7 +649,7 @@ export function AdminPanel({
               <div key={loc.id} className={`list-item ${selectedLocation?.id === loc.id ? 'selected' : ''}`} onClick={() => setSelectedLocation(loc)} style={{cursor: 'pointer', paddingLeft: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px'}}><div style={{display: 'flex', alignItems: 'center', gap: '10px', flex: 1, overflow: 'hidden'}}><input type="checkbox" checked={selectedIds.includes(loc.id)} onChange={() => toggleSelection(loc.id)} onClick={(e) => e.stopPropagation()} /><span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{getStructLabel(loc)}</span></div>{!isBatchSelecting && <div style={{display: 'flex', gap: '5px'}}><button className="upload-btn" style={{padding: '2px 5px', fontSize: '0.6rem', width: 'auto'}} onClick={(e) => { e.stopPropagation(); startEdit(loc); }}>EDIT</button><button className="upload-btn danger-btn" style={{padding: '2px 5px', fontSize: '0.6rem', width: 'auto'}} onClick={(e) => { e.stopPropagation(); setDeleteTarget(loc); }}>DEL</button></div>}</div>
             ))}
           </div>
-          <button onClick={onLogout} className="logout-btn">EXIT_ADMIN_MODE</button>
+          {!secureModeEnabled && <button onClick={onLogout} className="logout-btn">EXIT_ADMIN_MODE</button>}
         </>
       )}
 
@@ -1375,7 +1376,7 @@ export function AdminPanel({
                     </div>
 
                     <div style={{display: 'flex', gap: '10px', marginTop: '10px', marginBottom: '10px'}}>
-                        <button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}>★</button>
+                        <button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg></button>
                         <button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button>
                     </div>
                 </>
