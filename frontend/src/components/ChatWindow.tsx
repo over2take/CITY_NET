@@ -34,6 +34,14 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
   const [lastNpcContext, setLastNpcContext] = useState<Record<string, string>>({});
 
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (!activeDropdown) return;
+    const close = () => setActiveDropdown(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [activeDropdown]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessageCountRef = useRef(messages.length);
@@ -167,8 +175,10 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
     if (activeTab === targetUser) setActiveTab('GLOBAL');
   };
 
-  const handleUserClick = (user: any) => {
+  const handleUserClick = (user: any, e: React.MouseEvent) => {
     if (user.userName === userName) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setDropdownPos({ x: rect.left, y: rect.bottom });
     setActiveDropdown(activeDropdown === user.userName ? null : user.userName);
   };
 
@@ -264,7 +274,7 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                 return (
                   <div key={user.userName} style={{ position: 'relative' }}>
                     <div
-                      onClick={() => handleUserClick(user)}
+                      onClick={(e) => handleUserClick(user, e)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -293,7 +303,7 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                     </div>
 
                     {activeDropdown === user.userName && (
-                      <div style={{ position: 'absolute', top: '25px', left: '15px', background: 'var(--black)', border: '1px solid var(--green)', padding: '5px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '150px' }}>
+                      <div style={{ position: 'fixed', top: `${dropdownPos.y}px`, left: `${dropdownPos.x}px`, background: 'var(--black)', border: '1px solid var(--green)', padding: '5px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '160px' }}>
                         <button
                           className="utility-btn"
                           style={{ margin: 0, textAlign: 'left', width: '100%' }}
