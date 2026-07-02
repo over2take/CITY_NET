@@ -1357,7 +1357,7 @@ function App() {
             ) : (
               <>
                 <PerspectiveCamera makeDefault position={[0, 200, 250]} />
-            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode} dollyToCursor={true} />
+            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode} dollyToCursor={true} mouseButtons={{ left: 2, right: 1, middle: 4, wheel: 4 }} />
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <GlobalCameraCapture />
             <CursorPivotControls />
