@@ -168,7 +168,8 @@ CITY_NET/
 │   │   │   ├── Buildings.tsx       # 3D building meshes
 │   │   │   ├── Rhombuses.tsx       # Player token meshes
 │   │   │   ├── MapElements.tsx     # Roads, water, overlays
-│   │   │   ├── Sidebar.tsx         # Location info panel
+│   │   │   ├── Sidebar.tsx         # Nav rail — controls, volume, help, geometry tools
+│   │   │   ├── SecureLogin.tsx     # Player login, registration, and password reset UI
 │   │   │   ├── CityDatabase.tsx    # Location search/browse
 │   │   │   ├── DraggableWindow.tsx # Reusable draggable panel wrapper
 │   │   │   └── ...
