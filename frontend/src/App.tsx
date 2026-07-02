@@ -1128,8 +1128,8 @@ function App() {
                     if (rhombus) {
                       setSelectedLocation(rhombus);
                     } else {
-                      const user = activeUsers.find((u: any) => u.userName === targetUserName);
-                      setSelectedLocation({ id: -1, shape: 'rhombus', owner: targetUserName, name: targetUserName, description: user?.isOnline ? 'OPERATOR_OFFLINE — no beacon active' : 'OPERATOR_OFFLINE — no beacon active', x: 0, y: 0, z: 0, width: 0, height: 0, depth: 0 } as any);
+                      const isOnline = activeUsers.some((u: any) => u.userName === targetUserName);
+                      setSelectedLocation({ id: -1, shape: 'rhombus', owner: targetUserName, name: targetUserName, description: isOnline ? 'OPERATOR_ONLINE — beacon not yet deployed' : 'OPERATOR_OFFLINE — no beacon on map', x: 0, y: 0, z: 0, width: 0, height: 0, depth: 0 } as any);
                     }
                   }}
                   socket={socketRef.current}
