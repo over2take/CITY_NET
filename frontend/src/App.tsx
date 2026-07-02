@@ -1138,7 +1138,15 @@ function App() {
               />
             {isHitPointsOpen && (
               <HitPointsMenu 
-                targetRhombus={locations.find((l: any) => l.id === ((selectedLocation?.shape === 'rhombus' || (token !== '' && (selectedLocation?.shape === 'enemy_rhombus' || selectedLocation?.shape === 'friendly_rhombus'))) ? selectedLocation.id : locations.find((ul: any) => ul.shape === 'rhombus' && ul.owner === userName)?.id)) ?? null}
+                targetRhombus={(() => {
+                  if (selectedLocation && selectedLocation.id !== -1) {
+                    return locations.find((l: any) => l.id === selectedLocation.id) ?? null;
+                  }
+                  if (selectedLocation?.owner) {
+                    return locations.find((l: any) => l.shape === 'rhombus' && l.owner === selectedLocation.owner) ?? null;
+                  }
+                  return locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName) ?? null;
+                })()}
                 token={token} 
                 refreshLocations={fetchLocations}
                 pos={hitPointsPos}
@@ -1242,7 +1250,7 @@ function App() {
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
                       <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
                     )}
-                    {isRhombus && (
+                    {isRhombus && !isAdmin && (
                         <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
                             setReviewHealthOwner(selectedLocation.owner);
                             setReviewHealthPos({ x: infoPanelPos.x + 320 > window.innerWidth - 300 ? Math.max(0, infoPanelPos.x - 320) : infoPanelPos.x + 320, y: infoPanelPos.y });
