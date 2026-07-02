@@ -274,7 +274,7 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                 return (
                   <div key={user.userName} style={{ position: 'relative' }}>
                     <div
-                      onClick={(e) => handleUserClick(user, e)}
+                      onClick={(e) => { e.stopPropagation(); handleUserClick(user, e); }}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -303,7 +303,7 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                     </div>
 
                     {activeDropdown === user.userName && (
-                      <div style={{ position: 'fixed', top: `${dropdownPos.y}px`, left: `${dropdownPos.x}px`, background: 'var(--black)', border: '1px solid var(--green)', padding: '5px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '160px' }}>
+                      <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', top: `${dropdownPos.y}px`, left: `${dropdownPos.x}px`, background: 'var(--black)', border: '1px solid var(--green)', padding: '5px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '160px' }}>
                         <button
                           className="utility-btn"
                           style={{ margin: 0, textAlign: 'left', width: '100%' }}
