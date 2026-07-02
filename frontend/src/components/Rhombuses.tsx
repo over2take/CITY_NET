@@ -566,6 +566,7 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
   const animStateRef = useRef<'none' | 'appearing' | 'fading'>('none');
   const animStartTime = useRef<number | null>(null);
   const hasAppeared = useRef(false);
+  const isOnlineRef = useRef(false);
 
   // Trigger appearing animation on first session mount ONLY if online
   useEffect(() => {
@@ -580,6 +581,8 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
     if (!socket) return;
     const handleFade = (data: any) => {
       if (data.id === location.id && animStateRef.current !== 'fading') {
+        // Only animate if rhombus is currently visible (online or mid-appear)
+        if (!isOnlineRef.current && animStateRef.current !== 'appearing') return;
         animStateRef.current = 'fading';
         animStartTime.current = Date.now();
       }
@@ -634,6 +637,7 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
     if (lightRef.current) lightRef.current.visible = isClose;
     
     const isOnline = activeUsers.some((u: any) => u.userName === location.owner);
+    isOnlineRef.current = isOnline;
     const animState = animStateRef.current;
     let baseOpacity = isOnline ? 0.8 : 0;
     let scaleMult = 1.0;
