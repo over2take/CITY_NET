@@ -1147,7 +1147,8 @@ function App() {
               />
             )}
             {reviewHealthOwner && (() => {
-              const reviewLoc = locations.find((l: any) => l.shape === 'rhombus' && l.owner === reviewHealthOwner);
+              const reviewLoc = locations.find((l: any) => l.shape === 'rhombus' && l.owner === reviewHealthOwner)
+                ?? (selectedLocation?.owner === reviewHealthOwner ? selectedLocation : null);
               return reviewLoc ? (
                 <HealthReviewWindow
                   location={reviewLoc}
@@ -1240,6 +1241,12 @@ function App() {
                     )}
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
                       <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
+                    )}
+                    {isRhombus && (
+                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
+                            setReviewHealthOwner(selectedLocation.owner);
+                            setReviewHealthPos({ x: infoPanelPos.x + 320 > window.innerWidth - 300 ? Math.max(0, infoPanelPos.x - 320) : infoPanelPos.x + 320, y: infoPanelPos.y });
+                        }}>CHECK_HEALTH</button>
                     )}
                     {isRhombus && (isAdmin || (isPlayerRhombus && selectedLocation.owner === userName)) && (
                         <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--green)', color: '#000'}} onClick={() => {
