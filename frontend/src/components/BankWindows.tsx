@@ -335,6 +335,7 @@ interface BankWindowProps {
   userName: string;
   isBankOpen: boolean;
   firstPayDone?: boolean;
+  highRollerDone?: boolean;
   audioEnabled?: boolean;
   soundVolumes?: Record<string, number>;
 }
@@ -370,7 +371,7 @@ const CELEBRATION_CSS = `
 }
 `;
 
-export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOpen, firstPayDone, audioEnabled, soundVolumes }: BankWindowProps) {
+export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOpen, firstPayDone, highRollerDone, audioEnabled, soundVolumes }: BankWindowProps) {
   const vol = (key: string) => (soundVolumes?.[key] ?? 1);
   const audioEnabledRef = useRef(audioEnabled);
   useEffect(() => { audioEnabledRef.current = audioEnabled; }, [audioEnabled]);
@@ -382,7 +383,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
   const [showOverdraft, setShowOverdraft] = useState(false);
   const prevDebtRef = useRef(bankData.debt);
   const prevBalanceRef = useRef(bankData.balance);
-  const hasHighRollerFiredRef = useRef(false);
+  const hasHighRollerFiredRef = useRef(!!highRollerDone);
   const hasFirstPayFiredRef = useRef(!!firstPayDone);
   const bankInitializedRef = useRef(false);
   const isBankOpenRef = useRef(isBankOpen);
@@ -395,6 +396,9 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
   useEffect(() => {
     if (firstPayDone) hasFirstPayFiredRef.current = true;
   }, [firstPayDone]);
+  useEffect(() => {
+    if (highRollerDone) hasHighRollerFiredRef.current = true;
+  }, [highRollerDone]);
 
   const confettiPieces = useMemo(() => Array.from({ length: 45 }, (_, i) => ({
     left: Math.random() * 96,
@@ -457,6 +461,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
       // High Roller: balance crosses threshold for first time this session
       if (curr >= HIGH_ROLLER_THRESHOLD && !hasHighRollerFiredRef.current) {
         hasHighRollerFiredRef.current = true;
+        socket.emit('markHighRollerDone', { username: userName });
         if (canPlaySound) playHighRollerSound(vol('highroller'));
         if (bankIsOpen) {
           setShowHighRoller(true);

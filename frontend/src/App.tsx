@@ -142,7 +142,7 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
-  const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean }>({ balance: 0, debt: 0 });
+  const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean }>({ balance: 0, debt: 0 });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   // Load notification preference from the user's rhombus data
@@ -495,8 +495,8 @@ function App() {
     onFetchDistricts: fetchDistricts,
     onFetchWaterBodies: fetchWaterBodies,
     onFetchBattleMaps: fetchCurrentLocBattleMaps,
-    onBankUpdate: (balance, debt, firstPayDone) => setBankData({ balance, debt, firstPayDone }),
-    onBalancePaid: (balance, debt, firstPayDone) => { setBankData({ balance, debt, firstPayDone }); setIsBankOpen(true); },
+    onBankUpdate: (balance, debt, firstPayDone, highRollerDone) => setBankData({ balance, debt, firstPayDone, highRollerDone }),
+    onBalancePaid: (balance, debt, firstPayDone, highRollerDone) => { setBankData({ balance, debt, firstPayDone, highRollerDone }); setIsBankOpen(true); },
     onNotification: setNotification,
     onHasUnreadChat: setHasUnreadChat,
     onTokenUpdate: setToken,
@@ -1101,6 +1101,7 @@ function App() {
                 userName={userName}
                 isBankOpen={isBankOpen}
                 firstPayDone={bankData.firstPayDone}
+                highRollerDone={bankData.highRollerDone}
                 audioEnabled={audioEnabled}
                 soundVolumes={{
                   cashregister: parseFloat(globalSettings?.bank_vol_cashregister ?? '1'),

@@ -31,12 +31,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   };
 
   const sendBankUpdate = (username) => {
-    db.get('SELECT balance, debt, first_pay_done FROM player_banks WHERE username = ?', [username], (err, row) => {
+    db.get('SELECT balance, debt, first_pay_done, high_roller_done FROM player_banks WHERE username = ?', [username], (err, row) => {
       if (!err && row) {
-        io.emit('bankUpdate', { username, balance: row.balance, debt: row.debt, firstPayDone: !!row.first_pay_done });
+        io.emit('bankUpdate', { username, balance: row.balance, debt: row.debt, firstPayDone: !!row.first_pay_done, highRollerDone: !!row.high_roller_done });
       } else if (!err && !row) {
         db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, 0, 0)', [username], () => {
-          io.emit('bankUpdate', { username, balance: 0, debt: 0, firstPayDone: false });
+          io.emit('bankUpdate', { username, balance: 0, debt: 0, firstPayDone: false, highRollerDone: false });
         });
       }
     });
@@ -498,6 +498,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('markFirstPayDone', (data) => {
       if (!data || !data.username) return;
       db.run('UPDATE player_banks SET first_pay_done = 1 WHERE username = ?', [data.username]);
+    });
+
+    socket.on('markHighRollerDone', (data) => {
+      if (!data || !data.username) return;
+      db.run('UPDATE player_banks SET high_roller_done = 1 WHERE username = ?', [data.username]);
     });
 
     socket.on('withdrawFunds', (data) => {
