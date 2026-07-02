@@ -14,12 +14,13 @@ interface ChatWindowProps {
   isPrimaryAdmin: boolean;
   onGrantAccess: (userName: string) => void;
   onRevokeAccess: (userName: string) => void;
+  onOpenPlayerInfo: (userName: string) => void;
   socket: any;
   token: string;
   isChatOpen: boolean;
 }
 
-export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isPrimaryAdmin, onGrantAccess, onRevokeAccess, socket, token, isChatOpen }: ChatWindowProps) {
+export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userName, onSendMessage, notificationsEnabled, onToggleNotifications, isPrimaryAdmin, onGrantAccess, onRevokeAccess, onOpenPlayerInfo, socket, token, isChatOpen }: ChatWindowProps) {
   const [inputText, setInputText] = useState('');
 
   const [activeTab, setActiveTab] = useState('GLOBAL');
@@ -300,6 +301,16 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                         >
                           PRIVATE_MESSAGE
                         </button>
+
+                        {!user.isNPC && (
+                          <button
+                            className="utility-btn"
+                            style={{ margin: 0, textAlign: 'left', width: '100%' }}
+                            onClick={() => { onOpenPlayerInfo(user.userName); setActiveDropdown(null); }}
+                          >
+                            VIEW_PLAYER_INFO
+                          </button>
+                        )}
 
                         {isPrimaryAdmin && !user.isAdmin && !user.isNPC && (
                           <button
