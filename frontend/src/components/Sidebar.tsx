@@ -65,6 +65,45 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
   const isOwner = selectedLocation?.owner === userName;
   const canRemoveSelected = isSelectedRhombus && (isAdmin || isOwner);
 
+  const [acMelee, setAcMelee] = useState('');
+  const [acRanged, setAcRanged] = useState('');
+
+  // Any rhombus the player owns on any map — used for AC/settings regardless of current view
+  const anyUserRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
+
+  // Pre-populate AC fields from the player's rhombus (any map)
+  React.useEffect(() => {
+    if (anyUserRhombus) {
+      setAcMelee(anyUserRhombus.melee_ac != null ? String(anyUserRhombus.melee_ac) : '');
+      setAcRanged(anyUserRhombus.ranged_ac != null ? String(anyUserRhombus.ranged_ac) : '');
+    }
+  }, [anyUserRhombus?.id, anyUserRhombus?.melee_ac, anyUserRhombus?.ranged_ac]);
+
+  const handleSet = async () => {
+    // Sync name / description / color
+    syncRhombusToDB(rhombusState);
+    const target = anyUserRhombus;
+    if (target) {
+      // HP max
+      if (rhombusState.hp_max > 0) {
+        await fetch(`/api/locations/${target.id}/health`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ action: 'set_max', hp_max: rhombusState.hp_max }),
+        });
+      }
+      // AC
+      const meleeVal = acMelee === '' ? null : parseInt(acMelee, 10);
+      const rangedVal = acRanged === '' ? null : parseInt(acRanged, 10);
+      await fetch(`/api/locations/${target.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ ...target, melee_ac: meleeVal, ranged_ac: rangedVal }),
+      });
+      refreshLocations();
+    }
+  };
+
   const removeRhombus = async (id: number) => {
     if (socketRef.current) {
       socketRef.current.emit('requestRhombusPurge', { id, owner: userName });
@@ -81,105 +120,125 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
     }
   };
 
+  const isDefaultColor = rhombusState.color === '#00ff00';
+
   return (
     <div className="panel sidebar-panel">
+      <style>{`@keyframes rainbowHue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }`}</style>
       <header style={{ marginBottom: '20px' }}>
         <h3 style={{ margin: 0 }}>GEOMETRY_PROTOCOLS</h3>
       </header>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
 
-        <button
-          className={`rhombus-trigger-btn ${rhombusState.active ? 'active' : ''} ${userRhombus ? 'disabled' : ''}`}
-          onClick={() => !userRhombus && setRhombusState((p: any) => ({ ...p, active: !p.active }))}
-          disabled={!!userRhombus}
-          style={{ color: rhombusState.color }}
-        >
-          <svg width="60" height="60" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
-          </svg>
-          <span style={{ fontSize: '0.6rem', marginTop: '10px', display: 'block' }}>
-            {userRhombus ? 'RHOMBUS_ACTIVE' : (rhombusState.active ? 'SCANNING_MAP...' : 'INITIALIZE_RHOMBUS')}
-          </span>
-        </button>
+        {/* 1 — Rhombus deploy button */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+          <button
+            className={`rhombus-trigger-btn ${rhombusState.active ? 'active' : ''} ${userRhombus ? 'disabled' : ''}`}
+            onClick={() => !userRhombus && setRhombusState((p: any) => ({ ...p, active: !p.active }))}
+            disabled={!!userRhombus}
+            style={{ color: rhombusState.color }}
+          >
+            <svg width="60" height="60" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
+            </svg>
+            <span style={{ fontSize: '0.6rem', marginTop: '10px', display: 'block' }}>
+              {userRhombus ? 'RHOMBUS_ACTIVE' : (rhombusState.active ? 'PLACE_ON_MAP' : 'INITIALIZE_RHOMBUS')}
+            </span>
+          </button>
+          {rhombusState.active && !userRhombus && (
+            <span style={{ fontSize: '0.6rem', opacity: 0.6, letterSpacing: '1px' }}>place user token</span>
+          )}
+        </div>
 
         {userRhombus && (
           <button className="upload-btn danger-btn" onClick={() => removeRhombus(userRhombus.id)} style={{ width: '100%', fontSize: '0.65rem' }}>PURGE_YOUR_RHOMBUS</button>
         )}
-
         {canRemoveSelected && selectedLocation?.id !== userRhombus?.id && (
           <button className="upload-btn danger-btn" onClick={() => removeRhombus(selectedLocation.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_SELECTED_RHOMBUS</button>
         )}
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>BEACON_NAME</label>
-            <input
-              placeholder="ID_TAG"
-              value={rhombusState.name}
-              onChange={(e) => {
-                const ns = { ...rhombusState, name: e.target.value };
-                setRhombusState(ns);
-                syncRhombusToDB(ns);
-              }}
-              style={{ width: '100%' }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>DATA_DESCRIPTION</label>
-            <textarea
-              placeholder="BEACON_FEED_SUMMARY"
-              value={rhombusState.description}
-              onChange={(e) => {
-                const ns = { ...rhombusState, description: e.target.value };
-                setRhombusState(ns);
-                syncRhombusToDB(ns);
-              }}
-              style={{ width: '100%', height: '60px' }}
-            />
-          </div>
-          <div style={{ marginBottom: '10px' }}>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX HEALTH</label>
-            <div style={{ display: 'flex', gap: '5px' }}>
-              <input
-                type="number"
-                placeholder="0"
-                value={rhombusState.hp_max || ''}
-                onChange={(e) => setRhombusState({ ...rhombusState, hp_max: parseInt(e.target.value) || 0 })}
-                style={{ flex: 1, boxSizing: 'border-box', marginBottom: 0 }}
-              />
-              <button
-                className="upload-btn"
-                style={{ fontSize: '0.65rem', padding: '0 15px', minWidth: 'auto', margin: 0, height: 'auto' }}
-                onClick={async () => {
-                  const anyUserRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
-                  if (anyUserRhombus) {
-                    await fetch(`/api/locations/${anyUserRhombus.id}/health`, {
-                      method: 'PUT',
-                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                      body: JSON.stringify({ action: 'set_max', hp_max: rhombusState.hp_max })
-                    });
-                    refreshLocations();
-                  }
-                  syncRhombusToDB({ ...rhombusState, hp_max: rhombusState.hp_max });
-                }}
-              >
-                SET
-              </button>
-            </div>
-          </div>
+
+          {/* 2 — Color */}
           <div>
             <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>RHOMBUS_CHROMA_SYNC</label>
             <input
               type="color"
               value={rhombusState.color}
-              onChange={(e) => {
-                const ns = { ...rhombusState, color: e.target.value };
-                setRhombusState(ns);
-                syncRhombusToDB(ns);
+              onChange={(e) => setRhombusState({ ...rhombusState, color: e.target.value })}
+              style={{
+                width: '100%', height: '40px', background: 'none',
+                border: '1px solid var(--green)', cursor: 'pointer',
+                animation: isDefaultColor ? 'rainbowHue 4s linear infinite' : 'none',
               }}
-              style={{ width: '100%', height: '40px', background: 'none', border: '1px solid var(--green)', cursor: 'pointer' }}
             />
           </div>
+
+          {/* 3 — Name */}
+          <div>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>BEACON_NAME</label>
+            <input
+              placeholder="ID_TAG"
+              value={rhombusState.name}
+              onChange={(e) => setRhombusState({ ...rhombusState, name: e.target.value })}
+              style={{ width: '100%' }}
+            />
+          </div>
+
+          {/* 4 — Description */}
+          <div>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>DATA_DESCRIPTION</label>
+            <textarea
+              placeholder="BEACON_FEED_SUMMARY"
+              value={rhombusState.description}
+              onChange={(e) => setRhombusState({ ...rhombusState, description: e.target.value })}
+              style={{ width: '100%', height: '60px' }}
+            />
+          </div>
+
+          {/* 5 — Max health */}
+          <div>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX HEALTH</label>
+            <input
+              type="number"
+              placeholder="100"
+              value={rhombusState.hp_max || ''}
+              onChange={(e) => setRhombusState({ ...rhombusState, hp_max: parseInt(e.target.value) || 0 })}
+              style={{ width: '100%', boxSizing: 'border-box', marginBottom: 0 }}
+            />
+          </div>
+
+          {/* 6 — AC fields (always visible; saved via SET) */}
+          <div>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>ARMOR_CLASS</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.65rem', opacity: 0.8, whiteSpace: 'nowrap' }}>MELEE</span>
+              <input
+                type="number"
+                min="0"
+                placeholder="10"
+                value={acMelee}
+                onChange={e => setAcMelee(e.target.value)}
+                style={{ width: '48px', marginBottom: 0, textAlign: 'center' }}
+              />
+              <span style={{ fontSize: '0.65rem', opacity: 0.8, whiteSpace: 'nowrap' }}>RANGED</span>
+              <input
+                type="number"
+                min="0"
+                placeholder={acMelee !== '' ? acMelee : '10'}
+                value={acRanged}
+                onChange={e => setAcRanged(e.target.value)}
+                style={{ width: '48px', marginBottom: 0, textAlign: 'center' }}
+              />
+              <span title="Leave blank to use Melee AC" style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
+            </div>
+          </div>
+
+          {/* 7 — SET button */}
+          <button className="upload-btn" style={{ width: '100%', marginTop: '4px' }} onClick={handleSet}>
+            SET
+          </button>
+
         </div>
 
         <div className="info-box" style={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: '1.6', borderTop: '1px solid var(--dark-green)', paddingTop: '15px', width: '100%' }}>
@@ -216,6 +275,13 @@ export function SystemInfoMenu({ userName, token }: SystemInfoMenuProps) {
           <span style={{ opacity: 0.6 }}>ACCESS_LEVEL:</span><br />
           <span style={{ color: 'var(--green)', fontWeight: 'bold' }}>{token ? 'ADMIN_PRIVILEGES' : 'UNPRIVILEGED_USER'}</span>
         </div>
+        <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '15px', fontSize: '0.7rem' }}>
+          <span style={{ opacity: 0.6 }}>LICENSE:</span><br />
+          <span style={{ color: 'var(--green)' }}>AGPL-3.0 — open source</span><br />
+          <a href="https://github.com/over2take/CITY_NET" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)', opacity: 0.7, fontSize: '0.65rem', letterSpacing: '1px' }}>
+            SOURCE_CODE ↗
+          </a>
+        </div>
       </div>
     </div>
   );
@@ -229,9 +295,11 @@ interface DiceMenuProps {
   rhombusState: any;
   setIsDiceTrayOpen: (v: any) => void;
   setNotification: (msg: string) => void;
+  attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
+  onCancelAttack?: () => void;
 }
 
-export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen, setNotification }: DiceMenuProps) {
+export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack }: DiceMenuProps) {
   const diceTypes = [2, 4, 6, 8, 10, 12, 20, 100];
   const [diceCounts, setDiceCounts] = useState<Record<number, number>>({});
   const [workingMod, setWorkingMod] = useState<number>(0);
@@ -271,6 +339,20 @@ export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen,
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexShrink: 0 }}>
         <h3 style={{ margin: 0 }}>DICE_ROLLER</h3>
       </header>
+
+      {attackPending && (
+        <div style={{ marginBottom: '10px', padding: '8px 10px', border: '1px solid #cc2200', background: 'rgba(30,0,0,0.7)', flexShrink: 0 }}>
+          <div style={{ color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '1px' }}>
+            ATTACK ROLL — vs {attackPending.targetName}
+          </div>
+          <div style={{ color: 'var(--green)', fontSize: '0.75rem', marginBottom: '6px' }}>
+            {attackPending.attackType.toUpperCase()} · AC {attackPending.ac} · Roll {attackPending.ac}+ to hit
+          </div>
+          <button className="upload-btn" style={{ width: '100%', padding: '5px', fontSize: '0.75rem', backgroundColor: 'transparent', color: '#888', border: '1px solid #444' }} onClick={() => { socketRef.current?.emit('cancelAttack'); onCancelAttack?.(); }}>
+            CANCEL ATTACK
+          </button>
+        </div>
+      )}
 
       <div style={{ flex: '0 1 auto', overflowY: 'auto', marginBottom: '10px', paddingRight: '5px' }}>
         {diceTypes.map(sides => (
@@ -472,9 +554,11 @@ interface SidebarProps {
   setMeasureMode: (v: boolean) => void;
   isBankOpen: boolean;
   setIsBankOpen: (v: boolean) => void;
+  attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
+  onCancelAttack?: () => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -609,7 +693,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
-          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} />}
+          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} />}
         </div>
       </div>
     </div>
