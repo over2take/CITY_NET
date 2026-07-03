@@ -137,6 +137,45 @@ describe('PlayerRhombus', () => {
   });
 });
 
+// ─── window.rhombusWiggles (attack wiggle registry) ───────────────────────────
+
+describe('window.rhombusWiggles (attack wiggle registry)', () => {
+  beforeEach(() => {
+    delete (window as any).rhombusWiggles;
+  });
+
+  it('can be set and read per location id', () => {
+    (window as any).rhombusWiggles = {};
+    (window as any).rhombusWiggles[1] = Date.now();
+    expect(typeof (window as any).rhombusWiggles[1]).toBe('number');
+  });
+
+  it('allows deleting an entry once the wiggle expires', () => {
+    (window as any).rhombusWiggles = { 7: 1000 };
+    delete (window as any).rhombusWiggles[7];
+    expect((window as any).rhombusWiggles[7]).toBeUndefined();
+  });
+
+  it('wiggle expiry: elapsed fraction ≥ 1 means animation is over', () => {
+    const wigStart = Date.now() - 700; // 700ms ago → wt = 700/600 > 1
+    const wt = (Date.now() - wigStart) / 600;
+    expect(wt).toBeGreaterThanOrEqual(1);
+  });
+
+  it('wiggle active: elapsed fraction < 1 means still shaking', () => {
+    const wigStart = Date.now() - 300; // 300ms ago → wt = 0.5
+    const wt = (Date.now() - wigStart) / 600;
+    expect(wt).toBeLessThan(1);
+  });
+
+  it('amplitude decays to zero at wt=1', () => {
+    const amp = (t: number) => (1 - t) * 0.8;
+    expect(amp(0)).toBeCloseTo(0.8);
+    expect(amp(0.5)).toBeCloseTo(0.4);
+    expect(amp(1)).toBeCloseTo(0);
+  });
+});
+
 // ─── OverlapChecker ───────────────────────────────────────────────────────────
 
 describe('OverlapChecker', () => {

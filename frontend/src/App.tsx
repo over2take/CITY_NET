@@ -46,6 +46,7 @@ import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } fro
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
+import { AttackAnimations } from './components/AttackAnimations';
 import { StreamerVisibilityContext } from './context/StreamerVisibilityContext';
 import { StreamerOverlay } from './components/StreamerOverlay';
 import { StreamerDirectorPanel } from './components/StreamerDirectorPanel';
@@ -109,8 +110,14 @@ function App() {
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<SidebarMenu>('none');
   const [isDiceTrayOpen, setIsDiceTrayOpen] = useState(false);
 
+  // Attack state
+  const [attackPending, setAttackPending] = useState<{ targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null>(null);
+  const [lastAttackResult, setLastAttackResult] = useState<{ hit: boolean; roll: number; ac: number; targetName: string } | null>(null);
+  const [attackAnimations, setAttackAnimations] = useState<{ id: string; hit: boolean; attackType: 'melee' | 'ranged'; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number }; targetId: number }[]>([]);
+
   const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
   const [hitPointsPos, setHitPointsPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
+  const [acEdit, setAcEdit] = useState<{ melee: string; ranged: string } | null>(null);
 
   const [reviewHealthOwner, setReviewHealthOwner] = useState<string | null>(null);
   const [reviewHealthPos, setReviewHealthPos] = useState(() => ({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 }));
@@ -247,6 +254,15 @@ function App() {
       setCurrentLocBattleMaps([]);
     }
   }, [selectedLocation?.id]);
+
+  useEffect(() => { setAcEdit(null); }, [selectedLocation?.id]);
+
+  // Auto-clear attack result after 4 seconds; resets if a new result arrives
+  useEffect(() => {
+    if (!lastAttackResult) return;
+    const t = setTimeout(() => setLastAttackResult(null), 4000);
+    return () => clearTimeout(t);
+  }, [lastAttackResult]);
 
   const enterBattleMap = (locId: number) => {
     if (currentLocBattleMaps.length === 0) return;
@@ -540,6 +556,29 @@ function App() {
     },
     onDirectorUpdate: (state) => { if (IS_SPECTATOR) setDirectorState(state); },
     onSpectatorCount: setSpectatorCount,
+    onAttackPending: (data) => {
+      setAttackPending(data);
+      setActiveSidebarMenu('dice_menu');
+      setIsDiceTrayOpen(true);
+    },
+    onAttackResult: (data) => {
+      setAttackPending(null);
+      // Delay result reveal and animation until after the dice tray's 5-second roll display finishes
+      setTimeout(() => {
+        setLastAttackResult({ hit: data.hit, roll: data.roll, ac: data.ac, targetName: data.targetName });
+        // Skip animation if the target rhombus isn't rendered in this client's current view
+        if (!(window as any).activeRhombuses?.[data.targetId]) return;
+        setAttackAnimations(prev => [...prev, {
+          id: Math.random().toString(36).slice(2, 9),
+          hit: data.hit,
+          attackType: data.attackType,
+          attackerPos: data.attackerPos,
+          targetPos: data.targetPos,
+          targetId: data.targetId,
+          isBattleMap: data.isBattleMap ?? false,
+        }]);
+      }, 5000);
+    },
   });
 
   // Admin-side director mutations: update local state and push to spectators.
@@ -990,6 +1029,8 @@ function App() {
               setNotification={setNotification}
               measureMode={measureMode}
               setMeasureMode={setMeasureMode}
+              attackPending={attackPending}
+              onCancelAttack={() => { setAttackPending(null); setLastAttackResult(null); }}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -1275,6 +1316,41 @@ function App() {
                         <>
                           <p><strong>ID_TAG:</strong> {selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : (selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED'))}</p>
                           <p><strong>DATA_DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
+                          {/* AC display — admin can edit; owner can view their own; other players see nothing */}
+                          {(isAdmin || isOwner) && (
+                            isAdmin && acEdit ? (
+                              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <strong style={{ minWidth: '90px' }}>MELEE_AC:</strong>
+                                  <input type="number" min="0" value={acEdit.melee} onChange={e => setAcEdit(a => a ? { ...a, melee: e.target.value } : a)} style={{ width: '60px' }} />
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <strong style={{ minWidth: '90px' }}>RANGED_AC:</strong>
+                                  <input type="number" min="0" value={acEdit.ranged} onChange={e => setAcEdit(a => a ? { ...a, ranged: e.target.value } : a)} style={{ width: '60px' }} />
+                                  <span title="Leave blank to use Melee AC" style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button className="upload-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={async () => {
+                                    const meleeVal = acEdit.melee === '' ? null : parseInt(acEdit.melee, 10);
+                                    const rangedVal = acEdit.ranged === '' ? null : parseInt(acEdit.ranged, 10);
+                                    const loc = selectedLocation;
+                                    await fetch(`/api/locations/${loc.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...loc, melee_ac: meleeVal, ranged_ac: rangedVal }) });
+                                    fetchLocations();
+                                    setAcEdit(null);
+                                  }}>SAVE</button>
+                                  <button className="utility-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => setAcEdit(null)}>CANCEL</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ marginTop: '8px' }}>
+                                <p><strong>MELEE_AC:</strong> {selectedLocation.melee_ac ?? 10}</p>
+                                <p><strong>RANGED_AC:</strong> {selectedLocation.ranged_ac != null ? selectedLocation.ranged_ac : <span style={{ color: 'var(--text-muted, #888)' }}>{selectedLocation.melee_ac ?? 10} (melee)</span>}</p>
+                                {isAdmin && (
+                                  <button className="utility-btn" style={{ marginTop: '4px', padding: '3px 10px', fontSize: '11px' }} onClick={() => setAcEdit({ melee: String(selectedLocation.melee_ac ?? 10), ranged: selectedLocation.ranged_ac != null ? String(selectedLocation.ranged_ac) : '' })}>EDIT_AC</button>
+                                )}
+                              </div>
+                            )
+                          )}
                         </>
                       ) : (
                         <>
@@ -1339,6 +1415,32 @@ function App() {
                     )}
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
                       <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
+                    )}
+                    {/* ATTACK — visible to any logged-in player not attacking their own rhombus */}
+                    {isRhombus && isLoggedIn && !isOwner && (
+                      <div style={{ marginTop: '10px' }}>
+                        {attackPending?.targetId === selectedLocation.id ? (
+                          <div style={{ fontSize: '12px', color: 'var(--green)', border: '1px solid var(--green)', padding: '6px 10px' }}>
+                            AWAITING_ROLL — {attackPending.attackType.toUpperCase()} vs AC {attackPending.ac}
+                          </div>
+                        ) : (
+                          <>
+                            {attackPending ? (
+                              <div style={{ fontSize: '11px', color: '#888' }}>Attack in progress vs {attackPending.targetName}</div>
+                            ) : (
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button className="upload-btn" style={{ flex: 1, backgroundColor: '#cc2200', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'melee' }); }}>⚔ MELEE</button>
+                                <button className="upload-btn" style={{ flex: 1, backgroundColor: '#884400', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'ranged' }); }}>🏹 RANGED</button>
+                              </div>
+                            )}
+                            {lastAttackResult && lastAttackResult.targetName === selectedLocation.name && (
+                              <div style={{ marginTop: '6px', fontSize: '12px', color: lastAttackResult.hit ? '#00ff66' : '#ff4444', border: `1px solid ${lastAttackResult.hit ? '#00ff66' : '#ff4444'}`, padding: '6px 10px' }}>
+                                {lastAttackResult.hit ? 'HIT!' : 'MISS'} — rolled {lastAttackResult.roll}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     )}
                     {isRhombus && !isAdmin && !isOwner && (
                         <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
@@ -1558,6 +1660,8 @@ function App() {
             ))}
             </>
             )}
+            {/* Attack animations — rendered in both world and battle map views (shared coordinate space) */}
+            <AttackAnimations animations={attackAnimations} onComplete={(id) => setAttackAnimations(prev => prev.filter(a => a.id !== id))} />
             {/* Ping Effects */}
             {activePings.filter(ping => {
                 const currentBattleMapId = view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null;
