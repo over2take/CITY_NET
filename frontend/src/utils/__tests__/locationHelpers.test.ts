@@ -27,6 +27,12 @@ describe('isUserDefinedName', () => {
     expect(isUserDefinedName(undefined)).toBe(false);
   });
 
+  it('returns false for JOIN_STRUCTURES classification names', () => {
+    expect(isUserDefinedName('LANDMARK')).toBe(false);
+    expect(isUserDefinedName('MARKETS')).toBe(false);
+    expect(isUserDefinedName('CUSTOM')).toBe(false);
+  });
+
   it('is case-sensitive — lowercase zone names are treated as user-defined', () => {
     expect(isUserDefinedName('corpo')).toBe(true);
     expect(isUserDefinedName('urban')).toBe(true);

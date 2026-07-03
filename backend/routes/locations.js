@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 
-const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY']);
+const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY', 'LANDMARK', 'MARKETS', 'CUSTOM']);
 const isUserDefinedName = (name) => !!name && name.trim() !== '' && !ZONE_TYPE_NAMES.has(name.trim());
 
 const upsertLibrary = (db, loc) => {
@@ -49,6 +49,20 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     db.all('SELECT * FROM locations', [], (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json(rows);
+    });
+  });
+
+  // Custom structure library — all user-named structures with their child parts
+  router.get('/custom-library', authenticate, (req, res) => {
+    db.all('SELECT * FROM custom_structure_library ORDER BY saved_at DESC', (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const roots = rows.filter(r => !r.parent_id);
+      const children = rows.filter(r => r.parent_id);
+      const result = roots.map(root => ({
+        ...root,
+        parts: children.filter(c => c.parent_id === root.id),
+      }));
+      res.json(result);
     });
   });
 
@@ -119,6 +133,11 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             if (isUserDefinedName(loc.name)) {
               db.run('UPDATE locations SET is_global = 1 WHERE id = ?', [loc.id]);
               upsertLibrary(db, loc);
+            } else if (loc.parent_id) {
+              // Save child parts to library if their root is a global custom structure
+              db.get('SELECT is_global FROM locations WHERE id = ?', [loc.parent_id], (err, row) => {
+                if (!err && row && row.is_global) upsertLibrary(db, loc);
+              });
             }
             if (loc.shape === 'rhombus') io.emit('rhombusAppearing', { id: loc.id, owner: loc.owner });
           });
