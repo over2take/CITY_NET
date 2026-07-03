@@ -46,12 +46,10 @@ import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } fro
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, computeBroadcastFraming } from './components/Streamer';
-import { DEFAULT_DIRECTOR_STATE } from './types';
+import { StreamerVisibilityContext } from './context/StreamerVisibilityContext';
+import { DEFAULT_DIRECTOR_STATE, ALL_VISIBLE } from './types';
 import type { DirectorState } from './types';
-
-// Streamer mode: ?streamer=true loads a read-only spectator client for OBS capture.
-// World state arrives through the normal socket/REST pipeline; all admin/player UI is skipped.
-const IS_SPECTATOR = new URLSearchParams(window.location.search).has('streamer');
+import { IS_SPECTATOR } from './streamerMode';
 
 function App() {
   const controlsRef = useRef<any>(null);
@@ -1330,6 +1328,7 @@ function App() {
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
           </div>}
           <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
+            <StreamerVisibilityContext.Provider value={IS_SPECTATOR ? directorState.visibility : ALL_VISIBLE}>
             <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
             <MeasurementTool measureMode={measureMode} socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} mapScaleMultiplier={view === 'battle_map' ? (() => {
                 const loc = locations.find((l:any) => l.id === activeBattleMapData?.locationId);
@@ -1480,9 +1479,13 @@ function App() {
               </group>
             )}
             <CameraController target={cameraTarget} onComplete={() => { setCameraTarget(null); setShowZoomComplete(true); setTimeout(() => setShowZoomComplete(false), 3000); }} />
-            <Roads roads={roads} />
+            {(!IS_SPECTATOR || directorState.visibility.showRoads) && (
+              <>
+                <Roads roads={roads} />
+                <GhostTraffic roads={roads} />
+              </>
+            )}
             <WaterBodies waterBodies={waterBodies} />
-            <GhostTraffic roads={roads} />
             <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} />
             {roadSelectionBounds && view === 'city_gen' && (
               <mesh position={[(roadSelectionBounds.min.x + roadSelectionBounds.max.x) / 2, 0.02, (roadSelectionBounds.min.z + roadSelectionBounds.max.z) / 2]}>
@@ -1586,6 +1589,7 @@ function App() {
                 </group>
             )}
             <ambientLight intensity={0.5} />
+            </StreamerVisibilityContext.Provider>
           </Canvas>
         </>
       )}
