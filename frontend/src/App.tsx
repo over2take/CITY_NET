@@ -47,6 +47,10 @@ import { GlobalCameraCapture, CursorPivotControls, CameraController } from './co
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
 import { AttackAnimations } from './components/AttackAnimations';
+import { RadioFeed } from './components/RadioFeed';
+import type { MusicItem } from './components/RadioFeed';
+import { RadioPlayer } from './components/RadioPlayer';
+import type { MusicStateType } from './components/RadioPlayer';
 import { StreamerVisibilityContext } from './context/StreamerVisibilityContext';
 import { StreamerOverlay } from './components/StreamerOverlay';
 import { StreamerDirectorPanel } from './components/StreamerDirectorPanel';
@@ -114,6 +118,25 @@ function App() {
   const [attackPending, setAttackPending] = useState<{ targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null>(null);
   const [lastAttackResult, setLastAttackResult] = useState<{ hit: boolean; roll: number; ac: number; targetName: string } | null>(null);
   const [attackAnimations, setAttackAnimations] = useState<{ id: string; hit: boolean; attackType: 'melee' | 'ranged'; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number }; targetId: number }[]>([]);
+
+  // Radio Feed
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [musicState, setMusicState] = useState<MusicStateType>({
+    playing: false, trackId: null, src: null, name: null, position: 0, shuffle: false, loop: false,
+  });
+  const [musicVolume, setMusicVolume] = useState(() => parseFloat(localStorage.getItem('musicVolume') ?? '0.8'));
+  const [isRadioFeedOpen, setIsRadioFeedOpen] = useState(false);
+  const [isRadioPlayerOpen, setIsRadioPlayerOpen] = useState(false);
+  const [radioFeedPos, setRadioFeedPos] = useState(() => ({ x: window.innerWidth / 2 - 140, y: window.innerHeight / 2 - 220 }));
+  const [radioPlayerPos, setRadioPlayerPos] = useState(() => ({ x: window.innerWidth / 2 - 130, y: window.innerHeight / 2 - 150 }));
+  const [selectedTrackId, setSelectedTrackId] = useState<number | null>(null);
+
+  useEffect(() => { localStorage.setItem('musicVolume', String(musicVolume)); }, [musicVolume]);
+
+  // Keep audio element volume synced with local volume × master volume
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = Math.min(1, musicVolume * masterVolume);
+  }, [musicVolume, masterVolume]);
 
   const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
   const [hitPointsPos, setHitPointsPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
@@ -579,7 +602,75 @@ function App() {
         }]);
       }, 5000);
     },
+    onMusicState: (state) => {
+      setMusicState(state);
+      const audio = audioRef.current;
+      if (!audio || !state.src) return;
+      if (audio.src !== new URL(`/uploads/music/${state.src}`, window.location.origin).href) {
+        audio.src = `/uploads/music/${state.src}`;
+      }
+      audio.currentTime = state.position;
+      if (state.playing) audio.play().catch(() => {});
+      else audio.pause();
+    },
+    onMusicLoad: (data) => {
+      setMusicState((prev) => ({ ...prev, trackId: data.trackId, src: data.src, name: data.name, playing: false, position: 0 }));
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.src = `/uploads/music/${data.src}`;
+      audio.load();
+      audio.addEventListener('canplay', () => {
+        audioRef.current?.dispatchEvent(new Event('_musicReady'));
+      }, { once: true });
+    },
+    onMusicPlay: (data) => {
+      setMusicState((prev) => ({ ...prev, playing: true, position: data.position }));
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.currentTime = data.position + (Date.now() - data.timestamp) / 1000;
+      audio.play().catch(() => {});
+    },
+    onMusicPause: (data) => {
+      setMusicState((prev) => ({ ...prev, playing: false, position: data.position }));
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = data.position; }
+    },
+    onMusicSeek: (data) => {
+      setMusicState((prev) => ({ ...prev, position: data.position }));
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.currentTime = data.position + (Date.now() - data.timestamp) / 1000;
+    },
+    onMusicNext: (data) => {
+      setMusicState((prev) => ({ ...prev, trackId: data.trackId, src: data.src, name: data.name, playing: true, position: 0 }));
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.src = `/uploads/music/${data.src}`;
+      audio.load();
+      audio.addEventListener('canplay', () => audio.play().catch(() => {}), { once: true });
+    },
+    onMusicPrev: (data) => {
+      setMusicState((prev) => ({ ...prev, trackId: data.trackId, src: data.src, name: data.name, playing: true, position: 0 }));
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.src = `/uploads/music/${data.src}`;
+      audio.load();
+      audio.addEventListener('canplay', () => audio.play().catch(() => {}), { once: true });
+    },
+    onMusicShuffle: (data) => setMusicState((prev) => ({ ...prev, shuffle: data.enabled })),
+    onMusicLoop: (data) => {
+      setMusicState((prev) => ({ ...prev, loop: data.enabled }));
+      if (audioRef.current) audioRef.current.loop = data.enabled;
+    },
   });
+
+  // Emit musicReady when audio is buffered enough to play
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !socket) return;
+    const handler = () => socket.emit('musicReady');
+    audio.addEventListener('_musicReady' as any, handler);
+    return () => audio.removeEventListener('_musicReady' as any, handler);
+  }, [socket]);
 
   // Admin-side director mutations: update local state and push to spectators.
   const updateDirector = useCallback((partial: Partial<DirectorState>) => {
@@ -1031,6 +1122,16 @@ function App() {
               setMeasureMode={setMeasureMode}
               attackPending={attackPending}
               onCancelAttack={() => { setAttackPending(null); setLastAttackResult(null); }}
+              isRadioOpen={isAdmin ? isRadioFeedOpen : isRadioPlayerOpen}
+              onToggleRadio={() => {
+                if (isAdmin) {
+                  setIsRadioFeedOpen((v) => !v);
+                  if (!isRadioPlayerOpen) setIsRadioPlayerOpen(true);
+                } else {
+                  setIsRadioPlayerOpen((v) => !v);
+                }
+              }}
+              musicPlaying={musicState.playing}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -1247,6 +1348,38 @@ function App() {
                   token={token}
                   isChatOpen={isChatOpen}
               />
+            {/* Hidden audio element for Radio Feed — persists regardless of window visibility */}
+            <audio ref={audioRef} style={{ display: 'none' }} loop={musicState.loop} />
+
+            {isAdmin && isRadioFeedOpen && (
+              <RadioFeed
+                pos={radioFeedPos}
+                setPos={setRadioFeedPos}
+                onClose={() => setIsRadioFeedOpen(false)}
+                token={token}
+                socket={socketRef.current}
+                onTrackSelect={(item: MusicItem) => {
+                  setSelectedTrackId(item.id);
+                  if (socket && item.path) socket.emit('musicLoad', { trackId: item.id, src: item.path, name: item.name });
+                }}
+                selectedTrackId={selectedTrackId}
+              />
+            )}
+
+            {isRadioPlayerOpen && (
+              <RadioPlayer
+                pos={radioPlayerPos}
+                setPos={setRadioPlayerPos}
+                onClose={() => setIsRadioPlayerOpen(false)}
+                isAdmin={isAdmin}
+                socket={socketRef.current}
+                audioRef={audioRef}
+                musicState={musicState}
+                volume={musicVolume}
+                onVolumeChange={setMusicVolume}
+              />
+            )}
+
             {token && showDirectorPanel && (
               <StreamerDirectorPanel
                 pos={directorPanelPos}

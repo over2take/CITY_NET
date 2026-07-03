@@ -34,6 +34,15 @@ interface UseSocketOptions {
   onSpectatorCount?: (count: number) => void;
   onAttackPending?: (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => void;
   onAttackResult?: (data: { hit: boolean; attackerId: string; attackerName: string; targetId: number; targetName: string; attackType: 'melee' | 'ranged'; roll: number; ac: number; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number } }) => void;
+  onMusicState?: (state: any) => void;
+  onMusicLoad?: (data: { trackId: number; src: string; name: string }) => void;
+  onMusicPlay?: (data: { position: number; timestamp: number }) => void;
+  onMusicPause?: (data: { position: number }) => void;
+  onMusicSeek?: (data: { position: number; timestamp: number }) => void;
+  onMusicNext?: (data: { trackId: number; src: string; name: string }) => void;
+  onMusicPrev?: (data: { trackId: number; src: string; name: string }) => void;
+  onMusicShuffle?: (data: { enabled: boolean }) => void;
+  onMusicLoop?: (data: { enabled: boolean }) => void;
 }
 
 export function useSocket({
@@ -44,6 +53,8 @@ export function useSocket({
   onPasswordResetRequested, onPasswordResetResolved,
   onDirectorUpdate, onSpectatorCount,
   onAttackPending, onAttackResult,
+  onMusicState, onMusicLoad, onMusicPlay, onMusicPause, onMusicSeek,
+  onMusicNext, onMusicPrev, onMusicShuffle, onMusicLoop,
 }: UseSocketOptions) {
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const tokenRef = useRef(token);
@@ -177,6 +188,16 @@ export function useSocket({
     newSocket.on('attackPending', (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => onAttackPending?.(data));
 
     newSocket.on('attackResult', (data: any) => onAttackResult?.(data));
+
+    newSocket.on('musicState', (data: any) => onMusicState?.(data));
+    newSocket.on('musicLoad', (data: any) => onMusicLoad?.(data));
+    newSocket.on('musicPlay', (data: any) => onMusicPlay?.(data));
+    newSocket.on('musicPause', (data: any) => onMusicPause?.(data));
+    newSocket.on('musicSeek', (data: any) => onMusicSeek?.(data));
+    newSocket.on('musicNext', (data: any) => onMusicNext?.(data));
+    newSocket.on('musicPrev', (data: any) => onMusicPrev?.(data));
+    newSocket.on('musicShuffle', (data: any) => onMusicShuffle?.(data));
+    newSocket.on('musicLoop', (data: any) => onMusicLoop?.(data));
 
     newSocket.on('force_floor_change', (data: { locationId: number; floorIndex: number }) => {
       setActiveBattleMapData(prev =>
