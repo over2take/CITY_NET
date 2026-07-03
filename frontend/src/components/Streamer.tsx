@@ -18,11 +18,12 @@ export function SpectatorCameraRig({ socket, controlsRef, directorState }: {
   // Mirror poses arrive at ~10Hz; handled outside React state, straight to the controls.
   useEffect(() => {
     if (!socket) return;
-    const onPose = (msg: { pos: number[]; lookAt: number[] }) => {
+    const onPose = (msg: { pos: number[]; lookAt: number[]; zoom?: number }) => {
       if (modeRef.current !== 'mirror') return;
       const c = controlsRef.current;
       if (!c || !msg?.pos || !msg?.lookAt) return;
       c.setLookAt(msg.pos[0], msg.pos[1], msg.pos[2], msg.lookAt[0], msg.lookAt[1], msg.lookAt[2], true);
+      if (msg.zoom !== undefined) c.zoomTo(msg.zoom, true);
     };
     socket.on('streamerCamera', onPose);
     return () => { socket.off('streamerCamera', onPose); };
@@ -62,7 +63,8 @@ export function AdminCameraBroadcaster({ socket, controlsRef, enabled }: {
     controls.getTarget(tmpTarget.current);
     const p = state.camera.position;
     const t = tmpTarget.current;
-    socket.emit('streamerCamera', { pos: [p.x, p.y, p.z], lookAt: [t.x, t.y, t.z] });
+    // zoom matters for orthographic cameras (battle maps); harmless for perspective
+    socket.emit('streamerCamera', { pos: [p.x, p.y, p.z], lookAt: [t.x, t.y, t.z], zoom: state.camera.zoom });
   });
 
   return null;

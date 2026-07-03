@@ -1493,7 +1493,8 @@ function App() {
             ) : (
               <>
                 <PerspectiveCamera makeDefault position={[0, 200, 250]} />
-            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode && !IS_SPECTATOR} dollyToCursor={true} mouseButtons={{ left: 2, right: 1, middle: 16, wheel: 16 }} />
+            {/* Battle maps use an orthographic camera: DOLLY (16) is a no-op there, ZOOM (32) drives camera.zoom instead */}
+            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode && !IS_SPECTATOR} dollyToCursor={true} mouseButtons={{ left: 2, right: 1, middle: view === 'battle_map' ? 32 : 16, wheel: view === 'battle_map' ? 32 : 16 }} />
             {IS_SPECTATOR && <SpectatorCameraRig socket={socketRef.current} controlsRef={controlsRef} directorState={directorState} />}
             {!IS_SPECTATOR && token !== '' && <AdminCameraBroadcaster socket={socketRef.current} controlsRef={controlsRef} enabled={directorState.cameraMode === 'mirror' && spectatorCount > 0} />}
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
@@ -1644,7 +1645,7 @@ function App() {
             <ambientLight intensity={0.5} />
             </StreamerVisibilityContext.Provider>
           </Canvas>
-          {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} selectedLocation={selectedLocation} />}
+          {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} selectedLocation={selectedLocation} battleMapLabel={view === 'battle_map' && activeBattleMapData ? activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation : null} />}
         </>
       )}
     </div>
