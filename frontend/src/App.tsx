@@ -45,6 +45,9 @@ import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } from './components/MapElements';
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
+import { SpectatorCameraRig, AdminCameraBroadcaster } from './components/Streamer';
+import { DEFAULT_DIRECTOR_STATE } from './types';
+import type { DirectorState } from './types';
 
 // Streamer mode: ?streamer=true loads a read-only spectator client for OBS capture.
 // World state arrives through the normal socket/REST pipeline; all admin/player UI is skipped.
@@ -476,6 +479,11 @@ function App() {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+  // Streamer mode: on the admin this is the source of truth (edited via director
+  // panel / BROADCAST_THIS); on the spectator it's received via directorUpdate.
+  const [directorState, setDirectorState] = useState<DirectorState>(DEFAULT_DIRECTOR_STATE);
+  const [spectatorCount, setSpectatorCount] = useState(0);
+
   // Spectator boot path: no login, no chime, straight to the map.
   useEffect(() => {
     if (IS_SPECTATOR) {
@@ -526,7 +534,18 @@ function App() {
     onPasswordResetResolved: (_username, _action) => {
       // resolved entries are removed by the approve/deny handlers below
     },
+    onDirectorUpdate: (state) => { if (IS_SPECTATOR) setDirectorState(state); },
+    onSpectatorCount: setSpectatorCount,
   });
+
+  // Admin-side director mutations: update local state and push to spectators.
+  const updateDirector = useCallback((partial: Partial<DirectorState>) => {
+    setDirectorState(prev => {
+      const next = { ...prev, ...partial };
+      socketRef.current?.emit('directorUpdate', next);
+      return next;
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isLoggedIn) fetchAll();
@@ -1413,6 +1432,8 @@ function App() {
               <>
                 <PerspectiveCamera makeDefault position={[0, 200, 250]} />
             <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode && !IS_SPECTATOR} dollyToCursor={true} mouseButtons={{ left: 2, right: 1, middle: 16, wheel: 16 }} />
+            {IS_SPECTATOR && <SpectatorCameraRig socket={socketRef.current} controlsRef={controlsRef} directorState={directorState} />}
+            {!IS_SPECTATOR && token !== '' && <AdminCameraBroadcaster socket={socketRef.current} controlsRef={controlsRef} enabled={directorState.cameraMode === 'mirror' && spectatorCount > 0} />}
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <GlobalCameraCapture />
             <CursorPivotControls />
