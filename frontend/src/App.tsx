@@ -103,6 +103,7 @@ function App() {
   const [playerToken, setPlayerToken] = useState<string | null>(null);
   const [pendingRegistrations, setPendingRegistrations] = useState<{ username: string; created_at: string }[]>([]);
   const [showPendingPanel, setShowPendingPanel] = useState(false);
+  const [registrationApprovedFor, setRegistrationApprovedFor] = useState<string | null>(null);
   const [pendingResets, setPendingResets] = useState<{ username: string; requestId: string }[]>([]);
   const [view, setView] = useState<ViewMode>('list');
   const [editId, setEditId] = useState<number | null>(null);
@@ -570,6 +571,7 @@ function App() {
         if (next.length === 0) setShowPendingPanel(false);
         return next;
       });
+      setRegistrationApprovedFor(username);
     },
     onPasswordResetRequested: (username, requestId) => {
       setPendingResets(prev => prev.find(r => r.requestId === requestId) ? prev : [...prev, { username, requestId }]);
@@ -1085,6 +1087,7 @@ function App() {
           onSecureLogin={(name, pToken) => { setPlayerToken(pToken); startBootSequence(name, pToken); }}
           onAdminLogin={(name, adminToken) => { setToken(adminToken); setIsAdmin(true); setShowAdminPanel(true); startBootSequence(name); }}
           onPendingsFetched={setPendingRegistrations}
+          registrationApprovedFor={registrationApprovedFor}
           StatusLogDisplay={StatusLogDisplay}
         />
       )}
