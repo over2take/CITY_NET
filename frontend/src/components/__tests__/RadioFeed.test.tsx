@@ -142,7 +142,7 @@ describe('RadioFeed toolbar', () => {
 // ─── File selection ───────────────────────────────────────────────────────────
 
 describe('RadioFeed file selection', () => {
-  it('calls onTrackSelect when a file is clicked', async () => {
+  it('does NOT call onTrackSelect on single-click (selection only)', async () => {
     const onTrackSelect = vi.fn();
     global.fetch = vi.fn().mockResolvedValue({
       json: async () => [file({ id: 5, name: 'beat.mp3', path: 'beat.mp3' })],
@@ -150,7 +150,29 @@ describe('RadioFeed file selection', () => {
     render(<RadioFeed {...defaultProps} onTrackSelect={onTrackSelect} />);
     await waitFor(() => screen.getByText('beat.mp3'));
     await userEvent.click(screen.getByText('beat.mp3'));
+    expect(onTrackSelect).not.toHaveBeenCalled();
+  });
+
+  it('calls onTrackSelect on double-click of a file', async () => {
+    const onTrackSelect = vi.fn();
+    global.fetch = vi.fn().mockResolvedValue({
+      json: async () => [file({ id: 5, name: 'beat.mp3', path: 'beat.mp3' })],
+    });
+    render(<RadioFeed {...defaultProps} onTrackSelect={onTrackSelect} />);
+    await waitFor(() => screen.getByText('beat.mp3'));
+    await userEvent.dblClick(screen.getByText('beat.mp3'));
     expect(onTrackSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 5, type: 'file' }));
+  });
+
+  it('does NOT call onTrackSelect on double-click of a folder', async () => {
+    const onTrackSelect = vi.fn();
+    global.fetch = vi.fn().mockResolvedValue({
+      json: async () => [folder({ id: 3, name: 'CITY' })],
+    });
+    render(<RadioFeed {...defaultProps} onTrackSelect={onTrackSelect} />);
+    await waitFor(() => screen.getByText('CITY'));
+    await userEvent.dblClick(screen.getByText('CITY'));
+    expect(onTrackSelect).not.toHaveBeenCalled();
   });
 
   it('deselects a folder when clicked again (toggle)', async () => {
@@ -161,7 +183,6 @@ describe('RadioFeed file selection', () => {
     await waitFor(() => screen.getByText('CITY'));
     await userEvent.click(screen.getByText('CITY')); // select
     await userEvent.click(screen.getByText('CITY')); // deselect
-    // upload target should reset to ROOT after deselect
     expect(screen.getByText(/UPLOAD_TARGET: ROOT/)).toBeInTheDocument();
   });
 
