@@ -29,6 +29,33 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   // { targetId, attackType: 'melee' | 'ranged', ac }
   const pendingAttacks = new Map();
 
+  // ── Radio Feed ────────────────────────────────────────────────────────────────
+  let musicState = {
+    playing: false,
+    trackId: null,
+    src: null,
+    name: null,
+    position: 0,
+    shuffle: false,
+    loop: false,
+  };
+  // Per play-cycle set of socket IDs that have reported musicReady.
+  let musicReadySet = new Set();
+  let musicReadyTimeout = null;
+
+  const startPlayback = (position) => {
+    musicState.playing = true;
+    musicState.position = position;
+    const payload = { position, timestamp: Date.now() };
+    io.emit('musicPlay', payload);
+  };
+
+  const resolveReady = () => {
+    if (musicReadyTimeout) { clearTimeout(musicReadyTimeout); musicReadyTimeout = null; }
+    musicReadySet.clear();
+    startPlayback(musicState.position);
+  };
+
   const isAdminSocket = (socket) => {
     const info = userSockets.get(socket.id);
     return !!info && (info.isAdmin || elevatedUsers.has(info.userName));
@@ -154,6 +181,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           })));
         }
       });
+
+      socket.emit('musicState', musicState);
 
       db.get('SELECT id, battle_map_id FROM locations WHERE shape = "rhombus" AND owner = ?', [info.userName], (err, row) => {
         if (row) {
@@ -671,6 +700,75 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
     socket.on('cancelAttack', () => {
       pendingAttacks.delete(socket.id);
+    });
+
+    // ── Radio Feed ──────────────────────────────────────────────────────────────
+
+    socket.on('musicLoad', (data) => {
+      if (!isAdminSocket(socket)) return;
+      const { trackId, src, name } = data;
+      musicState = { ...musicState, playing: false, trackId, src, name, position: 0 };
+      musicReadySet.clear();
+      if (musicReadyTimeout) { clearTimeout(musicReadyTimeout); musicReadyTimeout = null; }
+      io.emit('musicLoad', { trackId, src, name });
+
+      // Gate: wait for all non-spectator sockets to report ready, or 5s timeout.
+      const expectedCount = [...userSockets.values()].length;
+      if (expectedCount === 0) { startPlayback(0); return; }
+      musicReadyTimeout = setTimeout(resolveReady, 5000);
+    });
+
+    socket.on('musicReady', () => {
+      musicReadySet.add(socket.id);
+      const expectedCount = [...userSockets.keys()].length;
+      if (musicReadySet.size >= expectedCount) resolveReady();
+    });
+
+    socket.on('musicPause', (data) => {
+      if (!isAdminSocket(socket)) return;
+      musicState.playing = false;
+      musicState.position = data.position ?? musicState.position;
+      io.emit('musicPause', { position: musicState.position });
+    });
+
+    // Resume from the paused position — no buffering gate (track is already loaded).
+    socket.on('musicResume', () => {
+      if (!isAdminSocket(socket)) return;
+      if (!musicState.src) return;
+      startPlayback(musicState.position);
+    });
+
+    socket.on('musicSeek', (data) => {
+      if (!isAdminSocket(socket)) return;
+      musicState.position = data.position ?? 0;
+      const payload = { position: musicState.position, timestamp: Date.now() };
+      io.emit('musicSeek', payload);
+    });
+
+    socket.on('musicNext', (data) => {
+      if (!isAdminSocket(socket)) return;
+      const { trackId, src, name } = data;
+      musicState = { ...musicState, playing: true, trackId, src, name, position: 0 };
+      io.emit('musicNext', { trackId, src, name });
+    });
+
+    socket.on('musicPrev', (data) => {
+      if (!isAdminSocket(socket)) return;
+      const { trackId, src, name } = data;
+      musicState = { ...musicState, playing: true, trackId, src, name, position: 0 };
+      io.emit('musicPrev', { trackId, src, name });
+    });
+
+    socket.on('musicShuffle', (data) => {
+      if (!isAdminSocket(socket)) return;
+      musicState.shuffle = !!data.enabled;
+      io.emit('musicShuffle', { enabled: musicState.shuffle });
+    });
+
+    socket.on('musicLoop', (data) => {
+      if (!isAdminSocket(socket)) return;
+      musicState.loop = !!data.enabled;
+      io.emit('musicLoop', { enabled: musicState.loop });
     });
 
     // Streamer mode: admin pushes director state (camera mode, target, visibility, HUD).

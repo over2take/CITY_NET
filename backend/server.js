@@ -22,6 +22,7 @@ const helpers = { emitUpdate, recordAction };
 // Middleware
 app.use(cors());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads/music', express.static(path.join(__dirname, 'uploads/music')));
 app.use(express.json({ limit: '2mb' }));
 
 // Routes
@@ -32,6 +33,7 @@ app.use('/api/maps', require('./routes/maps')(db, io, helpers));
 app.use('/api/roads', require('./routes/roads')(db, io, helpers));
 app.use('/api/player', require('./routes/player')(db, io));
 app.use('/api', require('./routes/admin')(db, io, helpers));
+app.use('/api/music', require('./routes/music')(db, io));
 
 // Frontend static serving
 const frontendDist = path.join(__dirname, '../frontend/dist');
