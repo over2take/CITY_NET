@@ -21,6 +21,8 @@ interface RadioPlayerProps {
   musicState: MusicStateType;
   volume: number;
   onVolumeChange: (v: number) => void;
+  onNext?: () => void;
+  onPrev?: () => void;
 }
 
 function fmt(secs: number) {
@@ -30,6 +32,7 @@ function fmt(secs: number) {
 
 export function RadioPlayer({
   pos, setPos, onClose, isAdmin, socket, audioRef, musicState, volume, onVolumeChange,
+  onNext, onPrev,
 }: RadioPlayerProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -58,21 +61,28 @@ export function RadioPlayer({
     if (musicState.playing) {
       emitIfAdmin('musicPause', { position: audioRef.current?.currentTime ?? musicState.position });
     } else {
-      // Admin re-triggers play from current position
-      if (!socket || !isAdmin) return;
-      socket.emit('musicLoad', { trackId: musicState.trackId, src: musicState.src, name: musicState.name });
+      // Resume from the paused position — the track is already loaded on every
+      // client, so no buffering gate is needed (server broadcasts musicPlay).
+      emitIfAdmin('musicResume');
     }
   };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // During a drag we only update the local display and local audio; the
+  // broadcast goes out once, on release, so we don't flood every client
+  // with a seek per pixel of drag.
+  const handleScrubChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const pos = parseFloat(e.target.value);
     setCurrentTime(pos);
     if (audioRef.current) audioRef.current.currentTime = pos;
-    emitIfAdmin('musicSeek', { position: pos });
   };
 
-  const handleNext = () => emitIfAdmin('musicNext', {});
-  const handlePrev = () => emitIfAdmin('musicPrev', {});
+  const handleScrubRelease = (e: React.SyntheticEvent<HTMLInputElement>) => {
+    scrubbing.current = false;
+    emitIfAdmin('musicSeek', { position: parseFloat((e.target as HTMLInputElement).value) });
+  };
+
+  const handleNext = () => { if (isAdmin) onNext?.(); };
+  const handlePrev = () => { if (isAdmin) onPrev?.(); };
   const handleShuffle = () => emitIfAdmin('musicShuffle', { enabled: !musicState.shuffle });
   const handleLoop = () => emitIfAdmin('musicLoop', { enabled: !musicState.loop });
 
@@ -108,9 +118,9 @@ export function RadioPlayer({
           step={0.5}
           value={currentTime}
           disabled={!isAdmin || !musicState.src}
-          onMouseDown={() => { scrubbing.current = true; }}
-          onMouseUp={() => { scrubbing.current = false; }}
-          onChange={handleSeek}
+          onPointerDown={() => { scrubbing.current = true; }}
+          onPointerUp={handleScrubRelease}
+          onChange={handleScrubChange}
           style={{ width: '100%', accentColor: 'var(--green)', cursor: isAdmin ? 'pointer' : 'default' }}
         />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'monospace', fontSize: '0.65rem', opacity: 0.6 }}>

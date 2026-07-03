@@ -731,6 +731,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       io.emit('musicPause', { position: musicState.position });
     });
 
+    // Resume from the paused position — no buffering gate (track is already loaded).
+    socket.on('musicResume', () => {
+      if (!isAdminSocket(socket)) return;
+      if (!musicState.src) return;
+      startPlayback(musicState.position);
+    });
+
     socket.on('musicSeek', (data) => {
       if (!isAdminSocket(socket)) return;
       musicState.position = data.position ?? 0;
