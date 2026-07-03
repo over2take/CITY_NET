@@ -18,12 +18,11 @@ export function SpectatorCameraRig({ socket, controlsRef, directorState }: {
   // Mirror poses arrive at ~10Hz; handled outside React state, straight to the controls.
   useEffect(() => {
     if (!socket) return;
-    const onPose = (msg: { pos: number[]; lookAt: number[]; zoom?: number }) => {
+    const onPose = (msg: { pos: number[]; lookAt: number[] }) => {
       if (modeRef.current !== 'mirror') return;
       const c = controlsRef.current;
       if (!c || !msg?.pos || !msg?.lookAt) return;
       c.setLookAt(msg.pos[0], msg.pos[1], msg.pos[2], msg.lookAt[0], msg.lookAt[1], msg.lookAt[2], true);
-      if (msg.zoom !== undefined) c.zoomTo(msg.zoom, true);
     };
     socket.on('streamerCamera', onPose);
     return () => { socket.off('streamerCamera', onPose); };
@@ -63,8 +62,55 @@ export function AdminCameraBroadcaster({ socket, controlsRef, enabled }: {
     controls.getTarget(tmpTarget.current);
     const p = state.camera.position;
     const t = tmpTarget.current;
-    // zoom matters for orthographic cameras (battle maps); harmless for perspective
-    socket.emit('streamerCamera', { pos: [p.x, p.y, p.z], lookAt: [t.x, t.y, t.z], zoom: state.camera.zoom });
+    socket.emit('streamerCamera', { pos: [p.x, p.y, p.z], lookAt: [t.x, t.y, t.z] });
+  });
+
+  return null;
+}
+
+// ─── Battle map camera sync ───────────────────────────────────────────────────
+// Battle maps use their own OrthographicCamera + MapControls (not CameraControls),
+// so pan is camera x/z and zoom is camera.zoom. The admin broadcasts both at
+// ~10Hz; the spectator lerps toward the latest pose each frame.
+
+export function AdminBattleMapBroadcaster({ socket, enabled }: { socket: any; enabled: boolean }) {
+  const lastSent = useRef(0);
+
+  useFrame((state) => {
+    if (!enabled || !socket) return;
+    const now = performance.now();
+    if (now - lastSent.current < 100) return;
+    lastSent.current = now;
+    const cam = state.camera;
+    socket.emit('streamerBattleCamera', { x: cam.position.x, z: cam.position.z, zoom: cam.zoom });
+  });
+
+  return null;
+}
+
+export function SpectatorBattleMapRig({ socket, cameraMode }: { socket: any; cameraMode: string }) {
+  const latest = useRef<{ x: number; z: number; zoom: number } | null>(null);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onPose = (msg: { x: number; z: number; zoom: number }) => { latest.current = msg; };
+    socket.on('streamerBattleCamera', onPose);
+    return () => { socket.off('streamerBattleCamera', onPose); };
+  }, [socket]);
+
+  useFrame((state, delta) => {
+    if (cameraMode === 'locked' || !latest.current) return;
+    const cam = state.camera;
+    const k = Math.min(1, 4 * delta);
+    cam.position.x = THREE.MathUtils.lerp(cam.position.x, latest.current.x, k);
+    cam.position.z = THREE.MathUtils.lerp(cam.position.z, latest.current.z, k);
+    cam.zoom = THREE.MathUtils.lerp(cam.zoom, latest.current.zoom, k);
+    cam.updateProjectionMatrix();
+    const controls = state.controls as any;
+    if (controls?.target) {
+      controls.target.set(cam.position.x, 0, cam.position.z);
+      controls.update?.();
+    }
   });
 
   return null;

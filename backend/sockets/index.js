@@ -628,6 +628,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       socket.to('spectators').emit('streamerHover', data);
     });
 
+    // Streamer mode: transient battle map camera pose (pan x/z + ortho zoom, ~10Hz).
+    socket.on('streamerBattleCamera', (pose) => {
+      if (!isAdminSocket(socket)) return;
+      socket.to('spectators').emit('streamerBattleCamera', pose);
+    });
+
     socket.on('disconnect', () => {
       if (socket.isSpectator) {
         console.log('Spectator disconnected:', socket.id);
