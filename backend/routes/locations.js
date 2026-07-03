@@ -3,6 +3,45 @@ const fs = require('fs');
 const path = require('path');
 const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 
+const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY']);
+const isUserDefinedName = (name) => !!name && name.trim() !== '' && !ZONE_TYPE_NAMES.has(name.trim());
+
+const upsertLibrary = (db, loc) => {
+  db.run(`INSERT INTO custom_structure_library
+    (id, name, description, npcs, x, y, z, width, height, depth, shape, color,
+     district_name, district_color, parent_id, isFavorite, isDanger, rotation,
+     rotation_x, rotation_z, classification, polyCount, hp_current, hp_max, hp_temp,
+     map_scale_multiplier, melee_ac, ranged_ac, injuries, saved_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+    ON CONFLICT(id) DO UPDATE SET
+      name=excluded.name, description=excluded.description, npcs=excluded.npcs,
+      x=excluded.x, y=excluded.y, z=excluded.z, width=excluded.width,
+      height=excluded.height, depth=excluded.depth, shape=excluded.shape,
+      color=excluded.color, district_name=excluded.district_name,
+      district_color=excluded.district_color, parent_id=excluded.parent_id,
+      isFavorite=excluded.isFavorite, isDanger=excluded.isDanger,
+      rotation=excluded.rotation, rotation_x=excluded.rotation_x,
+      rotation_z=excluded.rotation_z, classification=excluded.classification,
+      polyCount=excluded.polyCount, hp_current=excluded.hp_current,
+      hp_max=excluded.hp_max, hp_temp=excluded.hp_temp,
+      map_scale_multiplier=excluded.map_scale_multiplier,
+      melee_ac=excluded.melee_ac, ranged_ac=excluded.ranged_ac,
+      injuries=excluded.injuries, saved_at=CURRENT_TIMESTAMP`,
+    [loc.id, loc.name, loc.description || null, loc.npcs || null,
+     loc.x, loc.y, loc.z, loc.width, loc.height, loc.depth,
+     loc.shape || 'box', loc.color || '#00ff00',
+     loc.district_name || null, loc.district_color || null, loc.parent_id || null,
+     loc.isFavorite ? 1 : 0, loc.isDanger ? 1 : 0,
+     loc.rotation || 0, loc.rotation_x || 0, loc.rotation_z || 0,
+     loc.classification || null, loc.polyCount || 5,
+     loc.hp_current ?? null, loc.hp_max ?? null, loc.hp_temp ?? null,
+     loc.map_scale_multiplier ?? 5,
+     loc.melee_ac ?? null, loc.ranged_ac ?? null,
+     loc.injuries || '{}'],
+    (err) => { if (err) console.error('[library] upsert failed:', err.message); }
+  );
+};
+
 module.exports = (db, io, { emitUpdate, recordAction }) => {
   const router = express.Router();
 
@@ -77,6 +116,10 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         if (results.length > 0) {
           recordAction('location_create', { ids: results.map(r => r.id) });
           results.forEach(loc => {
+            if (isUserDefinedName(loc.name)) {
+              db.run('UPDATE locations SET is_global = 1 WHERE id = ?', [loc.id]);
+              upsertLibrary(db, loc);
+            }
             if (loc.shape === 'rhombus') io.emit('rhombusAppearing', { id: loc.id, owner: loc.owner });
           });
         }
@@ -183,6 +226,14 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       db.run(sql, params, function(err) {
         if (err) return res.status(500).json({ error: err.message });
         recordAction('location_update', { id: req.params.id, old_data: oldRow });
+        if (isUserDefinedName(name)) {
+          db.run('UPDATE locations SET is_global = 1 WHERE id = ?', [req.params.id]);
+          upsertLibrary(db, { id: parseInt(req.params.id), name, description, npcs, x, y, z,
+            width, height, depth, shape, color, district_name, district_color, parent_id,
+            isFavorite, isDanger, rotation, rotation_x, rotation_z, classification, polyCount,
+            hp_current: oldRow.hp_current, hp_max: oldRow.hp_max, hp_temp: oldRow.hp_temp,
+            map_scale_multiplier, melee_ac, ranged_ac, injuries: oldRow.injuries });
+        }
         emitUpdate();
         res.json({ id: req.params.id, ...req.body });
       });

@@ -145,16 +145,21 @@ CITY_NET/
 │   │   └── auth.js             # JWT verify middleware (admin + elevated users)
 │   ├── routes/
 │   │   ├── admin.js            # Admin-only REST endpoints
-│   │   ├── locations.js        # Location CRUD
+│   │   ├── locations.js        # Location CRUD; marks user-named locations as global, upserts custom_structure_library
 │   │   ├── battle_maps.js      # Battle map image upload/management
-│   │   ├── maps.js             # Saved map snapshots
+│   │   ├── maps.js             # Saved map snapshots; preserves global structures and rhombus tokens on load/clear
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload
 │   │   ├── roads.js            # Road CRUD
 │   │   └── player.js           # Player auth (register, login, forgot, reset)
 │   ├── sockets/
 │   │   └── index.js            # All Socket.IO event handlers
-│   └── startup/
-│       └── sanity_checks.js    # In-memory DB checks on boot
+│   ├── startup/
+│   │   └── sanity_checks.js    # In-memory DB checks on boot
+│   └── __tests__/
+│       ├── helpers/
+│       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
+│       ├── locations.global.test.js    # Custom structure global persistence tests
+│       └── maps.global.test.js         # Map load/clear global preservation tests
 │
 ├── frontend/
 │   ├── src/
@@ -192,9 +197,11 @@ CITY_NET/
 │   │   │   └── useMapData.ts   # Location/district/road data fetching
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
 │   │   └── utils/
-│   │       ├── locationHelpers.ts  # Location geometry utilities
+│   │       ├── locationHelpers.ts  # Location geometry utilities; exports ZONE_TYPE_NAMES and isUserDefinedName
 │   │       ├── rhombusHelpers.ts   # Player token position math
-│   │       └── threeHelpers.tsx    # Three.js scene utilities
+│   │       ├── threeHelpers.tsx    # Three.js scene utilities
+│   │       └── __tests__/
+│   │           └── locationHelpers.test.ts  # Unit tests for isUserDefinedName and getStructLabel
 │   └── public/                 # Static assets (audio, icons)
 │
 ├── docs/                       # Reference docs (deployment plans, feature notes)

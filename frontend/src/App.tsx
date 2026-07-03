@@ -127,8 +127,8 @@ function App() {
   const [musicVolume, setMusicVolume] = useState(() => parseFloat(localStorage.getItem('musicVolume') ?? '0.8'));
   const [isRadioFeedOpen, setIsRadioFeedOpen] = useState(false);
   const [isRadioPlayerOpen, setIsRadioPlayerOpen] = useState(false);
-  const [radioFeedPos, setRadioFeedPos] = useState(() => ({ x: window.innerWidth / 2 - 140, y: window.innerHeight / 2 - 220 }));
-  const [radioPlayerPos, setRadioPlayerPos] = useState(() => ({ x: window.innerWidth / 2 - 130, y: window.innerHeight / 2 - 150 }));
+  const [radioFeedPos, setRadioFeedPos] = useState(() => ({ x: window.innerWidth / 2 - 176, y: window.innerHeight / 2 - 220 }));
+  const [radioPlayerPos, setRadioPlayerPos] = useState(() => ({ x: window.innerWidth / 2 - 176 + 340 + 8, y: window.innerHeight / 2 - 220 }));
   const [selectedTrackId, setSelectedTrackId] = useState<number | null>(null);
 
   useEffect(() => { localStorage.setItem('musicVolume', String(musicVolume)); }, [musicVolume]);
@@ -603,15 +603,15 @@ function App() {
       }, 5000);
     },
     onMusicState: (state) => {
-      setMusicState(state);
+      // On reconnect, load the track and seek but never auto-play — admin must press play
+      setMusicState({ ...state, playing: false });
       const audio = audioRef.current;
       if (!audio || !state.src) return;
       if (audio.src !== new URL(`/uploads/music/${state.src}`, window.location.origin).href) {
         audio.src = `/uploads/music/${state.src}`;
       }
       audio.currentTime = state.position;
-      if (state.playing) audio.play().catch(() => {});
-      else audio.pause();
+      audio.pause();
     },
     onMusicLoad: (data) => {
       setMusicState((prev) => ({ ...prev, trackId: data.trackId, src: data.src, name: data.name, playing: false, position: 0 }));
@@ -1323,6 +1323,8 @@ function App() {
                 isCopyingSize={isCopyingSize}
                 setIsCopyingSize={setIsCopyingSize}
                 secureModeEnabled={secureModeEnabled}
+                currentLocBattleMaps={currentLocBattleMaps}
+                enterBattleMap={enterBattleMap}
                 />
             )}
             {adminBankPlayer && (
