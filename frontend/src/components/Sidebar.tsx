@@ -216,6 +216,13 @@ export function SystemInfoMenu({ userName, token }: SystemInfoMenuProps) {
           <span style={{ opacity: 0.6 }}>ACCESS_LEVEL:</span><br />
           <span style={{ color: 'var(--green)', fontWeight: 'bold' }}>{token ? 'ADMIN_PRIVILEGES' : 'UNPRIVILEGED_USER'}</span>
         </div>
+        <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '15px', fontSize: '0.7rem' }}>
+          <span style={{ opacity: 0.6 }}>LICENSE:</span><br />
+          <span style={{ color: 'var(--green)' }}>AGPL-3.0 — open source</span><br />
+          <a href="https://github.com/over2take/CITY_NET" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)', opacity: 0.7, fontSize: '0.65rem', letterSpacing: '1px' }}>
+            SOURCE_CODE ↗
+          </a>
+        </div>
       </div>
     </div>
   );
