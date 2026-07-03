@@ -160,7 +160,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   router.put('/:id', optionalAuthenticate, (req, res) => {
-    const { name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, map_scale_multiplier } = req.body;
+    const { name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, map_scale_multiplier, melee_ac, ranged_ac } = req.body;
 
     console.log(`[DEBUG] PUT /api/locations/${req.params.id} map_scale_multiplier:`, map_scale_multiplier);
     if (name === undefined || x === undefined || y === undefined || z === undefined) {
@@ -175,8 +175,10 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         return res.status(401).json({ error: 'Access denied: Unauthenticated users can only update rhombuses.' });
       }
 
-      const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=?, battle_map_id=?, floor_index=?, map_scale_multiplier=? WHERE id=?`;
-      const params = [name, description, npcs, x, y, z, width, height, depth, shape || 'box', color, district_name || null, district_color || null, parent_id || null, isFavorite ? 1 : 0, isDanger ? 1 : 0, owner || null, rotation || 0, rotation_x || 0, rotation_z || 0, classification || null, polyCount || 5, battle_map_id || null, floor_index !== undefined ? floor_index : null, map_scale_multiplier !== undefined ? map_scale_multiplier : oldRow.map_scale_multiplier, req.params.id];
+      const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=?, battle_map_id=?, floor_index=?, map_scale_multiplier=?, melee_ac=?, ranged_ac=? WHERE id=?`;
+      const meleAcVal = melee_ac !== undefined ? (melee_ac === '' || melee_ac === null ? null : parseInt(melee_ac, 10)) : oldRow.melee_ac;
+      const rangedAcVal = ranged_ac !== undefined ? (ranged_ac === '' || ranged_ac === null ? null : parseInt(ranged_ac, 10)) : oldRow.ranged_ac;
+      const params = [name, description, npcs, x, y, z, width, height, depth, shape || 'box', color, district_name || null, district_color || null, parent_id || null, isFavorite ? 1 : 0, isDanger ? 1 : 0, owner || null, rotation || 0, rotation_x || 0, rotation_z || 0, classification || null, polyCount || 5, battle_map_id || null, floor_index !== undefined ? floor_index : null, map_scale_multiplier !== undefined ? map_scale_multiplier : oldRow.map_scale_multiplier, meleAcVal, rangedAcVal, req.params.id];
 
       db.run(sql, params, function(err) {
         if (err) return res.status(500).json({ error: err.message });

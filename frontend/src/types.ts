@@ -31,6 +31,8 @@ export interface Location {
   hp_current: number | null;
   hp_max: number | null;
   hp_temp: number | null;
+  melee_ac: number | null;
+  ranged_ac: number | null;
   map_scale_multiplier: number;
 }
 
