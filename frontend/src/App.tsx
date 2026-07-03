@@ -1435,7 +1435,7 @@ function App() {
                             )}
                             {lastAttackResult && lastAttackResult.targetName === selectedLocation.name && (
                               <div style={{ marginTop: '6px', fontSize: '12px', color: lastAttackResult.hit ? '#00ff66' : '#ff4444', border: `1px solid ${lastAttackResult.hit ? '#00ff66' : '#ff4444'}`, padding: '6px 10px' }}>
-                                {lastAttackResult.hit ? 'HIT!' : 'MISS'} — rolled {lastAttackResult.roll} vs AC {lastAttackResult.ac}
+                                {lastAttackResult.hit ? 'HIT!' : 'MISS'} — rolled {lastAttackResult.roll}
                               </div>
                             )}
                           </>
