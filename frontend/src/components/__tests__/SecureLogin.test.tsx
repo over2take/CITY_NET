@@ -128,6 +128,47 @@ describe('Admin approval flow', () => {
   });
 });
 
+// ─── 3b. registrationApprovedFor prop — player-side redirect ─────────────────
+
+describe('registrationApprovedFor prop', () => {
+  const registerAs = async (username: string) => {
+    mockFetch({ 'POST /api/player/register': { ok: true, body: { message: 'Account pending admin approval' } } });
+    await userEvent.click(screen.getByText('REGISTER'));
+    await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), username);
+    await userEvent.type(screen.getByPlaceholderText('ACCESS_CODE'), 'secret');
+    await userEvent.type(screen.getByPlaceholderText('CONFIRM_ACCESS_CODE'), 'secret');
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'What is your favorite movie?');
+    await userEvent.type(screen.getByPlaceholderText('SECURITY_ANSWER'), 'Blade Runner');
+    await userEvent.click(screen.getByText('CREATE_ACCOUNT'));
+    await waitFor(() => expect(screen.getByText('REGISTRATION_SUBMITTED')).toBeInTheDocument());
+  };
+
+  it('returns player to login screen when their username is approved', async () => {
+    const { rerender } = render(<SecureLogin {...baseProps()} registrationApprovedFor={null} />);
+    await registerAs('GHOST');
+
+    rerender(<SecureLogin {...baseProps()} registrationApprovedFor="GHOST" />);
+    await waitFor(() => expect(screen.getByText('LOGIN')).toBeInTheDocument());
+    expect(screen.queryByText('REGISTRATION_SUBMITTED')).not.toBeInTheDocument();
+  });
+
+  it('does NOT redirect when a different username is approved', async () => {
+    const { rerender } = render(<SecureLogin {...baseProps()} registrationApprovedFor={null} />);
+    await registerAs('GHOST');
+
+    rerender(<SecureLogin {...baseProps()} registrationApprovedFor="RAZOR" />);
+    await waitFor(() => expect(screen.getByText('REGISTRATION_SUBMITTED')).toBeInTheDocument());
+  });
+
+  it('does nothing when registrationApprovedFor is null', async () => {
+    const { rerender } = render(<SecureLogin {...baseProps()} registrationApprovedFor={null} />);
+    await registerAs('GHOST');
+
+    rerender(<SecureLogin {...baseProps()} registrationApprovedFor={null} />);
+    await waitFor(() => expect(screen.getByText('REGISTRATION_SUBMITTED')).toBeInTheDocument());
+  });
+});
+
 // ─── 4. Successful login ─────────────────────────────────────────────────────
 
 describe('Successful secure login', () => {

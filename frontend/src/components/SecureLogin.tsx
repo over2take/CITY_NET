@@ -11,6 +11,7 @@ export interface SecureLoginProps {
   onAdminLogin: (username: string, adminToken: string) => void;
   onPendingsFetched: (rows: { username: string; created_at: string }[]) => void;
   StatusLogDisplay: React.ComponentType;
+  registrationApprovedFor?: string | null;
 }
 
 export function SecureLogin({
@@ -22,6 +23,7 @@ export function SecureLogin({
   onAdminLogin,
   onPendingsFetched,
   StatusLogDisplay,
+  registrationApprovedFor,
 }: SecureLoginProps) {
   const [loginView, setLoginView] = useState<LoginView>('login');
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
@@ -37,6 +39,16 @@ export function SecureLogin({
   const [tempUserName, setTempUserName] = useState('');
   const [loginError, setLoginError] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingUsername = useRef<string>('');
+
+  // When admin approves this user's registration, switch to login with a success message
+  useEffect(() => {
+    if (!registrationApprovedFor) return;
+    if (loginView === 'pending' && registrationApprovedFor === pendingUsername.current) {
+      setLoginView('login');
+      setLoginError('');
+    }
+  }, [registrationApprovedFor]);
 
   // Poll for admin approval when in awaiting state
   useEffect(() => {
@@ -107,6 +119,7 @@ export function SecureLogin({
     const res = await fetch('/api/player/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rest, security_question: finalQuestion }) });
     const data = await res.json();
     if (!res.ok) return setLoginError(data.error || 'Registration failed');
+    pendingUsername.current = registerForm.username.trim();
     setLoginView('pending');
   };
 
