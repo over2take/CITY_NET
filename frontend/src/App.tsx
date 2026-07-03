@@ -47,6 +47,7 @@ import { GlobalCameraCapture, CursorPivotControls, CameraController } from './co
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, computeBroadcastFraming } from './components/Streamer';
 import { StreamerVisibilityContext } from './context/StreamerVisibilityContext';
+import { StreamerOverlay } from './components/StreamerOverlay';
 import { DEFAULT_DIRECTOR_STATE, ALL_VISIBLE } from './types';
 import type { DirectorState } from './types';
 import { IS_SPECTATOR } from './streamerMode';
@@ -1591,6 +1592,7 @@ function App() {
             <ambientLight intensity={0.5} />
             </StreamerVisibilityContext.Provider>
           </Canvas>
+          {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} />}
         </>
       )}
     </div>
