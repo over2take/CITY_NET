@@ -145,7 +145,7 @@ CITY_NET/
 │   │   └── auth.js             # JWT verify middleware (admin + elevated users)
 │   ├── routes/
 │   │   ├── admin.js            # Admin-only REST endpoints
-│   │   ├── locations.js        # Location CRUD; marks user-named locations as global, upserts custom_structure_library
+│   │   ├── locations.js        # Location CRUD; marks user-named locations as global, upserts custom_structure_library (roots + child parts); serves GET /custom-library
 │   │   ├── battle_maps.js      # Battle map image upload/management
 │   │   ├── maps.js             # Saved map snapshots; preserves global structures and rhombus tokens on load/clear
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload
@@ -166,7 +166,7 @@ CITY_NET/
 │   │   ├── App.tsx             # Root component — state, routing, socket wiring
 │   │   ├── App.css / index.css # Global styles and CSS variables
 │   │   ├── components/
-│   │   │   ├── AdminPanel.tsx          # GM dashboard
+│   │   │   ├── AdminPanel.tsx          # GM dashboard; CUSTOM premade picker loads saved structures from library
 │   │   │   ├── HitPoints.tsx           # HP tracking + injury panel + HealthReviewWindow
 │   │   │   ├── BankWindows.tsx         # Player bank UI
 │   │   │   ├── ChatWindow.tsx          # In-game chat
