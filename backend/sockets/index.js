@@ -30,7 +30,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     return !!info && (info.isAdmin || elevatedUsers.has(info.userName));
   };
 
-  const broadcastActiveUsers = () => {
+  const buildActiveUsers = () => {
     const userMap = new Map();
     userSockets.forEach((info) => {
       userMap.set(info.userName, { ...info, isTemporaryAdmin: elevatedUsers.has(info.userName) });
@@ -38,7 +38,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     activeNPCs.forEach(npc => {
       userMap.set(npc.userName, { userName: npc.userName, isAdmin: false, isTemporaryAdmin: false, isNPC: true, isActive: npc.isActive });
     });
-    io.emit('activeUsersUpdated', Array.from(userMap.values()));
+    return Array.from(userMap.values());
+  };
+
+  const broadcastActiveUsers = () => {
+    io.emit('activeUsersUpdated', buildActiveUsers());
   };
 
   const sendBankUpdate = (username) => {
@@ -95,6 +99,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         socket.join('spectators');
         console.log(`Spectator connected: ${socket.id}`);
         if (directorState) socket.emit('directorUpdate', directorState);
+        // Send the current roster directly — spectators join silently (no
+        // broadcastActiveUsers), but player rhombuses only render for owners
+        // present in the active users list.
+        socket.emit('activeUsersUpdated', buildActiveUsers());
         broadcastSpectatorCount();
         return;
       }
