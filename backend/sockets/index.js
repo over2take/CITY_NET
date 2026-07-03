@@ -5,6 +5,9 @@ const SECRET = process.env.JWT_SECRET;
 const userSockets = new Map();
 let activeNPCs = [];
 
+// Streamer mode: spectator sockets are read-only observers, invisible to the game.
+const SPECTATOR_ALLOWED_EVENTS = new Set(['identify', 'requestDiceHistory']);
+
 const formatMeasurementPayload = (data, userName, socketId) => ({
   owner: userName ? userName : socketId,
   start: data.start,
@@ -19,7 +22,15 @@ const formatMeasurementPayload = (data, userName, socketId) => ({
 });
 
 module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
-  const broadcastActiveUsers = () => {
+  // Streamer mode: last director state, replayed to spectators when they join.
+  let directorState = null;
+
+  const isAdminSocket = (socket) => {
+    const info = userSockets.get(socket.id);
+    return !!info && (info.isAdmin || elevatedUsers.has(info.userName));
+  };
+
+  const buildActiveUsers = () => {
     const userMap = new Map();
     userSockets.forEach((info) => {
       userMap.set(info.userName, { ...info, isTemporaryAdmin: elevatedUsers.has(info.userName) });
@@ -27,7 +38,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     activeNPCs.forEach(npc => {
       userMap.set(npc.userName, { userName: npc.userName, isAdmin: false, isTemporaryAdmin: false, isNPC: true, isActive: npc.isActive });
     });
-    io.emit('activeUsersUpdated', Array.from(userMap.values()));
+    return Array.from(userMap.values());
+  };
+
+  const broadcastActiveUsers = () => {
+    io.emit('activeUsersUpdated', buildActiveUsers());
   };
 
   const sendBankUpdate = (username) => {
@@ -52,7 +67,18 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     }
   });
 
+  const broadcastSpectatorCount = () => {
+    const count = io.sockets.adapter.rooms.get('spectators')?.size || 0;
+    io.emit('spectatorCount', { count });
+  };
+
   io.on('connection', (socket) => {
+    // Spectators are read-only: drop every incoming event except the allowlist.
+    socket.use(([event], next) => {
+      if (socket.isSpectator && !SPECTATOR_ALLOWED_EVENTS.has(event)) return;
+      next();
+    });
+
     socket.on('requestDiceHistory', () => {
       db.all('SELECT * FROM dice_rolls ORDER BY timestamp DESC LIMIT 5', (err, rows) => {
         if (!err && rows) {
@@ -65,6 +91,21 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
     socket.on('identify', (data) => {
       let info = typeof data === 'string' ? { userName: data, isAdmin: false } : data;
+
+      // Streamer mode spectator: read-only, invisible to presence/chat, no rhombus.
+      // Safe to bypass Secure Mode because the socket.use guard drops all mutations.
+      if (info.spectator) {
+        socket.isSpectator = true;
+        socket.join('spectators');
+        console.log(`Spectator connected: ${socket.id}`);
+        if (directorState) socket.emit('directorUpdate', directorState);
+        // Send the current roster directly — spectators join silently (no
+        // broadcastActiveUsers), but player rhombuses only render for owners
+        // present in the active users list.
+        socket.emit('activeUsersUpdated', buildActiveUsers());
+        broadcastSpectatorCount();
+        return;
+      }
 
       // Secure Mode: verify player token before allowing connection
       if (process.env.SECURE_MODE === 'true' && !info.isAdmin) {
@@ -576,7 +617,37 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
+    // Streamer mode: admin pushes director state (camera mode, target, visibility, HUD).
+    socket.on('directorUpdate', (state) => {
+      if (!isAdminSocket(socket) || !state) return;
+      directorState = state;
+      io.to('spectators').emit('directorUpdate', directorState);
+    });
+
+    // Streamer mode: transient admin camera pose for mirror mode (~10Hz, not stored).
+    socket.on('streamerCamera', (pose) => {
+      if (!isAdminSocket(socket)) return;
+      socket.to('spectators').emit('streamerCamera', pose);
+    });
+
+    // Streamer mode: admin hover over a rhombus — spectators show its name tag.
+    socket.on('streamerHover', (data) => {
+      if (!isAdminSocket(socket)) return;
+      socket.to('spectators').emit('streamerHover', data);
+    });
+
+    // Streamer mode: transient battle map camera pose (pan x/z + ortho zoom, ~10Hz).
+    socket.on('streamerBattleCamera', (pose) => {
+      if (!isAdminSocket(socket)) return;
+      socket.to('spectators').emit('streamerBattleCamera', pose);
+    });
+
     socket.on('disconnect', () => {
+      if (socket.isSpectator) {
+        console.log('Spectator disconnected:', socket.id);
+        broadcastSpectatorCount();
+        return;
+      }
       const info = userSockets.get(socket.id);
       if (info) {
         console.log('User disconnected:', socket.id, 'Username:', info.userName);
