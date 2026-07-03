@@ -47,6 +47,10 @@ import { GlobalCameraCapture, CursorPivotControls, CameraController } from './co
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
 import { AttackAnimations } from './components/AttackAnimations';
+import { RadioFeed } from './components/RadioFeed';
+import type { MusicItem } from './components/RadioFeed';
+import { RadioPlayer } from './components/RadioPlayer';
+import type { MusicStateType } from './components/RadioPlayer';
 import { StreamerVisibilityContext } from './context/StreamerVisibilityContext';
 import { StreamerOverlay } from './components/StreamerOverlay';
 import { StreamerDirectorPanel } from './components/StreamerDirectorPanel';
@@ -115,6 +119,20 @@ function App() {
   const [lastAttackResult, setLastAttackResult] = useState<{ hit: boolean; roll: number; ac: number; targetName: string } | null>(null);
   const [attackAnimations, setAttackAnimations] = useState<{ id: string; hit: boolean; attackType: 'melee' | 'ranged'; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number }; targetId: number }[]>([]);
 
+  // Radio Feed
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [musicState, setMusicState] = useState<MusicStateType>({
+    playing: false, trackId: null, src: null, name: null, position: 0, shuffle: false, loop: false,
+  });
+  const [musicVolume, setMusicVolume] = useState(() => parseFloat(localStorage.getItem('musicVolume') ?? '0.8'));
+  const [isRadioFeedOpen, setIsRadioFeedOpen] = useState(false);
+  const [isRadioPlayerOpen, setIsRadioPlayerOpen] = useState(false);
+  const [radioFeedPos, setRadioFeedPos] = useState(() => ({ x: window.innerWidth / 2 - 140, y: window.innerHeight / 2 - 220 }));
+  const [radioPlayerPos, setRadioPlayerPos] = useState(() => ({ x: window.innerWidth / 2 - 130, y: window.innerHeight / 2 - 150 }));
+  const [selectedTrackId, setSelectedTrackId] = useState<number | null>(null);
+
+  useEffect(() => { localStorage.setItem('musicVolume', String(musicVolume)); }, [musicVolume]);
+
   const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
   const [hitPointsPos, setHitPointsPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
   const [acEdit, setAcEdit] = useState<{ melee: string; ranged: string } | null>(null);
@@ -172,6 +190,11 @@ function App() {
   const [notification, setNotification] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(() => { const saved = localStorage.getItem('audioEnabled'); return saved !== null ? JSON.parse(saved) : true; });
   const [masterVolume, setMasterVolume] = useState(() => { const saved = localStorage.getItem('masterVolume'); return saved !== null ? parseFloat(saved) : 0.5; });
+
+  // Keep audio element volume synced with local volume × master volume, respecting mute
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = audioEnabled ? musicVolume : 0;
+  }, [musicVolume, audioEnabled]);
   const [isBatchSelecting, setIsBatchSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [districtSelection, setDistrictSelection] = useState<number[]>([]);
@@ -579,7 +602,115 @@ function App() {
         }]);
       }, 5000);
     },
+    onMusicState: (state) => {
+      setMusicState(state);
+      const audio = audioRef.current;
+      if (!audio || !state.src) return;
+      if (audio.src !== new URL(`/uploads/music/${state.src}`, window.location.origin).href) {
+        audio.src = `/uploads/music/${state.src}`;
+      }
+      audio.currentTime = state.position;
+      if (state.playing) audio.play().catch(() => {});
+      else audio.pause();
+    },
+    onMusicLoad: (data) => {
+      setMusicState((prev) => ({ ...prev, trackId: data.trackId, src: data.src, name: data.name, playing: false, position: 0 }));
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.src = `/uploads/music/${data.src}`;
+      audio.load();
+      audio.addEventListener('canplay', () => emit('musicReady'), { once: true });
+    },
+    onMusicPlay: (data) => {
+      setMusicState((prev) => ({ ...prev, playing: true, position: data.position }));
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.currentTime = data.position + (Date.now() - data.timestamp) / 1000;
+      audio.play().catch(() => {});
+    },
+    onMusicPause: (data) => {
+      setMusicState((prev) => ({ ...prev, playing: false, position: data.position }));
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = data.position; }
+    },
+    onMusicSeek: (data) => {
+      setMusicState((prev) => ({ ...prev, position: data.position }));
+      const audio = audioRef.current;
+      if (!audio) return;
+      // Only compensate for network lag while playing — a paused track should
+      // land exactly where the admin scrubbed it.
+      audio.currentTime = data.position + (audio.paused ? 0 : (Date.now() - data.timestamp) / 1000);
+    },
+    onMusicNext: (data) => {
+      setMusicState((prev) => ({ ...prev, trackId: data.trackId, src: data.src, name: data.name, playing: true, position: 0 }));
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.src = `/uploads/music/${data.src}`;
+      audio.load();
+      audio.addEventListener('canplay', () => audio.play().catch(() => {}), { once: true });
+    },
+    onMusicPrev: (data) => {
+      setMusicState((prev) => ({ ...prev, trackId: data.trackId, src: data.src, name: data.name, playing: true, position: 0 }));
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.src = `/uploads/music/${data.src}`;
+      audio.load();
+      audio.addEventListener('canplay', () => audio.play().catch(() => {}), { once: true });
+    },
+    onMusicShuffle: (data) => setMusicState((prev) => ({ ...prev, shuffle: data.enabled })),
+    onMusicLoop: (data) => {
+      setMusicState((prev) => ({ ...prev, loop: data.enabled }));
+      if (audioRef.current) audioRef.current.loop = data.enabled;
+    },
   });
+
+  // Radio Feed: admin keeps a flat copy of the library so Next/Prev/auto-advance
+  // can pick the sibling track. Players never need this — the server tells them
+  // what to play.
+  const [musicLibrary, setMusicLibrary] = useState<MusicItem[]>([]);
+  useEffect(() => {
+    if (!isAdmin) return;
+    const fetchLib = () => {
+      fetch('/api/music/library')
+        .then((r) => r.json())
+        .then((d) => setMusicLibrary(Array.isArray(d) ? d : []))
+        .catch(() => {});
+    };
+    fetchLib();
+    const s = socketRef.current;
+    s?.on('musicLibraryUpdated', fetchLib);
+    return () => { s?.off('musicLibraryUpdated', fetchLib); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
+  // Pick the next/previous playable track. Shuffle picks any other track;
+  // otherwise walk the flat file list in order, wrapping at the ends.
+  const advanceTrack = (dir: 1 | -1) => {
+    if (!isAdmin) return;
+    const files = musicLibrary.filter((i) => i.type === 'file' && i.path);
+    if (files.length === 0) return;
+    const idx = files.findIndex((f) => f.id === musicState.trackId);
+    let next: MusicItem;
+    if (musicState.shuffle && files.length > 1) {
+      do {
+        next = files[Math.floor(Math.random() * files.length)];
+      } while (next.id === musicState.trackId);
+    } else {
+      next = files[(idx + dir + files.length) % files.length];
+    }
+    emit(dir === 1 ? 'musicNext' : 'musicPrev', { trackId: next.id, src: next.path, name: next.name });
+  };
+  const advanceTrackRef = useRef(advanceTrack);
+  useEffect(() => { advanceTrackRef.current = advanceTrack; });
+
+  // Auto-advance when a track finishes (loop mode never fires 'ended').
+  // Non-admin calls are no-ops both here and server-side.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onEnded = () => advanceTrackRef.current(1);
+    audio.addEventListener('ended', onEnded);
+    return () => audio.removeEventListener('ended', onEnded);
+  }, []);
 
   // Admin-side director mutations: update local state and push to spectators.
   const updateDirector = useCallback((partial: Partial<DirectorState>) => {
@@ -1012,6 +1143,8 @@ function App() {
               setAudioEnabled={setAudioEnabled}
               masterVolume={masterVolume}
               setMasterVolume={setMasterVolume}
+              musicVolume={musicVolume}
+              setMusicVolume={(v) => { setMusicVolume(v); localStorage.setItem('musicVolume', String(v)); }}
               rhombusState={rhombusState}
               setRhombusState={setRhombusState}
               refreshLocations={fetchLocations}
@@ -1031,6 +1164,16 @@ function App() {
               setMeasureMode={setMeasureMode}
               attackPending={attackPending}
               onCancelAttack={() => { setAttackPending(null); setLastAttackResult(null); }}
+              isRadioOpen={isAdmin ? isRadioFeedOpen : isRadioPlayerOpen}
+              onToggleRadio={() => {
+                if (isAdmin) {
+                  setIsRadioFeedOpen((v) => !v);
+                  if (!isRadioPlayerOpen) setIsRadioPlayerOpen(true);
+                } else {
+                  setIsRadioPlayerOpen((v) => !v);
+                }
+              }}
+              musicPlaying={musicState.playing}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -1247,6 +1390,40 @@ function App() {
                   token={token}
                   isChatOpen={isChatOpen}
               />
+            {/* Hidden audio element for Radio Feed — persists regardless of window visibility */}
+            <audio ref={audioRef} style={{ display: 'none' }} loop={musicState.loop} />
+
+            {isAdmin && isRadioFeedOpen && (
+              <RadioFeed
+                pos={radioFeedPos}
+                setPos={setRadioFeedPos}
+                onClose={() => setIsRadioFeedOpen(false)}
+                token={token}
+                socket={socketRef.current}
+                onTrackSelect={(item: MusicItem) => {
+                  setSelectedTrackId(item.id);
+                  if (item.path) emit('musicLoad', { trackId: item.id, src: item.path, name: item.name });
+                }}
+                selectedTrackId={selectedTrackId}
+              />
+            )}
+
+            {isRadioPlayerOpen && (
+              <RadioPlayer
+                pos={radioPlayerPos}
+                setPos={setRadioPlayerPos}
+                onClose={() => setIsRadioPlayerOpen(false)}
+                isAdmin={isAdmin}
+                socket={socketRef.current}
+                audioRef={audioRef}
+                musicState={musicState}
+                volume={musicVolume}
+                onVolumeChange={setMusicVolume}
+                onNext={() => advanceTrack(1)}
+                onPrev={() => advanceTrack(-1)}
+              />
+            )}
+
             {token && showDirectorPanel && (
               <StreamerDirectorPanel
                 pos={directorPanelPos}
