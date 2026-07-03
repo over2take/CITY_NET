@@ -619,9 +619,7 @@ function App() {
       if (!audio) return;
       audio.src = `/uploads/music/${data.src}`;
       audio.load();
-      audio.addEventListener('canplay', () => {
-        audioRef.current?.dispatchEvent(new Event('_musicReady'));
-      }, { once: true });
+      audio.addEventListener('canplay', () => emit('musicReady'), { once: true });
     },
     onMusicPlay: (data) => {
       setMusicState((prev) => ({ ...prev, playing: true, position: data.position }));
@@ -638,7 +636,9 @@ function App() {
       setMusicState((prev) => ({ ...prev, position: data.position }));
       const audio = audioRef.current;
       if (!audio) return;
-      audio.currentTime = data.position + (Date.now() - data.timestamp) / 1000;
+      // Only compensate for network lag while playing — a paused track should
+      // land exactly where the admin scrubbed it.
+      audio.currentTime = data.position + (audio.paused ? 0 : (Date.now() - data.timestamp) / 1000);
     },
     onMusicNext: (data) => {
       setMusicState((prev) => ({ ...prev, trackId: data.trackId, src: data.src, name: data.name, playing: true, position: 0 }));
@@ -663,14 +663,54 @@ function App() {
     },
   });
 
-  // Emit musicReady when audio is buffered enough to play
+  // Radio Feed: admin keeps a flat copy of the library so Next/Prev/auto-advance
+  // can pick the sibling track. Players never need this — the server tells them
+  // what to play.
+  const [musicLibrary, setMusicLibrary] = useState<MusicItem[]>([]);
+  useEffect(() => {
+    if (!isAdmin) return;
+    const fetchLib = () => {
+      fetch('/api/music/library')
+        .then((r) => r.json())
+        .then((d) => setMusicLibrary(Array.isArray(d) ? d : []))
+        .catch(() => {});
+    };
+    fetchLib();
+    const s = socketRef.current;
+    s?.on('musicLibraryUpdated', fetchLib);
+    return () => { s?.off('musicLibraryUpdated', fetchLib); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
+  // Pick the next/previous playable track. Shuffle picks any other track;
+  // otherwise walk the flat file list in order, wrapping at the ends.
+  const advanceTrack = (dir: 1 | -1) => {
+    if (!isAdmin) return;
+    const files = musicLibrary.filter((i) => i.type === 'file' && i.path);
+    if (files.length === 0) return;
+    const idx = files.findIndex((f) => f.id === musicState.trackId);
+    let next: MusicItem;
+    if (musicState.shuffle && files.length > 1) {
+      do {
+        next = files[Math.floor(Math.random() * files.length)];
+      } while (next.id === musicState.trackId);
+    } else {
+      next = files[(idx + dir + files.length) % files.length];
+    }
+    emit(dir === 1 ? 'musicNext' : 'musicPrev', { trackId: next.id, src: next.path, name: next.name });
+  };
+  const advanceTrackRef = useRef(advanceTrack);
+  useEffect(() => { advanceTrackRef.current = advanceTrack; });
+
+  // Auto-advance when a track finishes (loop mode never fires 'ended').
+  // Non-admin calls are no-ops both here and server-side.
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !socket) return;
-    const handler = () => socket.emit('musicReady');
-    audio.addEventListener('_musicReady' as any, handler);
-    return () => audio.removeEventListener('_musicReady' as any, handler);
-  }, [socket]);
+    if (!audio) return;
+    const onEnded = () => advanceTrackRef.current(1);
+    audio.addEventListener('ended', onEnded);
+    return () => audio.removeEventListener('ended', onEnded);
+  }, []);
 
   // Admin-side director mutations: update local state and push to spectators.
   const updateDirector = useCallback((partial: Partial<DirectorState>) => {
@@ -1377,6 +1417,8 @@ function App() {
                 musicState={musicState}
                 volume={musicVolume}
                 onVolumeChange={setMusicVolume}
+                onNext={() => advanceTrack(1)}
+                onPrev={() => advanceTrack(-1)}
               />
             )}
 
