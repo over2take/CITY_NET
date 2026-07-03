@@ -153,6 +153,18 @@ describe('RadioFeed file selection', () => {
     expect(onTrackSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 5, type: 'file' }));
   });
 
+  it('deselects a folder when clicked again (toggle)', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      json: async () => [folder({ id: 3, name: 'CITY' })],
+    });
+    render(<RadioFeed {...defaultProps} />);
+    await waitFor(() => screen.getByText('CITY'));
+    await userEvent.click(screen.getByText('CITY')); // select
+    await userEvent.click(screen.getByText('CITY')); // deselect
+    // upload target should reset to ROOT after deselect
+    expect(screen.getByText(/UPLOAD_TARGET: ROOT/)).toBeInTheDocument();
+  });
+
   it('does NOT call onTrackSelect when a folder is clicked', async () => {
     const onTrackSelect = vi.fn();
     global.fetch = vi.fn().mockResolvedValue({

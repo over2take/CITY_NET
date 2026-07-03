@@ -54,7 +54,7 @@ export function RadioFeed({
   const selectedItem = items.find((i) => i.id === selectedId) ?? null;
 
   const handleSelect = (item: MusicItem) => {
-    setSelectedId(item.id);
+    setSelectedId((prev) => (prev === item.id ? null : item.id));
     if (item.type === 'file') onTrackSelect(item);
   };
 
