@@ -150,7 +150,7 @@ CITY_NET/
 │   │   ├── maps.js             # Saved map snapshots; preserves global structures and rhombus tokens on load/clear
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload
 │   │   ├── roads.js            # Road CRUD
-│   │   └── player.js           # Player auth (register, login, forgot, reset)
+│   │   └── player.js           # Player auth (register, login, forgot, reset, registration status poll)
 │   ├── sockets/
 │   │   └── index.js            # All Socket.IO event handlers
 │   ├── startup/
@@ -175,7 +175,7 @@ CITY_NET/
 │   │   │   ├── Rhombuses.tsx           # Player token meshes
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays
 │   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools
-│   │   │   ├── SecureLogin.tsx         # Player login, registration, and password reset UI
+│   │   │   ├── SecureLogin.tsx         # Player login, registration, password reset UI; polls registration status until approved
 │   │   │   ├── CityDatabase.tsx        # Location search/browse
 │   │   │   ├── DraggableWindow.tsx     # Reusable draggable panel wrapper
 │   │   │   ├── AttackAnimations.tsx    # Attack hit/miss animations (swipe, projectile, miss text)
