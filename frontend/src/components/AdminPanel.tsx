@@ -22,7 +22,7 @@ export function AdminPanel({
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
-    secureModeEnabled
+    secureModeEnabled, currentLocBattleMaps, enterBattleMap
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -611,6 +611,15 @@ export function AdminPanel({
                     <button className="upload-btn" onClick={handleCopy}>COPY</button>
                     <button className="upload-btn danger-btn" onClick={() => setDeleteTarget(selectedLocation)}>DEL</button>
                   </div>
+                  {currentLocBattleMaps?.length > 0 && (
+                    <button
+                      className="upload-btn"
+                      style={{ width: '100%', marginTop: '8px', backgroundColor: '#5500ff' }}
+                      onClick={() => enterBattleMap(selectedLocation.id)}
+                    >
+                      ENTER_BATTLE_MAP ({currentLocBattleMaps.length})
+                    </button>
+                  )}
                 </>
               )}
               {copyBuffer && (

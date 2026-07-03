@@ -94,8 +94,8 @@ export function RadioPlayer({
       pos={pos}
       setPos={setPos}
       onClose={onClose}
-      windowStyle={{ width: '260px', zIndex: 1100 }}
-      contentStyle={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}
+      windowStyle={{ width: '360px', zIndex: 1100 }}
+      contentStyle={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}
     >
       {/* Track name */}
       <div
@@ -110,7 +110,7 @@ export function RadioPlayer({
       </div>
 
       {/* Scrubber */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingRight: '8px' }}>
         <input
           type="range"
           min={0}

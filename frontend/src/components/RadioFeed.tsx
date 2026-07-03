@@ -178,7 +178,7 @@ export function RadioFeed({
       pos={pos}
       setPos={setPos}
       onClose={onClose}
-      windowStyle={{ width: '340px', zIndex: 1200 }}
+      windowStyle={{ width: '280px', zIndex: 1200 }}
       contentStyle={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}
     >
       {/* Library tree */}

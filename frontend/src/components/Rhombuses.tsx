@@ -291,8 +291,8 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
       )}
       
       {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && streamerHovered)) && (
-          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
-            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #ff0000`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
+          <Html position={[0, isBattleMap ? 0.1 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude={!isBattleMap} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #ff0000`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px', transform: isBattleMap ? 'translateY(-40px)' : undefined }}>
                 {location.name}
             </div>
           </Html>
@@ -552,8 +552,8 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
       )}
       
       {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && streamerHovered)) && (
-          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
-            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #00ccff`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
+          <Html position={[0, isBattleMap ? 0.1 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude={!isBattleMap} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #00ccff`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px', transform: isBattleMap ? 'translateY(-40px)' : undefined }}>
                 {location.name}
             </div>
           </Html>
@@ -862,8 +862,8 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
       )}
 
       {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && streamerHovered)) && (
-          <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
-            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid ${baseColor}`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
+          <Html position={[0, isBattleMap ? 0.1 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude={!isBattleMap} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid ${baseColor}`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px', transform: isBattleMap ? 'translateY(-40px)' : undefined }}>
                 {location.name}
             </div>
           </Html>
