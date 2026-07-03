@@ -11,7 +11,6 @@ export interface SecureLoginProps {
   onAdminLogin: (username: string, adminToken: string) => void;
   onPendingsFetched: (rows: { username: string; created_at: string }[]) => void;
   StatusLogDisplay: React.ComponentType;
-  registrationApprovedFor?: string | null;
 }
 
 export function SecureLogin({
@@ -23,7 +22,6 @@ export function SecureLogin({
   onAdminLogin,
   onPendingsFetched,
   StatusLogDisplay,
-  registrationApprovedFor,
 }: SecureLoginProps) {
   const [loginView, setLoginView] = useState<LoginView>('login');
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
@@ -41,14 +39,27 @@ export function SecureLogin({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingUsername = useRef<string>('');
 
-  // When admin approves this user's registration, switch to login with a success message
+  // Poll registration status while waiting for admin approval
   useEffect(() => {
-    if (!registrationApprovedFor) return;
-    if (loginView === 'pending' && registrationApprovedFor === pendingUsername.current) {
-      setLoginView('login');
-      setLoginError('');
-    }
-  }, [registrationApprovedFor]);
+    if (loginView !== 'pending' || !pendingUsername.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/player/players/status/${encodeURIComponent(pendingUsername.current)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === 'approved') {
+          clearInterval(pollRef.current!);
+          setLoginView('login');
+          setLoginError('');
+        } else if (data.status === 'denied' || data.status === undefined) {
+          clearInterval(pollRef.current!);
+          setLoginError('Your registration was denied. Please contact your GM.');
+          setLoginView('login');
+        }
+      } catch { /* network hiccup — try again next tick */ }
+    }, 3000);
+    return () => clearInterval(pollRef.current!);
+  }, [loginView]);
 
   // Poll for admin approval when in awaiting state
   useEffect(() => {
