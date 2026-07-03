@@ -1316,38 +1316,40 @@ function App() {
                         <>
                           <p><strong>ID_TAG:</strong> {selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : (selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED'))}</p>
                           <p><strong>DATA_DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
-                          {/* AC display — read-only for players, editable for admin */}
-                          {isAdmin && acEdit ? (
-                            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <strong style={{ minWidth: '90px' }}>MELEE_AC:</strong>
-                                <input type="number" min="0" value={acEdit.melee} onChange={e => setAcEdit(a => a ? { ...a, melee: e.target.value } : a)} style={{ width: '60px' }} />
+                          {/* AC display — admin can edit; owner can view their own; other players see nothing */}
+                          {(isAdmin || isOwner) && (
+                            isAdmin && acEdit ? (
+                              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <strong style={{ minWidth: '90px' }}>MELEE_AC:</strong>
+                                  <input type="number" min="0" value={acEdit.melee} onChange={e => setAcEdit(a => a ? { ...a, melee: e.target.value } : a)} style={{ width: '60px' }} />
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <strong style={{ minWidth: '90px' }}>RANGED_AC:</strong>
+                                  <input type="number" min="0" value={acEdit.ranged} onChange={e => setAcEdit(a => a ? { ...a, ranged: e.target.value } : a)} style={{ width: '60px' }} />
+                                  <span title="Leave blank to use Melee AC" style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button className="upload-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={async () => {
+                                    const meleeVal = acEdit.melee === '' ? null : parseInt(acEdit.melee, 10);
+                                    const rangedVal = acEdit.ranged === '' ? null : parseInt(acEdit.ranged, 10);
+                                    const loc = selectedLocation;
+                                    await fetch(`/api/locations/${loc.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...loc, melee_ac: meleeVal, ranged_ac: rangedVal }) });
+                                    fetchLocations();
+                                    setAcEdit(null);
+                                  }}>SAVE</button>
+                                  <button className="utility-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => setAcEdit(null)}>CANCEL</button>
+                                </div>
                               </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <strong style={{ minWidth: '90px' }}>RANGED_AC:</strong>
-                                <input type="number" min="0" value={acEdit.ranged} onChange={e => setAcEdit(a => a ? { ...a, ranged: e.target.value } : a)} style={{ width: '60px' }} />
-                                <span title="Leave blank to use Melee AC" style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
+                            ) : (
+                              <div style={{ marginTop: '8px' }}>
+                                <p><strong>MELEE_AC:</strong> {selectedLocation.melee_ac ?? 10}</p>
+                                <p><strong>RANGED_AC:</strong> {selectedLocation.ranged_ac != null ? selectedLocation.ranged_ac : <span style={{ color: 'var(--text-muted, #888)' }}>{selectedLocation.melee_ac ?? 10} (melee)</span>}</p>
+                                {isAdmin && (
+                                  <button className="utility-btn" style={{ marginTop: '4px', padding: '3px 10px', fontSize: '11px' }} onClick={() => setAcEdit({ melee: String(selectedLocation.melee_ac ?? 10), ranged: selectedLocation.ranged_ac != null ? String(selectedLocation.ranged_ac) : '' })}>EDIT_AC</button>
+                                )}
                               </div>
-                              <div style={{ display: 'flex', gap: '6px' }}>
-                                <button className="upload-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={async () => {
-                                  const meleeVal = acEdit.melee === '' ? null : parseInt(acEdit.melee, 10);
-                                  const rangedVal = acEdit.ranged === '' ? null : parseInt(acEdit.ranged, 10);
-                                  const loc = selectedLocation;
-                                  await fetch(`/api/locations/${loc.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...loc, melee_ac: meleeVal, ranged_ac: rangedVal }) });
-                                  fetchLocations();
-                                  setAcEdit(null);
-                                }}>SAVE</button>
-                                <button className="utility-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => setAcEdit(null)}>CANCEL</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ marginTop: '8px' }}>
-                              <p><strong>MELEE_AC:</strong> {selectedLocation.melee_ac ?? 10}</p>
-                              <p><strong>RANGED_AC:</strong> {selectedLocation.ranged_ac != null ? selectedLocation.ranged_ac : <span style={{ color: 'var(--text-muted, #888)' }}>{selectedLocation.melee_ac ?? 10} (melee)</span>}</p>
-                              {isAdmin && (
-                                <button className="utility-btn" style={{ marginTop: '4px', padding: '3px 10px', fontSize: '11px' }} onClick={() => setAcEdit({ melee: String(selectedLocation.melee_ac ?? 10), ranged: selectedLocation.ranged_ac != null ? String(selectedLocation.ranged_ac) : '' })}>EDIT_AC</button>
-                              )}
-                            </div>
+                            )
                           )}
                         </>
                       ) : (
