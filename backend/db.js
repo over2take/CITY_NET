@@ -168,6 +168,9 @@ db.serialize(() => {
   db.run(`ALTER TABLE locations ADD COLUMN hp_temp INTEGER`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN map_scale_multiplier REAL DEFAULT 5`, (err) => {});
 
+  db.run(`ALTER TABLE locations ADD COLUMN melee_ac INTEGER`, (err) => {});
+  db.run(`ALTER TABLE locations ADD COLUMN ranged_ac INTEGER`, (err) => {});
+
   db.run(`ALTER TABLE dice_rolls ADD COLUMN historyString TEXT`, (err) => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS saved_maps (
