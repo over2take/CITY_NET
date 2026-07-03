@@ -52,9 +52,9 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     });
   });
 
-  // Custom structure library — all user-named structures with their child parts
+  // Custom structure library — structures saved via JOIN → CUSTOM classification
   router.get('/custom-library', authenticate, (req, res) => {
-    db.all('SELECT * FROM custom_structure_library ORDER BY saved_at DESC', (err, rows) => {
+    db.all(`SELECT * FROM custom_structure_library WHERE classification = 'CUSTOM' OR parent_id IS NOT NULL ORDER BY saved_at DESC`, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       const roots = rows.filter(r => !r.parent_id);
       const children = rows.filter(r => r.parent_id);
@@ -130,15 +130,6 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         if (results.length > 0) {
           recordAction('location_create', { ids: results.map(r => r.id) });
           results.forEach(loc => {
-            if (isUserDefinedName(loc.name)) {
-              db.run('UPDATE locations SET is_global = 1 WHERE id = ?', [loc.id]);
-              upsertLibrary(db, loc);
-            } else if (loc.parent_id) {
-              // Save child parts to library if their root is a global custom structure
-              db.get('SELECT is_global FROM locations WHERE id = ?', [loc.parent_id], (err, row) => {
-                if (!err && row && row.is_global) upsertLibrary(db, loc);
-              });
-            }
             if (loc.shape === 'rhombus') io.emit('rhombusAppearing', { id: loc.id, owner: loc.owner });
           });
         }
@@ -203,8 +194,23 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       }
     });
 
+    const saveGroupToLibrary = () => {
+      if (classification !== 'CUSTOM') return;
+      db.get('SELECT * FROM locations WHERE id = ?', [rootId], (err, root) => {
+        if (err || !root) return;
+        root.classification = 'CUSTOM';
+        if (!root.name) root.name = `CUSTOM_${rootId}`;
+        upsertLibrary(db, root);
+        db.all('SELECT * FROM locations WHERE parent_id = ?', [rootId], (err2, children) => {
+          if (err2 || !children) return;
+          children.forEach(child => upsertLibrary(db, child));
+        });
+      });
+    };
+
     updateRoot.then(() => {
       if (childrenIds.length === 0) {
+        saveGroupToLibrary();
         emitUpdate();
         return res.json({ message: 'Structure classified', rootId });
       }
@@ -214,6 +220,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         db.run(`UPDATE locations SET parent_id = ? WHERE id IN (${placeholders})`, [rootId, ...childrenIds], function(err) {
           if (err) return res.status(500).json({ error: err.message });
           recordAction('location_update_batch', { data: rows.map(r => ({ id: r.id, old_data: { parent_id: r.parent_id } })) });
+          saveGroupToLibrary();
           emitUpdate();
           res.json({ message: 'Structures joined', rootId });
         });
@@ -245,14 +252,6 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       db.run(sql, params, function(err) {
         if (err) return res.status(500).json({ error: err.message });
         recordAction('location_update', { id: req.params.id, old_data: oldRow });
-        if (isUserDefinedName(name)) {
-          db.run('UPDATE locations SET is_global = 1 WHERE id = ?', [req.params.id]);
-          upsertLibrary(db, { id: parseInt(req.params.id), name, description, npcs, x, y, z,
-            width, height, depth, shape, color, district_name, district_color, parent_id,
-            isFavorite, isDanger, rotation, rotation_x, rotation_z, classification, polyCount,
-            hp_current: oldRow.hp_current, hp_max: oldRow.hp_max, hp_temp: oldRow.hp_temp,
-            map_scale_multiplier, melee_ac, ranged_ac, injuries: oldRow.injuries });
-        }
         emitUpdate();
         res.json({ id: req.params.id, ...req.body });
       });

@@ -451,29 +451,43 @@ function App() {
             setEditData({ ...editData, baseWidth: totalW, baseHeight: totalH, baseDepth: totalD, width: totalW, height: totalH, depth: totalD });
             if (targetObject) targetObject.scale.set(1, 1, 1);
             
-            // If a generation type is already selected, regenerate at the new size (keep same type, cycle style)
+            // If a generation type is already selected, resize at the new dimensions
             if (editorGenType) {
-                const raw: any[] = [];
-                let zoneVal = 0.5;
-                if (editorGenType === 'CORPO') zoneVal = 0.9;
-                else if (editorGenType === 'URBAN') zoneVal = 0.5;
-                else if (editorGenType === 'SLUMS') zoneVal = 0.1;
-                else if (editorGenType === 'INDUSTRIAL') zoneVal = -0.1;
-                else if (editorGenType === 'LANDMARK') zoneVal = 1.5;
-                else if (editorGenType === 'MARKETS') zoneVal = 2.0;
-                else if (editorGenType === 'CUSTOM') zoneVal = 3.0;
-                const baseMaxStyle = editorGenType === 'CORPO' ? 11 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 13 : editorGenType === 'MARKETS' ? 5 : 0;
-                const customPoolSize = locations.filter((b: any) => b.classification === editorGenType && !b.parent_id).length;
-                const maxStyle = baseMaxStyle + customPoolSize;
-                if (maxStyle === 0) return;
-                const currentStyle = editorStyleIndex % maxStyle;
-                generateThemedBuildingsForPlot(0, 0, totalW, totalD, zoneVal, () => false, () => '', {}, raw, locations, undefined, totalH, currentStyle);
-                setEditorStyleIndex(editorStyleIndex + 1);
-                for (let i = 0; i < raw.length; i++) {
-                    if (!raw[i].name) raw[i].name = editorGenType + '_';
-                    if (editData.color) raw[i].color = editData.color;
+                if (editorGenType === 'CUSTOM' && editorGenParts.length > 0) {
+                    // Custom structures: scale the existing parts to fit the copied size
+                    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+                    editorGenParts.forEach((p: any) => {
+                        if (p.x - p.width/2 < minX) minX = p.x - p.width/2;
+                        if (p.x + p.width/2 > maxX) maxX = p.x + p.width/2;
+                        if (p.y < minY) minY = p.y;
+                        if (p.y + p.height > maxY) maxY = p.y + p.height;
+                        if (p.z - p.depth/2 < minZ) minZ = p.z - p.depth/2;
+                        if (p.z + p.depth/2 > maxZ) maxZ = p.z + p.depth/2;
+                    });
+                    const curW = maxX - minX || 1;
+                    const curH = maxY - minY || 1;
+                    const curD = maxZ - minZ || 1;
+                    if (targetObject) targetObject.scale.set(totalW / curW, totalH / curH, totalD / curD);
+                } else if (editorGenType !== 'CUSTOM') {
+                    const raw: any[] = [];
+                    let zoneVal = 0.5;
+                    if (editorGenType === 'CORPO') zoneVal = 0.9;
+                    else if (editorGenType === 'URBAN') zoneVal = 0.5;
+                    else if (editorGenType === 'SLUMS') zoneVal = 0.1;
+                    else if (editorGenType === 'INDUSTRIAL') zoneVal = -0.1;
+                    else if (editorGenType === 'LANDMARK') zoneVal = 1.5;
+                    else if (editorGenType === 'MARKETS') zoneVal = 2.0;
+                    const baseMaxStyle = editorGenType === 'CORPO' ? 11 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 13 : editorGenType === 'MARKETS' ? 5 : 0;
+                    if (baseMaxStyle === 0) { setIsCopyingSize(false); return; }
+                    const currentStyle = editorStyleIndex % baseMaxStyle;
+                    generateThemedBuildingsForPlot(0, 0, totalW, totalD, zoneVal, () => false, () => '', {}, raw, locations, undefined, totalH, currentStyle);
+                    setEditorStyleIndex(editorStyleIndex + 1);
+                    for (let i = 0; i < raw.length; i++) {
+                        if (!raw[i].name) raw[i].name = editorGenType + '_';
+                        if (editData.color) raw[i].color = editData.color;
+                    }
+                    setEditorGenParts(raw);
                 }
-                setEditorGenParts(raw);
             }
         }
         

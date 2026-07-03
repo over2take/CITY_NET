@@ -138,7 +138,6 @@ export function AdminPanel({
   const [showDefined, setShowDefined] = useState(false);
   const [showUndefined, setShowUndefined] = useState(false);
   const [customLibrary, setCustomLibrary] = useState<any[]>([]);
-  const [showCustomPicker, setShowCustomPicker] = useState(false);
   const [customLibraryLoading, setCustomLibraryLoading] = useState(false);
   const defined = locations.filter((l: any) => !l.parent_id && isUserDefinedName(l.name));
   const undefinedLocs = locations.filter((l: any) => !l.parent_id && !isUserDefinedName(l.name));
@@ -1325,7 +1324,6 @@ export function AdminPanel({
                         {['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'LANDMARK', 'MARKETS'].map(t => (
                           <button key={t} type="button" className={editorGenType === t ? 'active' : ''} onClick={() => {
                             setEditorGenType(t);
-                            setShowCustomPicker(false);
                             setEditorStyleIndex(0);
                             const raw: any[] = [];
                             const bWidth = (editData.baseWidth || editData.width || 2) * (targetObject ? targetObject.scale.x : 1);
@@ -1358,25 +1356,52 @@ export function AdminPanel({
                         ))}
                         <button
                           type="button"
-                          className={showCustomPicker ? 'active' : ''}
+                          className={editorGenType === 'CUSTOM' ? 'active' : ''}
                           onClick={async () => {
-                            if (showCustomPicker) { setShowCustomPicker(false); return; }
                             setEditorGenType('CUSTOM');
+                            setEditorStyleIndex(0);
                             setEditorGenParts([]);
                             setCustomLibraryLoading(true);
-                            setShowCustomPicker(true);
                             const res = await fetch('/api/locations/custom-library', { headers: { Authorization: `Bearer ${token}` } });
-                            if (res.ok) setCustomLibrary(await res.json());
+                            if (res.ok) {
+                              const lib = await res.json();
+                              setCustomLibrary(lib);
+                              if (lib.length > 0) {
+                                const entry = lib[0];
+                                const rootPart = { x: 0, y: 0, z: 0, width: entry.width, height: entry.height, depth: entry.depth, shape: entry.shape || 'box', color: entry.color || '#00ff00', rotation: entry.rotation || 0, rotation_x: entry.rotation_x || 0, rotation_z: entry.rotation_z || 0, polyCount: entry.polyCount || 5 };
+                                const childParts = (entry.parts || []).map((c: any) => ({ x: c.x - entry.x, y: c.y - entry.y, z: c.z - entry.z, width: c.width, height: c.height, depth: c.depth, shape: c.shape || 'box', color: c.color || '#00ff00', rotation: c.rotation || 0, rotation_x: c.rotation_x || 0, rotation_z: c.rotation_z || 0, polyCount: c.polyCount || 5, parent_name: 'ROOT' }));
+                                setEditorGenParts([rootPart, ...childParts]);
+                                setEditorStyleIndex(1);
+                              }
+                            }
                             setCustomLibraryLoading(false);
                           }}
                         >CUSTOM</button>
                       </div>
                       {editorGenType && (() => {
+                        if (editorGenType === 'CUSTOM') {
+                          const maxStyle = customLibrary.length;
+                          if (maxStyle === 0) return (
+                            <div style={{ marginTop: '8px', fontSize: '0.65rem', opacity: 0.6 }}>
+                              {customLibraryLoading ? 'LOADING...' : 'No custom structures yet. Use JOIN_STRUCTS → CUSTOM to add.'}
+                            </div>
+                          );
+                          const currentStyle = editorStyleIndex % maxStyle;
+                          const displayNum = currentStyle === 0 ? maxStyle : currentStyle;
+                          return (
+                            <button type="button" className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => {
+                              const entry = customLibrary[currentStyle];
+                              if (!entry) return;
+                              const rootPart = { x: 0, y: 0, z: 0, width: entry.width, height: entry.height, depth: entry.depth, shape: entry.shape || 'box', color: entry.color || '#00ff00', rotation: entry.rotation || 0, rotation_x: entry.rotation_x || 0, rotation_z: entry.rotation_z || 0, polyCount: entry.polyCount || 5 };
+                              const childParts = (entry.parts || []).map((c: any) => ({ x: c.x - entry.x, y: c.y - entry.y, z: c.z - entry.z, width: c.width, height: c.height, depth: c.depth, shape: c.shape || 'box', color: c.color || '#00ff00', rotation: c.rotation || 0, rotation_x: c.rotation_x || 0, rotation_z: c.rotation_z || 0, polyCount: c.polyCount || 5, parent_name: 'ROOT' }));
+                              setEditorGenParts([rootPart, ...childParts]);
+                              setEditorStyleIndex(editorStyleIndex + 1);
+                            }}>NEXT_STYLE [{displayNum}/{maxStyle}]</button>
+                          );
+                        }
                         const baseMaxStyle = editorGenType === 'CORPO' ? 11 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 13 : editorGenType === 'MARKETS' ? 5 : 0;
-                        const customPoolSize = locations.filter((b: any) => b.classification === editorGenType && !b.parent_id).length;
-                        const maxStyle = baseMaxStyle + customPoolSize;
-                        if (maxStyle === 0) return null;
-                        const currentStyle = editorStyleIndex % maxStyle;
+                        if (baseMaxStyle === 0) return null;
+                        const currentStyle = editorStyleIndex % baseMaxStyle;
                         return (
                           <button type="button" className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => {
                               const raw: any[] = [];
@@ -1389,69 +1414,14 @@ export function AdminPanel({
                               else if (editorGenType === 'INDUSTRIAL') zoneVal = -0.1;
                               else if (editorGenType === 'LANDMARK') zoneVal = 1.5;
                               else if (editorGenType === 'MARKETS') zoneVal = 2.0;
-                              else if (editorGenType === 'CUSTOM') zoneVal = 3.0;
                               const bHeight = (editData.baseHeight || editData.height || 4) * (targetObject ? targetObject.scale.y : 1);
                               generateThemedBuildingsForPlot(0, 0, bWidth, bDepth, zoneVal, () => false, () => '', {}, raw, locations, undefined, bHeight, currentStyle);
                               setEditorStyleIndex(editorStyleIndex + 1);
                               setEditorGenParts(raw);
-                          }}>NEXT_STYLE [{currentStyle === 0 ? maxStyle : currentStyle}/{maxStyle}]</button>
+                          }}>NEXT_STYLE [{currentStyle === 0 ? baseMaxStyle : currentStyle}/{baseMaxStyle}]</button>
                         );
                       })()}
                     </div>
-
-                    {/* Custom library picker */}
-                    {showCustomPicker && (
-                      <div style={{ marginTop: '8px', border: '1px solid var(--dark-green)', padding: '8px' }}>
-                        {customLibraryLoading && <div style={{ fontSize: '0.65rem', opacity: 0.6 }}>LOADING...</div>}
-                        {!customLibraryLoading && customLibrary.length === 0 && (
-                          <div style={{ fontSize: '0.65rem', opacity: 0.6, lineHeight: 1.6 }}>
-                            No saved structures yet.<br />Name a data point to add it here.
-                          </div>
-                        )}
-                        {!customLibraryLoading && customLibrary.map(entry => (
-                          <button
-                            key={entry.id}
-                            type="button"
-                            className="utility-btn"
-                            style={{ width: '100%', textAlign: 'left', marginBottom: '4px', fontSize: '0.65rem', padding: '5px 8px' }}
-                            onClick={() => {
-                              // Build editorGenParts with positions relative to root
-                              const rootPart = {
-                                x: 0, y: 0, z: 0,
-                                width: entry.width, height: entry.height, depth: entry.depth,
-                                shape: entry.shape || 'box',
-                                color: entry.color || '#00ff00',
-                                rotation: entry.rotation || 0,
-                                rotation_x: entry.rotation_x || 0,
-                                rotation_z: entry.rotation_z || 0,
-                                polyCount: entry.polyCount || 5,
-                              };
-                              const childParts = (entry.parts || []).map((c: any) => ({
-                                x: c.x - entry.x,
-                                y: c.y - entry.y,
-                                z: c.z - entry.z,
-                                width: c.width, height: c.height, depth: c.depth,
-                                shape: c.shape || 'box',
-                                color: c.color || '#00ff00',
-                                rotation: c.rotation || 0,
-                                rotation_x: c.rotation_x || 0,
-                                rotation_z: c.rotation_z || 0,
-                                polyCount: c.polyCount || 5,
-                                parent_name: entry.name,
-                              }));
-                              setEditorGenParts([rootPart, ...childParts]);
-                              setEditData({ ...editData, name: entry.name, description: entry.description || '', npcs: entry.npcs || '' });
-                              setShowCustomPicker(false);
-                            }}
-                          >
-                            <span style={{ color: 'var(--green)' }}>{entry.name}</span>
-                            <span style={{ opacity: 0.5, marginLeft: '6px' }}>
-                              {entry.parts?.length > 0 ? `+${entry.parts.length} parts` : entry.shape || 'box'}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
 
                     <div style={{display: 'flex', gap: '10px', marginTop: '10px', marginBottom: '10px'}}>
                         <button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg></button>
