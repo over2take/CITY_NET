@@ -123,6 +123,18 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
 
     if (groupRef.current) {
         groupRef.current.position.copy(visualPos.current);
+        // Attack hit wiggle: decaying positional shake triggered via window.rhombusWiggles
+        const wigStart = (window as any).rhombusWiggles?.[location.id];
+        if (wigStart) {
+            const wt = (Date.now() - wigStart) / 600;
+            if (wt < 1) {
+                const amp = (1 - wt) * 0.8;
+                groupRef.current.position.x += Math.sin(wt * Math.PI * 8) * amp;
+                groupRef.current.position.z += Math.cos(wt * Math.PI * 6) * amp * 0.5;
+            } else {
+                delete (window as any).rhombusWiggles[location.id];
+            }
+        }
     }
 
     const d = state.camera.position.distanceTo(visualPos.current);
@@ -383,6 +395,18 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
 
     if (groupRef.current) {
         groupRef.current.position.copy(visualPos.current);
+        // Attack hit wiggle: decaying positional shake triggered via window.rhombusWiggles
+        const wigStart = (window as any).rhombusWiggles?.[location.id];
+        if (wigStart) {
+            const wt = (Date.now() - wigStart) / 600;
+            if (wt < 1) {
+                const amp = (1 - wt) * 0.8;
+                groupRef.current.position.x += Math.sin(wt * Math.PI * 8) * amp;
+                groupRef.current.position.z += Math.cos(wt * Math.PI * 6) * amp * 0.5;
+            } else {
+                delete (window as any).rhombusWiggles[location.id];
+            }
+        }
     }
 
     const d = state.camera.position.distanceTo(visualPos.current);
@@ -653,6 +677,18 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
 
     if (groupRef.current) {
         groupRef.current.position.copy(visualPos.current);
+        // Attack hit wiggle: decaying positional shake triggered via window.rhombusWiggles
+        const wigStart = (window as any).rhombusWiggles?.[location.id];
+        if (wigStart) {
+            const wt = (Date.now() - wigStart) / 600;
+            if (wt < 1) {
+                const amp = (1 - wt) * 0.8;
+                groupRef.current.position.x += Math.sin(wt * Math.PI * 8) * amp;
+                groupRef.current.position.z += Math.cos(wt * Math.PI * 6) * amp * 0.5;
+            } else {
+                delete (window as any).rhombusWiggles[location.id];
+            }
+        }
     }
 
     const d = Math.sqrt((camPos.x - visualPos.current.x) ** 2 + (camPos.y - visualPos.current.y) ** 2 + (camPos.z - visualPos.current.z) ** 2);
