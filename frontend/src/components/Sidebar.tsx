@@ -65,6 +65,29 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
   const isOwner = selectedLocation?.owner === userName;
   const canRemoveSelected = isSelectedRhombus && (isAdmin || isOwner);
 
+  const [acMelee, setAcMelee] = useState('');
+  const [acRanged, setAcRanged] = useState('');
+
+  // Pre-populate AC fields whenever the deployed rhombus changes
+  React.useEffect(() => {
+    if (userRhombus) {
+      setAcMelee(userRhombus.melee_ac != null ? String(userRhombus.melee_ac) : '');
+      setAcRanged(userRhombus.ranged_ac != null ? String(userRhombus.ranged_ac) : '');
+    }
+  }, [userRhombus?.id, userRhombus?.melee_ac, userRhombus?.ranged_ac]);
+
+  const saveAc = async () => {
+    if (!userRhombus) return;
+    const meleeVal = acMelee === '' ? null : parseInt(acMelee, 10);
+    const rangedVal = acRanged === '' ? null : parseInt(acRanged, 10);
+    await fetch(`/api/locations/${userRhombus.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ ...userRhombus, melee_ac: meleeVal, ranged_ac: rangedVal }),
+    });
+    refreshLocations();
+  };
+
   const removeRhombus = async (id: number) => {
     if (socketRef.current) {
       socketRef.current.emit('requestRhombusPurge', { id, owner: userName });
@@ -181,6 +204,37 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
             />
           </div>
         </div>
+
+        {userRhombus && (
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '2px' }}>DEFENSE_RATING</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.7rem', minWidth: '80px', opacity: 0.8 }}>MELEE_AC:</span>
+              <input
+                type="number"
+                min="0"
+                placeholder="10"
+                value={acMelee}
+                onChange={e => setAcMelee(e.target.value)}
+                onBlur={saveAc}
+                style={{ flex: 1, marginBottom: 0 }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.7rem', minWidth: '80px', opacity: 0.8 }}>RANGED_AC:</span>
+              <input
+                type="number"
+                min="0"
+                placeholder={acMelee !== '' ? acMelee : '10'}
+                value={acRanged}
+                onChange={e => setAcRanged(e.target.value)}
+                onBlur={saveAc}
+                style={{ flex: 1, marginBottom: 0 }}
+              />
+              <span title="Leave blank to use Melee AC" style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
+            </div>
+          </div>
+        )}
 
         <div className="info-box" style={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: '1.6', borderTop: '1px solid var(--dark-green)', paddingTop: '15px', width: '100%' }}>
           <p style={{ color: 'var(--green)', fontWeight: 'bold', marginBottom: '5px' }}>INTERFACE_GUIDE:</p>
