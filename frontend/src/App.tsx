@@ -133,11 +133,6 @@ function App() {
 
   useEffect(() => { localStorage.setItem('musicVolume', String(musicVolume)); }, [musicVolume]);
 
-  // Keep audio element volume synced with local volume × master volume
-  useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = Math.min(1, musicVolume * masterVolume);
-  }, [musicVolume, masterVolume]);
-
   const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
   const [hitPointsPos, setHitPointsPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
   const [acEdit, setAcEdit] = useState<{ melee: string; ranged: string } | null>(null);
@@ -195,6 +190,11 @@ function App() {
   const [notification, setNotification] = useState<string | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(() => { const saved = localStorage.getItem('audioEnabled'); return saved !== null ? JSON.parse(saved) : true; });
   const [masterVolume, setMasterVolume] = useState(() => { const saved = localStorage.getItem('masterVolume'); return saved !== null ? parseFloat(saved) : 0.5; });
+
+  // Keep audio element volume synced with local volume × master volume
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = Math.min(1, musicVolume * masterVolume);
+  }, [musicVolume, masterVolume]);
   const [isBatchSelecting, setIsBatchSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [districtSelection, setDistrictSelection] = useState<number[]>([]);
