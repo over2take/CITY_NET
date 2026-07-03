@@ -45,7 +45,7 @@ import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } from './components/MapElements';
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
-import { SpectatorCameraRig, AdminCameraBroadcaster, computeBroadcastFraming } from './components/Streamer';
+import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
 import { StreamerVisibilityContext } from './context/StreamerVisibilityContext';
 import { StreamerOverlay } from './components/StreamerOverlay';
 import { StreamerDirectorPanel } from './components/StreamerDirectorPanel';
@@ -1401,9 +1401,15 @@ function App() {
                 return finalScale;
             })() : (globalSettings?.map_scale_multiplier || 5)} color={rhombusState.color || '#00ff00'} userName={userName} />
             <MeasurementVisualizer socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} userName={userName} />
+            {view === 'battle_map' && IS_SPECTATOR && (
+              <SpectatorBattleMapRig socket={socketRef.current} cameraMode={directorState.cameraMode} />
+            )}
+            {view === 'battle_map' && !IS_SPECTATOR && token !== '' && (
+              <AdminBattleMapBroadcaster socket={socketRef.current} enabled={spectatorCount > 0} />
+            )}
             {view === 'battle_map' ? (
               activeBattleMapData && activeBattleMapData.maps[activeBattleMapData.currentFloorIndex] && (
-                <BattleMapScene 
+                <BattleMapScene
                   measureMode={measureMode}
                   mapUrl={activeBattleMapData.maps[activeBattleMapData.currentFloorIndex].image_url} 
                   onMapClick={(pos: any) => {
@@ -1493,8 +1499,7 @@ function App() {
             ) : (
               <>
                 <PerspectiveCamera makeDefault position={[0, 200, 250]} />
-            {/* Battle maps use an orthographic camera: DOLLY (16) is a no-op there, ZOOM (32) drives camera.zoom instead */}
-            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode && !IS_SPECTATOR} dollyToCursor={true} mouseButtons={{ left: 2, right: 1, middle: view === 'battle_map' ? 32 : 16, wheel: view === 'battle_map' ? 32 : 16 }} />
+            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode && !IS_SPECTATOR} dollyToCursor={true} mouseButtons={{ left: 2, right: 1, middle: 16, wheel: 16 }} />
             {IS_SPECTATOR && <SpectatorCameraRig socket={socketRef.current} controlsRef={controlsRef} directorState={directorState} />}
             {!IS_SPECTATOR && token !== '' && <AdminCameraBroadcaster socket={socketRef.current} controlsRef={controlsRef} enabled={directorState.cameraMode === 'mirror' && spectatorCount > 0} />}
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
