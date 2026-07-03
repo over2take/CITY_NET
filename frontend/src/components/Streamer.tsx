@@ -50,17 +50,23 @@ export function AdminCameraBroadcaster({ socket, controlsRef, enabled }: {
   enabled: boolean;
 }) {
   const lastSent = useRef(0);
+  const tmpPos = useRef(new THREE.Vector3());
   const tmpTarget = useRef(new THREE.Vector3());
 
-  useFrame((state) => {
+  useFrame(() => {
     if (!enabled || !socket) return;
     const now = performance.now();
     if (now - lastSent.current < 100) return;
     lastSent.current = now;
     const controls = controlsRef.current;
     if (!controls) return;
-    controls.getTarget(tmpTarget.current);
-    const p = state.camera.position;
+    // Read position and target as a consistent end-value pair. Mixing the
+    // live camera position with the end target breaks dolly-to-cursor on the
+    // spectator: the two are from different points in the transition, so the
+    // reconstructed ray misses the cursor-anchored point.
+    controls.getPosition(tmpPos.current, true);
+    controls.getTarget(tmpTarget.current, true);
+    const p = tmpPos.current;
     const t = tmpTarget.current;
     socket.emit('streamerCamera', { pos: [p.x, p.y, p.z], lookAt: [t.x, t.y, t.z] });
   });
