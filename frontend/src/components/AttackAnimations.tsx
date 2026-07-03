@@ -18,6 +18,7 @@ export interface AttackAnimationEntry {
   attackerPos: { x: number; z: number } | null;
   targetPos: { x: number; z: number };
   targetId: number;
+  isBattleMap: boolean;
 }
 
 const MISS_STRINGS = [
@@ -107,9 +108,11 @@ function RangedProjectile({ entry, onDone }: { entry: AttackAnimationEntry; onDo
     }
   });
 
+  const radius = entry.isBattleMap ? 1.2 : 0.6;
+
   return (
     <mesh ref={meshRef} position={[from.x, 3, from.z]}>
-      <sphereGeometry args={[0.6, 12, 12]} />
+      <sphereGeometry args={[radius, 12, 12]} />
       <meshBasicMaterial color="#ffaa00" />
     </mesh>
   );

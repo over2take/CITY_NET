@@ -528,8 +528,16 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             pendingAttacks.delete(socket.id);
             const hit = grandTotal >= attack.ac;
             const info = userSockets.get(socket.id);
-            // Look up attacker position for animation
-            db.get('SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ?', [info ? info.userName : null], (posErr, attackerRow) => {
+            // Look up attacker position for animation — the attacker's rhombus on the
+            // same map as the target (players get one rhombus per battle map + world).
+            const onBattleMap = attack.targetBattleMapId !== null && attack.targetBattleMapId !== undefined;
+            const attackerSql = onBattleMap
+              ? 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id = ? AND floor_index = ?'
+              : 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id IS NULL';
+            const attackerParams = onBattleMap
+              ? [info ? info.userName : null, attack.targetBattleMapId, attack.targetFloorIndex]
+              : [info ? info.userName : null];
+            db.get(attackerSql, attackerParams, (posErr, attackerRow) => {
               io.emit('attackResult', {
                 hit,
                 attackerId: socket.id,
@@ -541,6 +549,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 ac: attack.ac,
                 attackerPos: attackerRow ? { x: attackerRow.x, z: attackerRow.z } : null,
                 targetPos: { x: attack.targetX, z: attack.targetZ },
+                isBattleMap: onBattleMap,
               });
             });
           }
@@ -648,14 +657,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('initiateAttack', (data) => {
       const info = userSockets.get(socket.id);
       if (!info || !data || !data.targetId || !data.attackType) return;
-      db.get('SELECT id, name, x, z, melee_ac, ranged_ac, shape FROM locations WHERE id = ?', [data.targetId], (err, target) => {
+      db.get('SELECT id, name, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index FROM locations WHERE id = ?', [data.targetId], (err, target) => {
         if (err || !target) return;
         const isRhombus = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'].includes(target.shape);
         if (!isRhombus) return;
         const meleeAc = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 10;
         const rangedAc = target.ranged_ac !== null && target.ranged_ac !== undefined ? target.ranged_ac : meleeAc;
         const ac = data.attackType === 'ranged' ? rangedAc : meleeAc;
-        pendingAttacks.set(socket.id, { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, targetX: target.x, targetZ: target.z });
+        pendingAttacks.set(socket.id, { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, targetX: target.x, targetZ: target.z, targetBattleMapId: target.battle_map_id, targetFloorIndex: target.floor_index });
         socket.emit('attackPending', { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac });
       });
     });

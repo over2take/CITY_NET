@@ -257,6 +257,13 @@ function App() {
 
   useEffect(() => { setAcEdit(null); }, [selectedLocation?.id]);
 
+  // Auto-clear attack result after 4 seconds; resets if a new result arrives
+  useEffect(() => {
+    if (!lastAttackResult) return;
+    const t = setTimeout(() => setLastAttackResult(null), 4000);
+    return () => clearTimeout(t);
+  }, [lastAttackResult]);
+
   const enterBattleMap = (locId: number) => {
     if (currentLocBattleMaps.length === 0) return;
     
@@ -556,15 +563,21 @@ function App() {
     },
     onAttackResult: (data) => {
       setAttackPending(null);
-      setLastAttackResult({ hit: data.hit, roll: data.roll, ac: data.ac, targetName: data.targetName });
-      setAttackAnimations(prev => [...prev, {
-        id: Math.random().toString(36).slice(2, 9),
-        hit: data.hit,
-        attackType: data.attackType,
-        attackerPos: data.attackerPos,
-        targetPos: data.targetPos,
-        targetId: data.targetId,
-      }]);
+      // Delay result reveal and animation until after the dice tray's 5-second roll display finishes
+      setTimeout(() => {
+        setLastAttackResult({ hit: data.hit, roll: data.roll, ac: data.ac, targetName: data.targetName });
+        // Skip animation if the target rhombus isn't rendered in this client's current view
+        if (!(window as any).activeRhombuses?.[data.targetId]) return;
+        setAttackAnimations(prev => [...prev, {
+          id: Math.random().toString(36).slice(2, 9),
+          hit: data.hit,
+          attackType: data.attackType,
+          attackerPos: data.attackerPos,
+          targetPos: data.targetPos,
+          targetId: data.targetId,
+          isBattleMap: data.isBattleMap ?? false,
+        }]);
+      }, 5000);
     },
   });
 
@@ -1408,11 +1421,6 @@ function App() {
                           <div style={{ fontSize: '12px', color: 'var(--green)', border: '1px solid var(--green)', padding: '6px 10px' }}>
                             AWAITING_ROLL — {attackPending.attackType.toUpperCase()} vs AC {attackPending.ac}
                           </div>
-                        ) : lastAttackResult && lastAttackResult.targetName === selectedLocation.name ? (
-                          <div style={{ fontSize: '12px', color: lastAttackResult.hit ? '#00ff66' : '#ff4444', border: `1px solid ${lastAttackResult.hit ? '#00ff66' : '#ff4444'}`, padding: '6px 10px' }}>
-                            {lastAttackResult.hit ? 'HIT!' : 'MISS'} — rolled {lastAttackResult.roll} vs AC {lastAttackResult.ac}
-                            <button className="utility-btn" style={{ marginLeft: '8px', fontSize: '10px', padding: '2px 6px' }} onClick={() => setLastAttackResult(null)}>✕</button>
-                          </div>
                         ) : (
                           <>
                             {attackPending ? (
@@ -1421,6 +1429,11 @@ function App() {
                               <div style={{ display: 'flex', gap: '6px' }}>
                                 <button className="upload-btn" style={{ flex: 1, backgroundColor: '#cc2200', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'melee' }); }}>⚔ MELEE</button>
                                 <button className="upload-btn" style={{ flex: 1, backgroundColor: '#884400', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'ranged' }); }}>🏹 RANGED</button>
+                              </div>
+                            )}
+                            {lastAttackResult && lastAttackResult.targetName === selectedLocation.name && (
+                              <div style={{ marginTop: '6px', fontSize: '12px', color: lastAttackResult.hit ? '#00ff66' : '#ff4444', border: `1px solid ${lastAttackResult.hit ? '#00ff66' : '#ff4444'}`, padding: '6px 10px' }}>
+                                {lastAttackResult.hit ? 'HIT!' : 'MISS'} — rolled {lastAttackResult.roll} vs AC {lastAttackResult.ac}
                               </div>
                             )}
                           </>
@@ -1631,7 +1644,6 @@ function App() {
                 <GhostTraffic roads={roads} />
               </>
             )}
-            <AttackAnimations animations={attackAnimations} onComplete={(id) => setAttackAnimations(prev => prev.filter(a => a.id !== id))} />
             <WaterBodies waterBodies={waterBodies} />
             <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} />
             {roadSelectionBounds && view === 'city_gen' && (
@@ -1646,6 +1658,8 @@ function App() {
             ))}
             </>
             )}
+            {/* Attack animations — rendered in both world and battle map views (shared coordinate space) */}
+            <AttackAnimations animations={attackAnimations} onComplete={(id) => setAttackAnimations(prev => prev.filter(a => a.id !== id))} />
             {/* Ping Effects */}
             {activePings.filter(ping => {
                 const currentBattleMapId = view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null;
