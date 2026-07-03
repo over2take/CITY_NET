@@ -45,7 +45,7 @@ import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } from './components/MapElements';
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
-import { SpectatorCameraRig, AdminCameraBroadcaster } from './components/Streamer';
+import { SpectatorCameraRig, AdminCameraBroadcaster, computeBroadcastFraming } from './components/Streamer';
 import { DEFAULT_DIRECTOR_STATE } from './types';
 import type { DirectorState } from './types';
 
@@ -1265,6 +1265,16 @@ function App() {
                         </svg>
                         BROADCAST PING
                     </button>
+                    {isAdmin && (
+                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#ff00aa', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}} title="Point the stream camera at this object" onClick={() => {
+                          updateDirector({ cameraMode: 'director', target: computeBroadcastFraming(selectedLocation) });
+                      }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                        </svg>
+                        BROADCAST_THIS
+                      </button>
+                    )}
                     {isAdmin && isPlayerRhombus && (
                       <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#00ff66', color: '#000'}} onClick={() => {
                           setAdminBankPlayer(selectedLocation.owner);
