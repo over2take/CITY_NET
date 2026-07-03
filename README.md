@@ -172,6 +172,7 @@ CITY_NET/
 │   │   │   ├── SecureLogin.tsx         # Player login, registration, and password reset UI
 │   │   │   ├── CityDatabase.tsx        # Location search/browse
 │   │   │   ├── DraggableWindow.tsx     # Reusable draggable panel wrapper
+│   │   │   ├── AttackAnimations.tsx    # Attack hit/miss animations (swipe, projectile, miss text)
 │   │   │   ├── Streamer.tsx            # Camera broadcaster/rig pairs for streamer mode
 │   │   │   ├── StreamerOverlay.tsx     # HUD overlay rendered on the spectator window
 │   │   │   ├── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
