@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import type {
   ActiveUser, ChatMessage, BattleMapSessionData, BattleMapPosition,
-  Location, PendingRequest,
+  Location, PendingRequest, DirectorState,
 } from '../types';
 
 interface UseSocketOptions {
@@ -10,6 +10,7 @@ interface UseSocketOptions {
   token: string;
   playerToken?: string | null;
   isLoggedIn: boolean;
+  isSpectator?: boolean;
   notificationsEnabled: boolean;
   isChatOpen: boolean;
   onFetchAll: () => void;
@@ -29,14 +30,17 @@ interface UseSocketOptions {
   onRegistrationUpdated?: (username: string, action: 'approved' | 'denied') => void;
   onPasswordResetRequested?: (username: string, requestId: string) => void;
   onPasswordResetResolved?: (username: string, action: 'approved' | 'denied') => void;
+  onDirectorUpdate?: (state: DirectorState) => void;
+  onSpectatorCount?: (count: number) => void;
 }
 
 export function useSocket({
-  userName, token, playerToken, isLoggedIn, notificationsEnabled, isChatOpen,
+  userName, token, playerToken, isLoggedIn, isSpectator, notificationsEnabled, isChatOpen,
   onFetchAll, onFetchGlobalSettings, onFetchLocations, onFetchRoads, onFetchDistricts, onFetchWaterBodies, onFetchBattleMaps,
   onBankUpdate, onBalancePaid, onNotification, onHasUnreadChat, onTokenUpdate, onIsAdminUpdate,
   onRegistrationPending, onRegistrationUpdated,
   onPasswordResetRequested, onPasswordResetResolved,
+  onDirectorUpdate, onSpectatorCount,
 }: UseSocketOptions) {
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const tokenRef = useRef(token);
@@ -70,6 +74,10 @@ export function useSocket({
     socketRef.current = newSocket;
 
     newSocket.on('connect', () => {
+      if (isSpectator) {
+        newSocket.emit('identify', { spectator: true, userName: 'SPECTATOR' });
+        return;
+      }
       newSocket.emit('identify', { userName: userNameRef.current, isAdmin: !!tokenRef.current, token: tokenRef.current, playerToken: playerTokenRef.current });
     });
 
@@ -118,7 +126,7 @@ export function useSocket({
       }
       lastKnownBalance = data.balance;
     });
-    newSocket.emit('requestBankBalance', { username: userName });
+    if (!isSpectator) newSocket.emit('requestBankBalance', { username: userName });
 
     newSocket.on('accessGranted', (data: { targetUser: string; token: string; forEditing?: boolean }) => {
       if (data.targetUser === userNameRef.current) {
@@ -158,6 +166,10 @@ export function useSocket({
     newSocket.on('passwordResetResolved', (data: { username: string; action: 'approved' | 'denied' }) => {
       onPasswordResetResolved?.(data.username, data.action);
     });
+
+    newSocket.on('directorUpdate', (state: DirectorState) => onDirectorUpdate?.(state));
+
+    newSocket.on('spectatorCount', (data: { count: number }) => onSpectatorCount?.(data.count));
 
     newSocket.on('force_floor_change', (data: { locationId: number; floorIndex: number }) => {
       setActiveBattleMapData(prev =>
@@ -220,10 +232,11 @@ export function useSocket({
   // Only fires on an already-connected socket so we don't buffer a tokenless identify
   // that would trip SECURE_MODE on initial connect (the connect handler covers that case).
   useEffect(() => {
+    if (isSpectator) return;
     if (socketRef.current?.connected && userName) {
       socketRef.current.emit('identify', { userName, isAdmin: !!token, token, playerToken: playerTokenRef.current });
     }
-  }, [token, userName]);
+  }, [token, userName, isSpectator]);
 
   const emit = useCallback((event: string, data?: unknown) => {
     socketRef.current?.emit(event, data);

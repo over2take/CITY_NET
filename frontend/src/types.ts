@@ -216,3 +216,39 @@ export interface GlobalSetting {
 }
 
 export type GlobalSettings = Record<string, string>;
+
+// ─── Streamer Mode ────────────────────────────────────────────────────────────
+
+export type StreamerCameraMode = 'director' | 'mirror' | 'locked';
+
+export interface StreamerVisibility {
+  showHealthBars: boolean;
+  showPlayerNames: boolean;
+  showRoads: boolean;
+}
+
+export interface DirectorState {
+  cameraMode: StreamerCameraMode;
+  target: { pos: [number, number, number]; lookAt: [number, number, number] } | null;
+  visibility: StreamerVisibility;
+  sceneTitle: string;
+  letterbox: boolean;
+  battleMap: { locationId: number; floorIndex: number } | null;
+  selectedLocationId: number | null;
+}
+
+export const ALL_VISIBLE: StreamerVisibility = {
+  showHealthBars: true,
+  showPlayerNames: true,
+  showRoads: true,
+};
+
+export const DEFAULT_DIRECTOR_STATE: DirectorState = {
+  cameraMode: 'director',
+  target: null,
+  visibility: ALL_VISIBLE,
+  sceneTitle: '',
+  letterbox: false,
+  battleMap: null,
+  selectedLocationId: null,
+};

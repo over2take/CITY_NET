@@ -45,9 +45,13 @@ import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } from './components/MapElements';
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
-
-
-
+import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
+import { StreamerVisibilityContext } from './context/StreamerVisibilityContext';
+import { StreamerOverlay } from './components/StreamerOverlay';
+import { StreamerDirectorPanel } from './components/StreamerDirectorPanel';
+import { DEFAULT_DIRECTOR_STATE, ALL_VISIBLE } from './types';
+import type { DirectorState } from './types';
+import { IS_SPECTATOR } from './streamerMode';
 
 function App() {
   const controlsRef = useRef<any>(null);
@@ -265,6 +269,7 @@ function App() {
     setView('battle_map');
     setSelectedLocation(null);
     if (socketRef.current) socketRef.current.emit('battle_map_enter', { locationId: locId, floorIndex: targetFloor });
+    if (token) updateDirector({ battleMap: { locationId: locId, floorIndex: targetFloor } });
   };
 
   const handleSaveDefault = () => {
@@ -307,6 +312,7 @@ function App() {
     setView('list'); // or previous view
     setBattleMapPositions({});
     if (socketRef.current) socketRef.current.emit('battle_map_leave');
+    if (token) updateDirector({ battleMap: null });
   };
 
   const handleBuildingClick = (loc: any) => {
@@ -475,6 +481,21 @@ function App() {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+  // Streamer mode: on the admin this is the source of truth (edited via director
+  // panel / BROADCAST_THIS); on the spectator it's received via directorUpdate.
+  const [directorState, setDirectorState] = useState<DirectorState>(DEFAULT_DIRECTOR_STATE);
+  const [spectatorCount, setSpectatorCount] = useState(0);
+  const [showDirectorPanel, setShowDirectorPanel] = useState(false);
+  const [directorPanelPos, setDirectorPanelPos] = useState(() => ({ x: window.innerWidth - 340, y: 70 }));
+
+  // Spectator boot path: no login, no chime, straight to the map.
+  useEffect(() => {
+    if (IS_SPECTATOR) {
+      setUserName('SPECTATOR');
+      setIsLoggedIn(true);
+    }
+  }, []);
+
   const {
     socketRef, tokenRef, userNameRef, wasGrantedForEditRef,
     activeUsers, chatMessages, setChatMessages,
@@ -486,7 +507,7 @@ function App() {
     activeEditLocation, setActiveEditLocation,
     emit,
   } = useSocket({
-    userName, token, playerToken, isLoggedIn,
+    userName, token, playerToken, isLoggedIn, isSpectator: IS_SPECTATOR,
     notificationsEnabled, isChatOpen,
     onFetchAll: fetchAll,
     onFetchGlobalSettings: fetchGlobalSettings,
@@ -517,7 +538,54 @@ function App() {
     onPasswordResetResolved: (_username, _action) => {
       // resolved entries are removed by the approve/deny handlers below
     },
+    onDirectorUpdate: (state) => { if (IS_SPECTATOR) setDirectorState(state); },
+    onSpectatorCount: setSpectatorCount,
   });
+
+  // Admin-side director mutations: update local state and push to spectators.
+  const updateDirector = useCallback((partial: Partial<DirectorState>) => {
+    setDirectorState(prev => {
+      const next = { ...prev, ...partial };
+      socketRef.current?.emit('directorUpdate', next);
+      return next;
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Admin: mirror the current selection to spectators (info card + highlight).
+  useEffect(() => {
+    if (IS_SPECTATOR || !token) return;
+    updateDirector({ selectedLocationId: selectedLocation?.id ?? null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLocation?.id, token]);
+
+  // Spectator: follow the admin's selection.
+  useEffect(() => {
+    if (!IS_SPECTATOR) return;
+    const id = directorState.selectedLocationId;
+    setSelectedLocation(id != null ? (locations.find((l: any) => l.id === id) ?? null) : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorState.selectedLocationId, locations]);
+
+  // Spectator: follow the admin into and out of battle maps.
+  useEffect(() => {
+    if (!IS_SPECTATOR) return;
+    const bm = directorState.battleMap;
+    if (bm) {
+      fetch(`/api/locations/${bm.locationId}/battle_maps`)
+        .then(res => res.json())
+        .then(maps => {
+          if (Array.isArray(maps) && maps.length > 0) {
+            setActiveBattleMapData({ locationId: bm.locationId, maps, currentFloorIndex: bm.floorIndex });
+            setView('battle_map');
+          }
+        })
+        .catch(() => {});
+    } else {
+      setActiveBattleMapData(null);
+      setView('list');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorState.battleMap?.locationId]);
 
   useEffect(() => {
     if (isLoggedIn) fetchAll();
@@ -838,7 +906,7 @@ function App() {
   return (
     <div className="crt-container">
       <div className="scanlines"></div>
-      {!isLoggedIn && (
+      {!isLoggedIn && !IS_SPECTATOR && (
         <SecureLogin
           secureModeEnabled={secureModeEnabled}
           audioEnabled={audioEnabled}
@@ -852,7 +920,7 @@ function App() {
       )}
       {isLoggedIn && (
         <>
-          <div className="ui-overlay">
+          {!IS_SPECTATOR && <div className="ui-overlay">
       {showBattleMapManager && (selectedLocation || activeEditLocation || editId) && (
         <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : (editId as number))} token={token} onClose={() => setShowBattleMapManager(false)} onMapsChanged={fetchCurrentLocBattleMaps} />
       )}
@@ -933,6 +1001,7 @@ function App() {
                 {view === 'draw_roads' && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: HOLD LEFT-CLICK + DRAG TO DRAW PATH`}</div>}
                 {measureMode && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: view === 'battle_map' ? '140px' : '20px', color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 5px #ff0000', padding: '5px 15px', background: 'rgba(20, 0, 0, 0.6)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300, border: '1px solid #ff4444' }}>{`SYSTEM_ALERT: MAP CAMERA LOCKED // MEASUREMENT ACTIVE`}</div>}
                 <div style={{display: 'flex', gap: '10px'}}>
+                  {token && <button className={`admin-toggle ${spectatorCount > 0 && !showDirectorPanel ? 'unread-flash' : ''}`} onClick={() => setShowDirectorPanel(p => !p)}>{spectatorCount > 0 ? '● BROADCAST' : 'BROADCAST'}</button>}
                   {token && <button className={`admin-toggle ${pendingRequests.length > 0 && !showAdminPanel ? 'unread-flash' : ''}`} onClick={() => setShowAdminPanel(!showAdminPanel)}>{showAdminPanel ? 'HIDE_DASHBOARD' : 'SHOW_DASHBOARD'}</button>}
                   {token && pendingRegistrations.length > 0 && (
                     <button className={`admin-toggle unread-flash`} onClick={() => setShowPendingPanel(p => !p)}>
@@ -1137,8 +1206,18 @@ function App() {
                   token={token}
                   isChatOpen={isChatOpen}
               />
+            {token && showDirectorPanel && (
+              <StreamerDirectorPanel
+                pos={directorPanelPos}
+                setPos={setDirectorPanelPos}
+                onClose={() => setShowDirectorPanel(false)}
+                directorState={directorState}
+                updateDirector={updateDirector}
+                spectatorCount={spectatorCount}
+              />
+            )}
             {isHitPointsOpen && (
-              <HitPointsMenu 
+              <HitPointsMenu
                 targetRhombus={(() => {
                   if (selectedLocation && selectedLocation.id !== -1) {
                     return locations.find((l: any) => l.id === selectedLocation.id) ?? null;
@@ -1237,6 +1316,16 @@ function App() {
                         </svg>
                         BROADCAST PING
                     </button>
+                    {isAdmin && (
+                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#ff00aa', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}} title="Point the stream camera at this object" onClick={() => {
+                          updateDirector({ cameraMode: 'director', target: computeBroadcastFraming(selectedLocation) });
+                      }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                        </svg>
+                        BROADCAST_THIS
+                      </button>
+                    )}
                     {isAdmin && isPlayerRhombus && (
                       <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#00ff66', color: '#000'}} onClick={() => {
                           setAdminBankPlayer(selectedLocation.owner);
@@ -1290,8 +1379,9 @@ function App() {
               return null;
             })()}
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
-          </div>
+          </div>}
           <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
+            <StreamerVisibilityContext.Provider value={IS_SPECTATOR ? directorState.visibility : ALL_VISIBLE}>
             <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
             <MeasurementTool measureMode={measureMode} socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} mapScaleMultiplier={view === 'battle_map' ? (() => {
                 const loc = locations.find((l:any) => l.id === activeBattleMapData?.locationId);
@@ -1311,9 +1401,15 @@ function App() {
                 return finalScale;
             })() : (globalSettings?.map_scale_multiplier || 5)} color={rhombusState.color || '#00ff00'} userName={userName} />
             <MeasurementVisualizer socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} userName={userName} />
+            {view === 'battle_map' && IS_SPECTATOR && (
+              <SpectatorBattleMapRig socket={socketRef.current} cameraMode={directorState.cameraMode} />
+            )}
+            {view === 'battle_map' && !IS_SPECTATOR && token !== '' && (
+              <AdminBattleMapBroadcaster socket={socketRef.current} enabled={spectatorCount > 0} />
+            )}
             {view === 'battle_map' ? (
               activeBattleMapData && activeBattleMapData.maps[activeBattleMapData.currentFloorIndex] && (
-                <BattleMapScene 
+                <BattleMapScene
                   measureMode={measureMode}
                   mapUrl={activeBattleMapData.maps[activeBattleMapData.currentFloorIndex].image_url} 
                   onMapClick={(pos: any) => {
@@ -1403,7 +1499,9 @@ function App() {
             ) : (
               <>
                 <PerspectiveCamera makeDefault position={[0, 200, 250]} />
-            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode} dollyToCursor={true} mouseButtons={{ left: 2, right: 1, middle: 16, wheel: 16 }} />
+            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode && !IS_SPECTATOR} dollyToCursor={true} mouseButtons={{ left: 2, right: 1, middle: 16, wheel: 16 }} />
+            {IS_SPECTATOR && <SpectatorCameraRig socket={socketRef.current} controlsRef={controlsRef} directorState={directorState} />}
+            {!IS_SPECTATOR && token !== '' && <AdminCameraBroadcaster socket={socketRef.current} controlsRef={controlsRef} enabled={directorState.cameraMode === 'mirror' && spectatorCount > 0} />}
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <GlobalCameraCapture />
             <CursorPivotControls />
@@ -1440,9 +1538,13 @@ function App() {
               </group>
             )}
             <CameraController target={cameraTarget} onComplete={() => { setCameraTarget(null); setShowZoomComplete(true); setTimeout(() => setShowZoomComplete(false), 3000); }} />
-            <Roads roads={roads} />
+            {(!IS_SPECTATOR || directorState.visibility.showRoads) && (
+              <>
+                <Roads roads={roads} />
+                <GhostTraffic roads={roads} />
+              </>
+            )}
             <WaterBodies waterBodies={waterBodies} />
-            <GhostTraffic roads={roads} />
             <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} />
             {roadSelectionBounds && view === 'city_gen' && (
               <mesh position={[(roadSelectionBounds.min.x + roadSelectionBounds.max.x) / 2, 0.02, (roadSelectionBounds.min.z + roadSelectionBounds.max.z) / 2]}>
@@ -1546,7 +1648,9 @@ function App() {
                 </group>
             )}
             <ambientLight intensity={0.5} />
+            </StreamerVisibilityContext.Provider>
           </Canvas>
+          {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} selectedLocation={selectedLocation} battleMapLabel={view === 'battle_map' && activeBattleMapData ? activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation : null} />}
         </>
       )}
     </div>
