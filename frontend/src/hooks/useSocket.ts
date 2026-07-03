@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import type {
   ActiveUser, ChatMessage, BattleMapSessionData, BattleMapPosition,
-  Location, PendingRequest,
+  Location, PendingRequest, DirectorState,
 } from '../types';
 
 interface UseSocketOptions {
@@ -30,6 +30,8 @@ interface UseSocketOptions {
   onRegistrationUpdated?: (username: string, action: 'approved' | 'denied') => void;
   onPasswordResetRequested?: (username: string, requestId: string) => void;
   onPasswordResetResolved?: (username: string, action: 'approved' | 'denied') => void;
+  onDirectorUpdate?: (state: DirectorState) => void;
+  onSpectatorCount?: (count: number) => void;
 }
 
 export function useSocket({
@@ -38,6 +40,7 @@ export function useSocket({
   onBankUpdate, onBalancePaid, onNotification, onHasUnreadChat, onTokenUpdate, onIsAdminUpdate,
   onRegistrationPending, onRegistrationUpdated,
   onPasswordResetRequested, onPasswordResetResolved,
+  onDirectorUpdate, onSpectatorCount,
 }: UseSocketOptions) {
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const tokenRef = useRef(token);
@@ -163,6 +166,10 @@ export function useSocket({
     newSocket.on('passwordResetResolved', (data: { username: string; action: 'approved' | 'denied' }) => {
       onPasswordResetResolved?.(data.username, data.action);
     });
+
+    newSocket.on('directorUpdate', (state: DirectorState) => onDirectorUpdate?.(state));
+
+    newSocket.on('spectatorCount', (data: { count: number }) => onSpectatorCount?.(data.count));
 
     newSocket.on('force_floor_change', (data: { locationId: number; floorIndex: number }) => {
       setActiveBattleMapData(prev =>

@@ -22,6 +22,14 @@ const formatMeasurementPayload = (data, userName, socketId) => ({
 });
 
 module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
+  // Streamer mode: last director state, replayed to spectators when they join.
+  let directorState = null;
+
+  const isAdminSocket = (socket) => {
+    const info = userSockets.get(socket.id);
+    return !!info && (info.isAdmin || elevatedUsers.has(info.userName));
+  };
+
   const broadcastActiveUsers = () => {
     const userMap = new Map();
     userSockets.forEach((info) => {
@@ -86,6 +94,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         socket.isSpectator = true;
         socket.join('spectators');
         console.log(`Spectator connected: ${socket.id}`);
+        if (directorState) socket.emit('directorUpdate', directorState);
         broadcastSpectatorCount();
         return;
       }
@@ -598,6 +607,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           }
         });
       });
+    });
+
+    // Streamer mode: admin pushes director state (camera mode, target, visibility, HUD).
+    socket.on('directorUpdate', (state) => {
+      if (!isAdminSocket(socket) || !state) return;
+      directorState = state;
+      io.to('spectators').emit('directorUpdate', directorState);
+    });
+
+    // Streamer mode: transient admin camera pose for mirror mode (~10Hz, not stored).
+    socket.on('streamerCamera', (pose) => {
+      if (!isAdminSocket(socket)) return;
+      socket.to('spectators').emit('streamerCamera', pose);
     });
 
     socket.on('disconnect', () => {
