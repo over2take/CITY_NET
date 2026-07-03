@@ -233,6 +233,8 @@ export interface DirectorState {
   visibility: StreamerVisibility;
   sceneTitle: string;
   letterbox: boolean;
+  battleMap: { locationId: number; floorIndex: number } | null;
+  selectedLocationId: number | null;
 }
 
 export const ALL_VISIBLE: StreamerVisibility = {
@@ -247,4 +249,6 @@ export const DEFAULT_DIRECTOR_STATE: DirectorState = {
   visibility: ALL_VISIBLE,
   sceneTitle: '',
   letterbox: false,
+  battleMap: null,
+  selectedLocationId: null,
 };

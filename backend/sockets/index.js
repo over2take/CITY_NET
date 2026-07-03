@@ -622,6 +622,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       socket.to('spectators').emit('streamerCamera', pose);
     });
 
+    // Streamer mode: admin hover over a rhombus — spectators show its name tag.
+    socket.on('streamerHover', (data) => {
+      if (!isAdminSocket(socket)) return;
+      socket.to('spectators').emit('streamerHover', data);
+    });
+
     socket.on('disconnect', () => {
       if (socket.isSpectator) {
         console.log('Spectator disconnected:', socket.id);

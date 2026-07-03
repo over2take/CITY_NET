@@ -269,6 +269,7 @@ function App() {
     setView('battle_map');
     setSelectedLocation(null);
     if (socketRef.current) socketRef.current.emit('battle_map_enter', { locationId: locId, floorIndex: targetFloor });
+    if (token) updateDirector({ battleMap: { locationId: locId, floorIndex: targetFloor } });
   };
 
   const handleSaveDefault = () => {
@@ -311,6 +312,7 @@ function App() {
     setView('list'); // or previous view
     setBattleMapPositions({});
     if (socketRef.current) socketRef.current.emit('battle_map_leave');
+    if (token) updateDirector({ battleMap: null });
   };
 
   const handleBuildingClick = (loc: any) => {
@@ -548,6 +550,42 @@ function App() {
       return next;
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Admin: mirror the current selection to spectators (info card + highlight).
+  useEffect(() => {
+    if (IS_SPECTATOR || !token) return;
+    updateDirector({ selectedLocationId: selectedLocation?.id ?? null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLocation?.id, token]);
+
+  // Spectator: follow the admin's selection.
+  useEffect(() => {
+    if (!IS_SPECTATOR) return;
+    const id = directorState.selectedLocationId;
+    setSelectedLocation(id != null ? (locations.find((l: any) => l.id === id) ?? null) : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorState.selectedLocationId, locations]);
+
+  // Spectator: follow the admin into and out of battle maps.
+  useEffect(() => {
+    if (!IS_SPECTATOR) return;
+    const bm = directorState.battleMap;
+    if (bm) {
+      fetch(`/api/locations/${bm.locationId}/battle_maps`)
+        .then(res => res.json())
+        .then(maps => {
+          if (Array.isArray(maps) && maps.length > 0) {
+            setActiveBattleMapData({ locationId: bm.locationId, maps, currentFloorIndex: bm.floorIndex });
+            setView('battle_map');
+          }
+        })
+        .catch(() => {});
+    } else {
+      setActiveBattleMapData(null);
+      setView('list');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorState.battleMap?.locationId]);
 
   useEffect(() => {
     if (isLoggedIn) fetchAll();
@@ -1606,7 +1644,7 @@ function App() {
             <ambientLight intensity={0.5} />
             </StreamerVisibilityContext.Provider>
           </Canvas>
-          {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} />}
+          {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} selectedLocation={selectedLocation} />}
         </>
       )}
     </div>
