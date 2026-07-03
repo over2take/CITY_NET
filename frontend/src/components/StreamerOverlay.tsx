@@ -12,7 +12,7 @@ interface DiceEvent {
 
 // Broadcast HUD for the spectator window: scene title chyron, dice lower-third,
 // optional cinematic letterbox. Pure DOM — sits on top of the Canvas.
-export function StreamerOverlay({ socket, directorState, selectedLocation }: { socket: any; directorState: DirectorState; selectedLocation: Location | null }) {
+export function StreamerOverlay({ socket, directorState, selectedLocation, battleMapLabel }: { socket: any; directorState: DirectorState; selectedLocation: Location | null; battleMapLabel?: string | null }) {
   const [diceEvents, setDiceEvents] = useState<DiceEvent[]>([]);
 
   useEffect(() => {
@@ -47,6 +47,18 @@ export function StreamerOverlay({ socket, directorState, selectedLocation }: { s
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '10vh', background: '#000' }} />
           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '10vh', background: '#000' }} />
         </>
+      )}
+
+      {/* Battle map floor designation */}
+      {battleMapLabel && (
+        <div style={{
+          position: 'absolute', top: directorState.letterbox ? 'calc(10vh + 16px)' : '20px', left: '50%', transform: 'translateX(-50%)',
+          animation: 'streamer-chyron-in 0.5s ease-out both',
+          color: 'var(--green, #00ff00)', fontSize: '2em', fontWeight: 'bold',
+          textShadow: '0 0 10px #00ff00', letterSpacing: '3px', textTransform: 'uppercase',
+        }}>
+          {battleMapLabel}
+        </div>
       )}
 
       {/* Scene title chyron */}
