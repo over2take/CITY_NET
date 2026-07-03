@@ -287,12 +287,12 @@ describe('GeometryMenu', () => {
     expect(socketRef.current.emit).toHaveBeenCalledWith('requestRhombusPurge', expect.objectContaining({ id: 10 }));
   });
 
-  it('calls syncRhombusToDB on name input change', async () => {
+  it('calls syncRhombusToDB when SET button is clicked', async () => {
     const syncRhombusToDB = vi.fn();
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={syncRhombusToDB} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    await userEvent.type(screen.getByPlaceholderText('ID_TAG'), 'X');
+    await userEvent.click(screen.getByText('SET'));
     expect(syncRhombusToDB).toHaveBeenCalled();
   });
 });
