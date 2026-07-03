@@ -51,8 +51,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       const roads = JSON.parse(row.roads_data || '[]');
 
       db.serialize(() => {
-        // Delete only non-global, non-rhombus locations; globals and player tokens survive
-        db.run(`DELETE FROM locations WHERE is_global = 0 AND (shape IS NULL OR shape NOT IN ('rhombus', 'enemy_rhombus', 'friendly_rhombus'))`);
+        // Delete all locations except player/enemy tokens
+        db.run(`DELETE FROM locations WHERE shape IS NULL OR shape NOT IN ('rhombus', 'enemy_rhombus', 'friendly_rhombus')`);
         db.run('DELETE FROM districts');
         db.run('DELETE FROM roads');
 
@@ -91,8 +91,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
 
   router.post('/clear', authenticate, (req, res) => {
     db.serialize(() => {
-      // Preserve global structures and active rhombuses/tokens
-      db.run(`DELETE FROM locations WHERE is_global = 0 AND (shape IS NULL OR shape NOT IN ('rhombus', 'enemy_rhombus', 'friendly_rhombus'))`);
+      // Preserve only player/enemy tokens
+      db.run(`DELETE FROM locations WHERE shape IS NULL OR shape NOT IN ('rhombus', 'enemy_rhombus', 'friendly_rhombus')`);
       db.run('DELETE FROM districts');
       db.run('DELETE FROM roads');
       db.run('UPDATE sqlite_sequence SET seq = COALESCE((SELECT MAX(id) FROM locations), 0) WHERE name="locations"');

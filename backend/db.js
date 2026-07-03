@@ -172,6 +172,9 @@ db.serialize(() => {
   db.run(`ALTER TABLE locations ADD COLUMN ranged_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN is_global INTEGER DEFAULT 0`, (err) => {});
 
+  db.run(`ALTER TABLE custom_structure_library ADD COLUMN melee_ac INTEGER`, (err) => {});
+  db.run(`ALTER TABLE custom_structure_library ADD COLUMN ranged_ac INTEGER`, (err) => {});
+
   db.run(`CREATE TABLE IF NOT EXISTS custom_structure_library (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
