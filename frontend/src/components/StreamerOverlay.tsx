@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DirectorState } from '../types';
+import type { DirectorState, Location } from '../types';
 
 interface DiceEvent {
   id: string;
@@ -12,7 +12,7 @@ interface DiceEvent {
 
 // Broadcast HUD for the spectator window: scene title chyron, dice lower-third,
 // optional cinematic letterbox. Pure DOM — sits on top of the Canvas.
-export function StreamerOverlay({ socket, directorState }: { socket: any; directorState: DirectorState }) {
+export function StreamerOverlay({ socket, directorState, selectedLocation }: { socket: any; directorState: DirectorState; selectedLocation: Location | null }) {
   const [diceEvents, setDiceEvents] = useState<DiceEvent[]>([]);
 
   useEffect(() => {
@@ -62,6 +62,45 @@ export function StreamerOverlay({ socket, directorState }: { socket: any; direct
           {directorState.sceneTitle}
         </div>
       )}
+
+      {/* Selected object info card — mirrors the admin's selection */}
+      {selectedLocation && (() => {
+        const isRhombus = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'].includes(selectedLocation.shape);
+        const title = selectedLocation.name
+          || (selectedLocation.shape === 'enemy_rhombus' ? 'HOSTILE_NODE'
+          : selectedLocation.shape === 'friendly_rhombus' ? 'FRIENDLY_NPC'
+          : selectedLocation.shape === 'rhombus' ? 'TACTICAL_BEACON' : 'DATA_POINT');
+        return (
+          <div style={{
+            position: 'absolute', top: directorState.letterbox ? 'calc(10vh + 16px)' : '24px', right: '24px',
+            animation: 'streamer-chyron-in 0.4s ease-out both',
+            width: '300px', border: '1px solid var(--green, #00ff00)', background: 'rgba(0, 5, 0, 0.9)',
+            boxShadow: '0 0 15px rgba(0,255,0,0.25)',
+          }}>
+            <div style={{ background: 'var(--green, #00ff00)', color: '#000', fontWeight: 'bold', padding: '6px 12px', fontSize: '13px', letterSpacing: '2px', textTransform: 'uppercase' }}>
+              {title}
+            </div>
+            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
+              <div>
+                <span style={{ color: '#fff', fontWeight: 'bold', letterSpacing: '1px' }}>{isRhombus ? 'DATA_DESCRIPTION: ' : 'DESCRIPTION: '}</span>
+                <span style={{ color: 'var(--green, #00ff00)' }}>{selectedLocation.description || 'NO_DATA'}</span>
+              </div>
+              {!isRhombus && (
+                <div>
+                  <span style={{ color: '#fff', fontWeight: 'bold', letterSpacing: '1px' }}>RESIDENTS: </span>
+                  <span style={{ color: 'var(--green, #00ff00)' }}>{selectedLocation.npcs || 'UNKNOWN'}</span>
+                </div>
+              )}
+              {!isRhombus && selectedLocation.district_name && (
+                <div>
+                  <span style={{ color: '#fff', fontWeight: 'bold', letterSpacing: '1px' }}>DISTRICT: </span>
+                  <span style={{ color: 'var(--green, #00ff00)' }}>{selectedLocation.district_name}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Dice lower-thirds */}
       <div style={{
