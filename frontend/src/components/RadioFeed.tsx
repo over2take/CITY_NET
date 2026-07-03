@@ -55,7 +55,12 @@ export function RadioFeed({
 
   const handleSelect = (item: MusicItem) => {
     setSelectedId((prev) => (prev === item.id ? null : item.id));
-    if (item.type === 'file') onTrackSelect(item);
+  };
+
+  const handleDoubleClick = (item: MusicItem) => {
+    if (item.type !== 'file') return;
+    setSelectedId(item.id);
+    onTrackSelect(item);
   };
 
   const toggleExpand = (id: number, e: React.MouseEvent) => {
@@ -131,6 +136,7 @@ export function RadioFeed({
         <div key={item.id}>
           <div
             onClick={() => handleSelect(item)}
+            onDoubleClick={() => handleDoubleClick(item)}
             style={{
               display: 'flex',
               alignItems: 'center',
