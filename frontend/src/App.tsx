@@ -1400,7 +1400,7 @@ function App() {
                 socket={socketRef.current}
                 onTrackSelect={(item: MusicItem) => {
                   setSelectedTrackId(item.id);
-                  if (socket && item.path) socket.emit('musicLoad', { trackId: item.id, src: item.path, name: item.name });
+                  if (item.path) emit('musicLoad', { trackId: item.id, src: item.path, name: item.name });
                 }}
                 selectedTrackId={selectedTrackId}
               />
