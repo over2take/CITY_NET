@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { CityDataBaseMenu } from './CityDatabase';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
-import creditsPngIcon from '../assets/Credits.png';
+import { CurrencyIcon } from './BankWindows';
 
 // ─── NavControlsMenu ─────────────────────────────────────────────────────────
 
@@ -561,9 +561,10 @@ interface SidebarProps {
   isRadioOpen?: boolean;
   onToggleRadio?: () => void;
   musicPlaying?: boolean;
+  currencyIcon?: string;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -660,7 +661,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
             </svg>
           </button>
           <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} title="CITY_NET // BANK">
-            <div style={{ width: '24px', height: '24px', backgroundColor: 'currentColor', WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }} />
+            <CurrencyIcon icon={currencyIcon} size={24} />
           </button>
           <button
             className={`rail-btn ${isRadioOpen ? 'active' : ''}`}

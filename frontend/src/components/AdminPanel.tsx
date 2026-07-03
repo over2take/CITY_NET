@@ -574,6 +574,28 @@ export function AdminPanel({
               </div>
           </div>
 
+          <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+            <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
+                <button
+                  key={opt}
+                  className={`utility-btn ${(globalSettings?.currency_icon || 'credits') === opt ? 'active' : ''}`}
+                  style={{ padding: '4px 10px', fontSize: opt === 'credits' ? '0.6rem' : '1rem' }}
+                  onClick={() => {
+                    fetch('/api/settings', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                      body: JSON.stringify({ key: 'currency_icon', value: opt }),
+                    }).then(() => fetchGlobalSettings());
+                  }}
+                >
+                  {opt === 'credits' ? 'DEFAULT' : opt}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
 
           {/* BANK SOUNDS TEST PANEL */}
