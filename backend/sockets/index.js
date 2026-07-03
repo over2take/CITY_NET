@@ -25,6 +25,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   // Streamer mode: last director state, replayed to spectators when they join.
   let directorState = null;
 
+  // Attack system: one pending attack per socket. Cleared on roll, cancel, or disconnect.
+  // { targetId, attackType: 'melee' | 'ranged', ac }
+  const pendingAttacks = new Map();
+
   const isAdminSocket = (socket) => {
     const info = userSockets.get(socket.id);
     return !!info && (info.isAdmin || elevatedUsers.has(info.userName));
@@ -517,6 +521,29 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         [userName, grandTotal, JSON.stringify(results), color, finalString], (err) => {
           if (err) console.error('Error saving dice roll:', err);
           io.emit('diceRollBroadcast', broadcastData);
+
+          // If this player had a pending attack, resolve it.
+          const attack = pendingAttacks.get(socket.id);
+          if (attack) {
+            pendingAttacks.delete(socket.id);
+            const hit = grandTotal >= attack.ac;
+            const info = userSockets.get(socket.id);
+            // Look up attacker position for animation
+            db.get('SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ?', [info ? info.userName : null], (posErr, attackerRow) => {
+              io.emit('attackResult', {
+                hit,
+                attackerId: socket.id,
+                attackerName: info ? info.userName : 'Unknown',
+                targetId: attack.targetId,
+                targetName: attack.targetName,
+                attackType: attack.attackType,
+                roll: grandTotal,
+                ac: attack.ac,
+                attackerPos: attackerRow ? { x: attackerRow.x, z: attackerRow.z } : null,
+                targetPos: { x: attack.targetX, z: attack.targetZ },
+              });
+            });
+          }
         });
     });
 
@@ -617,6 +644,26 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
+    // --- Attack system ---
+    socket.on('initiateAttack', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !data || !data.targetId || !data.attackType) return;
+      db.get('SELECT id, name, x, z, melee_ac, ranged_ac, shape FROM locations WHERE id = ?', [data.targetId], (err, target) => {
+        if (err || !target) return;
+        const isRhombus = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'].includes(target.shape);
+        if (!isRhombus) return;
+        const meleeAc = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 10;
+        const rangedAc = target.ranged_ac !== null && target.ranged_ac !== undefined ? target.ranged_ac : meleeAc;
+        const ac = data.attackType === 'ranged' ? rangedAc : meleeAc;
+        pendingAttacks.set(socket.id, { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, targetX: target.x, targetZ: target.z });
+        socket.emit('attackPending', { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac });
+      });
+    });
+
+    socket.on('cancelAttack', () => {
+      pendingAttacks.delete(socket.id);
+    });
+
     // Streamer mode: admin pushes director state (camera mode, target, visibility, HUD).
     socket.on('directorUpdate', (state) => {
       if (!isAdminSocket(socket) || !state) return;
@@ -643,6 +690,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     });
 
     socket.on('disconnect', () => {
+      pendingAttacks.delete(socket.id);
       if (socket.isSpectator) {
         console.log('Spectator disconnected:', socket.id);
         broadcastSpectatorCount();
