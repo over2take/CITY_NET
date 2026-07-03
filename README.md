@@ -148,6 +148,7 @@ CITY_NET/
 │   │   ├── locations.js        # Location CRUD
 │   │   ├── battle_maps.js      # Battle map image upload/management
 │   │   ├── maps.js             # Saved map snapshots
+│   │   ├── music.js            # Radio Feed — library CRUD + file upload
 │   │   ├── roads.js            # Road CRUD
 │   │   └── player.js           # Player auth (register, login, forgot, reset)
 │   ├── sockets/
@@ -173,10 +174,16 @@ CITY_NET/
 │   │   │   ├── CityDatabase.tsx        # Location search/browse
 │   │   │   ├── DraggableWindow.tsx     # Reusable draggable panel wrapper
 │   │   │   ├── AttackAnimations.tsx    # Attack hit/miss animations (swipe, projectile, miss text)
+│   │   │   ├── RadioFeed.tsx           # Admin music library panel (folder tree, upload, delete)
+│   │   │   ├── RadioPlayer.tsx         # Playback window (scrubber, transport, per-client volume)
+│   │   │   ├── Camera.tsx              # CameraController and cursor-pivot helpers
+│   │   │   ├── HealthBar.tsx           # 3D health bar rendered above tokens
+│   │   │   ├── MeasurementTool.tsx     # Ruler overlay for distance measurement
+│   │   │   ├── PingEffect.tsx          # Location ping animation
+│   │   │   ├── StatusDisplay.tsx       # Status log and status bar text
 │   │   │   ├── Streamer.tsx            # Camera broadcaster/rig pairs for streamer mode
 │   │   │   ├── StreamerOverlay.tsx     # HUD overlay rendered on the spectator window
-│   │   │   ├── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
-│   │   │   └── ...
+│   │   │   └── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
 │   │   ├── context/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
 │   │   ├── hooks/
