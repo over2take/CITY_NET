@@ -210,7 +210,7 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
 
           {/* 6 — AC fields (always visible; saved via SET) */}
           <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>DEFENSE_RATING</label>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>ARMOR_CLASS</label>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <span style={{ fontSize: '0.65rem', opacity: 0.8, whiteSpace: 'nowrap' }}>MELEE</span>
               <input
