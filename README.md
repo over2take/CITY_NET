@@ -160,23 +160,29 @@ CITY_NET/
 │   │   ├── App.tsx             # Root component — state, routing, socket wiring
 │   │   ├── App.css / index.css # Global styles and CSS variables
 │   │   ├── components/
-│   │   │   ├── AdminPanel.tsx      # GM dashboard
-│   │   │   ├── HitPoints.tsx       # HP tracking + injury panel + HealthReviewWindow
-│   │   │   ├── BankWindows.tsx     # Player bank UI
-│   │   │   ├── ChatWindow.tsx      # In-game chat
-│   │   │   ├── DiceTray.tsx        # Dice roller
-│   │   │   ├── Buildings.tsx       # 3D building meshes
-│   │   │   ├── Rhombuses.tsx       # Player token meshes
-│   │   │   ├── MapElements.tsx     # Roads, water, overlays
-│   │   │   ├── Sidebar.tsx         # Nav rail — controls, volume, help, geometry tools
-│   │   │   ├── SecureLogin.tsx     # Player login, registration, and password reset UI
-│   │   │   ├── CityDatabase.tsx    # Location search/browse
-│   │   │   ├── DraggableWindow.tsx # Reusable draggable panel wrapper
+│   │   │   ├── AdminPanel.tsx          # GM dashboard
+│   │   │   ├── HitPoints.tsx           # HP tracking + injury panel + HealthReviewWindow
+│   │   │   ├── BankWindows.tsx         # Player bank UI
+│   │   │   ├── ChatWindow.tsx          # In-game chat
+│   │   │   ├── DiceTray.tsx            # Dice roller
+│   │   │   ├── Buildings.tsx           # 3D building meshes
+│   │   │   ├── Rhombuses.tsx           # Player token meshes
+│   │   │   ├── MapElements.tsx         # Roads, water, overlays
+│   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools
+│   │   │   ├── SecureLogin.tsx         # Player login, registration, and password reset UI
+│   │   │   ├── CityDatabase.tsx        # Location search/browse
+│   │   │   ├── DraggableWindow.tsx     # Reusable draggable panel wrapper
+│   │   │   ├── Streamer.tsx            # Camera broadcaster/rig pairs for streamer mode
+│   │   │   ├── StreamerOverlay.tsx     # HUD overlay rendered on the spectator window
+│   │   │   ├── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
 │   │   │   └── ...
+│   │   ├── context/
+│   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
 │   │   ├── hooks/
 │   │   │   ├── useSocket.ts    # Socket.IO connection and all event listeners
 │   │   │   ├── useApi.ts       # Fetch helpers
 │   │   │   └── useMapData.ts   # Location/district/road data fetching
+│   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
 │   │   └── utils/
 │   │       ├── locationHelpers.ts  # Location geometry utilities
 │   │       ├── rhombusHelpers.ts   # Player token position math
@@ -208,6 +214,7 @@ CITY_NET/
 - **`DraggableWindow` is the UI primitive.** Every floating panel wraps it.
 - **Inline SVG components instead of `<img>` tags** for icons that need CSS-variable colour control.
 - **Secure Mode is a pure opt-in.** When `SECURE_MODE=false`, the player auth routes return 404 and the frontend shows the simple name-only login — existing behaviour is unchanged.
+- **Streamer mode is a read-only spectator client.** Append `?streamer=true` to the URL to open a broadcast-safe overlay view. The spectator socket role is invisible to presence/chat and all mutating events are blocked server-side. A `DirectorState` object is broadcast from admin to spectators over Socket.IO, controlling camera mode, visibility flags, scene title, and letterbox.
 
 ---
 
