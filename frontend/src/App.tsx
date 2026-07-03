@@ -1188,6 +1188,7 @@ function App() {
                 }
               }}
               musicPlaying={musicState.playing}
+              currencyIcon={globalSettings?.currency_icon}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -1379,6 +1380,7 @@ function App() {
                   firstpay: parseFloat(globalSettings?.bank_vol_firstpay ?? '1'),
                   overdraft: parseFloat(globalSettings?.bank_vol_overdraft ?? '1'),
                 }}
+                currencyIcon={globalSettings?.currency_icon}
             />
               <ChatWindow 
                   pos={chatPos} 
