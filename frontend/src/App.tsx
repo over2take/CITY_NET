@@ -46,8 +46,9 @@ import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } fro
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 
-
-
+// Streamer mode: ?streamer=true loads a read-only spectator client for OBS capture.
+// World state arrives through the normal socket/REST pipeline; all admin/player UI is skipped.
+const IS_SPECTATOR = new URLSearchParams(window.location.search).has('streamer');
 
 function App() {
   const controlsRef = useRef<any>(null);
@@ -475,6 +476,14 @@ function App() {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+  // Spectator boot path: no login, no chime, straight to the map.
+  useEffect(() => {
+    if (IS_SPECTATOR) {
+      setUserName('SPECTATOR');
+      setIsLoggedIn(true);
+    }
+  }, []);
+
   const {
     socketRef, tokenRef, userNameRef, wasGrantedForEditRef,
     activeUsers, chatMessages, setChatMessages,
@@ -486,7 +495,7 @@ function App() {
     activeEditLocation, setActiveEditLocation,
     emit,
   } = useSocket({
-    userName, token, playerToken, isLoggedIn,
+    userName, token, playerToken, isLoggedIn, isSpectator: IS_SPECTATOR,
     notificationsEnabled, isChatOpen,
     onFetchAll: fetchAll,
     onFetchGlobalSettings: fetchGlobalSettings,
@@ -838,7 +847,7 @@ function App() {
   return (
     <div className="crt-container">
       <div className="scanlines"></div>
-      {!isLoggedIn && (
+      {!isLoggedIn && !IS_SPECTATOR && (
         <SecureLogin
           secureModeEnabled={secureModeEnabled}
           audioEnabled={audioEnabled}
@@ -852,7 +861,7 @@ function App() {
       )}
       {isLoggedIn && (
         <>
-          <div className="ui-overlay">
+          {!IS_SPECTATOR && <div className="ui-overlay">
       {showBattleMapManager && (selectedLocation || activeEditLocation || editId) && (
         <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : (editId as number))} token={token} onClose={() => setShowBattleMapManager(false)} onMapsChanged={fetchCurrentLocBattleMaps} />
       )}
@@ -1290,7 +1299,7 @@ function App() {
               return null;
             })()}
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
-          </div>
+          </div>}
           <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
             <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
             <MeasurementTool measureMode={measureMode} socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} mapScaleMultiplier={view === 'battle_map' ? (() => {
@@ -1403,7 +1412,7 @@ function App() {
             ) : (
               <>
                 <PerspectiveCamera makeDefault position={[0, 200, 250]} />
-            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode} dollyToCursor={true} mouseButtons={{ left: 2, right: 1, middle: 16, wheel: 16 }} />
+            <CameraControls ref={controlsRef} makeDefault enabled={!isDragging && !measureMode && !IS_SPECTATOR} dollyToCursor={true} mouseButtons={{ left: 2, right: 1, middle: 16, wheel: 16 }} />
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <GlobalCameraCapture />
             <CursorPivotControls />
