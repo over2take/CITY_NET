@@ -1,4 +1,4 @@
-export const ZONE_TYPE_NAMES: ReadonlySet<string> = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY']);
+export const ZONE_TYPE_NAMES: ReadonlySet<string> = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY', 'LANDMARK', 'MARKETS', 'CUSTOM']);
 
 export const isUserDefinedName = (name: string | undefined | null) =>
   !!name && name.trim() !== '' && !ZONE_TYPE_NAMES.has(name.trim());
