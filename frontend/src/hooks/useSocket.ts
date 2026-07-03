@@ -10,6 +10,7 @@ interface UseSocketOptions {
   token: string;
   playerToken?: string | null;
   isLoggedIn: boolean;
+  isSpectator?: boolean;
   notificationsEnabled: boolean;
   isChatOpen: boolean;
   onFetchAll: () => void;
@@ -32,7 +33,7 @@ interface UseSocketOptions {
 }
 
 export function useSocket({
-  userName, token, playerToken, isLoggedIn, notificationsEnabled, isChatOpen,
+  userName, token, playerToken, isLoggedIn, isSpectator, notificationsEnabled, isChatOpen,
   onFetchAll, onFetchGlobalSettings, onFetchLocations, onFetchRoads, onFetchDistricts, onFetchWaterBodies, onFetchBattleMaps,
   onBankUpdate, onBalancePaid, onNotification, onHasUnreadChat, onTokenUpdate, onIsAdminUpdate,
   onRegistrationPending, onRegistrationUpdated,
@@ -70,6 +71,10 @@ export function useSocket({
     socketRef.current = newSocket;
 
     newSocket.on('connect', () => {
+      if (isSpectator) {
+        newSocket.emit('identify', { spectator: true, userName: 'SPECTATOR' });
+        return;
+      }
       newSocket.emit('identify', { userName: userNameRef.current, isAdmin: !!tokenRef.current, token: tokenRef.current, playerToken: playerTokenRef.current });
     });
 
@@ -118,7 +123,7 @@ export function useSocket({
       }
       lastKnownBalance = data.balance;
     });
-    newSocket.emit('requestBankBalance', { username: userName });
+    if (!isSpectator) newSocket.emit('requestBankBalance', { username: userName });
 
     newSocket.on('accessGranted', (data: { targetUser: string; token: string; forEditing?: boolean }) => {
       if (data.targetUser === userNameRef.current) {
@@ -220,10 +225,11 @@ export function useSocket({
   // Only fires on an already-connected socket so we don't buffer a tokenless identify
   // that would trip SECURE_MODE on initial connect (the connect handler covers that case).
   useEffect(() => {
+    if (isSpectator) return;
     if (socketRef.current?.connected && userName) {
       socketRef.current.emit('identify', { userName, isAdmin: !!token, token, playerToken: playerTokenRef.current });
     }
-  }, [token, userName]);
+  }, [token, userName, isSpectator]);
 
   const emit = useCallback((event: string, data?: unknown) => {
     socketRef.current?.emit(event, data);

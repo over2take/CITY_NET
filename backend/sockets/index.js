@@ -5,6 +5,9 @@ const SECRET = process.env.JWT_SECRET;
 const userSockets = new Map();
 let activeNPCs = [];
 
+// Streamer mode: spectator sockets are read-only observers, invisible to the game.
+const SPECTATOR_ALLOWED_EVENTS = new Set(['identify', 'requestDiceHistory']);
+
 const formatMeasurementPayload = (data, userName, socketId) => ({
   owner: userName ? userName : socketId,
   start: data.start,
@@ -52,7 +55,18 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     }
   });
 
+  const broadcastSpectatorCount = () => {
+    const count = io.sockets.adapter.rooms.get('spectators')?.size || 0;
+    io.emit('spectatorCount', { count });
+  };
+
   io.on('connection', (socket) => {
+    // Spectators are read-only: drop every incoming event except the allowlist.
+    socket.use(([event], next) => {
+      if (socket.isSpectator && !SPECTATOR_ALLOWED_EVENTS.has(event)) return;
+      next();
+    });
+
     socket.on('requestDiceHistory', () => {
       db.all('SELECT * FROM dice_rolls ORDER BY timestamp DESC LIMIT 5', (err, rows) => {
         if (!err && rows) {
@@ -65,6 +79,16 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
     socket.on('identify', (data) => {
       let info = typeof data === 'string' ? { userName: data, isAdmin: false } : data;
+
+      // Streamer mode spectator: read-only, invisible to presence/chat, no rhombus.
+      // Safe to bypass Secure Mode because the socket.use guard drops all mutations.
+      if (info.spectator) {
+        socket.isSpectator = true;
+        socket.join('spectators');
+        console.log(`Spectator connected: ${socket.id}`);
+        broadcastSpectatorCount();
+        return;
+      }
 
       // Secure Mode: verify player token before allowing connection
       if (process.env.SECURE_MODE === 'true' && !info.isAdmin) {
@@ -577,6 +601,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     });
 
     socket.on('disconnect', () => {
+      if (socket.isSpectator) {
+        console.log('Spectator disconnected:', socket.id);
+        broadcastSpectatorCount();
+        return;
+      }
       const info = userSockets.get(socket.id);
       if (info) {
         console.log('User disconnected:', socket.id, 'Username:', info.userName);
