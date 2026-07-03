@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { HealthBar } from '../HealthBar';
+import { useStreamerVisibility } from '../context/StreamerVisibilityContext';
+import { IS_SPECTATOR } from '../streamerMode';
 
 export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap, measureMode }: any) => {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -14,6 +16,7 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
   const intersection = useMemo(() => new THREE.Vector3(), []);
   
   const isAdmin = token !== '';
+  const streamerVis = useStreamerVisibility();
   const [isHovered, setIsHovered] = useState(false);
   const [isLocalDragging, setIsLocalDragging] = useState(false);
     useEffect(() => {
@@ -254,7 +257,7 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
       
-      {location.name && (isHovered || isSelected) && (
+      {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames)) && (
           <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
             <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #ff0000`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
                 {location.name}
@@ -277,6 +280,7 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
   const intersection = useMemo(() => new THREE.Vector3(), []);
   
   const isAdmin = token !== '';
+  const streamerVis = useStreamerVisibility();
   const [isHovered, setIsHovered] = useState(false);
   const [isLocalDragging, setIsLocalDragging] = useState(false);
   useEffect(() => {
@@ -501,7 +505,7 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
       
-      {location.name && (isHovered || isSelected) && (
+      {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames)) && (
           <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
             <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #00ccff`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
                 {location.name}
@@ -527,6 +531,7 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
   const isAdmin = token !== '';
   const isOwner = location.owner === userName;
   const canManage = isAdmin || isOwner;
+  const streamerVis = useStreamerVisibility();
 
   const isOnline = activeUsers.some((u: any) => u.userName === location.owner);
   const [isHovered, setIsHovered] = useState(false);
@@ -793,11 +798,11 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
         </mesh>
       </mesh>
 
-      {isOnline && (
+      {isOnline && streamerVis.showHealthBars && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
-      
-      {location.name && (isHovered || isSelected) && (
+
+      {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && isOnline)) && (
           <Html position={[0, isBattleMap ? 2.5 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude style={{ pointerEvents: 'none', userSelect: 'none' }}>
             <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid ${baseColor}`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px' }}>
                 {location.name}

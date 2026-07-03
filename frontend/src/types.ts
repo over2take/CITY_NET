@@ -223,10 +223,8 @@ export type StreamerCameraMode = 'director' | 'mirror' | 'locked';
 
 export interface StreamerVisibility {
   showHealthBars: boolean;
-  showLocationLabels: boolean;
-  showDistrictBorders: boolean;
-  showRoads: boolean;
   showPlayerNames: boolean;
+  showRoads: boolean;
 }
 
 export interface DirectorState {
@@ -239,10 +237,8 @@ export interface DirectorState {
 
 export const ALL_VISIBLE: StreamerVisibility = {
   showHealthBars: true,
-  showLocationLabels: true,
-  showDistrictBorders: true,
-  showRoads: true,
   showPlayerNames: true,
+  showRoads: true,
 };
 
 export const DEFAULT_DIRECTOR_STATE: DirectorState = {
