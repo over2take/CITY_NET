@@ -68,24 +68,40 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
   const [acMelee, setAcMelee] = useState('');
   const [acRanged, setAcRanged] = useState('');
 
-  // Pre-populate AC fields whenever the deployed rhombus changes
-  React.useEffect(() => {
-    if (userRhombus) {
-      setAcMelee(userRhombus.melee_ac != null ? String(userRhombus.melee_ac) : '');
-      setAcRanged(userRhombus.ranged_ac != null ? String(userRhombus.ranged_ac) : '');
-    }
-  }, [userRhombus?.id, userRhombus?.melee_ac, userRhombus?.ranged_ac]);
+  // Any rhombus the player owns on any map — used for AC/settings regardless of current view
+  const anyUserRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
 
-  const saveAc = async () => {
-    if (!userRhombus) return;
-    const meleeVal = acMelee === '' ? null : parseInt(acMelee, 10);
-    const rangedVal = acRanged === '' ? null : parseInt(acRanged, 10);
-    await fetch(`/api/locations/${userRhombus.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ ...userRhombus, melee_ac: meleeVal, ranged_ac: rangedVal }),
-    });
-    refreshLocations();
+  // Pre-populate AC fields from the player's rhombus (any map)
+  React.useEffect(() => {
+    if (anyUserRhombus) {
+      setAcMelee(anyUserRhombus.melee_ac != null ? String(anyUserRhombus.melee_ac) : '');
+      setAcRanged(anyUserRhombus.ranged_ac != null ? String(anyUserRhombus.ranged_ac) : '');
+    }
+  }, [anyUserRhombus?.id, anyUserRhombus?.melee_ac, anyUserRhombus?.ranged_ac]);
+
+  const handleSet = async () => {
+    // Sync name / description / color
+    syncRhombusToDB(rhombusState);
+    const target = anyUserRhombus;
+    if (target) {
+      // HP max
+      if (rhombusState.hp_max > 0) {
+        await fetch(`/api/locations/${target.id}/health`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ action: 'set_max', hp_max: rhombusState.hp_max }),
+        });
+      }
+      // AC
+      const meleeVal = acMelee === '' ? null : parseInt(acMelee, 10);
+      const rangedVal = acRanged === '' ? null : parseInt(acRanged, 10);
+      await fetch(`/api/locations/${target.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ ...target, melee_ac: meleeVal, ranged_ac: rangedVal }),
+      });
+      refreshLocations();
+    }
   };
 
   const removeRhombus = async (id: number) => {
@@ -104,137 +120,126 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
     }
   };
 
+  const isDefaultColor = rhombusState.color === '#00ff00';
+
   return (
     <div className="panel sidebar-panel">
+      <style>{`@keyframes rainbowHue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }`}</style>
       <header style={{ marginBottom: '20px' }}>
         <h3 style={{ margin: 0 }}>GEOMETRY_PROTOCOLS</h3>
       </header>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
 
-        <button
-          className={`rhombus-trigger-btn ${rhombusState.active ? 'active' : ''} ${userRhombus ? 'disabled' : ''}`}
-          onClick={() => !userRhombus && setRhombusState((p: any) => ({ ...p, active: !p.active }))}
-          disabled={!!userRhombus}
-          style={{ color: rhombusState.color }}
-        >
-          <svg width="60" height="60" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
-          </svg>
-          <span style={{ fontSize: '0.6rem', marginTop: '10px', display: 'block' }}>
-            {userRhombus ? 'RHOMBUS_ACTIVE' : (rhombusState.active ? 'SCANNING_MAP...' : 'INITIALIZE_RHOMBUS')}
-          </span>
-        </button>
+        {/* 1 — Rhombus deploy button */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+          <button
+            className={`rhombus-trigger-btn ${rhombusState.active ? 'active' : ''} ${userRhombus ? 'disabled' : ''}`}
+            onClick={() => !userRhombus && setRhombusState((p: any) => ({ ...p, active: !p.active }))}
+            disabled={!!userRhombus}
+            style={{ color: rhombusState.color }}
+          >
+            <svg width="60" height="60" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
+            </svg>
+            <span style={{ fontSize: '0.6rem', marginTop: '10px', display: 'block' }}>
+              {userRhombus ? 'RHOMBUS_ACTIVE' : (rhombusState.active ? 'PLACE_ON_MAP' : 'INITIALIZE_RHOMBUS')}
+            </span>
+          </button>
+          {rhombusState.active && !userRhombus && (
+            <span style={{ fontSize: '0.6rem', opacity: 0.6, letterSpacing: '1px' }}>place user token</span>
+          )}
+        </div>
 
         {userRhombus && (
           <button className="upload-btn danger-btn" onClick={() => removeRhombus(userRhombus.id)} style={{ width: '100%', fontSize: '0.65rem' }}>PURGE_YOUR_RHOMBUS</button>
         )}
-
         {canRemoveSelected && selectedLocation?.id !== userRhombus?.id && (
           <button className="upload-btn danger-btn" onClick={() => removeRhombus(selectedLocation.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_SELECTED_RHOMBUS</button>
         )}
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>BEACON_NAME</label>
-            <input
-              placeholder="ID_TAG"
-              value={rhombusState.name}
-              onChange={(e) => {
-                const ns = { ...rhombusState, name: e.target.value };
-                setRhombusState(ns);
-                syncRhombusToDB(ns);
-              }}
-              style={{ width: '100%' }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>DATA_DESCRIPTION</label>
-            <textarea
-              placeholder="BEACON_FEED_SUMMARY"
-              value={rhombusState.description}
-              onChange={(e) => {
-                const ns = { ...rhombusState, description: e.target.value };
-                setRhombusState(ns);
-                syncRhombusToDB(ns);
-              }}
-              style={{ width: '100%', height: '60px' }}
-            />
-          </div>
-          <div style={{ marginBottom: '10px' }}>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX HEALTH</label>
-            <div style={{ display: 'flex', gap: '5px' }}>
-              <input
-                type="number"
-                placeholder="0"
-                value={rhombusState.hp_max || ''}
-                onChange={(e) => setRhombusState({ ...rhombusState, hp_max: parseInt(e.target.value) || 0 })}
-                style={{ flex: 1, boxSizing: 'border-box', marginBottom: 0 }}
-              />
-              <button
-                className="upload-btn"
-                style={{ fontSize: '0.65rem', padding: '0 15px', minWidth: 'auto', margin: 0, height: 'auto' }}
-                onClick={async () => {
-                  const anyUserRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
-                  if (anyUserRhombus) {
-                    await fetch(`/api/locations/${anyUserRhombus.id}/health`, {
-                      method: 'PUT',
-                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                      body: JSON.stringify({ action: 'set_max', hp_max: rhombusState.hp_max })
-                    });
-                    refreshLocations();
-                  }
-                  syncRhombusToDB({ ...rhombusState, hp_max: rhombusState.hp_max });
-                }}
-              >
-                SET
-              </button>
-            </div>
-          </div>
+
+          {/* 2 — Color */}
           <div>
             <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>RHOMBUS_CHROMA_SYNC</label>
             <input
               type="color"
               value={rhombusState.color}
-              onChange={(e) => {
-                const ns = { ...rhombusState, color: e.target.value };
-                setRhombusState(ns);
-                syncRhombusToDB(ns);
+              onChange={(e) => setRhombusState({ ...rhombusState, color: e.target.value })}
+              style={{
+                width: '100%', height: '40px', background: 'none',
+                border: '1px solid var(--green)', cursor: 'pointer',
+                animation: isDefaultColor ? 'rainbowHue 4s linear infinite' : 'none',
               }}
-              style={{ width: '100%', height: '40px', background: 'none', border: '1px solid var(--green)', cursor: 'pointer' }}
             />
           </div>
-        </div>
 
-        {userRhombus && (
-          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '2px' }}>DEFENSE_RATING</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.7rem', minWidth: '80px', opacity: 0.8 }}>MELEE_AC:</span>
+          {/* 3 — Name */}
+          <div>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>BEACON_NAME</label>
+            <input
+              placeholder="ID_TAG"
+              value={rhombusState.name}
+              onChange={(e) => setRhombusState({ ...rhombusState, name: e.target.value })}
+              style={{ width: '100%' }}
+            />
+          </div>
+
+          {/* 4 — Description */}
+          <div>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>DATA_DESCRIPTION</label>
+            <textarea
+              placeholder="BEACON_FEED_SUMMARY"
+              value={rhombusState.description}
+              onChange={(e) => setRhombusState({ ...rhombusState, description: e.target.value })}
+              style={{ width: '100%', height: '60px' }}
+            />
+          </div>
+
+          {/* 5 — Max health */}
+          <div>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX HEALTH</label>
+            <input
+              type="number"
+              placeholder="100"
+              value={rhombusState.hp_max || ''}
+              onChange={(e) => setRhombusState({ ...rhombusState, hp_max: parseInt(e.target.value) || 0 })}
+              style={{ width: '100%', boxSizing: 'border-box', marginBottom: 0 }}
+            />
+          </div>
+
+          {/* 6 — AC fields (always visible; saved via SET) */}
+          <div>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>DEFENSE_RATING</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.65rem', opacity: 0.8, whiteSpace: 'nowrap' }}>MELEE</span>
               <input
                 type="number"
                 min="0"
                 placeholder="10"
                 value={acMelee}
                 onChange={e => setAcMelee(e.target.value)}
-                onBlur={saveAc}
-                style={{ flex: 1, marginBottom: 0 }}
+                style={{ width: '48px', marginBottom: 0, textAlign: 'center' }}
               />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.7rem', minWidth: '80px', opacity: 0.8 }}>RANGED_AC:</span>
+              <span style={{ fontSize: '0.65rem', opacity: 0.8, whiteSpace: 'nowrap' }}>RANGED</span>
               <input
                 type="number"
                 min="0"
                 placeholder={acMelee !== '' ? acMelee : '10'}
                 value={acRanged}
                 onChange={e => setAcRanged(e.target.value)}
-                onBlur={saveAc}
-                style={{ flex: 1, marginBottom: 0 }}
+                style={{ width: '48px', marginBottom: 0, textAlign: 'center' }}
               />
               <span title="Leave blank to use Melee AC" style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
             </div>
           </div>
-        )}
+
+          {/* 7 — SET button */}
+          <button className="upload-btn" style={{ width: '100%', marginTop: '4px' }} onClick={handleSet}>
+            SET
+          </button>
+
+        </div>
 
         <div className="info-box" style={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: '1.6', borderTop: '1px solid var(--dark-green)', paddingTop: '15px', width: '100%' }}>
           <p style={{ color: 'var(--green)', fontWeight: 'bold', marginBottom: '5px' }}>INTERFACE_GUIDE:</p>
