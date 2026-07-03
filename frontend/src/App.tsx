@@ -191,10 +191,10 @@ function App() {
   const [audioEnabled, setAudioEnabled] = useState(() => { const saved = localStorage.getItem('audioEnabled'); return saved !== null ? JSON.parse(saved) : true; });
   const [masterVolume, setMasterVolume] = useState(() => { const saved = localStorage.getItem('masterVolume'); return saved !== null ? parseFloat(saved) : 0.5; });
 
-  // Keep audio element volume synced with local volume × master volume
+  // Keep audio element volume synced with local volume × master volume, respecting mute
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = Math.min(1, musicVolume * masterVolume);
-  }, [musicVolume, masterVolume]);
+    if (audioRef.current) audioRef.current.volume = audioEnabled ? Math.min(1, musicVolume * masterVolume) : 0;
+  }, [musicVolume, masterVolume, audioEnabled]);
   const [isBatchSelecting, setIsBatchSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [districtSelection, setDistrictSelection] = useState<number[]>([]);
