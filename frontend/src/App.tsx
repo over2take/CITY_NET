@@ -48,6 +48,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, computeBroadcastFraming } from './components/Streamer';
 import { StreamerVisibilityContext } from './context/StreamerVisibilityContext';
 import { StreamerOverlay } from './components/StreamerOverlay';
+import { StreamerDirectorPanel } from './components/StreamerDirectorPanel';
 import { DEFAULT_DIRECTOR_STATE, ALL_VISIBLE } from './types';
 import type { DirectorState } from './types';
 import { IS_SPECTATOR } from './streamerMode';
@@ -482,6 +483,8 @@ function App() {
   // panel / BROADCAST_THIS); on the spectator it's received via directorUpdate.
   const [directorState, setDirectorState] = useState<DirectorState>(DEFAULT_DIRECTOR_STATE);
   const [spectatorCount, setSpectatorCount] = useState(0);
+  const [showDirectorPanel, setShowDirectorPanel] = useState(false);
+  const [directorPanelPos, setDirectorPanelPos] = useState(() => ({ x: window.innerWidth - 340, y: 70 }));
 
   // Spectator boot path: no login, no chime, straight to the map.
   useEffect(() => {
@@ -960,6 +963,7 @@ function App() {
                 {view === 'draw_roads' && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: HOLD LEFT-CLICK + DRAG TO DRAW PATH`}</div>}
                 {measureMode && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: view === 'battle_map' ? '140px' : '20px', color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 5px #ff0000', padding: '5px 15px', background: 'rgba(20, 0, 0, 0.6)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300, border: '1px solid #ff4444' }}>{`SYSTEM_ALERT: MAP CAMERA LOCKED // MEASUREMENT ACTIVE`}</div>}
                 <div style={{display: 'flex', gap: '10px'}}>
+                  {token && <button className={`admin-toggle ${spectatorCount > 0 && !showDirectorPanel ? 'unread-flash' : ''}`} onClick={() => setShowDirectorPanel(p => !p)}>{spectatorCount > 0 ? '● BROADCAST' : 'BROADCAST'}</button>}
                   {token && <button className={`admin-toggle ${pendingRequests.length > 0 && !showAdminPanel ? 'unread-flash' : ''}`} onClick={() => setShowAdminPanel(!showAdminPanel)}>{showAdminPanel ? 'HIDE_DASHBOARD' : 'SHOW_DASHBOARD'}</button>}
                   {token && pendingRegistrations.length > 0 && (
                     <button className={`admin-toggle unread-flash`} onClick={() => setShowPendingPanel(p => !p)}>
@@ -1164,8 +1168,18 @@ function App() {
                   token={token}
                   isChatOpen={isChatOpen}
               />
+            {token && showDirectorPanel && (
+              <StreamerDirectorPanel
+                pos={directorPanelPos}
+                setPos={setDirectorPanelPos}
+                onClose={() => setShowDirectorPanel(false)}
+                directorState={directorState}
+                updateDirector={updateDirector}
+                spectatorCount={spectatorCount}
+              />
+            )}
             {isHitPointsOpen && (
-              <HitPointsMenu 
+              <HitPointsMenu
                 targetRhombus={(() => {
                   if (selectedLocation && selectedLocation.id !== -1) {
                     return locations.find((l: any) => l.id === selectedLocation.id) ?? null;
