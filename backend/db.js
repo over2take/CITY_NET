@@ -232,6 +232,16 @@ db.serialize(() => {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
   db.run(`ALTER TABLE player_accounts ADD COLUMN status TEXT DEFAULT 'pending'`, () => {});
+
+  db.run(`CREATE TABLE IF NOT EXISTS music_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_id INTEGER,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    path TEXT,
+    sort_order INTEGER DEFAULT 0,
+    FOREIGN KEY(parent_id) REFERENCES music_items(id) ON DELETE CASCADE
+  )`);
 });
 
 module.exports = db;

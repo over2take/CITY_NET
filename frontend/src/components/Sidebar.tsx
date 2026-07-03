@@ -556,9 +556,12 @@ interface SidebarProps {
   setIsBankOpen: (v: boolean) => void;
   attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
   onCancelAttack?: () => void;
+  isRadioOpen?: boolean;
+  onToggleRadio?: () => void;
+  musicPlaying?: boolean;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -656,6 +659,25 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           </button>
           <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} title="CITY_NET // BANK">
             <div style={{ width: '24px', height: '24px', backgroundColor: 'currentColor', WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }} />
+          </button>
+          <button
+            className={`rail-btn ${isRadioOpen ? 'active' : ''}`}
+            onClick={onToggleRadio}
+            title="RADIO_FEED"
+            style={{ position: 'relative' }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18V5l12-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="16" r="3" />
+            </svg>
+            {musicPlaying && (
+              <span style={{
+                position: 'absolute', top: '2px', right: '2px',
+                width: '7px', height: '7px', borderRadius: '50%',
+                background: 'var(--green)', display: 'block',
+              }} />
+            )}
           </button>
         </div>
         <div className="rail-bottom" style={{ paddingBottom: '20px', display: 'flex', justifyContent: 'center' }}>
