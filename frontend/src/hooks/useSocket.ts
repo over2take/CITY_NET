@@ -32,6 +32,8 @@ interface UseSocketOptions {
   onPasswordResetResolved?: (username: string, action: 'approved' | 'denied') => void;
   onDirectorUpdate?: (state: DirectorState) => void;
   onSpectatorCount?: (count: number) => void;
+  onAttackPending?: (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => void;
+  onAttackResult?: (data: { hit: boolean; attackerId: string; attackerName: string; targetId: number; targetName: string; attackType: 'melee' | 'ranged'; roll: number; ac: number; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number } }) => void;
 }
 
 export function useSocket({
@@ -41,6 +43,7 @@ export function useSocket({
   onRegistrationPending, onRegistrationUpdated,
   onPasswordResetRequested, onPasswordResetResolved,
   onDirectorUpdate, onSpectatorCount,
+  onAttackPending, onAttackResult,
 }: UseSocketOptions) {
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const tokenRef = useRef(token);
@@ -170,6 +173,10 @@ export function useSocket({
     newSocket.on('directorUpdate', (state: DirectorState) => onDirectorUpdate?.(state));
 
     newSocket.on('spectatorCount', (data: { count: number }) => onSpectatorCount?.(data.count));
+
+    newSocket.on('attackPending', (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => onAttackPending?.(data));
+
+    newSocket.on('attackResult', (data: any) => onAttackResult?.(data));
 
     newSocket.on('force_floor_change', (data: { locationId: number; floorIndex: number }) => {
       setActiveBattleMapData(prev =>

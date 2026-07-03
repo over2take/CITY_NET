@@ -109,6 +109,11 @@ function App() {
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<SidebarMenu>('none');
   const [isDiceTrayOpen, setIsDiceTrayOpen] = useState(false);
 
+  // Attack state
+  const [attackPending, setAttackPending] = useState<{ targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null>(null);
+  const [lastAttackResult, setLastAttackResult] = useState<{ hit: boolean; roll: number; ac: number; targetName: string } | null>(null);
+  const [attackAnimations, setAttackAnimations] = useState<{ id: string; hit: boolean; attackType: 'melee' | 'ranged'; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number }; targetId: number }[]>([]);
+
   const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
   const [hitPointsPos, setHitPointsPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
   const [acEdit, setAcEdit] = useState<{ melee: string; ranged: string } | null>(null);
@@ -543,6 +548,23 @@ function App() {
     },
     onDirectorUpdate: (state) => { if (IS_SPECTATOR) setDirectorState(state); },
     onSpectatorCount: setSpectatorCount,
+    onAttackPending: (data) => {
+      setAttackPending(data);
+      setActiveSidebarMenu('dice_menu');
+      setIsDiceTrayOpen(true);
+    },
+    onAttackResult: (data) => {
+      setAttackPending(null);
+      setLastAttackResult({ hit: data.hit, roll: data.roll, ac: data.ac, targetName: data.targetName });
+      setAttackAnimations(prev => [...prev, {
+        id: Math.random().toString(36).slice(2, 9),
+        hit: data.hit,
+        attackType: data.attackType,
+        attackerPos: data.attackerPos,
+        targetPos: data.targetPos,
+        targetId: data.targetId,
+      }]);
+    },
   });
 
   // Admin-side director mutations: update local state and push to spectators.
@@ -993,6 +1015,8 @@ function App() {
               setNotification={setNotification}
               measureMode={measureMode}
               setMeasureMode={setMeasureMode}
+              attackPending={attackPending}
+              onCancelAttack={() => { setAttackPending(null); setLastAttackResult(null); }}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -1375,6 +1399,32 @@ function App() {
                     )}
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
                       <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
+                    )}
+                    {/* ATTACK — visible to any logged-in player not attacking their own rhombus */}
+                    {isRhombus && isLoggedIn && !isOwner && (
+                      <div style={{ marginTop: '10px' }}>
+                        {attackPending?.targetId === selectedLocation.id ? (
+                          <div style={{ fontSize: '12px', color: 'var(--green)', border: '1px solid var(--green)', padding: '6px 10px' }}>
+                            AWAITING_ROLL — {attackPending.attackType.toUpperCase()} vs AC {attackPending.ac}
+                          </div>
+                        ) : lastAttackResult && lastAttackResult.targetName === selectedLocation.name ? (
+                          <div style={{ fontSize: '12px', color: lastAttackResult.hit ? '#00ff66' : '#ff4444', border: `1px solid ${lastAttackResult.hit ? '#00ff66' : '#ff4444'}`, padding: '6px 10px' }}>
+                            {lastAttackResult.hit ? 'HIT!' : 'MISS'} — rolled {lastAttackResult.roll} vs AC {lastAttackResult.ac}
+                            <button className="utility-btn" style={{ marginLeft: '8px', fontSize: '10px', padding: '2px 6px' }} onClick={() => setLastAttackResult(null)}>✕</button>
+                          </div>
+                        ) : (
+                          <>
+                            {attackPending ? (
+                              <div style={{ fontSize: '11px', color: '#888' }}>Attack in progress vs {attackPending.targetName}</div>
+                            ) : (
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button className="upload-btn" style={{ flex: 1, backgroundColor: '#cc2200', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'melee' }); }}>⚔ MELEE</button>
+                                <button className="upload-btn" style={{ flex: 1, backgroundColor: '#884400', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'ranged' }); }}>🏹 RANGED</button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     )}
                     {isRhombus && !isAdmin && !isOwner && (
                         <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {

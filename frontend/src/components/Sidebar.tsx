@@ -229,9 +229,11 @@ interface DiceMenuProps {
   rhombusState: any;
   setIsDiceTrayOpen: (v: any) => void;
   setNotification: (msg: string) => void;
+  attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
+  onCancelAttack?: () => void;
 }
 
-export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen, setNotification }: DiceMenuProps) {
+export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack }: DiceMenuProps) {
   const diceTypes = [2, 4, 6, 8, 10, 12, 20, 100];
   const [diceCounts, setDiceCounts] = useState<Record<number, number>>({});
   const [workingMod, setWorkingMod] = useState<number>(0);
@@ -271,6 +273,20 @@ export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen,
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexShrink: 0 }}>
         <h3 style={{ margin: 0 }}>DICE_ROLLER</h3>
       </header>
+
+      {attackPending && (
+        <div style={{ marginBottom: '10px', padding: '8px 10px', border: '1px solid #cc2200', background: 'rgba(30,0,0,0.7)', flexShrink: 0 }}>
+          <div style={{ color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '1px' }}>
+            ATTACK ROLL — vs {attackPending.targetName}
+          </div>
+          <div style={{ color: 'var(--green)', fontSize: '0.75rem', marginBottom: '6px' }}>
+            {attackPending.attackType.toUpperCase()} · AC {attackPending.ac} · Roll {attackPending.ac}+ to hit
+          </div>
+          <button className="upload-btn" style={{ width: '100%', padding: '5px', fontSize: '0.75rem', backgroundColor: 'transparent', color: '#888', border: '1px solid #444' }} onClick={() => { socketRef.current?.emit('cancelAttack'); onCancelAttack?.(); }}>
+            CANCEL ATTACK
+          </button>
+        </div>
+      )}
 
       <div style={{ flex: '0 1 auto', overflowY: 'auto', marginBottom: '10px', paddingRight: '5px' }}>
         {diceTypes.map(sides => (
@@ -472,9 +488,11 @@ interface SidebarProps {
   setMeasureMode: (v: boolean) => void;
   isBankOpen: boolean;
   setIsBankOpen: (v: boolean) => void;
+  attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
+  onCancelAttack?: () => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -609,7 +627,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
-          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} />}
+          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} />}
         </div>
       </div>
     </div>
