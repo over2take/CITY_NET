@@ -535,6 +535,8 @@ interface SidebarProps {
   setAudioEnabled: (v: boolean) => void;
   masterVolume: number;
   setMasterVolume: (v: number) => void;
+  musicVolume: number;
+  setMusicVolume: (v: number) => void;
   rhombusState: any;
   setRhombusState: (s: any) => void;
   refreshLocations: () => void;
@@ -561,7 +563,7 @@ interface SidebarProps {
   musicPlaying?: boolean;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -683,15 +685,34 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
         <div className="rail-bottom" style={{ paddingBottom: '20px', display: 'flex', justifyContent: 'center' }}>
           <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }} onMouseEnter={handleVolumeEnter} onMouseLeave={handleVolumeLeave}>
             {showVolumeSlider && (
-              <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', background: '#0a0a0a', border: '1px solid var(--green)', padding: '8px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginBottom: '6px', zIndex: 1000, minWidth: '36px' }}>
-                <span style={{ fontSize: '0.5rem', letterSpacing: '1px', color: 'var(--green)', whiteSpace: 'nowrap' }}>{Math.round(masterVolume * 100)}%</span>
-                <input
-                  type="range" min="0" max="1" step="0.05"
-                  value={masterVolume}
-                  onChange={e => setMasterVolume(parseFloat(e.target.value))}
-                  style={{ writingMode: 'vertical-lr', direction: 'rtl', height: '80px', cursor: 'pointer', accentColor: 'var(--green)', background: 'transparent' } as React.CSSProperties}
-                />
-                <span style={{ fontSize: '0.45rem', letterSpacing: '1px', color: 'var(--green)', opacity: 0.6, whiteSpace: 'nowrap' }}>VOL</span>
+              <div style={{ position: 'absolute', bottom: '0', left: '100%', background: '#0a0a0a', border: '1px solid var(--green)', padding: '8px 8px', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', marginLeft: '6px', zIndex: 1000 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '0.5rem', letterSpacing: '1px', color: 'var(--green)', whiteSpace: 'nowrap' }}>{Math.round(masterVolume * 100)}%</span>
+                  <input
+                    type="range" min="0" max="1" step="0.05"
+                    value={masterVolume}
+                    onChange={e => setMasterVolume(parseFloat(e.target.value))}
+                    style={{ writingMode: 'vertical-lr', direction: 'rtl', height: '80px', cursor: 'pointer', accentColor: 'var(--green)', background: 'transparent' } as React.CSSProperties}
+                  />
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--green)', opacity: 0.6 }}>
+                    <path d="M20 2H4c-.55 0-1 .45-1 1v18c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1M5 4h14v8H5zm14 16H5v-6h14z" />
+                    <path d="M15 18h3v-2h-3v.5h-3v1h3zm-8-2a1 1 0 1 0 0 2a1 1 0 1 0 0-2" />
+                  </svg>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '0.5rem', letterSpacing: '1px', color: 'var(--green)', whiteSpace: 'nowrap' }}>{Math.round(musicVolume * 100)}%</span>
+                  <input
+                    type="range" min="0" max="1" step="0.05"
+                    value={musicVolume}
+                    onChange={e => setMusicVolume(parseFloat(e.target.value))}
+                    style={{ writingMode: 'vertical-lr', direction: 'rtl', height: '80px', cursor: 'pointer', accentColor: 'var(--green)', background: 'transparent' } as React.CSSProperties}
+                  />
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--green)', opacity: 0.6 }}>
+                    <path d="M9 18V5l12-2v13" />
+                    <circle cx="6" cy="18" r="3" />
+                    <circle cx="18" cy="16" r="3" />
+                  </svg>
+                </div>
               </div>
             )}
             <button className={`rail-btn ${!audioEnabled ? 'muted' : ''}`} onClick={() => setAudioEnabled(!audioEnabled)} title={`${audioEnabled ? 'CLICK: MUTE_AUDIO' : 'CLICK: UNMUTE_AUDIO'} // HOVER: MASTER_VOLUME`}>

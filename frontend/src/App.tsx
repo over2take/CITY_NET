@@ -193,8 +193,8 @@ function App() {
 
   // Keep audio element volume synced with local volume × master volume, respecting mute
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = audioEnabled ? Math.min(1, musicVolume * masterVolume) : 0;
-  }, [musicVolume, masterVolume, audioEnabled]);
+    if (audioRef.current) audioRef.current.volume = audioEnabled ? musicVolume : 0;
+  }, [musicVolume, audioEnabled]);
   const [isBatchSelecting, setIsBatchSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [districtSelection, setDistrictSelection] = useState<number[]>([]);
@@ -1143,6 +1143,8 @@ function App() {
               setAudioEnabled={setAudioEnabled}
               masterVolume={masterVolume}
               setMasterVolume={setMasterVolume}
+              musicVolume={musicVolume}
+              setMusicVolume={(v) => { setMusicVolume(v); localStorage.setItem('musicVolume', String(v)); }}
               rhombusState={rhombusState}
               setRhombusState={setRhombusState}
               refreshLocations={fetchLocations}
