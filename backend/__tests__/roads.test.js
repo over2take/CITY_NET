@@ -98,6 +98,37 @@ describe('POST /api/roads', () => {
   });
 });
 
+// ─── DELETE /api/roads/:id ────────────────────────────────────────────────────
+
+describe('DELETE /api/roads/:id', () => {
+  it('removes only the specified segment', async () => {
+    await run(db, `INSERT INTO roads (x1, z1, x2, z2, width) VALUES (0, 0, 10, 0, 4)`);
+    await run(db, `INSERT INTO roads (x1, z1, x2, z2, width) VALUES (10, 0, 20, 0, 4)`);
+    const [first] = await all(db, 'SELECT id FROM roads ORDER BY id ASC LIMIT 1');
+
+    const res = await request(app)
+      .delete(`/api/roads/${first.id}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(res.status).toBe(200);
+    const remaining = await all(db, 'SELECT * FROM roads');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].id).not.toBe(first.id);
+  });
+
+  it('returns 404 for a non-existent id', async () => {
+    const res = await request(app)
+      .delete('/api/roads/9999')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 401 without a token for DELETE /:id', async () => {
+    const res = await request(app).delete('/api/roads/1');
+    expect(res.status).toBe(401);
+  });
+});
+
 // ─── DELETE /api/roads ────────────────────────────────────────────────────────
 
 describe('DELETE /api/roads', () => {

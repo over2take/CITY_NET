@@ -42,7 +42,7 @@ import { ZONE_TYPE_NAMES, isUserDefinedName, getStructLabel } from './utils/loca
 import { renderBaseGeometry } from './utils/threeHelpers';
 import { mergeRhombusHealthFromLocation, resolveDeployHealth } from './utils/rhombusHelpers';
 import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './components/Buildings';
-import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } from './components/MapElements';
+import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic, RoadEraser } from './components/MapElements';
 import { Overpasses, OverpassPreview } from './components/Overpasses';
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
@@ -212,6 +212,7 @@ function App() {
   const [roadLayerMode, setRoadLayerMode] = useState<'road' | 'overpass'>('road');
   const [overpassHeight, setOverpassHeight] = useState(8);
   const [overpassRampLength, setOverpassRampLength] = useState(20);
+  const [roadEraseMode, setRoadEraseMode] = useState<'segment' | 'path'>('segment');
   const [citySectionType, setCitySectionType] = useState<'MIXED' | 'CORPO' | 'URBAN' | 'SLUMS' | 'INDUSTRIAL'>('MIXED');
   const [genExcludeRoads, setGenExcludeRoads] = useState(false);
   const [rhombusState, setRhombusState] = useState(() => {
@@ -1203,6 +1204,7 @@ function App() {
                 {showZoomComplete && !cameraTarget && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_STATUS: ZOOM COMPLETE`}</div>}
                 {view === 'city_gen' && !roadSelectionBounds && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: LEFT-CLICK + DRAG TO SELECT GENERATION AREA`}</div>}
                 {view === 'draw_roads' && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: HOLD LEFT-CLICK + DRAG TO DRAW PATH`}</div>}
+                {view === 'purge_roads' && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: '#ff3300', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 8px #ff3300', padding: '5px 15px', background: 'rgba(20, 0, 0, 0.6)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300, border: '1px solid #ff3300' }}>{roadEraseMode === 'segment' ? 'ERASER MODE: CLICK SEGMENT TO DELETE' : 'SELECTOR MODE: CLICK SEGMENT TO DELETE PATH'}</div>}
                 {measureMode && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: view === 'battle_map' ? '140px' : '20px', color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 5px #ff0000', padding: '5px 15px', background: 'rgba(20, 0, 0, 0.6)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300, border: '1px solid #ff4444' }}>{`SYSTEM_ALERT: MAP CAMERA LOCKED // MEASUREMENT ACTIVE`}</div>}
                 <div style={{display: 'flex', gap: '10px'}}>
                   {token && <button className={`admin-toggle ${spectatorCount > 0 && !showDirectorPanel ? 'unread-flash' : ''}`} onClick={() => setShowDirectorPanel(p => !p)}>{spectatorCount > 0 ? '● BROADCAST' : 'BROADCAST'}</button>}
@@ -1333,6 +1335,7 @@ function App() {
                 overpassRampLength={overpassRampLength}
                 setOverpassRampLength={setOverpassRampLength}
                 refreshOverpasses={fetchOverpasses}
+                onRoadEraseModeChange={setRoadEraseMode}
                 isGeneratingMap={isGeneratingMap}
                 setIsGeneratingMap={setIsGeneratingMap}
                 citySectionType={citySectionType}
@@ -1849,7 +1852,10 @@ function App() {
             <CameraController target={cameraTarget} onComplete={() => { setCameraTarget(null); setShowZoomComplete(true); setTimeout(() => setShowZoomComplete(false), 3000); }} />
             {(!IS_SPECTATOR || directorState.visibility.showRoads) && (
               <>
-                <Roads roads={roads} />
+                {view === 'purge_roads'
+                  ? <RoadEraser roads={roads} token={token} eraseMode={roadEraseMode} refreshRoads={fetchRoads} />
+                  : <Roads roads={roads} />
+                }
                 <GhostTraffic roads={roads} overpasses={overpasses} />
                 <Overpasses overpasses={overpasses} roads={roads} />
               </>

@@ -585,6 +585,102 @@ const _pt = new THREE.Vector3();
 const _closest = new THREE.Vector3();
 const _line = new THREE.Line3();
 
+/** Find all segment IDs in the same connected chain as the clicked segment. */
+const findChainIds = (clickedId: number, roads: any[], tol = 0.5): number[] => {
+  const key = (x: number, z: number) => `${Math.round(x / tol)},${Math.round(z / tol)}`;
+  const nodeMap = new Map<string, number[]>();
+  roads.forEach(r => {
+    const k0 = key(r.x1, r.z1), k1 = key(r.x2, r.z2);
+    if (!nodeMap.has(k0)) nodeMap.set(k0, []);
+    if (!nodeMap.has(k1)) nodeMap.set(k1, []);
+    nodeMap.get(k0)!.push(r.id);
+    nodeMap.get(k1)!.push(r.id);
+  });
+  const segById = new Map(roads.map(r => [r.id, r]));
+  const visited = new Set<number>();
+  const queue = [clickedId];
+  while (queue.length) {
+    const id = queue.pop()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const seg = segById.get(id);
+    if (!seg) continue;
+    // Only walk through degree-2 nodes (straight road, no junction)
+    for (const nodeKey of [key(seg.x1, seg.z1), key(seg.x2, seg.z2)]) {
+      const neighbours = nodeMap.get(nodeKey) || [];
+      if (neighbours.length === 2) neighbours.forEach(nid => { if (!visited.has(nid)) queue.push(nid); });
+    }
+  }
+  return [...visited];
+};
+
+const segmentMatrix = (r: any, obj: THREE.Object3D) => {
+  const p1 = new THREE.Vector3(r.x1, 0.05, r.z1);
+  const p2 = new THREE.Vector3(r.x2, 0.05, r.z2);
+  const dist = p1.distanceTo(p2) + (r.width * 0.1);
+  obj.position.copy(p1.clone().lerp(p2, 0.5));
+  obj.scale.set(dist, r.width, 1);
+  obj.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), p2.clone().sub(p1).normalize());
+  obj.rotateX(-Math.PI / 2);
+};
+
+export const RoadEraser = React.memo(({ roads, token, eraseMode, refreshRoads }: {
+  roads: any[];
+  token: string;
+  eraseMode: 'segment' | 'path';
+  refreshRoads: () => void;
+}) => {
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const hoveredChain = useMemo(
+    () => (hoveredId !== null && eraseMode === 'path') ? new Set(findChainIds(hoveredId, roads)) : null,
+    [hoveredId, eraseMode, roads]
+  );
+
+  const deleteIds = async (ids: number[]) => {
+    await Promise.all(ids.map(id =>
+      fetch(`/api/roads/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    ));
+    refreshRoads();
+  };
+
+  return (
+    <group>
+      {roads.map(r => {
+        const isHovered = eraseMode === 'segment' ? r.id === hoveredId : (hoveredChain?.has(r.id) ?? false);
+        const p1 = new THREE.Vector3(r.x1, 0.05, r.z1);
+        const p2 = new THREE.Vector3(r.x2, 0.05, r.z2);
+        const dist = p1.distanceTo(p2) + (r.width * 0.1);
+        const dir = p2.clone().sub(p1).normalize();
+        const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir);
+        const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+        return (
+          <mesh
+            key={r.id}
+            position={p1.clone().lerp(p2, 0.5)}
+            quaternion={quat.multiply(pitchQ)}
+            scale={[dist, r.width, 1]}
+            onPointerOver={(e) => { e.stopPropagation(); setHoveredId(r.id); }}
+            onPointerOut={() => setHoveredId(null)}
+            onClick={async (e) => {
+              e.stopPropagation();
+              const ids = eraseMode === 'path' ? findChainIds(r.id, roads) : [r.id];
+              await deleteIds(ids);
+            }}
+          >
+            <planeGeometry args={[1, 1]} />
+            <meshBasicMaterial
+              color={isHovered ? '#ff3300' : '#004411'}
+              transparent
+              opacity={isHovered ? 0.85 : 0.7}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+});
+
 export const getClosestPointOnRoads = (x: number, z: number, roadsList: any[], maxSnapDistance = 15) => {
     if (!roadsList || roadsList.length === 0) return { x, z };
     
