@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 
 const PAN_SPEED = 0.8;
-const PAN_LERP  = 0.18;
 const PAN_KEYS: Record<string, [number, number]> = {
   KeyW: [0, -1], ArrowUp: [0, -1],
   KeyS: [0,  1], ArrowDown: [0,  1],
@@ -14,10 +13,9 @@ const PAN_KEYS: Record<string, [number, number]> = {
 export function KeyboardPan({ active }: { active: boolean }) {
   const { controls } = useThree();
   const keys = useRef<Set<string>>(new Set());
-  const vel  = useRef<[number, number]>([0, 0]);
 
   useEffect(() => {
-    if (!active) { keys.current.clear(); vel.current = [0, 0]; return; }
+    if (!active) { keys.current.clear(); return; }
     const down = (e: KeyboardEvent) => { if (PAN_KEYS[e.code]) { e.preventDefault(); keys.current.add(e.code); } };
     const up   = (e: KeyboardEvent) => keys.current.delete(e.code);
     window.addEventListener('keydown', down);
@@ -26,16 +24,11 @@ export function KeyboardPan({ active }: { active: boolean }) {
   }, [active]);
 
   useFrame(() => {
-    if (!active || !controls) return;
-    let tx = 0, ty = 0;
-    keys.current.forEach(code => { const d = PAN_KEYS[code]; if (d) { tx += d[0]; ty += d[1]; } });
-    // normalise diagonal so corners aren't faster
-    const len = Math.hypot(tx, ty);
-    if (len > 0) { tx /= len; ty /= len; }
-    vel.current[0] += (tx * PAN_SPEED - vel.current[0]) * PAN_LERP;
-    vel.current[1] += (ty * PAN_SPEED - vel.current[1]) * PAN_LERP;
-    if (Math.abs(vel.current[0]) > 0.001 || Math.abs(vel.current[1]) > 0.001)
-      (controls as any).truck(vel.current[0], vel.current[1], true);
+    if (!active || !controls || keys.current.size === 0) return;
+    let dx = 0, dy = 0;
+    keys.current.forEach(code => { const d = PAN_KEYS[code]; if (d) { dx += d[0]; dy += d[1]; } });
+    const len = Math.hypot(dx, dy);
+    if (len > 0) (controls as any).truck((dx / len) * PAN_SPEED, (dy / len) * PAN_SPEED, true);
   });
 
   return null;
