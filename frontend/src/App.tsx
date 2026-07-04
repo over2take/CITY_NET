@@ -223,6 +223,8 @@ function App() {
   const [isPlacingSign, setIsPlacingSign] = useState(false);
   const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
   const [selectedSignId, setSelectedSignId] = useState<number | null>(null);
+  const [signMesh, setSignMesh] = useState<THREE.Mesh | null>(null);
+  const [signTransformMode, setSignTransformMode] = useState<'translate' | 'rotate'>('translate');
   const [remoteFonts, setRemoteFonts] = useState<RemoteFont[]>([]);
   const [overpassHeight, setOverpassHeight] = useState(8);
   const [overpassRampLength, setOverpassRampLength] = useState(20);
@@ -892,6 +894,18 @@ function App() {
     setIsPlacingSign(false);
   };
 
+  const handleSignDragEnd = useCallback((e: any) => {
+    setIsDragging(e.value);
+    if (e.value || !signMesh || !selectedSignId) return;
+    const { x, y, z } = signMesh.position;
+    const rotY = signMesh.rotation.y;
+    fetch(`/api/signs/${selectedSignId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ x, y, z, rotation_y: rotY }),
+    }).then(() => fetchSigns());
+  }, [signMesh, selectedSignId, token, fetchSigns]);
+
   const handleTreePlantClick = async (e: any) => {
       if (!isPlantingTrees || !isAdmin) return;
       e.stopPropagation();
@@ -1411,6 +1425,8 @@ function App() {
                 fetchSigns={fetchSigns}
                 remoteFonts={remoteFonts}
                 setRemoteFonts={setRemoteFonts}
+                signTransformMode={signTransformMode}
+                setSignTransformMode={setSignTransformMode}
                 isPlacingSign={isPlacingSign}
                 setIsPlacingSign={setIsPlacingSign}
                 pendingSignPos={pendingSignPos}
@@ -1933,7 +1949,13 @@ function App() {
                 {renderSignage && <AutoSignage locations={locations} density={signageDensity} />}
               </>
             )}
-            <Signs signs={signs} remoteFonts={remoteFonts} onSelect={isAdmin ? setSelectedSignId : undefined} />
+            <Signs
+              signs={signs}
+              remoteFonts={remoteFonts}
+              selectedId={isAdmin ? selectedSignId : null}
+              onSelect={isAdmin ? setSelectedSignId : undefined}
+              onMeshRef={isAdmin ? setSignMesh : undefined}
+            />
             {roadLayerMode === 'overpass' && roadTrail.length > 0 && (
               <OverpassPreview
                 trail={roadTrail}
@@ -2032,6 +2054,8 @@ function App() {
             )}
             {/* @ts-ignore */}
             {token && (view === 'editor' || view === 'generator') && targetObject && <TransformControls object={targetObject} mode={view === 'generator' ? 'translate' : transformMode} translationSnap={snapToGrid ? 1 : null} rotationSnap={snapRotation ? Math.PI / 18 : null} onDraggingChanged={(e: any) => setIsDragging(e.value)} />}
+            {/* @ts-ignore */}
+            {token && isAdmin && signMesh && !targetObject && <TransformControls object={signMesh} mode={signTransformMode} onDraggingChanged={handleSignDragEnd} />}
             {token && view === 'generator' && (
               <group ref={(group) => { 
                   if (group) {

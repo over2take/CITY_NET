@@ -28,6 +28,8 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
   setSelectedSignId: (id: number | null) => void;
   remoteFonts: RemoteFont[];
   setRemoteFonts: (f: RemoteFont[]) => void;
+  signTransformMode: 'translate' | 'rotate';
+  setSignTransformMode: (m: 'translate' | 'rotate') => void;
   onClose: () => void;
 }) {
   const [form, setForm] = React.useState<any>(BLANK_SIGN);
@@ -223,6 +225,21 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
         {isPlacingSign ? 'CLICK MAP TO PLACE...' : 'PICK POSITION ON MAP'}
       </button>
 
+      {selectedSignId != null && (
+        <div style={{display:'flex', gap:'6px', marginBottom:'6px'}}>
+          <button
+            className={`utility-btn${signTransformMode === 'translate' ? ' active' : ''}`}
+            style={{flex:1, fontSize:'0.7rem'}}
+            onClick={() => setSignTransformMode('translate')}
+          >MOVE</button>
+          <button
+            className={`utility-btn${signTransformMode === 'rotate' ? ' active' : ''}`}
+            style={{flex:1, fontSize:'0.7rem'}}
+            onClick={() => setSignTransformMode('rotate')}
+          >ROTATE</button>
+        </div>
+      )}
+
       {/* Font selector */}
       <div style={{marginBottom: '6px'}}>
         <label style={{fontSize: '0.7rem', opacity: 0.8}}>FONT</label>
@@ -309,7 +326,7 @@ export function AdminPanel({
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
-    signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId,
+    signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode,
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -1077,6 +1094,8 @@ export function AdminPanel({
           setPendingSignPos={setPendingSignPos}
           selectedSignId={selectedSignId}
           setSelectedSignId={setSelectedSignId}
+          signTransformMode={signTransformMode}
+          setSignTransformMode={setSignTransformMode}
           onClose={() => setView('list')}
         />
       )}
