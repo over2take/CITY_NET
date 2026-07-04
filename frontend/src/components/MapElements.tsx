@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { resolveDeployHealth } from '../utils/rhombusHelpers';
-import { parseOverpassPoints, sampleOverpassPath } from '../utils/overpassHelpers';
+import { parseOverpassPoints, sampleOverpassPath, buildOverpassGeometry } from '../utils/overpassHelpers';
 import { chainRoadPolylines } from '../utils/roadHelpers';
 
 export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token }: any) => {
@@ -624,29 +624,52 @@ const segmentMatrix = (r: any, obj: THREE.Object3D) => {
   obj.rotateX(-Math.PI / 2);
 };
 
-export const RoadEraser = React.memo(({ roads, token, eraseMode, refreshRoads }: {
+export const RoadEraser = React.memo(({ roads, overpasses = [], token, eraseMode, refreshRoads, refreshOverpasses }: {
   roads: any[];
+  overpasses?: any[];
   token: string;
   eraseMode: 'segment' | 'path';
   refreshRoads: () => void;
+  refreshOverpasses?: () => void;
 }) => {
-  const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [hoveredRoadId, setHoveredRoadId] = useState<number | null>(null);
+  const [hoveredOverpassId, setHoveredOverpassId] = useState<number | null>(null);
+
   const hoveredChain = useMemo(
-    () => (hoveredId !== null && eraseMode === 'path') ? new Set(findChainIds(hoveredId, roads)) : null,
-    [hoveredId, eraseMode, roads]
+    () => (hoveredRoadId !== null && eraseMode === 'path') ? new Set(findChainIds(hoveredRoadId, roads)) : null,
+    [hoveredRoadId, eraseMode, roads]
   );
 
-  const deleteIds = async (ids: number[]) => {
+  const deleteRoadIds = async (ids: number[]) => {
     await Promise.all(ids.map(id =>
       fetch(`/api/roads/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
     ));
     refreshRoads();
   };
 
+  const deleteOverpass = async (id: number) => {
+    await fetch(`/api/overpasses/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    refreshOverpasses?.();
+  };
+
+  // Build overpass deck tiles for each overpass so they're clickable in the scene
+  const overpassTiles = useMemo(() => {
+    return (overpasses || []).map(o => {
+      const pts = parseOverpassPoints(o.points);
+      if (pts.length < 2) return { id: o.id, tiles: [] };
+      const { tiles } = buildOverpassGeometry(pts, {
+        height: o.height, width: o.width,
+        rampLength: o.ramp_length, pillarSpacing: o.pillar_spacing,
+      }, roads);
+      return { id: o.id, tiles, width: o.width };
+    });
+  }, [overpasses, roads]);
+
   return (
     <group>
+      {/* Road segments */}
       {roads.map(r => {
-        const isHovered = eraseMode === 'segment' ? r.id === hoveredId : (hoveredChain?.has(r.id) ?? false);
+        const isHovered = eraseMode === 'segment' ? r.id === hoveredRoadId : (hoveredChain?.has(r.id) ?? false);
         const p1 = new THREE.Vector3(r.x1, 0.05, r.z1);
         const p2 = new THREE.Vector3(r.x2, 0.05, r.z2);
         const dist = p1.distanceTo(p2) + (r.width * 0.1);
@@ -655,28 +678,44 @@ export const RoadEraser = React.memo(({ roads, token, eraseMode, refreshRoads }:
         const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
         return (
           <mesh
-            key={r.id}
+            key={`road-${r.id}`}
             position={p1.clone().lerp(p2, 0.5)}
-            quaternion={quat.multiply(pitchQ)}
+            quaternion={quat.clone().multiply(pitchQ)}
             scale={[dist, r.width, 1]}
-            onPointerOver={(e) => { e.stopPropagation(); setHoveredId(r.id); }}
-            onPointerOut={() => setHoveredId(null)}
+            onPointerOver={(e) => { e.stopPropagation(); setHoveredRoadId(r.id); setHoveredOverpassId(null); }}
+            onPointerOut={() => setHoveredRoadId(null)}
             onClick={async (e) => {
               e.stopPropagation();
               const ids = eraseMode === 'path' ? findChainIds(r.id, roads) : [r.id];
-              await deleteIds(ids);
+              await deleteRoadIds(ids);
             }}
           >
             <planeGeometry args={[1, 1]} />
-            <meshBasicMaterial
-              color={isHovered ? '#ff3300' : '#004411'}
-              transparent
-              opacity={isHovered ? 0.85 : 0.7}
-              side={THREE.DoubleSide}
-            />
+            <meshBasicMaterial color={isHovered ? '#ff3300' : '#004411'} transparent opacity={isHovered ? 0.85 : 0.7} side={THREE.DoubleSide} />
           </mesh>
         );
       })}
+
+      {/* Overpass deck tiles — whole overpass deletes on click */}
+      {overpassTiles.map(({ id, tiles, width }) =>
+        (tiles as any[]).map((t, ti) => {
+          const isHovered = id === hoveredOverpassId;
+          return (
+            <mesh
+              key={`op-${id}-${ti}`}
+              position={[t.x, t.y, t.z]}
+              rotation={new THREE.Euler(0, t.yaw, t.pitch, 'YZX')}
+              scale={[t.length, 0.5, width]}
+              onPointerOver={(e) => { e.stopPropagation(); setHoveredOverpassId(id); setHoveredRoadId(null); }}
+              onPointerOut={() => setHoveredOverpassId(null)}
+              onClick={async (e) => { e.stopPropagation(); await deleteOverpass(id); }}
+            >
+              <boxGeometry args={[1, 1, 1]} />
+              <meshBasicMaterial color={isHovered ? '#ff3300' : '#005522'} transparent opacity={isHovered ? 0.85 : 0.75} />
+            </mesh>
+          );
+        })
+      )}
     </group>
   );
 });

@@ -1334,6 +1334,7 @@ function App() {
                 setOverpassHeight={setOverpassHeight}
                 overpassRampLength={overpassRampLength}
                 setOverpassRampLength={setOverpassRampLength}
+                overpasses={overpasses}
                 refreshOverpasses={fetchOverpasses}
                 onRoadEraseModeChange={setRoadEraseMode}
                 isGeneratingMap={isGeneratingMap}
@@ -1853,7 +1854,7 @@ function App() {
             {(!IS_SPECTATOR || directorState.visibility.showRoads) && (
               <>
                 {view === 'purge_roads'
-                  ? <RoadEraser roads={roads} token={token} eraseMode={roadEraseMode} refreshRoads={fetchRoads} />
+                  ? <RoadEraser roads={roads} overpasses={overpasses} token={token} eraseMode={roadEraseMode} refreshRoads={fetchRoads} refreshOverpasses={fetchOverpasses} />
                   : <Roads roads={roads} />
                 }
                 <GhostTraffic roads={roads} overpasses={overpasses} />
