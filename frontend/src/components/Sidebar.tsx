@@ -3,6 +3,8 @@ import kofiLogo from '../assets/kofi.png';
 import { CityDataBaseMenu } from './CityDatabase';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { CurrencyIcon } from './BankWindows';
+import { THEMES } from '../theme/themes';
+import type { ThemeName } from '../theme/themes';
 
 // ─── NavControlsMenu ─────────────────────────────────────────────────────────
 
@@ -258,9 +260,11 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
 interface SystemInfoMenuProps {
   userName: string;
   token: string;
+  currentTheme?: ThemeName;
+  onThemeChange?: (theme: ThemeName) => void;
 }
 
-export function SystemInfoMenu({ userName, token }: SystemInfoMenuProps) {
+export function SystemInfoMenu({ userName, token, currentTheme, onThemeChange }: SystemInfoMenuProps) {
   return (
     <div className="panel sidebar-panel">
       <header style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
@@ -275,6 +279,24 @@ export function SystemInfoMenu({ userName, token }: SystemInfoMenuProps) {
         <div style={{ marginBottom: '20px' }}>
           <span style={{ opacity: 0.6 }}>ACCESS_LEVEL:</span><br />
           <span style={{ color: 'var(--green)', fontWeight: 'bold' }}>{token ? 'ADMIN_PRIVILEGES' : 'UNPRIVILEGED_USER'}</span>
+        </div>
+        <div style={{ marginBottom: '20px' }}>
+          <span style={{ opacity: 0.6 }}>THEME:</span><br />
+          {onThemeChange && currentTheme ? (
+            <select 
+              value={currentTheme}
+              onChange={(e) => onThemeChange(e.target.value as ThemeName)}
+              style={{ background: 'transparent', color: 'var(--green)', border: '1px solid var(--green)', padding: '2px', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              {(Object.keys(THEMES) as ThemeName[]).map(key => (
+                <option key={key} value={key} style={{ background: 'var(--black)' }}>
+                  {THEMES[key].name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span style={{ color: 'var(--green)' }}>{THEMES[currentTheme || 'classic']?.name || 'Classic'}</span>
+          )}
         </div>
         <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '15px', fontSize: '0.7rem' }}>
           <span style={{ opacity: 0.6 }}>LICENSE:</span><br />
@@ -577,9 +599,11 @@ interface SidebarProps {
   onToggleRadio?: () => void;
   musicPlaying?: boolean;
   currencyIcon?: string;
+  currentTheme?: ThemeName;
+  onThemeChange?: (theme: ThemeName) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -747,7 +771,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
       </div>
       <div className="menu-container">
         <div className="menu-content">
-          {activeMenu === 'system_info' && <SystemInfoMenu userName={userName} token={token} />}
+          {activeMenu === 'system_info' && <SystemInfoMenu userName={userName} token={token} currentTheme={currentTheme} onThemeChange={onThemeChange} />}
           {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} view={view} activeUsers={activeUsers} />}
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} />}

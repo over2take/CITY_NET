@@ -3,6 +3,118 @@
   --dark-green: #003300;
   --black: #000000;
   --glow: 0 0 10px rgba(0, 255, 0, 0.7);
+  --panel-bg: rgba(0, 20, 0, 0.85);
+  --text: #00ff00;
+  --cyan: #00ffaa;
+  --grid-section: #006600;
+  --grid-cell: #003300;
+  --bg-gradient: radial-gradient(circle, #001a00 0%, #000000 100%);
+  --scanline-tint: rgba(32, 255, 32, 0.05);
+}
+
+.theme-classic {
+  --green: #00ff00;
+  --dark-green: #004400;
+  --black: #0a1a0f;
+  --glow: 0 0 10px rgba(0, 255, 0, 0.7);
+  --panel-bg: rgba(0, 20, 0, 0.85);
+  --text: #00cc00;
+  --cyan: #00ffaa;
+  --grid-section: #006600;
+  --grid-cell: #003300;
+  --bg-gradient: radial-gradient(circle, #06240e 0%, #020a05 100%);
+  --scanline-tint: rgba(32, 255, 32, 0.05);
+  background-color: var(--black);
+}
+
+.theme-vaporwave {
+  --green: #ff71ce;
+  --dark-green: #4a154b;
+  --black: #1a0b2e;
+  --glow: 0 0 10px rgba(255, 113, 206, 0.7);
+  --panel-bg: rgba(26, 11, 46, 0.85);
+  --text: #b967ff;
+  --cyan: #05ffa1;
+  --grid-section: #7b2d8b;
+  --grid-cell: #4a154b;
+  --bg-gradient: linear-gradient(160deg, #2b1250 0%, #1a0b2e 45%, #3d0a3f 100%);
+  --scanline-tint: rgba(255, 113, 206, 0.05);
+  background-color: var(--black);
+}
+
+.theme-cyberpunk {
+  --green: #f3e600;
+  --dark-green: #2a2600;
+  --black: #0d0d0d;
+  --glow: 0 0 10px rgba(243, 230, 0, 0.7);
+  --panel-bg: rgba(13, 13, 13, 0.85);
+  --text: #00f0ff;
+  --cyan: #d100d1;
+  --grid-section: #4a4500;
+  --grid-cell: #2a2600;
+  --bg-gradient: linear-gradient(180deg, #16161d 0%, #0d0d0d 55%, #1c1500 100%);
+  --scanline-tint: rgba(243, 230, 0, 0.04);
+  background-color: var(--black);
+}
+
+.theme-crimson {
+  --green: #ff3333;
+  --dark-green: #660000;
+  --black: #110000;
+  --glow: 0 0 10px rgba(255, 51, 51, 0.7);
+  --panel-bg: rgba(20, 0, 0, 0.85);
+  --text: #ff8888;
+  --cyan: #ff5555;
+  --grid-section: #880000;
+  --grid-cell: #440000;
+  --bg-gradient: radial-gradient(circle, #2a0505 0%, #0a0000 100%);
+  --scanline-tint: rgba(255, 51, 51, 0.05);
+  background-color: var(--black);
+}
+
+.theme-ocean {
+  --green: #00ffff;
+  --dark-green: #003366;
+  --black: #001122;
+  --glow: 0 0 10px rgba(0, 255, 255, 0.7);
+  --panel-bg: rgba(0, 17, 34, 0.85);
+  --text: #88ccff;
+  --cyan: #00aaff;
+  --grid-section: #005588;
+  --grid-cell: #003366;
+  --bg-gradient: linear-gradient(180deg, #002944 0%, #001122 60%, #000a14 100%);
+  --scanline-tint: rgba(0, 255, 255, 0.05);
+  background-color: var(--black);
+}
+
+.theme-solar {
+  --green: #ffaa00;
+  --dark-green: #663300;
+  --black: #221100;
+  --glow: 0 0 10px rgba(255, 170, 0, 0.7);
+  --panel-bg: rgba(34, 17, 0, 0.85);
+  --text: #ffdd88;
+  --cyan: #ffcc00;
+  --grid-section: #884400;
+  --grid-cell: #552200;
+  --bg-gradient: linear-gradient(200deg, #3a2000 0%, #221100 55%, #140a00 100%);
+  --scanline-tint: rgba(255, 170, 0, 0.05);
+  background-color: var(--black);
+}
+
+.theme-monochrome {
+  --green: #ffffff;
+  --dark-green: #333333;
+  --black: #000000;
+  --glow: 0 0 10px rgba(255, 255, 255, 0.5);
+  --panel-bg: rgba(10, 10, 10, 0.90);
+  --text: #cccccc;
+  --cyan: #aaaaaa;
+  --grid-section: #444444;
+  --grid-cell: #222222;
+  --bg-gradient: radial-gradient(circle, #141414 0%, #000000 100%);
+  --scanline-tint: rgba(255, 255, 255, 0.04);
+  background-color: var(--black);
 }
 
 body, html, #root {
@@ -20,7 +132,7 @@ body, html, #root {
   width: 100vw;
   height: 100vh;
   position: relative;
-  background: radial-gradient(circle, #001a00 0%, #000 100%);
+  background: var(--bg-gradient);
 }
 
 .scanlines {
@@ -29,13 +141,23 @@ body, html, #root {
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(
-    rgba(18, 16, 16, 0) 50%,
-    rgba(0, 0, 0, 0.25) 50%
-  );
-  background-size: 100% 4px;
+  /* horizontal scanlines + RGB aperture grille (vertical subpixel stripes) */
+  background:
+    linear-gradient(
+      rgba(18, 16, 16, 0) 50%,
+      rgba(0, 0, 0, 0.25) 50%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 0, 0, 0.025) 0px,
+      rgba(0, 255, 0, 0.015) 1px,
+      rgba(0, 0, 255, 0.025) 2px,
+      rgba(255, 0, 0, 0.025) 3px
+    );
+  background-size: 100% 4px, 3px 100%;
   z-index: 10;
   pointer-events: none;
+  animation: crt-flicker 4s steps(1) infinite;
 }
 
 .scanlines::before {
@@ -45,16 +167,49 @@ body, html, #root {
     top: 0;
     left: 0;
     right: 0;
-    height: 800px;
-    background: linear-gradient(rgba(18, 16, 16, 0) 0%, rgba(32, 255, 32, 0.05) 50%, rgba(18, 16, 16, 0) 100%);
-    animation: scanline 10s linear infinite;
+    height: 300px;
+    /* thin bright retrace core with soft falloff, not a wide even wash */
+    background: linear-gradient(
+      transparent 0%,
+      var(--scanline-tint) 42%,
+      color-mix(in srgb, var(--green) 6%, transparent) 50%,
+      var(--scanline-tint) 58%,
+      transparent 100%
+    );
+    opacity: 0.6;
+    animation: scanline 9.2s linear infinite;
     pointer-events: none;
     transform: translateZ(0);
   }
-  
+
+/* vignette — CRT tubes darken toward corners */
+.scanlines::after {
+    content: "";
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.35) 100%);
+    pointer-events: none;
+  }
+
+/* sweep down, then hold off-screen — a retrace pass, not a constant loop */
 @keyframes scanline {
-    0% { transform: translateY(-800px); }
+    0% { transform: translateY(-300px); }
+    55% { transform: translateY(100vh); }
     100% { transform: translateY(100vh); }
+  }
+
+/* phosphor flicker — tiny irregular brightness dips */
+@keyframes crt-flicker {
+    0% { opacity: 1; }
+    7% { opacity: 0.92; }
+    8% { opacity: 1; }
+    31% { opacity: 0.95; }
+    32% { opacity: 1; }
+    53% { opacity: 0.9; }
+    54% { opacity: 1; }
+    79% { opacity: 0.94; }
+    80% { opacity: 1; }
   }
 
 .ui-overlay {
@@ -80,7 +235,7 @@ header h1 {
 }
 
 .panel {
-  background: rgba(0, 20, 0, 0.8);
+  background: var(--panel-bg);
   border: 1px solid var(--green);
   padding: 20px;
   box-shadow: var(--glow);
@@ -236,7 +391,8 @@ canvas {
   justify-content: space-between;
   font-size: 0.7rem;
   margin: 10px 0;
-  color: #888;
+  color: var(--text);
+  opacity: 0.75;
 }
 
 .upload-btn {
@@ -274,7 +430,7 @@ canvas {
 
 .list-item button {
   padding: 2px 5px;
-  font-size: 0.6rem;
+  font-size: 0.7rem;
 }
 
 .logout-btn {
@@ -536,7 +692,7 @@ header {
   height: 100%;
   overflow: hidden;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  background: rgba(0, 10, 0, 0.9);
+  background: var(--panel-bg);
   backdrop-filter: blur(10px);
 }
 
@@ -642,7 +798,7 @@ header {
   position: absolute;
   background: var(--black);
   border: 2px solid var(--green);
-  box-shadow: 4px 4px 0 0 #002200;
+  box-shadow: 4px 4px 0 0 color-mix(in srgb, var(--dark-green) 60%, black);
   min-width: 300px;
   max-width: 400px;
   z-index: 1000;
@@ -768,7 +924,7 @@ header {
 }
 
 .rhombus-trigger-btn:hover {
-  background: rgba(0, 50, 0, 0.3);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
   box-shadow: var(--glow);
 }
 
@@ -785,7 +941,7 @@ header {
 }
 
 .info-box {
-  background: rgba(0, 20, 0, 0.3);
+  background: color-mix(in srgb, var(--green) 8%, transparent);
   padding: 10px;
   border-left: 2px solid var(--green);
 }
@@ -812,8 +968,8 @@ button:disabled, .utility-btn:disabled, .upload-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   pointer-events: none;
-  border-color: #005500 !important;
-  color: #005500 !important;
+  border-color: color-mix(in srgb, var(--green) 40%, black) !important;
+  color: color-mix(in srgb, var(--green) 40%, black) !important;
   box-shadow: none !important;
   background: var(--black) !important;
 }
@@ -876,12 +1032,12 @@ button:disabled, .utility-btn:disabled, .upload-btn:disabled {
 }
 
 .login-panel input {
-  background: rgba(0, 255, 0, 0.05);
+  background: color-mix(in srgb, var(--green) 5%, transparent);
   border: 1px solid var(--green);
   color: var(--green);
   padding: 15px;
   margin-bottom: 15px;
-  box-shadow: inset 0 0 10px rgba(0, 255, 0, 0.1);
+  box-shadow: inset 0 0 10px color-mix(in srgb, var(--green) 10%, transparent);
   width: 100%;
   box-sizing: border-box;
   display: block;
