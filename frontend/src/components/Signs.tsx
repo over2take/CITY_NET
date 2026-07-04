@@ -1,0 +1,253 @@
+import React, { useMemo, useContext, useEffect, useState } from 'react';
+import * as THREE from 'three';
+import { ThemeContext } from '../theme/themes';
+import { loadFont, type RemoteFont } from '../utils/fontLoader';
+
+export interface SignLine {
+  text: string;
+  font_size: number;
+}
+
+export interface SignData {
+  id: number;
+  text: string;
+  x: number;
+  y: number;
+  z: number;
+  rotation_y: number;
+  font_size: number;
+  font_family?: string | null;
+  lines?: string | null; // JSON-encoded SignLine[]
+  image_url?: string | null;
+  use_tv_filter?: number;
+}
+
+// ─── Canvas rendering ────────────────────────────────────────────────────────
+
+const PIXELS_PER_UNIT = 48;
+const BORDER_PX = 3;
+const H_PAD_RATIO = 0.4;
+const V_PAD_RATIO = 0.35;
+const LINE_GAP_RATIO = 0.3;
+const MAX_IMAGE_PX = 512;
+
+const makeSignTexture = (
+  lines: SignLine[],
+  fontFamily: string,
+  primaryColor: string
+): { tex: THREE.CanvasTexture; w: number; h: number } => {
+  // Measure each line in a temporary canvas
+  const tmp = document.createElement('canvas').getContext('2d')!;
+  const measured = lines.map(l => {
+    const px = Math.round(l.font_size * PIXELS_PER_UNIT);
+    tmp.font = `bold ${px}px ${fontFamily}`;
+    return { px, textW: tmp.measureText(l.text).width };
+  });
+
+  const maxPx = Math.max(...measured.map(m => m.px));
+  const hPad = maxPx * H_PAD_RATIO;
+  const vPad = maxPx * V_PAD_RATIO;
+  const lineGap = (i: number) => measured[i].px * LINE_GAP_RATIO;
+  const totalTextH = measured.reduce((s, m) => s + m.px, 0)
+    + measured.slice(0, -1).reduce((s, _, i) => s + lineGap(i), 0);
+  const maxTextW = Math.max(...measured.map(m => m.textW));
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = Math.ceil(maxTextW + hPad * 2);
+  canvas.height = Math.ceil(totalTextH + vPad * 2);
+
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#030a03';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = primaryColor;
+  ctx.lineWidth = BORDER_PX;
+  ctx.strokeRect(BORDER_PX / 2, BORDER_PX / 2, canvas.width - BORDER_PX, canvas.height - BORDER_PX);
+
+  let y = vPad;
+  lines.forEach((line, i) => {
+    const { px } = measured[i];
+    ctx.font = `bold ${px}px ${fontFamily}`;
+    ctx.fillStyle = primaryColor;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(line.text, canvas.width / 2, y);
+    y += px + (i < lines.length - 1 ? lineGap(i) : 0);
+  });
+
+  return {
+    tex: new THREE.CanvasTexture(canvas),
+    w: canvas.width  / PIXELS_PER_UNIT,
+    h: canvas.height / PIXELS_PER_UNIT,
+  };
+};
+
+const makeImageTexture = (
+  img: HTMLImageElement,
+  captionLines: SignLine[],
+  fontFamily: string,
+  primaryColor: string,
+): { tex: THREE.CanvasTexture; w: number; h: number } => {
+  const scale = Math.min(1, MAX_IMAGE_PX / img.naturalWidth);
+  const imgW = Math.max(1, Math.round(img.naturalWidth * scale));
+  const imgH = Math.max(1, Math.round(img.naturalHeight * scale));
+
+  const hasCaption = captionLines.some(l => l.text.trim());
+  const vPad = 8;
+  let capH = 0;
+  let capMeasured: Array<{ px: number }> = [];
+
+  if (hasCaption) {
+    const tmp = document.createElement('canvas').getContext('2d')!;
+    capMeasured = captionLines.map(l => {
+      const px = Math.round(l.font_size * PIXELS_PER_UNIT);
+      tmp.font = `bold ${px}px ${fontFamily}`;
+      return { px };
+    });
+    const totalTextH = capMeasured.reduce((s, m, i) =>
+      s + m.px + (i < captionLines.length - 1 ? m.px * LINE_GAP_RATIO : 0), 0);
+    capH = Math.ceil(totalTextH + vPad * 2);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = imgW;
+  canvas.height = imgH + capH;
+
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#030a03';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, imgW, imgH);
+
+  ctx.strokeStyle = primaryColor;
+  ctx.lineWidth = BORDER_PX;
+  ctx.strokeRect(BORDER_PX / 2, BORDER_PX / 2, canvas.width - BORDER_PX, canvas.height - BORDER_PX);
+
+  if (hasCaption) {
+    ctx.fillStyle = 'rgba(3, 10, 3, 0.82)';
+    ctx.fillRect(0, imgH, imgW, capH);
+    let y = imgH + vPad;
+    captionLines.forEach((l, i) => {
+      const { px } = capMeasured[i];
+      ctx.font = `bold ${px}px ${fontFamily}`;
+      ctx.fillStyle = primaryColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(l.text, imgW / 2, y);
+      y += px + (i < captionLines.length - 1 ? px * LINE_GAP_RATIO : 0);
+    });
+  }
+
+  return {
+    tex: new THREE.CanvasTexture(canvas),
+    w: canvas.width  / PIXELS_PER_UNIT,
+    h: canvas.height / PIXELS_PER_UNIT,
+  };
+};
+
+/** Normalise a SignData into a lines array for rendering */
+const resolveLines = (sign: SignData): SignLine[] => {
+  if (sign.lines) {
+    try {
+      const parsed = JSON.parse(sign.lines) as SignLine[];
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch { /* fall through */ }
+  }
+  return [{ text: sign.text, font_size: sign.font_size }];
+};
+
+// ─── Sign mesh ───────────────────────────────────────────────────────────────
+
+const SignMesh = React.memo(({
+  sign, primaryColor, fontReady, isSelected, onSelect, onMeshRef,
+}: {
+  sign: SignData;
+  primaryColor: string;
+  fontReady: boolean;
+  isSelected: boolean;
+  onSelect?: (id: number) => void;
+  onMeshRef?: (mesh: THREE.Mesh | null) => void;
+}) => {
+  const family  = sign.font_family || 'monospace';
+  const lines   = useMemo(() => resolveLines(sign), [sign]);
+  const meshRef = React.useRef<THREE.Mesh>(null);
+
+  // Async image loading — switches canvas renderer to image mode when ready
+  const [loadedImage, setLoadedImage] = useState<HTMLImageElement | null>(null);
+  useEffect(() => {
+    if (!sign.image_url) { setLoadedImage(null); return; }
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => { if (!cancelled) setLoadedImage(img); };
+    img.onerror = () => { if (!cancelled) setLoadedImage(null); };
+    img.src = sign.image_url;
+    return () => { cancelled = true; };
+  }, [sign.image_url]);
+
+  const { tex, w, h } = useMemo(() => {
+    if (loadedImage) return makeImageTexture(loadedImage, lines, family, primaryColor);
+    return makeSignTexture(lines, family, primaryColor);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedImage, lines, family, primaryColor, fontReady]);
+
+  // Notify parent when this sign becomes selected/deselected
+  useEffect(() => {
+    onMeshRef?.(isSelected ? meshRef.current : null);
+  }, [isSelected, onMeshRef]);
+
+  return (
+    <mesh
+      ref={meshRef}
+      position={[sign.x, sign.y + h / 2, sign.z]}
+      rotation={[0, sign.rotation_y, 0]}
+      onClick={onSelect ? (e) => { e.stopPropagation(); onSelect(sign.id); } : undefined}
+    >
+      <planeGeometry args={[w, h]} />
+      <meshBasicMaterial map={tex} transparent opacity={0.95} depthWrite={false} side={THREE.DoubleSide} />
+    </mesh>
+  );
+});
+
+// ─── Font preloader ───────────────────────────────────────────────────────────
+
+const useFontReady = (signs: SignData[], remoteFonts: RemoteFont[]) => {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const needed = new Set(signs.map(s => s.font_family).filter(Boolean) as string[]);
+    const toLoad = remoteFonts.filter(rf => needed.has(rf.name));
+    if (!toLoad.length) { setReady(true); return; }
+    Promise.all(toLoad.map(rf => loadFont(rf.name, rf.url)))
+      .finally(() => setReady(true));
+  }, [signs, remoteFonts]);
+  return ready;
+};
+
+// ─── Main export ─────────────────────────────────────────────────────────────
+
+export const Signs = React.memo(({
+  signs, remoteFonts = [], selectedId, onSelect, onMeshRef,
+}: {
+  signs: SignData[];
+  remoteFonts?: RemoteFont[];
+  selectedId?: number | null;
+  onSelect?: (id: number) => void;
+  onMeshRef?: (mesh: THREE.Mesh | null) => void;
+}) => {
+  const theme = useContext(ThemeContext);
+  const fontReady = useFontReady(signs, remoteFonts);
+  if (!signs.length) return null;
+  return (
+    <group>
+      {signs.map(s => (
+        <SignMesh
+          key={s.id}
+          sign={s}
+          primaryColor={theme.primary}
+          fontReady={fontReady}
+          isSelected={s.id === selectedId}
+          onSelect={onSelect}
+          onMeshRef={onMeshRef}
+        />
+      ))}
+    </group>
+  );
+});

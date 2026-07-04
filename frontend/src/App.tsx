@@ -46,6 +46,10 @@ import { mergeRhombusHealthFromLocation, resolveDeployHealth } from './utils/rho
 import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './components/Buildings';
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic, RoadEraser } from './components/MapElements';
 import { Overpasses, OverpassPreview } from './components/Overpasses';
+import { Sidewalks } from './components/Sidewalks';
+import { AutoSignage } from './components/AutoSignage';
+import { Signs, type SignData } from './components/Signs';
+import { type RemoteFont } from './utils/fontLoader';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
@@ -64,7 +68,7 @@ import { IS_SPECTATOR } from './streamerMode';
 function App() {
   const [currentTheme, setCurrentTheme] = useState<ThemeName>('classic');
   const controlsRef = useRef<any>(null);
-  const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchAll } = useMapData();
+  const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, signs, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchSigns, fetchAll } = useMapData();
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
@@ -213,6 +217,15 @@ function App() {
     const [snapRotation, setSnapRotation] = useState(false);
   const [drawingRoadWidth, setDrawingRoadWidth] = useState(2.4);
   const [roadLayerMode, setRoadLayerMode] = useState<'road' | 'overpass'>('road');
+  const [renderSidewalks, setRenderSidewalks] = useState(true);
+  const [renderSignage, setRenderSignage] = useState(true);
+  const [signageDensity, setSignageDensity] = useState(1);
+  const [isPlacingSign, setIsPlacingSign] = useState(false);
+  const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
+  const [selectedSignId, setSelectedSignId] = useState<number | null>(null);
+  const [signMesh, setSignMesh] = useState<THREE.Mesh | null>(null);
+  const [signTransformMode, setSignTransformMode] = useState<'translate' | 'rotate'>('translate');
+  const [remoteFonts, setRemoteFonts] = useState<RemoteFont[]>([]);
   const [overpassHeight, setOverpassHeight] = useState(8);
   const [overpassRampLength, setOverpassRampLength] = useState(20);
   const [overpassSplitRamps, setOverpassSplitRamps] = useState(false);
@@ -788,6 +801,10 @@ function App() {
   }, [isLoggedIn]);
 
   useEffect(() => {
+    fetch('/api/fonts').then(r => r.json()).then(setRemoteFonts).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     setTempBattleMapScale(null);
   }, [activeBattleMapData?.locationId, activeBattleMapData?.currentFloorIndex]);
 
@@ -869,6 +886,25 @@ function App() {
   const [isDeployingFriendly, setIsDeployingFriendly] = useState(false);
   const [treeBatchSize, setTreeBatchSize] = useState(5);
   const [blockBuildings, setBlockBuildings] = useState<any[]>([]);
+
+  const handleSignPlaceClick = (e: any) => {
+    if (!isPlacingSign || !isAdmin) return;
+    e.stopPropagation();
+    setPendingSignPos({ x: e.point.x, z: e.point.z });
+    setIsPlacingSign(false);
+  };
+
+  const handleSignDragEnd = useCallback((e: any) => {
+    setIsDragging(e.value);
+    if (e.value || !signMesh || !selectedSignId) return;
+    const { x, y, z } = signMesh.position;
+    const rotY = signMesh.rotation.y;
+    fetch(`/api/signs/${selectedSignId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ x, y, z, rotation_y: rotY }),
+    }).then(() => fetchSigns());
+  }, [signMesh, selectedSignId, token, fetchSigns]);
 
   const handleTreePlantClick = async (e: any) => {
       if (!isPlantingTrees || !isAdmin) return;
@@ -1357,6 +1393,12 @@ function App() {
                 setOverpassRampLengthStart={setOverpassRampLengthStart}
                 overpassRampLengthEnd={overpassRampLengthEnd}
                 setOverpassRampLengthEnd={setOverpassRampLengthEnd}
+                renderSidewalks={renderSidewalks}
+                setRenderSidewalks={setRenderSidewalks}
+                renderSignage={renderSignage}
+                setRenderSignage={setRenderSignage}
+                signageDensity={signageDensity}
+                setSignageDensity={setSignageDensity}
                 overpasses={overpasses}
                 refreshOverpasses={fetchOverpasses}
                 onRoadEraseModeChange={setRoadEraseMode}
@@ -1379,6 +1421,19 @@ function App() {
                 secureModeEnabled={secureModeEnabled}
                 currentLocBattleMaps={currentLocBattleMaps}
                 enterBattleMap={enterBattleMap}
+                signs={signs}
+                fetchSigns={fetchSigns}
+                remoteFonts={remoteFonts}
+                setRemoteFonts={setRemoteFonts}
+                signMesh={signMesh}
+                signTransformMode={signTransformMode}
+                setSignTransformMode={setSignTransformMode}
+                isPlacingSign={isPlacingSign}
+                setIsPlacingSign={setIsPlacingSign}
+                pendingSignPos={pendingSignPos}
+                setPendingSignPos={setPendingSignPos}
+                selectedSignId={selectedSignId}
+                setSelectedSignId={setSelectedSignId}
                 />
             )}
             {adminBankPlayer && (
@@ -1717,7 +1772,7 @@ function App() {
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
           </div>}
           <ThemeContext.Provider value={THEMES[currentTheme]}>
-            <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
+            <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }} onPointerMissed={() => setSelectedSignId(null)}>
               <StreamerVisibilityContext.Provider value={IS_SPECTATOR ? directorState.visibility : ALL_VISIBLE}>
             <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
             <MeasurementTool measureMode={measureMode} socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} mapScaleMultiplier={view === 'battle_map' ? (() => {
@@ -1884,8 +1939,17 @@ function App() {
                 }
                 <GhostTraffic roads={roads} overpasses={overpasses} />
                 <Overpasses overpasses={overpasses} roads={roads} />
+                {renderSidewalks && <Sidewalks locations={locations} />}
+                {renderSignage && <AutoSignage locations={locations} density={signageDensity} />}
               </>
             )}
+            <Signs
+              signs={signs}
+              remoteFonts={remoteFonts}
+              selectedId={isAdmin ? selectedSignId : null}
+              onSelect={isAdmin ? setSelectedSignId : undefined}
+              onMeshRef={isAdmin ? setSignMesh : undefined}
+            />
             {roadLayerMode === 'overpass' && roadTrail.length > 0 && (
               <OverpassPreview
                 trail={roadTrail}
@@ -1984,6 +2048,8 @@ function App() {
             )}
             {/* @ts-ignore */}
             {token && (view === 'editor' || view === 'generator') && targetObject && <TransformControls object={targetObject} mode={view === 'generator' ? 'translate' : transformMode} translationSnap={snapToGrid ? 1 : null} rotationSnap={snapRotation ? Math.PI / 18 : null} onDraggingChanged={(e: any) => setIsDragging(e.value)} />}
+            {/* @ts-ignore */}
+            {token && isAdmin && signMesh && !targetObject && <TransformControls object={signMesh} mode={signTransformMode} onDraggingChanged={handleSignDragEnd} />}
             {token && view === 'generator' && (
               <group ref={(group) => { 
                   if (group) {

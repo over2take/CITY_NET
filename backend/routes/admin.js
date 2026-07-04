@@ -105,6 +105,22 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             [o.id, o.points, o.height, o.width, o.ramp_length, o.ramp_length_start ?? null, o.ramp_length_end ?? null, o.pillar_spacing ?? 12],
             finishUndo
           );
+        } else if (action.type === 'sign_create') {
+          db.run(`DELETE FROM signs WHERE id = ?`, [payload.id], finishUndo);
+        } else if (action.type === 'sign_delete') {
+          const s = payload.data;
+          db.run(
+            `INSERT INTO signs (id, text, x, y, z, rotation_y, font_size, image_url, use_tv_filter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [s.id, s.text, s.x, s.y, s.z, s.rotation_y, s.font_size, s.image_url, s.use_tv_filter],
+            finishUndo
+          );
+        } else if (action.type === 'sign_update') {
+          const d = payload.old_data;
+          db.run(
+            `UPDATE signs SET text=?, x=?, y=?, z=?, rotation_y=?, font_size=?, image_url=?, use_tv_filter=? WHERE id=?`,
+            [d.text, d.x, d.y, d.z, d.rotation_y, d.font_size, d.image_url, d.use_tv_filter, payload.id],
+            finishUndo
+          );
         } else {
           res.status(400).json({ error: 'Unknown action type' });
         }

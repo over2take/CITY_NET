@@ -6,6 +6,346 @@ import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
+import type { SignData, SignLine } from './Signs';
+import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
+
+// ─── Custom Signs view ───────────────────────────────────────────────────────
+
+const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_y: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, lines: null };
+const BLANK_LINE = { text: '', font_size: 1.0 };
+
+const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: '#00ff00', border: '1px solid #00ff00', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
+
+function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, remoteFonts, setRemoteFonts, signTransformMode, setSignTransformMode, controlsRef, signMesh, onClose }: {
+  token: string;
+  signs: SignData[];
+  fetchSigns: () => void;
+  isPlacingSign: boolean;
+  setIsPlacingSign: (v: boolean) => void;
+  pendingSignPos: { x: number; z: number } | null;
+  setPendingSignPos: (v: { x: number; z: number } | null) => void;
+  selectedSignId: number | null;
+  setSelectedSignId: (id: number | null) => void;
+  remoteFonts: RemoteFont[];
+  setRemoteFonts: (f: RemoteFont[]) => void;
+  signTransformMode: 'translate' | 'rotate';
+  setSignTransformMode: (m: 'translate' | 'rotate') => void;
+  controlsRef: React.MutableRefObject<any>;
+  signMesh: THREE.Mesh | null;
+  onClose: () => void;
+}) {
+  const [form, setForm] = React.useState<any>(BLANK_SIGN);
+  const [isNew, setIsNew] = React.useState(true);
+  const [isMultiLine, setIsMultiLine] = React.useState(false);
+  const [formLines, setFormLines] = React.useState<{text: string; font_size: number}[]>([{...BLANK_LINE}]);
+  const [uploadErr, setUploadErr] = React.useState('');
+  const [uploading, setUploading] = React.useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  const getCenterGroundTarget = () => {
+    let tx = 0, tz = 0;
+    if (controlsRef.current) {
+      const camera = controlsRef.current._camera || controlsRef.current.camera;
+      if (camera) {
+        const rc = new THREE.Raycaster();
+        rc.setFromCamera(new THREE.Vector2(0, 0), camera);
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const target = new THREE.Vector3();
+        rc.ray.intersectPlane(plane, target);
+        tx = target.x; tz = target.z;
+      } else if (controlsRef.current.getTarget) {
+        const t = new THREE.Vector3();
+        controlsRef.current.getTarget(t);
+        tx = t.x; tz = t.z;
+      }
+    }
+    return { tx, tz };
+  };
+
+  React.useEffect(() => {
+    if (selectedSignId == null) return;
+    const s = signs.find(s => s.id === selectedSignId);
+    if (!s) return;
+    setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter, font_family: s.font_family ?? 'monospace' });
+    setIsNew(false);
+    if (s.lines) {
+      try {
+        const parsed = JSON.parse(s.lines);
+        if (Array.isArray(parsed) && parsed.length) { setFormLines(parsed); setIsMultiLine(true); return; }
+      } catch { /* fall through */ }
+    }
+    setIsMultiLine(false);
+    setFormLines([{ text: s.text, font_size: s.font_size }]);
+  }, [selectedSignId, signs]);
+
+  React.useEffect(() => {
+    if (!pendingSignPos) return;
+    setForm((f: any) => ({ ...f, x: parseFloat(pendingSignPos.x.toFixed(2)), z: parseFloat(pendingSignPos.z.toFixed(2)) }));
+    setPendingSignPos(null);
+  }, [pendingSignPos, setPendingSignPos]);
+
+  const startNew = () => {
+    setForm(BLANK_SIGN); setIsNew(true); setSelectedSignId(null);
+    setIsMultiLine(false); setFormLines([{...BLANK_LINE}]);
+  };
+
+  const toggleMultiLine = (on: boolean) => {
+    if (on) {
+      // seed with current single-line values
+      setFormLines([{ text: form.text || '', font_size: parseFloat(form.font_size) || 1 }]);
+    } else {
+      // pull first line back into the form
+      const first = formLines[0] ?? BLANK_LINE;
+      setForm((f: any) => ({ ...f, text: first.text, font_size: first.font_size }));
+    }
+    setIsMultiLine(on);
+  };
+
+  const updateLine = (i: number, key: string, val: any) =>
+    setFormLines(ls => ls.map((l, idx) => idx === i ? { ...l, [key]: val } : l));
+  const addLine    = () => setFormLines(ls => [...ls, { ...BLANK_LINE }]);
+  const removeLine = (i: number) => setFormLines(ls => ls.filter((_, idx) => idx !== i));
+
+  const buildBody = () => {
+    const primaryText = isMultiLine ? (formLines[0]?.text || '') : form.text;
+    const primarySize = isMultiLine ? (formLines[0]?.font_size || 1) : (parseFloat(form.font_size) || 1);
+    return {
+      text: primaryText,
+      x: parseFloat(form.x) || 0,
+      y: parseFloat(form.y) || 0,
+      z: parseFloat(form.z) || 0,
+      rotation_y: parseFloat(form.rotation_y) || 0,
+      font_size: primarySize,
+      font_family: form.font_family || 'monospace',
+      image_url: form.image_url || null,
+      use_tv_filter: form.use_tv_filter ? 1 : 0,
+      lines: isMultiLine ? formLines.filter((l: SignLine) => l.text.trim()) : null,
+    };
+  };
+
+  const hasContent = () => {
+    const hasText = isMultiLine ? formLines.some((l: SignLine) => l.text.trim()) : form.text.trim();
+    return !!(hasText || form.image_url?.trim());
+  };
+
+  // Place a new sign at the center of the current camera view, then select it so the gizmo appears
+  const placeSign = async () => {
+    if (!hasContent()) return;
+    const { tx, tz } = getCenterGroundTarget();
+    const body = { ...buildBody(), x: tx, z: tz, rotation_y: 0 };
+    const res = await fetch('/api/signs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return;
+    const created = await res.json();
+    setSelectedSignId(created.id);
+    setIsNew(false);
+    setForm((f: any) => ({ ...f, x: parseFloat(tx.toFixed(2)), z: parseFloat(tz.toFixed(2)) }));
+    fetchSigns();
+  };
+
+  const save = async () => {
+    if (!hasContent()) return;
+    const body = buildBody();
+    await fetch(`/api/signs/${selectedSignId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    fetchSigns();
+  };
+
+  const remove = async (id: number) => {
+    await fetch(`/api/signs/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    fetchSigns();
+    if (selectedSignId === id) startNew();
+  };
+
+  const uploadFont = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadErr(''); setUploading(true);
+    const fd = new FormData();
+    fd.append('font', file);
+    try {
+      const res = await fetch('/api/fonts', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { setUploadErr(`Server error (${res.status}) — restart the backend`); return; }
+      if (!res.ok) { setUploadErr(data.error || `Upload failed (${res.status})`); return; }
+      const updated = await fetch('/api/fonts').then(r => r.json());
+      setRemoteFonts(updated);
+      setForm((f: any) => ({ ...f, font_family: data.name }));
+    } catch { setUploadErr('Upload failed'); }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ''; }
+  };
+
+  const deleteFont = async (file: string) => {
+    await fetch(`/api/fonts/${encodeURIComponent(file)}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    const updated = await fetch('/api/fonts').then(r => r.json());
+    setRemoteFonts(updated);
+    if (remoteFonts.find(f => f.file === file)?.name === form.font_family) {
+      setForm((f: any) => ({ ...f, font_family: 'monospace' }));
+    }
+  };
+
+  const field = (label: string, key: string, type = 'text', step?: string) => (
+    <div style={{marginBottom: '6px'}}>
+      <label style={{fontSize: '0.7rem', opacity: 0.8}}>{label}</label>
+      <input type={type} step={step} value={form[key]} onChange={e => setForm((f: any) => ({ ...f, [key]: e.target.value }))} style={INPUT_STYLE} />
+    </div>
+  );
+
+  const allFontOptions = [
+    ...BUILTIN_FONTS,
+    ...remoteFonts.map(rf => ({ label: rf.name, value: rf.name })),
+  ];
+
+  return (
+    <>
+      <header style={{marginBottom: '10px'}}>
+        <h3>CUSTOM_SIGNS</h3>
+        <button onClick={onClose} className="close-btn" style={{position: 'static'}}>X</button>
+      </header>
+
+      {/* Sign list */}
+      <div style={{maxHeight: '120px', overflowY: 'auto', marginBottom: '10px', border: '1px solid #00ff0044', padding: '4px'}}>
+        {signs.length === 0 && <div style={{fontSize: '0.7rem', opacity: 0.5}}>NO SIGNS PLACED</div>}
+        {signs.map(s => (
+          <div key={s.id} style={{display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', borderBottom: '1px solid #00ff0022', background: selectedSignId === s.id ? '#00ff0011' : 'transparent'}}>
+            <div style={{flex: 1, fontSize: '0.7rem', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} onClick={() => { setSelectedSignId(s.id); setIsNew(false); }}>
+              {s.text}
+            </div>
+            <button style={{fontSize: '0.6rem', padding: '1px 5px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', cursor: 'pointer'}} onClick={() => remove(s.id)}>DEL</button>
+          </div>
+        ))}
+      </div>
+
+      {/* Form */}
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px'}}>
+        <span style={{fontSize:'0.7rem', fontWeight:'bold', color:'#00ff00'}}>{isNew ? 'NEW SIGN' : `EDIT #${selectedSignId}`}</span>
+        <label style={{display:'flex', alignItems:'center', gap:'4px', fontSize:'0.7rem', cursor:'pointer'}}>
+          <input type="checkbox" checked={isMultiLine} onChange={e => toggleMultiLine(e.target.checked)} />
+          MULTI-LINE
+        </label>
+      </div>
+
+      {isMultiLine ? (
+        <div style={{marginBottom:'6px', border:'1px solid #00ff0033', padding:'6px'}}>
+          {formLines.map((line, i) => (
+            <div key={i} style={{marginBottom:'8px', paddingBottom:'8px', borderBottom: i < formLines.length - 1 ? '1px dashed #00ff0033' : 'none'}}>
+              <div style={{display:'flex', alignItems:'center', gap:'4px', marginBottom:'3px'}}>
+                <span style={{fontSize:'0.65rem', opacity:0.6}}>LINE {i + 1}</span>
+                {formLines.length > 1 && (
+                  <button style={{marginLeft:'auto', fontSize:'0.6rem', padding:'0 4px', background:'transparent', color:'#ff4444', border:'1px solid #ff4444', cursor:'pointer'}} onClick={() => removeLine(i)}>✕</button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={line.text}
+                onChange={e => updateLine(i, 'text', e.target.value)}
+                placeholder="Line text..."
+                style={{...INPUT_STYLE, marginBottom:'4px'}}
+              />
+              <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
+                <label style={{fontSize:'0.65rem', opacity:0.7, whiteSpace:'nowrap'}}>SIZE: {line.font_size.toFixed(1)}</label>
+                <input type="range" min="0.5" max="4" step="0.5" value={line.font_size} onChange={e => updateLine(i, 'font_size', parseFloat(e.target.value))} style={{flex:1}} />
+              </div>
+            </div>
+          ))}
+          <button className="utility-btn" style={{width:'100%', fontSize:'0.7rem'}} onClick={addLine}>+ ADD LINE</button>
+        </div>
+      ) : (
+        field('TEXT', 'text')
+      )}
+      <div style={{display: 'flex', gap: '8px'}}>
+        <div style={{flex: 1}}>{field('X', 'x', 'number', '0.1')}</div>
+        <div style={{flex: 1}}>{field('Y', 'y', 'number', '0.1')}</div>
+        <div style={{flex: 1}}>{field('Z', 'z', 'number', '0.1')}</div>
+      </div>
+
+      {selectedSignId != null && (
+        <div style={{display:'flex', gap:'6px', marginBottom:'6px'}}>
+          <button
+            className={`utility-btn${signTransformMode === 'translate' ? ' active' : ''}`}
+            style={{flex:1, fontSize:'0.7rem'}}
+            onClick={() => setSignTransformMode('translate')}
+          >MOVE</button>
+          <button
+            className={`utility-btn${signTransformMode === 'rotate' ? ' active' : ''}`}
+            style={{flex:1, fontSize:'0.7rem'}}
+            onClick={() => setSignTransformMode('rotate')}
+          >ROTATE</button>
+        </div>
+      )}
+
+      {/* Font selector */}
+      <div style={{marginBottom: '6px'}}>
+        <label style={{fontSize: '0.7rem', opacity: 0.8}}>FONT</label>
+        <select
+          value={form.font_family || 'monospace'}
+          onChange={e => setForm((f: any) => ({ ...f, font_family: e.target.value }))}
+          style={{...INPUT_STYLE, width: '100%'}}
+        >
+          {allFontOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Font uploader */}
+      <div style={{marginBottom: '8px', padding: '6px', border: '1px dashed #00ff0055'}}>
+        <div style={{fontSize: '0.65rem', opacity: 0.7, marginBottom: '4px'}}>UPLOAD FONT (.ttf .otf .woff .woff2)</div>
+        <input ref={fileRef} type="file" accept=".ttf,.otf,.woff,.woff2" onChange={uploadFont} style={{display: 'none'}} />
+        <button className="utility-btn" style={{width: '100%', fontSize: '0.7rem'}} onClick={() => fileRef.current?.click()} disabled={uploading}>
+          {uploading ? 'UPLOADING...' : 'CHOOSE FILE'}
+        </button>
+        {uploadErr && <div style={{fontSize: '0.65rem', color: '#ff4444', marginTop: '3px'}}>{uploadErr}</div>}
+        {remoteFonts.length > 0 && (
+          <div style={{marginTop: '6px'}}>
+            {remoteFonts.map(rf => (
+              <div key={rf.file} style={{display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', padding: '2px 0'}}>
+                <span style={{flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{rf.name}</span>
+                <button style={{padding: '1px 4px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', cursor: 'pointer', fontSize: '0.6rem'}} onClick={() => deleteFont(rf.file)}>DEL</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{display: 'flex', gap: '8px', marginBottom: '6px'}}>
+        <div style={{flex: 1}}>
+          <label style={{fontSize: '0.7rem', opacity: 0.8}}>ROTATION_Y: {parseFloat(form.rotation_y || 0).toFixed(2)}</label>
+          <input type="range" min="0" max={Math.PI * 2} step="0.05" value={form.rotation_y || 0} onChange={e => {
+            const val = parseFloat(e.target.value);
+            setForm((f: any) => ({...f, rotation_y: val}));
+            if (signMesh) signMesh.rotation.y = val;
+          }} style={{width: '100%'}} />
+        </div>
+        {!isMultiLine && <div style={{flex: 1}}>
+          <label style={{fontSize: '0.7rem', opacity: 0.8}}>FONT_SIZE: {parseFloat(form.font_size || 1).toFixed(1)}</label>
+          <input type="range" min="0.5" max="4" step="0.5" value={form.font_size || 1} onChange={e => setForm((f: any) => ({...f, font_size: parseFloat(e.target.value)}))} style={{width: '100%'}} />
+        </div>}
+      </div>
+      {field('IMAGE_URL (optional)', 'image_url')}
+      <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', marginBottom: '10px', cursor: 'pointer'}}>
+        <input type="checkbox" checked={!!form.use_tv_filter} onChange={e => setForm((f: any) => ({...f, use_tv_filter: e.target.checked}))} />
+        TV_FILTER (Fable)
+      </label>
+
+      <div style={{display: 'flex', gap: '8px'}}>
+        <button className="utility-btn" style={{flex: 1}} onClick={isNew ? placeSign : save} disabled={!hasContent()}>
+          {isNew ? 'PLACE SIGN' : 'SAVE CHANGES'}
+        </button>
+        {!isNew && <button className="utility-btn" style={{flex: 1}} onClick={startNew}>NEW</button>}
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function AdminPanel({
   socketRef, token, onLogout, refreshLocations, refreshRoads, locations, roads, editData, setEditData, editId, setEditId,
@@ -20,6 +360,9 @@ export function AdminPanel({
   roadLayerMode, setRoadLayerMode, overpassHeight, setOverpassHeight, overpassRampLength, setOverpassRampLength,
   overpassSplitRamps, setOverpassSplitRamps, overpassRampLengthStart, setOverpassRampLengthStart, overpassRampLengthEnd, setOverpassRampLengthEnd,
   refreshOverpasses, overpasses,
+  renderSidewalks, setRenderSidewalks,
+  renderSignage, setRenderSignage,
+  signageDensity, setSignageDensity,
   onRoadEraseModeChange,
   genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu,
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
@@ -27,7 +370,8 @@ export function AdminPanel({
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
-    secureModeEnabled, currentLocBattleMaps, enterBattleMap
+    secureModeEnabled, currentLocBattleMaps, enterBattleMap,
+    signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signMesh,
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -568,6 +912,25 @@ export function AdminPanel({
           {/* BANK SOUNDS TEST PANEL */}
           <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
 
+          <div style={{display: 'flex', gap: '16px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #00ff00'}}>
+            <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+              <input type="checkbox" checked={renderSidewalks ?? true} onChange={e => setRenderSidewalks(e.target.checked)} />
+              SIDEWALKS
+            </label>
+            <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+              <input type="checkbox" checked={renderSignage ?? true} onChange={e => setRenderSignage(e.target.checked)} />
+              SIGNAGE
+            </label>
+          </div>
+          {renderSignage && (
+            <div style={{marginTop: '6px'}}>
+              <label style={{fontSize: '0.7rem', opacity: 0.8}}>SIGN_DENSITY: {(signageDensity ?? 1).toFixed(1)}</label>
+              <input type="range" min="0.5" max="5" step="0.5" value={signageDensity ?? 1} onChange={e => setSignageDensity(parseFloat(e.target.value))} style={{width: '100%'}} />
+            </div>
+          )}
+
+          <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setView('signs')}>CUSTOM_SIGNS ({(signs || []).length})</button>
+
           <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
           <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={async () => {
             if (confirm("PURGE ALL WATER DATA?")) {
@@ -761,6 +1124,27 @@ export function AdminPanel({
                 setAdminAlert(`DRAWN NETWORK GENERATED: ${finalSegments.length} SEGMENTS`); refreshLocations(); setView('list'); setRoadTrail([]);
             }}>GENERATE_FROM_DRAWINGS</button>
         </>
+      )}
+
+      {view === 'signs' && (
+        <SignsView
+          token={token}
+          signs={signs || []}
+          fetchSigns={fetchSigns}
+          remoteFonts={remoteFonts || []}
+          setRemoteFonts={setRemoteFonts}
+          isPlacingSign={isPlacingSign}
+          setIsPlacingSign={setIsPlacingSign}
+          pendingSignPos={pendingSignPos}
+          setPendingSignPos={setPendingSignPos}
+          selectedSignId={selectedSignId}
+          setSelectedSignId={setSelectedSignId}
+          signTransformMode={signTransformMode}
+          setSignTransformMode={setSignTransformMode}
+          controlsRef={controlsRef}
+          signMesh={signMesh}
+          onClose={() => setView('list')}
+        />
       )}
 
       {view === 'purge_roads' && (
@@ -1523,6 +1907,19 @@ export function AdminPanel({
                         <button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg></button>
                         <button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button>
                     </div>
+
+                    {editData.shape !== 'enemy_rhombus' && editData.shape !== 'friendly_rhombus' && editData.shape !== 'rhombus' && editData.shape !== 'none' && (
+                      <div style={{display: 'flex', gap: '16px', marginTop: '8px', marginBottom: '10px'}}>
+                        <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+                          <input type="checkbox" checked={editData.has_sidewalk ?? true} onChange={e => setEditData({...editData, has_sidewalk: e.target.checked})} />
+                          SIDEWALK
+                        </label>
+                        <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+                          <input type="checkbox" checked={editData.has_signage ?? true} onChange={e => setEditData({...editData, has_signage: e.target.checked})} />
+                          SIGNAGE
+                        </label>
+                      </div>
+                    )}
                 </>
             )}
             
