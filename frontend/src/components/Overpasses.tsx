@@ -45,16 +45,18 @@ export const Overpasses = React.memo(({ overpasses, roads }: { overpasses: Overp
   const geometry = useMemo(() => {
     const tiles: Array<DeckTile & { width: number }> = [];
     const pillars: OverpassPillar[] = [];
-    (overpasses || []).forEach(o => {
-      const pts = parsePoints(o.points);
+    const allParsed = (overpasses || []).map(o => ({ points: parsePoints(o.points), width: o.width || 4 }));
+    (overpasses || []).forEach((o, idx) => {
+      const pts = allParsed[idx].points;
       if (pts.length < 2) return;
+      const otherOverpasses = allParsed.filter((_, i) => i !== idx);
       const g = buildOverpassGeometry(pts, {
         height: o.height, width: o.width,
         rampLength: o.ramp_length,
         rampLengthStart: o.ramp_length_start ?? undefined,
         rampLengthEnd: o.ramp_length_end ?? undefined,
         pillarSpacing: o.pillar_spacing,
-      }, roads || []);
+      }, roads || [], { otherOverpasses });
       g.tiles.forEach(t => tiles.push({ ...t, width: o.width }));
       pillars.push(...g.pillars);
     });

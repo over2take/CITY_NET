@@ -463,10 +463,12 @@ export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any
         cum: [], length: 0, width: chain.width,
       });
     });
-    overpasses.forEach(o => {
-      const pts = parseOverpassPoints(o.points);
+    const allOverpassPaths = overpasses.map(o => parseOverpassPoints(o.points));
+    overpasses.forEach((o, idx) => {
+      const pts = allOverpassPaths[idx];
       if (pts.length < 2) return;
-      const sampled = sampleOverpassPath(pts, { height: o.height, rampLength: o.ramp_length }, roads);
+      const otherOverpassPaths = allOverpassPaths.filter((_, i) => i !== idx);
+      const sampled = sampleOverpassPath(pts, { height: o.height, rampLength: o.ramp_length, rampLengthStart: o.ramp_length_start ?? undefined, rampLengthEnd: o.ramp_length_end ?? undefined }, roads, 4, otherOverpassPaths);
       if (sampled.length < 2) return;
       // 0.25 = half deck thickness, +0.08 to float just above the surface
       routes.push({

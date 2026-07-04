@@ -96,6 +96,15 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         } else if (action.type === 'water_create') {
           const placeholders = payload.ids.map(() => '?').join(',');
           db.run(`DELETE FROM water_bodies WHERE id IN (${placeholders})`, payload.ids, finishUndo);
+        } else if (action.type === 'overpass_create') {
+          db.run(`DELETE FROM overpasses WHERE id = ?`, [payload.id], finishUndo);
+        } else if (action.type === 'overpass_delete') {
+          const o = payload.data;
+          db.run(
+            `INSERT INTO overpasses (id, points, height, width, ramp_length, ramp_length_start, ramp_length_end, pillar_spacing) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [o.id, o.points, o.height, o.width, o.ramp_length, o.ramp_length_start ?? null, o.ramp_length_end ?? null, o.pillar_spacing ?? 12],
+            finishUndo
+          );
         } else {
           res.status(400).json({ error: 'Unknown action type' });
         }

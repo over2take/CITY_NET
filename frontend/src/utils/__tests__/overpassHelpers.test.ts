@@ -3,6 +3,8 @@ import {
   elevationAt,
   buildOverpassGeometry,
   isEndpointConnected,
+  isEndpointConnectedToOverpass,
+  snapToOverpassEdge,
   pointToSegmentDist,
   sampleOverpassPath,
   parseOverpassPoints,
@@ -393,5 +395,136 @@ describe('isEndpointConnected', () => {
     expect(isEndpointConnected({ x: 11, z: 1 }, roads)).toBe(true);
     expect(isEndpointConnected({ x: 30, z: 0 }, roads)).toBe(false); // mid-segment ≠ endpoint
     expect(isEndpointConnected({ x: 100, z: 100 }, roads)).toBe(false);
+  });
+});
+
+describe('isEndpointConnectedToOverpass', () => {
+  const path1 = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+
+  it('returns true when the point is within tolerance of a segment (not just vertices)', () => {
+    // Point at x=50 on the segment z=0 — between vertices, not near either endpoint
+    expect(isEndpointConnectedToOverpass({ x: 50, z: 2 }, [path1])).toBe(true);
+    expect(isEndpointConnectedToOverpass({ x: 50, z: -2 }, [path1])).toBe(true);
+  });
+
+  it('returns true near a path vertex', () => {
+    expect(isEndpointConnectedToOverpass({ x: 1, z: 1 }, [path1])).toBe(true);
+  });
+
+  it('returns false when the point is beyond tolerance', () => {
+    expect(isEndpointConnectedToOverpass({ x: 200, z: 200 }, [path1])).toBe(false);
+    expect(isEndpointConnectedToOverpass({ x: 50, z: 5 }, [path1])).toBe(false); // 5 > tol=3
+  });
+
+  it('returns false for an empty paths array', () => {
+    expect(isEndpointConnectedToOverpass({ x: 0, z: 0 }, [])).toBe(false);
+  });
+
+  it('checks across multiple other paths', () => {
+    const path2 = [{ x: 200, z: 200 }, { x: 250, z: 200 }];
+    expect(isEndpointConnectedToOverpass({ x: 225, z: 201 }, [path1, path2])).toBe(true);
+  });
+
+  it('respects a custom tolerance', () => {
+    // Point 4 units perpendicular from segment — default tol=3 misses, tol=5 catches
+    expect(isEndpointConnectedToOverpass({ x: 50, z: 4 }, [path1], 3)).toBe(false);
+    expect(isEndpointConnectedToOverpass({ x: 50, z: 4 }, [path1], 5)).toBe(true);
+  });
+});
+
+describe('snapToOverpassEdge', () => {
+  const other = { points: [{ x: 0, z: 0 }, { x: 100, z: 0 }], width: 10 };
+
+  it('snaps to the centreline of the closest segment', () => {
+    // Point sitting 3 units above the centreline at x=50
+    const snapped = snapToOverpassEdge({ x: 50, z: 3 }, [other]);
+    expect(snapped).not.toBeNull();
+    expect(snapped!.x).toBeCloseTo(50);
+    expect(snapped!.z).toBeCloseTo(0); // centreline z=0
+  });
+
+  it('returns null when nothing is within tolerance + half-width', () => {
+    const result = snapToOverpassEdge({ x: 50, z: 200 }, [other]);
+    expect(result).toBeNull();
+  });
+
+  it('returns null for an empty others array', () => {
+    expect(snapToOverpassEdge({ x: 50, z: 0 }, [])).toBeNull();
+  });
+
+  it('picks the nearest segment when multiple others exist', () => {
+    const other2 = { points: [{ x: 0, z: 100 }, { x: 100, z: 100 }], width: 10 };
+    // Point at z=8 — closer to other (z=0) than other2 (z=100)
+    const snapped = snapToOverpassEdge({ x: 50, z: 8 }, [other, other2]);
+    expect(snapped).not.toBeNull();
+    expect(snapped!.z).toBeCloseTo(0);
+  });
+
+  it('clamps to the nearest segment endpoint for points past the end', () => {
+    // x=120, past the end of the segment at x=100
+    const snapped = snapToOverpassEdge({ x: 102, z: 2 }, [other]);
+    expect(snapped).not.toBeNull();
+    expect(snapped!.x).toBeCloseTo(100);
+    expect(snapped!.z).toBeCloseTo(0);
+  });
+});
+
+describe('buildOverpassGeometry — otherOverpasses snapping', () => {
+  it('snaps connected start to the centreline of the other overpass', () => {
+    // Crossing overpass running along z=0
+    const other = { points: [{ x: 0, z: 0 }, { x: 100, z: 0 }], width: 8 };
+    // This overpass starts 2 units above the other's centreline — should snap to z=0
+    const pts = [{ x: 50, z: 2 }, { x: 50, z: 60 }];
+    const { tiles } = buildOverpassGeometry(
+      pts, params, [], { otherOverpasses: [other] }
+    );
+    expect(tiles.length).toBeGreaterThan(0);
+    // First tile should be flat (connectedStart suppresses ramp)
+    expect(tiles[0].isRamp).toBe(false);
+    expect(tiles[0].y).toBeCloseTo(params.height, 1);
+  });
+
+  it('does not snap when the endpoint is out of range', () => {
+    const other = { points: [{ x: 0, z: 0 }, { x: 100, z: 0 }], width: 8 };
+    const pts = [{ x: 50, z: 200 }, { x: 50, z: 260 }]; // far from other
+    const { tiles } = buildOverpassGeometry(
+      pts, params, [], { otherOverpasses: [other] }
+    );
+    // Not snapped — start should ramp up normally
+    expect(tiles[0].isRamp).toBe(true);
+  });
+
+  it('explicit rampLengthStart overrides overpass connection detection', () => {
+    const other = { points: [{ x: 0, z: 0 }, { x: 100, z: 0 }], width: 8 };
+    const pts = [{ x: 50, z: 2 }, { x: 50, z: 80 }];
+    // rampLengthStart explicitly set — should NOT auto-connect
+    const { tiles } = buildOverpassGeometry(
+      pts, { ...params, rampLengthStart: 15 }, [], { otherOverpasses: [other] }
+    );
+    // First tile should still be ramping (explicit ramp length wins over auto-connect)
+    expect(tiles[0].isRamp).toBe(true);
+  });
+});
+
+describe('sampleOverpassPath — overpass connectivity', () => {
+  it('suppresses the start ramp when the endpoint is near another overpass path', () => {
+    const otherPath = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    // Overpass starting 2 units from the other's centreline
+    const pts = [{ x: 50, z: 2 }, { x: 50, z: 60 }];
+    const samples = sampleOverpassPath(
+      pts, { height: 10, rampLength: 20 }, [], 4, [otherPath]
+    );
+    expect(samples.length).toBeGreaterThan(0);
+    expect(samples[0].y).toBeCloseTo(10); // no ramp — connected start
+  });
+
+  it('does not suppress the ramp when explicit rampLengthStart is set', () => {
+    const otherPath = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    const pts = [{ x: 50, z: 2 }, { x: 50, z: 60 }];
+    const samples = sampleOverpassPath(
+      pts, { height: 10, rampLength: 20, rampLengthStart: 15 }, [], 4, [otherPath]
+    );
+    // Explicit rampLengthStart means connectedStart is false — starts at ground
+    expect(samples[0].y).toBeCloseTo(0);
   });
 });
