@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="400" height="300" fill="#020a0a"/>
+  <rect x="8" y="8" width="384" height="284" fill="none" stroke="#28ffd6" stroke-width="4" rx="14" filter="url(#glow)"/>
+  <!-- medical cross -->
+  <path d="M175 60 h50 v40 h40 v50 h-40 v40 h-50 v-40 h-40 v-50 h40 z" fill="none" stroke="#ff3b3b" stroke-width="6" filter="url(#glow)"/>
+  <!-- pulse line through cross -->
+  <path d="M60 145 h70 l12 -24 l18 48 l14 -30 l8 6 h158" fill="none" stroke="#28ffd6" stroke-width="4" filter="url(#glow)"/>
+  <text x="200" y="255" text-anchor="middle" font-family="monospace" font-size="40" font-weight="bold" fill="#28ffd6" filter="url(#glow)">CLINIC</text>
+</svg>

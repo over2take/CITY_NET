@@ -310,6 +310,7 @@ db.serialize(() => {
   )`);
   db.run(`ALTER TABLE signs ADD COLUMN font_family TEXT DEFAULT 'monospace'`, () => {});
   db.run(`ALTER TABLE signs ADD COLUMN lines TEXT`, () => {});
+  db.run(`ALTER TABLE signs ADD COLUMN filter_intensity REAL DEFAULT 1.0`, () => {});
 });
 
 module.exports = db;
