@@ -5,6 +5,15 @@ import creditsPngIcon from '../assets/Credits.png';
 export type BankSoundKey = 'cashregister' | 'debtpaid' | 'highroller' | 'firstpay' | 'overdraft';
 export type BankSoundVolumes = Record<BankSoundKey, number>;
 
+export function CurrencyIcon({ icon, size = 18, color = 'currentColor' }: { icon?: string; size?: number; color?: string }) {
+  if (!icon || icon === 'credits') {
+    return <div style={{ width: size, height: size, backgroundColor: color, WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center', flexShrink: 0 }} />;
+  }
+  // Single-char symbols ($, £, €) need a larger multiplier to match emoji visual weight
+  const isEmoji = [...icon].length > 1;
+  return <span style={{ fontSize: size * (isEmoji ? 0.85 : 1.15), lineHeight: 1, color, flexShrink: 0 }}>{icon}</span>;
+}
+
 export const formatBankValue = (val: number) => {
   const rounded = Math.round(val * 100) / 100;
   return (rounded === 0 ? 0 : rounded).toFixed(2);
@@ -338,6 +347,7 @@ interface BankWindowProps {
   highRollerDone?: boolean;
   audioEnabled?: boolean;
   soundVolumes?: Record<string, number>;
+  currencyIcon?: string;
 }
 
 const CONFETTI_COLORS = ['#ff0066', '#00ff66', '#ffcc00', '#00ccff', '#ff6600', '#cc00ff', '#ffffff'];
@@ -371,7 +381,7 @@ const CELEBRATION_CSS = `
 }
 `;
 
-export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOpen, firstPayDone, highRollerDone, audioEnabled, soundVolumes }: BankWindowProps) {
+export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOpen, firstPayDone, highRollerDone, audioEnabled, soundVolumes, currencyIcon }: BankWindowProps) {
   const vol = (key: string) => (soundVolumes?.[key] ?? 1);
   const audioEnabledRef = useRef(audioEnabled);
   useEffect(() => { audioEnabledRef.current = audioEnabled; }, [audioEnabled]);
@@ -517,7 +527,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
         <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>Balance</div>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: balanceColor, marginBottom: '15px' }}>
-            <div style={{ width: '18px', height: '18px', backgroundColor: balanceColor, WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }} />
+            <CurrencyIcon icon={currencyIcon} size={18} color={balanceColor} />
             {formatBankValue(bankData.balance)}
           </div>
           <button className="panel-btn" style={{ width: '100%' }} onClick={() => setActivePrompt('withdraw')}>withdraw</button>
@@ -526,7 +536,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
         <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>Debt</div>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: debtColor, marginBottom: '15px' }}>
-            <div style={{ width: '18px', height: '18px', backgroundColor: debtColor, WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }} />
+            <CurrencyIcon icon={currencyIcon} size={18} color={debtColor} />
             {formatBankValue(bankData.debt)}
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>

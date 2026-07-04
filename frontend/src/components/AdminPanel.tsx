@@ -22,7 +22,7 @@ export function AdminPanel({
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
-    secureModeEnabled
+    secureModeEnabled, currentLocBattleMaps, enterBattleMap
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -137,6 +137,8 @@ export function AdminPanel({
   const [adminAlert, setAdminAlert] = useState<string | null>(null);
   const [showDefined, setShowDefined] = useState(false);
   const [showUndefined, setShowUndefined] = useState(false);
+  const [customLibrary, setCustomLibrary] = useState<any[]>([]);
+  const [customLibraryLoading, setCustomLibraryLoading] = useState(false);
   const defined = locations.filter((l: any) => !l.parent_id && isUserDefinedName(l.name));
   const undefinedLocs = locations.filter((l: any) => !l.parent_id && !isUserDefinedName(l.name));
 
@@ -572,6 +574,28 @@ export function AdminPanel({
               </div>
           </div>
 
+          <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+            <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
+                <button
+                  key={opt}
+                  className={`utility-btn ${(globalSettings?.currency_icon || 'credits') === opt ? 'active' : ''}`}
+                  style={{ padding: '4px 10px', fontSize: opt === 'credits' ? '0.6rem' : '1rem' }}
+                  onClick={() => {
+                    fetch('/api/settings', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                      body: JSON.stringify({ key: 'currency_icon', value: opt }),
+                    }).then(() => fetchGlobalSettings());
+                  }}
+                >
+                  {opt === 'credits' ? 'DEFAULT' : opt}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
 
           {/* BANK SOUNDS TEST PANEL */}
@@ -611,6 +635,15 @@ export function AdminPanel({
                     <button className="upload-btn" onClick={handleCopy}>COPY</button>
                     <button className="upload-btn danger-btn" onClick={() => setDeleteTarget(selectedLocation)}>DEL</button>
                   </div>
+                  {currentLocBattleMaps?.length > 0 && (
+                    <button
+                      className="upload-btn"
+                      style={{ width: '100%', marginTop: '8px', backgroundColor: '#5500ff' }}
+                      onClick={() => enterBattleMap(selectedLocation.id)}
+                    >
+                      ENTER_BATTLE_MAP ({currentLocBattleMaps.length})
+                    </button>
+                  )}
                 </>
               )}
               {copyBuffer && (
@@ -1310,10 +1343,10 @@ export function AdminPanel({
                     <div style={{marginTop: '10px', padding: '10px', border: '1px solid #333', background: 'rgba(0,0,0,0.5)'}}>
                       <label style={{fontSize: '0.7rem'}}>PREMADE STRUCTURES</label>
                       <div className="button-group" style={{marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
-                        {['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'LANDMARK', 'MARKETS', 'CUSTOM'].map(t => (
+                        {['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'LANDMARK', 'MARKETS'].map(t => (
                           <button key={t} type="button" className={editorGenType === t ? 'active' : ''} onClick={() => {
                             setEditorGenType(t);
-                            setEditorStyleIndex(0); // Reset cycle when switching type
+                            setEditorStyleIndex(0);
                             const raw: any[] = [];
                             const bWidth = (editData.baseWidth || editData.width || 2) * (targetObject ? targetObject.scale.x : 1);
                             const bDepth = (editData.baseDepth || editData.depth || 2) * (targetObject ? targetObject.scale.z : 1);
@@ -1324,8 +1357,6 @@ export function AdminPanel({
                             else if (t === 'INDUSTRIAL') zoneVal = -0.1;
                             else if (t === 'LANDMARK') zoneVal = 1.5;
                             else if (t === 'MARKETS') zoneVal = 2.0;
-                            else if (t === 'CUSTOM') zoneVal = 3.0;
-                            
                             const localIsBlocked = (x: number, z: number, w: number, d: number, buffer = 1.5) => {
                                 return raw.some(l => {
                                     const xOverlap = Math.abs(l.x - x) < (l.width + w) / 2 + buffer;
@@ -1333,7 +1364,6 @@ export function AdminPanel({
                                     return xOverlap && zOverlap;
                                 });
                             };
-                            
                             const bHeight = (editData.baseHeight || editData.height || 4) * (targetObject ? targetObject.scale.y : 1);
                             generateThemedBuildingsForPlot(0, 0, bWidth, bDepth, zoneVal, localIsBlocked, () => '', {}, raw, locations, undefined, bHeight, 0);
                             setEditorStyleIndex(1);
@@ -1346,13 +1376,54 @@ export function AdminPanel({
                             {t}
                           </button>
                         ))}
+                        <button
+                          type="button"
+                          className={editorGenType === 'CUSTOM' ? 'active' : ''}
+                          onClick={async () => {
+                            setEditorGenType('CUSTOM');
+                            setEditorStyleIndex(0);
+                            setEditorGenParts([]);
+                            setCustomLibraryLoading(true);
+                            const res = await fetch('/api/locations/custom-library', { headers: { Authorization: `Bearer ${token}` } });
+                            if (res.ok) {
+                              const lib = await res.json();
+                              setCustomLibrary(lib);
+                              if (lib.length > 0) {
+                                const entry = lib[0];
+                                const rootPart = { x: 0, y: 0, z: 0, width: entry.width, height: entry.height, depth: entry.depth, shape: entry.shape || 'box', color: entry.color || '#00ff00', rotation: entry.rotation || 0, rotation_x: entry.rotation_x || 0, rotation_z: entry.rotation_z || 0, polyCount: entry.polyCount || 5 };
+                                const childParts = (entry.parts || []).map((c: any) => ({ x: c.x - entry.x, y: c.y - entry.y, z: c.z - entry.z, width: c.width, height: c.height, depth: c.depth, shape: c.shape || 'box', color: c.color || '#00ff00', rotation: c.rotation || 0, rotation_x: c.rotation_x || 0, rotation_z: c.rotation_z || 0, polyCount: c.polyCount || 5, parent_name: 'ROOT' }));
+                                setEditorGenParts([rootPart, ...childParts]);
+                                setEditorStyleIndex(1);
+                              }
+                            }
+                            setCustomLibraryLoading(false);
+                          }}
+                        >CUSTOM</button>
                       </div>
                       {editorGenType && (() => {
+                        if (editorGenType === 'CUSTOM') {
+                          const maxStyle = customLibrary.length;
+                          if (maxStyle === 0) return (
+                            <div style={{ marginTop: '8px', fontSize: '0.65rem', opacity: 0.6 }}>
+                              {customLibraryLoading ? 'LOADING...' : 'No custom structures yet. Use JOIN_STRUCTS → CUSTOM to add.'}
+                            </div>
+                          );
+                          const currentStyle = editorStyleIndex % maxStyle;
+                          const displayNum = currentStyle === 0 ? maxStyle : currentStyle;
+                          return (
+                            <button type="button" className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => {
+                              const entry = customLibrary[currentStyle];
+                              if (!entry) return;
+                              const rootPart = { x: 0, y: 0, z: 0, width: entry.width, height: entry.height, depth: entry.depth, shape: entry.shape || 'box', color: entry.color || '#00ff00', rotation: entry.rotation || 0, rotation_x: entry.rotation_x || 0, rotation_z: entry.rotation_z || 0, polyCount: entry.polyCount || 5 };
+                              const childParts = (entry.parts || []).map((c: any) => ({ x: c.x - entry.x, y: c.y - entry.y, z: c.z - entry.z, width: c.width, height: c.height, depth: c.depth, shape: c.shape || 'box', color: c.color || '#00ff00', rotation: c.rotation || 0, rotation_x: c.rotation_x || 0, rotation_z: c.rotation_z || 0, polyCount: c.polyCount || 5, parent_name: 'ROOT' }));
+                              setEditorGenParts([rootPart, ...childParts]);
+                              setEditorStyleIndex(editorStyleIndex + 1);
+                            }}>NEXT_STYLE [{displayNum}/{maxStyle}]</button>
+                          );
+                        }
                         const baseMaxStyle = editorGenType === 'CORPO' ? 11 : editorGenType === 'URBAN' ? 10 : editorGenType === 'INDUSTRIAL' ? 10 : editorGenType === 'SLUMS' ? 1 : editorGenType === 'LANDMARK' ? 13 : editorGenType === 'MARKETS' ? 5 : 0;
-                        const customPoolSize = locations.filter((b: any) => b.classification === editorGenType && !b.parent_id).length;
-                        const maxStyle = baseMaxStyle + customPoolSize;
-                        if (maxStyle === 0) return null;
-                        const currentStyle = editorStyleIndex % maxStyle;
+                        if (baseMaxStyle === 0) return null;
+                        const currentStyle = editorStyleIndex % baseMaxStyle;
                         return (
                           <button type="button" className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => {
                               const raw: any[] = [];
@@ -1365,12 +1436,11 @@ export function AdminPanel({
                               else if (editorGenType === 'INDUSTRIAL') zoneVal = -0.1;
                               else if (editorGenType === 'LANDMARK') zoneVal = 1.5;
                               else if (editorGenType === 'MARKETS') zoneVal = 2.0;
-                              else if (editorGenType === 'CUSTOM') zoneVal = 3.0;
                               const bHeight = (editData.baseHeight || editData.height || 4) * (targetObject ? targetObject.scale.y : 1);
                               generateThemedBuildingsForPlot(0, 0, bWidth, bDepth, zoneVal, () => false, () => '', {}, raw, locations, undefined, bHeight, currentStyle);
                               setEditorStyleIndex(editorStyleIndex + 1);
                               setEditorGenParts(raw);
-                          }}>NEXT_STYLE [{currentStyle === 0 ? maxStyle : currentStyle}/{maxStyle}]</button>
+                          }}>NEXT_STYLE [{currentStyle === 0 ? baseMaxStyle : currentStyle}/{baseMaxStyle}]</button>
                         );
                       })()}
                     </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SecureLogin } from '../SecureLogin';
 
@@ -126,6 +126,68 @@ describe('Admin approval flow', () => {
       expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ Authorization: 'Bearer admin-token' }) })
     );
   });
+});
+
+// ─── 3b. Pending approval polling — player-side redirect ─────────────────────
+// These tests let the real 3-second interval fire; each has a 6-second timeout.
+
+describe('Pending approval polling', () => {
+  const registerAs = async (username: string) => {
+    await userEvent.click(screen.getByText('REGISTER'));
+    await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), username);
+    await userEvent.type(screen.getByPlaceholderText('ACCESS_CODE'), 'secret');
+    await userEvent.type(screen.getByPlaceholderText('CONFIRM_ACCESS_CODE'), 'secret');
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'What is your favorite movie?');
+    await userEvent.type(screen.getByPlaceholderText('SECURITY_ANSWER'), 'Blade Runner');
+    await userEvent.click(screen.getByText('CREATE_ACCOUNT'));
+    await waitFor(() => expect(screen.getByText('REGISTRATION_SUBMITTED')).toBeInTheDocument());
+  };
+
+  it('redirects to login when poll returns approved', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ message: 'Account pending admin approval' }) })
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'approved' }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<SecureLogin {...baseProps()} />);
+    await registerAs('GHOST');
+
+    await waitFor(
+      () => expect(screen.getByText('LOGIN')).toBeInTheDocument(),
+      { timeout: 5000 }
+    );
+    expect(screen.queryByText('REGISTRATION_SUBMITTED')).not.toBeInTheDocument();
+  }, 6000);
+
+  it('redirects to login with error when poll returns denied', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ message: 'Account pending admin approval' }) })
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'denied' }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<SecureLogin {...baseProps()} />);
+    await registerAs('GHOST');
+
+    await waitFor(
+      () => expect(screen.getByText(/denied/i)).toBeInTheDocument(),
+      { timeout: 5000 }
+    );
+  }, 6000);
+
+  it('polls the correct status endpoint for the registered username', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ message: 'Account pending admin approval' }) })
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: 'pending' }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<SecureLogin {...baseProps()} />);
+    await registerAs('GHOST');
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls.map(([url]) => url);
+      expect(calls).toContain('/api/player/players/status/GHOST');
+    }, { timeout: 5000 });
+  }, 6000);
 });
 
 // ─── 4. Successful login ─────────────────────────────────────────────────────

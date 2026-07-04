@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { CityDataBaseMenu } from './CityDatabase';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
-import creditsPngIcon from '../assets/Credits.png';
+import { CurrencyIcon } from './BankWindows';
 
 // ─── NavControlsMenu ─────────────────────────────────────────────────────────
 
@@ -561,9 +561,10 @@ interface SidebarProps {
   isRadioOpen?: boolean;
   onToggleRadio?: () => void;
   musicPlaying?: boolean;
+  currencyIcon?: string;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -660,7 +661,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
             </svg>
           </button>
           <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} title="CITY_NET // BANK">
-            <div style={{ width: '24px', height: '24px', backgroundColor: 'currentColor', WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center' }} />
+            <CurrencyIcon icon={currencyIcon} size={24} />
           </button>
           <button
             className={`rail-btn ${isRadioOpen ? 'active' : ''}`}
@@ -692,7 +693,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
                     type="range" min="0" max="1" step="0.05"
                     value={masterVolume}
                     onChange={e => setMasterVolume(parseFloat(e.target.value))}
-                    style={{ writingMode: 'vertical-lr', direction: 'rtl', height: '80px', cursor: 'pointer', accentColor: 'var(--green)', background: 'transparent' } as React.CSSProperties}
+                    className="vol-slider"
                   />
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--green)', opacity: 0.6 }}>
                     <path d="M20 2H4c-.55 0-1 .45-1 1v18c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1M5 4h14v8H5zm14 16H5v-6h14z" />
@@ -705,7 +706,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
                     type="range" min="0" max="1" step="0.05"
                     value={musicVolume}
                     onChange={e => setMusicVolume(parseFloat(e.target.value))}
-                    style={{ writingMode: 'vertical-lr', direction: 'rtl', height: '80px', cursor: 'pointer', accentColor: 'var(--green)', background: 'transparent' } as React.CSSProperties}
+                    className="vol-slider"
                   />
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--green)', opacity: 0.6 }}>
                     <path d="M9 18V5l12-2v13" />

@@ -593,6 +593,51 @@ header {
   max-height: calc(100vh - 120px) !important;
 }
 
+/* Vertical volume sliders (custom-drawn so Chrome and Firefox render identically) */
+.vol-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 20px;
+  height: 80px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.vol-slider::-webkit-slider-runnable-track {
+  width: 4px;
+  height: 100%;
+  background: var(--dark-green);
+  border-radius: 2px;
+}
+
+.vol-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: var(--green);
+  border: none;
+}
+
+.vol-slider::-moz-range-track {
+  width: 4px;
+  height: 100%;
+  background: var(--dark-green);
+  border-radius: 2px;
+}
+
+.vol-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--green);
+  border: none;
+}
+
 .win95-window {
   position: absolute;
   background: var(--black);
