@@ -7,12 +7,15 @@ import { generateThemedBuildingsForPlot } from './Buildings';
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
 import type { SignData } from './Signs';
+import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 // ─── Custom Signs view ───────────────────────────────────────────────────────
 
-const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_y: 0, font_size: 1.0, image_url: '', use_tv_filter: false };
+const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_y: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false };
 
-function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, onClose }: {
+const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: '#00ff00', border: '1px solid #00ff00', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
+
+function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, remoteFonts, setRemoteFonts, onClose }: {
   token: string;
   signs: SignData[];
   fetchSigns: () => void;
@@ -22,19 +25,22 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
   setPendingSignPos: (v: { x: number; z: number } | null) => void;
   selectedSignId: number | null;
   setSelectedSignId: (id: number | null) => void;
+  remoteFonts: RemoteFont[];
+  setRemoteFonts: (f: RemoteFont[]) => void;
   onClose: () => void;
 }) {
   const [form, setForm] = React.useState<any>(BLANK_SIGN);
   const [isNew, setIsNew] = React.useState(true);
+  const [uploadErr, setUploadErr] = React.useState('');
+  const [uploading, setUploading] = React.useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
 
-  // When a sign is clicked in 3D, load it into the form
   React.useEffect(() => {
     if (selectedSignId == null) return;
     const s = signs.find(s => s.id === selectedSignId);
-    if (s) { setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter }); setIsNew(false); }
+    if (s) { setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter, font_family: s.font_family ?? 'monospace' }); setIsNew(false); }
   }, [selectedSignId, signs]);
 
-  // When user picks a position on the map, fill x/z into form
   React.useEffect(() => {
     if (!pendingSignPos) return;
     setForm((f: any) => ({ ...f, x: parseFloat(pendingSignPos.x.toFixed(2)), z: parseFloat(pendingSignPos.z.toFixed(2)) }));
@@ -52,6 +58,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       z: parseFloat(form.z) || 0,
       rotation_y: parseFloat(form.rotation_y) || 0,
       font_size: parseFloat(form.font_size) || 1,
+      font_family: form.font_family || 'monospace',
       image_url: form.image_url || null,
       use_tv_filter: form.use_tv_filter ? 1 : 0,
     };
@@ -68,18 +75,43 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
     if (selectedSignId === id) startNew();
   };
 
+  const uploadFont = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadErr(''); setUploading(true);
+    const fd = new FormData();
+    fd.append('font', file);
+    try {
+      const res = await fetch('/api/fonts', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+      const data = await res.json();
+      if (!res.ok) { setUploadErr(data.error || 'Upload failed'); return; }
+      const updated = await fetch('/api/fonts').then(r => r.json());
+      setRemoteFonts(updated);
+      setForm((f: any) => ({ ...f, font_family: data.name }));
+    } catch { setUploadErr('Upload failed'); }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ''; }
+  };
+
+  const deleteFont = async (file: string) => {
+    await fetch(`/api/fonts/${encodeURIComponent(file)}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    const updated = await fetch('/api/fonts').then(r => r.json());
+    setRemoteFonts(updated);
+    if (remoteFonts.find(f => f.file === file)?.name === form.font_family) {
+      setForm((f: any) => ({ ...f, font_family: 'monospace' }));
+    }
+  };
+
   const field = (label: string, key: string, type = 'text', step?: string) => (
     <div style={{marginBottom: '6px'}}>
       <label style={{fontSize: '0.7rem', opacity: 0.8}}>{label}</label>
-      <input
-        type={type}
-        step={step}
-        value={form[key]}
-        onChange={e => setForm((f: any) => ({ ...f, [key]: type === 'number' ? e.target.value : e.target.value }))}
-        style={{width: '100%', marginTop: '2px', background: '#010a01', color: '#00ff00', border: '1px solid #00ff00', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem'}}
-      />
+      <input type={type} step={step} value={form[key]} onChange={e => setForm((f: any) => ({ ...f, [key]: e.target.value }))} style={INPUT_STYLE} />
     </div>
   );
+
+  const allFontOptions = [
+    ...BUILTIN_FONTS,
+    ...remoteFonts.map(rf => ({ label: rf.name, value: rf.name })),
+  ];
 
   return (
     <>
@@ -89,7 +121,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       </header>
 
       {/* Sign list */}
-      <div style={{maxHeight: '140px', overflowY: 'auto', marginBottom: '10px', border: '1px solid #00ff0044', padding: '4px'}}>
+      <div style={{maxHeight: '120px', overflowY: 'auto', marginBottom: '10px', border: '1px solid #00ff0044', padding: '4px'}}>
         {signs.length === 0 && <div style={{fontSize: '0.7rem', opacity: 0.5}}>NO SIGNS PLACED</div>}
         {signs.map(s => (
           <div key={s.id} style={{display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', borderBottom: '1px solid #00ff0022', background: selectedSignId === s.id ? '#00ff0011' : 'transparent'}}>
@@ -109,13 +141,44 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
         <div style={{flex: 1}}>{field('Y', 'y', 'number', '0.1')}</div>
         <div style={{flex: 1}}>{field('Z', 'z', 'number', '0.1')}</div>
       </div>
-      <button
-        className="utility-btn"
-        style={{width: '100%', marginBottom: '6px', opacity: isPlacingSign ? 0.5 : 1}}
-        onClick={() => setIsPlacingSign(true)}
-      >
+      <button className="utility-btn" style={{width: '100%', marginBottom: '6px', opacity: isPlacingSign ? 0.5 : 1}} onClick={() => setIsPlacingSign(true)}>
         {isPlacingSign ? 'CLICK MAP TO PLACE...' : 'PICK POSITION ON MAP'}
       </button>
+
+      {/* Font selector */}
+      <div style={{marginBottom: '6px'}}>
+        <label style={{fontSize: '0.7rem', opacity: 0.8}}>FONT</label>
+        <select
+          value={form.font_family || 'monospace'}
+          onChange={e => setForm((f: any) => ({ ...f, font_family: e.target.value }))}
+          style={{...INPUT_STYLE, width: '100%'}}
+        >
+          {allFontOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Font uploader */}
+      <div style={{marginBottom: '8px', padding: '6px', border: '1px dashed #00ff0055'}}>
+        <div style={{fontSize: '0.65rem', opacity: 0.7, marginBottom: '4px'}}>UPLOAD FONT (.ttf .otf .woff .woff2)</div>
+        <input ref={fileRef} type="file" accept=".ttf,.otf,.woff,.woff2" onChange={uploadFont} style={{display: 'none'}} />
+        <button className="utility-btn" style={{width: '100%', fontSize: '0.7rem'}} onClick={() => fileRef.current?.click()} disabled={uploading}>
+          {uploading ? 'UPLOADING...' : 'CHOOSE FILE'}
+        </button>
+        {uploadErr && <div style={{fontSize: '0.65rem', color: '#ff4444', marginTop: '3px'}}>{uploadErr}</div>}
+        {remoteFonts.length > 0 && (
+          <div style={{marginTop: '6px'}}>
+            {remoteFonts.map(rf => (
+              <div key={rf.file} style={{display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', padding: '2px 0'}}>
+                <span style={{flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{rf.name}</span>
+                <button style={{padding: '1px 4px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', cursor: 'pointer', fontSize: '0.6rem'}} onClick={() => deleteFont(rf.file)}>DEL</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div style={{display: 'flex', gap: '8px', marginBottom: '6px'}}>
         <div style={{flex: 1}}>
           <label style={{fontSize: '0.7rem', opacity: 0.8}}>ROTATION_Y: {parseFloat(form.rotation_y || 0).toFixed(2)}</label>
@@ -168,7 +231,7 @@ export function AdminPanel({
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
-    signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId,
+    signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId,
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -928,6 +991,8 @@ export function AdminPanel({
           token={token}
           signs={signs || []}
           fetchSigns={fetchSigns}
+          remoteFonts={remoteFonts || []}
+          setRemoteFonts={setRemoteFonts}
           isPlacingSign={isPlacingSign}
           setIsPlacingSign={setIsPlacingSign}
           pendingSignPos={pendingSignPos}

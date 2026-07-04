@@ -304,9 +304,11 @@ db.serialize(() => {
     z REAL NOT NULL,
     rotation_y REAL DEFAULT 0,
     font_size REAL DEFAULT 1.0,
+    font_family TEXT DEFAULT 'monospace',
     image_url TEXT,
     use_tv_filter INTEGER DEFAULT 0
   )`);
+  db.run(`ALTER TABLE signs ADD COLUMN font_family TEXT DEFAULT 'monospace'`, () => {});
 });
 
 module.exports = db;

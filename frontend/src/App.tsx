@@ -49,6 +49,7 @@ import { Overpasses, OverpassPreview } from './components/Overpasses';
 import { Sidewalks } from './components/Sidewalks';
 import { AutoSignage } from './components/AutoSignage';
 import { Signs, type SignData } from './components/Signs';
+import { type RemoteFont } from './utils/fontLoader';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
@@ -222,6 +223,7 @@ function App() {
   const [isPlacingSign, setIsPlacingSign] = useState(false);
   const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
   const [selectedSignId, setSelectedSignId] = useState<number | null>(null);
+  const [remoteFonts, setRemoteFonts] = useState<RemoteFont[]>([]);
   const [overpassHeight, setOverpassHeight] = useState(8);
   const [overpassRampLength, setOverpassRampLength] = useState(20);
   const [overpassSplitRamps, setOverpassSplitRamps] = useState(false);
@@ -795,6 +797,10 @@ function App() {
   useEffect(() => {
     if (isLoggedIn) fetchAll();
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    fetch('/api/fonts').then(r => r.json()).then(setRemoteFonts).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setTempBattleMapScale(null);
@@ -1403,6 +1409,8 @@ function App() {
                 enterBattleMap={enterBattleMap}
                 signs={signs}
                 fetchSigns={fetchSigns}
+                remoteFonts={remoteFonts}
+                setRemoteFonts={setRemoteFonts}
                 isPlacingSign={isPlacingSign}
                 setIsPlacingSign={setIsPlacingSign}
                 pendingSignPos={pendingSignPos}
@@ -1925,7 +1933,7 @@ function App() {
                 {renderSignage && <AutoSignage locations={locations} density={signageDensity} />}
               </>
             )}
-            <Signs signs={signs} onSelect={isAdmin ? setSelectedSignId : undefined} />
+            <Signs signs={signs} remoteFonts={remoteFonts} onSelect={isAdmin ? setSelectedSignId : undefined} />
             {roadLayerMode === 'overpass' && roadTrail.length > 0 && (
               <OverpassPreview
                 trail={roadTrail}

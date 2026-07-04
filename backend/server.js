@@ -33,6 +33,8 @@ app.use('/api/maps', require('./routes/maps')(db, io, helpers));
 app.use('/api/roads', require('./routes/roads')(db, io, helpers));
 app.use('/api/overpasses', require('./routes/overpasses')(db, io, helpers));
 app.use('/api/signs', require('./routes/signs')(db, io, helpers));
+app.use('/api/fonts', require('./routes/fonts')(db, io));
+app.use('/uploads/fonts', express.static(path.join(__dirname, 'uploads/fonts')));
 app.use('/api/player', require('./routes/player')(db, io));
 app.use('/api', require('./routes/admin')(db, io, helpers));
 app.use('/api/music', require('./routes/music')(db, io));

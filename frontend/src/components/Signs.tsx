@@ -1,6 +1,7 @@
-import React, { useMemo, useContext } from 'react';
+import React, { useMemo, useContext, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { ThemeContext } from '../theme/themes';
+import { loadFont, type RemoteFont } from '../utils/fontLoader';
 
 export interface SignData {
   id: number;
@@ -10,6 +11,7 @@ export interface SignData {
   z: number;
   rotation_y: number;
   font_size: number;
+  font_family?: string | null;
   image_url?: string | null;
   use_tv_filter?: number;
 }
@@ -19,25 +21,28 @@ const BORDER_PX = 3;
 const H_PAD_RATIO = 0.35;
 const V_PAD_RATIO = 0.4;
 
-const makeTextTexture = (text: string, fontSizeUnits: number, primaryColor: string): { tex: THREE.CanvasTexture; w: number; h: number } => {
+const makeTextTexture = (
+  text: string,
+  fontSizeUnits: number,
+  fontFamily: string,
+  primaryColor: string
+): { tex: THREE.CanvasTexture; w: number; h: number } => {
   const px = Math.round(fontSizeUnits * PIXELS_PER_UNIT);
+  const fontStr = `bold ${px}px ${fontFamily}`;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
-  ctx.font = `bold ${px}px monospace`;
+  ctx.font = fontStr;
   const measured = ctx.measureText(text).width;
   const hPad = px * H_PAD_RATIO;
   const vPad = px * V_PAD_RATIO;
   canvas.width = Math.ceil(measured + hPad * 2);
   canvas.height = Math.ceil(px + vPad * 2);
-  // background
   ctx.fillStyle = '#030a03';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  // border
   ctx.strokeStyle = primaryColor;
   ctx.lineWidth = BORDER_PX;
   ctx.strokeRect(BORDER_PX / 2, BORDER_PX / 2, canvas.width - BORDER_PX, canvas.height - BORDER_PX);
-  // text
-  ctx.font = `bold ${px}px monospace`;
+  ctx.font = fontStr;
   ctx.fillStyle = primaryColor;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -50,15 +55,20 @@ const makeTextTexture = (text: string, fontSizeUnits: number, primaryColor: stri
 const SignMesh = React.memo(({
   sign,
   primaryColor,
+  fontReady,
   onSelect,
 }: {
   sign: SignData;
   primaryColor: string;
+  fontReady: boolean;
   onSelect?: (id: number) => void;
 }) => {
+  const family = sign.font_family || 'monospace';
   const { tex, w, h } = useMemo(
-    () => makeTextTexture(sign.text, sign.font_size, primaryColor),
-    [sign.text, sign.font_size, primaryColor]
+    () => makeTextTexture(sign.text, sign.font_size, family, primaryColor),
+    // fontReady in deps forces a re-render once the font loads
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sign.text, sign.font_size, family, primaryColor, fontReady]
   );
 
   return (
@@ -79,19 +89,46 @@ const SignMesh = React.memo(({
   );
 });
 
+// Tracks which remote fonts are loaded so SignMesh can re-render
+const useFontReady = (signs: SignData[], remoteFonts: RemoteFont[]) => {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const needed = new Set(
+      signs.map(s => s.font_family).filter(Boolean) as string[]
+    );
+    const remoteNeeded = remoteFonts.filter(rf => needed.has(rf.name));
+    if (remoteNeeded.length === 0) { setReady(true); return; }
+    Promise.all(remoteNeeded.map(rf => loadFont(rf.name, rf.url)))
+      .then(() => setReady(true))
+      .catch(() => setReady(true)); // fall back to default font on error
+  }, [signs, remoteFonts]);
+
+  return ready;
+};
+
 export const Signs = React.memo(({
   signs,
+  remoteFonts = [],
   onSelect,
 }: {
   signs: SignData[];
+  remoteFonts?: RemoteFont[];
   onSelect?: (id: number) => void;
 }) => {
   const theme = useContext(ThemeContext);
+  const fontReady = useFontReady(signs, remoteFonts);
   if (!signs.length) return null;
   return (
     <group>
       {signs.map(s => (
-        <SignMesh key={s.id} sign={s} primaryColor={theme.primary} onSelect={onSelect} />
+        <SignMesh
+          key={s.id}
+          sign={s}
+          primaryColor={theme.primary}
+          fontReady={fontReady}
+          onSelect={onSelect}
+        />
       ))}
     </group>
   );
