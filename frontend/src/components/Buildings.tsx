@@ -133,10 +133,16 @@ export const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect
             tempObj.rotation.set(el.rotation_x || 0, el.rotation || 0, el.rotation_z || 0, 'YXZ');
             tempObj.scale.set(el.width, el.height, el.depth);
             tempObj.updateMatrix();
-            
+            hitMeshRef.current!.setMatrixAt(i, tempObj.matrix);
+
+            // Wireframe lines rasterize at 1px regardless of geometry size, so a
+            // 'none' shape still draws a visible dot unless scaled to zero
+            if (shape === 'none') {
+                tempObj.scale.set(0, 0, 0);
+                tempObj.updateMatrix();
+            }
             wireframeMeshRef.current!.setMatrixAt(i, tempObj.matrix);
             fillMeshRef.current!.setMatrixAt(i, tempObj.matrix);
-            hitMeshRef.current!.setMatrixAt(i, tempObj.matrix);
             
             const parentLoc = el.rootLoc || el;
             const hasData = isUserDefinedName(parentLoc.name) || 

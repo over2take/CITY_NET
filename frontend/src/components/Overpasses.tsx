@@ -94,7 +94,7 @@ export const Overpasses = React.memo(({ overpasses, roads }: { overpasses: Overp
     <group>
       <instancedMesh ref={deckRef} args={[null as any, null as any, Math.max(1, geometry.tiles.length)]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color={theme.border} emissive={theme.background} roughness={0.6} metalness={0.3} />
+        <meshBasicMaterial color={theme.border} transparent opacity={0.7} />
       </instancedMesh>
       <instancedMesh ref={edgeRef} args={[null as any, null as any, Math.max(1, geometry.tiles.length)]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
@@ -102,7 +102,7 @@ export const Overpasses = React.memo(({ overpasses, roads }: { overpasses: Overp
       </instancedMesh>
       <instancedMesh ref={pillarRef} args={[null as any, null as any, Math.max(1, geometry.pillars.length)]} frustumCulled={false}>
         <cylinderGeometry args={[0.5, 0.8, 1, 8]} />
-        <meshStandardMaterial color={theme.border} emissive={theme.background} roughness={0.7} metalness={0.4} />
+        <meshBasicMaterial color={theme.border} transparent opacity={0.7} />
       </instancedMesh>
     </group>
   );
