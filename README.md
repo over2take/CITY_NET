@@ -135,6 +135,7 @@ Click `ADMIN_LOGIN` in the top bar once you're on the map. Enter your `.env` `AD
 - Dice roll history
 - Battle map uploads
 - City database and district management
+- Custom sign placement (text, image, multi-line; free-transform gizmo for wall placement; custom font upload)
 
 ---
 
@@ -148,13 +149,15 @@ CITY_NET/
 │   ├── middleware/
 │   │   └── auth.js             # JWT verify middleware (admin + elevated users)
 │   ├── routes/
-│   │   ├── admin.js            # Admin-only REST endpoints
+│   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs
 │   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only)
 │   │   ├── battle_maps.js      # Battle map image upload/management
 │   │   ├── maps.js             # Saved map snapshots (locations, districts, roads, overpasses, water bodies); preserves only rhombus tokens on load/clear
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload
 │   │   ├── roads.js            # Road CRUD; DELETE /:id removes a single segment
 │   │   ├── overpasses.js       # Overpass CRUD (GET all / POST one / DELETE :id)
+│   │   ├── signs.js            # Custom sign CRUD (GET all / POST / PATCH :id / DELETE :id); text optional when image_url set
+│   │   ├── fonts.js            # Font file upload/list/delete (.ttf .otf .woff .woff2); served as static under /uploads/fonts/
 │   │   └── player.js           # Player auth (register, login, forgot, reset, registration status poll)
 │   ├── sockets/
 │   │   └── index.js            # All Socket.IO event handlers
@@ -180,6 +183,9 @@ CITY_NET/
 │   │   │   ├── ChatWindow.tsx          # In-game chat
 │   │   │   ├── DiceTray.tsx            # Dice roller
 │   │   │   ├── Buildings.tsx           # 3D building meshes
+│   │   │   ├── Sidewalks.tsx           # Pavement rings around structures; compound bounding box for multi-part buildings
+│   │   │   ├── AutoSignage.tsx         # Procedural signs on building faces (seeded RNG, face jitter, overlap check)
+│   │   │   ├── Signs.tsx               # Custom sign meshes — canvas-texture renderer (text, image, multi-line), free-transform gizmo
 │   │   │   ├── Rhombuses.tsx           # Player token meshes
 │   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
@@ -203,7 +209,7 @@ CITY_NET/
 │   │   ├── hooks/
 │   │   │   ├── useSocket.ts    # Socket.IO connection and all event listeners
 │   │   │   ├── useApi.ts       # Fetch helpers
-│   │   │   └── useMapData.ts   # Location/district/road/overpass/water body data fetching
+│   │   │   └── useMapData.ts   # Location/district/road/overpass/water body/sign data fetching
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
 │   │   └── utils/
 │   │       ├── locationHelpers.ts  # Location geometry utilities; exports ZONE_TYPE_NAMES and isUserDefinedName
@@ -211,6 +217,7 @@ CITY_NET/
 │   │       ├── threeHelpers.tsx    # Three.js scene utilities
 │   │       ├── roadHelpers.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry, getClosestPointOnRoads
 │   │       ├── overpassHelpers.ts  # Elevation profile, deck tile subdivision, pillar placement with road-avoidance
+│   │       ├── fontLoader.ts       # FontFace loader for remote fonts (cached by URL); BUILTIN_FONTS list
 │   │       └── __tests__/
 │   │           ├── locationHelpers.test.ts  # Unit tests for isUserDefinedName and getStructLabel
 │   │           ├── roadHelpers.test.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry
