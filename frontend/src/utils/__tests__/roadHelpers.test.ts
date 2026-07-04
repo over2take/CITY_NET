@@ -99,6 +99,79 @@ describe('consolidateRoads', () => {
     expect(widths).toEqual([3, 6]);
   });
 
+  it('produces a single segment route for an isolated road', () => {
+    const routes = chainRoadPolylines([seg(0, 0, 10, 0)]);
+    expect(routes).toHaveLength(1);
+    expect(routes[0].points).toHaveLength(2);
+  });
+
+  it('4-way intersection breaks into 4 separate single-segment routes', () => {
+    // Four roads sharing the node at (10,10)
+    const segs = [
+      seg(10, 10, 20, 10), // east
+      seg(10, 10,  0, 10), // west
+      seg(10, 10, 10, 20), // south
+      seg(10, 10, 10,  0), // north
+    ];
+    const routes = chainRoadPolylines(segs);
+    expect(routes).toHaveLength(4);
+    routes.forEach(r => expect(r.points).toHaveLength(2));
+  });
+
+  it('chains a longer straight with mixed order segments', () => {
+    // Segments supplied out of spatial order — chaining must still find the full street
+    const segs = [seg(20, 0, 30, 0), seg(0, 0, 10, 0), seg(10, 0, 20, 0)];
+    const routes = chainRoadPolylines(segs);
+    expect(routes).toHaveLength(1);
+    expect(routes[0].points).toHaveLength(4);
+  });
+
+  it('T-junction: straight road breaks at the T, branch is its own route', () => {
+    // Straight A–B–C with branch off B
+    const segs = [
+      seg( 0, 0, 10, 0), // A→B
+      seg(10, 0, 20, 0), // B→C
+      seg(10, 0, 10, 10), // B→D (branch)
+    ];
+    const routes = chainRoadPolylines(segs);
+    // B has degree 3 → no chain passes through B; all three segments are standalone
+    expect(routes.length).toBe(3);
+    routes.forEach(r => expect(r.points).toHaveLength(2));
+  });
+
+  it('handles a closed loop — all segments visited, none left out', () => {
+    const segs = [
+      seg( 0,  0, 10,  0),
+      seg(10,  0, 10, 10),
+      seg(10, 10,  0, 10),
+      seg( 0, 10,  0,  0),
+    ];
+    const routes = chainRoadPolylines(segs);
+    // Every node in a loop has degree 2 but walk hits the start twice → should
+    // still visit all 4 segments with no duplication
+    const totalSegsCovered = routes.reduce((sum, r) => sum + (r.points.length - 1), 0);
+    expect(totalSegsCovered).toBe(4);
+  });
+
+  it('uses the snap tolerance to treat near-coincident endpoints as shared', () => {
+    // key = Math.round(x / tol): 10/1=10, 10.3/1=10.3→10 → same bucket → connected
+    const segs = [seg(0, 0, 10, 0), seg(10.3, 0, 20, 0)];
+    const routes = chainRoadPolylines(segs, 1.0);
+    expect(routes).toHaveLength(1);
+    expect(routes[0].points).toHaveLength(3);
+  });
+
+  it('does NOT merge endpoints outside the snap tolerance', () => {
+    // 10/1=10, 12/1=12 → different buckets → two separate routes
+    const segs = [seg(0, 0, 10, 0), seg(12, 0, 20, 0)];
+    const routes = chainRoadPolylines(segs, 1.0);
+    expect(routes).toHaveLength(2);
+  });
+
+  it('returns no routes for an empty segment list', () => {
+    expect(chainRoadPolylines([])).toHaveLength(0);
+  });
+
   it('preserves extra properties on segments', () => {
     const input = [{ x1: 0, z1: 0, x2: 20, z2: 0, width: 6, myProp: 'hello' }];
     const result = consolidateRoads(input, []);
