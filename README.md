@@ -149,7 +149,7 @@ CITY_NET/
 │   │   ├── battle_maps.js      # Battle map image upload/management
 │   │   ├── maps.js             # Saved map snapshots; preserves only rhombus tokens on load/clear — all structures are map-scoped
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload
-│   │   ├── roads.js            # Road CRUD
+│   │   ├── roads.js            # Road CRUD; DELETE /:id removes a single segment
 │   │   ├── overpasses.js       # Overpass CRUD (GET all / POST one / DELETE :id)
 │   │   └── player.js           # Player auth (register, login, forgot, reset, registration status poll)
 │   ├── sockets/
@@ -161,7 +161,7 @@ CITY_NET/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
 │       ├── locations.global.test.js    # Custom structure global persistence tests
 │       ├── maps.global.test.js         # Map load/clear global preservation tests
-│       ├── roads.test.js               # Road API (GET / POST / DELETE)
+│       ├── roads.test.js               # Road API (GET / POST / DELETE / DELETE :id)
 │       └── overpasses.test.js          # Overpass API (GET / POST / DELETE :id, 400 validation)
 │
 ├── frontend/
@@ -177,7 +177,7 @@ CITY_NET/
 │   │   │   ├── Buildings.tsx           # 3D building meshes
 │   │   │   ├── Rhombuses.tsx           # Player token meshes
 │   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
-│   │   │   ├── MapElements.tsx         # Roads, water, overlays
+│   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
 │   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools
 │   │   │   ├── SecureLogin.tsx         # Player login, registration, password reset UI; polls registration status until approved
 │   │   │   ├── CityDatabase.tsx        # Location search/browse
