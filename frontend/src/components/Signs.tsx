@@ -28,7 +28,8 @@ const PIXELS_PER_UNIT = 48;
 const BORDER_PX = 3;
 const H_PAD_RATIO = 0.4;
 const V_PAD_RATIO = 0.35;
-const LINE_GAP_RATIO = 0.3; // gap between lines as fraction of that line's px height
+const LINE_GAP_RATIO = 0.3;
+const MAX_IMAGE_PX = 512;
 
 const makeSignTexture = (
   lines: SignLine[],
@@ -80,6 +81,68 @@ const makeSignTexture = (
   };
 };
 
+const makeImageTexture = (
+  img: HTMLImageElement,
+  captionLines: SignLine[],
+  fontFamily: string,
+  primaryColor: string,
+): { tex: THREE.CanvasTexture; w: number; h: number } => {
+  const scale = Math.min(1, MAX_IMAGE_PX / img.naturalWidth);
+  const imgW = Math.max(1, Math.round(img.naturalWidth * scale));
+  const imgH = Math.max(1, Math.round(img.naturalHeight * scale));
+
+  const hasCaption = captionLines.some(l => l.text.trim());
+  const vPad = 8;
+  let capH = 0;
+  let capMeasured: Array<{ px: number }> = [];
+
+  if (hasCaption) {
+    const tmp = document.createElement('canvas').getContext('2d')!;
+    capMeasured = captionLines.map(l => {
+      const px = Math.round(l.font_size * PIXELS_PER_UNIT);
+      tmp.font = `bold ${px}px ${fontFamily}`;
+      return { px };
+    });
+    const totalTextH = capMeasured.reduce((s, m, i) =>
+      s + m.px + (i < captionLines.length - 1 ? m.px * LINE_GAP_RATIO : 0), 0);
+    capH = Math.ceil(totalTextH + vPad * 2);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = imgW;
+  canvas.height = imgH + capH;
+
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#030a03';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, imgW, imgH);
+
+  ctx.strokeStyle = primaryColor;
+  ctx.lineWidth = BORDER_PX;
+  ctx.strokeRect(BORDER_PX / 2, BORDER_PX / 2, canvas.width - BORDER_PX, canvas.height - BORDER_PX);
+
+  if (hasCaption) {
+    ctx.fillStyle = 'rgba(3, 10, 3, 0.82)';
+    ctx.fillRect(0, imgH, imgW, capH);
+    let y = imgH + vPad;
+    captionLines.forEach((l, i) => {
+      const { px } = capMeasured[i];
+      ctx.font = `bold ${px}px ${fontFamily}`;
+      ctx.fillStyle = primaryColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(l.text, imgW / 2, y);
+      y += px + (i < captionLines.length - 1 ? px * LINE_GAP_RATIO : 0);
+    });
+  }
+
+  return {
+    tex: new THREE.CanvasTexture(canvas),
+    w: canvas.width  / PIXELS_PER_UNIT,
+    h: canvas.height / PIXELS_PER_UNIT,
+  };
+};
+
 /** Normalise a SignData into a lines array for rendering */
 const resolveLines = (sign: SignData): SignLine[] => {
   if (sign.lines) {
@@ -107,11 +170,24 @@ const SignMesh = React.memo(({
   const lines   = useMemo(() => resolveLines(sign), [sign]);
   const meshRef = React.useRef<THREE.Mesh>(null);
 
-  const { tex, w, h } = useMemo(
-    () => makeSignTexture(lines, family, primaryColor),
+  // Async image loading — switches canvas renderer to image mode when ready
+  const [loadedImage, setLoadedImage] = useState<HTMLImageElement | null>(null);
+  useEffect(() => {
+    if (!sign.image_url) { setLoadedImage(null); return; }
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => { if (!cancelled) setLoadedImage(img); };
+    img.onerror = () => { if (!cancelled) setLoadedImage(null); };
+    img.src = sign.image_url;
+    return () => { cancelled = true; };
+  }, [sign.image_url]);
+
+  const { tex, w, h } = useMemo(() => {
+    if (loadedImage) return makeImageTexture(loadedImage, lines, family, primaryColor);
+    return makeSignTexture(lines, family, primaryColor);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lines, family, primaryColor, fontReady]
-  );
+  }, [loadedImage, lines, family, primaryColor, fontReady]);
 
   // Notify parent when this sign becomes selected/deselected
   useEffect(() => {

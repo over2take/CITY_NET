@@ -6,7 +6,7 @@ import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
-import type { SignData } from './Signs';
+import type { SignData, SignLine } from './Signs';
 import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 // ─── Custom Signs view ───────────────────────────────────────────────────────
@@ -16,7 +16,7 @@ const BLANK_LINE = { text: '', font_size: 1.0 };
 
 const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: '#00ff00', border: '1px solid #00ff00', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
 
-function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, remoteFonts, setRemoteFonts, signTransformMode, setSignTransformMode, onClose }: {
+function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, remoteFonts, setRemoteFonts, signTransformMode, setSignTransformMode, controlsRef, signMesh, onClose }: {
   token: string;
   signs: SignData[];
   fetchSigns: () => void;
@@ -30,6 +30,8 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
   setRemoteFonts: (f: RemoteFont[]) => void;
   signTransformMode: 'translate' | 'rotate';
   setSignTransformMode: (m: 'translate' | 'rotate') => void;
+  controlsRef: React.MutableRefObject<any>;
+  signMesh: THREE.Mesh | null;
   onClose: () => void;
 }) {
   const [form, setForm] = React.useState<any>(BLANK_SIGN);
@@ -39,6 +41,26 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
   const [uploadErr, setUploadErr] = React.useState('');
   const [uploading, setUploading] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
+
+  const getCenterGroundTarget = () => {
+    let tx = 0, tz = 0;
+    if (controlsRef.current) {
+      const camera = controlsRef.current._camera || controlsRef.current.camera;
+      if (camera) {
+        const rc = new THREE.Raycaster();
+        rc.setFromCamera(new THREE.Vector2(0, 0), camera);
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const target = new THREE.Vector3();
+        rc.ray.intersectPlane(plane, target);
+        tx = target.x; tz = target.z;
+      } else if (controlsRef.current.getTarget) {
+        const t = new THREE.Vector3();
+        controlsRef.current.getTarget(t);
+        tx = t.x; tz = t.z;
+      }
+    }
+    return { tx, tz };
+  };
 
   React.useEffect(() => {
     if (selectedSignId == null) return;
@@ -84,17 +106,10 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
   const addLine    = () => setFormLines(ls => [...ls, { ...BLANK_LINE }]);
   const removeLine = (i: number) => setFormLines(ls => ls.filter((_, idx) => idx !== i));
 
-  const save = async () => {
-    const hasText = isMultiLine
-      ? formLines.some(l => l.text.trim())
-      : form.text.trim();
-    if (!hasText) return;
-
-    // For text/font_size, use first line (or single-line form) as the canonical fallback
+  const buildBody = () => {
     const primaryText = isMultiLine ? (formLines[0]?.text || '') : form.text;
     const primarySize = isMultiLine ? (formLines[0]?.font_size || 1) : (parseFloat(form.font_size) || 1);
-
-    const body: any = {
+    return {
       text: primaryText,
       x: parseFloat(form.x) || 0,
       y: parseFloat(form.y) || 0,
@@ -104,13 +119,42 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       font_family: form.font_family || 'monospace',
       image_url: form.image_url || null,
       use_tv_filter: form.use_tv_filter ? 1 : 0,
-      lines: isMultiLine ? formLines.filter(l => l.text.trim()) : null,
+      lines: isMultiLine ? formLines.filter((l: SignLine) => l.text.trim()) : null,
     };
-    const url = isNew ? '/api/signs' : `/api/signs/${selectedSignId}`;
-    const method = isNew ? 'POST' : 'PATCH';
-    await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(body) });
+  };
+
+  const hasContent = () => {
+    const hasText = isMultiLine ? formLines.some((l: SignLine) => l.text.trim()) : form.text.trim();
+    return !!(hasText || form.image_url?.trim());
+  };
+
+  // Place a new sign at the center of the current camera view, then select it so the gizmo appears
+  const placeSign = async () => {
+    if (!hasContent()) return;
+    const { tx, tz } = getCenterGroundTarget();
+    const body = { ...buildBody(), x: tx, z: tz, rotation_y: 0 };
+    const res = await fetch('/api/signs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return;
+    const created = await res.json();
+    setSelectedSignId(created.id);
+    setIsNew(false);
+    setForm((f: any) => ({ ...f, x: parseFloat(tx.toFixed(2)), z: parseFloat(tz.toFixed(2)) }));
     fetchSigns();
-    startNew();
+  };
+
+  const save = async () => {
+    if (!hasContent()) return;
+    const body = buildBody();
+    await fetch(`/api/signs/${selectedSignId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    fetchSigns();
   };
 
   const remove = async (id: number) => {
@@ -221,9 +265,6 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
         <div style={{flex: 1}}>{field('Y', 'y', 'number', '0.1')}</div>
         <div style={{flex: 1}}>{field('Z', 'z', 'number', '0.1')}</div>
       </div>
-      <button className="utility-btn" style={{width: '100%', marginBottom: '6px', opacity: isPlacingSign ? 0.5 : 1}} onClick={() => setIsPlacingSign(true)}>
-        {isPlacingSign ? 'CLICK MAP TO PLACE...' : 'PICK POSITION ON MAP'}
-      </button>
 
       {selectedSignId != null && (
         <div style={{display:'flex', gap:'6px', marginBottom:'6px'}}>
@@ -277,7 +318,11 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       <div style={{display: 'flex', gap: '8px', marginBottom: '6px'}}>
         <div style={{flex: 1}}>
           <label style={{fontSize: '0.7rem', opacity: 0.8}}>ROTATION_Y: {parseFloat(form.rotation_y || 0).toFixed(2)}</label>
-          <input type="range" min="0" max={Math.PI * 2} step="0.05" value={form.rotation_y || 0} onChange={e => setForm((f: any) => ({...f, rotation_y: parseFloat(e.target.value)}))} style={{width: '100%'}} />
+          <input type="range" min="0" max={Math.PI * 2} step="0.05" value={form.rotation_y || 0} onChange={e => {
+            const val = parseFloat(e.target.value);
+            setForm((f: any) => ({...f, rotation_y: val}));
+            if (signMesh) signMesh.rotation.y = val;
+          }} style={{width: '100%'}} />
         </div>
         {!isMultiLine && <div style={{flex: 1}}>
           <label style={{fontSize: '0.7rem', opacity: 0.8}}>FONT_SIZE: {parseFloat(form.font_size || 1).toFixed(1)}</label>
@@ -291,7 +336,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       </label>
 
       <div style={{display: 'flex', gap: '8px'}}>
-        <button className="utility-btn" style={{flex: 1}} onClick={save} disabled={!form.text.trim()}>
+        <button className="utility-btn" style={{flex: 1}} onClick={isNew ? placeSign : save} disabled={!hasContent()}>
           {isNew ? 'PLACE SIGN' : 'SAVE CHANGES'}
         </button>
         {!isNew && <button className="utility-btn" style={{flex: 1}} onClick={startNew}>NEW</button>}
@@ -326,7 +371,7 @@ export function AdminPanel({
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
-    signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode,
+    signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signMesh,
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -1096,6 +1141,8 @@ export function AdminPanel({
           setSelectedSignId={setSelectedSignId}
           signTransformMode={signTransformMode}
           setSignTransformMode={setSignTransformMode}
+          controlsRef={controlsRef}
+          signMesh={signMesh}
           onClose={() => setView('list')}
         />
       )}
