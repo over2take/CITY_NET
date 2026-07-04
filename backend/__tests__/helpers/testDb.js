@@ -108,6 +108,18 @@ function makeTestDb() {
         map_scale_multiplier TEXT DEFAULT '[1]'
       )`);
 
+      db.run(`CREATE TABLE signs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        text TEXT NOT NULL,
+        x REAL NOT NULL,
+        y REAL NOT NULL,
+        z REAL NOT NULL,
+        rotation_y REAL DEFAULT 0,
+        font_size REAL DEFAULT 1.0,
+        image_url TEXT,
+        use_tv_filter INTEGER DEFAULT 0
+      )`);
+
       db.run(`CREATE TABLE action_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         type TEXT NOT NULL,
