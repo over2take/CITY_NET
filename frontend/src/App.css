@@ -5,6 +5,62 @@
   --glow: 0 0 10px rgba(0, 255, 0, 0.7);
 }
 
+.theme-classic {
+  --green: #00ff00;
+  --dark-green: #004400;
+  --black: #0a1a0f;
+  --glow: 0 0 10px rgba(0, 255, 0, 0.7);
+  background-color: var(--black);
+}
+
+.theme-vaporwave {
+  --green: #ff71ce;
+  --dark-green: #4a154b;
+  --black: #1a0b2e;
+  --glow: 0 0 10px rgba(255, 113, 206, 0.7);
+  background-color: var(--black);
+}
+
+.theme-cyberpunk {
+  --green: #f3e600;
+  --dark-green: #0d0d0d;
+  --black: #0d0d0d;
+  --glow: 0 0 10px rgba(243, 230, 0, 0.7);
+  background-color: var(--black);
+}
+
+.theme-crimson {
+  --green: #ff3333;
+  --dark-green: #660000;
+  --black: #110000;
+  --glow: 0 0 10px rgba(255, 51, 51, 0.7);
+  background-color: var(--black);
+}
+
+.theme-ocean {
+  --green: #00ffff;
+  --dark-green: #003366;
+  --black: #001122;
+  --glow: 0 0 10px rgba(0, 255, 255, 0.7);
+  background-color: var(--black);
+}
+
+.theme-solar {
+  --green: #ffaa00;
+  --dark-green: #663300;
+  --black: #221100;
+  --glow: 0 0 10px rgba(255, 170, 0, 0.7);
+  background-color: var(--black);
+}
+
+.theme-monochrome {
+  --green: #ffffff;
+  --dark-green: #333333;
+  --black: #000000;
+  --glow: 0 0 10px rgba(255, 255, 255, 0.7);
+  background-color: var(--black);
+}
+
 body, html, #root {
   margin: 0;
   padding: 0;

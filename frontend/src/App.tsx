@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh, Html, OrthographicCamera } from '@react-three/drei';
@@ -18,6 +18,8 @@ import type {
 import rhombusIcon from './assets/rhombus.svg';
 import { useMapData } from './hooks/useMapData';
 import { useSocket } from './hooks/useSocket';
+import { THEMES, ThemeContext } from './theme/themes';
+import type { ThemeName } from './theme/themes';
 import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
@@ -60,6 +62,7 @@ import type { DirectorState } from './types';
 import { IS_SPECTATOR } from './streamerMode';
 
 function App() {
+  const [currentTheme, setCurrentTheme] = useState<ThemeName>('classic');
   const controlsRef = useRef<any>(null);
   const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchAll } = useMapData();
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
@@ -118,7 +121,7 @@ function App() {
   // Attack state
   const [attackPending, setAttackPending] = useState<{ targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null>(null);
   const [lastAttackResult, setLastAttackResult] = useState<{ hit: boolean; roll: number; ac: number; targetName: string } | null>(null);
-  const [attackAnimations, setAttackAnimations] = useState<{ id: string; hit: boolean; attackType: 'melee' | 'ranged'; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number }; targetId: number }[]>([]);
+  const [attackAnimations, setAttackAnimations] = useState<{ id: string; hit: boolean; attackType: 'melee' | 'ranged'; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number }; targetId: number; isBattleMap: boolean }[]>([]);
 
   // Radio Feed
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -618,7 +621,7 @@ function App() {
           attackerPos: data.attackerPos,
           targetPos: data.targetPos,
           targetId: data.targetId,
-          isBattleMap: data.isBattleMap ?? false,
+          isBattleMap: (data as any).isBattleMap ?? false,
         }]);
       }, 5000);
     },
@@ -1094,7 +1097,7 @@ function App() {
   };
 
   return (
-    <div className="crt-container">
+    <div className={`crt-container theme-${currentTheme}`}>
       <div className="scanlines"></div>
       {!isLoggedIn && !IS_SPECTATOR && (
         <SecureLogin
@@ -1102,7 +1105,16 @@ function App() {
           audioEnabled={audioEnabled}
           onToggleAudio={() => setAudioEnabled(a => !a)}
           onSimpleLogin={(name) => startBootSequence(name)}
-          onSecureLogin={(name, pToken) => { setPlayerToken(pToken); startBootSequence(name, pToken); }}
+          onSecureLogin={(name, pToken) => { 
+            setPlayerToken(pToken); 
+            try {
+              const payload = JSON.parse(atob(pToken.split('.')[1]));
+              if (payload.theme && THEMES[payload.theme as ThemeName]) {
+                setCurrentTheme(payload.theme as ThemeName);
+              }
+            } catch (e) { }
+            startBootSequence(name, pToken); 
+          }}
           onAdminLogin={(name, adminToken) => { setToken(adminToken); setIsAdmin(true); setShowAdminPanel(true); startBootSequence(name); }}
           onPendingsFetched={setPendingRegistrations}
           StatusLogDisplay={StatusLogDisplay}
@@ -1195,6 +1207,8 @@ function App() {
               }}
               musicPlaying={musicState.playing}
               currencyIcon={globalSettings?.currency_icon}
+              currentTheme={currentTheme}
+              onThemeChange={setCurrentTheme}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -1449,7 +1463,7 @@ function App() {
                 onClose={() => setIsRadioPlayerOpen(false)}
                 isAdmin={isAdmin}
                 socket={socketRef.current}
-                audioRef={audioRef}
+                audioRef={audioRef as React.RefObject<HTMLAudioElement>}
                 musicState={musicState}
                 volume={musicVolume}
                 onVolumeChange={setMusicVolume}
@@ -1693,8 +1707,9 @@ function App() {
             })()}
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
           </div>}
-          <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
-            <StreamerVisibilityContext.Provider value={IS_SPECTATOR ? directorState.visibility : ALL_VISIBLE}>
+          <ThemeContext.Provider value={THEMES[currentTheme]}>
+            <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
+              <StreamerVisibilityContext.Provider value={IS_SPECTATOR ? directorState.visibility : ALL_VISIBLE}>
             <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
             <MeasurementTool measureMode={measureMode} socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} mapScaleMultiplier={view === 'battle_map' ? (() => {
                 const loc = locations.find((l:any) => l.id === activeBattleMapData?.locationId);
@@ -1976,9 +1991,10 @@ function App() {
                 </group>
             )}
             <ambientLight intensity={0.5} />
-            </StreamerVisibilityContext.Provider>
-          </Canvas>
-          {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} selectedLocation={selectedLocation} battleMapLabel={view === 'battle_map' && activeBattleMapData ? activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation : null} />}
+              </StreamerVisibilityContext.Provider>
+            </Canvas>
+          </ThemeContext.Provider>
+        {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} selectedLocation={selectedLocation} battleMapLabel={view === 'battle_map' && activeBattleMapData ? activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation : null} />}
         </>
       )}
     </div>
