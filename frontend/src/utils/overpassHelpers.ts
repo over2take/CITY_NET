@@ -55,6 +55,51 @@ export const isEndpointConnected = (
   return false;
 };
 
+/** True if pt sits within tol of any segment along another overpass path. */
+export const isEndpointConnectedToOverpass = (
+  pt: OverpassPoint,
+  otherPaths: OverpassPoint[][],
+  tol = 3
+): boolean => {
+  for (const path of otherPaths) {
+    for (let i = 1; i < path.length; i++) {
+      if (pointToSegmentDist(pt.x, pt.z, path[i - 1].x, path[i - 1].z, path[i].x, path[i].z) <= tol) return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Snap an endpoint onto the centreline of the nearest other overpass deck, the
+ * same way road segments join at shared centreline nodes. Running the joining
+ * deck through to the centreline makes angled junctions fully overlap with no
+ * notches or gaps. Returns null when nothing is in range.
+ */
+export const snapToOverpassEdge = (
+  pt: OverpassPoint,
+  others: Array<{ points: OverpassPoint[]; width: number }>,
+  tol = 3
+): OverpassPoint | null => {
+  let best: { cx: number; cz: number; dist: number } | null = null;
+  for (const o of others) {
+    const pts = o.points;
+    for (let i = 1; i < pts.length; i++) {
+      const x1 = pts[i - 1].x, z1 = pts[i - 1].z, x2 = pts[i].x, z2 = pts[i].z;
+      const dx = x2 - x1, dz = z2 - z1;
+      const lenSq = dx * dx + dz * dz;
+      let t = 0;
+      if (lenSq > 0) t = Math.max(0, Math.min(1, ((pt.x - x1) * dx + (pt.z - z1) * dz) / lenSq));
+      const cx = x1 + t * dx, cz = z1 + t * dz;
+      const dist = Math.hypot(pt.x - cx, pt.z - cz);
+      if (dist <= tol + o.width / 2 && (!best || dist < best.dist)) {
+        best = { cx, cz, dist };
+      }
+    }
+  }
+  if (!best) return null;
+  return { x: best.cx, z: best.cz };
+};
+
 /**
  * Deck elevation at arclength s along the path.
  * slope = height / rampLength stays constant; short roads simply peak lower
@@ -91,11 +136,14 @@ export const sampleOverpassPath = (
   points: OverpassPoint[],
   params: Pick<OverpassParams, 'height' | 'rampLength' | 'rampLengthStart' | 'rampLengthEnd'>,
   existingRoads: Array<{ x1: number; z1: number; x2: number; z2: number }> = [],
-  step = 4
+  step = 4,
+  otherOverpassPaths: OverpassPoint[][] = [],
 ): Array<{ x: number; y: number; z: number }> => {
   if (!points || points.length < 2) return [];
-  const connectedStart = isEndpointConnected(points[0], existingRoads);
-  const connectedEnd = isEndpointConnected(points[points.length - 1], existingRoads);
+  const connectedStart = params.rampLengthStart !== undefined ? false
+    : (isEndpointConnected(points[0], existingRoads) || isEndpointConnectedToOverpass(points[0], otherOverpassPaths));
+  const connectedEnd = params.rampLengthEnd !== undefined ? false
+    : (isEndpointConnected(points[points.length - 1], existingRoads) || isEndpointConnectedToOverpass(points[points.length - 1], otherOverpassPaths));
 
   const cum: number[] = [0];
   for (let i = 1; i < points.length; i++) {
@@ -131,14 +179,29 @@ export const buildOverpassGeometry = (
   points: OverpassPoint[],
   params: OverpassParams,
   existingRoads: Array<{ x1: number; z1: number; x2: number; z2: number; width?: number }> = [],
-  opts: { connectedStart?: boolean; connectedEnd?: boolean; tileLength?: number } = {}
+  opts: { connectedStart?: boolean; connectedEnd?: boolean; tileLength?: number; otherOverpasses?: Array<{ points: OverpassPoint[]; width: number }> } = {}
 ): OverpassGeometry => {
   const { height, rampLength, rampLengthStart, rampLengthEnd, pillarSpacing } = params;
   const tileLength = opts.tileLength ?? 3;
-  const connectedStart = opts.connectedStart ?? isEndpointConnected(points[0], existingRoads);
-  const connectedEnd = opts.connectedEnd ?? isEndpointConnected(points[points.length - 1], existingRoads);
+  const otherOverpasses = opts.otherOverpasses ?? [];
+  const otherPaths = otherOverpasses.map(o => o.points);
+  // If the user explicitly set a ramp length for an end, honour it — don't let auto-connection override it.
+  const connectedStart = rampLengthStart !== undefined ? false
+    : (opts.connectedStart ?? (isEndpointConnected(points[0], existingRoads) || isEndpointConnectedToOverpass(points[0], otherPaths)));
+  const connectedEnd = rampLengthEnd !== undefined ? false
+    : (opts.connectedEnd ?? (isEndpointConnected(points[points.length - 1], existingRoads) || isEndpointConnectedToOverpass(points[points.length - 1], otherPaths)));
 
   if (!points || points.length < 2) return { tiles: [], pillars: [], totalLength: 0 };
+
+  // When an end merges into another overpass, snap it flush to that deck's side edge.
+  if (connectedStart) {
+    const snapped = snapToOverpassEdge(points[0], otherOverpasses);
+    if (snapped) points = [snapped, ...points.slice(1)];
+  }
+  if (connectedEnd) {
+    const snapped = snapToOverpassEdge(points[points.length - 1], otherOverpasses);
+    if (snapped) points = [...points.slice(0, points.length - 1), snapped];
+  }
 
   // Cumulative arclength at each path point
   const cum: number[] = [0];

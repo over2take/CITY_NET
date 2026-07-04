@@ -66,6 +66,8 @@ function makeTestDb() {
         height REAL NOT NULL,
         width REAL NOT NULL,
         ramp_length REAL NOT NULL,
+        ramp_length_start REAL,
+        ramp_length_end REAL,
         pillar_spacing REAL DEFAULT 12
       )`);
 

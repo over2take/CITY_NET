@@ -167,6 +167,51 @@ describe('POST /api/admin/undo — water_create', () => {
   });
 });
 
+describe('POST /api/admin/undo — overpass_create', () => {
+  it('deletes the created overpass', async () => {
+    const r = await run(db, `INSERT INTO overpasses (points, height, width, ramp_length, pillar_spacing) VALUES ('[{"x":0,"z":0},{"x":50,"z":0}]', 8, 6, 20, 12)`);
+    await seedHistory(db, 'overpass_create', { id: r.lastID });
+
+    const res = await request(app)
+      .post('/api/admin/undo')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.type).toBe('overpass_create');
+    const overpasses = await all(db, 'SELECT * FROM overpasses');
+    expect(overpasses).toHaveLength(0);
+  });
+});
+
+describe('POST /api/admin/undo — overpass_delete', () => {
+  it('restores the deleted overpass with all columns', async () => {
+    const overpassData = {
+      id: 42,
+      points: '[{"x":0,"z":0},{"x":50,"z":0}]',
+      height: 8,
+      width: 6,
+      ramp_length: 20,
+      ramp_length_start: 10,
+      ramp_length_end: 15,
+      pillar_spacing: 12,
+    };
+    await seedHistory(db, 'overpass_delete', { id: overpassData.id, data: overpassData });
+
+    const res = await request(app)
+      .post('/api/admin/undo')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.type).toBe('overpass_delete');
+    const overpasses = await all(db, 'SELECT * FROM overpasses');
+    expect(overpasses).toHaveLength(1);
+    expect(overpasses[0].id).toBe(42);
+    expect(overpasses[0].height).toBe(8);
+    expect(overpasses[0].ramp_length_start).toBe(10);
+    expect(overpasses[0].ramp_length_end).toBe(15);
+  });
+});
+
 describe('POST /api/admin/undo — unknown type', () => {
   it('returns 400 for an unrecognised action type', async () => {
     await seedHistory(db, 'alien_create', { ids: [1] });
