@@ -27,7 +27,8 @@ vi.mock('three', async () => {
   return { ...actual };
 });
 
-import { Roads, WaterBody, WaterBodies, GhostTraffic, DistrictInteractions, getClosestPointOnRoads } from '../MapElements';
+import { Roads, WaterBody, WaterBodies, GhostTraffic, DistrictInteractions } from '../MapElements';
+import { getClosestPointOnRoads } from '../../utils/roadHelpers';
 
 const makeRoad = (overrides = {}): any => ({
   id: 1, x1: 0, z1: 0, x2: 10, z2: 0, width: 2, color: '#00ff00',

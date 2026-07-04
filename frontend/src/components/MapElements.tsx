@@ -3,8 +3,10 @@ import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { resolveDeployHealth } from '../utils/rhombusHelpers';
+import { parseOverpassPoints, sampleOverpassPath, buildOverpassGeometry } from '../utils/overpassHelpers';
+import { chainRoadPolylines, buildRoadRibbonGeometry } from '../utils/roadHelpers';
 
-export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token }: any) => {
+export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token, roadLayerMode }: any) => {
   const { camera, gl, controls } = useThree();
   const [dragStart, setDragStart] = useState<THREE.Vector3 | null>(null);
   const [dragEnd, setDragEnd] = useState<THREE.Vector3 | null>(null);
@@ -80,12 +82,13 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
       }
       (controls as any).update();
       (controls as any).minPolarAngle = 0;
-      (controls as any).maxPolarAngle = 0.01;
+      // Allow free tilt in overpass mode so the user can preview ramp height
+      (controls as any).maxPolarAngle = (view === 'draw_roads' && roadLayerMode === 'overpass') ? Math.PI / 2 : 0.01;
     } else if (controls) {
       (controls as any).minPolarAngle = 0;
       (controls as any).maxPolarAngle = Math.PI;
     }
-  }, [view, controls, camera]);
+  }, [view, controls, camera, roadLayerMode]);
 
   useEffect(() => {
     if (view !== 'district' && view !== 'draw_roads' && view !== 'draw_water' && view !== 'city_gen' && !isBatchSelecting && !rhombusState?.active) return;
@@ -338,10 +341,14 @@ export const WaterBody = ({ body }: { body: any }) => {
   return (
     <mesh ref={meshRef} position={[0, 0.035, 0]} rotation={[-Math.PI / 2, 0, 0]}>
       <shapeGeometry args={[shape]} />
-      <shaderMaterial 
+      <shaderMaterial
         ref={materialRef}
         transparent={true}
         side={THREE.DoubleSide}
+        depthWrite={true}
+        polygonOffset={true}
+        polygonOffsetFactor={-4}
+        polygonOffsetUnits={-4}
         uniforms={uniforms}
         vertexShader={`
           varying vec2 vUv;
@@ -395,186 +402,304 @@ export const WaterBodies = React.memo(({ waterBodies }: { waterBodies: any[] }) 
 });
 
 export const Roads = React.memo(({ roads }: { roads: any[] }) => {
-  const baseMeshRef = useRef<THREE.InstancedMesh>(null);
-  const coreMeshRef = useRef<THREE.InstancedMesh>(null);
-  const tempObj = new THREE.Object3D();
+  const coreMatRef = useRef<THREE.MeshBasicMaterial>(null);
 
   useFrame((state) => {
-    if (coreMeshRef.current && coreMeshRef.current.material) {
-      (coreMeshRef.current.material as THREE.MeshBasicMaterial).opacity = 0.5 + Math.sin(state.clock.elapsedTime * 1.5) * 0.4;
+    if (coreMatRef.current) {
+      coreMatRef.current.opacity = 0.5 + Math.sin(state.clock.elapsedTime * 1.5) * 0.4;
     }
   });
 
-  useEffect(() => {
-    if (!baseMeshRef.current || !coreMeshRef.current || !baseMeshRef.current.setMatrixAt) return;
-    roads.forEach((r, i) => {
-      const p1 = new THREE.Vector3(r.x1, 0.05, r.z1);
-      const p2 = new THREE.Vector3(r.x2, 0.05, r.z2);
-      const dist = p1.distanceTo(p2) + (r.width * 0.1);
-      
-      // Update Base (Wide, faint)
-      tempObj.position.copy(p1.clone().lerp(p2, 0.5));
-      tempObj.scale.set(dist, r.width, 1);
-      tempObj.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), p2.clone().sub(p1).normalize());
-      tempObj.rotateX(-Math.PI / 2);
-      tempObj.updateMatrix();
-      baseMeshRef.current!.setMatrixAt(i, tempObj.matrix);
-
-      // Update Core (Thin, bright)
-      tempObj.position.y = 0.06; // Slightly above base
-      tempObj.scale.set(dist, r.width * 0.08, 1); // Thinner core
-      tempObj.updateMatrix();
-      coreMeshRef.current!.setMatrixAt(i, tempObj.matrix);
-    });
-    baseMeshRef.current.instanceMatrix.needsUpdate = true;
-    coreMeshRef.current.instanceMatrix.needsUpdate = true;
+  // Chain segments into streets and build continuous mitered ribbons so bends
+  // render as one surface instead of overlapping per-segment quads
+  const { baseGeo, coreGeo } = useMemo(() => {
+    const chains = chainRoadPolylines(roads);
+    return {
+      baseGeo: buildRoadRibbonGeometry(chains),
+      coreGeo: buildRoadRibbonGeometry(chains, 0.08),
+    };
   }, [roads]);
+
+  useEffect(() => () => { baseGeo.dispose(); coreGeo.dispose(); }, [baseGeo, coreGeo]);
 
   return (
     <group>
       {/* Road Base - Vibrant Cyber Green */}
-      <instancedMesh ref={baseMeshRef} args={[null as any, null as any, roads.length]} frustumCulled={false}>
-        <planeGeometry args={[1, 1]} />
+      <mesh geometry={baseGeo} position={[0, 0.05, 0]} frustumCulled={false}>
         <meshBasicMaterial color="#004411" transparent opacity={0.7} side={THREE.DoubleSide} />
-      </instancedMesh>
-      
+      </mesh>
+
       {/* Road Core - Pulsing Neon Link */}
-      <instancedMesh ref={coreMeshRef} args={[null as any, null as any, roads.length]} frustumCulled={false}>
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial color="#00ffaa" transparent opacity={0.9} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
-      </instancedMesh>
+      <mesh geometry={coreGeo} position={[0, 0.06, 0]} frustumCulled={false}>
+        <meshBasicMaterial ref={coreMatRef} color="#00ffaa" transparent opacity={0.9} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
+      </mesh>
     </group>
   );
 });
 
-export const GhostTraffic = React.memo(({ roads }: { roads: any[] }) => {
+interface TrafficRoute {
+  pts: THREE.Vector3[];   // polyline the cars follow (roads: 2 pts, overpasses: sampled deck path)
+  cum: number[];          // cumulative arclength at each point
+  length: number;
+  width: number;
+}
+
+const TRAFFIC_COLORS = [new THREE.Color('#00ffaa'), new THREE.Color('#ff7744'), new THREE.Color('#ffe566')];
+
+export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any[]; overpasses?: any[] }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  
-  // Calculate total road length and weights
-  const roadWeights = useMemo(() => {
+
+  // Flat roads + elevated overpass decks unified into arclength-parameterised routes
+  const { routes, weights, totalLength } = useMemo(() => {
+    const routes: TrafficRoute[] = [];
+    // Chain contiguous segments into whole streets so cars don't fade at every segment
+    chainRoadPolylines(roads).forEach(chain => {
+      routes.push({
+        // y=0.18 — road surface is at 0.05, car half-height is 0.11, sit above it
+        pts: chain.points.map(p => new THREE.Vector3(p.x, 0.18, p.z)),
+        cum: [], length: 0, width: chain.width,
+      });
+    });
+    overpasses.forEach(o => {
+      const pts = parseOverpassPoints(o.points);
+      if (pts.length < 2) return;
+      const sampled = sampleOverpassPath(pts, { height: o.height, rampLength: o.ramp_length }, roads);
+      if (sampled.length < 2) return;
+      // 0.25 = half deck thickness, +0.08 to float just above the surface
+      routes.push({
+        pts: sampled.map(s => new THREE.Vector3(s.x, s.y + 0.33, s.z)),
+        cum: [], length: 0, width: o.width || 4,
+      });
+    });
     const weights: number[] = [];
     let totalLength = 0;
-    roads.forEach(r => {
-      const len = Math.sqrt((r.x2 - r.x1)**2 + (r.z2 - r.z1)**2);
-      totalLength += len;
+    routes.forEach(rt => {
+      rt.cum = [0];
+      for (let i = 1; i < rt.pts.length; i++) rt.cum.push(rt.cum[i - 1] + rt.pts[i].distanceTo(rt.pts[i - 1]));
+      rt.length = rt.cum[rt.cum.length - 1];
+      totalLength += rt.length;
       weights.push(totalLength);
     });
-    return { weights, totalLength };
-  }, [roads]);
+    return { routes, weights, totalLength };
+  }, [roads, overpasses]);
 
-  const packetCount = Math.min(Math.floor(roadWeights.totalLength * 0.4), 600); // Density-based count
+  const packetCount = Math.min(Math.floor(totalLength * 0.4), 600); // Density-based count
   const tempObj = new THREE.Object3D();
+  const tempColor = new THREE.Color();
 
-  const getRandomRoadIndex = () => {
-    const r = Math.random() * roadWeights.totalLength;
-    return roadWeights.weights.findIndex(w => w >= r);
+  const getRandomRouteIndex = () => {
+    const r = Math.random() * totalLength;
+    return weights.findIndex(w => w >= r);
   };
-  
+
   const packets = useMemo(() => {
     return Array.from({ length: packetCount }, () => ({
-      roadIndex: getRandomRoadIndex(),
+      routeIndex: getRandomRouteIndex(),
       progress: Math.random(),
       speed: 0.12 + Math.random() * 0.15, // Slightly slower, more consistent speed
       side: Math.random() > 0.5 ? 1 : -1,
       // 3 discrete lane slots per side for better separation
-      laneSlot: Math.floor(Math.random() * 3) 
+      laneSlot: Math.floor(Math.random() * 3),
+      carLength: 0.55 + Math.random() * 0.35, // varied vehicle sizes
+      colorIndex: Math.floor(Math.random() * TRAFFIC_COLORS.length), // mixed on both sides
     }));
-  }, [roads.length, packetCount, roadWeights]);
+  }, [routes.length, packetCount, weights]);
 
   useFrame((state, delta) => {
-    if (!meshRef.current || roads.length === 0) return;
+    if (!meshRef.current || routes.length === 0) return;
 
     packets.forEach((p, i) => {
-      const roadLen = Math.max(1, roadWeights.weights[p.roadIndex] - (p.roadIndex > 0 ? roadWeights.weights[p.roadIndex-1] : 0));
-      p.progress += delta * (p.speed / roadLen * 50);
-      
-      const r = roads[p.roadIndex];
-      if (!r) { p.roadIndex = getRandomRoadIndex(); return; }
+      const rt = routes[p.routeIndex];
+      if (!rt) { p.routeIndex = getRandomRouteIndex(); return; }
 
-      const p1 = new THREE.Vector3(r.x1, 0.07, r.z1);
-      const p2 = new THREE.Vector3(r.x2, 0.07, r.z2);
-      
-      const start = p.side === 1 ? p1 : p2;
-      const end = p.side === 1 ? p2 : p1;
-      const pos = start.clone().lerp(end, p.progress % 1);
-      
-      const roadDir = p2.clone().sub(p1).normalize();
-      const roadNormal = new THREE.Vector3(-roadDir.z, 0, roadDir.x);
-      
-      // Map 0,1,2 slots to offsets within the side
-      // r.width * 0.15, 0.25, 0.35
-      const laneOffset = (0.15 + (p.laneSlot * 0.12)) * r.width;
+      p.progress += delta * (p.speed / Math.max(1, rt.length) * 50);
+      const t = p.progress % 1;
+      // side === -1 drives the polyline in reverse
+      const s = (p.side === 1 ? t : 1 - t) * rt.length;
+
+      // Locate the segment containing arclength s
+      let seg = 1;
+      while (seg < rt.cum.length - 1 && rt.cum[seg] < s) seg++;
+      const segLen = Math.max(rt.cum[seg] - rt.cum[seg - 1], 0.001);
+      const local = (s - rt.cum[seg - 1]) / segLen;
+      const pos = rt.pts[seg - 1].clone().lerp(rt.pts[seg], local);
+
+      const segDir = rt.pts[seg].clone().sub(rt.pts[seg - 1]).normalize();
+      const travelDir = p.side === 1 ? segDir : segDir.clone().negate();
+      // Lane offset uses the horizontal normal so cars keep right on slopes too
+      const flatDir = new THREE.Vector3(segDir.x, 0, segDir.z).normalize();
+      const roadNormal = new THREE.Vector3(-flatDir.z, 0, flatDir.x);
+
+      // Map 0,1,2 slots to offsets within the side: width * 0.15, 0.27, 0.39
+      const laneOffset = (0.15 + (p.laneSlot * 0.12)) * rt.width;
       pos.add(roadNormal.multiplyScalar(laneOffset * p.side));
 
       tempObj.position.copy(pos);
-      tempObj.scale.set(0.7, 0.08, 0.25); // Slightly smaller for more "room"
-      
-      const travelDir = end.clone().sub(start).normalize();
+      tempObj.scale.set(p.carLength, 0.22, 0.3);
       tempObj.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), travelDir);
-      
+
       tempObj.updateMatrix();
       meshRef.current!.setMatrixAt(i, tempObj.matrix);
 
-      // Phasing out logic at the end of the road
-      const actualProgress = p.progress % 1;
-      let opacity = 0.7;
-      if (actualProgress > 0.8) {
-        opacity = 0.7 * (1 - (actualProgress - 0.8) / 0.2);
-      } else if (actualProgress < 0.2) {
-        opacity = 0.7 * (actualProgress / 0.2);
-      }
-      meshRef.current!.setColorAt(i, new THREE.Color("#00ffaa").multiplyScalar(opacity));
+      // Fade over a fixed world distance at the ends so long and short routes match
+      const fadeDist = Math.min(6, rt.length * 0.4);
+      const distIn = t * rt.length;
+      const distOut = (1 - t) * rt.length;
+      const opacity = Math.max(0, Math.min(1, distIn / fadeDist, distOut / fadeDist));
+      tempColor.copy(TRAFFIC_COLORS[p.colorIndex]).multiplyScalar(opacity);
+      meshRef.current!.setColorAt(i, tempColor);
 
       if (p.progress >= 1) {
         p.progress = 0;
-        p.roadIndex = getRandomRoadIndex();
+        p.routeIndex = getRandomRouteIndex();
       }
     });
-    
+
     meshRef.current.instanceMatrix.needsUpdate = true;
     if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[null as any, null as any, packetCount]} frustumCulled={false}>
+    <instancedMesh ref={meshRef} args={[null as any, null as any, packetCount]} frustumCulled={false} renderOrder={2}>
       <boxGeometry args={[1, 1, 1]} />
       <meshBasicMaterial transparent blending={THREE.AdditiveBlending} depthWrite={false} />
     </instancedMesh>
   );
 });
 
-const _p1 = new THREE.Vector3();
-const _p2 = new THREE.Vector3();
-const _pt = new THREE.Vector3();
-const _closest = new THREE.Vector3();
-const _line = new THREE.Line3();
-
-export const getClosestPointOnRoads = (x: number, z: number, roadsList: any[], maxSnapDistance = 15) => {
-    if (!roadsList || roadsList.length === 0) return { x, z };
-    
-    _pt.set(x, 0, z);
-    let minDistance = Infinity;
-    let closestX = x;
-    let closestZ = z;
-
-    for (let i = 0; i < roadsList.length; i++) {
-        const r = roadsList[i];
-        _p1.set(r.x1, 0, r.z1);
-        _p2.set(r.x2, 0, r.z2);
-        _line.set(_p1, _p2);
-        _line.closestPointToPoint(_pt, true, _closest);
-        
-        const dist = _closest.distanceTo(_pt);
-        if (dist < minDistance) {
-            minDistance = dist;
-            closestX = _closest.x;
-            closestZ = _closest.z;
-        }
+/** Find all segment IDs in the same connected chain as the clicked segment. */
+const findChainIds = (clickedId: number, roads: any[], tol = 0.5): number[] => {
+  const key = (x: number, z: number) => `${Math.round(x / tol)},${Math.round(z / tol)}`;
+  const nodeMap = new Map<string, number[]>();
+  roads.forEach(r => {
+    const k0 = key(r.x1, r.z1), k1 = key(r.x2, r.z2);
+    if (!nodeMap.has(k0)) nodeMap.set(k0, []);
+    if (!nodeMap.has(k1)) nodeMap.set(k1, []);
+    nodeMap.get(k0)!.push(r.id);
+    nodeMap.get(k1)!.push(r.id);
+  });
+  const segById = new Map(roads.map(r => [r.id, r]));
+  const visited = new Set<number>();
+  const queue = [clickedId];
+  while (queue.length) {
+    const id = queue.pop()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const seg = segById.get(id);
+    if (!seg) continue;
+    // Only walk through degree-2 nodes (straight road, no junction)
+    for (const nodeKey of [key(seg.x1, seg.z1), key(seg.x2, seg.z2)]) {
+      const neighbours = nodeMap.get(nodeKey) || [];
+      if (neighbours.length === 2) neighbours.forEach(nid => { if (!visited.has(nid)) queue.push(nid); });
     }
-
-    if (minDistance < maxSnapDistance) {
-        return { x: closestX, z: closestZ };
-    }
-    return { x, z };
+  }
+  return [...visited];
 };
+
+const segmentMatrix = (r: any, obj: THREE.Object3D) => {
+  const p1 = new THREE.Vector3(r.x1, 0.05, r.z1);
+  const p2 = new THREE.Vector3(r.x2, 0.05, r.z2);
+  const dist = p1.distanceTo(p2) + (r.width * 0.1);
+  obj.position.copy(p1.clone().lerp(p2, 0.5));
+  obj.scale.set(dist, r.width, 1);
+  obj.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), p2.clone().sub(p1).normalize());
+  obj.rotateX(-Math.PI / 2);
+};
+
+export const RoadEraser = React.memo(({ roads, overpasses = [], token, eraseMode, refreshRoads, refreshOverpasses }: {
+  roads: any[];
+  overpasses?: any[];
+  token: string;
+  eraseMode: 'segment' | 'path';
+  refreshRoads: () => void;
+  refreshOverpasses?: () => void;
+}) => {
+  const [hoveredRoadId, setHoveredRoadId] = useState<number | null>(null);
+  const [hoveredOverpassId, setHoveredOverpassId] = useState<number | null>(null);
+
+  const hoveredChain = useMemo(
+    () => (hoveredRoadId !== null && eraseMode === 'path') ? new Set(findChainIds(hoveredRoadId, roads)) : null,
+    [hoveredRoadId, eraseMode, roads]
+  );
+
+  const deleteRoadIds = async (ids: number[]) => {
+    await Promise.all(ids.map(id =>
+      fetch(`/api/roads/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    ));
+    refreshRoads();
+  };
+
+  const deleteOverpass = async (id: number) => {
+    await fetch(`/api/overpasses/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    refreshOverpasses?.();
+  };
+
+  // Build overpass deck tiles for each overpass so they're clickable in the scene
+  const overpassTiles = useMemo(() => {
+    return (overpasses || []).map(o => {
+      const pts = parseOverpassPoints(o.points);
+      if (pts.length < 2) return { id: o.id, tiles: [] };
+      const { tiles } = buildOverpassGeometry(pts, {
+        height: o.height, width: o.width,
+        rampLength: o.ramp_length, pillarSpacing: o.pillar_spacing,
+      }, roads);
+      return { id: o.id, tiles, width: o.width };
+    });
+  }, [overpasses, roads]);
+
+  return (
+    <group>
+      {/* Road segments */}
+      {roads.map(r => {
+        const isHovered = eraseMode === 'segment' ? r.id === hoveredRoadId : (hoveredChain?.has(r.id) ?? false);
+        const p1 = new THREE.Vector3(r.x1, 0.05, r.z1);
+        const p2 = new THREE.Vector3(r.x2, 0.05, r.z2);
+        const dist = p1.distanceTo(p2) + (r.width * 0.1);
+        const dir = p2.clone().sub(p1).normalize();
+        const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir);
+        const pitchQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+        return (
+          <mesh
+            key={`road-${r.id}`}
+            position={p1.clone().lerp(p2, 0.5)}
+            quaternion={quat.clone().multiply(pitchQ)}
+            scale={[dist, r.width, 1]}
+            onPointerOver={(e) => { e.stopPropagation(); setHoveredRoadId(r.id); setHoveredOverpassId(null); }}
+            onPointerOut={() => setHoveredRoadId(null)}
+            onClick={async (e) => {
+              e.stopPropagation();
+              const ids = eraseMode === 'path' ? findChainIds(r.id, roads) : [r.id];
+              await deleteRoadIds(ids);
+            }}
+          >
+            <planeGeometry args={[1, 1]} />
+            <meshBasicMaterial color={isHovered ? '#ff3300' : '#004411'} transparent opacity={isHovered ? 0.85 : 0.7} side={THREE.DoubleSide} />
+          </mesh>
+        );
+      })}
+
+      {/* Overpass deck tiles — whole overpass deletes on click */}
+      {overpassTiles.map(({ id, tiles, width }) =>
+        (tiles as any[]).map((t, ti) => {
+          const isHovered = id === hoveredOverpassId;
+          return (
+            <mesh
+              key={`op-${id}-${ti}`}
+              position={[t.x, t.y, t.z]}
+              rotation={new THREE.Euler(0, t.yaw, t.pitch, 'YZX')}
+              scale={[t.length, 0.5, width]}
+              onPointerOver={(e) => { e.stopPropagation(); setHoveredOverpassId(id); setHoveredRoadId(null); }}
+              onPointerOut={() => setHoveredOverpassId(null)}
+              onClick={async (e) => { e.stopPropagation(); await deleteOverpass(id); }}
+            >
+              <boxGeometry args={[1, 1, 1]} />
+              <meshBasicMaterial color={isHovered ? '#ff3300' : '#005522'} transparent opacity={isHovered ? 0.85 : 0.75} />
+            </mesh>
+          );
+        })
+      )}
+    </group>
+  );
+});
+
 
