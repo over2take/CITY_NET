@@ -228,6 +228,9 @@ db.serialize(() => {
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  db.run(`ALTER TABLE saved_maps ADD COLUMN overpasses_data TEXT`, () => {});
+  db.run(`ALTER TABLE saved_maps ADD COLUMN water_bodies_data TEXT`, () => {});
+
   db.run(`CREATE TABLE IF NOT EXISTS structure_prefabs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     classification TEXT NOT NULL,
