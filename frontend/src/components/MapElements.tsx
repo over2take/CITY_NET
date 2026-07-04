@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { resolveDeployHealth } from '../utils/rhombusHelpers';
 import { parseOverpassPoints, sampleOverpassPath } from '../utils/overpassHelpers';
+import { chainRoadPolylines } from '../utils/roadHelpers';
 
 export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token }: any) => {
   const { camera, gl, controls } = useThree();
@@ -464,10 +465,11 @@ export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any
   // Flat roads + elevated overpass decks unified into arclength-parameterised routes
   const { routes, weights, totalLength } = useMemo(() => {
     const routes: TrafficRoute[] = [];
-    roads.forEach(r => {
+    // Chain contiguous segments into whole streets so cars don't fade at every segment
+    chainRoadPolylines(roads).forEach(chain => {
       routes.push({
-        pts: [new THREE.Vector3(r.x1, 0.07, r.z1), new THREE.Vector3(r.x2, 0.07, r.z2)],
-        cum: [], length: 0, width: r.width || 4,
+        pts: chain.points.map(p => new THREE.Vector3(p.x, 0.07, p.z)),
+        cum: [], length: 0, width: chain.width,
       });
     });
     overpasses.forEach(o => {
@@ -550,13 +552,11 @@ export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any
       tempObj.updateMatrix();
       meshRef.current!.setMatrixAt(i, tempObj.matrix);
 
-      // Phasing out logic at the ends of the route
-      let opacity = 0.7;
-      if (t > 0.8) {
-        opacity = 0.7 * (1 - (t - 0.8) / 0.2);
-      } else if (t < 0.2) {
-        opacity = 0.7 * (t / 0.2);
-      }
+      // Fade over a fixed world distance at the ends so long and short routes match
+      const fadeDist = Math.min(6, rt.length * 0.4);
+      const distIn = t * rt.length;
+      const distOut = (1 - t) * rt.length;
+      const opacity = 0.7 * Math.max(0, Math.min(1, distIn / fadeDist, distOut / fadeDist));
       // Head/tail-light tint by travel direction
       tempColor.copy(p.side === 1 ? HEADLIGHT : TAILLIGHT).multiplyScalar(opacity);
       meshRef.current!.setColorAt(i, tempColor);

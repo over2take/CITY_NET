@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { consolidateRoads } from '../roadHelpers';
+import { consolidateRoads, chainRoadPolylines } from '../roadHelpers';
 
 const seg = (x1: number, z1: number, x2: number, z2: number, width = 4) => ({ x1, z1, x2, z2, width });
 
@@ -66,6 +66,37 @@ describe('consolidateRoads', () => {
     const input = [seg(12, 0, 50, 0)];
     const result = consolidateRoads(input, existing, 15);
     expect(result[0].x1).toBeCloseTo(10);
+  });
+
+  it('chains contiguous segments into one polyline route', () => {
+    const segs = [seg(0, 0, 10, 0), seg(10, 0, 20, 0), seg(20, 0, 30, 5)];
+    const routes = chainRoadPolylines(segs);
+    expect(routes).toHaveLength(1);
+    expect(routes[0].points).toHaveLength(4);
+    const xs = routes[0].points.map(p => p.x);
+    // One continuous walk end-to-end (either direction)
+    expect(Math.min(...xs)).toBe(0);
+    expect(Math.max(...xs)).toBe(30);
+  });
+
+  it('breaks chains at 3-way junctions', () => {
+    const segs = [
+      seg(0, 0, 10, 0),
+      seg(10, 0, 20, 0),
+      seg(10, 0, 10, 10), // branch off the shared node at (10,0)
+    ];
+    const routes = chainRoadPolylines(segs);
+    // The junction node has degree 3 → no chain passes through it
+    expect(routes.length).toBeGreaterThanOrEqual(2);
+    routes.forEach(r => expect(r.points.length).toBe(2));
+  });
+
+  it('keeps disconnected segments as separate routes and preserves width', () => {
+    const segs = [seg(0, 0, 10, 0, 6), seg(100, 100, 120, 100, 3)];
+    const routes = chainRoadPolylines(segs);
+    expect(routes).toHaveLength(2);
+    const widths = routes.map(r => r.width).sort();
+    expect(widths).toEqual([3, 6]);
   });
 
   it('preserves extra properties on segments', () => {
