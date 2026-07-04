@@ -12,14 +12,14 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   router.post('/', authenticate, (req, res) => {
-    const { points, height, width, ramp_length, pillar_spacing } = req.body;
+    const { points, height, width, ramp_length, ramp_length_start, ramp_length_end, pillar_spacing } = req.body;
     if (!points || height == null || width == null || ramp_length == null) {
       return res.status(400).json({ error: 'points, height, width, and ramp_length are required' });
     }
     const pointsJson = typeof points === 'string' ? points : JSON.stringify(points);
     db.run(
-      `INSERT INTO overpasses (points, height, width, ramp_length, pillar_spacing) VALUES (?, ?, ?, ?, ?)`,
-      [pointsJson, height, width, ramp_length, pillar_spacing ?? 12],
+      `INSERT INTO overpasses (points, height, width, ramp_length, ramp_length_start, ramp_length_end, pillar_spacing) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [pointsJson, height, width, ramp_length, ramp_length_start ?? null, ramp_length_end ?? null, pillar_spacing ?? 12],
       function (err) {
         if (err) return res.status(500).json({ error: err.message });
         recordAction('overpass_create', { id: this.lastID });
