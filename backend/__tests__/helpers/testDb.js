@@ -117,6 +117,31 @@ function makeTestDb() {
         password TEXT
       )`);
 
+      db.run(`CREATE TABLE player_accounts (
+        username TEXT PRIMARY KEY,
+        password_hash TEXT NOT NULL,
+        security_question TEXT,
+        security_answer_hash TEXT,
+        temp_password INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      db.run(`CREATE TABLE chat_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender TEXT NOT NULL,
+        text TEXT NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      db.run(`CREATE TABLE private_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender TEXT NOT NULL,
+        recipient TEXT NOT NULL,
+        text TEXT NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
       db.run(`CREATE TABLE sqlite_sequence (name TEXT, seq INTEGER)`, () => {
         // ignore error — it may already exist
         resolve(db);
