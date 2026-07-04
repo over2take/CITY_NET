@@ -47,6 +47,7 @@ import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic, RoadEraser } from './components/MapElements';
 import { Overpasses, OverpassPreview } from './components/Overpasses';
 import { Sidewalks } from './components/Sidewalks';
+import { AutoSignage } from './components/AutoSignage';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
@@ -215,6 +216,8 @@ function App() {
   const [drawingRoadWidth, setDrawingRoadWidth] = useState(2.4);
   const [roadLayerMode, setRoadLayerMode] = useState<'road' | 'overpass'>('road');
   const [renderSidewalks, setRenderSidewalks] = useState(true);
+  const [renderSignage, setRenderSignage] = useState(true);
+  const [signageDensity, setSignageDensity] = useState(1);
   const [overpassHeight, setOverpassHeight] = useState(8);
   const [overpassRampLength, setOverpassRampLength] = useState(20);
   const [overpassSplitRamps, setOverpassSplitRamps] = useState(false);
@@ -1361,6 +1364,10 @@ function App() {
                 setOverpassRampLengthEnd={setOverpassRampLengthEnd}
                 renderSidewalks={renderSidewalks}
                 setRenderSidewalks={setRenderSidewalks}
+                renderSignage={renderSignage}
+                setRenderSignage={setRenderSignage}
+                signageDensity={signageDensity}
+                setSignageDensity={setSignageDensity}
                 overpasses={overpasses}
                 refreshOverpasses={fetchOverpasses}
                 onRoadEraseModeChange={setRoadEraseMode}
@@ -1889,6 +1896,7 @@ function App() {
                 <GhostTraffic roads={roads} overpasses={overpasses} />
                 <Overpasses overpasses={overpasses} roads={roads} />
                 {renderSidewalks && <Sidewalks locations={locations} />}
+                {renderSignage && <AutoSignage locations={locations} density={signageDensity} />}
               </>
             )}
             {roadLayerMode === 'overpass' && roadTrail.length > 0 && (
