@@ -6,6 +6,7 @@ export function useMapData() {
   const [districts, setDistricts] = useState<District[]>([]);
   const [roads, setRoads] = useState<Road[]>([]);
   const [waterBodies, setWaterBodies] = useState<WaterBody[]>([]);
+  const [overpasses, setOverpasses] = useState<any[]>([]);
 
   const fetchLocations = useCallback(() => {
     fetch(`/api/locations?_t=${Date.now()}`)
@@ -35,18 +36,27 @@ export function useMapData() {
       .catch(err => console.error('Error fetching water:', err));
   }, []);
 
+  const fetchOverpasses = useCallback(() => {
+    fetch(`/api/overpasses?_t=${Date.now()}`)
+      .then(res => res.json())
+      .then(data => setOverpasses(data))
+      .catch(err => console.error('Error fetching overpasses:', err));
+  }, []);
+
   const fetchAll = useCallback(() => {
     fetchLocations();
     fetchDistricts();
     fetchRoads();
     fetchWaterBodies();
-  }, [fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies]);
+    fetchOverpasses();
+  }, [fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses]);
 
   return {
     locations, setLocations,
     districts, setDistricts,
     roads, setRoads,
     waterBodies, setWaterBodies,
-    fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchAll,
+    overpasses, setOverpasses,
+    fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchAll,
   };
 }

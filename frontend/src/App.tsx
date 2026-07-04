@@ -43,6 +43,7 @@ import { renderBaseGeometry } from './utils/threeHelpers';
 import { mergeRhombusHealthFromLocation, resolveDeployHealth } from './utils/rhombusHelpers';
 import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './components/Buildings';
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic } from './components/MapElements';
+import { Overpasses, OverpassPreview } from './components/Overpasses';
 import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
@@ -60,7 +61,7 @@ import { IS_SPECTATOR } from './streamerMode';
 
 function App() {
   const controlsRef = useRef<any>(null);
-  const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchAll } = useMapData();
+  const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchAll } = useMapData();
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
@@ -208,6 +209,9 @@ function App() {
   const [snapToGrid, setSnapToGrid] = useState(false);
     const [snapRotation, setSnapRotation] = useState(false);
   const [drawingRoadWidth, setDrawingRoadWidth] = useState(2.4);
+  const [roadLayerMode, setRoadLayerMode] = useState<'road' | 'overpass'>('road');
+  const [overpassHeight, setOverpassHeight] = useState(8);
+  const [overpassRampLength, setOverpassRampLength] = useState(20);
   const [citySectionType, setCitySectionType] = useState<'MIXED' | 'CORPO' | 'URBAN' | 'SLUMS' | 'INDUSTRIAL'>('MIXED');
   const [genExcludeRoads, setGenExcludeRoads] = useState(false);
   const [rhombusState, setRhombusState] = useState(() => {
@@ -566,6 +570,7 @@ function App() {
     onFetchGlobalSettings: fetchGlobalSettings,
     onFetchLocations: fetchLocations,
     onFetchRoads: fetchRoads,
+    onFetchOverpasses: fetchOverpasses,
     onFetchDistricts: fetchDistricts,
     onFetchWaterBodies: fetchWaterBodies,
     onFetchBattleMaps: fetchCurrentLocBattleMaps,
@@ -1321,6 +1326,13 @@ function App() {
                   setSnapRotation={setSnapRotation}
                 drawingRoadWidth={drawingRoadWidth}
                 setDrawingRoadWidth={setDrawingRoadWidth}
+                roadLayerMode={roadLayerMode}
+                setRoadLayerMode={setRoadLayerMode}
+                overpassHeight={overpassHeight}
+                setOverpassHeight={setOverpassHeight}
+                overpassRampLength={overpassRampLength}
+                setOverpassRampLength={setOverpassRampLength}
+                refreshOverpasses={fetchOverpasses}
                 isGeneratingMap={isGeneratingMap}
                 setIsGeneratingMap={setIsGeneratingMap}
                 citySectionType={citySectionType}
@@ -1839,7 +1851,17 @@ function App() {
               <>
                 <Roads roads={roads} />
                 <GhostTraffic roads={roads} />
+                <Overpasses overpasses={overpasses} roads={roads} />
               </>
+            )}
+            {roadLayerMode === 'overpass' && roadTrail.length > 0 && (
+              <OverpassPreview
+                trail={roadTrail}
+                height={overpassHeight}
+                width={drawingRoadWidth}
+                rampLength={overpassRampLength}
+                roads={roads}
+              />
             )}
             <WaterBodies waterBodies={waterBodies} />
             <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} />

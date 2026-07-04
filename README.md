@@ -150,6 +150,7 @@ CITY_NET/
 │   │   ├── maps.js             # Saved map snapshots; preserves only rhombus tokens on load/clear — all structures are map-scoped
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload
 │   │   ├── roads.js            # Road CRUD
+│   │   ├── overpasses.js       # Overpass CRUD (GET all / POST one / DELETE :id)
 │   │   └── player.js           # Player auth (register, login, forgot, reset, registration status poll)
 │   ├── sockets/
 │   │   └── index.js            # All Socket.IO event handlers
@@ -159,7 +160,9 @@ CITY_NET/
 │       ├── helpers/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
 │       ├── locations.global.test.js    # Custom structure global persistence tests
-│       └── maps.global.test.js         # Map load/clear global preservation tests
+│       ├── maps.global.test.js         # Map load/clear global preservation tests
+│       ├── roads.test.js               # Road API (GET / POST / DELETE)
+│       └── overpasses.test.js          # Overpass API (GET / POST / DELETE :id, 400 validation)
 │
 ├── frontend/
 │   ├── src/
@@ -173,6 +176,7 @@ CITY_NET/
 │   │   │   ├── DiceTray.tsx            # Dice roller
 │   │   │   ├── Buildings.tsx           # 3D building meshes
 │   │   │   ├── Rhombuses.tsx           # Player token meshes
+│   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays
 │   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools
 │   │   │   ├── SecureLogin.tsx         # Player login, registration, password reset UI; polls registration status until approved
@@ -194,12 +198,14 @@ CITY_NET/
 │   │   ├── hooks/
 │   │   │   ├── useSocket.ts    # Socket.IO connection and all event listeners
 │   │   │   ├── useApi.ts       # Fetch helpers
-│   │   │   └── useMapData.ts   # Location/district/road data fetching
+│   │   │   └── useMapData.ts   # Location/district/road/overpass data fetching
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
 │   │   └── utils/
 │   │       ├── locationHelpers.ts  # Location geometry utilities; exports ZONE_TYPE_NAMES and isUserDefinedName
 │   │       ├── rhombusHelpers.ts   # Player token position math
 │   │       ├── threeHelpers.tsx    # Three.js scene utilities
+│   │       ├── roadHelpers.ts      # consolidateRoads — snaps new segments to existing road nodes/projections, deduplicates
+│   │       ├── overpassHelpers.ts  # Elevation profile, deck tile subdivision, pillar placement with road-avoidance
 │   │       └── __tests__/
 │   │           └── locationHelpers.test.ts  # Unit tests for isUserDefinedName and getStructLabel
 │   └── public/                 # Static assets (audio, icons)
