@@ -184,6 +184,15 @@ module.exports = (db, io) => {
     });
   });
 
+  // Player: poll own registration status while waiting for approval
+  router.get('/players/status/:username', (req, res) => {
+    db.get("SELECT status FROM player_accounts WHERE username = ?", [req.params.username], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      res.json({ status: row.status });
+    });
+  });
+
   // Admin: list pending registrations
   router.get('/admin/players/pending', authenticate, (req, res) => {
     db.all("SELECT username, created_at FROM player_accounts WHERE status = 'pending' ORDER BY created_at ASC", (err, rows) => {

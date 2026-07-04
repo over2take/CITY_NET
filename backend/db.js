@@ -170,6 +170,43 @@ db.serialize(() => {
 
   db.run(`ALTER TABLE locations ADD COLUMN melee_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN ranged_ac INTEGER`, (err) => {});
+  db.run(`ALTER TABLE locations ADD COLUMN is_global INTEGER DEFAULT 0`, (err) => {});
+
+  db.run(`ALTER TABLE custom_structure_library ADD COLUMN melee_ac INTEGER`, (err) => {});
+  db.run(`ALTER TABLE custom_structure_library ADD COLUMN ranged_ac INTEGER`, (err) => {});
+
+  db.run(`CREATE TABLE IF NOT EXISTS custom_structure_library (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    npcs TEXT,
+    x REAL,
+    y REAL,
+    z REAL,
+    width REAL,
+    height REAL,
+    depth REAL,
+    shape TEXT,
+    color TEXT,
+    district_name TEXT,
+    district_color TEXT,
+    parent_id INTEGER,
+    isFavorite INTEGER DEFAULT 0,
+    isDanger INTEGER DEFAULT 0,
+    rotation REAL DEFAULT 0,
+    rotation_x REAL DEFAULT 0,
+    rotation_z REAL DEFAULT 0,
+    classification TEXT,
+    polyCount INTEGER DEFAULT 5,
+    hp_current INTEGER,
+    hp_max INTEGER,
+    hp_temp INTEGER,
+    map_scale_multiplier REAL DEFAULT 5,
+    melee_ac INTEGER,
+    ranged_ac INTEGER,
+    injuries TEXT DEFAULT '{}',
+    saved_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
 
   db.run(`ALTER TABLE dice_rolls ADD COLUMN historyString TEXT`, (err) => {});
 

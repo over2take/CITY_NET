@@ -37,6 +37,29 @@ export function SecureLogin({
   const [tempUserName, setTempUserName] = useState('');
   const [loginError, setLoginError] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingUsername = useRef<string>('');
+
+  // Poll registration status while waiting for admin approval
+  useEffect(() => {
+    if (loginView !== 'pending' || !pendingUsername.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/player/players/status/${encodeURIComponent(pendingUsername.current)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === 'approved') {
+          clearInterval(pollRef.current!);
+          setLoginView('login');
+          setLoginError('');
+        } else if (data.status === 'denied' || data.status === undefined) {
+          clearInterval(pollRef.current!);
+          setLoginError('Your registration was denied. Please contact your GM.');
+          setLoginView('login');
+        }
+      } catch { /* network hiccup — try again next tick */ }
+    }, 3000);
+    return () => clearInterval(pollRef.current!);
+  }, [loginView]);
 
   // Poll for admin approval when in awaiting state
   useEffect(() => {
@@ -107,6 +130,7 @@ export function SecureLogin({
     const res = await fetch('/api/player/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rest, security_question: finalQuestion }) });
     const data = await res.json();
     if (!res.ok) return setLoginError(data.error || 'Registration failed');
+    pendingUsername.current = registerForm.username.trim();
     setLoginView('pending');
   };
 
