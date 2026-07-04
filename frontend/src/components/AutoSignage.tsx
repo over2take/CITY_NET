@@ -75,35 +75,60 @@ const getCompoundBounds = (root: SignageLocation, children: SignageLocation[]): 
 
 // ─── Sign placement ──────────────────────────────────────────────────────────
 
+const SIGN_MIN_GAP = 0.4; // minimum world-unit gap between sign edges
+
+const signsOverlap = (a: SignDef, b: SignDef): boolean => {
+  const dx = Math.abs(a.x - b.x), dz = Math.abs(a.z - b.z), dy = Math.abs(a.y - b.y);
+  const minX = (a.w + b.w) / 2 + SIGN_MIN_GAP;
+  const minY = (a.h + b.h) / 2 + SIGN_MIN_GAP;
+  // signs on different faces (normals differ) can't overlap
+  if (Math.abs(a.rotY - b.rotY) > 0.1) return false;
+  return dx < minX && dz < minX && dy < minY;
+};
+
 const placeSigns = (loc: SignageLocation, children: SignageLocation[], rand: () => number, density: number): SignDef[] => {
   const signs: SignDef[] = [];
   const bounds = getCompoundBounds(loc, children);
   const { cx, cz, w, d, maxH, baseY } = bounds;
   const hw = w / 2, hd = d / 2;
+  // lateral axis for each face: [lx, lz] direction along the face width
   const faces = [
-    { rotY: 0,            ox: 0,   oz: hd,  faceW: w, faceH: maxH },
-    { rotY: Math.PI,      ox: 0,   oz: -hd, faceW: w, faceH: maxH },
-    { rotY: Math.PI / 2,  ox: -hw, oz: 0,   faceW: d, faceH: maxH },
-    { rotY: -Math.PI / 2, ox: hw,  oz: 0,   faceW: d, faceH: maxH },
+    { rotY: 0,            ox: 0,   oz: hd,  faceW: w, faceH: maxH, lx: 1, lz: 0 },
+    { rotY: Math.PI,      ox: 0,   oz: -hd, faceW: w, faceH: maxH, lx: 1, lz: 0 },
+    { rotY: Math.PI / 2,  ox: -hw, oz: 0,   faceW: d, faceH: maxH, lx: 0, lz: 1 },
+    { rotY: -Math.PI / 2, ox: hw,  oz: 0,   faceW: d, faceH: maxH, lx: 0, lz: 1 },
   ];
   const count = Math.max(1, Math.round(density * (1 + rand() * 3)));
+  const yaw = loc.rotation ?? 0;
+  const cos = Math.cos(yaw), sin = Math.sin(yaw);
+
   for (let i = 0; i < count; i++) {
     const face = faces[Math.floor(rand() * faces.length)];
-    const signW = Math.min(face.faceW * (0.3 + rand() * 0.4), 4);
+    const signW = Math.min(face.faceW * (0.2 + rand() * 0.35), 4);
     const signH = signW * (0.3 + rand() * 0.4);
-    const yOffset = rand() * (maxH * 0.5); // upper half of wall
-    const yaw = loc.rotation ?? 0;
-    const cos = Math.cos(yaw), sin = Math.sin(yaw);
-    const ox = face.ox, oz = face.oz;
-    signs.push({
+    // jitter laterally within the face, keeping sign inside bounds
+    const maxLateral = Math.max(0, face.faceW / 2 - signW / 2);
+    const lateral = (rand() - 0.5) * 2 * maxLateral;
+    // random height in upper 60% of wall
+    const yOffset = maxH * 0.4 + rand() * (maxH * 0.5);
+
+    const ox = face.ox + face.lx * lateral;
+    const oz = face.oz + face.lz * lateral;
+
+    const candidate: SignDef = {
       x: cx + cos * ox - sin * oz,
-      y: baseY + maxH / 2 + yOffset,
+      y: baseY + yOffset,
       z: cz + sin * ox + cos * oz,
       rotY: face.rotY + yaw,
       w: signW, h: signH,
       type: SIGN_TYPES[Math.floor(rand() * SIGN_TYPES.length)],
       seed: Math.floor(rand() * 0xffff),
-    });
+    };
+
+    // skip if it overlaps an already-placed sign
+    if (!signs.some(s => signsOverlap(s, candidate))) {
+      signs.push(candidate);
+    }
   }
   return signs;
 };
