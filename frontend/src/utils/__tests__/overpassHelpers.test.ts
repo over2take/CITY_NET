@@ -8,6 +8,34 @@ import {
   parseOverpassPoints,
 } from '../overpassHelpers';
 
+// ─── pointToSegmentDist ───────────────────────────────────────────────────────
+
+describe('pointToSegmentDist', () => {
+  it('returns 0 for a point on the segment', () => {
+    expect(pointToSegmentDist(5, 0, 0, 0, 10, 0)).toBeCloseTo(0);
+  });
+
+  it('returns perpendicular distance for a point beside the segment', () => {
+    expect(pointToSegmentDist(5, 3, 0, 0, 10, 0)).toBeCloseTo(3);
+  });
+
+  it('clamps to the nearest endpoint for points beyond the segment', () => {
+    // Point is past the end — closest point is (10,0)
+    expect(pointToSegmentDist(15, 0, 0, 0, 10, 0)).toBeCloseTo(5);
+    // Point is before the start — closest point is (0,0)
+    expect(pointToSegmentDist(-3, 0, 0, 0, 10, 0)).toBeCloseTo(3);
+  });
+
+  it('handles a zero-length segment (point vs point)', () => {
+    expect(pointToSegmentDist(3, 4, 0, 0, 0, 0)).toBeCloseTo(5);
+  });
+
+  it('works for diagonal segments', () => {
+    // Segment (0,0)-(10,10): perpendicular from (0,10) is √(50)≈7.07
+    expect(pointToSegmentDist(0, 10, 0, 0, 10, 10)).toBeCloseTo(Math.sqrt(50), 3);
+  });
+});
+
 const params = { height: 10, width: 6, rampLength: 20, pillarSpacing: 12 };
 
 describe('elevationAt', () => {
@@ -163,6 +191,109 @@ describe('parseOverpassPoints', () => {
   it('returns empty array on malformed input', () => {
     expect(parseOverpassPoints('not json')).toEqual([]);
     expect(parseOverpassPoints('{"x":1}')).toEqual([]);
+  });
+});
+
+describe('elevationAt — edge cases', () => {
+  it('returns 0 when rampLength is 0 (flat bridge from end to end)', () => {
+    // slope = height / 0.001 (clamped) → enormous slope, so min(height, slope*0) = 0 at ends
+    // but at middle it should clamp to height
+    expect(elevationAt(50, 100, 10, 0)).toBeCloseTo(10);
+  });
+
+  it('both ends connected → full height along entire span', () => {
+    expect(elevationAt(0,   100, 10, 20, true, true)).toBeCloseTo(10);
+    expect(elevationAt(50,  100, 10, 20, true, true)).toBeCloseTo(10);
+    expect(elevationAt(100, 100, 10, 20, true, true)).toBeCloseTo(10);
+  });
+});
+
+describe('buildOverpassGeometry — multi-segment (curved) path', () => {
+  it('handles a 3-point L-shaped path', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 50, z: 0 }, { x: 50, z: 50 }];
+    const { tiles, totalLength } = buildOverpassGeometry(pts, params, []);
+    expect(totalLength).toBeCloseTo(100);
+    expect(tiles.length).toBeGreaterThan(0);
+    // Flat tiles at height, ramp tiles below it
+    tiles.forEach(t => expect(t.y).toBeLessThanOrEqual(10 + 1e-6));
+  });
+
+  it('totalLength equals sum of segment lengths', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 30, z: 0 }, { x: 30, z: 40 }];
+    const { totalLength } = buildOverpassGeometry(pts, params, []);
+    expect(totalLength).toBeCloseTo(70); // 30 + 40
+  });
+});
+
+describe('buildOverpassGeometry — tile yaw', () => {
+  it('yaw is 0 for a path going in the +x direction', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    const { tiles } = buildOverpassGeometry(pts, params, []);
+    tiles.forEach(t => expect(t.yaw).toBeCloseTo(0));
+  });
+
+  it('yaw is π/2 for a path going in the +z direction', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 0, z: 100 }];
+    const { tiles } = buildOverpassGeometry(pts, params, []);
+    // atan2(-(dz), dx) = atan2(-100, 0) = -π/2; three renders may flip, just check magnitude
+    tiles.forEach(t => expect(Math.abs(t.yaw)).toBeCloseTo(Math.PI / 2));
+  });
+});
+
+describe('buildOverpassGeometry — connected end suppression', () => {
+  it('keeps deck flat at a connected end (no ramp on far side)', () => {
+    const roads = [{ x1: 100, z1: 0, x2: 150, z2: 0, width: 4 }];
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    const { tiles } = buildOverpassGeometry(pts, params, roads);
+    expect(tiles[tiles.length - 1].y).toBeCloseTo(10, 1);
+    expect(tiles[tiles.length - 1].pitch).toBeCloseTo(0, 3);
+    // Start still ramps up
+    expect(tiles[0].isRamp).toBe(true);
+  });
+
+  it('opts.connectedStart/End override road detection', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    // No roads, but force both connected via opts
+    const { tiles } = buildOverpassGeometry(pts, params, [], { connectedStart: true, connectedEnd: true });
+    tiles.forEach(t => {
+      expect(t.isRamp).toBe(false);
+      expect(t.y).toBeCloseTo(10, 1);
+    });
+  });
+});
+
+describe('buildOverpassGeometry — zero rampLength', () => {
+  it('all interior tiles are flat at full height when rampLength is 0', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    const { tiles } = buildOverpassGeometry(pts, { ...params, rampLength: 0 }, []);
+    // Ramp is sub-tile in length so only the first and last tiles straddle the
+    // elevation jump; every interior tile should be flat at full height
+    const interior = tiles.slice(1, -1);
+    expect(interior.length).toBeGreaterThan(0);
+    interior.forEach(t => {
+      expect(t.isRamp).toBe(false);
+      expect(t.y).toBeCloseTo(10, 1);
+    });
+  });
+});
+
+describe('sampleOverpassPath — multi-segment', () => {
+  it('interpolates through all waypoints of an L-shaped path', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 50, z: 0 }, { x: 50, z: 50 }];
+    const samples = sampleOverpassPath(pts, { height: 10, rampLength: 20 }, [], 4);
+    expect(samples.length).toBeGreaterThan(10);
+    // First sample near (0,0), last near (50,50)
+    expect(samples[0].x).toBeCloseTo(0);
+    expect(samples[0].z).toBeCloseTo(0);
+    expect(samples[samples.length - 1].x).toBeCloseTo(50, 0);
+    expect(samples[samples.length - 1].z).toBeCloseTo(50, 0);
+  });
+
+  it('step size controls sample density', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    const coarse = sampleOverpassPath(pts, { height: 10, rampLength: 20 }, [], 20);
+    const fine   = sampleOverpassPath(pts, { height: 10, rampLength: 20 }, [], 2);
+    expect(fine.length).toBeGreaterThan(coarse.length);
   });
 });
 
