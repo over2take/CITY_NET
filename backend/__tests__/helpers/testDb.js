@@ -60,12 +60,23 @@ function makeTestDb() {
         x1 REAL, z1 REAL, x2 REAL, z2 REAL, width REAL
       )`);
 
+      db.run(`CREATE TABLE overpasses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        points TEXT NOT NULL,
+        height REAL NOT NULL,
+        width REAL NOT NULL,
+        ramp_length REAL NOT NULL,
+        pillar_spacing REAL DEFAULT 12
+      )`);
+
       db.run(`CREATE TABLE saved_maps (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL,
         locations_data TEXT,
         districts_data TEXT,
         roads_data TEXT,
+        overpasses_data TEXT,
+        water_bodies_data TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
@@ -85,6 +96,25 @@ function makeTestDb() {
         melee_ac INTEGER, ranged_ac INTEGER,
         injuries TEXT DEFAULT '{}',
         saved_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      db.run(`CREATE TABLE water_bodies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        points_json TEXT NOT NULL,
+        map_scale_multiplier TEXT DEFAULT '[1]'
+      )`);
+
+      db.run(`CREATE TABLE action_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      db.run(`CREATE TABLE admin (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT
       )`);
 
       db.run(`CREATE TABLE sqlite_sequence (name TEXT, seq INTEGER)`, () => {

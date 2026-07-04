@@ -2,6 +2,10 @@
 
 A real-time 3D city map for tabletop RPG sessions. The GM builds and manages the city; players connect and explore it live. Built with React + Three.js on the front, Node.js + SQLite on the back, and Socket.IO stitching it all together.
 
+If CITY_NET adds something to your table, please consider supporting the creator:
+
+[![Support on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/over2take)
+
 ---
 
 ## For Game Masters — Getting Started
@@ -147,9 +151,10 @@ CITY_NET/
 │   │   ├── admin.js            # Admin-only REST endpoints
 │   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only)
 │   │   ├── battle_maps.js      # Battle map image upload/management
-│   │   ├── maps.js             # Saved map snapshots; preserves only rhombus tokens on load/clear — all structures are map-scoped
+│   │   ├── maps.js             # Saved map snapshots (locations, districts, roads, overpasses, water bodies); preserves only rhombus tokens on load/clear
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload
-│   │   ├── roads.js            # Road CRUD
+│   │   ├── roads.js            # Road CRUD; DELETE /:id removes a single segment
+│   │   ├── overpasses.js       # Overpass CRUD (GET all / POST one / DELETE :id)
 │   │   └── player.js           # Player auth (register, login, forgot, reset, registration status poll)
 │   ├── sockets/
 │   │   └── index.js            # All Socket.IO event handlers
@@ -159,7 +164,10 @@ CITY_NET/
 │       ├── helpers/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
 │       ├── locations.global.test.js    # Custom structure global persistence tests
-│       └── maps.global.test.js         # Map load/clear global preservation tests
+│       ├── maps.global.test.js         # Map load/clear global preservation tests
+│       ├── roads.test.js               # Road API (GET / POST / DELETE / DELETE :id)
+│       ├── overpasses.test.js          # Overpass API (GET / POST / DELETE :id, 400 validation)
+│       └── undo.test.js                # Undo endpoint (all action types, auth, ordering)
 │
 ├── frontend/
 │   ├── src/
@@ -173,7 +181,8 @@ CITY_NET/
 │   │   │   ├── DiceTray.tsx            # Dice roller
 │   │   │   ├── Buildings.tsx           # 3D building meshes
 │   │   │   ├── Rhombuses.tsx           # Player token meshes
-│   │   │   ├── MapElements.tsx         # Roads, water, overlays
+│   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
+│   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
 │   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools
 │   │   │   ├── SecureLogin.tsx         # Player login, registration, password reset UI; polls registration status until approved
 │   │   │   ├── CityDatabase.tsx        # Location search/browse
@@ -194,15 +203,19 @@ CITY_NET/
 │   │   ├── hooks/
 │   │   │   ├── useSocket.ts    # Socket.IO connection and all event listeners
 │   │   │   ├── useApi.ts       # Fetch helpers
-│   │   │   └── useMapData.ts   # Location/district/road data fetching
+│   │   │   └── useMapData.ts   # Location/district/road/overpass/water body data fetching
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
 │   │   └── utils/
 │   │       ├── locationHelpers.ts  # Location geometry utilities; exports ZONE_TYPE_NAMES and isUserDefinedName
 │   │       ├── rhombusHelpers.ts   # Player token position math
 │   │       ├── threeHelpers.tsx    # Three.js scene utilities
+│   │       ├── roadHelpers.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry, getClosestPointOnRoads
+│   │       ├── overpassHelpers.ts  # Elevation profile, deck tile subdivision, pillar placement with road-avoidance
 │   │       └── __tests__/
-│   │           └── locationHelpers.test.ts  # Unit tests for isUserDefinedName and getStructLabel
-│   └── public/                 # Static assets (audio, icons)
+│   │           ├── locationHelpers.test.ts  # Unit tests for isUserDefinedName and getStructLabel
+│   │           ├── roadHelpers.test.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry
+│   │           └── overpassHelpers.test.ts  # Elevation, geometry, and path-sampling tests
+│   └── public/                 # Static assets (audio, icons, kofi.png)
 │
 ├── docs/                       # Reference docs (deployment plans, feature notes)
 ├── Dockerfile.backend
@@ -228,6 +241,8 @@ CITY_NET/
 - **`useSocket.ts` owns all socket subscriptions.** Adding a new real-time event means adding it there and nowhere else.
 - **`DraggableWindow` is the UI primitive.** Every floating panel wraps it.
 - **Inline SVG components instead of `<img>` tags** for icons that need CSS-variable colour control.
+- **Roads are chained into continuous ribbons, not per-segment quads.** `chainRoadPolylines` walks degree-2 nodes into full street polylines; `buildRoadRibbonGeometry` builds a single mitered-joint mesh per street so bends render seamlessly. Ghost traffic uses the same chains.
+- **Undo is action-history driven.** Mutating operations push a typed payload to `action_history`; `POST /api/admin/undo` pops the latest entry and reverses it in a single `db.serialize` block.
 - **Secure Mode is a pure opt-in.** When `SECURE_MODE=false`, the player auth routes return 404 and the frontend shows the simple name-only login — existing behaviour is unchanged.
 - **Streamer mode is a read-only spectator client.** Append `?streamer=true` to the URL to open a broadcast-safe overlay view. The spectator socket role is invisible to presence/chat and all mutating events are blocked server-side. A `DirectorState` object is broadcast from admin to spectators over Socket.IO, controlling camera mode, visibility flags, scene title, and letterbox.
 
@@ -237,7 +252,7 @@ CITY_NET/
 
 1. Fork the repo and create a branch off `main`
 2. `npm run dev` (frontend) + `node server.js` (backend) for local development
-3. Run tests: `cd frontend && npm test`
+3. Run tests: `cd frontend && npm test` / `cd backend && npm test`
 4. Open a PR against `main` — describe what changed and why
 
 ---
