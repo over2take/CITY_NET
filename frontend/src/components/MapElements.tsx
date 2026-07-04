@@ -1,12 +1,14 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useMemo, useContext } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { resolveDeployHealth } from '../utils/rhombusHelpers';
 import { parseOverpassPoints, sampleOverpassPath, buildOverpassGeometry } from '../utils/overpassHelpers';
 import { chainRoadPolylines, buildRoadRibbonGeometry } from '../utils/roadHelpers';
+import { ThemeContext } from '../theme/themes';
 
 export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token, roadLayerMode }: any) => {
+  const theme = useContext(ThemeContext);
   const { camera, gl, controls } = useThree();
   const [dragStart, setDragStart] = useState<THREE.Vector3 | null>(null);
   const [dragEnd, setDragEnd] = useState<THREE.Vector3 | null>(null);
@@ -239,7 +241,7 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
       {dragStart && dragEnd && (
           <mesh position={[(dragStart.x + dragEnd.x) / 2, 0.1, (dragStart.z + dragEnd.z) / 2]}>
               <boxGeometry args={[Math.abs(dragEnd.x - dragStart.x), 0.1, Math.abs(dragEnd.z - dragStart.z)]} />
-              <meshBasicMaterial color="#ffff00" wireframe transparent opacity={0.5} />
+              <meshBasicMaterial color={theme.highlight} wireframe transparent opacity={0.5} />
           </mesh>
       )}
       {view === 'draw_roads' && roadTrail && roadTrail.length > 0 && (
@@ -257,7 +259,7 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
                               <group key={i} position={roadPos} onUpdate={(self) => self.lookAt(pNext)}>
                                   <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]}>
                                       <planeGeometry args={[dist, drawingRoadWidth]} />
-                                      <meshBasicMaterial color="#ffff00" transparent opacity={0.4} side={THREE.DoubleSide} />
+                                      <meshBasicMaterial color={theme.highlight} transparent opacity={0.4} side={THREE.DoubleSide} />
                                   </mesh>
                               </group>
                           );
@@ -279,7 +281,7 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
                       <group key={i} position={linePos} onUpdate={(self) => self.lookAt(pNext)}>
                           <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]}>
                               <planeGeometry args={[dist, 0.5]} />
-                              <meshBasicMaterial color="#0088ff" transparent opacity={0.6} side={THREE.DoubleSide} />
+                              <meshBasicMaterial color={theme.friendly} transparent opacity={0.6} side={THREE.DoubleSide} />
                           </mesh>
                       </group>
                   );
@@ -289,7 +291,7 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
                   <group position={waterTrail[waterTrail.length - 1].clone().lerp(waterTrail[0], 0.5)} onUpdate={(self) => self.lookAt(waterTrail[0])}>
                       <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]}>
                           <planeGeometry args={[waterTrail[waterTrail.length - 1].distanceTo(waterTrail[0]), 0.5]} />
-                          <meshBasicMaterial color="#0088ff" transparent opacity={0.3} side={THREE.DoubleSide} />
+                          <meshBasicMaterial color={theme.friendly} transparent opacity={0.3} side={THREE.DoubleSide} />
                       </mesh>
                   </group>
               )}
@@ -402,6 +404,7 @@ export const WaterBodies = React.memo(({ waterBodies }: { waterBodies: any[] }) 
 });
 
 export const Roads = React.memo(({ roads }: { roads: any[] }) => {
+  const theme = useContext(ThemeContext);
   const coreMatRef = useRef<THREE.MeshBasicMaterial>(null);
 
   useFrame((state) => {
@@ -426,12 +429,12 @@ export const Roads = React.memo(({ roads }: { roads: any[] }) => {
     <group>
       {/* Road Base - Vibrant Cyber Green */}
       <mesh geometry={baseGeo} position={[0, 0.05, 0]} frustumCulled={false}>
-        <meshBasicMaterial color="#004411" transparent opacity={0.7} side={THREE.DoubleSide} />
+        <meshBasicMaterial color={theme.border} transparent opacity={0.7} side={THREE.DoubleSide} />
       </mesh>
 
       {/* Road Core - Pulsing Neon Link */}
       <mesh geometry={coreGeo} position={[0, 0.06, 0]} frustumCulled={false}>
-        <meshBasicMaterial ref={coreMatRef} color="#00ffaa" transparent opacity={0.9} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
+        <meshBasicMaterial ref={coreMatRef} color={theme.highlight} transparent opacity={0.9} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
       </mesh>
     </group>
   );
@@ -614,6 +617,7 @@ export const RoadEraser = React.memo(({ roads, overpasses = [], token, eraseMode
   refreshRoads: () => void;
   refreshOverpasses?: () => void;
 }) => {
+  const theme = useContext(ThemeContext);
   const [hoveredRoadId, setHoveredRoadId] = useState<number | null>(null);
   const [hoveredOverpassId, setHoveredOverpassId] = useState<number | null>(null);
 
@@ -673,7 +677,7 @@ export const RoadEraser = React.memo(({ roads, overpasses = [], token, eraseMode
             }}
           >
             <planeGeometry args={[1, 1]} />
-            <meshBasicMaterial color={isHovered ? '#ff3300' : '#004411'} transparent opacity={isHovered ? 0.85 : 0.7} side={THREE.DoubleSide} />
+            <meshBasicMaterial color={isHovered ? theme.danger : theme.border} transparent opacity={isHovered ? 0.85 : 0.7} side={THREE.DoubleSide} />
           </mesh>
         );
       })}
@@ -693,7 +697,7 @@ export const RoadEraser = React.memo(({ roads, overpasses = [], token, eraseMode
               onClick={async (e) => { e.stopPropagation(); await deleteOverpass(id); }}
             >
               <boxGeometry args={[1, 1, 1]} />
-              <meshBasicMaterial color={isHovered ? '#ff3300' : '#005522'} transparent opacity={isHovered ? 0.85 : 0.75} />
+              <meshBasicMaterial color={isHovered ? theme.danger : theme.border} transparent opacity={isHovered ? 0.85 : 0.75} />
             </mesh>
           );
         })

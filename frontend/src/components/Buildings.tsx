@@ -1,11 +1,13 @@
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect, useContext } from 'react';
 import * as THREE from 'three';
 import { Html, Bvh } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { isUserDefinedName } from '../utils/locationHelpers';
 import { renderBaseGeometry } from '../utils/threeHelpers';
+import { ThemeContext } from '../theme/themes';
 
 export const Building = React.memo(({ location, children, onClick, isSelected, isBatchSelected, isOverlapped, setTargetObject, editMeshRef, token, userName, refreshLocations, setIsDragging, isDragging, socket, activeUsers }: any) => {
+  const theme = useContext(ThemeContext);
   const meshRef = useRef<THREE.Mesh>(null);
   
   const parts = [location, ...(children || [])];
@@ -95,7 +97,7 @@ export const Building = React.memo(({ location, children, onClick, isSelected, i
               <mesh raycast={() => null}>
                 {renderBaseGeometry(p.shape, p.polyCount || 5)}
                 <meshBasicMaterial 
-                  color={isBatchSelected ? "#ffff00" : location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : hasData ? "#8800ff" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : "#00ff00")} 
+                  color={isBatchSelected ? theme.highlight : location.isDanger ? theme.danger : location.isFavorite ? theme.friendly : hasData ? "#8800ff" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : theme.primary)} 
                   wireframe={true} 
                 />
               </mesh>
@@ -104,7 +106,7 @@ export const Building = React.memo(({ location, children, onClick, isSelected, i
               <mesh raycast={() => null}>
                 {renderBaseGeometry(p.shape, p.polyCount || 5)}
                 <meshBasicMaterial 
-                  color={location.isDanger ? "#ff0000" : location.isFavorite ? "#ff7b00" : hasData ? "#8800ff" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : "#00ff00")} 
+                  color={location.isDanger ? theme.danger : location.isFavorite ? theme.friendly : hasData ? "#8800ff" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : theme.primary)} 
                   transparent={true}
                   opacity={(isSelected || isBatchSelected) ? 0.3 : (isOverlapped ? 0.0 : 0.05)}
                   depthTest={!isOverlapped}
@@ -118,6 +120,7 @@ export const Building = React.memo(({ location, children, onClick, isSelected, i
 });
 
 export const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect, isDragging }: { shape: string, polyCount: number, elements: any[], onSelect: (rootLoc: any) => void, isDragging?: boolean }) => {
+    const theme = useContext(ThemeContext);
     const wireframeMeshRef = useRef<THREE.InstancedMesh>(null);
     const fillMeshRef = useRef<THREE.InstancedMesh>(null);
     const hitMeshRef = useRef<THREE.InstancedMesh>(null);
@@ -130,22 +133,28 @@ export const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect
             tempObj.rotation.set(el.rotation_x || 0, el.rotation || 0, el.rotation_z || 0, 'YXZ');
             tempObj.scale.set(el.width, el.height, el.depth);
             tempObj.updateMatrix();
-            
+            hitMeshRef.current!.setMatrixAt(i, tempObj.matrix);
+
+            // Wireframe lines rasterize at 1px regardless of geometry size, so a
+            // 'none' shape still draws a visible dot unless scaled to zero
+            if (shape === 'none') {
+                tempObj.scale.set(0, 0, 0);
+                tempObj.updateMatrix();
+            }
             wireframeMeshRef.current!.setMatrixAt(i, tempObj.matrix);
             fillMeshRef.current!.setMatrixAt(i, tempObj.matrix);
-            hitMeshRef.current!.setMatrixAt(i, tempObj.matrix);
             
             const parentLoc = el.rootLoc || el;
             const hasData = isUserDefinedName(parentLoc.name) || 
                             (parentLoc.description && parentLoc.description.trim() !== "") || 
                             (parentLoc.npcs && parentLoc.npcs.trim() !== "");
             
-            let color = "#00ff00";
+            let color = theme.primary;
             if (parentLoc.district_color) color = parentLoc.district_color;
             if (el.color && el.color !== "#00ff00") color = el.color;
             if (hasData) color = "#8800ff";
-            if (parentLoc.isFavorite) color = "#ff7b00";
-            if (parentLoc.isDanger) color = "#ff0000";
+            if (parentLoc.isFavorite) color = theme.friendly;
+            if (parentLoc.isDanger) color = theme.danger;
             
             const threeColor = new THREE.Color(color);
             wireframeMeshRef.current!.setColorAt(i, threeColor);
@@ -160,7 +169,7 @@ export const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect
         hitMeshRef.current!.instanceMatrix.needsUpdate = true;
         hitMeshRef.current!.computeBoundingBox();
         hitMeshRef.current!.computeBoundingSphere();
-    }, [elements]);
+    }, [elements, theme]);
 
     const dragDist = useRef(0);
 
@@ -190,7 +199,7 @@ export const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect
             {/* Holographic Face Fill - No raycasting */}
             <instancedMesh ref={fillMeshRef} frustumCulled={false} args={visMeshArgs as any} raycast={() => null}>
                 {renderBaseGeometry(shape, polyCount)}
-                <meshBasicMaterial color="#020202" />
+                <meshBasicMaterial color={theme.background} />
             </instancedMesh>
 
             {/* Solid Hitbox - Low opacity is more reliable for R3F raycasting than colorWrite=false */}

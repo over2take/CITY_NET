@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { THEMES, ThemeContext } from '../themes';
 
-const REQUIRED_FIELDS = ['name', 'id', 'primary', 'background', 'panelBg', 'glow', 'danger', 'friendly'] as const;
-const THEME_IDS = ['classic', 'vaporwave', 'cyberpunk', 'crimson', 'deep_space', 'high_contrast', 'sepia'] as const;
+const REQUIRED_FIELDS = ['id', 'name', 'primary', 'background', 'panelBg', 'glow', 'danger', 'friendly'] as const;
+const THEME_IDS = ['classic', 'vaporwave', 'cyberpunk', 'crimson', 'ocean', 'solar', 'monochrome'] as const;
 
 describe('THEMES palette', () => {
   it('exports exactly the expected theme IDs', () => {
@@ -34,6 +34,12 @@ describe('THEMES palette', () => {
       it('panelBg is a CSS color or rgba string', () => {
         expect(THEMES[id].panelBg).toMatch(/^(rgba?\(|#)/);
       });
+
+      it('gridSection and gridCell are valid hex colors', () => {
+        const hex = /^#[0-9a-fA-F]{6}$/;
+        expect(THEMES[id].gridSection).toMatch(hex);
+        expect(THEMES[id].gridCell).toMatch(hex);
+      });
     });
   });
 });
@@ -41,7 +47,6 @@ describe('THEMES palette', () => {
 describe('ThemeContext', () => {
   it('default value is the classic theme', () => {
     expect(ThemeContext).toBeDefined();
-    // Context default is set to THEMES.classic in themes.ts
     const defaultValue = (ThemeContext as any)._currentValue;
     expect(defaultValue.id).toBe('classic');
   });
