@@ -59,6 +59,86 @@ export const chainRoadPolylines = (
   return routes.filter(r => r.points.length >= 2);
 };
 
+/**
+ * Build a single flat ribbon geometry (in the xz plane, y=0) from chained road
+ * polylines, using mitered joints so bends render as one continuous surface
+ * instead of overlapping per-segment quads.
+ */
+export const buildRoadRibbonGeometry = (
+  chains: Array<{ points: { x: number; z: number }[]; width: number }>,
+  widthScale = 1,
+  miterLimit = 3
+): THREE.BufferGeometry => {
+  const positions: number[] = [];
+  const indices: number[] = [];
+
+  chains.forEach(chain => {
+    const pts = chain.points;
+    if (pts.length < 2) return;
+    const halfW = (chain.width * widthScale) / 2;
+    const base = positions.length / 3;
+
+    // Direction of each segment
+    const dirs: { x: number; z: number }[] = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const dx = pts[i + 1].x - pts[i].x;
+      const dz = pts[i + 1].z - pts[i].z;
+      const len = Math.hypot(dx, dz) || 1;
+      dirs.push({ x: dx / len, z: dz / len });
+    }
+
+    for (let i = 0; i < pts.length; i++) {
+      // Average adjacent segment directions at interior points
+      const dPrev = dirs[Math.max(0, i - 1)];
+      const dNext = dirs[Math.min(dirs.length - 1, i)];
+      let mx = dPrev.x + dNext.x, mz = dPrev.z + dNext.z;
+      const mLen = Math.hypot(mx, mz);
+      if (mLen < 1e-6) { mx = dNext.x; mz = dNext.z; } else { mx /= mLen; mz /= mLen; }
+      // Perpendicular (left) of the miter direction
+      const nx = -mz, nz = mx;
+      // Widen the joint so the ribbon keeps constant width through the bend
+      const cosHalf = mx * dNext.x + mz * dNext.z;
+      const miter = Math.min(miterLimit, 1 / Math.max(0.2, Math.abs(cosHalf)));
+      const w = halfW * miter;
+      positions.push(pts[i].x + nx * w, 0, pts[i].z + nz * w);
+      positions.push(pts[i].x - nx * w, 0, pts[i].z - nz * w);
+    }
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = base + i * 2, b = a + 1, c = a + 2, d = a + 3;
+      indices.push(a, b, c, b, d, c);
+    }
+  });
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+};
+
+const _p1 = new THREE.Vector3();
+const _p2 = new THREE.Vector3();
+const _pt = new THREE.Vector3();
+const _closest = new THREE.Vector3();
+const _line = new THREE.Line3();
+
+export const getClosestPointOnRoads = (x: number, z: number, roadsList: any[], maxSnapDistance = 15) => {
+  if (!roadsList || roadsList.length === 0) return { x, z };
+  _pt.set(x, 0, z);
+  let minDistance = Infinity;
+  let closestX = x, closestZ = z;
+  for (let i = 0; i < roadsList.length; i++) {
+    const r = roadsList[i];
+    _p1.set(r.x1, 0, r.z1); _p2.set(r.x2, 0, r.z2);
+    _line.set(_p1, _p2);
+    _line.closestPointToPoint(_pt, true, _closest);
+    const dist = _closest.distanceTo(_pt);
+    if (dist < minDistance) { minDistance = dist; closestX = _closest.x; closestZ = _closest.z; }
+  }
+  return minDistance < maxSnapDistance ? { x: closestX, z: closestZ } : { x, z };
+};
+
 export const consolidateRoads = (newSegments: RoadSegment[], existingRoads: RoadSegment[], snapDist = 6): RoadSegment[] => {
   const points: THREE.Vector3[] = [];
   newSegments.forEach(s => { points.push(new THREE.Vector3(s.x1, 0, s.z1), new THREE.Vector3(s.x2, 0, s.z2)); });

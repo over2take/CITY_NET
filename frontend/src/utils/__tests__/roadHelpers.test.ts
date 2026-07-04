@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { consolidateRoads, chainRoadPolylines } from '../roadHelpers';
+import { consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry } from '../roadHelpers';
 
 const seg = (x1: number, z1: number, x2: number, z2: number, width = 4) => ({ x1, z1, x2, z2, width });
 
@@ -104,5 +104,51 @@ describe('consolidateRoads', () => {
     const result = consolidateRoads(input, []);
     expect((result[0] as any).myProp).toBe('hello');
     expect(result[0].width).toBe(6);
+  });
+});
+
+describe('buildRoadRibbonGeometry', () => {
+  it('builds two vertices per point and two triangles per segment', () => {
+    const chains = [{ points: [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 20, z: 0 }], width: 4 }];
+    const geo = buildRoadRibbonGeometry(chains);
+    expect(geo.getAttribute('position').count).toBe(6); // 3 pts * 2
+    expect(geo.getIndex()!.count).toBe(12); // 2 segments * 2 tris * 3 idx
+  });
+
+  it('offsets straight-line vertices by half the width', () => {
+    const chains = [{ points: [{ x: 0, z: 0 }, { x: 10, z: 0 }], width: 4 }];
+    const geo = buildRoadRibbonGeometry(chains);
+    const pos = geo.getAttribute('position');
+    // Direction +x → perpendicular ±z, half width 2
+    expect(Math.abs(pos.getZ(0))).toBeCloseTo(2);
+    expect(Math.abs(pos.getZ(1))).toBeCloseTo(2);
+    expect(pos.getZ(0)).toBeCloseTo(-pos.getZ(1));
+  });
+
+  it('widens the joint at a 90-degree bend (miter)', () => {
+    const chains = [{ points: [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 10 }], width: 4 }];
+    const geo = buildRoadRibbonGeometry(chains);
+    const pos = geo.getAttribute('position');
+    // Interior point vertices (idx 2,3) — miter at 45° half-angle = halfW / cos(45°) ≈ 2.828
+    const d = Math.hypot(pos.getX(2) - 10, pos.getZ(2) - 0);
+    expect(d).toBeCloseTo(2 / Math.cos(Math.PI / 4), 1);
+  });
+
+  it('respects the width scale factor', () => {
+    const chains = [{ points: [{ x: 0, z: 0 }, { x: 10, z: 0 }], width: 4 }];
+    const geo = buildRoadRibbonGeometry(chains, 0.5);
+    const pos = geo.getAttribute('position');
+    expect(Math.abs(pos.getZ(0))).toBeCloseTo(1);
+  });
+
+  it('handles multiple chains and skips degenerate ones', () => {
+    const chains = [
+      { points: [{ x: 0, z: 0 }, { x: 10, z: 0 }], width: 4 },
+      { points: [{ x: 5, z: 5 }], width: 4 }, // degenerate, skipped
+      { points: [{ x: 0, z: 20 }, { x: 10, z: 20 }], width: 6 },
+    ];
+    const geo = buildRoadRibbonGeometry(chains);
+    expect(geo.getAttribute('position').count).toBe(8);
+    expect(geo.getIndex()!.count).toBe(12);
   });
 });

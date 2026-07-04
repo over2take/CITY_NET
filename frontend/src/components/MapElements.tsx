@@ -4,7 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { resolveDeployHealth } from '../utils/rhombusHelpers';
 import { parseOverpassPoints, sampleOverpassPath, buildOverpassGeometry } from '../utils/overpassHelpers';
-import { chainRoadPolylines } from '../utils/roadHelpers';
+import { chainRoadPolylines, buildRoadRibbonGeometry } from '../utils/roadHelpers';
 
 export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token, roadLayerMode }: any) => {
   const { camera, gl, controls } = useThree();
@@ -341,10 +341,14 @@ export const WaterBody = ({ body }: { body: any }) => {
   return (
     <mesh ref={meshRef} position={[0, 0.035, 0]} rotation={[-Math.PI / 2, 0, 0]}>
       <shapeGeometry args={[shape]} />
-      <shaderMaterial 
+      <shaderMaterial
         ref={materialRef}
         transparent={true}
         side={THREE.DoubleSide}
+        depthWrite={true}
+        polygonOffset={true}
+        polygonOffsetFactor={-4}
+        polygonOffsetUnits={-4}
         uniforms={uniforms}
         vertexShader={`
           varying vec2 vUv;
@@ -398,54 +402,37 @@ export const WaterBodies = React.memo(({ waterBodies }: { waterBodies: any[] }) 
 });
 
 export const Roads = React.memo(({ roads }: { roads: any[] }) => {
-  const baseMeshRef = useRef<THREE.InstancedMesh>(null);
-  const coreMeshRef = useRef<THREE.InstancedMesh>(null);
-  const tempObj = new THREE.Object3D();
+  const coreMatRef = useRef<THREE.MeshBasicMaterial>(null);
 
   useFrame((state) => {
-    if (coreMeshRef.current && coreMeshRef.current.material) {
-      (coreMeshRef.current.material as THREE.MeshBasicMaterial).opacity = 0.5 + Math.sin(state.clock.elapsedTime * 1.5) * 0.4;
+    if (coreMatRef.current) {
+      coreMatRef.current.opacity = 0.5 + Math.sin(state.clock.elapsedTime * 1.5) * 0.4;
     }
   });
 
-  useEffect(() => {
-    if (!baseMeshRef.current || !coreMeshRef.current || !baseMeshRef.current.setMatrixAt) return;
-    roads.forEach((r, i) => {
-      const p1 = new THREE.Vector3(r.x1, 0.05, r.z1);
-      const p2 = new THREE.Vector3(r.x2, 0.05, r.z2);
-      const dist = p1.distanceTo(p2) + (r.width * 0.1);
-      
-      // Update Base (Wide, faint)
-      tempObj.position.copy(p1.clone().lerp(p2, 0.5));
-      tempObj.scale.set(dist, r.width, 1);
-      tempObj.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), p2.clone().sub(p1).normalize());
-      tempObj.rotateX(-Math.PI / 2);
-      tempObj.updateMatrix();
-      baseMeshRef.current!.setMatrixAt(i, tempObj.matrix);
-
-      // Update Core (Thin, bright)
-      tempObj.position.y = 0.06; // Slightly above base
-      tempObj.scale.set(dist, r.width * 0.08, 1); // Thinner core
-      tempObj.updateMatrix();
-      coreMeshRef.current!.setMatrixAt(i, tempObj.matrix);
-    });
-    baseMeshRef.current.instanceMatrix.needsUpdate = true;
-    coreMeshRef.current.instanceMatrix.needsUpdate = true;
+  // Chain segments into streets and build continuous mitered ribbons so bends
+  // render as one surface instead of overlapping per-segment quads
+  const { baseGeo, coreGeo } = useMemo(() => {
+    const chains = chainRoadPolylines(roads);
+    return {
+      baseGeo: buildRoadRibbonGeometry(chains),
+      coreGeo: buildRoadRibbonGeometry(chains, 0.08),
+    };
   }, [roads]);
+
+  useEffect(() => () => { baseGeo.dispose(); coreGeo.dispose(); }, [baseGeo, coreGeo]);
 
   return (
     <group>
       {/* Road Base - Vibrant Cyber Green */}
-      <instancedMesh ref={baseMeshRef} args={[null as any, null as any, roads.length]} frustumCulled={false}>
-        <planeGeometry args={[1, 1]} />
+      <mesh geometry={baseGeo} position={[0, 0.05, 0]} frustumCulled={false}>
         <meshBasicMaterial color="#004411" transparent opacity={0.7} side={THREE.DoubleSide} />
-      </instancedMesh>
-      
+      </mesh>
+
       {/* Road Core - Pulsing Neon Link */}
-      <instancedMesh ref={coreMeshRef} args={[null as any, null as any, roads.length]} frustumCulled={false}>
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial color="#00ffaa" transparent opacity={0.9} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
-      </instancedMesh>
+      <mesh geometry={coreGeo} position={[0, 0.06, 0]} frustumCulled={false}>
+        <meshBasicMaterial ref={coreMatRef} color="#00ffaa" transparent opacity={0.9} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
+      </mesh>
     </group>
   );
 });
@@ -579,12 +566,6 @@ export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any
     </instancedMesh>
   );
 });
-
-const _p1 = new THREE.Vector3();
-const _p2 = new THREE.Vector3();
-const _pt = new THREE.Vector3();
-const _closest = new THREE.Vector3();
-const _line = new THREE.Line3();
 
 /** Find all segment IDs in the same connected chain as the clicked segment. */
 const findChainIds = (clickedId: number, roads: any[], tol = 0.5): number[] => {
@@ -721,32 +702,4 @@ export const RoadEraser = React.memo(({ roads, overpasses = [], token, eraseMode
   );
 });
 
-export const getClosestPointOnRoads = (x: number, z: number, roadsList: any[], maxSnapDistance = 15) => {
-    if (!roadsList || roadsList.length === 0) return { x, z };
-    
-    _pt.set(x, 0, z);
-    let minDistance = Infinity;
-    let closestX = x;
-    let closestZ = z;
-
-    for (let i = 0; i < roadsList.length; i++) {
-        const r = roadsList[i];
-        _p1.set(r.x1, 0, r.z1);
-        _p2.set(r.x2, 0, r.z2);
-        _line.set(_p1, _p2);
-        _line.closestPointToPoint(_pt, true, _closest);
-        
-        const dist = _closest.distanceTo(_pt);
-        if (dist < minDistance) {
-            minDistance = dist;
-            closestX = _closest.x;
-            closestZ = _closest.z;
-        }
-    }
-
-    if (minDistance < maxSnapDistance) {
-        return { x: closestX, z: closestZ };
-    }
-    return { x, z };
-};
 

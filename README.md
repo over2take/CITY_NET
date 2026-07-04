@@ -2,6 +2,10 @@
 
 A real-time 3D city map for tabletop RPG sessions. The GM builds and manages the city; players connect and explore it live. Built with React + Three.js on the front, Node.js + SQLite on the back, and Socket.IO stitching it all together.
 
+If CITY_NET adds something to your table, please consider supporting the creator:
+
+[![Support on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/over2take)
+
 ---
 
 ## For Game Masters — Getting Started
