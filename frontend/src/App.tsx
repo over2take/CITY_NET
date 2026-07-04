@@ -46,7 +46,7 @@ import { mergeRhombusHealthFromLocation, resolveDeployHealth } from './utils/rho
 import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './components/Buildings';
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic, RoadEraser } from './components/MapElements';
 import { Overpasses, OverpassPreview } from './components/Overpasses';
-import { GlobalCameraCapture, CursorPivotControls, CameraController } from './components/Camera';
+import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
 import { AttackAnimations } from './components/AttackAnimations';
@@ -1833,6 +1833,7 @@ function App() {
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <GlobalCameraCapture />
             <CursorPivotControls />
+            <KeyboardPan active={view === 'draw_roads'} />
             <color attach="background" args={[THEMES[currentTheme].background]} />
             {/* @ts-ignore */}
             {isPlantingTrees && (

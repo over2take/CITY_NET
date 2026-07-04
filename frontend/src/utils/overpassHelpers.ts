@@ -66,7 +66,9 @@ export const elevationAt = (
   connectedStart = false,
   connectedEnd = false
 ): number => {
-  const slope = height / Math.max(rampLength, 0.001);
+  // rampLength === 0 means flat deck at full height — no ramps, ends stay elevated
+  if (rampLength === 0) return height;
+  const slope = height / rampLength;
   const dStart = connectedStart ? Infinity : s;
   const dEnd = connectedEnd ? Infinity : totalLength - s;
   return Math.min(height, slope * Math.max(0, Math.min(dStart, dEnd)));
