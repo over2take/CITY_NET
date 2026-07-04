@@ -91,6 +91,15 @@ db.serialize(() => {
     width REAL DEFAULT 4
   )`);
 
+  db.run(`CREATE TABLE IF NOT EXISTS overpasses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    points TEXT NOT NULL,
+    height REAL NOT NULL,
+    width REAL NOT NULL,
+    ramp_length REAL NOT NULL,
+    pillar_spacing REAL DEFAULT 12
+  )`);
+
   db.run(`CREATE TABLE IF NOT EXISTS dice_rolls (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL,

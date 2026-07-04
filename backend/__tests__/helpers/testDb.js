@@ -60,6 +60,15 @@ function makeTestDb() {
         x1 REAL, z1 REAL, x2 REAL, z2 REAL, width REAL
       )`);
 
+      db.run(`CREATE TABLE overpasses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        points TEXT NOT NULL,
+        height REAL NOT NULL,
+        width REAL NOT NULL,
+        ramp_length REAL NOT NULL,
+        pillar_spacing REAL DEFAULT 12
+      )`);
+
       db.run(`CREATE TABLE saved_maps (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL,

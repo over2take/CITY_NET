@@ -19,6 +19,7 @@ interface UseSocketOptions {
   onFetchRoads: () => void;
   onFetchDistricts: () => void;
   onFetchWaterBodies: () => void;
+  onFetchOverpasses?: () => void;
   onFetchBattleMaps?: () => void;
   onBankUpdate: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean) => void;
   onBalancePaid?: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean) => void;
@@ -47,7 +48,7 @@ interface UseSocketOptions {
 
 export function useSocket({
   userName, token, playerToken, isLoggedIn, isSpectator, notificationsEnabled, isChatOpen,
-  onFetchAll, onFetchGlobalSettings, onFetchLocations, onFetchRoads, onFetchDistricts, onFetchWaterBodies, onFetchBattleMaps,
+  onFetchAll, onFetchGlobalSettings, onFetchLocations, onFetchRoads, onFetchDistricts, onFetchWaterBodies, onFetchOverpasses, onFetchBattleMaps,
   onBankUpdate, onBalancePaid, onNotification, onHasUnreadChat, onTokenUpdate, onIsAdminUpdate,
   onRegistrationPending, onRegistrationUpdated,
   onPasswordResetRequested, onPasswordResetResolved,
@@ -108,6 +109,7 @@ export function useSocket({
       onFetchRoads();
       onFetchDistricts();
       onFetchWaterBodies();
+      onFetchOverpasses?.();
       if (!payload?.isRhombusOnly) {
         (window as any).hasUnsavedChanges = true;
         onFetchBattleMaps?.();
