@@ -16,7 +16,7 @@ const BLANK_LINE = { text: '', font_size: 1.0 };
 
 const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: '#00ff00', border: '1px solid #00ff00', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
 
-function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, remoteFonts, setRemoteFonts, onClose }: {
+function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, remoteFonts, setRemoteFonts, signTransformMode, setSignTransformMode, onClose }: {
   token: string;
   signs: SignData[];
   fetchSigns: () => void;
