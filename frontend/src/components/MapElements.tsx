@@ -467,7 +467,8 @@ export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any
     // Chain contiguous segments into whole streets so cars don't fade at every segment
     chainRoadPolylines(roads).forEach(chain => {
       routes.push({
-        pts: chain.points.map(p => new THREE.Vector3(p.x, 0.07, p.z)),
+        // y=0.18 — road surface is at 0.05, car half-height is 0.11, sit above it
+        pts: chain.points.map(p => new THREE.Vector3(p.x, 0.18, p.z)),
         cum: [], length: 0, width: chain.width,
       });
     });
@@ -546,7 +547,7 @@ export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any
       pos.add(roadNormal.multiplyScalar(laneOffset * p.side));
 
       tempObj.position.copy(pos);
-      tempObj.scale.set(p.carLength, 0.22, 0.45);
+      tempObj.scale.set(p.carLength, 0.22, 0.3);
       tempObj.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), travelDir);
 
       tempObj.updateMatrix();
