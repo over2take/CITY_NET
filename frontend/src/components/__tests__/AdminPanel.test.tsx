@@ -188,9 +188,9 @@ describe('AdminPanel draw_roads view', () => {
 });
 
 describe('AdminPanel list view road tools', () => {
-  it('shows PURGE_ALL_ROADS button in list view', () => {
+  it('shows PURGE_ROADS button in list view', () => {
     render(<AdminPanel {...baseProps()} view="list" />);
-    expect(screen.getByText('PURGE_ALL_ROADS')).toBeInTheDocument();
+    expect(screen.getByText('PURGE_ROADS')).toBeInTheDocument();
   });
 });
 

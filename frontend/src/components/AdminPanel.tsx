@@ -18,6 +18,7 @@ export function AdminPanel({
   roadTrail, setRoadTrail, waterTrail, setWaterTrail, fetchWaterBodies, roadDrawMode, setRoadDrawMode, snapToGrid, setSnapToGrid, snapRotation, setSnapRotation,
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
   roadLayerMode, setRoadLayerMode, overpassHeight, setOverpassHeight, overpassRampLength, setOverpassRampLength, refreshOverpasses,
+  onRoadEraseModeChange,
   genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu,
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
@@ -141,6 +142,9 @@ export function AdminPanel({
   const [showUndefined, setShowUndefined] = useState(false);
   const [customLibrary, setCustomLibrary] = useState<any[]>([]);
   const [customLibraryLoading, setCustomLibraryLoading] = useState(false);
+  const [roadEraseMode, setRoadEraseModeLocal] = useState<'segment' | 'path'>('segment');
+  const setRoadEraseMode = (m: 'segment' | 'path') => { setRoadEraseModeLocal(m); onRoadEraseModeChange?.(m); };
+  const [roadPurgeConfirming, setRoadPurgeConfirming] = useState(false);
   const defined = locations.filter((l: any) => !l.parent_id && isUserDefinedName(l.name));
   const undefinedLocs = locations.filter((l: any) => !l.parent_id && !isUserDefinedName(l.name));
 
@@ -561,15 +565,7 @@ export function AdminPanel({
           {/* BANK SOUNDS TEST PANEL */}
           <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
 
-          <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={async () => {
-            if (confirm("PURGE ALL ROAD DATA?")) {
-              const res = await fetch('/api/roads', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-              if (res.ok) {
-                setAdminAlert("ALL ROADS PURGED FROM DATABASE");
-                if (refreshRoads) refreshRoads();
-              }
-            }
-          }}>PURGE_ALL_ROADS</button>
+          <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
           <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={async () => {
             if (confirm("PURGE ALL WATER DATA?")) {
               const res = await fetch('/api/water', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
@@ -740,6 +736,45 @@ export function AdminPanel({
                 await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalSegments) });
                 setAdminAlert(`DRAWN NETWORK GENERATED: ${finalSegments.length} SEGMENTS`); refreshLocations(); setView('list'); setRoadTrail([]);
             }}>GENERATE_FROM_DRAWINGS</button>
+        </>
+      )}
+
+      {view === 'purge_roads' && (
+        <>
+          <header style={{marginBottom: '10px'}}>
+            <h3>PURGE_ROADS</h3>
+            <button onClick={() => { setView('list'); setRoadPurgeConfirming(false); }} className="close-btn" style={{position: 'static'}}>X</button>
+          </header>
+          <div className="editor-controls">
+            <label style={{fontSize: '0.7rem'}}>TOOL</label>
+            <div className="button-group" style={{marginTop: '5px'}}>
+              <button className={roadEraseMode === 'segment' ? 'active' : ''} onClick={() => setRoadEraseMode('segment')}>ERASER</button>
+              <button className={roadEraseMode === 'path' ? 'active' : ''} onClick={() => setRoadEraseMode('path')}>SELECTOR</button>
+            </div>
+          </div>
+          <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px', opacity: 0.7}}>
+            {roadEraseMode === 'segment'
+              ? 'CLICK A SEGMENT ON THE MAP TO DELETE IT'
+              : 'CLICK ANY SEGMENT TO DELETE THE FULL CONNECTED ROAD PATH'}
+          </div>
+          <div style={{marginTop: '10px', fontSize: '0.7rem', border: '1px dashed #ff3300', padding: '10px'}}>
+            <p style={{opacity: 0.7}}>ROAD_SEGMENTS: {roads.length}</p>
+            {roadPurgeConfirming ? (
+              <>
+                <p style={{marginTop: '8px', color: '#ff3300'}}>PURGE ALL {roads.length} SEGMENTS?</p>
+                <div style={{display: 'flex', gap: '5px', marginTop: '8px'}}>
+                  <button className="upload-btn danger-btn" style={{flex: 1}} onClick={async () => {
+                    const res = await fetch('/api/roads', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+                    if (res.ok) { setAdminAlert('ALL ROADS PURGED'); if (refreshRoads) refreshRoads(); setView('list'); }
+                    setRoadPurgeConfirming(false);
+                  }}>CONFIRM</button>
+                  <button className="utility-btn" style={{flex: 1}} onClick={() => setRoadPurgeConfirming(false)}>CANCEL</button>
+                </div>
+              </>
+            ) : (
+              <button className="utility-btn danger-btn" style={{marginTop: '8px', width: '100%'}} onClick={() => setRoadPurgeConfirming(true)}>PURGE_ALL_ROADS</button>
+            )}
+          </div>
         </>
       )}
 

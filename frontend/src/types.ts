@@ -149,6 +149,7 @@ export type ViewMode =
   | 'district'
   | 'join'
   | 'draw_roads'
+  | 'purge_roads'
   | 'draw_water'
   | 'city_gen'
   | 'battle_map';

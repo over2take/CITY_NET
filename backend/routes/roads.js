@@ -28,6 +28,20 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     });
   });
 
+  router.delete('/:id', authenticate, (req, res) => {
+    const { id } = req.params;
+    db.get('SELECT * FROM roads WHERE id = ?', [id], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Road segment not found' });
+      db.run('DELETE FROM roads WHERE id = ?', [id], (err2) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        recordAction('road_delete_segment', { id, data: row });
+        emitUpdate();
+        res.json({ message: 'Road segment deleted' });
+      });
+    });
+  });
+
   router.delete('/', authenticate, (req, res) => {
     db.all('SELECT * FROM roads', [], (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
