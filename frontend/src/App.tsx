@@ -1425,6 +1425,7 @@ function App() {
                 fetchSigns={fetchSigns}
                 remoteFonts={remoteFonts}
                 setRemoteFonts={setRemoteFonts}
+                signMesh={signMesh}
                 signTransformMode={signTransformMode}
                 setSignTransformMode={setSignTransformMode}
                 isPlacingSign={isPlacingSign}
@@ -1771,7 +1772,7 @@ function App() {
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
           </div>}
           <ThemeContext.Provider value={THEMES[currentTheme]}>
-            <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }}>
+            <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }} onPointerMissed={() => setSelectedSignId(null)}>
               <StreamerVisibilityContext.Provider value={IS_SPECTATOR ? directorState.visibility : ALL_VISIBLE}>
             <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
             <MeasurementTool measureMode={measureMode} socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} mapScaleMultiplier={view === 'battle_map' ? (() => {
@@ -1901,13 +1902,6 @@ function App() {
             {/* @ts-ignore */}
             {isPlantingTrees && (
                 <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} onPointerDown={handleTreePlantClick}>
-                    <planeGeometry args={[10000, 10000]} />
-                    <meshBasicMaterial visible={false} />
-                </mesh>
-            )}
-            {/* @ts-ignore */}
-            {isPlacingSign && (
-                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} onPointerDown={handleSignPlaceClick}>
                     <planeGeometry args={[10000, 10000]} />
                     <meshBasicMaterial visible={false} />
                 </mesh>

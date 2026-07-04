@@ -25,10 +25,13 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
 
   router.post('/', authenticate, (req, res) => {
     const { text, x, y, z, rotation_y, font_size, font_family, image_url, use_tv_filter, lines } = req.body;
-    if (!text || x == null || y == null || z == null) {
-      return res.status(400).json({ error: 'text, x, y, z are required' });
+    if (x == null || y == null || z == null) {
+      return res.status(400).json({ error: 'x, y, z are required' });
     }
-    const safeText = String(text).slice(0, 120);
+    if (!text && !image_url) {
+      return res.status(400).json({ error: 'text or image_url is required' });
+    }
+    const safeText = text ? String(text).slice(0, 120) : '';
     const safeImageUrl = image_url && !String(image_url).match(/^(javascript:|data:)/i)
       ? String(image_url).slice(0, 500) : null;
     const safeFont = font_family ? String(font_family).slice(0, 100) : 'monospace';
