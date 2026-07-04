@@ -75,6 +75,8 @@ function makeTestDb() {
         locations_data TEXT,
         districts_data TEXT,
         roads_data TEXT,
+        overpasses_data TEXT,
+        water_bodies_data TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
