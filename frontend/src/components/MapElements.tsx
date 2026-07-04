@@ -456,7 +456,7 @@ interface TrafficRoute {
   width: number;
 }
 
-const TRAFFIC_COLORS = [new THREE.Color('#00ffaa'), new THREE.Color('#ff7744')];
+const TRAFFIC_COLORS = [new THREE.Color('#00ffaa'), new THREE.Color('#ff7744'), new THREE.Color('#ffe566')];
 
 export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any[]; overpasses?: any[] }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -546,7 +546,7 @@ export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any
       pos.add(roadNormal.multiplyScalar(laneOffset * p.side));
 
       tempObj.position.copy(pos);
-      tempObj.scale.set(p.carLength, 0.08, 0.25);
+      tempObj.scale.set(p.carLength, 0.22, 0.45);
       tempObj.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), travelDir);
 
       tempObj.updateMatrix();
