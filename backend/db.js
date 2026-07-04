@@ -180,6 +180,8 @@ db.serialize(() => {
   db.run(`ALTER TABLE locations ADD COLUMN melee_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN ranged_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN is_global INTEGER DEFAULT 0`, (err) => {});
+  db.run(`ALTER TABLE locations ADD COLUMN has_sidewalk INTEGER DEFAULT 1`, (err) => {});
+  db.run(`ALTER TABLE locations ADD COLUMN has_signage INTEGER DEFAULT 1`, (err) => {});
 
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN melee_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN ranged_ac INTEGER`, (err) => {});

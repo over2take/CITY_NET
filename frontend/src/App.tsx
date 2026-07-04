@@ -46,6 +46,7 @@ import { mergeRhombusHealthFromLocation, resolveDeployHealth } from './utils/rho
 import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './components/Buildings';
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic, RoadEraser } from './components/MapElements';
 import { Overpasses, OverpassPreview } from './components/Overpasses';
+import { Sidewalks } from './components/Sidewalks';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
@@ -213,6 +214,7 @@ function App() {
     const [snapRotation, setSnapRotation] = useState(false);
   const [drawingRoadWidth, setDrawingRoadWidth] = useState(2.4);
   const [roadLayerMode, setRoadLayerMode] = useState<'road' | 'overpass'>('road');
+  const [renderSidewalks, setRenderSidewalks] = useState(true);
   const [overpassHeight, setOverpassHeight] = useState(8);
   const [overpassRampLength, setOverpassRampLength] = useState(20);
   const [overpassSplitRamps, setOverpassSplitRamps] = useState(false);
@@ -1357,6 +1359,8 @@ function App() {
                 setOverpassRampLengthStart={setOverpassRampLengthStart}
                 overpassRampLengthEnd={overpassRampLengthEnd}
                 setOverpassRampLengthEnd={setOverpassRampLengthEnd}
+                renderSidewalks={renderSidewalks}
+                setRenderSidewalks={setRenderSidewalks}
                 overpasses={overpasses}
                 refreshOverpasses={fetchOverpasses}
                 onRoadEraseModeChange={setRoadEraseMode}
@@ -1884,6 +1888,7 @@ function App() {
                 }
                 <GhostTraffic roads={roads} overpasses={overpasses} />
                 <Overpasses overpasses={overpasses} roads={roads} />
+                {renderSidewalks && <Sidewalks locations={locations} />}
               </>
             )}
             {roadLayerMode === 'overpass' && roadTrail.length > 0 && (
