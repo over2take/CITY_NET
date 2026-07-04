@@ -17,7 +17,9 @@ export function AdminPanel({
   joinSelection, setJoinSelection, selectedClassification, setSelectedClassification, roadSelectionBounds, setRoadSelectionBounds,
   roadTrail, setRoadTrail, waterTrail, setWaterTrail, fetchWaterBodies, roadDrawMode, setRoadDrawMode, snapToGrid, setSnapToGrid, snapRotation, setSnapRotation,
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
-  roadLayerMode, setRoadLayerMode, overpassHeight, setOverpassHeight, overpassRampLength, setOverpassRampLength, refreshOverpasses, overpasses,
+  roadLayerMode, setRoadLayerMode, overpassHeight, setOverpassHeight, overpassRampLength, setOverpassRampLength,
+  overpassSplitRamps, setOverpassSplitRamps, overpassRampLengthStart, setOverpassRampLengthStart, overpassRampLengthEnd, setOverpassRampLengthEnd,
+  refreshOverpasses, overpasses,
   onRoadEraseModeChange,
   genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu,
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
@@ -669,8 +671,26 @@ export function AdminPanel({
                     <input type="range" min="2" max="30" step="0.5" value={overpassHeight ?? 8} onChange={(e) => setOverpassHeight?.(parseFloat(e.target.value))} style={{width: '100%'}} />
                   </div>
                   <div style={{marginTop: '10px'}}>
-                    <label style={{fontSize: '0.7rem'}}>RAMP_LENGTH: {(overpassRampLength ?? 20).toFixed(0)}</label>
-                    <input type="range" min="0" max="160" step="1" value={overpassRampLength ?? 20} onChange={(e) => setOverpassRampLength?.(parseFloat(e.target.value))} style={{width: '100%'}} />
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px'}}>
+                      <label style={{fontSize: '0.7rem'}}>RAMP_LENGTH</label>
+                      <label style={{fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer'}}>
+                        <input type="checkbox" checked={overpassSplitRamps ?? false} onChange={(e) => setOverpassSplitRamps?.(e.target.checked)} />
+                        SPLIT
+                      </label>
+                    </div>
+                    {overpassSplitRamps ? (
+                      <>
+                        <label style={{fontSize: '0.65rem', opacity: 0.8}}>START: {(overpassRampLengthStart ?? 20).toFixed(0)}</label>
+                        <input type="range" min="0" max="160" step="1" value={overpassRampLengthStart ?? 20} onChange={(e) => setOverpassRampLengthStart?.(parseFloat(e.target.value))} style={{width: '100%'}} />
+                        <label style={{fontSize: '0.65rem', opacity: 0.8}}>END: {(overpassRampLengthEnd ?? 20).toFixed(0)}</label>
+                        <input type="range" min="0" max="160" step="1" value={overpassRampLengthEnd ?? 20} onChange={(e) => setOverpassRampLengthEnd?.(parseFloat(e.target.value))} style={{width: '100%'}} />
+                      </>
+                    ) : (
+                      <>
+                        <label style={{fontSize: '0.65rem', opacity: 0.8}}>{(overpassRampLength ?? 20).toFixed(0)}</label>
+                        <input type="range" min="0" max="160" step="1" value={overpassRampLength ?? 20} onChange={(e) => setOverpassRampLength?.(parseFloat(e.target.value))} style={{width: '100%'}} />
+                      </>
+                    )}
                   </div>
                 </>
               )}
@@ -723,7 +743,10 @@ export function AdminPanel({
                   for (const pts of overpassPaths) {
                     await fetch('/api/overpasses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({
                       points: pts, height: overpassHeight ?? 8, width: roadWidth,
-                      ramp_length: overpassRampLength ?? 20, pillar_spacing: 12,
+                      ramp_length: overpassRampLength ?? 20,
+                      ramp_length_start: overpassSplitRamps ? (overpassRampLengthStart ?? 20) : null,
+                      ramp_length_end: overpassSplitRamps ? (overpassRampLengthEnd ?? 20) : null,
+                      pillar_spacing: 12,
                     }) });
                   }
                   setAdminAlert(`OVERPASS GENERATED: ${overpassPaths.length} SPAN${overpassPaths.length > 1 ? 'S' : ''}`);
