@@ -2,6 +2,37 @@ import React, { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 
+const PAN_SPEED = 0.4;
+const PAN_KEYS: Record<string, [number, number]> = {
+  KeyW: [0, -1], ArrowUp: [0, -1],
+  KeyS: [0,  1], ArrowDown: [0,  1],
+  KeyA: [-1, 0], ArrowLeft: [-1, 0],
+  KeyD: [1,  0], ArrowRight: [1,  0],
+};
+
+export function KeyboardPan({ active }: { active: boolean }) {
+  const { controls } = useThree();
+  const keys = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!active) { keys.current.clear(); return; }
+    const down = (e: KeyboardEvent) => { if (PAN_KEYS[e.code]) { e.preventDefault(); keys.current.add(e.code); } };
+    const up   = (e: KeyboardEvent) => keys.current.delete(e.code);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); keys.current.clear(); };
+  }, [active]);
+
+  useFrame(() => {
+    if (!active || !controls || keys.current.size === 0) return;
+    let dx = 0, dy = 0;
+    keys.current.forEach(code => { const d = PAN_KEYS[code]; if (d) { dx += d[0]; dy += d[1]; } });
+    if (dx !== 0 || dy !== 0) (controls as any).truck(dx * PAN_SPEED, dy * PAN_SPEED, true);
+  });
+
+  return null;
+}
+
 export const GlobalCameraCapture = () => {
   const { camera } = useThree();
   useEffect(() => {
