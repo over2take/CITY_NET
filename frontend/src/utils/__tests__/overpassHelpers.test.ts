@@ -4,6 +4,8 @@ import {
   buildOverpassGeometry,
   isEndpointConnected,
   pointToSegmentDist,
+  sampleOverpassPath,
+  parseOverpassPoints,
 } from '../overpassHelpers';
 
 const params = { height: 10, width: 6, rampLength: 20, pillarSpacing: 12 };
@@ -120,6 +122,47 @@ describe('buildOverpassGeometry — pillars', () => {
     const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
     const { pillars } = buildOverpassGeometry(pts, { ...params, pillarSpacing: 2 }, []);
     pillars.forEach(p => expect(p.height).toBeGreaterThanOrEqual(1.5));
+  });
+});
+
+describe('sampleOverpassPath', () => {
+  it('produces evenly spaced samples following the elevation profile', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    const samples = sampleOverpassPath(pts, { height: 10, rampLength: 20 }, [], 4);
+    expect(samples.length).toBeGreaterThan(20);
+    // Ends at ground, middle at full height
+    expect(samples[0].y).toBeCloseTo(0);
+    expect(samples[samples.length - 1].y).toBeCloseTo(0);
+    const mid = samples[Math.floor(samples.length / 2)];
+    expect(mid.y).toBeCloseTo(10, 1);
+    // x runs monotonically from 0 to 100
+    expect(samples[0].x).toBeCloseTo(0);
+    expect(samples[samples.length - 1].x).toBeCloseTo(100);
+  });
+
+  it('respects connected endpoints (flat deck at the join)', () => {
+    const roads = [{ x1: 0, z1: 0, x2: -50, z2: 0 }];
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    const samples = sampleOverpassPath(pts, { height: 10, rampLength: 20 }, roads, 4);
+    expect(samples[0].y).toBeCloseTo(10); // no ramp at the connected start
+    expect(samples[samples.length - 1].y).toBeCloseTo(0);
+  });
+
+  it('returns empty for degenerate input', () => {
+    expect(sampleOverpassPath([{ x: 0, z: 0 }], { height: 10, rampLength: 20 })).toHaveLength(0);
+  });
+});
+
+describe('parseOverpassPoints', () => {
+  it('passes arrays through and parses JSON strings', () => {
+    const pts = [{ x: 1, z: 2 }];
+    expect(parseOverpassPoints(pts)).toBe(pts);
+    expect(parseOverpassPoints(JSON.stringify(pts))).toEqual(pts);
+  });
+
+  it('returns empty array on malformed input', () => {
+    expect(parseOverpassPoints('not json')).toEqual([]);
+    expect(parseOverpassPoints('{"x":1}')).toEqual([]);
   });
 });
 

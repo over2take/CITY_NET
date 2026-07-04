@@ -1850,7 +1850,7 @@ function App() {
             {(!IS_SPECTATOR || directorState.visibility.showRoads) && (
               <>
                 <Roads roads={roads} />
-                <GhostTraffic roads={roads} />
+                <GhostTraffic roads={roads} overpasses={overpasses} />
                 <Overpasses overpasses={overpasses} roads={roads} />
               </>
             )}
