@@ -3,6 +3,11 @@
   --dark-green: #003300;
   --black: #000000;
   --glow: 0 0 10px rgba(0, 255, 0, 0.7);
+  --panel-bg: rgba(0, 20, 0, 0.85);
+  --text: #00ff00;
+  --cyan: #00ffaa;
+  --grid-section: #006600;
+  --grid-cell: #003300;
 }
 
 .theme-classic {
@@ -10,6 +15,11 @@
   --dark-green: #004400;
   --black: #0a1a0f;
   --glow: 0 0 10px rgba(0, 255, 0, 0.7);
+  --panel-bg: rgba(0, 20, 0, 0.85);
+  --text: #00cc00;
+  --cyan: #00ffaa;
+  --grid-section: #006600;
+  --grid-cell: #003300;
   background-color: var(--black);
 }
 
@@ -18,14 +28,24 @@
   --dark-green: #4a154b;
   --black: #1a0b2e;
   --glow: 0 0 10px rgba(255, 113, 206, 0.7);
+  --panel-bg: rgba(26, 11, 46, 0.85);
+  --text: #b967ff;
+  --cyan: #05ffa1;
+  --grid-section: #7b2d8b;
+  --grid-cell: #4a154b;
   background-color: var(--black);
 }
 
 .theme-cyberpunk {
   --green: #f3e600;
-  --dark-green: #0d0d0d;
+  --dark-green: #2a2600;
   --black: #0d0d0d;
   --glow: 0 0 10px rgba(243, 230, 0, 0.7);
+  --panel-bg: rgba(13, 13, 13, 0.85);
+  --text: #00f0ff;
+  --cyan: #d100d1;
+  --grid-section: #4a4500;
+  --grid-cell: #2a2600;
   background-color: var(--black);
 }
 
@@ -34,6 +54,11 @@
   --dark-green: #660000;
   --black: #110000;
   --glow: 0 0 10px rgba(255, 51, 51, 0.7);
+  --panel-bg: rgba(20, 0, 0, 0.85);
+  --text: #ff8888;
+  --cyan: #ff5555;
+  --grid-section: #880000;
+  --grid-cell: #440000;
   background-color: var(--black);
 }
 
@@ -42,6 +67,11 @@
   --dark-green: #003366;
   --black: #001122;
   --glow: 0 0 10px rgba(0, 255, 255, 0.7);
+  --panel-bg: rgba(0, 17, 34, 0.85);
+  --text: #88ccff;
+  --cyan: #00aaff;
+  --grid-section: #005588;
+  --grid-cell: #003366;
   background-color: var(--black);
 }
 
@@ -50,6 +80,11 @@
   --dark-green: #663300;
   --black: #221100;
   --glow: 0 0 10px rgba(255, 170, 0, 0.7);
+  --panel-bg: rgba(34, 17, 0, 0.85);
+  --text: #ffdd88;
+  --cyan: #ffcc00;
+  --grid-section: #884400;
+  --grid-cell: #552200;
   background-color: var(--black);
 }
 
@@ -57,7 +92,12 @@
   --green: #ffffff;
   --dark-green: #333333;
   --black: #000000;
-  --glow: 0 0 10px rgba(255, 255, 255, 0.7);
+  --glow: 0 0 10px rgba(255, 255, 255, 0.5);
+  --panel-bg: rgba(10, 10, 10, 0.90);
+  --text: #cccccc;
+  --cyan: #aaaaaa;
+  --grid-section: #444444;
+  --grid-cell: #222222;
   background-color: var(--black);
 }
 

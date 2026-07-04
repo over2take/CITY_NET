@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DraggableWindow } from './DraggableWindow';
+import { ThemeContext } from '../theme/themes';
 import paperFillIcon from '../assets/lets-icons--paper-fill.svg';
 import paperLightIcon from '../assets/lets-icons--paper-light.svg';
 import type { DiceRoll } from '../types';
@@ -33,6 +34,7 @@ interface DotMatrixScoreboardProps {
 }
 
 export function DotMatrixScoreboard({ value, timestamp, isRolling }: DotMatrixScoreboardProps) {
+  const theme = useContext(ThemeContext);
   const cols = 25;
   const rows = 5;
   const [idleMode, setIdleMode] = useState(!value && !isRolling);
@@ -134,10 +136,11 @@ export function DotMatrixScoreboard({ value, timestamp, isRolling }: DotMatrixSc
   }
 
   const getColor = (val: number) => {
-    if (val === 1) return { bg: 'var(--green)', shadow: '0 0 5px var(--green), 0 0 10px var(--green)' };
-    if (val === 2) return { bg: 'rgba(0,255,0,0.5)', shadow: '0 0 2px var(--green)' };
-    if (val === 3) return { bg: 'rgba(0,255,0,0.2)', shadow: 'none' };
-    return { bg: 'rgba(0,255,0,0.05)', shadow: 'none' };
+    const p = theme.primary;
+    if (val === 1) return { bg: p, shadow: `0 0 5px ${p}, 0 0 10px ${p}` };
+    if (val === 2) return { bg: `${p}80`, shadow: `0 0 2px ${p}` };
+    if (val === 3) return { bg: `${p}33`, shadow: 'none' };
+    return { bg: `${p}0d`, shadow: 'none' };
   };
 
   return (
@@ -367,7 +370,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
       titleControls={titleControls}
     >
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, background: 'var(--black)' }}>
-        <div style={{ padding: '20px', background: '#0a0a0a', borderBottom: '2px solid var(--dark-green)', textAlign: 'center', overflow: 'hidden' }}>
+        <div style={{ padding: '20px', background: 'var(--black)', borderBottom: '2px solid var(--dark-green)', textAlign: 'center', overflow: 'hidden' }}>
           <DotMatrixScoreboard
             value={displayRoll !== null ? displayRoll.total.toString() : ''}
             timestamp={displayRoll?.timestamp || 0}
@@ -388,7 +391,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
             style={{
               position: 'absolute', left: '-252px', top: 0, bottom: 0, width: '250px',
               boxSizing: 'border-box', border: '2px solid var(--green)',
-              background: 'rgba(0,15,0,0.95)', overflowY: 'auto',
+              background: 'var(--panel-bg)', overflowY: 'auto',
               padding: '10px', fontSize: '0.75rem', textAlign: 'left',
             }}
           >
