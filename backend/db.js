@@ -295,6 +295,18 @@ db.serialize(() => {
     sort_order INTEGER DEFAULT 0,
     FOREIGN KEY(parent_id) REFERENCES music_items(id) ON DELETE CASCADE
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS signs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    z REAL NOT NULL,
+    rotation_y REAL DEFAULT 0,
+    font_size REAL DEFAULT 1.0,
+    image_url TEXT,
+    use_tv_filter INTEGER DEFAULT 0
+  )`);
 });
 
 module.exports = db;

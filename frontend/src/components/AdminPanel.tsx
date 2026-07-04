@@ -6,6 +6,143 @@ import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
+import type { SignData } from './Signs';
+
+// ─── Custom Signs view ───────────────────────────────────────────────────────
+
+const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_y: 0, font_size: 1.0, image_url: '', use_tv_filter: false };
+
+function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, onClose }: {
+  token: string;
+  signs: SignData[];
+  fetchSigns: () => void;
+  isPlacingSign: boolean;
+  setIsPlacingSign: (v: boolean) => void;
+  pendingSignPos: { x: number; z: number } | null;
+  setPendingSignPos: (v: { x: number; z: number } | null) => void;
+  selectedSignId: number | null;
+  setSelectedSignId: (id: number | null) => void;
+  onClose: () => void;
+}) {
+  const [form, setForm] = React.useState<any>(BLANK_SIGN);
+  const [isNew, setIsNew] = React.useState(true);
+
+  // When a sign is clicked in 3D, load it into the form
+  React.useEffect(() => {
+    if (selectedSignId == null) return;
+    const s = signs.find(s => s.id === selectedSignId);
+    if (s) { setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter }); setIsNew(false); }
+  }, [selectedSignId, signs]);
+
+  // When user picks a position on the map, fill x/z into form
+  React.useEffect(() => {
+    if (!pendingSignPos) return;
+    setForm((f: any) => ({ ...f, x: parseFloat(pendingSignPos.x.toFixed(2)), z: parseFloat(pendingSignPos.z.toFixed(2)) }));
+    setPendingSignPos(null);
+  }, [pendingSignPos, setPendingSignPos]);
+
+  const startNew = () => { setForm(BLANK_SIGN); setIsNew(true); setSelectedSignId(null); };
+
+  const save = async () => {
+    if (!form.text.trim()) return;
+    const body = {
+      text: form.text,
+      x: parseFloat(form.x) || 0,
+      y: parseFloat(form.y) || 0,
+      z: parseFloat(form.z) || 0,
+      rotation_y: parseFloat(form.rotation_y) || 0,
+      font_size: parseFloat(form.font_size) || 1,
+      image_url: form.image_url || null,
+      use_tv_filter: form.use_tv_filter ? 1 : 0,
+    };
+    const url = isNew ? '/api/signs' : `/api/signs/${selectedSignId}`;
+    const method = isNew ? 'POST' : 'PATCH';
+    await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(body) });
+    fetchSigns();
+    startNew();
+  };
+
+  const remove = async (id: number) => {
+    await fetch(`/api/signs/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    fetchSigns();
+    if (selectedSignId === id) startNew();
+  };
+
+  const field = (label: string, key: string, type = 'text', step?: string) => (
+    <div style={{marginBottom: '6px'}}>
+      <label style={{fontSize: '0.7rem', opacity: 0.8}}>{label}</label>
+      <input
+        type={type}
+        step={step}
+        value={form[key]}
+        onChange={e => setForm((f: any) => ({ ...f, [key]: type === 'number' ? e.target.value : e.target.value }))}
+        style={{width: '100%', marginTop: '2px', background: '#010a01', color: '#00ff00', border: '1px solid #00ff00', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem'}}
+      />
+    </div>
+  );
+
+  return (
+    <>
+      <header style={{marginBottom: '10px'}}>
+        <h3>CUSTOM_SIGNS</h3>
+        <button onClick={onClose} className="close-btn" style={{position: 'static'}}>X</button>
+      </header>
+
+      {/* Sign list */}
+      <div style={{maxHeight: '140px', overflowY: 'auto', marginBottom: '10px', border: '1px solid #00ff0044', padding: '4px'}}>
+        {signs.length === 0 && <div style={{fontSize: '0.7rem', opacity: 0.5}}>NO SIGNS PLACED</div>}
+        {signs.map(s => (
+          <div key={s.id} style={{display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', borderBottom: '1px solid #00ff0022', background: selectedSignId === s.id ? '#00ff0011' : 'transparent'}}>
+            <div style={{flex: 1, fontSize: '0.7rem', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} onClick={() => { setSelectedSignId(s.id); setIsNew(false); }}>
+              {s.text}
+            </div>
+            <button style={{fontSize: '0.6rem', padding: '1px 5px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', cursor: 'pointer'}} onClick={() => remove(s.id)}>DEL</button>
+          </div>
+        ))}
+      </div>
+
+      {/* Form */}
+      <div style={{fontSize: '0.7rem', fontWeight: 'bold', marginBottom: '6px', color: '#00ff00'}}>{isNew ? 'NEW SIGN' : `EDIT #${selectedSignId}`}</div>
+      {field('TEXT', 'text')}
+      <div style={{display: 'flex', gap: '8px'}}>
+        <div style={{flex: 1}}>{field('X', 'x', 'number', '0.1')}</div>
+        <div style={{flex: 1}}>{field('Y', 'y', 'number', '0.1')}</div>
+        <div style={{flex: 1}}>{field('Z', 'z', 'number', '0.1')}</div>
+      </div>
+      <button
+        className="utility-btn"
+        style={{width: '100%', marginBottom: '6px', opacity: isPlacingSign ? 0.5 : 1}}
+        onClick={() => setIsPlacingSign(true)}
+      >
+        {isPlacingSign ? 'CLICK MAP TO PLACE...' : 'PICK POSITION ON MAP'}
+      </button>
+      <div style={{display: 'flex', gap: '8px', marginBottom: '6px'}}>
+        <div style={{flex: 1}}>
+          <label style={{fontSize: '0.7rem', opacity: 0.8}}>ROTATION_Y: {parseFloat(form.rotation_y || 0).toFixed(2)}</label>
+          <input type="range" min="0" max={Math.PI * 2} step="0.05" value={form.rotation_y || 0} onChange={e => setForm((f: any) => ({...f, rotation_y: parseFloat(e.target.value)}))} style={{width: '100%'}} />
+        </div>
+        <div style={{flex: 1}}>
+          <label style={{fontSize: '0.7rem', opacity: 0.8}}>FONT_SIZE: {parseFloat(form.font_size || 1).toFixed(1)}</label>
+          <input type="range" min="0.5" max="4" step="0.5" value={form.font_size || 1} onChange={e => setForm((f: any) => ({...f, font_size: parseFloat(e.target.value)}))} style={{width: '100%'}} />
+        </div>
+      </div>
+      {field('IMAGE_URL (optional)', 'image_url')}
+      <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', marginBottom: '10px', cursor: 'pointer'}}>
+        <input type="checkbox" checked={!!form.use_tv_filter} onChange={e => setForm((f: any) => ({...f, use_tv_filter: e.target.checked}))} />
+        TV_FILTER (Fable)
+      </label>
+
+      <div style={{display: 'flex', gap: '8px'}}>
+        <button className="utility-btn" style={{flex: 1}} onClick={save} disabled={!form.text.trim()}>
+          {isNew ? 'PLACE SIGN' : 'SAVE CHANGES'}
+        </button>
+        {!isNew && <button className="utility-btn" style={{flex: 1}} onClick={startNew}>NEW</button>}
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function AdminPanel({
   socketRef, token, onLogout, refreshLocations, refreshRoads, locations, roads, editData, setEditData, editId, setEditId,
@@ -30,7 +167,8 @@ export function AdminPanel({
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
-    secureModeEnabled, currentLocBattleMaps, enterBattleMap
+    secureModeEnabled, currentLocBattleMaps, enterBattleMap,
+    signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId,
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -588,6 +726,8 @@ export function AdminPanel({
             </div>
           )}
 
+          <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setView('signs')}>CUSTOM_SIGNS ({(signs || []).length})</button>
+
           <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
           <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={async () => {
             if (confirm("PURGE ALL WATER DATA?")) {
@@ -781,6 +921,21 @@ export function AdminPanel({
                 setAdminAlert(`DRAWN NETWORK GENERATED: ${finalSegments.length} SEGMENTS`); refreshLocations(); setView('list'); setRoadTrail([]);
             }}>GENERATE_FROM_DRAWINGS</button>
         </>
+      )}
+
+      {view === 'signs' && (
+        <SignsView
+          token={token}
+          signs={signs || []}
+          fetchSigns={fetchSigns}
+          isPlacingSign={isPlacingSign}
+          setIsPlacingSign={setIsPlacingSign}
+          pendingSignPos={pendingSignPos}
+          setPendingSignPos={setPendingSignPos}
+          selectedSignId={selectedSignId}
+          setSelectedSignId={setSelectedSignId}
+          onClose={() => setView('list')}
+        />
       )}
 
       {view === 'purge_roads' && (

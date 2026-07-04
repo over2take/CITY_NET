@@ -48,6 +48,7 @@ import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic, Road
 import { Overpasses, OverpassPreview } from './components/Overpasses';
 import { Sidewalks } from './components/Sidewalks';
 import { AutoSignage } from './components/AutoSignage';
+import { Signs, type SignData } from './components/Signs';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
@@ -66,7 +67,7 @@ import { IS_SPECTATOR } from './streamerMode';
 function App() {
   const [currentTheme, setCurrentTheme] = useState<ThemeName>('classic');
   const controlsRef = useRef<any>(null);
-  const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchAll } = useMapData();
+  const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, signs, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchSigns, fetchAll } = useMapData();
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
@@ -218,6 +219,9 @@ function App() {
   const [renderSidewalks, setRenderSidewalks] = useState(true);
   const [renderSignage, setRenderSignage] = useState(true);
   const [signageDensity, setSignageDensity] = useState(1);
+  const [isPlacingSign, setIsPlacingSign] = useState(false);
+  const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
+  const [selectedSignId, setSelectedSignId] = useState<number | null>(null);
   const [overpassHeight, setOverpassHeight] = useState(8);
   const [overpassRampLength, setOverpassRampLength] = useState(20);
   const [overpassSplitRamps, setOverpassSplitRamps] = useState(false);
@@ -875,6 +879,13 @@ function App() {
   const [treeBatchSize, setTreeBatchSize] = useState(5);
   const [blockBuildings, setBlockBuildings] = useState<any[]>([]);
 
+  const handleSignPlaceClick = (e: any) => {
+    if (!isPlacingSign || !isAdmin) return;
+    e.stopPropagation();
+    setPendingSignPos({ x: e.point.x, z: e.point.z });
+    setIsPlacingSign(false);
+  };
+
   const handleTreePlantClick = async (e: any) => {
       if (!isPlantingTrees || !isAdmin) return;
       e.stopPropagation();
@@ -1390,6 +1401,14 @@ function App() {
                 secureModeEnabled={secureModeEnabled}
                 currentLocBattleMaps={currentLocBattleMaps}
                 enterBattleMap={enterBattleMap}
+                signs={signs}
+                fetchSigns={fetchSigns}
+                isPlacingSign={isPlacingSign}
+                setIsPlacingSign={setIsPlacingSign}
+                pendingSignPos={pendingSignPos}
+                setPendingSignPos={setPendingSignPos}
+                selectedSignId={selectedSignId}
+                setSelectedSignId={setSelectedSignId}
                 />
             )}
             {adminBankPlayer && (
@@ -1862,6 +1881,13 @@ function App() {
                     <meshBasicMaterial visible={false} />
                 </mesh>
             )}
+            {/* @ts-ignore */}
+            {isPlacingSign && (
+                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} onPointerDown={handleSignPlaceClick}>
+                    <planeGeometry args={[10000, 10000]} />
+                    <meshBasicMaterial visible={false} />
+                </mesh>
+            )}
             <Grid raycast={() => null} infiniteGrid fadeDistance={750} fadeStrength={1.5} cellSize={1} cellThickness={0.7} sectionSize={10} sectionThickness={1.2} sectionColor={THEMES[currentTheme].gridSection} cellColor={THEMES[currentTheme].gridCell} />
             {token !== '' && (
               <group position={[0, 0.01, 0]}>
@@ -1899,6 +1925,7 @@ function App() {
                 {renderSignage && <AutoSignage locations={locations} density={signageDensity} />}
               </>
             )}
+            <Signs signs={signs} onSelect={isAdmin ? setSelectedSignId : undefined} />
             {roadLayerMode === 'overpass' && roadTrail.length > 0 && (
               <OverpassPreview
                 trail={roadTrail}
