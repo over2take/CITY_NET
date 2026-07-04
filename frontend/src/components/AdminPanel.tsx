@@ -11,7 +11,8 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 // ─── Custom Signs view ───────────────────────────────────────────────────────
 
-const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_y: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false };
+const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_y: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, lines: null };
+const BLANK_LINE = { text: '', font_size: 1.0 };
 
 const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: '#00ff00', border: '1px solid #00ff00', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
 
@@ -31,6 +32,8 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
 }) {
   const [form, setForm] = React.useState<any>(BLANK_SIGN);
   const [isNew, setIsNew] = React.useState(true);
+  const [isMultiLine, setIsMultiLine] = React.useState(false);
+  const [formLines, setFormLines] = React.useState<{text: string; font_size: number}[]>([{...BLANK_LINE}]);
   const [uploadErr, setUploadErr] = React.useState('');
   const [uploading, setUploading] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
@@ -38,7 +41,17 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
   React.useEffect(() => {
     if (selectedSignId == null) return;
     const s = signs.find(s => s.id === selectedSignId);
-    if (s) { setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter, font_family: s.font_family ?? 'monospace' }); setIsNew(false); }
+    if (!s) return;
+    setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter, font_family: s.font_family ?? 'monospace' });
+    setIsNew(false);
+    if (s.lines) {
+      try {
+        const parsed = JSON.parse(s.lines);
+        if (Array.isArray(parsed) && parsed.length) { setFormLines(parsed); setIsMultiLine(true); return; }
+      } catch { /* fall through */ }
+    }
+    setIsMultiLine(false);
+    setFormLines([{ text: s.text, font_size: s.font_size }]);
   }, [selectedSignId, signs]);
 
   React.useEffect(() => {
@@ -47,20 +60,49 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
     setPendingSignPos(null);
   }, [pendingSignPos, setPendingSignPos]);
 
-  const startNew = () => { setForm(BLANK_SIGN); setIsNew(true); setSelectedSignId(null); };
+  const startNew = () => {
+    setForm(BLANK_SIGN); setIsNew(true); setSelectedSignId(null);
+    setIsMultiLine(false); setFormLines([{...BLANK_LINE}]);
+  };
+
+  const toggleMultiLine = (on: boolean) => {
+    if (on) {
+      // seed with current single-line values
+      setFormLines([{ text: form.text || '', font_size: parseFloat(form.font_size) || 1 }]);
+    } else {
+      // pull first line back into the form
+      const first = formLines[0] ?? BLANK_LINE;
+      setForm((f: any) => ({ ...f, text: first.text, font_size: first.font_size }));
+    }
+    setIsMultiLine(on);
+  };
+
+  const updateLine = (i: number, key: string, val: any) =>
+    setFormLines(ls => ls.map((l, idx) => idx === i ? { ...l, [key]: val } : l));
+  const addLine    = () => setFormLines(ls => [...ls, { ...BLANK_LINE }]);
+  const removeLine = (i: number) => setFormLines(ls => ls.filter((_, idx) => idx !== i));
 
   const save = async () => {
-    if (!form.text.trim()) return;
-    const body = {
-      text: form.text,
+    const hasText = isMultiLine
+      ? formLines.some(l => l.text.trim())
+      : form.text.trim();
+    if (!hasText) return;
+
+    // For text/font_size, use first line (or single-line form) as the canonical fallback
+    const primaryText = isMultiLine ? (formLines[0]?.text || '') : form.text;
+    const primarySize = isMultiLine ? (formLines[0]?.font_size || 1) : (parseFloat(form.font_size) || 1);
+
+    const body: any = {
+      text: primaryText,
       x: parseFloat(form.x) || 0,
       y: parseFloat(form.y) || 0,
       z: parseFloat(form.z) || 0,
       rotation_y: parseFloat(form.rotation_y) || 0,
-      font_size: parseFloat(form.font_size) || 1,
+      font_size: primarySize,
       font_family: form.font_family || 'monospace',
       image_url: form.image_url || null,
       use_tv_filter: form.use_tv_filter ? 1 : 0,
+      lines: isMultiLine ? formLines.filter(l => l.text.trim()) : null,
     };
     const url = isNew ? '/api/signs' : `/api/signs/${selectedSignId}`;
     const method = isNew ? 'POST' : 'PATCH';
@@ -136,8 +178,42 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       </div>
 
       {/* Form */}
-      <div style={{fontSize: '0.7rem', fontWeight: 'bold', marginBottom: '6px', color: '#00ff00'}}>{isNew ? 'NEW SIGN' : `EDIT #${selectedSignId}`}</div>
-      {field('TEXT', 'text')}
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px'}}>
+        <span style={{fontSize:'0.7rem', fontWeight:'bold', color:'#00ff00'}}>{isNew ? 'NEW SIGN' : `EDIT #${selectedSignId}`}</span>
+        <label style={{display:'flex', alignItems:'center', gap:'4px', fontSize:'0.7rem', cursor:'pointer'}}>
+          <input type="checkbox" checked={isMultiLine} onChange={e => toggleMultiLine(e.target.checked)} />
+          MULTI-LINE
+        </label>
+      </div>
+
+      {isMultiLine ? (
+        <div style={{marginBottom:'6px', border:'1px solid #00ff0033', padding:'6px'}}>
+          {formLines.map((line, i) => (
+            <div key={i} style={{marginBottom:'8px', paddingBottom:'8px', borderBottom: i < formLines.length - 1 ? '1px dashed #00ff0033' : 'none'}}>
+              <div style={{display:'flex', alignItems:'center', gap:'4px', marginBottom:'3px'}}>
+                <span style={{fontSize:'0.65rem', opacity:0.6}}>LINE {i + 1}</span>
+                {formLines.length > 1 && (
+                  <button style={{marginLeft:'auto', fontSize:'0.6rem', padding:'0 4px', background:'transparent', color:'#ff4444', border:'1px solid #ff4444', cursor:'pointer'}} onClick={() => removeLine(i)}>✕</button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={line.text}
+                onChange={e => updateLine(i, 'text', e.target.value)}
+                placeholder="Line text..."
+                style={{...INPUT_STYLE, marginBottom:'4px'}}
+              />
+              <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
+                <label style={{fontSize:'0.65rem', opacity:0.7, whiteSpace:'nowrap'}}>SIZE: {line.font_size.toFixed(1)}</label>
+                <input type="range" min="0.5" max="4" step="0.5" value={line.font_size} onChange={e => updateLine(i, 'font_size', parseFloat(e.target.value))} style={{flex:1}} />
+              </div>
+            </div>
+          ))}
+          <button className="utility-btn" style={{width:'100%', fontSize:'0.7rem'}} onClick={addLine}>+ ADD LINE</button>
+        </div>
+      ) : (
+        field('TEXT', 'text')
+      )}
       <div style={{display: 'flex', gap: '8px'}}>
         <div style={{flex: 1}}>{field('X', 'x', 'number', '0.1')}</div>
         <div style={{flex: 1}}>{field('Y', 'y', 'number', '0.1')}</div>
@@ -186,10 +262,10 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
           <label style={{fontSize: '0.7rem', opacity: 0.8}}>ROTATION_Y: {parseFloat(form.rotation_y || 0).toFixed(2)}</label>
           <input type="range" min="0" max={Math.PI * 2} step="0.05" value={form.rotation_y || 0} onChange={e => setForm((f: any) => ({...f, rotation_y: parseFloat(e.target.value)}))} style={{width: '100%'}} />
         </div>
-        <div style={{flex: 1}}>
+        {!isMultiLine && <div style={{flex: 1}}>
           <label style={{fontSize: '0.7rem', opacity: 0.8}}>FONT_SIZE: {parseFloat(form.font_size || 1).toFixed(1)}</label>
           <input type="range" min="0.5" max="4" step="0.5" value={form.font_size || 1} onChange={e => setForm((f: any) => ({...f, font_size: parseFloat(e.target.value)}))} style={{width: '100%'}} />
-        </div>
+        </div>}
       </div>
       {field('IMAGE_URL (optional)', 'image_url')}
       <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', marginBottom: '10px', cursor: 'pointer'}}>

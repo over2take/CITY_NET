@@ -309,6 +309,7 @@ db.serialize(() => {
     use_tv_filter INTEGER DEFAULT 0
   )`);
   db.run(`ALTER TABLE signs ADD COLUMN font_family TEXT DEFAULT 'monospace'`, () => {});
+  db.run(`ALTER TABLE signs ADD COLUMN lines TEXT`, () => {});
 });
 
 module.exports = db;
