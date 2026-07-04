@@ -163,7 +163,7 @@ export const InstancedShape = React.memo(({ shape, polyCount, elements, onSelect
         hitMeshRef.current!.instanceMatrix.needsUpdate = true;
         hitMeshRef.current!.computeBoundingBox();
         hitMeshRef.current!.computeBoundingSphere();
-    }, [elements]);
+    }, [elements, theme]);
 
     const dragDist = useRef(0);
 

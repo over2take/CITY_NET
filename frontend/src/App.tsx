@@ -1833,7 +1833,7 @@ function App() {
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <GlobalCameraCapture />
             <CursorPivotControls />
-            <color attach="background" args={['#000000']} />
+            <color attach="background" args={[THEMES[currentTheme].background]} />
             {/* @ts-ignore */}
             {isPlantingTrees && (
                 <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} onPointerDown={handleTreePlantClick}>
@@ -1841,7 +1841,7 @@ function App() {
                     <meshBasicMaterial visible={false} />
                 </mesh>
             )}
-            <Grid raycast={() => null} infiniteGrid fadeDistance={750} fadeStrength={1.5} cellSize={1} cellThickness={0.7} sectionSize={10} sectionThickness={1.2} sectionColor="#006600" cellColor="#003300" />
+            <Grid raycast={() => null} infiniteGrid fadeDistance={750} fadeStrength={1.5} cellSize={1} cellThickness={0.7} sectionSize={10} sectionThickness={1.2} sectionColor={THEMES[currentTheme].border} cellColor={THEMES[currentTheme].background} />
             {token !== '' && (
               <group position={[0, 0.01, 0]}>
                 {/* Center Lines (Blue) */}
