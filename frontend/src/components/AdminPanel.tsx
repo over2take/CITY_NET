@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
+import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
@@ -16,6 +17,7 @@ export function AdminPanel({
   joinSelection, setJoinSelection, selectedClassification, setSelectedClassification, roadSelectionBounds, setRoadSelectionBounds,
   roadTrail, setRoadTrail, waterTrail, setWaterTrail, fetchWaterBodies, roadDrawMode, setRoadDrawMode, snapToGrid, setSnapToGrid, snapRotation, setSnapRotation,
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
+  roadLayerMode, setRoadLayerMode, overpassHeight, setOverpassHeight, overpassRampLength, setOverpassRampLength, refreshOverpasses,
   genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu,
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
@@ -142,48 +144,6 @@ export function AdminPanel({
   const defined = locations.filter((l: any) => !l.parent_id && isUserDefinedName(l.name));
   const undefinedLocs = locations.filter((l: any) => !l.parent_id && !isUserDefinedName(l.name));
 
-  const consolidateRoads = (newSegments: any[], existingRoads: any[], snapDist = 6) => {
-    const points: THREE.Vector3[] = [];
-    newSegments.forEach(s => { points.push(new THREE.Vector3(s.x1, 0, s.z1), new THREE.Vector3(s.x2, 0, s.z2)); });
-    
-    // Snap to existing nodes OR project onto existing segments
-    points.forEach(p => {
-        let bestDist = snapDist;
-        let snapTarget: THREE.Vector3 | null = null;
-
-        for (const r of existingRoads) {
-            const p1 = new THREE.Vector3(r.x1, 0, r.z1); 
-            const p2 = new THREE.Vector3(r.x2, 0, r.z2);
-            
-            // Check endpoints
-            const d1 = p.distanceTo(p1);
-            const d2 = p.distanceTo(p2);
-            if (d1 < bestDist) { bestDist = d1; snapTarget = p1; }
-            if (d2 < bestDist) { bestDist = d2; snapTarget = p2; }
-
-            // Project onto segment if not near endpoints
-            const line = new THREE.Line3(p1, p2);
-            const closest = new THREE.Vector3();
-            line.closestPointToPoint(p, true, closest);
-            const dLine = p.distanceTo(closest);
-            if (dLine < bestDist) { bestDist = dLine; snapTarget = closest; }
-        }
-        if (snapTarget) p.copy(snapTarget);
-    });
-
-    // Snap new points to each other
-    for (let i = 0; i < points.length; i++) {
-        for (let j = i + 1; j < points.length; j++) {
-            if (points[i].distanceTo(points[j]) < snapDist) points[j].copy(points[i]);
-        }
-    }
-
-    return newSegments.map((s, i) => ({ 
-        ...s, 
-        x1: points[i*2].x, z1: points[i*2].z, 
-        x2: points[i*2+1].x, z2: points[i*2+1].z 
-    })).filter(s => new THREE.Vector3(s.x1, 0, s.z1).distanceTo(new THREE.Vector3(s.x2, 0, s.z2)) > 0.5);
-  };
 
   const getCenterGroundTarget = () => {
     let tx = 0, tz = 0;
@@ -690,7 +650,12 @@ export function AdminPanel({
         <>
           <header style={{marginBottom: '10px'}}><h3>DRAW_ROADS</h3><button onClick={() => { setView('list'); setRoadTrail([]); }} className="close-btn" style={{position: 'static'}}>X</button></header>
           <div className="editor-controls">
-              <label style={{fontSize: '0.7rem'}}>DRAWING_MODE</label>
+              <label style={{fontSize: '0.7rem'}}>LAYER</label>
+              <div className="button-group" style={{marginTop: '5px'}}>
+                  <button className={(roadLayerMode || 'road') === 'road' ? 'active' : ''} onClick={() => setRoadLayerMode?.('road')}>ROAD</button>
+                  <button className={roadLayerMode === 'overpass' ? 'active' : ''} onClick={() => setRoadLayerMode?.('overpass')}>OVERPASS</button>
+              </div>
+              <label style={{fontSize: '0.7rem', marginTop: '10px', display: 'block'}}>DRAWING_MODE</label>
               <div className="button-group" style={{marginTop: '5px'}}>
                   <button className={roadDrawMode === 'free' ? 'active' : ''} onClick={() => { setRoadDrawMode('free'); }}>FREE_DRAW</button>
                   <button className={roadDrawMode === 'straight' ? 'active' : ''} onClick={() => { setRoadDrawMode('straight'); }}>STRAIGHT</button>
@@ -700,12 +665,25 @@ export function AdminPanel({
                 <label style={{fontSize: '0.7rem'}}>ROAD_THICKNESS: {drawingRoadWidth.toFixed(1)}</label>
                 <input type="range" min="0.5" max="10" step="0.1" value={drawingRoadWidth} onChange={(e) => setDrawingRoadWidth(parseFloat(e.target.value))} style={{width: '100%'}} />
               </div>
+              {roadLayerMode === 'overpass' && (
+                <>
+                  <div style={{marginTop: '10px'}}>
+                    <label style={{fontSize: '0.7rem'}}>HEIGHT: {(overpassHeight ?? 8).toFixed(1)}</label>
+                    <input type="range" min="2" max="30" step="0.5" value={overpassHeight ?? 8} onChange={(e) => setOverpassHeight?.(parseFloat(e.target.value))} style={{width: '100%'}} />
+                  </div>
+                  <div style={{marginTop: '10px'}}>
+                    <label style={{fontSize: '0.7rem'}}>RAMP_LENGTH: {(overpassRampLength ?? 20).toFixed(0)}</label>
+                    <input type="range" min="5" max="80" step="1" value={overpassRampLength ?? 20} onChange={(e) => setOverpassRampLength?.(parseFloat(e.target.value))} style={{width: '100%'}} />
+                  </div>
+                </>
+              )}
           </div>
           <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}><p>PATHS_DRAWN: {roadTrail.length}</p><p>TOTAL_NODES: {roadTrail.reduce((acc, curr) => acc + curr.length, 0)}</p><p style={{opacity: 0.7, marginTop: '5px'}}>HOLD LEFT-CLICK TO DRAW PATH</p><button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setRoadTrail([])}>CLEAR_ALL_DRAWINGS</button></div>
           <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => {
                 if (roadTrail.length === 0) return setAdminAlert("DRAW A PATH FIRST");
                 const roadWidth = drawingRoadWidth;
                 let allNewSegments: any[] = [];
+                const overpassPaths: { x: number; z: number }[][] = [];
 
                 for (const path of roadTrail) {
                     if (path.length < 2) continue;
@@ -733,13 +711,31 @@ export function AdminPanel({
                         }
                     }
 
+                    if (roadLayerMode === 'overpass') {
+                      overpassPaths.push(currentPath.map(p => ({ x: p.x, z: p.z })));
+                      continue;
+                    }
+
                     for (let i = 0; i < currentPath.length - 1; i++) {
                       allNewSegments.push({ x1: currentPath[i].x, z1: currentPath[i].z, x2: currentPath[i+1].x, z2: currentPath[i+1].z, width: roadWidth });
                     }
                 }
 
+                if (roadLayerMode === 'overpass') {
+                  if (overpassPaths.length === 0) return setAdminAlert("NO VALID PATHS DRAWN");
+                  for (const pts of overpassPaths) {
+                    await fetch('/api/overpasses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({
+                      points: pts, height: overpassHeight ?? 8, width: roadWidth,
+                      ramp_length: overpassRampLength ?? 20, pillar_spacing: 12,
+                    }) });
+                  }
+                  setAdminAlert(`OVERPASS GENERATED: ${overpassPaths.length} SPAN${overpassPaths.length > 1 ? 'S' : ''}`);
+                  refreshOverpasses?.(); setView('list'); setRoadTrail([]);
+                  return;
+                }
+
                 if (allNewSegments.length === 0) return setAdminAlert("NO VALID PATHS DRAWN");
-                
+
                 const finalSegments = consolidateRoads(allNewSegments, roads);
                 await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalSegments) });
                 setAdminAlert(`DRAWN NETWORK GENERATED: ${finalSegments.length} SEGMENTS`); refreshLocations(); setView('list'); setRoadTrail([]);
