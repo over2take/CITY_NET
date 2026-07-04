@@ -13,6 +13,8 @@ interface OverpassRow {
   height: number;
   width: number;
   ramp_length: number;
+  ramp_length_start?: number | null;
+  ramp_length_end?: number | null;
   pillar_spacing: number;
 }
 
@@ -43,13 +45,18 @@ export const Overpasses = React.memo(({ overpasses, roads }: { overpasses: Overp
   const geometry = useMemo(() => {
     const tiles: Array<DeckTile & { width: number }> = [];
     const pillars: OverpassPillar[] = [];
-    (overpasses || []).forEach(o => {
-      const pts = parsePoints(o.points);
+    const allParsed = (overpasses || []).map(o => ({ points: parsePoints(o.points), width: o.width || 4 }));
+    (overpasses || []).forEach((o, idx) => {
+      const pts = allParsed[idx].points;
       if (pts.length < 2) return;
+      const otherOverpasses = allParsed.filter((_, i) => i !== idx);
       const g = buildOverpassGeometry(pts, {
         height: o.height, width: o.width,
-        rampLength: o.ramp_length, pillarSpacing: o.pillar_spacing,
-      }, roads || []);
+        rampLength: o.ramp_length,
+        rampLengthStart: o.ramp_length_start ?? undefined,
+        rampLengthEnd: o.ramp_length_end ?? undefined,
+        pillarSpacing: o.pillar_spacing,
+      }, roads || [], { otherOverpasses });
       g.tiles.forEach(t => tiles.push({ ...t, width: o.width }));
       pillars.push(...g.pillars);
     });
@@ -112,11 +119,13 @@ export const Overpasses = React.memo(({ overpasses, roads }: { overpasses: Overp
  * Semi-transparent ghost of the overpass being drawn in DRAW_ROADS.
  * Recomputes live as the trail, HEIGHT, or RAMP_LENGTH change.
  */
-export const OverpassPreview = React.memo(({ trail, height, width, rampLength, pillarSpacing = 12, roads }: {
+export const OverpassPreview = React.memo(({ trail, height, width, rampLength, rampLengthStart, rampLengthEnd, pillarSpacing = 12, roads }: {
   trail: THREE.Vector3[][];
   height: number;
   width: number;
   rampLength: number;
+  rampLengthStart?: number;
+  rampLengthEnd?: number;
   pillarSpacing?: number;
   roads: any[];
 }) => {
@@ -127,12 +136,12 @@ export const OverpassPreview = React.memo(({ trail, height, width, rampLength, p
     (trail || []).forEach(path => {
       if (!path || path.length < 2) return;
       const pts = path.map(p => ({ x: p.x, z: p.z }));
-      const g = buildOverpassGeometry(pts, { height, width, rampLength, pillarSpacing }, roads || []);
+      const g = buildOverpassGeometry(pts, { height, width, rampLength, rampLengthStart, rampLengthEnd, pillarSpacing }, roads || []);
       tiles.push(...g.tiles);
       pillars.push(...g.pillars);
     });
     return { tiles, pillars };
-  }, [trail, height, width, rampLength, pillarSpacing, roads]);
+  }, [trail, height, width, rampLength, rampLengthStart, rampLengthEnd, pillarSpacing, roads]);
 
   if (geometry.tiles.length === 0) return null;
 

@@ -215,6 +215,9 @@ function App() {
   const [roadLayerMode, setRoadLayerMode] = useState<'road' | 'overpass'>('road');
   const [overpassHeight, setOverpassHeight] = useState(8);
   const [overpassRampLength, setOverpassRampLength] = useState(20);
+  const [overpassSplitRamps, setOverpassSplitRamps] = useState(false);
+  const [overpassRampLengthStart, setOverpassRampLengthStart] = useState(20);
+  const [overpassRampLengthEnd, setOverpassRampLengthEnd] = useState(20);
   const [roadEraseMode, setRoadEraseMode] = useState<'segment' | 'path'>('segment');
   const [citySectionType, setCitySectionType] = useState<'MIXED' | 'CORPO' | 'URBAN' | 'SLUMS' | 'INDUSTRIAL'>('MIXED');
   const [genExcludeRoads, setGenExcludeRoads] = useState(false);
@@ -1348,6 +1351,12 @@ function App() {
                 setOverpassHeight={setOverpassHeight}
                 overpassRampLength={overpassRampLength}
                 setOverpassRampLength={setOverpassRampLength}
+                overpassSplitRamps={overpassSplitRamps}
+                setOverpassSplitRamps={setOverpassSplitRamps}
+                overpassRampLengthStart={overpassRampLengthStart}
+                setOverpassRampLengthStart={setOverpassRampLengthStart}
+                overpassRampLengthEnd={overpassRampLengthEnd}
+                setOverpassRampLengthEnd={setOverpassRampLengthEnd}
                 overpasses={overpasses}
                 refreshOverpasses={fetchOverpasses}
                 onRoadEraseModeChange={setRoadEraseMode}
@@ -1883,6 +1892,8 @@ function App() {
                 height={overpassHeight}
                 width={drawingRoadWidth}
                 rampLength={overpassRampLength}
+                rampLengthStart={overpassSplitRamps ? overpassRampLengthStart : undefined}
+                rampLengthEnd={overpassSplitRamps ? overpassRampLengthEnd : undefined}
                 roads={roads}
               />
             )}
