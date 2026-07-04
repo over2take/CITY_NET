@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useContext } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { buildOverpassGeometry, parseOverpassPoints } from '../utils/overpassHelpers';
 import type { DeckTile, OverpassPillar, OverpassPoint } from '../utils/overpassHelpers';
+import { ThemeContext } from '../theme/themes';
 
 const DECK_THICKNESS = 0.5;
 
@@ -34,6 +35,7 @@ const applyPillarMatrix = (obj: THREE.Object3D, p: OverpassPillar) => {
 
 /** Saved overpasses from the DB, rendered as instanced decks + pillars. */
 export const Overpasses = React.memo(({ overpasses, roads }: { overpasses: OverpassRow[]; roads: any[] }) => {
+  const theme = useContext(ThemeContext);
   const deckRef = useRef<THREE.InstancedMesh>(null);
   const edgeRef = useRef<THREE.InstancedMesh>(null);
   const pillarRef = useRef<THREE.InstancedMesh>(null);
@@ -92,15 +94,15 @@ export const Overpasses = React.memo(({ overpasses, roads }: { overpasses: Overp
     <group>
       <instancedMesh ref={deckRef} args={[null as any, null as any, Math.max(1, geometry.tiles.length)]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#0a2a18" emissive="#00331a" roughness={0.6} metalness={0.3} />
+        <meshStandardMaterial color={theme.border} emissive={theme.background} roughness={0.6} metalness={0.3} />
       </instancedMesh>
       <instancedMesh ref={edgeRef} args={[null as any, null as any, Math.max(1, geometry.tiles.length)]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial color="#00ffaa" transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} />
+        <meshBasicMaterial color={theme.highlight} transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} />
       </instancedMesh>
       <instancedMesh ref={pillarRef} args={[null as any, null as any, Math.max(1, geometry.pillars.length)]} frustumCulled={false}>
         <cylinderGeometry args={[0.5, 0.8, 1, 8]} />
-        <meshStandardMaterial color="#123322" emissive="#002211" roughness={0.7} metalness={0.4} />
+        <meshStandardMaterial color={theme.border} emissive={theme.background} roughness={0.7} metalness={0.4} />
       </instancedMesh>
     </group>
   );
@@ -118,6 +120,7 @@ export const OverpassPreview = React.memo(({ trail, height, width, rampLength, p
   pillarSpacing?: number;
   roads: any[];
 }) => {
+  const theme = useContext(ThemeContext);
   const geometry = useMemo(() => {
     const tiles: DeckTile[] = [];
     const pillars: OverpassPillar[] = [];
@@ -138,13 +141,13 @@ export const OverpassPreview = React.memo(({ trail, height, width, rampLength, p
       {geometry.tiles.map((t, i) => (
         <mesh key={`t${i}`} position={[t.x, t.y, t.z]} rotation={new THREE.Euler(0, t.yaw, t.pitch, 'YZX')}>
           <boxGeometry args={[t.length, DECK_THICKNESS, width]} />
-          <meshBasicMaterial color="#00ffaa" transparent opacity={0.3} depthWrite={false} />
+          <meshBasicMaterial color={theme.highlight} transparent opacity={0.3} depthWrite={false} />
         </mesh>
       ))}
       {geometry.pillars.map((p, i) => (
         <mesh key={`p${i}`} position={[p.x, p.height / 2, p.z]}>
           <cylinderGeometry args={[0.5, 0.8, p.height, 8]} />
-          <meshBasicMaterial color="#00ffaa" transparent opacity={0.2} depthWrite={false} />
+          <meshBasicMaterial color={theme.highlight} transparent opacity={0.2} depthWrite={false} />
         </mesh>
       ))}
     </group>
