@@ -297,6 +297,96 @@ describe('sampleOverpassPath — multi-segment', () => {
   });
 });
 
+describe('elevationAt — split ramp lengths', () => {
+  it('uses rampLengthStart for the start ramp and rampLengthEnd for the end ramp', () => {
+    // path length 100, start ramp 10, end ramp 30, height 10
+    // at s=5: halfway up start ramp → 5
+    expect(elevationAt(5,  100, 10, 20, false, false, 10, 30)).toBeCloseTo(5);
+    // at s=10: top of start ramp → full height
+    expect(elevationAt(10, 100, 10, 20, false, false, 10, 30)).toBeCloseTo(10);
+    // at s=50: flat middle → full height
+    expect(elevationAt(50, 100, 10, 20, false, false, 10, 30)).toBeCloseTo(10);
+    // at s=70: top of end ramp (30 from end) → full height
+    expect(elevationAt(70, 100, 10, 20, false, false, 10, 30)).toBeCloseTo(10);
+    // at s=85: halfway down end ramp → 5
+    expect(elevationAt(85, 100, 10, 20, false, false, 10, 30)).toBeCloseTo(5);
+    // at s=100: ground at far end → 0
+    expect(elevationAt(100, 100, 10, 20, false, false, 10, 30)).toBeCloseTo(0);
+  });
+
+  it('rampLengthStart=0 keeps start at full height, end still ramps', () => {
+    expect(elevationAt(0,   100, 10, 20, false, false, 0, 20)).toBeCloseTo(10);
+    expect(elevationAt(50,  100, 10, 20, false, false, 0, 20)).toBeCloseTo(10);
+    expect(elevationAt(100, 100, 10, 20, false, false, 0, 20)).toBeCloseTo(0);
+  });
+
+  it('rampLengthEnd=0 keeps end at full height, start still ramps', () => {
+    expect(elevationAt(0,   100, 10, 20, false, false, 20, 0)).toBeCloseTo(0);
+    expect(elevationAt(50,  100, 10, 20, false, false, 20, 0)).toBeCloseTo(10);
+    expect(elevationAt(100, 100, 10, 20, false, false, 20, 0)).toBeCloseTo(10);
+  });
+
+  it('both split ramps 0 → flat deck full length', () => {
+    expect(elevationAt(0,   100, 10, 20, false, false, 0, 0)).toBeCloseTo(10);
+    expect(elevationAt(50,  100, 10, 20, false, false, 0, 0)).toBeCloseTo(10);
+    expect(elevationAt(100, 100, 10, 20, false, false, 0, 0)).toBeCloseTo(10);
+  });
+
+  it('connectedStart overrides rampLengthStart', () => {
+    // connected start always forces full height at s=0 regardless of rampLengthStart
+    expect(elevationAt(0, 100, 10, 20, true, false, 40, 20)).toBeCloseTo(10);
+  });
+
+  it('connectedEnd overrides rampLengthEnd', () => {
+    expect(elevationAt(100, 100, 10, 20, false, true, 20, 40)).toBeCloseTo(10);
+  });
+
+  it('falls back to rampLength when split values are undefined', () => {
+    // No split args — should behave identically to the base elevationAt
+    expect(elevationAt(10, 100, 10, 20, false, false, undefined, undefined)).toBeCloseTo(5);
+    expect(elevationAt(50, 100, 10, 20, false, false, undefined, undefined)).toBeCloseTo(10);
+  });
+});
+
+describe('buildOverpassGeometry — split ramp lengths', () => {
+  it('produces a short start ramp and long end ramp when split', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    const { tiles } = buildOverpassGeometry(pts, { ...params, rampLengthStart: 5, rampLengthEnd: 30 }, []);
+    // First tile is near ground, should be ramped
+    expect(tiles[0].isRamp).toBe(true);
+    // Tile at s≈7 (past 5-unit start ramp) should be flat
+    const earlyFlat = tiles.find(t => t.x > 7 && t.x < 20);
+    expect(earlyFlat).toBeDefined();
+    expect(earlyFlat!.isRamp).toBe(false);
+    expect(earlyFlat!.y).toBeCloseTo(10, 1);
+    // Tile near s=90 (inside 30-unit end ramp) should be ramped
+    const lateRamp = tiles.find(t => t.x > 85 && t.x < 95);
+    expect(lateRamp).toBeDefined();
+    expect(lateRamp!.isRamp).toBe(true);
+    expect(lateRamp!.y).toBeLessThan(10);
+  });
+
+  it('rampLengthStart=0, rampLengthEnd=0 → all interior tiles flat', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    const { tiles } = buildOverpassGeometry(pts, { ...params, rampLengthStart: 0, rampLengthEnd: 0 }, []);
+    const interior = tiles.slice(1, -1);
+    expect(interior.length).toBeGreaterThan(0);
+    interior.forEach(t => {
+      expect(t.isRamp).toBe(false);
+      expect(t.y).toBeCloseTo(10, 1);
+    });
+  });
+
+  it('rampLengthStart=0 → first tile at full height', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    const { tiles } = buildOverpassGeometry(pts, { ...params, rampLengthStart: 0, rampLengthEnd: 20 }, []);
+    expect(tiles[0].y).toBeCloseTo(10, 1);
+    expect(tiles[0].isRamp).toBe(false);
+    // Far end should still slope down
+    expect(tiles[tiles.length - 1].isRamp).toBe(true);
+  });
+});
+
 describe('isEndpointConnected', () => {
   it('detects a nearby road endpoint within tolerance', () => {
     const roads = [{ x1: 10, z1: 0, x2: 50, z2: 0 }];
