@@ -670,7 +670,7 @@ export function AdminPanel({
                   </div>
                   <div style={{marginTop: '10px'}}>
                     <label style={{fontSize: '0.7rem'}}>RAMP_LENGTH: {(overpassRampLength ?? 20).toFixed(0)}</label>
-                    <input type="range" min="5" max="80" step="1" value={overpassRampLength ?? 20} onChange={(e) => setOverpassRampLength?.(parseFloat(e.target.value))} style={{width: '100%'}} />
+                    <input type="range" min="5" max="160" step="1" value={overpassRampLength ?? 20} onChange={(e) => setOverpassRampLength?.(parseFloat(e.target.value))} style={{width: '100%'}} />
                   </div>
                 </>
               )}
