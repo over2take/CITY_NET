@@ -46,7 +46,9 @@ function makeTestDb() {
         melee_ac INTEGER,
         ranged_ac INTEGER,
         injuries TEXT DEFAULT '{}',
-        is_global INTEGER DEFAULT 0
+        is_global INTEGER DEFAULT 0,
+        has_sidewalk INTEGER DEFAULT 1,
+        has_signage INTEGER DEFAULT 1
       )`);
 
       db.run(`CREATE TABLE districts (
@@ -104,6 +106,18 @@ function makeTestDb() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         points_json TEXT NOT NULL,
         map_scale_multiplier TEXT DEFAULT '[1]'
+      )`);
+
+      db.run(`CREATE TABLE signs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        text TEXT NOT NULL,
+        x REAL NOT NULL,
+        y REAL NOT NULL,
+        z REAL NOT NULL,
+        rotation_y REAL DEFAULT 0,
+        font_size REAL DEFAULT 1.0,
+        image_url TEXT,
+        use_tv_filter INTEGER DEFAULT 0
       )`);
 
       db.run(`CREATE TABLE action_history (

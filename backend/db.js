@@ -180,6 +180,8 @@ db.serialize(() => {
   db.run(`ALTER TABLE locations ADD COLUMN melee_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN ranged_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN is_global INTEGER DEFAULT 0`, (err) => {});
+  db.run(`ALTER TABLE locations ADD COLUMN has_sidewalk INTEGER DEFAULT 1`, (err) => {});
+  db.run(`ALTER TABLE locations ADD COLUMN has_signage INTEGER DEFAULT 1`, (err) => {});
 
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN melee_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN ranged_ac INTEGER`, (err) => {});
@@ -293,6 +295,21 @@ db.serialize(() => {
     sort_order INTEGER DEFAULT 0,
     FOREIGN KEY(parent_id) REFERENCES music_items(id) ON DELETE CASCADE
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS signs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    z REAL NOT NULL,
+    rotation_y REAL DEFAULT 0,
+    font_size REAL DEFAULT 1.0,
+    font_family TEXT DEFAULT 'monospace',
+    image_url TEXT,
+    use_tv_filter INTEGER DEFAULT 0
+  )`);
+  db.run(`ALTER TABLE signs ADD COLUMN font_family TEXT DEFAULT 'monospace'`, () => {});
+  db.run(`ALTER TABLE signs ADD COLUMN lines TEXT`, () => {});
 });
 
 module.exports = db;
