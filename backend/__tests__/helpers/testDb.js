@@ -96,6 +96,25 @@ function makeTestDb() {
         saved_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
+      db.run(`CREATE TABLE water_bodies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        points_json TEXT NOT NULL,
+        map_scale_multiplier TEXT DEFAULT '[1]'
+      )`);
+
+      db.run(`CREATE TABLE action_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      db.run(`CREATE TABLE admin (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT
+      )`);
+
       db.run(`CREATE TABLE sqlite_sequence (name TEXT, seq INTEGER)`, () => {
         // ignore error — it may already exist
         resolve(db);

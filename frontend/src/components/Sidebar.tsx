@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import kofiLogo from '../assets/kofi.png';
 import { CityDataBaseMenu } from './CityDatabase';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { CurrencyIcon } from './BankWindows';
@@ -281,6 +282,20 @@ export function SystemInfoMenu({ userName, token }: SystemInfoMenuProps) {
           <a href="https://github.com/over2take/CITY_NET" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)', opacity: 0.7, fontSize: '0.65rem', letterSpacing: '1px' }}>
             SOURCE_CODE ↗
           </a>
+        </div>
+        <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '15px', marginTop: '15px', textAlign: 'center' }}>
+          <div style={{ opacity: 0.6, fontSize: '0.65rem', letterSpacing: '1px', marginBottom: '8px' }}>SUPPORT THE CREATOR: Over2Take</div>
+          <a href="https://ko-fi.com/over2take" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block' }}>
+            <img src={kofiLogo} alt="Support on Ko-fi" style={{ height: '32px', filter: 'brightness(0) saturate(100%) invert(62%) sepia(98%) saturate(400%) hue-rotate(90deg) brightness(0.9)', opacity: 0.85, transition: 'opacity 0.2s' }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '0.85')}
+            />
+          </a>
+          <div style={{ marginTop: '6px' }}>
+            <a href="https://ko-fi.com/over2take" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)', opacity: 0.7, fontSize: '0.6rem', letterSpacing: '1px' }}>
+              ko-fi.com/over2take ↗
+            </a>
+          </div>
         </div>
       </div>
     </div>
