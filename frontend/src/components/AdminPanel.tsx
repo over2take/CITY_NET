@@ -83,8 +83,10 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
     fd.append('font', file);
     try {
       const res = await fetch('/api/fonts', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
-      const data = await res.json();
-      if (!res.ok) { setUploadErr(data.error || 'Upload failed'); return; }
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { setUploadErr(`Server error (${res.status}) — restart the backend`); return; }
+      if (!res.ok) { setUploadErr(data.error || `Upload failed (${res.status})`); return; }
       const updated = await fetch('/api/fonts').then(r => r.json());
       setRemoteFonts(updated);
       setForm((f: any) => ({ ...f, font_family: data.name }));
