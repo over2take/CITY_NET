@@ -575,7 +575,7 @@ export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any
   return (
     <instancedMesh ref={meshRef} args={[null as any, null as any, packetCount]} frustumCulled={false} renderOrder={2}>
       <boxGeometry args={[1, 1, 1]} />
-      <meshBasicMaterial transparent blending={THREE.AdditiveBlending} depthWrite={false} depthTest={false} />
+      <meshBasicMaterial transparent blending={THREE.AdditiveBlending} depthWrite={false} />
     </instancedMesh>
   );
 });
