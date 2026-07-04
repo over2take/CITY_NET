@@ -1841,7 +1841,7 @@ function App() {
                     <meshBasicMaterial visible={false} />
                 </mesh>
             )}
-            <Grid raycast={() => null} infiniteGrid fadeDistance={750} fadeStrength={1.5} cellSize={1} cellThickness={0.7} sectionSize={10} sectionThickness={1.2} sectionColor={THEMES[currentTheme].border} cellColor={THEMES[currentTheme].background} />
+            <Grid raycast={() => null} infiniteGrid fadeDistance={750} fadeStrength={1.5} cellSize={1} cellThickness={0.7} sectionSize={10} sectionThickness={1.2} sectionColor={THEMES[currentTheme].gridSection} cellColor={THEMES[currentTheme].gridCell} />
             {token !== '' && (
               <group position={[0, 0.01, 0]}>
                 {/* Center Lines (Blue) */}
