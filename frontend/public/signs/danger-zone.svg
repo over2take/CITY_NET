@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="400" height="300" fill="#0f0202"/>
+  <rect x="8" y="8" width="384" height="284" fill="none" stroke="#ff3b3b" stroke-width="4" rx="14" filter="url(#glow)"/>
+  <!-- warning triangle -->
+  <path d="M200 45 L275 165 L125 165 z" fill="none" stroke="#ffcf3f" stroke-width="6" stroke-linejoin="round" filter="url(#glow)"/>
+  <line x1="200" y1="80" x2="200" y2="125" stroke="#ffcf3f" stroke-width="8" stroke-linecap="round" filter="url(#glow)"/>
+  <circle cx="200" cy="145" r="6" fill="#ffcf3f" filter="url(#glow)"/>
+  <text x="200" y="215" text-anchor="middle" font-family="monospace" font-size="40" font-weight="bold" fill="#ff3b3b" filter="url(#glow)">KEEP OUT</text>
+  <text x="200" y="258" text-anchor="middle" font-family="monospace" font-size="24" font-weight="bold" fill="#ff7a2e" filter="url(#glow)">COMBAT ZONE</text>
+</svg>

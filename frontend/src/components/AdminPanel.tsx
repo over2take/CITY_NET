@@ -11,8 +11,18 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 // ─── Custom Signs view ───────────────────────────────────────────────────────
 
-const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_y: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, lines: null };
+const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_y: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, filter_intensity: 1.0, lines: null };
 const BLANK_LINE = { text: '', font_size: 1.0 };
+
+const SIGN_PRESETS = [
+  { label: 'NOODLES', url: '/signs/noodle-bar.svg' },
+  { label: 'CLINIC', url: '/signs/cyber-clinic.svg' },
+  { label: 'MOTEL', url: '/signs/motel.svg' },
+  { label: 'BAR', url: '/signs/bar-open.svg' },
+  { label: 'PAWN', url: '/signs/pawn-shop.svg' },
+  { label: 'NET CAFE', url: '/signs/net-cafe.svg' },
+  { label: 'KEEP OUT', url: '/signs/danger-zone.svg' },
+];
 
 const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: '#00ff00', border: '1px solid #00ff00', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
 
@@ -66,7 +76,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
     if (selectedSignId == null) return;
     const s = signs.find(s => s.id === selectedSignId);
     if (!s) return;
-    setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter, font_family: s.font_family ?? 'monospace' });
+    setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter, font_family: s.font_family ?? 'monospace', filter_intensity: s.filter_intensity ?? 1.0 });
     setIsNew(false);
     if (s.lines) {
       try {
@@ -119,6 +129,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       font_family: form.font_family || 'monospace',
       image_url: form.image_url || null,
       use_tv_filter: form.use_tv_filter ? 1 : 0,
+      filter_intensity: parseFloat(form.filter_intensity) >= 0 ? parseFloat(form.filter_intensity) : 1.0,
       lines: isMultiLine ? formLines.filter((l: SignLine) => l.text.trim()) : null,
     };
   };
@@ -330,10 +341,29 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
         </div>}
       </div>
       {field('IMAGE_URL (optional)', 'image_url')}
-      <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', marginBottom: '10px', cursor: 'pointer'}}>
+      <div style={{marginBottom: '8px'}}>
+        <label style={{fontSize: '0.65rem', opacity: 0.7}}>PRESET SIGNS</label>
+        <div style={{display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '3px'}}>
+          {SIGN_PRESETS.map(p => (
+            <button
+              key={p.url}
+              className="utility-btn"
+              style={{fontSize: '0.6rem', padding: '2px 6px', opacity: form.image_url === p.url ? 1 : 0.65, borderStyle: form.image_url === p.url ? 'solid' : 'dashed'}}
+              onClick={() => setForm((f: any) => ({...f, image_url: f.image_url === p.url ? '' : p.url}))}
+            >{p.label}</button>
+          ))}
+        </div>
+      </div>
+      <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', marginBottom: form.use_tv_filter ? '4px' : '10px', cursor: 'pointer'}}>
         <input type="checkbox" checked={!!form.use_tv_filter} onChange={e => setForm((f: any) => ({...f, use_tv_filter: e.target.checked}))} />
-        TV_FILTER (Fable)
+        TV_FILTER
       </label>
+      {form.use_tv_filter && (
+        <div style={{marginBottom: '10px'}}>
+          <label style={{fontSize: '0.7rem', opacity: 0.8}}>FILTER_INTENSITY: {(parseFloat(form.filter_intensity) >= 0 ? parseFloat(form.filter_intensity) : 1).toFixed(1)}</label>
+          <input type="range" min="0.1" max="2" step="0.1" value={parseFloat(form.filter_intensity) >= 0 ? form.filter_intensity : 1} onChange={e => setForm((f: any) => ({...f, filter_intensity: parseFloat(e.target.value)}))} style={{width: '100%'}} />
+        </div>
+      )}
 
       <div style={{display: 'flex', gap: '8px'}}>
         <button className="utility-btn" style={{flex: 1}} onClick={isNew ? placeSign : save} disabled={!hasContent()}>

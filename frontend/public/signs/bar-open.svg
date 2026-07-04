@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="400" height="300" fill="#050310"/>
+  <rect x="8" y="8" width="384" height="284" fill="none" stroke="#7d5dff" stroke-width="4" rx="14" filter="url(#glow)"/>
+  <!-- martini glass -->
+  <path d="M130 70 h80 l-40 55 z" fill="none" stroke="#5df2ff" stroke-width="5" filter="url(#glow)"/>
+  <line x1="170" y1="125" x2="170" y2="175" stroke="#5df2ff" stroke-width="5" filter="url(#glow)"/>
+  <line x1="145" y1="178" x2="195" y2="178" stroke="#5df2ff" stroke-width="5" filter="url(#glow)"/>
+  <!-- olive -->
+  <circle cx="185" cy="88" r="8" fill="none" stroke="#a4ff4f" stroke-width="4" filter="url(#glow)"/>
+  <text x="255" y="140" text-anchor="middle" font-family="monospace" font-size="52" font-weight="bold" fill="#7d5dff" filter="url(#glow)">BAR</text>
+  <text x="200" y="250" text-anchor="middle" font-family="monospace" font-size="34" font-weight="bold" fill="#ff2d78" filter="url(#glow)">OPEN 24/7</text>
+</svg>
