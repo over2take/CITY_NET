@@ -3,7 +3,9 @@ export interface OverpassPoint { x: number; z: number; }
 export interface OverpassParams {
   height: number;        // target deck elevation
   width: number;         // deck width
-  rampLength: number;    // horizontal run of each end ramp
+  rampLength: number;    // horizontal run of each end ramp (used when start/end not split)
+  rampLengthStart?: number; // override for start ramp only
+  rampLengthEnd?: number;   // override for end ramp only
   pillarSpacing: number; // distance between pillar centres along the deck
 }
 
@@ -64,14 +66,15 @@ export const elevationAt = (
   height: number,
   rampLength: number,
   connectedStart = false,
-  connectedEnd = false
+  connectedEnd = false,
+  rampLengthStart?: number,
+  rampLengthEnd?: number,
 ): number => {
-  // rampLength === 0 means flat deck at full height — no ramps, ends stay elevated
-  if (rampLength === 0) return height;
-  const slope = height / rampLength;
-  const dStart = connectedStart ? Infinity : s;
-  const dEnd = connectedEnd ? Infinity : totalLength - s;
-  return Math.min(height, slope * Math.max(0, Math.min(dStart, dEnd)));
+  const rl0 = rampLengthStart ?? rampLength;
+  const rl1 = rampLengthEnd   ?? rampLength;
+  const elevStart = rl0 === 0 || connectedStart ? height : Math.min(height, (height / rl0) * s);
+  const elevEnd   = rl1 === 0 || connectedEnd   ? height : Math.min(height, (height / rl1) * (totalLength - s));
+  return Math.min(elevStart, elevEnd);
 };
 
 /** Parse an overpass row's points column (JSON string from the DB or an array). */
@@ -86,7 +89,7 @@ export const parseOverpassPoints = (raw: string | OverpassPoint[]): OverpassPoin
  */
 export const sampleOverpassPath = (
   points: OverpassPoint[],
-  params: Pick<OverpassParams, 'height' | 'rampLength'>,
+  params: Pick<OverpassParams, 'height' | 'rampLength' | 'rampLengthStart' | 'rampLengthEnd'>,
   existingRoads: Array<{ x1: number; z1: number; x2: number; z2: number }> = [],
   step = 4
 ): Array<{ x: number; y: number; z: number }> => {
@@ -111,7 +114,7 @@ export const sampleOverpassPath = (
     const t = (s - cum[i - 1]) / segLen;
     samples.push({
       x: points[i - 1].x + (points[i].x - points[i - 1].x) * t,
-      y: elevationAt(s, totalLength, params.height, params.rampLength, connectedStart, connectedEnd),
+      y: elevationAt(s, totalLength, params.height, params.rampLength, connectedStart, connectedEnd, params.rampLengthStart, params.rampLengthEnd),
       z: points[i - 1].z + (points[i].z - points[i - 1].z) * t,
     });
   }
@@ -130,7 +133,7 @@ export const buildOverpassGeometry = (
   existingRoads: Array<{ x1: number; z1: number; x2: number; z2: number; width?: number }> = [],
   opts: { connectedStart?: boolean; connectedEnd?: boolean; tileLength?: number } = {}
 ): OverpassGeometry => {
-  const { height, rampLength, pillarSpacing } = params;
+  const { height, rampLength, rampLengthStart, rampLengthEnd, pillarSpacing } = params;
   const tileLength = opts.tileLength ?? 3;
   const connectedStart = opts.connectedStart ?? isEndpointConnected(points[0], existingRoads);
   const connectedEnd = opts.connectedEnd ?? isEndpointConnected(points[points.length - 1], existingRoads);
@@ -145,7 +148,7 @@ export const buildOverpassGeometry = (
   const totalLength = cum[cum.length - 1];
   if (totalLength < 0.5) return { tiles: [], pillars: [], totalLength: 0 };
 
-  const elev = (s: number) => elevationAt(s, totalLength, height, rampLength, connectedStart, connectedEnd);
+  const elev = (s: number) => elevationAt(s, totalLength, height, rampLength, connectedStart, connectedEnd, rampLengthStart, rampLengthEnd);
   const posAt = (s: number): OverpassPoint => {
     let i = 1;
     while (i < cum.length - 1 && cum[i] < s) i++;
