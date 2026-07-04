@@ -456,8 +456,7 @@ interface TrafficRoute {
   width: number;
 }
 
-const HEADLIGHT = new THREE.Color('#00ffaa'); // travelling with the polyline
-const TAILLIGHT = new THREE.Color('#ff7744'); // travelling against it
+const TRAFFIC_COLORS = [new THREE.Color('#00ffaa'), new THREE.Color('#ff7744')];
 
 export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any[]; overpasses?: any[] }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -513,6 +512,7 @@ export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any
       // 3 discrete lane slots per side for better separation
       laneSlot: Math.floor(Math.random() * 3),
       carLength: 0.55 + Math.random() * 0.35, // varied vehicle sizes
+      colorIndex: Math.floor(Math.random() * TRAFFIC_COLORS.length), // mixed on both sides
     }));
   }, [routes.length, packetCount, weights]);
 
@@ -556,9 +556,8 @@ export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any
       const fadeDist = Math.min(6, rt.length * 0.4);
       const distIn = t * rt.length;
       const distOut = (1 - t) * rt.length;
-      const opacity = 0.7 * Math.max(0, Math.min(1, distIn / fadeDist, distOut / fadeDist));
-      // Head/tail-light tint by travel direction
-      tempColor.copy(p.side === 1 ? HEADLIGHT : TAILLIGHT).multiplyScalar(opacity);
+      const opacity = Math.max(0, Math.min(1, distIn / fadeDist, distOut / fadeDist));
+      tempColor.copy(TRAFFIC_COLORS[p.colorIndex]).multiplyScalar(opacity);
       meshRef.current!.setColorAt(i, tempColor);
 
       if (p.progress >= 1) {
