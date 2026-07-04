@@ -6,7 +6,7 @@ import { resolveDeployHealth } from '../utils/rhombusHelpers';
 import { parseOverpassPoints, sampleOverpassPath, buildOverpassGeometry } from '../utils/overpassHelpers';
 import { chainRoadPolylines } from '../utils/roadHelpers';
 
-export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token }: any) => {
+export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token, roadLayerMode }: any) => {
   const { camera, gl, controls } = useThree();
   const [dragStart, setDragStart] = useState<THREE.Vector3 | null>(null);
   const [dragEnd, setDragEnd] = useState<THREE.Vector3 | null>(null);
@@ -82,12 +82,13 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
       }
       (controls as any).update();
       (controls as any).minPolarAngle = 0;
-      (controls as any).maxPolarAngle = 0.01;
+      // Allow free tilt in overpass mode so the user can preview ramp height
+      (controls as any).maxPolarAngle = (view === 'draw_roads' && roadLayerMode === 'overpass') ? Math.PI / 2 : 0.01;
     } else if (controls) {
       (controls as any).minPolarAngle = 0;
       (controls as any).maxPolarAngle = Math.PI;
     }
-  }, [view, controls, camera]);
+  }, [view, controls, camera, roadLayerMode]);
 
   useEffect(() => {
     if (view !== 'district' && view !== 'draw_roads' && view !== 'draw_water' && view !== 'city_gen' && !isBatchSelecting && !rhombusState?.active) return;
