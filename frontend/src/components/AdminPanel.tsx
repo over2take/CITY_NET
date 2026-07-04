@@ -17,7 +17,7 @@ export function AdminPanel({
   joinSelection, setJoinSelection, selectedClassification, setSelectedClassification, roadSelectionBounds, setRoadSelectionBounds,
   roadTrail, setRoadTrail, waterTrail, setWaterTrail, fetchWaterBodies, roadDrawMode, setRoadDrawMode, snapToGrid, setSnapToGrid, snapRotation, setSnapRotation,
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
-  roadLayerMode, setRoadLayerMode, overpassHeight, setOverpassHeight, overpassRampLength, setOverpassRampLength, refreshOverpasses,
+  roadLayerMode, setRoadLayerMode, overpassHeight, setOverpassHeight, overpassRampLength, setOverpassRampLength, refreshOverpasses, overpasses,
   onRoadEraseModeChange,
   genExcludeRoads, setGenExcludeRoads, setRhombusState, setActiveSidebarMenu,
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
@@ -145,6 +145,7 @@ export function AdminPanel({
   const [roadEraseMode, setRoadEraseModeLocal] = useState<'segment' | 'path'>('segment');
   const setRoadEraseMode = (m: 'segment' | 'path') => { setRoadEraseModeLocal(m); onRoadEraseModeChange?.(m); };
   const [roadPurgeConfirming, setRoadPurgeConfirming] = useState(false);
+  const [overpassPurgeConfirming, setOverpassPurgeConfirming] = useState(false);
   const defined = locations.filter((l: any) => !l.parent_id && isUserDefinedName(l.name));
   const undefinedLocs = locations.filter((l: any) => !l.parent_id && !isUserDefinedName(l.name));
 
@@ -773,6 +774,25 @@ export function AdminPanel({
               </>
             ) : (
               <button className="utility-btn danger-btn" style={{marginTop: '8px', width: '100%'}} onClick={() => setRoadPurgeConfirming(true)}>PURGE_ALL_ROADS</button>
+            )}
+          </div>
+          <div style={{marginTop: '10px', fontSize: '0.7rem', border: '1px dashed #ff3300', padding: '10px'}}>
+            <p style={{opacity: 0.7}}>OVERPASSES: {(overpasses || []).length}</p>
+            <p style={{opacity: 0.6, marginTop: '4px'}}>CLICK AN OVERPASS TO DELETE IT</p>
+            {overpassPurgeConfirming ? (
+              <>
+                <p style={{marginTop: '8px', color: '#ff3300'}}>PURGE ALL {(overpasses || []).length} OVERPASSES?</p>
+                <div style={{display: 'flex', gap: '5px', marginTop: '8px'}}>
+                  <button className="upload-btn danger-btn" style={{flex: 1}} onClick={async () => {
+                    await Promise.all((overpasses || []).map((o: any) => fetch(`/api/overpasses/${o.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })));
+                    setAdminAlert('ALL OVERPASSES PURGED'); refreshOverpasses?.(); setView('list');
+                    setOverpassPurgeConfirming(false);
+                  }}>CONFIRM</button>
+                  <button className="utility-btn" style={{flex: 1}} onClick={() => setOverpassPurgeConfirming(false)}>CANCEL</button>
+                </div>
+              </>
+            ) : (
+              <button className="utility-btn danger-btn" style={{marginTop: '8px', width: '100%'}} onClick={() => setOverpassPurgeConfirming(true)}>PURGE_ALL_OVERPASSES</button>
             )}
           </div>
         </>
