@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { resolveDeployHealth } from '../utils/rhombusHelpers';
+import { parseOverpassPoints, sampleOverpassPath } from '../utils/overpassHelpers';
 
 export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token }: any) => {
   const { camera, gl, controls } = useThree();
@@ -447,90 +448,125 @@ export const Roads = React.memo(({ roads }: { roads: any[] }) => {
   );
 });
 
-export const GhostTraffic = React.memo(({ roads }: { roads: any[] }) => {
+interface TrafficRoute {
+  pts: THREE.Vector3[];   // polyline the cars follow (roads: 2 pts, overpasses: sampled deck path)
+  cum: number[];          // cumulative arclength at each point
+  length: number;
+  width: number;
+}
+
+const HEADLIGHT = new THREE.Color('#00ffaa'); // travelling with the polyline
+const TAILLIGHT = new THREE.Color('#ff7744'); // travelling against it
+
+export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any[]; overpasses?: any[] }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  
-  // Calculate total road length and weights
-  const roadWeights = useMemo(() => {
+
+  // Flat roads + elevated overpass decks unified into arclength-parameterised routes
+  const { routes, weights, totalLength } = useMemo(() => {
+    const routes: TrafficRoute[] = [];
+    roads.forEach(r => {
+      routes.push({
+        pts: [new THREE.Vector3(r.x1, 0.07, r.z1), new THREE.Vector3(r.x2, 0.07, r.z2)],
+        cum: [], length: 0, width: r.width || 4,
+      });
+    });
+    overpasses.forEach(o => {
+      const pts = parseOverpassPoints(o.points);
+      if (pts.length < 2) return;
+      const sampled = sampleOverpassPath(pts, { height: o.height, rampLength: o.ramp_length }, roads);
+      if (sampled.length < 2) return;
+      // 0.25 = half deck thickness, +0.08 to float just above the surface
+      routes.push({
+        pts: sampled.map(s => new THREE.Vector3(s.x, s.y + 0.33, s.z)),
+        cum: [], length: 0, width: o.width || 4,
+      });
+    });
     const weights: number[] = [];
     let totalLength = 0;
-    roads.forEach(r => {
-      const len = Math.sqrt((r.x2 - r.x1)**2 + (r.z2 - r.z1)**2);
-      totalLength += len;
+    routes.forEach(rt => {
+      rt.cum = [0];
+      for (let i = 1; i < rt.pts.length; i++) rt.cum.push(rt.cum[i - 1] + rt.pts[i].distanceTo(rt.pts[i - 1]));
+      rt.length = rt.cum[rt.cum.length - 1];
+      totalLength += rt.length;
       weights.push(totalLength);
     });
-    return { weights, totalLength };
-  }, [roads]);
+    return { routes, weights, totalLength };
+  }, [roads, overpasses]);
 
-  const packetCount = Math.min(Math.floor(roadWeights.totalLength * 0.4), 600); // Density-based count
+  const packetCount = Math.min(Math.floor(totalLength * 0.4), 600); // Density-based count
   const tempObj = new THREE.Object3D();
+  const tempColor = new THREE.Color();
 
-  const getRandomRoadIndex = () => {
-    const r = Math.random() * roadWeights.totalLength;
-    return roadWeights.weights.findIndex(w => w >= r);
+  const getRandomRouteIndex = () => {
+    const r = Math.random() * totalLength;
+    return weights.findIndex(w => w >= r);
   };
-  
+
   const packets = useMemo(() => {
     return Array.from({ length: packetCount }, () => ({
-      roadIndex: getRandomRoadIndex(),
+      routeIndex: getRandomRouteIndex(),
       progress: Math.random(),
       speed: 0.12 + Math.random() * 0.15, // Slightly slower, more consistent speed
       side: Math.random() > 0.5 ? 1 : -1,
       // 3 discrete lane slots per side for better separation
-      laneSlot: Math.floor(Math.random() * 3) 
+      laneSlot: Math.floor(Math.random() * 3),
+      carLength: 0.55 + Math.random() * 0.35, // varied vehicle sizes
     }));
-  }, [roads.length, packetCount, roadWeights]);
+  }, [routes.length, packetCount, weights]);
 
   useFrame((state, delta) => {
-    if (!meshRef.current || roads.length === 0) return;
+    if (!meshRef.current || routes.length === 0) return;
 
     packets.forEach((p, i) => {
-      const roadLen = Math.max(1, roadWeights.weights[p.roadIndex] - (p.roadIndex > 0 ? roadWeights.weights[p.roadIndex-1] : 0));
-      p.progress += delta * (p.speed / roadLen * 50);
-      
-      const r = roads[p.roadIndex];
-      if (!r) { p.roadIndex = getRandomRoadIndex(); return; }
+      const rt = routes[p.routeIndex];
+      if (!rt) { p.routeIndex = getRandomRouteIndex(); return; }
 
-      const p1 = new THREE.Vector3(r.x1, 0.07, r.z1);
-      const p2 = new THREE.Vector3(r.x2, 0.07, r.z2);
-      
-      const start = p.side === 1 ? p1 : p2;
-      const end = p.side === 1 ? p2 : p1;
-      const pos = start.clone().lerp(end, p.progress % 1);
-      
-      const roadDir = p2.clone().sub(p1).normalize();
-      const roadNormal = new THREE.Vector3(-roadDir.z, 0, roadDir.x);
-      
-      // Map 0,1,2 slots to offsets within the side
-      // r.width * 0.15, 0.25, 0.35
-      const laneOffset = (0.15 + (p.laneSlot * 0.12)) * r.width;
+      p.progress += delta * (p.speed / Math.max(1, rt.length) * 50);
+      const t = p.progress % 1;
+      // side === -1 drives the polyline in reverse
+      const s = (p.side === 1 ? t : 1 - t) * rt.length;
+
+      // Locate the segment containing arclength s
+      let seg = 1;
+      while (seg < rt.cum.length - 1 && rt.cum[seg] < s) seg++;
+      const segLen = Math.max(rt.cum[seg] - rt.cum[seg - 1], 0.001);
+      const local = (s - rt.cum[seg - 1]) / segLen;
+      const pos = rt.pts[seg - 1].clone().lerp(rt.pts[seg], local);
+
+      const segDir = rt.pts[seg].clone().sub(rt.pts[seg - 1]).normalize();
+      const travelDir = p.side === 1 ? segDir : segDir.clone().negate();
+      // Lane offset uses the horizontal normal so cars keep right on slopes too
+      const flatDir = new THREE.Vector3(segDir.x, 0, segDir.z).normalize();
+      const roadNormal = new THREE.Vector3(-flatDir.z, 0, flatDir.x);
+
+      // Map 0,1,2 slots to offsets within the side: width * 0.15, 0.27, 0.39
+      const laneOffset = (0.15 + (p.laneSlot * 0.12)) * rt.width;
       pos.add(roadNormal.multiplyScalar(laneOffset * p.side));
 
       tempObj.position.copy(pos);
-      tempObj.scale.set(0.7, 0.08, 0.25); // Slightly smaller for more "room"
-      
-      const travelDir = end.clone().sub(start).normalize();
+      tempObj.scale.set(p.carLength, 0.08, 0.25);
       tempObj.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), travelDir);
-      
+
       tempObj.updateMatrix();
       meshRef.current!.setMatrixAt(i, tempObj.matrix);
 
-      // Phasing out logic at the end of the road
-      const actualProgress = p.progress % 1;
+      // Phasing out logic at the ends of the route
       let opacity = 0.7;
-      if (actualProgress > 0.8) {
-        opacity = 0.7 * (1 - (actualProgress - 0.8) / 0.2);
-      } else if (actualProgress < 0.2) {
-        opacity = 0.7 * (actualProgress / 0.2);
+      if (t > 0.8) {
+        opacity = 0.7 * (1 - (t - 0.8) / 0.2);
+      } else if (t < 0.2) {
+        opacity = 0.7 * (t / 0.2);
       }
-      meshRef.current!.setColorAt(i, new THREE.Color("#00ffaa").multiplyScalar(opacity));
+      // Head/tail-light tint by travel direction
+      tempColor.copy(p.side === 1 ? HEADLIGHT : TAILLIGHT).multiplyScalar(opacity);
+      meshRef.current!.setColorAt(i, tempColor);
 
       if (p.progress >= 1) {
         p.progress = 0;
-        p.roadIndex = getRandomRoadIndex();
+        p.routeIndex = getRandomRouteIndex();
       }
     });
-    
+
     meshRef.current.instanceMatrix.needsUpdate = true;
     if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
   });

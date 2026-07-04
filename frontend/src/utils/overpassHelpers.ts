@@ -72,6 +72,50 @@ export const elevationAt = (
   return Math.min(height, slope * Math.max(0, Math.min(dStart, dEnd)));
 };
 
+/** Parse an overpass row's points column (JSON string from the DB or an array). */
+export const parseOverpassPoints = (raw: string | OverpassPoint[]): OverpassPoint[] => {
+  if (Array.isArray(raw)) return raw;
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch { return []; }
+};
+
+/**
+ * Sample an overpass path into evenly spaced 3D points on the deck surface —
+ * used by traffic animation so cars climb the ramps and cross the deck.
+ */
+export const sampleOverpassPath = (
+  points: OverpassPoint[],
+  params: Pick<OverpassParams, 'height' | 'rampLength'>,
+  existingRoads: Array<{ x1: number; z1: number; x2: number; z2: number }> = [],
+  step = 4
+): Array<{ x: number; y: number; z: number }> => {
+  if (!points || points.length < 2) return [];
+  const connectedStart = isEndpointConnected(points[0], existingRoads);
+  const connectedEnd = isEndpointConnected(points[points.length - 1], existingRoads);
+
+  const cum: number[] = [0];
+  for (let i = 1; i < points.length; i++) {
+    cum.push(cum[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].z - points[i - 1].z));
+  }
+  const totalLength = cum[cum.length - 1];
+  if (totalLength < 0.5) return [];
+
+  const samples: Array<{ x: number; y: number; z: number }> = [];
+  const count = Math.max(2, Math.ceil(totalLength / step) + 1);
+  for (let k = 0; k < count; k++) {
+    const s = (k / (count - 1)) * totalLength;
+    let i = 1;
+    while (i < cum.length - 1 && cum[i] < s) i++;
+    const segLen = Math.max(cum[i] - cum[i - 1], 0.001);
+    const t = (s - cum[i - 1]) / segLen;
+    samples.push({
+      x: points[i - 1].x + (points[i].x - points[i - 1].x) * t,
+      y: elevationAt(s, totalLength, params.height, params.rampLength, connectedStart, connectedEnd),
+      z: points[i - 1].z + (points[i].z - points[i - 1].z) * t,
+    });
+  }
+  return samples;
+};
+
 /**
  * Turn a drawn path into deck tiles + pillars.
  * - Tiles follow the polyline, subdivided to ~tileLength so ramps read as smooth slopes.

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { buildOverpassGeometry } from '../utils/overpassHelpers';
+import { buildOverpassGeometry, parseOverpassPoints } from '../utils/overpassHelpers';
 import type { DeckTile, OverpassPillar, OverpassPoint } from '../utils/overpassHelpers';
 
 const DECK_THICKNESS = 0.5;
@@ -15,10 +15,7 @@ interface OverpassRow {
   pillar_spacing: number;
 }
 
-const parsePoints = (raw: string | OverpassPoint[]): OverpassPoint[] => {
-  if (Array.isArray(raw)) return raw;
-  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch { return []; }
-};
+const parsePoints = parseOverpassPoints;
 
 /** Set an instance matrix for one deck tile (Euler 'YZX': pitch in the local frame, then yaw). */
 const applyTileMatrix = (obj: THREE.Object3D, t: DeckTile, width: number) => {
