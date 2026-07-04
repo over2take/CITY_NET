@@ -94,25 +94,33 @@ const resolveLines = (sign: SignData): SignLine[] => {
 // ─── Sign mesh ───────────────────────────────────────────────────────────────
 
 const SignMesh = React.memo(({
-  sign, primaryColor, fontReady, onSelect,
+  sign, primaryColor, fontReady, isSelected, onSelect, onMeshRef,
 }: {
   sign: SignData;
   primaryColor: string;
   fontReady: boolean;
+  isSelected: boolean;
   onSelect?: (id: number) => void;
+  onMeshRef?: (mesh: THREE.Mesh | null) => void;
 }) => {
-  const family = sign.font_family || 'monospace';
-  const lines  = useMemo(() => resolveLines(sign), [sign]);
+  const family  = sign.font_family || 'monospace';
+  const lines   = useMemo(() => resolveLines(sign), [sign]);
+  const meshRef = React.useRef<THREE.Mesh>(null);
 
   const { tex, w, h } = useMemo(
     () => makeSignTexture(lines, family, primaryColor),
-    // fontReady triggers re-render once remote font is loaded
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [lines, family, primaryColor, fontReady]
   );
 
+  // Notify parent when this sign becomes selected/deselected
+  useEffect(() => {
+    onMeshRef?.(isSelected ? meshRef.current : null);
+  }, [isSelected, onMeshRef]);
+
   return (
     <mesh
+      ref={meshRef}
       position={[sign.x, sign.y + h / 2, sign.z]}
       rotation={[0, sign.rotation_y, 0]}
       onClick={onSelect ? (e) => { e.stopPropagation(); onSelect(sign.id); } : undefined}
@@ -140,11 +148,13 @@ const useFontReady = (signs: SignData[], remoteFonts: RemoteFont[]) => {
 // ─── Main export ─────────────────────────────────────────────────────────────
 
 export const Signs = React.memo(({
-  signs, remoteFonts = [], onSelect,
+  signs, remoteFonts = [], selectedId, onSelect, onMeshRef,
 }: {
   signs: SignData[];
   remoteFonts?: RemoteFont[];
+  selectedId?: number | null;
   onSelect?: (id: number) => void;
+  onMeshRef?: (mesh: THREE.Mesh | null) => void;
 }) => {
   const theme = useContext(ThemeContext);
   const fontReady = useFontReady(signs, remoteFonts);
@@ -152,7 +162,15 @@ export const Signs = React.memo(({
   return (
     <group>
       {signs.map(s => (
-        <SignMesh key={s.id} sign={s} primaryColor={theme.primary} fontReady={fontReady} onSelect={onSelect} />
+        <SignMesh
+          key={s.id}
+          sign={s}
+          primaryColor={theme.primary}
+          fontReady={fontReady}
+          isSelected={s.id === selectedId}
+          onSelect={onSelect}
+          onMeshRef={onMeshRef}
+        />
       ))}
     </group>
   );
