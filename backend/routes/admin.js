@@ -197,6 +197,35 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     });
   });
 
+  // --- Watchtower ---
+  router.post('/check-update', authenticate, (req, res) => {
+    if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
+    const token = process.env.WATCHTOWER_API_TOKEN;
+    if (!token) return res.status(503).json({ error: 'WATCHTOWER_API_TOKEN not configured' });
+
+    const http = require('http');
+    const options = {
+      hostname: 'watchtower',
+      port: 8080,
+      path: '/v1/update',
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    };
+    const request = http.request(options, (upstream) => {
+      let body = '';
+      upstream.on('data', chunk => { body += chunk; });
+      upstream.on('end', () => {
+        res.status(upstream.statusCode).json(
+          body ? (() => { try { return JSON.parse(body); } catch { return { message: body }; } })() : { message: 'Update check triggered' }
+        );
+      });
+    });
+    request.on('error', (err) => {
+      res.status(502).json({ error: `Could not reach Watchtower: ${err.message}` });
+    });
+    request.end();
+  });
+
   // --- Chat ---
   router.post('/chat/purge', authenticate, (req, res) => {
     db.run('DELETE FROM chat_logs', (err) => {

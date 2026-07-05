@@ -82,21 +82,75 @@ cd backend
 node server.js
 ```
 
-Everything runs on port `5000`. To expose it publicly you need a reverse proxy or tunnel pointing at `localhost:5000`. Three common options:
+Everything runs on port `5000`. To expose it publicly you need a reverse proxy or tunnel pointing at `localhost:5000`. Options below:
 
-> **Note:** if you're running the [Docker stack](#6-docker-optional) instead of this manual setup, the app is served by Nginx on port `80`, not `5000` — point your tunnel at `localhost:80` instead. The backend container isn't reachable directly from the host.
+> **Note:** if you're running the [Docker stack](#6-docker-optional) instead of this manual setup, the app is served by Nginx. The default host port is `80` (configurable via `APP_PORT` in `backend/.env`). Point your tunnel or DNS at `localhost:$APP_PORT`. The backend container isn't reachable directly from the host.
+
+---
 
 **Cloudflare Tunnel** (recommended — free, no port forwarding, works behind NAT)
 1. Install [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
-2. `cloudflared tunnel --url http://localhost:5000` (or `:80` for Docker)
+2. `cloudflared tunnel --url http://localhost:5000` (or `http://localhost:$APP_PORT` for Docker)
 3. Cloudflare prints a public `https://` URL — share that with your players
+
+---
+
+**DuckDNS** (free persistent subdomain — good for home servers with dynamic IPs)
+
+DuckDNS gives you a free subdomain like `yourcity.duckdns.org` that always points to your home IP even when it changes. Unlike Cloudflare Tunnel it requires port forwarding on your router, but it gives players a clean, permanent URL.
+
+> **Port note:** port `80` gives a clean URL (`http://yourcity.duckdns.org`) but many residential ISPs block inbound port 80. If yours does, set `APP_PORT=8080` in `backend/.env` and players connect to `http://yourcity.duckdns.org:8080`. Port `443` enables a clean HTTPS URL but requires an SSL certificate (see Certbot below).
+
+1. Register a free subdomain and copy your token at [duckdns.org](https://www.duckdns.org)
+2. In `backend/.env` set:
+   ```env
+   DUCKDNS_SUBDOMAINS=yourcity
+   DUCKDNS_TOKEN=your-token-here
+   APP_PORT=80          # or 8080 if your ISP blocks 80
+   TZ=America/Chicago   # your timezone
+   ```
+3. The `duckdns` service in `docker-compose.yml` runs automatically and keeps your IP updated — no cron job needed
+4. Forward the chosen port (e.g. `80` or `8080`) on your router to the host machine
+5. Players connect to `http://yourcity.duckdns.org` (or `:8080` if you used that port)
+
+**Adding HTTPS with Let's Encrypt (optional but recommended)**
+```bash
+# Install Certbot with the DuckDNS plugin
+pip install certbot certbot-dns-duckdns
+# Issue a cert (DNS-01 challenge — no port 443 needed for issuance)
+certbot certonly \
+  --authenticator dns-duckdns \
+  --dns-duckdns-token your-token-here \
+  -d yourcity.duckdns.org
+```
+Then update `nginx.conf` to listen on 443 with the issued cert and set `APP_PORT=443`.
+
+---
+
+**IPv6 direct connect** (LAN play — no internet, no port forwarding)
+
+If your players are on the same local network, they can connect directly via your machine's IPv6 address — no router config needed.
+
+1. Find your IPv6 address:
+   - **Windows:** `ipconfig` → look for `IPv6 Address` under your network adapter
+   - **Linux/Mac:** `ip addr` or `ifconfig` → look for `inet6` (use the global address, not `fe80::`)
+2. Make sure Docker is running (`docker compose up -d`)
+3. Players open `http://[your-ipv6-address]` in their browser (brackets required)
+   - Example: `http://[2001:db8:85a3::8a2e:370:7334]`
+   - If using a custom `APP_PORT`: `http://[2001:db8::1]:8080`
+
+> **Tip:** IPv6 LAN addresses are stable on most home networks but can change if the router restarts. For regular sessions, set a static IPv6 address on the host machine.
+
+---
 
 **ngrok** (quick and easy, free tier has session limits)
 1. Sign up at [ngrok.com](https://ngrok.com) and install the CLI
-2. `ngrok http 5000` (or `80` for Docker)
+2. `ngrok http 5000` (or `$APP_PORT` for Docker)
 3. ngrok prints a public URL good for the session
 
-**Nginx** (self-hosted, requires a domain and a VPS/home server with open ports)
+---
+
+**Nginx reverse proxy** (self-hosted VPS, requires a domain)
 - An `nginx.conf` is included in the repo — it proxies HTTP and WebSocket traffic to port `5000`
 - Point your domain's DNS at your server, install [Nginx](https://nginx.org/en/docs/install.html), drop the config in `/etc/nginx/sites-available/`, and enable it
 - Pair with [Certbot](https://certbot.eff.org/) for free HTTPS via Let's Encrypt
@@ -110,6 +164,8 @@ docker compose up -d
 ```
 
 The compose file includes [Watchtower](https://containrrr.dev/watchtower/) — it watches your containers and automatically pulls updated images when you push a new build to Docker Hub. Watchtower checks for updates at **4am local time** (the device's timezone) and on every startup, so powering the machine back on after downtime will also trigger a check. Updates restart the containers, which disconnects active sessions — schedule releases between sessions to avoid disrupting players.
+
+The app is exposed on `APP_PORT` (default `80`). The optional `duckdns` service keeps your DuckDNS subdomain pointed at your current IP — set `DUCKDNS_SUBDOMAINS` and `DUCKDNS_TOKEN` in `backend/.env` to enable it, or remove the service block if you're not using DuckDNS.
 
 ---
 
