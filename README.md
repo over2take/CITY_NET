@@ -170,6 +170,7 @@ CITY_NET/
 │       ├── maps.global.test.js         # Map load/clear global preservation tests
 │       ├── roads.test.js               # Road API (GET / POST / DELETE / DELETE :id)
 │       ├── overpasses.test.js          # Overpass API (GET / POST / DELETE :id, 400 validation)
+│       ├── signs.test.js               # Sign API (GET / POST / PATCH / DELETE, auth, image-only, filter_intensity clamping, XSS)
 │       └── undo.test.js                # Undo endpoint (all action types, auth, ordering)
 │
 ├── frontend/
@@ -183,9 +184,9 @@ CITY_NET/
 │   │   │   ├── ChatWindow.tsx          # In-game chat
 │   │   │   ├── DiceTray.tsx            # Dice roller
 │   │   │   ├── Buildings.tsx           # 3D building meshes
-│   │   │   ├── Sidewalks.tsx           # Pavement rings around structures; compound bounding box for multi-part buildings
-│   │   │   ├── AutoSignage.tsx         # Procedural signs on building faces (seeded RNG, face jitter, overlap check)
-│   │   │   ├── Signs.tsx               # Custom sign meshes — canvas-texture renderer (text, image, multi-line), free-transform gizmo
+│   │   │   ├── Sidewalks.tsx           # Road-flanking pavement strips (mitered quad ribbons, no geometry under roads) + neon curb line overlays
+│   │   │   ├── AutoSignage.tsx         # Procedural signs on building faces (seeded RNG, weighted type pool: text, preset SVG images, vertical neon; overlap check)
+│   │   │   ├── Signs.tsx               # Custom sign meshes — canvas-texture renderer (text, image, multi-line), TV/CRT shader filter, free-transform gizmo
 │   │   │   ├── Rhombuses.tsx           # Player token meshes
 │   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
@@ -222,7 +223,9 @@ CITY_NET/
 │   │           ├── locationHelpers.test.ts  # Unit tests for isUserDefinedName and getStructLabel
 │   │           ├── roadHelpers.test.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry
 │   │           └── overpassHelpers.test.ts  # Elevation, geometry, and path-sampling tests
-│   └── public/                 # Static assets (audio, icons, kofi.png)
+│   └── public/
+│       ├── signs/              # Preset neon SVG sign images (motel, bar, cyber-clinic, etc.)
+│       └── ...                 # Audio, icons, kofi.png
 │
 ├── docs/                       # Reference docs (deployment plans, feature notes)
 ├── Dockerfile.backend

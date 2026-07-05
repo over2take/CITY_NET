@@ -218,28 +218,27 @@ const TV_FRAG = /* glsl */`
 `;
 
 const TVSignMaterial = ({ tex, intensity }: { tex: THREE.CanvasTexture; intensity: number }) => {
-  const uniforms = useMemo(() => ({
-    uMap: { value: tex as THREE.Texture },
-    uTime: { value: 0 },
-    uIntensity: { value: intensity },
-    uOpacity: { value: 0.95 },
+  const material = useMemo(() => new THREE.ShaderMaterial({
+    vertexShader: TV_VERT,
+    fragmentShader: TV_FRAG,
+    uniforms: {
+      uMap: { value: tex as THREE.Texture },
+      uTime: { value: 0 },
+      uIntensity: { value: intensity },
+      uOpacity: { value: 0.95 },
+    },
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
 
-  useEffect(() => { uniforms.uMap.value = tex; }, [tex, uniforms]);
-  useEffect(() => { uniforms.uIntensity.value = intensity; }, [intensity, uniforms]);
-  useFrame((state) => { uniforms.uTime.value = state.clock.elapsedTime; });
+  useEffect(() => { material.uniforms.uMap.value = tex; }, [tex, material]);
+  useEffect(() => { material.uniforms.uIntensity.value = intensity; }, [intensity, material]);
+  useEffect(() => () => material.dispose(), [material]);
+  useFrame((state) => { material.uniforms.uTime.value = state.clock.getElapsedTime(); });
 
-  return (
-    <shaderMaterial
-      vertexShader={TV_VERT}
-      fragmentShader={TV_FRAG}
-      uniforms={uniforms}
-      transparent
-      depthWrite={false}
-      side={THREE.DoubleSide}
-    />
-  );
+  return <primitive object={material} attach="material" />;
 };
 
 // ─── Sign mesh ───────────────────────────────────────────────────────────────

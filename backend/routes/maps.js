@@ -90,8 +90,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         }
 
         if (overpasses.length > 0) {
-          const stmtO = db.prepare(`INSERT INTO overpasses (id, points, height, width, ramp_length, pillar_spacing) VALUES (?, ?, ?, ?, ?, ?)`);
-          overpasses.forEach(o => stmtO.run([o.id, o.points, o.height, o.width, o.ramp_length, o.pillar_spacing]));
+          const stmtO = db.prepare(`INSERT INTO overpasses (id, points, height, width, ramp_length, ramp_length_start, ramp_length_end, pillar_spacing) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+          overpasses.forEach(o => stmtO.run([o.id, o.points, o.height, o.width, o.ramp_length, o.ramp_length_start ?? null, o.ramp_length_end ?? null, o.pillar_spacing]));
           stmtO.finalize();
         }
 
