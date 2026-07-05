@@ -104,10 +104,11 @@ describe('buildOverpassGeometry — tiles', () => {
     tiles.forEach(t => expect(t.y).toBeLessThan(10));
   });
 
-  it('keeps the deck flat at a connected start', () => {
-    const roads = [{ x1: 0, z1: 0, x2: -50, z2: 0, width: 4 }]; // endpoint at (0,0)
+  it('keeps the deck flat at a connected start (overpass junction)', () => {
+    // An overpass whose path crosses through the start point triggers connected start
+    const otherOverpasses = [{ points: [{ x: -1, z: -10 }, { x: 1, z: 10 }], width: 4 }];
     const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
-    const { tiles } = buildOverpassGeometry(pts, params, roads);
+    const { tiles } = buildOverpassGeometry(pts, params, [], { otherOverpasses });
     // First tile should already be at full height, unpitched
     expect(tiles[0].y).toBeCloseTo(10, 1);
     expect(tiles[0].pitch).toBeCloseTo(0, 3);
@@ -170,11 +171,12 @@ describe('sampleOverpassPath', () => {
     expect(samples[samples.length - 1].x).toBeCloseTo(100);
   });
 
-  it('respects connected endpoints (flat deck at the join)', () => {
+  it('road proximity does not suppress start ramp (roads are ground-level)', () => {
     const roads = [{ x1: 0, z1: 0, x2: -50, z2: 0 }];
     const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
     const samples = sampleOverpassPath(pts, { height: 10, rampLength: 20 }, roads, 4);
-    expect(samples[0].y).toBeCloseTo(10); // no ramp at the connected start
+    // Start should still ramp from ground (road proximity no longer suppresses ramp)
+    expect(samples[0].y).toBeCloseTo(0);
     expect(samples[samples.length - 1].y).toBeCloseTo(0);
   });
 
@@ -243,19 +245,30 @@ describe('buildOverpassGeometry — tile yaw', () => {
 });
 
 describe('buildOverpassGeometry — connected end suppression', () => {
-  it('keeps deck flat at a connected end (no ramp on far side)', () => {
+  it('does NOT suppress ramp when end is near a road endpoint (roads are at ground)', () => {
+    // Road endpoints are ground-level — proximity should not kill the ramp
     const roads = [{ x1: 100, z1: 0, x2: 150, z2: 0, width: 4 }];
     const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
     const { tiles } = buildOverpassGeometry(pts, params, roads);
+    // Both ends should still ramp (neither connected to an elevated overpass)
+    expect(tiles[0].isRamp).toBe(true);
+    expect(tiles[tiles.length - 1].isRamp).toBe(true);
+  });
+
+  it('suppresses ramp when end merges into another overpass (elevated junction)', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    // Another overpass whose path passes right through the end point
+    const otherOverpasses = [{ points: [{ x: 98, z: -10 }, { x: 102, z: 10 }], width: 4 }];
+    const { tiles } = buildOverpassGeometry(pts, params, [], { otherOverpasses });
+    // End should be flat at full height (no ramp)
+    expect(tiles[tiles.length - 1].isRamp).toBe(false);
     expect(tiles[tiles.length - 1].y).toBeCloseTo(10, 1);
-    expect(tiles[tiles.length - 1].pitch).toBeCloseTo(0, 3);
     // Start still ramps up
     expect(tiles[0].isRamp).toBe(true);
   });
 
-  it('opts.connectedStart/End override road detection', () => {
+  it('opts.connectedStart/End force flat deck at both ends', () => {
     const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
-    // No roads, but force both connected via opts
     const { tiles } = buildOverpassGeometry(pts, params, [], { connectedStart: true, connectedEnd: true });
     tiles.forEach(t => {
       expect(t.isRamp).toBe(false);

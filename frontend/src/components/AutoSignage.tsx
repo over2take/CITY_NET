@@ -5,7 +5,7 @@ import { ThemeContext } from '../theme/themes';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type SignType = 'color_wash' | 'glitch_word' | 'scroll_text' | 'strobe';
+type SignType = 'color_wash' | 'glitch_word' | 'scroll_text' | 'strobe' | 'preset_image' | 'vertical_text';
 
 interface SignDef {
   x: number; y: number; z: number;
@@ -28,11 +28,39 @@ interface SignageLocation {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const NO_SIGNAGE_SHAPES = new Set(['rhombus', 'enemy_rhombus', 'friendly_rhombus', 'none']);
-const SIGN_TYPES: SignType[] = ['color_wash', 'glitch_word', 'scroll_text', 'strobe'];
+// Weighted pool — duplicates raise the odds of that type being picked
+const SIGN_TYPES: SignType[] = [
+  'color_wash',
+  'glitch_word', 'glitch_word',
+  'scroll_text', 'scroll_text',
+  'strobe',
+  'preset_image', 'preset_image', 'preset_image',
+  'vertical_text', 'vertical_text', 'vertical_text',
+];
 const GLITCH_WORDS = [
   'SYS_ERR', 'NETRUNNER', 'GHOST', 'FLATLINE', 'UPLOAD',
   'BREACH', 'NEURAL', 'CHROME', 'NEON', 'DECODE',
   'OFFLINE', 'PROXY', 'SIGNAL', 'STATIC', 'CORRUPT',
+  'FIREWALL', 'DAEMON', 'ICEBREAK', 'WETWARE', 'BLACKOUT',
+  'OVERCLOCK', 'JACK_IN', 'NULL_PTR', 'TRACE', 'ENCRYPT',
+  'MALWARE', 'SPLICE', 'VOLTAGE', 'REBOOT', 'PHANTOM',
+];
+const SCROLL_PHRASES = [
+  'NEURAL LINK', 'GHOST SIGNAL', 'CHROME DREAMS', 'NET RUNNER', 'DEEP SPACE',
+  'ZERO DAY', 'CYBER NOIR', 'NIGHT MARKET', 'BLACK ICE', 'DATA HEIST',
+  'STREET SAMURAI', 'NEON RAIN', 'LOW LIFE HIGH TECH', 'EDGE OF TOWN',
+  'SIGNAL LOST', 'MEAT SPACE', 'COLD WIRE', 'LAST CALL',
+];
+const VERTICAL_WORDS = [
+  'RAMEN', 'HOTEL', 'BAR', 'ARMS', 'DATA', 'SUSHI',
+  'PACHINKO', 'CLINIC', 'TATTOO', 'VAULT', 'KARAOKE',
+  'DINER', 'CHROME', 'PAWN', 'MOTEL', 'CLUB',
+];
+const NEON_PALETTE = ['#ff2d78', '#5df2ff', '#ffcf3f', '#a4ff4f', '#ff7a2e', '#7d5dff', '#28ffd6'];
+const PRESET_SIGN_URLS = [
+  '/signs/noodle-bar.svg', '/signs/cyber-clinic.svg', '/signs/motel.svg',
+  '/signs/bar-open.svg', '/signs/pawn-shop.svg', '/signs/net-cafe.svg',
+  '/signs/danger-zone.svg',
 ];
 
 const SIGN_CANVAS_W = 256;
@@ -98,19 +126,35 @@ const placeSigns = (loc: SignageLocation, children: SignageLocation[], rand: () 
     { rotY: Math.PI / 2,  ox: -hw, oz: 0,   faceW: d, faceH: maxH, lx: 0, lz: 1 },
     { rotY: -Math.PI / 2, ox: hw,  oz: 0,   faceW: d, faceH: maxH, lx: 0, lz: 1 },
   ];
-  const count = Math.max(1, Math.round(density * (1 + rand() * 3)));
+  const count = Math.max(1, Math.round(density * (1.5 + rand() * 3.5)));
   const yaw = loc.rotation ?? 0;
   const cos = Math.cos(yaw), sin = Math.sin(yaw);
 
   for (let i = 0; i < count; i++) {
     const face = faces[Math.floor(rand() * faces.length)];
-    const signW = Math.min(face.faceW * (0.2 + rand() * 0.35), 4);
-    const signH = signW * (0.3 + rand() * 0.4);
+    const type = SIGN_TYPES[Math.floor(rand() * SIGN_TYPES.length)];
+
+    // Size by type: vertical banners are tall+narrow, preset images keep 4:3,
+    // the rest are wide marquee strips. Caps scale with the face, not a flat 4u.
+    let signW: number, signH: number;
+    if (type === 'vertical_text') {
+      signW = Math.max(0.6, Math.min(face.faceW * 0.12, 1.8));
+      signH = Math.min(signW * (3 + rand() * 2), maxH * 0.75);
+    } else if (type === 'preset_image') {
+      signW = Math.min(face.faceW * (0.18 + rand() * 0.25), 7);
+      signH = signW * 0.75;
+    } else {
+      signW = Math.min(face.faceW * (0.2 + rand() * 0.35), 6);
+      signH = signW * (0.3 + rand() * 0.4);
+    }
+    if (signH > maxH * 0.9) continue; // doesn't fit this wall
+
     // jitter laterally within the face, keeping sign inside bounds
     const maxLateral = Math.max(0, face.faceW / 2 - signW / 2);
     const lateral = (rand() - 0.5) * 2 * maxLateral;
-    // random height in upper 60% of wall
-    const yOffset = maxH * 0.4 + rand() * (maxH * 0.5);
+    // random height in upper 60% of wall, clamped so the sign stays on it
+    const rawY = maxH * 0.4 + rand() * (maxH * 0.5);
+    const yOffset = Math.min(Math.max(rawY, signH / 2 + 0.3), maxH - signH / 2);
 
     const ox = face.ox + face.lx * lateral;
     const oz = face.oz + face.lz * lateral;
@@ -121,7 +165,7 @@ const placeSigns = (loc: SignageLocation, children: SignageLocation[], rand: () 
       z: cz + sin * ox + cos * oz,
       rotY: face.rotY + yaw,
       w: signW, h: signH,
-      type: SIGN_TYPES[Math.floor(rand() * SIGN_TYPES.length)],
+      type,
       seed: Math.floor(rand() * 0xffff),
     };
 
@@ -218,8 +262,7 @@ const GlitchWordSign = ({ def }: { def: SignDef }) => {
 
 const ScrollTextSign = ({ def }: { def: SignDef }) => {
   const rand = useMemo(() => seededRand(def.seed), [def.seed]);
-  const phrases = ['NEURAL LINK', 'GHOST SIGNAL', 'CHROME DREAMS', 'NET RUNNER', 'DEEP SPACE', 'ZERO DAY', 'CYBER NOIR'];
-  const phrase = useMemo(() => phrases[Math.floor(rand() * phrases.length)], [rand]);
+  const phrase = useMemo(() => SCROLL_PHRASES[Math.floor(rand() * SCROLL_PHRASES.length)], [rand]);
   const tex = useMemo(() => { const c = makeCanvas(); return new THREE.CanvasTexture(c); }, []);
   const offset = useRef(SIGN_CANVAS_W);
 
@@ -279,6 +322,62 @@ const StrobeSign = ({ def }: { def: SignDef }) => {
   );
 };
 
+// Shared texture cache for preset SVG signs — each file loads once per session
+const presetTexCache = new Map<string, THREE.Texture>();
+const getPresetTexture = (url: string): THREE.Texture => {
+  let t = presetTexCache.get(url);
+  if (!t) {
+    t = new THREE.TextureLoader().load(url);
+    t.colorSpace = THREE.SRGBColorSpace;
+    presetTexCache.set(url, t);
+  }
+  return t;
+};
+
+const PresetImageSign = ({ def }: { def: SignDef }) => {
+  const rand = useMemo(() => seededRand(def.seed), [def.seed]);
+  const url = useMemo(() => PRESET_SIGN_URLS[Math.floor(rand() * PRESET_SIGN_URLS.length)], [rand]);
+  const tex = useMemo(() => getPresetTexture(url), [url]);
+  return (
+    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} raycast={() => null}>
+      <planeGeometry args={[def.w, def.h]} />
+      <meshBasicMaterial map={tex} transparent opacity={0.95} depthWrite={false} side={THREE.FrontSide} />
+    </mesh>
+  );
+};
+
+const VerticalTextSign = ({ def }: { def: SignDef }) => {
+  const rand = useMemo(() => seededRand(def.seed), [def.seed]);
+  const tex = useMemo(() => {
+    const word = VERTICAL_WORDS[Math.floor(rand() * VERTICAL_WORDS.length)];
+    const color = NEON_PALETTE[Math.floor(rand() * NEON_PALETTE.length)];
+    const c = document.createElement('canvas');
+    c.width = 96; c.height = 64 * word.length + 24;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = '#05050a';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, c.width - 4, c.height - 4);
+    ctx.font = 'bold 52px monospace';
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    word.split('').forEach((ch, i) => {
+      ctx.fillText(ch, c.width / 2, 44 + i * 64);
+    });
+    return new THREE.CanvasTexture(c);
+  }, [rand]);
+  return (
+    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} raycast={() => null}>
+      <planeGeometry args={[def.w, def.h]} />
+      <meshBasicMaterial map={tex} transparent opacity={0.92} depthWrite={false} side={THREE.FrontSide} />
+    </mesh>
+  );
+};
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export const AutoSignage = React.memo(({ locations, density = 1 }: { locations: SignageLocation[]; density?: number }) => {
@@ -313,10 +412,12 @@ export const AutoSignage = React.memo(({ locations, density = 1 }: { locations: 
     <group>
       {signs.map((def, i) => {
         switch (def.type) {
-          case 'color_wash':  return <ColorWashSign  key={i} def={def} />;
-          case 'glitch_word': return <GlitchWordSign key={i} def={def} />;
-          case 'scroll_text': return <ScrollTextSign key={i} def={def} />;
-          case 'strobe':      return <StrobeSign     key={i} def={def} />;
+          case 'color_wash':    return <ColorWashSign    key={i} def={def} />;
+          case 'glitch_word':   return <GlitchWordSign   key={i} def={def} />;
+          case 'scroll_text':   return <ScrollTextSign   key={i} def={def} />;
+          case 'strobe':        return <StrobeSign       key={i} def={def} />;
+          case 'preset_image':  return <PresetImageSign  key={i} def={def} />;
+          case 'vertical_text': return <VerticalTextSign key={i} def={def} />;
         }
       })}
     </group>
