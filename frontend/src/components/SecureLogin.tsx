@@ -178,7 +178,7 @@ export function SecureLogin({
           </div>
 
           <h1 style={{ fontSize: '3rem', margin: '0', textShadow: 'var(--glow)' }}>CITY_NET</h1>
-          <div style={{ fontSize: '0.65rem', opacity: 0.5, letterSpacing: '4px', marginTop: '35px', marginBottom: '15px' }}>NAV_OS_v1.0.4</div>
+          <div style={{ fontSize: '0.65rem', opacity: 0.5, letterSpacing: '4px', marginTop: '35px', marginBottom: '15px' }}>NAV_OS_v{__APP_VERSION__}</div>
 
           {loginError && (
             <div style={{ fontSize: '0.7rem', color: loginError.includes('updated') ? 'var(--green)' : '#ff3333', marginBottom: '10px', letterSpacing: '1px' }}>
