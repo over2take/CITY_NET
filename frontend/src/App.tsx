@@ -1150,6 +1150,8 @@ function App() {
         setIsAdmin(false);
         setIsLoggedIn(false);
         setNotification(null);
+        setSelectedSignId(null);
+        setSignMesh(null);
     }, 2500);
   };
 
