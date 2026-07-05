@@ -42,22 +42,16 @@ function CheckUpdateButton({ token }: { token: string }) {
     setTimeout(() => setStatus('idle'), 5000);
   };
 
+  const label = status === 'checking' ? 'CHECKING...' : status === 'done' || status === 'error' ? message : 'Check for update';
+  const color = status === 'error' ? '#ff4444' : status === 'done' ? 'var(--green)' : 'var(--green)';
+
   return (
     <button
-      className={`rail-btn${status === 'done' ? ' active' : ''}`}
       onClick={check}
       disabled={status === 'checking'}
-      title={status === 'idle' ? 'CHECK_FOR_UPDATES' : message}
-      style={{ position: 'relative' }}
+      style={{ background: 'none', border: 'none', cursor: status === 'checking' ? 'default' : 'pointer', color, fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', marginTop: '4px', padding: 0, textDecoration: status === 'idle' ? 'underline' : 'none' }}
     >
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-        style={{ animation: status === 'checking' ? 'spin 1s linear infinite' : 'none' }}>
-        <polyline points="23 4 23 10 17 10" />
-        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-      </svg>
-      {status === 'error' && (
-        <span style={{ position: 'absolute', top: '2px', right: '2px', width: '7px', height: '7px', borderRadius: '50%', background: '#ff4444' }} />
-      )}
+      {label}
     </button>
   );
 }
@@ -321,11 +315,15 @@ interface SystemInfoMenuProps {
 }
 
 export function SystemInfoMenu({ userName, token, currentTheme, onThemeChange }: SystemInfoMenuProps) {
+  let isPrimaryAdmin = false;
+  if (token) { try { isPrimaryAdmin = !JSON.parse(atob(token.split('.')[1])).isTemporary; } catch { } }
+
   return (
     <div className="panel sidebar-panel">
       <header style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
         <h1 style={{ fontSize: '1.5rem', margin: 0, textShadow: 'var(--glow)' }}>CITY_NET</h1>
         <div style={{ fontSize: '0.65rem', opacity: 0.7, letterSpacing: '2px', marginTop: '2px' }}>NAV_OS_v{__APP_VERSION__}</div>
+        {isPrimaryAdmin && <CheckUpdateButton token={token} />}
       </header>
       <div style={{ fontSize: '0.8rem', lineHeight: '1.8', borderTop: '1px solid var(--dark-green)', paddingTop: '15px' }}>
         <div style={{ marginBottom: '10px' }}>
@@ -749,9 +747,6 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
                 <line x1="15" y1="3" x2="15" y2="21"></line>
               </svg>
             </button>
-          )}
-          {isPrimaryAdmin && (
-            <CheckUpdateButton token={token} />
           )}
           <button className={`rail-btn ${isChatOpen ? 'active' : ''} ${hasUnreadChat && !isChatOpen ? 'unread-flash' : ''}`} onClick={() => setIsChatOpen(!isChatOpen)} title="GLOBAL_CHAT">
             <svg width="24" height="24" viewBox="0 0 256 256" fill="none" stroke="currentColor" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
