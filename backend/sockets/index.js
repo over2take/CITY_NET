@@ -332,7 +332,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!isAdminSocket(socket)) return;
       const renderSignage = !!data.renderSignage;
       const signageDensity = Math.min(5, Math.max(0.5, Number(data.signageDensity) || 1));
-      io.emit('viewSettingsUpdated', { renderSignage, signageDensity });
+      const renderSidewalks = !!data.renderSidewalks;
+      io.emit('viewSettingsUpdated', { renderSignage, signageDensity, renderSidewalks });
     });
 
     socket.on('requestEditing', (data) => { io.emit('editingRequested', data); });
