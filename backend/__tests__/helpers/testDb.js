@@ -81,6 +81,7 @@ function makeTestDb() {
         roads_data TEXT,
         overpasses_data TEXT,
         water_bodies_data TEXT,
+        signs_data TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 

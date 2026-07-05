@@ -225,6 +225,7 @@ function App() {
   const [selectedSignId, setSelectedSignId] = useState<number | null>(null);
   const [signMesh, setSignMesh] = useState<THREE.Mesh | null>(null);
   const [signTransformMode, setSignTransformMode] = useState<'translate' | 'rotate'>('translate');
+  const [signTransformActive, setSignTransformActive] = useState(false);
   const [remoteFonts, setRemoteFonts] = useState<RemoteFont[]>([]);
   const [overpassHeight, setOverpassHeight] = useState(8);
   const [overpassRampLength, setOverpassRampLength] = useState(20);
@@ -591,9 +592,15 @@ function App() {
     onFetchLocations: fetchLocations,
     onFetchRoads: fetchRoads,
     onFetchOverpasses: fetchOverpasses,
+    onFetchSigns: fetchSigns,
     onFetchDistricts: fetchDistricts,
     onFetchWaterBodies: fetchWaterBodies,
     onFetchBattleMaps: fetchCurrentLocBattleMaps,
+    onViewSettingsUpdate: ({ renderSignage: rs, signageDensity: sd, renderSidewalks: rw }) => {
+      setRenderSignage(rs);
+      setSignageDensity(sd);
+      setRenderSidewalks(rw);
+    },
     onBankUpdate: (balance, debt, firstPayDone, highRollerDone) => setBankData({ balance, debt, firstPayDone, highRollerDone }),
     onBalancePaid: (balance, debt, firstPayDone, highRollerDone) => { setBankData({ balance, debt, firstPayDone, highRollerDone }); setIsBankOpen(true); },
     onNotification: setNotification,
@@ -876,6 +883,9 @@ function App() {
     window.addEventListener('pointerup', handleGlobalPointerUp);
     return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
   }, []);
+
+  // Deactivate TransformControls when selection changes
+  useEffect(() => { setSignTransformActive(false); }, [selectedSignId]);
   const [editData, setEditData] = useState({ name: '', description: '', npcs: '', x: 0, y: 0, z: 0, width: 8, height: 16, depth: 8, baseWidth: 8, baseHeight: 16, baseDepth: 8, shape: 'box', color: '#00ff00', isFavorite: false, isDanger: false, owner: '', polyCount: 5 });
   const [editorGenParts, setEditorGenParts] = useState<any[]>([]);
   const [editorGenType, setEditorGenType] = useState<string>('');
@@ -894,16 +904,23 @@ function App() {
     setIsPlacingSign(false);
   };
 
-  const handleSignDragEnd = useCallback((e: any) => {
-    setIsDragging(e.value);
-    if (e.value || !signMesh || !selectedSignId) return;
-    const { x, y, z } = signMesh.position;
+  const handleUpdateSign = useCallback(() => {
+    if (!signMesh || !selectedSignId) return;
+    signMesh.geometry.computeBoundingBox();
+    const bb = signMesh.geometry.boundingBox;
+    const halfH = bb ? (bb.max.y - bb.min.y) / 2 : 0;
+    const x = signMesh.position.x;
+    const y = signMesh.position.y - halfH;
+    const z = signMesh.position.z;
     const rotY = signMesh.rotation.y;
     fetch(`/api/signs/${selectedSignId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ x, y, z, rotation_y: rotY }),
-    }).then(() => fetchSigns());
+    }).then(r => { if (!r.ok) console.error('Sign save failed:', r.status); fetchSigns(); });
+    setSignTransformActive(false);
+    setSelectedSignId(null);
+    setSignMesh(null);
   }, [signMesh, selectedSignId, token, fetchSigns]);
 
   const handleTreePlantClick = async (e: any) => {
@@ -1121,6 +1138,9 @@ function App() {
         setIsAdmin(false);
         setIsLoggedIn(false);
         setNotification(null);
+        setSelectedSignId(null);
+        setSignMesh(null);
+        setSignTransformActive(false);
     }, 2500);
   };
 
@@ -1394,11 +1414,11 @@ function App() {
                 overpassRampLengthEnd={overpassRampLengthEnd}
                 setOverpassRampLengthEnd={setOverpassRampLengthEnd}
                 renderSidewalks={renderSidewalks}
-                setRenderSidewalks={setRenderSidewalks}
+                setRenderSidewalks={(val: boolean) => { setRenderSidewalks(val); socketRef.current?.emit('updateViewSettings', { renderSignage, signageDensity, renderSidewalks: val }); }}
                 renderSignage={renderSignage}
-                setRenderSignage={setRenderSignage}
+                setRenderSignage={(val: boolean) => { setRenderSignage(val); socketRef.current?.emit('updateViewSettings', { renderSignage: val, signageDensity, renderSidewalks }); }}
                 signageDensity={signageDensity}
-                setSignageDensity={setSignageDensity}
+                setSignageDensity={(val: number) => { setSignageDensity(val); socketRef.current?.emit('updateViewSettings', { renderSignage, signageDensity: val, renderSidewalks }); }}
                 overpasses={overpasses}
                 refreshOverpasses={fetchOverpasses}
                 onRoadEraseModeChange={setRoadEraseMode}
@@ -1428,6 +1448,9 @@ function App() {
                 signMesh={signMesh}
                 signTransformMode={signTransformMode}
                 setSignTransformMode={setSignTransformMode}
+                signTransformActive={signTransformActive}
+                setSignTransformActive={setSignTransformActive}
+                handleUpdateSign={handleUpdateSign}
                 isPlacingSign={isPlacingSign}
                 setIsPlacingSign={setIsPlacingSign}
                 pendingSignPos={pendingSignPos}
@@ -1772,7 +1795,7 @@ function App() {
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
           </div>}
           <ThemeContext.Provider value={THEMES[currentTheme]}>
-            <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }} onPointerMissed={() => setSelectedSignId(null)}>
+            <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }} onPointerMissed={() => {}}>
               <StreamerVisibilityContext.Provider value={IS_SPECTATOR ? directorState.visibility : ALL_VISIBLE}>
             <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
             <MeasurementTool measureMode={measureMode} socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} mapScaleMultiplier={view === 'battle_map' ? (() => {
@@ -2049,7 +2072,7 @@ function App() {
             {/* @ts-ignore */}
             {token && (view === 'editor' || view === 'generator') && targetObject && <TransformControls object={targetObject} mode={view === 'generator' ? 'translate' : transformMode} translationSnap={snapToGrid ? 1 : null} rotationSnap={snapRotation ? Math.PI / 18 : null} onDraggingChanged={(e: any) => setIsDragging(e.value)} />}
             {/* @ts-ignore */}
-            {token && isAdmin && signMesh && !targetObject && <TransformControls object={signMesh} mode={signTransformMode} onDraggingChanged={handleSignDragEnd} />}
+            {token && isAdmin && signMesh && signTransformActive && !targetObject && <TransformControls object={signMesh} mode={signTransformMode} />}
             {token && view === 'generator' && (
               <group ref={(group) => { 
                   if (group) {
