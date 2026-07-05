@@ -19,7 +19,7 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     ports:
-      - "80:80"
+      - "${APP_PORT:-80}:80"
     depends_on:
       - backend
     restart: unless-stopped
@@ -31,4 +31,21 @@ services:
     environment:
       - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}
     command: --schedule "0 0 4 * * *" --http-api-update
+    restart: unless-stopped
+
+  # ── DuckDNS (optional) ──────────────────────────────────────────────────────
+  # Keeps your DuckDNS subdomain pointing at your current public IP.
+  # Requires DUCKDNS_SUBDOMAINS and DUCKDNS_TOKEN in backend/.env.
+  # Remove or comment this service out if you're not using DuckDNS.
+  duckdns:
+    image: lscr.io/linuxserver/duckdns:latest
+    env_file:
+      - ./backend/.env
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-America/Chicago}
+      - SUBDOMAINS=${DUCKDNS_SUBDOMAINS}
+      - TOKEN=${DUCKDNS_TOKEN}
+      - LOG_FILE=false
     restart: unless-stopped
