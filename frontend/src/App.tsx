@@ -911,14 +911,13 @@ function App() {
   const handleSignDragEnd = useCallback((e: any) => {
     isDraggingRef.current = e.value;
     setIsDragging(e.value);
+    console.log('[sign drag]', e.value ? 'START' : 'END', 'selectedSignId=', selectedSignId, 'signMesh=', !!signMesh, 'dragSignIdRef=', dragSignIdRef.current);
     if (e.value) {
-      // Capture the sign ID now — onPointerMissed fires on handle click (TransformControls
-      // handles are not R3F-managed, so R3F sees a miss) and clears selectedSignId before
-      // drag ends. We stash it here while the closure still has the correct value.
       dragSignIdRef.current = selectedSignId;
       return;
     }
     const signId = dragSignIdRef.current;
+    console.log('[sign drag] END check: signId=', signId, 'signMesh=', !!signMesh);
     if (!signMesh || !signId) return;
     // position.y is the mesh center; subtract half-height to get the base y stored in DB
     signMesh.geometry.computeBoundingBox();
