@@ -286,6 +286,7 @@ const SignMesh = React.memo(({
       ref={meshRef}
       position={[sign.x, sign.y + h / 2, sign.z]}
       rotation={[0, sign.rotation_y, 0]}
+      renderOrder={10}
       onClick={onSelect ? (e) => { e.stopPropagation(); onSelect(sign.id); } : undefined}
     >
       <planeGeometry args={[w, h]} />
