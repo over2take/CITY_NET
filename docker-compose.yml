@@ -1,5 +1,6 @@
 services:
   backend:
+    image: over2take/citynet-backend:latest
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -13,6 +14,7 @@ services:
     restart: unless-stopped
 
   frontend:
+    image: over2take/citynet-frontend:latest
     build:
       context: .
       dockerfile: Dockerfile.frontend
