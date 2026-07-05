@@ -278,6 +278,9 @@ export const generateThemedBuildingsForPlot = (
   const startIndex = rawBuildings.length;
   const color = ''; // default neutral color
 
+  // Landmark style count: update both here and in baseMaxStyle if adding new styles
+  const LANDMARK_STYLE_COUNT = 13;
+
   let targetGenType = '';
   if (zoneTypeVal === 2.0) targetGenType = 'MARKETS';
   else if (zoneTypeVal >= 1.5 && zoneTypeVal < 2.0) targetGenType = 'LANDMARK';
@@ -553,7 +556,7 @@ export const generateThemedBuildingsForPlot = (
     const h = overrideH !== undefined ? overrideH : (20 + Math.random() * 60);
     const baseW = bw * 0.9;
     const baseD = bd * 0.9;
-    const landmarkStyle = styleOverride !== undefined ? styleOverride % 13 : Math.floor(Math.random() * 13);
+    const landmarkStyle = styleOverride !== undefined ? styleOverride % LANDMARK_STYLE_COUNT : Math.floor(Math.random() * LANDMARK_STYLE_COUNT);
 
     if (landmarkStyle === 0) {
       // Style 1: Grand Obelisk
