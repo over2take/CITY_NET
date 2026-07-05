@@ -1,5 +1,6 @@
 import React, { useMemo, useContext, useEffect, useState } from 'react';
 import * as THREE from 'three';
+import { useFrame } from '@react-three/fiber';
 import { ThemeContext } from '../theme/themes';
 import { loadFont, type RemoteFont } from '../utils/fontLoader';
 
@@ -20,6 +21,7 @@ export interface SignData {
   lines?: string | null; // JSON-encoded SignLine[]
   image_url?: string | null;
   use_tv_filter?: number;
+  filter_intensity?: number | null;
 }
 
 // ─── Canvas rendering ────────────────────────────────────────────────────────
@@ -154,6 +156,91 @@ const resolveLines = (sign: SignData): SignLine[] => {
   return [{ text: sign.text, font_size: sign.font_size }];
 };
 
+// ─── TV filter shader ────────────────────────────────────────────────────────
+
+const TV_VERT = /* glsl */`
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const TV_FRAG = /* glsl */`
+  uniform sampler2D uMap;
+  uniform float uTime;
+  uniform float uIntensity;
+  uniform float uOpacity;
+  varying vec2 vUv;
+
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+  }
+
+  void main() {
+    vec2 uv = vUv;
+    float t = uTime;
+    float k = uIntensity;
+
+    // Occasional glitch: a few frames every couple of seconds, rows shear sideways
+    float slice = floor(t * 8.0);
+    float glitchGate = step(0.96, hash(vec2(slice, 3.7)));
+    float rowJitter = (hash(vec2(floor(uv.y * 36.0), slice)) - 0.5) * 0.08 * glitchGate * k;
+    uv.x += rowJitter;
+
+    // Chromatic fringe: split R/B horizontally
+    float fr = 0.003 * k;
+    vec4 c;
+    c.r = texture2D(uMap, uv + vec2(fr, 0.0)).r;
+    c.g = texture2D(uMap, uv).g;
+    c.b = texture2D(uMap, uv - vec2(fr, 0.0)).b;
+    c.a = texture2D(uMap, uv).a;
+
+    // Scanlines
+    float scan = 0.5 + 0.5 * sin(uv.y * 420.0);
+    c.rgb *= mix(1.0, 0.72 + 0.28 * scan, k);
+
+    // Rolling refresh band sweeping downward
+    float roll = fract(uv.y - t * 0.07);
+    float band = smoothstep(0.0, 0.18, roll) * smoothstep(0.38, 0.2, roll);
+    c.rgb *= 1.0 + band * 0.25 * k;
+
+    // Per-pixel static
+    float n = hash(uv * vec2(521.0, 383.0) + fract(t) * 61.7);
+    c.rgb += (n - 0.5) * 0.12 * k;
+
+    // Vignette (curved-screen corner falloff)
+    vec2 d = uv - 0.5;
+    c.rgb *= 1.0 - dot(d, d) * 0.8 * k;
+
+    gl_FragColor = vec4(c.rgb, c.a * uOpacity);
+  }
+`;
+
+const TVSignMaterial = ({ tex, intensity }: { tex: THREE.CanvasTexture; intensity: number }) => {
+  const material = useMemo(() => new THREE.ShaderMaterial({
+    vertexShader: TV_VERT,
+    fragmentShader: TV_FRAG,
+    uniforms: {
+      uMap: { value: tex as THREE.Texture },
+      uTime: { value: 0 },
+      uIntensity: { value: intensity },
+      uOpacity: { value: 0.95 },
+    },
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []);
+
+  useEffect(() => { material.uniforms.uMap.value = tex; }, [tex, material]);
+  useEffect(() => { material.uniforms.uIntensity.value = intensity; }, [intensity, material]);
+  useEffect(() => () => material.dispose(), [material]);
+  useFrame((state) => { material.uniforms.uTime.value = state.clock.getElapsedTime(); });
+
+  return <primitive object={material} attach="material" />;
+};
+
 // ─── Sign mesh ───────────────────────────────────────────────────────────────
 
 const SignMesh = React.memo(({
@@ -202,7 +289,9 @@ const SignMesh = React.memo(({
       onClick={onSelect ? (e) => { e.stopPropagation(); onSelect(sign.id); } : undefined}
     >
       <planeGeometry args={[w, h]} />
-      <meshBasicMaterial map={tex} transparent opacity={0.95} depthWrite={false} side={THREE.DoubleSide} />
+      {sign.use_tv_filter
+        ? <TVSignMaterial tex={tex} intensity={sign.filter_intensity ?? 1.0} />
+        : <meshBasicMaterial map={tex} transparent opacity={0.95} depthWrite={false} side={THREE.DoubleSide} />}
     </mesh>
   );
 });

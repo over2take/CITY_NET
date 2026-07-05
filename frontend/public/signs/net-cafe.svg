@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="400" height="300" fill="#00080f"/>
+  <rect x="8" y="8" width="384" height="284" fill="none" stroke="#00d9ff" stroke-width="4" rx="14" filter="url(#glow)"/>
+  <!-- wifi arcs -->
+  <path d="M140 120 a85 85 0 0 1 120 0" fill="none" stroke="#00d9ff" stroke-width="6" filter="url(#glow)"/>
+  <path d="M162 145 a54 54 0 0 1 76 0" fill="none" stroke="#00d9ff" stroke-width="6" filter="url(#glow)"/>
+  <path d="M184 170 a23 23 0 0 1 32 0" fill="none" stroke="#00d9ff" stroke-width="6" filter="url(#glow)"/>
+  <circle cx="200" cy="190" r="7" fill="#ff2d78" filter="url(#glow)"/>
+  <text x="200" y="250" text-anchor="middle" font-family="monospace" font-size="38" font-weight="bold" fill="#ff2d78" filter="url(#glow)">NET//CAFE</text>
+</svg>

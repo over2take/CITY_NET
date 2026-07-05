@@ -141,9 +141,9 @@ export const sampleOverpassPath = (
 ): Array<{ x: number; y: number; z: number }> => {
   if (!points || points.length < 2) return [];
   const connectedStart = params.rampLengthStart !== undefined ? false
-    : (isEndpointConnected(points[0], existingRoads) || isEndpointConnectedToOverpass(points[0], otherOverpassPaths));
+    : isEndpointConnectedToOverpass(points[0], otherOverpassPaths);
   const connectedEnd = params.rampLengthEnd !== undefined ? false
-    : (isEndpointConnected(points[points.length - 1], existingRoads) || isEndpointConnectedToOverpass(points[points.length - 1], otherOverpassPaths));
+    : isEndpointConnectedToOverpass(points[points.length - 1], otherOverpassPaths);
 
   const cum: number[] = [0];
   for (let i = 1; i < points.length; i++) {
@@ -185,11 +185,12 @@ export const buildOverpassGeometry = (
   const tileLength = opts.tileLength ?? 3;
   const otherOverpasses = opts.otherOverpasses ?? [];
   const otherPaths = otherOverpasses.map(o => o.points);
-  // If the user explicitly set a ramp length for an end, honour it — don't let auto-connection override it.
+  // Suppress the ground ramp only when an end merges into ANOTHER ELEVATED overpass.
+  // Roads are at ground level, so proximity to a road endpoint must not suppress the ramp.
   const connectedStart = rampLengthStart !== undefined ? false
-    : (opts.connectedStart ?? (isEndpointConnected(points[0], existingRoads) || isEndpointConnectedToOverpass(points[0], otherPaths)));
+    : (opts.connectedStart ?? isEndpointConnectedToOverpass(points[0], otherPaths));
   const connectedEnd = rampLengthEnd !== undefined ? false
-    : (opts.connectedEnd ?? (isEndpointConnected(points[points.length - 1], existingRoads) || isEndpointConnectedToOverpass(points[points.length - 1], otherPaths)));
+    : (opts.connectedEnd ?? isEndpointConnectedToOverpass(points[points.length - 1], otherPaths));
 
   if (!points || points.length < 2) return { tiles: [], pillars: [], totalLength: 0 };
 

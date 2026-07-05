@@ -1939,7 +1939,7 @@ function App() {
                 }
                 <GhostTraffic roads={roads} overpasses={overpasses} />
                 <Overpasses overpasses={overpasses} roads={roads} />
-                {renderSidewalks && <Sidewalks locations={locations} />}
+                {renderSidewalks && <Sidewalks locations={locations} roads={roads} />}
                 {renderSignage && <AutoSignage locations={locations} density={signageDensity} />}
               </>
             )}

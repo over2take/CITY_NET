@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="400" height="300" fill="#0a0602"/>
+  <rect x="8" y="8" width="384" height="284" fill="none" stroke="#ffb02e" stroke-width="4" rx="14" filter="url(#glow)"/>
+  <text x="200" y="120" text-anchor="middle" font-family="monospace" font-size="72" font-weight="bold" fill="#ffb02e" filter="url(#glow)">MOTEL</text>
+  <!-- half-dead VACANCY: 'VA' dimmed like burnt-out tubes -->
+  <text x="200" y="200" text-anchor="middle" font-family="monospace" font-size="40" font-weight="bold" filter="url(#glow)">
+    <tspan fill="#3a2408">VA</tspan><tspan fill="#ff4fd8">CANCY</tspan>
+  </text>
+  <!-- star -->
+  <path d="M200 218 l7 16 l18 2 l-13 12 l4 18 l-16 -9 l-16 9 l4 -18 l-13 -12 l18 -2 z" fill="none" stroke="#ff4fd8" stroke-width="3" filter="url(#glow)"/>
+</svg>

@@ -95,19 +95,25 @@ export const Overpasses = React.memo(({ overpasses, roads }: { overpasses: Overp
     }
   }, [geometry]);
 
+  // Fixed buffer size — instancedMesh allocates its WebGL buffer at mount and
+  // cannot grow. Map switches recompute geometry but keep the same mesh alive,
+  // so we need headroom for the largest overpass set any map could have.
+  const MAX_TILES = 2000;
+  const MAX_PILLARS = 500;
+
   if (geometry.tiles.length === 0) return null;
 
   return (
     <group>
-      <instancedMesh ref={deckRef} args={[null as any, null as any, Math.max(1, geometry.tiles.length)]} frustumCulled={false}>
+      <instancedMesh ref={deckRef} args={[null as any, null as any, MAX_TILES]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial color={theme.border} transparent opacity={0.7} />
       </instancedMesh>
-      <instancedMesh ref={edgeRef} args={[null as any, null as any, Math.max(1, geometry.tiles.length)]} frustumCulled={false}>
+      <instancedMesh ref={edgeRef} args={[null as any, null as any, MAX_TILES]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial color={theme.highlight} transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} />
       </instancedMesh>
-      <instancedMesh ref={pillarRef} args={[null as any, null as any, Math.max(1, geometry.pillars.length)]} frustumCulled={false}>
+      <instancedMesh ref={pillarRef} args={[null as any, null as any, MAX_PILLARS]} frustumCulled={false}>
         <cylinderGeometry args={[0.5, 0.8, 1, 8]} />
         <meshBasicMaterial color={theme.border} transparent opacity={0.7} />
       </instancedMesh>

@@ -116,8 +116,11 @@ function makeTestDb() {
         z REAL NOT NULL,
         rotation_y REAL DEFAULT 0,
         font_size REAL DEFAULT 1.0,
+        font_family TEXT DEFAULT 'monospace',
         image_url TEXT,
-        use_tv_filter INTEGER DEFAULT 0
+        use_tv_filter INTEGER DEFAULT 0,
+        lines TEXT,
+        filter_intensity REAL DEFAULT 1.0
       )`);
 
       db.run(`CREATE TABLE action_history (
