@@ -879,6 +879,12 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
   const dragSignIdRef = useRef<number | null>(null);
+  const signTransformRef = useRef<any>(null);
+  const handleSignDragEndRef = useRef<(e: any) => void>(() => {});
+
+  // Always keep the ref pointing at the latest version of the callback so the
+  // addEventListener below never captures a stale closure.
+  useEffect(() => { handleSignDragEndRef.current = handleSignDragEnd; });
   useEffect(() => {
     const handleGlobalPointerUp = () => { setIsDragging(false); };
     window.addEventListener('pointerup', handleGlobalPointerUp);
@@ -927,6 +933,16 @@ function App() {
       body: JSON.stringify({ x, y, z, rotation_y: rotY }),
     }).then(r => { if (!r.ok) console.error('Sign save failed:', r.status); fetchSigns(); });
   }, [signMesh, selectedSignId, token, fetchSigns]);
+
+  // Wire dragging-changed via addEventListener — onDraggingChanged prop does not
+  // reliably map to Three.js's hyphenated event name through R3F's prop system.
+  useEffect(() => {
+    const tc = signTransformRef.current;
+    if (!tc) return;
+    const handler = (e: any) => handleSignDragEndRef.current(e);
+    tc.addEventListener('dragging-changed', handler);
+    return () => tc.removeEventListener('dragging-changed', handler);
+  }, [signMesh]); // re-run when TransformControls mounts/unmounts with a new sign
 
   const handleTreePlantClick = async (e: any) => {
       if (!isPlantingTrees || !isAdmin) return;
@@ -2073,7 +2089,7 @@ function App() {
             {/* @ts-ignore */}
             {token && (view === 'editor' || view === 'generator') && targetObject && <TransformControls object={targetObject} mode={view === 'generator' ? 'translate' : transformMode} translationSnap={snapToGrid ? 1 : null} rotationSnap={snapRotation ? Math.PI / 18 : null} onDraggingChanged={(e: any) => setIsDragging(e.value)} />}
             {/* @ts-ignore */}
-            {token && isAdmin && signMesh && !targetObject && <TransformControls object={signMesh} mode={signTransformMode} onDraggingChanged={handleSignDragEnd} />}
+            {token && isAdmin && signMesh && !targetObject && <TransformControls ref={signTransformRef} object={signMesh} mode={signTransformMode} />}
             {token && view === 'generator' && (
               <group ref={(group) => { 
                   if (group) {
