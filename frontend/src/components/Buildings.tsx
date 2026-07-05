@@ -877,6 +877,25 @@ export const generateThemedBuildingsForPlot = (
          rawBuildings.push({ name: '', x: seatX, y: seatY, z: seatZ, width: 2.0, depth: 2.0, height: 1.5, color: '#00ffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
+    else if (landmarkStyle === 12) {
+      // Style 13: Crystal Tower (geometric crystal spire)
+      const baseW = Math.min(baseW, baseD) * 0.35;
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 1.2, depth: baseW * 1.2, height: h * 0.1, color, shape: 'box', polyCount: 5 };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      const facets = 8;
+      for (let i = 0; i < facets; i++) {
+        const angle = (i / facets) * Math.PI * 2;
+        const facetX = bx + Math.cos(angle) * baseW * 0.4;
+        const facetZ = bz + Math.sin(angle) * baseW * 0.4;
+        const facetH = h * (0.3 + (i % 3) * 0.25);
+        rawBuildings.push({ name: '', x: facetX, y: h * 0.1, z: facetZ, width: baseW * 0.5, depth: baseW * 0.5, height: facetH, color, shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
+      }
+
+      // Central spire
+      rawBuildings.push({ name: '', x: bx, y: h * 0.4, z: bz, width: baseW * 0.4, depth: baseW * 0.4, height: h * 0.55, color: '#00ffff', shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
+    }
     return;
   }
 
