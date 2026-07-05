@@ -6,6 +6,56 @@ import { CurrencyIcon } from './BankWindows';
 import { THEMES } from '../theme/themes';
 import type { ThemeName } from '../theme/themes';
 
+// ─── CheckUpdateButton ───────────────────────────────────────────────────────
+
+function CheckUpdateButton({ token }: { token: string }) {
+  const [status, setStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+
+  const check = async () => {
+    setStatus('checking');
+    setMessage('');
+    if (import.meta.env.DEV) {
+      await new Promise(r => setTimeout(r, 5000));
+      setStatus('done');
+      setMessage('DEV: No updates available');
+      setTimeout(() => setStatus('idle'), 5000);
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/check-update', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStatus('done');
+        setMessage(data.message || 'Update check complete');
+      } else {
+        setStatus('error');
+        setMessage(data.error || 'Update check failed');
+      }
+    } catch {
+      setStatus('error');
+      setMessage('Could not reach server');
+    }
+    setTimeout(() => setStatus('idle'), 5000);
+  };
+
+  const label = status === 'checking' ? 'CHECKING...' : status === 'done' || status === 'error' ? message : 'Check for update';
+  const color = status === 'error' ? '#ff4444' : status === 'done' ? 'var(--green)' : 'var(--green)';
+
+  return (
+    <button
+      onClick={check}
+      disabled={status === 'checking'}
+      style={{ background: 'none', border: 'none', cursor: status === 'checking' ? 'default' : 'pointer', color, fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', marginTop: '4px', padding: 0, textDecoration: status === 'idle' ? 'underline' : 'none' }}
+    >
+      {label}
+    </button>
+  );
+}
+
 // ─── NavControlsMenu ─────────────────────────────────────────────────────────
 
 interface NavControlsMenuProps {
@@ -265,11 +315,16 @@ interface SystemInfoMenuProps {
 }
 
 export function SystemInfoMenu({ userName, token, currentTheme, onThemeChange }: SystemInfoMenuProps) {
+  let isPrimaryAdmin = false;
+  if (token) { try { isPrimaryAdmin = !JSON.parse(atob(token.split('.')[1])).isTemporary; } catch { } }
+
   return (
     <div className="panel sidebar-panel">
       <header style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
         <h1 style={{ fontSize: '1.5rem', margin: 0, textShadow: 'var(--glow)' }}>CITY_NET</h1>
         <div style={{ fontSize: '0.65rem', opacity: 0.7, letterSpacing: '2px', marginTop: '2px' }}>NAV_OS_v{__APP_VERSION__}</div>
+        {isPrimaryAdmin && <CheckUpdateButton token={token} />}
+        <a href="https://github.com/over2take/CITY_NET/blob/main/CHANGELOG.md" target="_blank" rel="noreferrer" style={{ fontSize: '0.6rem', opacity: 0.5, letterSpacing: '1px', marginTop: '2px', color: 'var(--green)' }}>CHANGELOG ↗</a>
       </header>
       <div style={{ fontSize: '0.8rem', lineHeight: '1.8', borderTop: '1px solid var(--dark-green)', paddingTop: '15px' }}>
         <div style={{ marginBottom: '10px' }}>
