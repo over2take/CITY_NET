@@ -26,10 +26,10 @@ const insertLocation = (db, overrides = {}) => {
   );
 };
 
-const seedSavedMap = (db, mapName, { locations = [], districts = [], roads = [], overpasses = [], waterBodies = [] } = {}) =>
+const seedSavedMap = (db, mapName, { locations = [], districts = [], roads = [], overpasses = [], waterBodies = [], signs = [] } = {}) =>
   run(db,
-    `INSERT INTO saved_maps (name, locations_data, districts_data, roads_data, overpasses_data, water_bodies_data) VALUES (?, ?, ?, ?, ?, ?)`,
-    [mapName, JSON.stringify(locations), JSON.stringify(districts), JSON.stringify(roads), JSON.stringify(overpasses), JSON.stringify(waterBodies)]
+    `INSERT INTO saved_maps (name, locations_data, districts_data, roads_data, overpasses_data, water_bodies_data, signs_data) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [mapName, JSON.stringify(locations), JSON.stringify(districts), JSON.stringify(roads), JSON.stringify(overpasses), JSON.stringify(waterBodies), JSON.stringify(signs)]
   );
 
 let db;
@@ -158,6 +158,17 @@ describe('POST /api/maps/clear', () => {
     expect(overpasses).toHaveLength(0);
     expect(water).toHaveLength(0);
   });
+
+  it('clears signs on map clear', async () => {
+    await run(db, `INSERT INTO signs (text, x, y, z, rotation_y, font_size, font_family) VALUES ('SIGN', 0, 3, 0, 0, 24, 'monospace')`);
+
+    await request(app)
+      .post('/api/maps/clear')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    const signs = await all(db, 'SELECT * FROM signs');
+    expect(signs).toHaveLength(0);
+  });
 });
 
 // ─── POST /api/maps/save ──────────────────────────────────────────────────────
@@ -281,6 +292,47 @@ describe('POST /api/maps/load/:name — overpasses and water', () => {
     const water = await all(db, 'SELECT * FROM water_bodies');
     expect(overpasses).toHaveLength(0);
     expect(water).toHaveLength(0);
+  });
+
+  it('clears existing signs before loading a map', async () => {
+    await run(db, `INSERT INTO signs (text, x, y, z, rotation_y, font_size, font_family) VALUES ('OLD', 0, 3, 0, 0, 24, 'monospace')`);
+    await seedSavedMap(db, 'no_signs', {});
+
+    await request(app)
+      .post('/api/maps/load/no_signs')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    const signs = await all(db, 'SELECT * FROM signs');
+    expect(signs).toHaveLength(0);
+  });
+
+  it('restores signs from the saved snapshot', async () => {
+    await seedSavedMap(db, 'sign_city', {
+      signs: [{ id: 7, text: 'NEON', x: 5, y: 3, z: 5, rotation_y: 0, font_size: 24, font_family: 'monospace', image_url: null, use_tv_filter: 0, lines: null, filter_intensity: 1.0 }],
+    });
+
+    await request(app)
+      .post('/api/maps/load/sign_city')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    const signs = await all(db, 'SELECT * FROM signs');
+    expect(signs).toHaveLength(1);
+    expect(signs[0].text).toBe('NEON');
+    expect(signs[0].x).toBe(5);
+  });
+
+  it('save snapshots include current signs', async () => {
+    await run(db, `INSERT INTO signs (text, x, y, z, rotation_y, font_size, font_family) VALUES ('WELCOME', 10, 3, 0, 0, 24, 'monospace')`);
+
+    await request(app)
+      .post('/api/maps/save')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ name: 'with_signs' });
+
+    const row = await get(db, `SELECT * FROM saved_maps WHERE name = 'with_signs'`);
+    const savedSigns = JSON.parse(row.signs_data);
+    expect(savedSigns).toHaveLength(1);
+    expect(savedSigns[0].text).toBe('WELCOME');
   });
 });
 

@@ -209,7 +209,7 @@ const ColorWashSign = ({ def }: { def: SignDef }) => {
   });
 
   return (
-    <mesh ref={meshRef} position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} raycast={() => null}>
+    <mesh ref={meshRef} position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
       <planeGeometry args={[def.w, def.h]} />
       <meshBasicMaterial map={tex} transparent opacity={0.85} depthWrite={false} side={THREE.FrontSide} />
     </mesh>
@@ -253,7 +253,7 @@ const GlitchWordSign = ({ def }: { def: SignDef }) => {
   });
 
   return (
-    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} raycast={() => null}>
+    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
       <planeGeometry args={[def.w, def.h]} />
       <meshBasicMaterial map={tex} transparent opacity={0.9} depthWrite={false} side={THREE.FrontSide} blending={THREE.AdditiveBlending} />
     </mesh>
@@ -281,7 +281,7 @@ const ScrollTextSign = ({ def }: { def: SignDef }) => {
   });
 
   return (
-    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} raycast={() => null}>
+    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
       <planeGeometry args={[def.w, def.h]} />
       <meshBasicMaterial map={tex} transparent opacity={0.88} depthWrite={false} side={THREE.FrontSide} />
     </mesh>
@@ -315,7 +315,7 @@ const StrobeSign = ({ def }: { def: SignDef }) => {
   });
 
   return (
-    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} raycast={() => null}>
+    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
       <planeGeometry args={[def.w, def.h]} />
       <meshBasicMaterial map={tex} transparent opacity={0.8} depthWrite={false} side={THREE.FrontSide} blending={THREE.AdditiveBlending} />
     </mesh>
@@ -339,7 +339,7 @@ const PresetImageSign = ({ def }: { def: SignDef }) => {
   const url = useMemo(() => PRESET_SIGN_URLS[Math.floor(rand() * PRESET_SIGN_URLS.length)], [rand]);
   const tex = useMemo(() => getPresetTexture(url), [url]);
   return (
-    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} raycast={() => null}>
+    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
       <planeGeometry args={[def.w, def.h]} />
       <meshBasicMaterial map={tex} transparent opacity={0.95} depthWrite={false} side={THREE.FrontSide} />
     </mesh>
@@ -371,7 +371,7 @@ const VerticalTextSign = ({ def }: { def: SignDef }) => {
     return new THREE.CanvasTexture(c);
   }, [rand]);
   return (
-    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} raycast={() => null}>
+    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
       <planeGeometry args={[def.w, def.h]} />
       <meshBasicMaterial map={tex} transparent opacity={0.92} depthWrite={false} side={THREE.FrontSide} />
     </mesh>

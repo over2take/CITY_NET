@@ -26,7 +26,7 @@ const SIGN_PRESETS = [
 
 const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: '#00ff00', border: '1px solid #00ff00', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
 
-function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, remoteFonts, setRemoteFonts, signTransformMode, setSignTransformMode, controlsRef, signMesh, onClose }: {
+function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, remoteFonts, setRemoteFonts, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, controlsRef, signMesh, onClose }: {
   token: string;
   signs: SignData[];
   fetchSigns: () => void;
@@ -40,6 +40,9 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
   setRemoteFonts: (f: RemoteFont[]) => void;
   signTransformMode: 'translate' | 'rotate';
   setSignTransformMode: (m: 'translate' | 'rotate') => void;
+  signTransformActive: boolean;
+  setSignTransformActive: (v: boolean) => void;
+  handleUpdateSign: () => void;
   controlsRef: React.MutableRefObject<any>;
   signMesh: THREE.Mesh | null;
   onClose: () => void;
@@ -160,12 +163,24 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
   const save = async () => {
     if (!hasContent()) return;
     const body = buildBody();
+    if (signMesh) {
+      signMesh.geometry.computeBoundingBox();
+      const bb = signMesh.geometry.boundingBox;
+      const halfH = bb ? (bb.max.y - bb.min.y) / 2 : 0;
+      body.x = signMesh.position.x;
+      body.y = signMesh.position.y - halfH;
+      body.z = signMesh.position.z;
+      body.rotation_y = signMesh.rotation.y;
+    }
     await fetch(`/api/signs/${selectedSignId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify(body),
     });
     fetchSigns();
+    setSignTransformActive(false);
+    setSelectedSignId(null);
+    startNew();
   };
 
   const remove = async (id: number) => {
@@ -271,25 +286,28 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       ) : (
         field('TEXT', 'text')
       )}
-      <div style={{display: 'flex', gap: '8px'}}>
-        <div style={{flex: 1}}>{field('X', 'x', 'number', '0.1')}</div>
-        <div style={{flex: 1}}>{field('Y', 'y', 'number', '0.1')}</div>
-        <div style={{flex: 1}}>{field('Z', 'z', 'number', '0.1')}</div>
-      </div>
-
       {selectedSignId != null && (
-        <div style={{display:'flex', gap:'6px', marginBottom:'6px'}}>
-          <button
-            className={`utility-btn${signTransformMode === 'translate' ? ' active' : ''}`}
-            style={{flex:1, fontSize:'0.7rem'}}
-            onClick={() => setSignTransformMode('translate')}
-          >MOVE</button>
-          <button
-            className={`utility-btn${signTransformMode === 'rotate' ? ' active' : ''}`}
-            style={{flex:1, fontSize:'0.7rem'}}
-            onClick={() => setSignTransformMode('rotate')}
-          >ROTATE</button>
-        </div>
+        <>
+          <div style={{display:'flex', gap:'6px', marginBottom:'6px'}}>
+            <button
+              className={`utility-btn${signTransformActive && signTransformMode === 'translate' ? ' active' : ''}`}
+              style={{flex:1, fontSize:'0.7rem'}}
+              onClick={() => { setSignTransformMode('translate'); setSignTransformActive(true); }}
+            >MOVE</button>
+            <button
+              className={`utility-btn${signTransformActive && signTransformMode === 'rotate' ? ' active' : ''}`}
+              style={{flex:1, fontSize:'0.7rem'}}
+              onClick={() => { setSignTransformMode('rotate'); setSignTransformActive(true); }}
+            >ROTATE</button>
+          </div>
+          {signTransformActive && (
+            <button
+              className="utility-btn"
+              style={{width:'100%', fontSize:'0.7rem', marginBottom:'6px', color:'#00ff00', borderColor:'#00ff00'}}
+              onClick={handleUpdateSign}
+            >UPDATE SIGN POSITION</button>
+          )}
+        </>
       )}
 
       {/* Font selector */}
@@ -401,7 +419,7 @@ export function AdminPanel({
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
-    signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signMesh,
+    signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -1171,6 +1189,9 @@ export function AdminPanel({
           setSelectedSignId={setSelectedSignId}
           signTransformMode={signTransformMode}
           setSignTransformMode={setSignTransformMode}
+          signTransformActive={signTransformActive}
+          setSignTransformActive={setSignTransformActive}
+          handleUpdateSign={handleUpdateSign}
           controlsRef={controlsRef}
           signMesh={signMesh}
           onClose={() => setView('list')}
