@@ -278,6 +278,14 @@ export const generateThemedBuildingsForPlot = (
   const startIndex = rawBuildings.length;
   const color = ''; // default neutral color
 
+  // Style counts: update these if adding new styles for each zone type
+  const SLUMS_STYLE_COUNT = 1;
+  const INDUSTRIAL_STYLE_COUNT = 10;
+  const CORPO_STYLE_COUNT = 11;
+  const URBAN_STYLE_COUNT = 10;
+  const LANDMARK_STYLE_COUNT = 13;
+  const MARKETS_STYLE_COUNT = 5;
+
   let targetGenType = '';
   if (zoneTypeVal === 2.0) targetGenType = 'MARKETS';
   else if (zoneTypeVal >= 1.5 && zoneTypeVal < 2.0) targetGenType = 'LANDMARK';
@@ -288,7 +296,7 @@ export const generateThemedBuildingsForPlot = (
   else if (zoneTypeVal === 3.0) targetGenType = 'CUSTOM';
 
   const customPool = sourceLocations.filter(b => b.classification === targetGenType && !b.parent_id);
-  const baseMaxStyle = (targetGenType === 'CORPO' ? 11 : targetGenType === 'URBAN' ? 10 : targetGenType === 'INDUSTRIAL' ? 10 : targetGenType === 'SLUMS' ? 1 : targetGenType === 'LANDMARK' ? 13 : targetGenType === 'MARKETS' ? 5 : 0);
+  const baseMaxStyle = (targetGenType === 'CORPO' ? CORPO_STYLE_COUNT : targetGenType === 'URBAN' ? URBAN_STYLE_COUNT : targetGenType === 'INDUSTRIAL' ? INDUSTRIAL_STYLE_COUNT : targetGenType === 'SLUMS' ? SLUMS_STYLE_COUNT : targetGenType === 'LANDMARK' ? LANDMARK_STYLE_COUNT : targetGenType === 'MARKETS' ? MARKETS_STYLE_COUNT : 0);
 
   if (styleOverride !== undefined && styleOverride >= baseMaxStyle && customPool.length > 0) {
     const customIndex = styleOverride - baseMaxStyle;
@@ -417,7 +425,7 @@ export const generateThemedBuildingsForPlot = (
 
   // 2. INDUSTRIAL
   if (zoneTypeVal < 0) {
-    const industrialStyle = styleOverride !== undefined ? styleOverride % 10 : Math.floor(Math.random() * 10);
+    const industrialStyle = styleOverride !== undefined ? styleOverride % INDUSTRIAL_STYLE_COUNT : Math.floor(Math.random() * INDUSTRIAL_STYLE_COUNT);
     
     // Create the base concrete pad platform
     const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', polyCount: 5, rotation: 0 };
@@ -553,7 +561,7 @@ export const generateThemedBuildingsForPlot = (
     const h = overrideH !== undefined ? overrideH : (20 + Math.random() * 60);
     const baseW = bw * 0.9;
     const baseD = bd * 0.9;
-    const landmarkStyle = styleOverride !== undefined ? styleOverride % 13 : Math.floor(Math.random() * 13);
+    const landmarkStyle = styleOverride !== undefined ? styleOverride % LANDMARK_STYLE_COUNT : Math.floor(Math.random() * LANDMARK_STYLE_COUNT);
 
     if (landmarkStyle === 0) {
       // Style 1: Grand Obelisk
@@ -877,6 +885,25 @@ export const generateThemedBuildingsForPlot = (
          rawBuildings.push({ name: '', x: seatX, y: seatY, z: seatZ, width: 2.0, depth: 2.0, height: 1.5, color: '#00ffff', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
+    else if (landmarkStyle === 12) {
+      // Style 13: Crystal Tower (geometric crystal spire)
+      const baseW = Math.min(baseW, baseD) * 0.35;
+      const root = { name: '', description: '', x: bx, y: 0, z: bz, width: baseW * 1.2, depth: baseW * 1.2, height: h * 0.1, color, shape: 'box', polyCount: 5 };
+      rawBuildings.push(root);
+      const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
+
+      const facets = 8;
+      for (let i = 0; i < facets; i++) {
+        const angle = (i / facets) * Math.PI * 2;
+        const facetX = bx + Math.cos(angle) * baseW * 0.4;
+        const facetZ = bz + Math.sin(angle) * baseW * 0.4;
+        const facetH = h * (0.3 + (i % 3) * 0.25);
+        rawBuildings.push({ name: '', x: facetX, y: h * 0.1, z: facetZ, width: baseW * 0.5, depth: baseW * 0.5, height: facetH, color, shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
+      }
+
+      // Central spire
+      rawBuildings.push({ name: '', x: bx, y: h * 0.4, z: bz, width: baseW * 0.4, depth: baseW * 0.4, height: h * 0.55, color: '#00ffff', shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
+    }
     return;
   }
 
@@ -902,7 +929,7 @@ export const generateThemedBuildingsForPlot = (
       baseD = Math.max(4.0, bd * 0.3);
     }
 
-    const corpoStyle = styleOverride !== undefined ? styleOverride % 11 : Math.floor(Math.random() * 11); // 11 styles
+    const corpoStyle = styleOverride !== undefined ? styleOverride % CORPO_STYLE_COUNT : Math.floor(Math.random() * CORPO_STYLE_COUNT); // 11 styles
 
     if (corpoStyle === 0) {
       // Style 0: Asymmetrical Nexus (main tower + data-centre annex + skybridges)
@@ -1092,7 +1119,7 @@ export const generateThemedBuildingsForPlot = (
   // 4. URBAN (APARTMENT COMPLEXES)
   if (zoneTypeVal > 0.3 && zoneTypeVal < 0.8) {
     const h = overrideH !== undefined ? overrideH : (10 + Math.random() * 20) * (0.8 + Math.random() * 0.4);
-    const urbanStyle = styleOverride !== undefined ? styleOverride % 10 : Math.floor(Math.random() * 10);
+    const urbanStyle = styleOverride !== undefined ? styleOverride % URBAN_STYLE_COUNT : Math.floor(Math.random() * URBAN_STYLE_COUNT);
 
     if (urbanStyle === 0) {
       // Style 0: Courtyard Apartment (Hollow O-block)
@@ -1336,7 +1363,7 @@ export const generateThemedBuildingsForPlot = (
   // 5. MARKETS
   if (zoneTypeVal >= 2.0 && zoneTypeVal < 3.0) {
     const h = overrideH !== undefined ? overrideH : (10 + Math.random() * 20);
-    const marketStyle = styleOverride !== undefined ? styleOverride % 5 : Math.floor(Math.random() * 5);
+    const marketStyle = styleOverride !== undefined ? styleOverride % MARKETS_STYLE_COUNT : Math.floor(Math.random() * MARKETS_STYLE_COUNT);
 
     if (marketStyle === 0 || marketStyle === 1) {
       // Stall Markets: 5-8 market stalls (small rectangles with overhangs and tables)
