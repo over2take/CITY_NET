@@ -278,8 +278,13 @@ export const generateThemedBuildingsForPlot = (
   const startIndex = rawBuildings.length;
   const color = ''; // default neutral color
 
-  // Landmark style count: update both here and in baseMaxStyle if adding new styles
+  // Style counts: update these if adding new styles for each zone type
+  const SLUMS_STYLE_COUNT = 1;
+  const INDUSTRIAL_STYLE_COUNT = 10;
+  const CORPO_STYLE_COUNT = 11;
+  const URBAN_STYLE_COUNT = 10;
   const LANDMARK_STYLE_COUNT = 13;
+  const MARKETS_STYLE_COUNT = 5;
 
   let targetGenType = '';
   if (zoneTypeVal === 2.0) targetGenType = 'MARKETS';
@@ -291,7 +296,7 @@ export const generateThemedBuildingsForPlot = (
   else if (zoneTypeVal === 3.0) targetGenType = 'CUSTOM';
 
   const customPool = sourceLocations.filter(b => b.classification === targetGenType && !b.parent_id);
-  const baseMaxStyle = (targetGenType === 'CORPO' ? 11 : targetGenType === 'URBAN' ? 10 : targetGenType === 'INDUSTRIAL' ? 10 : targetGenType === 'SLUMS' ? 1 : targetGenType === 'LANDMARK' ? 13 : targetGenType === 'MARKETS' ? 5 : 0);
+  const baseMaxStyle = (targetGenType === 'CORPO' ? CORPO_STYLE_COUNT : targetGenType === 'URBAN' ? URBAN_STYLE_COUNT : targetGenType === 'INDUSTRIAL' ? INDUSTRIAL_STYLE_COUNT : targetGenType === 'SLUMS' ? SLUMS_STYLE_COUNT : targetGenType === 'LANDMARK' ? LANDMARK_STYLE_COUNT : targetGenType === 'MARKETS' ? MARKETS_STYLE_COUNT : 0);
 
   if (styleOverride !== undefined && styleOverride >= baseMaxStyle && customPool.length > 0) {
     const customIndex = styleOverride - baseMaxStyle;
@@ -420,7 +425,7 @@ export const generateThemedBuildingsForPlot = (
 
   // 2. INDUSTRIAL
   if (zoneTypeVal < 0) {
-    const industrialStyle = styleOverride !== undefined ? styleOverride % 10 : Math.floor(Math.random() * 10);
+    const industrialStyle = styleOverride !== undefined ? styleOverride % INDUSTRIAL_STYLE_COUNT : Math.floor(Math.random() * INDUSTRIAL_STYLE_COUNT);
     
     // Create the base concrete pad platform
     const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', polyCount: 5, rotation: 0 };
@@ -924,7 +929,7 @@ export const generateThemedBuildingsForPlot = (
       baseD = Math.max(4.0, bd * 0.3);
     }
 
-    const corpoStyle = styleOverride !== undefined ? styleOverride % 11 : Math.floor(Math.random() * 11); // 11 styles
+    const corpoStyle = styleOverride !== undefined ? styleOverride % CORPO_STYLE_COUNT : Math.floor(Math.random() * CORPO_STYLE_COUNT); // 11 styles
 
     if (corpoStyle === 0) {
       // Style 0: Asymmetrical Nexus (main tower + data-centre annex + skybridges)
@@ -1114,7 +1119,7 @@ export const generateThemedBuildingsForPlot = (
   // 4. URBAN (APARTMENT COMPLEXES)
   if (zoneTypeVal > 0.3 && zoneTypeVal < 0.8) {
     const h = overrideH !== undefined ? overrideH : (10 + Math.random() * 20) * (0.8 + Math.random() * 0.4);
-    const urbanStyle = styleOverride !== undefined ? styleOverride % 10 : Math.floor(Math.random() * 10);
+    const urbanStyle = styleOverride !== undefined ? styleOverride % URBAN_STYLE_COUNT : Math.floor(Math.random() * URBAN_STYLE_COUNT);
 
     if (urbanStyle === 0) {
       // Style 0: Courtyard Apartment (Hollow O-block)
@@ -1358,7 +1363,7 @@ export const generateThemedBuildingsForPlot = (
   // 5. MARKETS
   if (zoneTypeVal >= 2.0 && zoneTypeVal < 3.0) {
     const h = overrideH !== undefined ? overrideH : (10 + Math.random() * 20);
-    const marketStyle = styleOverride !== undefined ? styleOverride % 5 : Math.floor(Math.random() * 5);
+    const marketStyle = styleOverride !== undefined ? styleOverride % MARKETS_STYLE_COUNT : Math.floor(Math.random() * MARKETS_STYLE_COUNT);
 
     if (marketStyle === 0 || marketStyle === 1) {
       // Stall Markets: 5-8 market stalls (small rectangles with overhangs and tables)
