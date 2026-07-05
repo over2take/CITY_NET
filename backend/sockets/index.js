@@ -328,6 +328,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       db.run('UPDATE locations SET notifications_enabled = ? WHERE owner = ? AND shape = "rhombus"', [data.enabled ? 1 : 0, data.userName]);
     });
 
+    socket.on('updateViewSettings', (data) => {
+      if (!isAdminSocket(socket)) return;
+      const renderSignage = !!data.renderSignage;
+      const signageDensity = Math.min(5, Math.max(0.5, Number(data.signageDensity) || 1));
+      io.emit('viewSettingsUpdated', { renderSignage, signageDensity });
+    });
+
     socket.on('requestEditing', (data) => { io.emit('editingRequested', data); });
 
     socket.on('approveEditing', (data) => {

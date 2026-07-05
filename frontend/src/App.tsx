@@ -591,9 +591,14 @@ function App() {
     onFetchLocations: fetchLocations,
     onFetchRoads: fetchRoads,
     onFetchOverpasses: fetchOverpasses,
+    onFetchSigns: fetchSigns,
     onFetchDistricts: fetchDistricts,
     onFetchWaterBodies: fetchWaterBodies,
     onFetchBattleMaps: fetchCurrentLocBattleMaps,
+    onViewSettingsUpdate: ({ renderSignage: rs, signageDensity: sd }) => {
+      setRenderSignage(rs);
+      setSignageDensity(sd);
+    },
     onBankUpdate: (balance, debt, firstPayDone, highRollerDone) => setBankData({ balance, debt, firstPayDone, highRollerDone }),
     onBalancePaid: (balance, debt, firstPayDone, highRollerDone) => { setBankData({ balance, debt, firstPayDone, highRollerDone }); setIsBankOpen(true); },
     onNotification: setNotification,
@@ -1396,9 +1401,9 @@ function App() {
                 renderSidewalks={renderSidewalks}
                 setRenderSidewalks={setRenderSidewalks}
                 renderSignage={renderSignage}
-                setRenderSignage={setRenderSignage}
+                setRenderSignage={(val: boolean) => { setRenderSignage(val); socketRef.current?.emit('updateViewSettings', { renderSignage: val, signageDensity }); }}
                 signageDensity={signageDensity}
-                setSignageDensity={setSignageDensity}
+                setSignageDensity={(val: number) => { setSignageDensity(val); socketRef.current?.emit('updateViewSettings', { renderSignage, signageDensity: val }); }}
                 overpasses={overpasses}
                 refreshOverpasses={fetchOverpasses}
                 onRoadEraseModeChange={setRoadEraseMode}
