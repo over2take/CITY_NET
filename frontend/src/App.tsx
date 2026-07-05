@@ -877,6 +877,7 @@ function App() {
 
   const [transformMode, setTransformMode] = useState<'translate' | 'scale'>('translate');
   const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
   useEffect(() => {
     const handleGlobalPointerUp = () => { setIsDragging(false); };
     window.addEventListener('pointerup', handleGlobalPointerUp);
@@ -901,6 +902,7 @@ function App() {
   };
 
   const handleSignDragEnd = useCallback((e: any) => {
+    isDraggingRef.current = e.value;
     setIsDragging(e.value);
     if (e.value || !signMesh || !selectedSignId) return;
     // position.y is the mesh center; subtract half-height to get the base y stored in DB
@@ -1784,7 +1786,7 @@ function App() {
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
           </div>}
           <ThemeContext.Provider value={THEMES[currentTheme]}>
-            <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }} onPointerMissed={() => setSelectedSignId(null)}>
+            <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }} onPointerMissed={() => { if (!isDraggingRef.current) setSelectedSignId(null); }}>
               <StreamerVisibilityContext.Provider value={IS_SPECTATOR ? directorState.visibility : ALL_VISIBLE}>
             <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
             <MeasurementTool measureMode={measureMode} socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} mapScaleMultiplier={view === 'battle_map' ? (() => {
