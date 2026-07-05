@@ -15,6 +15,13 @@ function CheckUpdateButton({ token }: { token: string }) {
   const check = async () => {
     setStatus('checking');
     setMessage('');
+    if (import.meta.env.DEV) {
+      await new Promise(r => setTimeout(r, 5000));
+      setStatus('done');
+      setMessage('DEV: No updates available');
+      setTimeout(() => setStatus('idle'), 5000);
+      return;
+    }
     try {
       const res = await fetch('/api/admin/check-update', {
         method: 'POST',
