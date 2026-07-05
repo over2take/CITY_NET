@@ -878,6 +878,7 @@ function App() {
   const [transformMode, setTransformMode] = useState<'translate' | 'scale'>('translate');
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
+  const dragSignIdRef = useRef<number | null>(null);
   useEffect(() => {
     const handleGlobalPointerUp = () => { setIsDragging(false); };
     window.addEventListener('pointerup', handleGlobalPointerUp);
@@ -904,7 +905,15 @@ function App() {
   const handleSignDragEnd = useCallback((e: any) => {
     isDraggingRef.current = e.value;
     setIsDragging(e.value);
-    if (e.value || !signMesh || !selectedSignId) return;
+    if (e.value) {
+      // Capture the sign ID now — onPointerMissed fires on handle click (TransformControls
+      // handles are not R3F-managed, so R3F sees a miss) and clears selectedSignId before
+      // drag ends. We stash it here while the closure still has the correct value.
+      dragSignIdRef.current = selectedSignId;
+      return;
+    }
+    const signId = dragSignIdRef.current;
+    if (!signMesh || !signId) return;
     // position.y is the mesh center; subtract half-height to get the base y stored in DB
     signMesh.geometry.computeBoundingBox();
     const bb = signMesh.geometry.boundingBox;
@@ -913,7 +922,7 @@ function App() {
     const y = signMesh.position.y - halfH;
     const z = signMesh.position.z;
     const rotY = signMesh.rotation.y;
-    fetch(`/api/signs/${selectedSignId}`, {
+    fetch(`/api/signs/${signId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ x, y, z, rotation_y: rotY }),
