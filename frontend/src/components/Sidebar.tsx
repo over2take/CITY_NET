@@ -6,6 +6,55 @@ import { CurrencyIcon } from './BankWindows';
 import { THEMES } from '../theme/themes';
 import type { ThemeName } from '../theme/themes';
 
+// ─── CheckUpdateButton ───────────────────────────────────────────────────────
+
+function CheckUpdateButton({ token }: { token: string }) {
+  const [status, setStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+
+  const check = async () => {
+    setStatus('checking');
+    setMessage('');
+    try {
+      const res = await fetch('/api/admin/check-update', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStatus('done');
+        setMessage(data.message || 'Update check complete');
+      } else {
+        setStatus('error');
+        setMessage(data.error || 'Update check failed');
+      }
+    } catch {
+      setStatus('error');
+      setMessage('Could not reach server');
+    }
+    setTimeout(() => setStatus('idle'), 5000);
+  };
+
+  return (
+    <button
+      className={`rail-btn${status === 'done' ? ' active' : ''}`}
+      onClick={check}
+      disabled={status === 'checking'}
+      title={status === 'idle' ? 'CHECK_FOR_UPDATES' : message}
+      style={{ position: 'relative' }}
+    >
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        style={{ animation: status === 'checking' ? 'spin 1s linear infinite' : 'none' }}>
+        <polyline points="23 4 23 10 17 10" />
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+      </svg>
+      {status === 'error' && (
+        <span style={{ position: 'absolute', top: '2px', right: '2px', width: '7px', height: '7px', borderRadius: '50%', background: '#ff4444' }} />
+      )}
+    </button>
+  );
+}
+
 // ─── NavControlsMenu ─────────────────────────────────────────────────────────
 
 interface NavControlsMenuProps {
@@ -693,6 +742,9 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
                 <line x1="15" y1="3" x2="15" y2="21"></line>
               </svg>
             </button>
+          )}
+          {isPrimaryAdmin && (
+            <CheckUpdateButton token={token} />
           )}
           <button className={`rail-btn ${isChatOpen ? 'active' : ''} ${hasUnreadChat && !isChatOpen ? 'unread-flash' : ''}`} onClick={() => setIsChatOpen(!isChatOpen)} title="GLOBAL_CHAT">
             <svg width="24" height="24" viewBox="0 0 256 256" fill="none" stroke="currentColor" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
