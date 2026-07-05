@@ -9,6 +9,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.1.8] - 2026-07-05
+
+### Added
+- **UPGRADE.md** — comprehensive upgrade guide with step-by-step instructions for pulling new versions from Docker Hub
+- **Env var status check** on admin login — admins get an in-app warning if critical environment variables are missing
+- `GET /api/admin/env-status` endpoint — returns list of missing required env vars
+
+### Fixed
+- Backend startup now validates required env vars and logs helpful warnings if any are missing
+- Removed stale root-level `.env.example` to eliminate confusion (canonical location is `backend/.env.example`)
+
+---
+
 ## [1.1.7] - 2026-07-05
 
 ### Added
