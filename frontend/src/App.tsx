@@ -879,12 +879,6 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
   const dragSignIdRef = useRef<number | null>(null);
-  const handleSignMeshRef = useCallback((mesh: THREE.Mesh | null) => {
-    // Don't clear the mesh ref while a drag is in progress — doing so unmounts
-    // TransformControls with a dangling object and fires the scene-graph warning.
-    if (isDraggingRef.current && mesh === null) return;
-    setSignMesh(mesh);
-  }, []);
   useEffect(() => {
     const handleGlobalPointerUp = () => { setIsDragging(false); };
     window.addEventListener('pointerup', handleGlobalPointerUp);
@@ -1978,7 +1972,7 @@ function App() {
               remoteFonts={remoteFonts}
               selectedId={isAdmin ? selectedSignId : null}
               onSelect={isAdmin ? setSelectedSignId : undefined}
-              onMeshRef={isAdmin ? handleSignMeshRef : undefined}
+              onMeshRef={isAdmin ? setSignMesh : undefined}
             />
             {roadLayerMode === 'overpass' && roadTrail.length > 0 && (
               <OverpassPreview
