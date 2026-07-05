@@ -106,6 +106,19 @@ function App() {
     } catch (e) { }
   }
 
+  // Check env var status on admin login
+  useEffect(() => {
+    if (!token || !isAdmin) return;
+    fetch('/api/admin/env-status', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.all_present && data.missing?.length > 0) {
+          setNotification(`⚠️ Missing env vars: ${data.missing.join(', ')} — See UPGRADE.md or backend/.env.example`);
+        }
+      })
+      .catch(() => {});
+  }, [token, isAdmin]);
+
   const [secureModeEnabled, setSecureModeEnabled] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [playerToken, setPlayerToken] = useState<string | null>(null);

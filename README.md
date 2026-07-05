@@ -167,6 +167,21 @@ The compose file includes [Watchtower](https://containrrr.dev/watchtower/) — i
 
 The app is exposed on `APP_PORT` (default `80`). The optional `duckdns` service keeps your DuckDNS subdomain pointed at your current IP — set `DUCKDNS_SUBDOMAINS` and `DUCKDNS_TOKEN` in `backend/.env` to enable it, or remove the service block if you're not using DuckDNS.
 
+**Checking for new environment variables after updates**
+
+When you update the Docker images (via Watchtower or manual `docker compose pull`), new required environment variables may have been added. If you're missing any, the backend logs a warning on startup with the missing var names.
+
+To see the latest `.env.example` from a running container:
+```bash
+docker cp citynet-backend:/app/.env.example ./backend/.env.example.new
+diff backend/.env.example backend/.env.example.new
+```
+
+Compare the diff and add any new vars to your `backend/.env`, then restart:
+```bash
+docker compose up -d
+```
+
 ---
 
 ## Secure Mode
