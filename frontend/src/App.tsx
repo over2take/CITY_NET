@@ -595,9 +595,10 @@ function App() {
     onFetchDistricts: fetchDistricts,
     onFetchWaterBodies: fetchWaterBodies,
     onFetchBattleMaps: fetchCurrentLocBattleMaps,
-    onViewSettingsUpdate: ({ renderSignage: rs, signageDensity: sd }) => {
+    onViewSettingsUpdate: ({ renderSignage: rs, signageDensity: sd, renderSidewalks: rw }) => {
       setRenderSignage(rs);
       setSignageDensity(sd);
+      setRenderSidewalks(rw);
     },
     onBankUpdate: (balance, debt, firstPayDone, highRollerDone) => setBankData({ balance, debt, firstPayDone, highRollerDone }),
     onBalancePaid: (balance, debt, firstPayDone, highRollerDone) => { setBankData({ balance, debt, firstPayDone, highRollerDone }); setIsBankOpen(true); },
@@ -1399,11 +1400,11 @@ function App() {
                 overpassRampLengthEnd={overpassRampLengthEnd}
                 setOverpassRampLengthEnd={setOverpassRampLengthEnd}
                 renderSidewalks={renderSidewalks}
-                setRenderSidewalks={setRenderSidewalks}
+                setRenderSidewalks={(val: boolean) => { setRenderSidewalks(val); socketRef.current?.emit('updateViewSettings', { renderSignage, signageDensity, renderSidewalks: val }); }}
                 renderSignage={renderSignage}
-                setRenderSignage={(val: boolean) => { setRenderSignage(val); socketRef.current?.emit('updateViewSettings', { renderSignage: val, signageDensity }); }}
+                setRenderSignage={(val: boolean) => { setRenderSignage(val); socketRef.current?.emit('updateViewSettings', { renderSignage: val, signageDensity, renderSidewalks }); }}
                 signageDensity={signageDensity}
-                setSignageDensity={(val: number) => { setSignageDensity(val); socketRef.current?.emit('updateViewSettings', { renderSignage, signageDensity: val }); }}
+                setSignageDensity={(val: number) => { setSignageDensity(val); socketRef.current?.emit('updateViewSettings', { renderSignage, signageDensity: val, renderSidewalks }); }}
                 overpasses={overpasses}
                 refreshOverpasses={fetchOverpasses}
                 onRoadEraseModeChange={setRoadEraseMode}

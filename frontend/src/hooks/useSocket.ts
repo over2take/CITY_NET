@@ -22,7 +22,7 @@ interface UseSocketOptions {
   onFetchOverpasses?: () => void;
   onFetchSigns?: () => void;
   onFetchBattleMaps?: () => void;
-  onViewSettingsUpdate?: (settings: { renderSignage: boolean; signageDensity: number }) => void;
+  onViewSettingsUpdate?: (settings: { renderSignage: boolean; signageDensity: number; renderSidewalks: boolean }) => void;
   onBankUpdate: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean) => void;
   onBalancePaid?: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean) => void;
   onNotification: (msg: string | null) => void;
