@@ -109,7 +109,7 @@ A `docker-compose.yml` is included. Copy `.env.example` to `backend/.env`, fill 
 docker compose up -d
 ```
 
-The compose file includes [Watchtower](https://containrrr.dev/watchtower/) — it watches your containers and automatically pulls updated images when you push a new build to Docker Hub.
+The compose file includes [Watchtower](https://containrrr.dev/watchtower/) — it watches your containers and automatically pulls updated images when you push a new build to Docker Hub. Watchtower checks for updates at **4am local time** (the device's timezone) and on every startup, so powering the machine back on after downtime will also trigger a check. Updates restart the containers, which disconnects active sessions — schedule releases between sessions to avoid disrupting players.
 
 ---
 
