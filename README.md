@@ -29,17 +29,36 @@ cd backend
 cp .env.example .env
 ```
 
-Open `backend/.env` and set your values:
+Open `backend/.env` and set your values. See `backend/.env.example` for all options and defaults.
 
+**Required:**
 ```env
 ADMIN_USER=your_admin_name
 ADMIN_PASS=your_secure_password
 JWT_SECRET=some_long_random_string
+WATCHTOWER_API_TOKEN=your-random-token
+```
 
+Generate a strong token for `WATCHTOWER_API_TOKEN`:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+**Optional:**
+```env
+# Default: 5000 (rarely changed)
 PORT=5000
 
-# Optional — require players to register accounts before joining
+# Default: false — require players to register accounts before joining
 SECURE_MODE=false
+
+# Default: 80 — change if your ISP blocks inbound port 80
+APP_PORT=80
+
+# Only needed if using the duckdns service in docker-compose.yml
+DUCKDNS_SUBDOMAINS=yourname
+DUCKDNS_TOKEN=your-token-from-duckdns.org
+TZ=America/Chicago
 ```
 
 > **Never commit `.env`.** It's already in `.gitignore`.
