@@ -47,6 +47,12 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     res.json({ message: 'Control updated', controller: currentController });
   });
 
+  router.get('/env-status', authenticate, (req, res) => {
+    const requiredVars = ['JWT_SECRET', 'ADMIN_USER', 'ADMIN_PASS', 'WATCHTOWER_API_TOKEN'];
+    const missing = requiredVars.filter(v => !process.env[v]);
+    res.json({ missing, all_present: missing.length === 0 });
+  });
+
   router.post('/undo', authenticate, (req, res) => {
     db.get('SELECT * FROM action_history ORDER BY timestamp DESC LIMIT 1', [], (err, action) => {
       if (err) return res.status(500).json({ error: err.message });

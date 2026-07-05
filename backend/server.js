@@ -1,4 +1,13 @@
 require('dotenv').config();
+
+// Validate required environment variables
+const requiredEnvVars = ['JWT_SECRET', 'ADMIN_USER', 'ADMIN_PASS', 'WATCHTOWER_API_TOKEN'];
+const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+if (missingVars.length > 0) {
+  console.warn(`⚠️  Missing required environment variables: ${missingVars.join(', ')}`);
+  console.warn('   See backend/.env.example for defaults or run: docker cp citynet-backend:/app/.env.example ./backend/.env.example.new');
+}
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
