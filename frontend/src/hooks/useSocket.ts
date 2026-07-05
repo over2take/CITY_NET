@@ -119,7 +119,7 @@ export function useSocket({
       }
     });
 
-    newSocket.on('viewSettingsUpdated', (settings: { renderSignage: boolean; signageDensity: number }) => {
+    newSocket.on('viewSettingsUpdated', (settings: { renderSignage: boolean; signageDensity: number; renderSidewalks: boolean }) => {
       onViewSettingsUpdate?.(settings);
     });
 
