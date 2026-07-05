@@ -28,5 +28,7 @@ services:
     image: containrrr/watchtower
     volumes:
       - //var/run/docker.sock:/var/run/docker.sock
-    command: --schedule "0 0 4 * * *"
+    environment:
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}
+    command: --schedule "0 0 4 * * *" --http-api-update
     restart: unless-stopped
