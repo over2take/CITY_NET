@@ -27,19 +27,23 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
               if (err4) return res.status(500).json({ error: err4.message });
               db.all('SELECT * FROM water_bodies', (err5, waterBodies) => {
                 if (err5) return res.status(500).json({ error: err5.message });
+                db.all('SELECT * FROM signs', (err6, signs) => {
+                  if (err6) return res.status(500).json({ error: err6.message });
 
-                const sql = `INSERT INTO saved_maps (name, locations_data, districts_data, roads_data, overpasses_data, water_bodies_data)
-                             VALUES (?, ?, ?, ?, ?, ?)
-                             ON CONFLICT(name) DO UPDATE SET
-                               locations_data=excluded.locations_data,
-                               districts_data=excluded.districts_data,
-                               roads_data=excluded.roads_data,
-                               overpasses_data=excluded.overpasses_data,
-                               water_bodies_data=excluded.water_bodies_data,
-                               timestamp=CURRENT_TIMESTAMP`;
-                db.run(sql, [name, JSON.stringify(locations), JSON.stringify(districts), JSON.stringify(roads), JSON.stringify(overpasses), JSON.stringify(waterBodies)], function(err) {
-                  if (err) return res.status(500).json({ error: err.message });
-                  res.json({ message: 'Map saved successfully' });
+                  const sql = `INSERT INTO saved_maps (name, locations_data, districts_data, roads_data, overpasses_data, water_bodies_data, signs_data)
+                               VALUES (?, ?, ?, ?, ?, ?, ?)
+                               ON CONFLICT(name) DO UPDATE SET
+                                 locations_data=excluded.locations_data,
+                                 districts_data=excluded.districts_data,
+                                 roads_data=excluded.roads_data,
+                                 overpasses_data=excluded.overpasses_data,
+                                 water_bodies_data=excluded.water_bodies_data,
+                                 signs_data=excluded.signs_data,
+                                 timestamp=CURRENT_TIMESTAMP`;
+                  db.run(sql, [name, JSON.stringify(locations), JSON.stringify(districts), JSON.stringify(roads), JSON.stringify(overpasses), JSON.stringify(waterBodies), JSON.stringify(signs)], function(err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    res.json({ message: 'Map saved successfully' });
+                  });
                 });
               });
             });
@@ -59,6 +63,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       const roads = JSON.parse(row.roads_data || '[]');
       const overpasses = JSON.parse(row.overpasses_data || '[]');
       const waterBodies = JSON.parse(row.water_bodies_data || '[]');
+      const signs = JSON.parse(row.signs_data || '[]');
 
       db.serialize(() => {
         // Delete all locations except player/enemy tokens
@@ -67,6 +72,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         db.run('DELETE FROM roads');
         db.run('DELETE FROM overpasses');
         db.run('DELETE FROM water_bodies');
+        db.run('DELETE FROM signs');
 
         if (locations.length > 0) {
           const stmtL = db.prepare(`INSERT OR IGNORE INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp, map_scale_multiplier, is_global)
@@ -107,6 +113,13 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         }
         db.run('UPDATE sqlite_sequence SET seq = COALESCE((SELECT MAX(id) FROM water_bodies), 0) WHERE name="water_bodies"');
 
+        if (signs.length > 0) {
+          const stmtS = db.prepare(`INSERT INTO signs (id, text, x, y, z, rotation_y, font_size, font_family, image_url, use_tv_filter, lines, filter_intensity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          signs.forEach(s => stmtS.run([s.id, s.text, s.x, s.y, s.z, s.rotation_y, s.font_size, s.font_family, s.image_url ?? null, s.use_tv_filter ?? 0, s.lines ?? null, s.filter_intensity ?? 1.0]));
+          stmtS.finalize();
+        }
+        db.run('UPDATE sqlite_sequence SET seq = COALESCE((SELECT MAX(id) FROM signs), 0) WHERE name="signs"');
+
         db.run('SELECT 1', () => {
           emitUpdate();
           res.json({ message: 'Map loaded successfully' });
@@ -123,11 +136,13 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       db.run('DELETE FROM roads');
       db.run('DELETE FROM overpasses');
       db.run('DELETE FROM water_bodies');
+      db.run('DELETE FROM signs');
       db.run('UPDATE sqlite_sequence SET seq = COALESCE((SELECT MAX(id) FROM locations), 0) WHERE name="locations"');
       db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="districts"');
       db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="roads"');
       db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="overpasses"');
       db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="water_bodies"');
+      db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="signs"');
 
       db.run('SELECT 1', () => {
         emitUpdate();

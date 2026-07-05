@@ -903,13 +903,19 @@ function App() {
   const handleSignDragEnd = useCallback((e: any) => {
     setIsDragging(e.value);
     if (e.value || !signMesh || !selectedSignId) return;
-    const { x, y, z } = signMesh.position;
+    // position.y is the mesh center; subtract half-height to get the base y stored in DB
+    signMesh.geometry.computeBoundingBox();
+    const bb = signMesh.geometry.boundingBox;
+    const halfH = bb ? (bb.max.y - bb.min.y) / 2 : 0;
+    const x = signMesh.position.x;
+    const y = signMesh.position.y - halfH;
+    const z = signMesh.position.z;
     const rotY = signMesh.rotation.y;
     fetch(`/api/signs/${selectedSignId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ x, y, z, rotation_y: rotY }),
-    }).then(() => fetchSigns());
+    }).then(r => { if (!r.ok) console.error('Sign save failed:', r.status); fetchSigns(); });
   }, [signMesh, selectedSignId, token, fetchSigns]);
 
   const handleTreePlantClick = async (e: any) => {

@@ -232,6 +232,7 @@ db.serialize(() => {
 
   db.run(`ALTER TABLE saved_maps ADD COLUMN overpasses_data TEXT`, () => {});
   db.run(`ALTER TABLE saved_maps ADD COLUMN water_bodies_data TEXT`, () => {});
+  db.run(`ALTER TABLE saved_maps ADD COLUMN signs_data TEXT`, () => {});
   db.run(`ALTER TABLE overpasses ADD COLUMN ramp_length_start REAL`, () => {});
   db.run(`ALTER TABLE overpasses ADD COLUMN ramp_length_end REAL`, () => {});
 
