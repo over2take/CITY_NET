@@ -29,9 +29,16 @@ cd CITY_NET
 
 ### 2. Configure environment
 
+**Linux/Mac:**
 ```bash
 cp backend/.env.example backend/.env
 cp backend/.env .env
+```
+
+**Windows (PowerShell):**
+```powershell
+Copy-Item backend\.env.example backend\.env
+Copy-Item backend\.env .env
 ```
 
 Edit `backend/.env` with your values. See `backend/.env.example` for all options and defaults.
@@ -77,9 +84,16 @@ Everything runs automatically. Access the app at `http://localhost:$APP_PORT` (d
 
 ### 2. Configure the backend
 
+**Linux/Mac:**
 ```bash
 cd backend
 cp .env.example .env
+```
+
+**Windows (PowerShell):**
+```powershell
+cd backend
+Copy-Item .env.example .env
 ```
 
 Edit `backend/.env` with your values (same required/optional settings as above).
