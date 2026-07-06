@@ -182,13 +182,22 @@ A `docker-compose.yml` is included. Copy `.env.example` to `backend/.env`, fill 
 docker compose up -d
 ```
 
-The compose file includes [Watchtower](https://containrrr.dev/watchtower/) — it watches your containers and automatically pulls updated images when you push a new build to Docker Hub. Watchtower checks for updates at **4am local time** (the device's timezone) and on every startup, so powering the machine back on after downtime will also trigger a check. Updates restart the containers, which disconnects active sessions — schedule releases between sessions to avoid disrupting players.
-
 The app is exposed on `APP_PORT` (default `80`). The optional `duckdns` service keeps your DuckDNS subdomain pointed at your current IP — set `DUCKDNS_SUBDOMAINS` and `DUCKDNS_TOKEN` in `backend/.env` to enable it, or remove the service block if you're not using DuckDNS.
+
+**Checking for updates**
+
+The admin panel includes a "Check for update" button (in the system info area) that queries Docker Hub for new versions. When an update is available, it shows the command to pull and restart:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+This works because the GitHub Actions workflow automatically tags Docker images with version numbers from `package.json`. When you bump the version and run the release workflow, new images are available on Docker Hub with version tags.
 
 **Checking for new environment variables after updates**
 
-When you update the Docker images (via Watchtower or manual `docker compose pull`), new required environment variables may have been added. If you're missing any, the backend logs a warning on startup with the missing var names.
+When you update the Docker images, new required environment variables may have been added. If you're missing any, the backend logs a warning on startup with the missing var names.
 
 To see the latest `.env.example` from a running container:
 ```bash
