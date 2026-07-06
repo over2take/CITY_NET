@@ -12,7 +12,8 @@ If CITY_NET adds something to your table, please consider supporting the creator
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v18 or newer
+- **Docker option:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recommended, easiest setup)
+- **Manual option:** [Node.js](https://nodejs.org/) v18 or newer
 - A terminal (PowerShell, bash, etc.)
 
 ### 1. Clone the repo
@@ -22,16 +23,20 @@ git clone https://github.com/over2take/CITY_NET.git
 cd CITY_NET
 ```
 
-### 2. Configure the backend
+---
+
+## Option A: Docker (Recommended)
+
+### 2. Configure environment
 
 ```bash
-cd backend
-cp .env.example .env
+cp backend/.env.example backend/.env
+cp backend/.env.example .env
 ```
 
-Open `backend/.env` and set your values. See `backend/.env.example` for all options and defaults.
+Edit both files with your values. See `backend/.env.example` for all options.
 
-**Required:**
+**Required in both files:**
 ```env
 ADMIN_USER=your_admin_name
 ADMIN_PASS=your_secure_password
@@ -39,34 +44,47 @@ JWT_SECRET=some_long_random_string
 WATCHTOWER_API_TOKEN=your-random-token
 ```
 
-Generate a strong token for `WATCHTOWER_API_TOKEN`:
+Generate a strong token:
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-**Optional:**
+**Optional settings** (safe to leave as-is):
 ```env
-# Default: 5000 (rarely changed)
 PORT=5000
-
-# Default: false — require players to register accounts before joining
 SECURE_MODE=false
-
-# Default: 80 — change if your ISP blocks inbound port 80
 APP_PORT=80
-
-# Only needed if using the duckdns service in docker-compose.yml
 DUCKDNS_SUBDOMAINS=yourname
 DUCKDNS_TOKEN=your-token-from-duckdns.org
 TZ=America/Chicago
 ```
 
-> **Never commit `.env`.** It's already in `.gitignore`.
+> **Never commit `.env` files.** They're already in `.gitignore`.
+
+### 3. Start Docker
+
+```bash
+docker compose up -d
+```
+
+Everything runs automatically. Access the app at `http://localhost:$APP_PORT` (default `http://localhost:80`).
+
+---
+
+## Option B: Manual Setup
+
+### 2. Configure the backend
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Edit `backend/.env` with your values (same required/optional settings as above).
 
 ### 3. Install dependencies
 
 ```bash
-# From the repo root
 cd backend && npm install
 cd ../frontend && npm install
 ```
@@ -92,18 +110,15 @@ Frontend is at `http://localhost:5173`, backend at `http://localhost:5000`.
 ```bash
 cd frontend
 npm run build
-```
-
-Then start the backend — it serves the built frontend automatically:
-
-```bash
-cd backend
+cd ../backend
 node server.js
 ```
 
-Everything runs on port `5000`. To expose it publicly you need a reverse proxy or tunnel pointing at `localhost:5000`. Options below:
+---
 
-> **Note:** if you're running the [Docker stack](#6-docker-optional) instead of this manual setup, the app is served by Nginx. The default host port is `80` (configurable via `APP_PORT` in `backend/.env`). Point your tunnel or DNS at `localhost:$APP_PORT`. The backend container isn't reachable directly from the host.
+## Connectivity & Deployment
+
+The app runs locally on `localhost:5000` (manual) or `localhost:$APP_PORT` (Docker). To let players connect over the internet, you need to expose it publicly:
 
 ---
 
@@ -174,35 +189,16 @@ If your players are on the same local network, they can connect directly via you
 - Point your domain's DNS at your server, install [Nginx](https://nginx.org/en/docs/install.html), drop the config in `/etc/nginx/sites-available/`, and enable it
 - Pair with [Certbot](https://certbot.eff.org/) for free HTTPS via Let's Encrypt
 
-### 6. Docker (optional)
-
-A `docker-compose.yml` is included. Set up environment files:
-
-```bash
-cp backend/.env.example backend/.env
-cp backend/.env.example .env
-```
-
-Edit both files and fill in your values. Then:
-
-```bash
-docker compose up -d
-```
-
-> **Note:** `backend/.env` is for the app; `.env` (root) is for docker-compose to substitute variables like `DUCKDNS_SUBDOMAINS` and `TZ`.
-
-The app is exposed on `APP_PORT` (default `80`). The optional `duckdns` service keeps your DuckDNS subdomain pointed at your current IP — set `DUCKDNS_SUBDOMAINS` and `DUCKDNS_TOKEN` in `backend/.env` to enable it, or remove the service block if you're not using DuckDNS.
-
 **Checking for updates**
 
-The admin panel includes a "Check for update" button (in the system info area) that queries Docker Hub for new versions. When an update is available, it shows the command to pull and restart:
+The admin panel includes a "Check for update" button that queries Docker Hub for new versions. When an update is available, it shows the command to pull and restart:
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-This works because the GitHub Actions workflow automatically tags Docker images with version numbers from `package.json`. When you bump the version and run the release workflow, new images are available on Docker Hub with version tags.
+The GitHub Actions workflow automatically tags Docker images with version numbers from `package.json`. When you bump the version and run the release workflow, new images are available on Docker Hub with version tags.
 
 **Checking for new environment variables after updates**
 
