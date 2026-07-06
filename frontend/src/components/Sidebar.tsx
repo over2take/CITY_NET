@@ -32,7 +32,7 @@ function CheckUpdateButton({ token }: { token: string }) {
         setStatus('done');
         setMessage(
           data.hasUpdate
-            ? `${data.message}\n\nUpdate:\ndocker compose down\ndocker compose build --no-cache\ndocker compose up -d`
+            ? `${data.message}\n\nUpdate:\ndocker compose down\ndocker compose pull\ndocker compose up -d`
             : data.message || 'You\'re up to date'
         );
       } else {
