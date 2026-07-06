@@ -258,6 +258,26 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     request.end();
   });
 
+  // --- Apply Update ---
+  router.post('/update', authenticate, (req, res) => {
+    if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
+
+    const { spawn } = require('child_process');
+
+    res.json({ message: 'Update started' });
+
+    const update = spawn('docker', [
+      'compose', '-f', '/app/docker-compose.yml', 'pull',
+    ]);
+
+    update.on('close', (pullCode) => {
+      if (pullCode !== 0) return;
+      spawn('docker', [
+        'compose', '-f', '/app/docker-compose.yml', 'up', '-d',
+      ]);
+    });
+  });
+
   // --- Chat ---
   router.post('/chat/purge', authenticate, (req, res) => {
     db.run('DELETE FROM chat_logs', (err) => {
