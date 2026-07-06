@@ -31,10 +31,12 @@ cd CITY_NET
 
 ```bash
 cp backend/.env.example backend/.env
-cp backend/.env.example .env
+cp backend/.env .env
 ```
 
-Edit both files with your values. See `backend/.env.example` for all options.
+Edit `backend/.env` with your values. See `backend/.env.example` for all options and defaults.
+
+> **Note:** We copy to both locations because docker-compose needs the root `.env` to substitute variables like `DUCKDNS_SUBDOMAINS` in the compose file itself.
 
 **Required in both files:**
 ```env
