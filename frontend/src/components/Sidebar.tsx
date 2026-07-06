@@ -23,21 +23,25 @@ function CheckUpdateButton({ token }: { token: string }) {
       return;
     }
     try {
-      const res = await fetch('/api/admin/check-update', {
+      const res = await fetch('/api/check-update', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (res.ok) {
         setStatus('done');
-        setMessage(data.message || 'Update check complete');
+        setMessage(
+          data.hasUpdate
+            ? `${data.message}\n\nUpdate: docker compose pull && docker compose up -d`
+            : data.message || 'You\'re up to date'
+        );
       } else {
         setStatus('error');
-        setMessage(data.error || 'Update check failed');
+        setMessage('Could not check for updates');
       }
     } catch {
       setStatus('error');
-      setMessage('Could not reach server');
+      setMessage('Connection failed');
     }
     setTimeout(() => setStatus('idle'), 5000);
   };
