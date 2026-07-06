@@ -9,6 +9,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.1.9] - 2026-07-06
+
+### Added
+- **Docker Hub version checking** — admin panel button queries Docker Hub for new versions
+- **GitHub Actions auto-tagging** — release workflow now tags images with version numbers from package.json
+- **PR template with checklists** — ensures version bumps and env var updates before merging
+
+### Changed
+- Watchtower removed in favor of manual Docker Hub pulling and GitHub Actions workflow
+- README reorganized into Docker vs Manual setup paths with clear instructions
+- Added Windows PowerShell command variants for cross-platform support
+
+---
+
 ## [1.1.8] - 2026-07-05
 
 ### Added
