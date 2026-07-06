@@ -11,10 +11,15 @@ import type { ThemeName } from '../theme/themes';
 function CheckUpdateButton({ token }: { token: string }) {
   const [status, setStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [hasUpdate, setHasUpdate] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const updateCommands = 'docker compose down\ndocker compose pull\ndocker compose up -d';
 
   const check = async () => {
     setStatus('checking');
     setMessage('');
+    setHasUpdate(false);
     if (import.meta.env.DEV) {
       await new Promise(r => setTimeout(r, 5000));
       setStatus('done');
@@ -30,11 +35,12 @@ function CheckUpdateButton({ token }: { token: string }) {
       const data = await res.json();
       if (res.ok) {
         setStatus('done');
-        setMessage(
-          data.hasUpdate
-            ? `${data.message}\n\nUpdate:\ndocker compose down\ndocker compose pull\ndocker compose up -d`
-            : data.message || 'You\'re up to date'
-        );
+        if (data.hasUpdate) {
+          setHasUpdate(true);
+          setMessage(`${data.message}\n\nUpdate:\n${updateCommands}`);
+        } else {
+          setMessage(data.message || 'You\'re up to date');
+        }
       } else {
         setStatus('error');
         setMessage('Could not check for updates');
@@ -46,17 +52,34 @@ function CheckUpdateButton({ token }: { token: string }) {
     setTimeout(() => setStatus('idle'), 5000);
   };
 
+  const copyCommands = () => {
+    navigator.clipboard.writeText(updateCommands);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const label = status === 'checking' ? 'CHECKING...' : status === 'done' || status === 'error' ? message : 'Check for update';
   const color = status === 'error' ? '#ff4444' : status === 'done' ? 'var(--green)' : 'var(--green)';
 
   return (
-    <button
-      onClick={check}
-      disabled={status === 'checking'}
-      style={{ background: 'none', border: 'none', cursor: status === 'checking' ? 'default' : 'pointer', color, fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', marginTop: '4px', padding: 0, textDecoration: status === 'idle' ? 'underline' : 'none' }}
-    >
-      {label}
-    </button>
+    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+      <button
+        onClick={check}
+        disabled={status === 'checking'}
+        style={{ background: 'none', border: 'none', cursor: status === 'checking' ? 'default' : 'pointer', color, fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', marginTop: '4px', padding: 0, textDecoration: status === 'idle' ? 'underline' : 'none', flex: 1 }}
+      >
+        {label}
+      </button>
+      {hasUpdate && status === 'done' && (
+        <button
+          onClick={copyCommands}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--green)', fontSize: '0.6rem', opacity: 0.7, padding: '2px 4px', marginTop: '4px' }}
+          title="Copy update commands"
+        >
+          {copied ? '✓ COPIED' : 'COPY'}
+        </button>
+      )}
+    </div>
   );
 }
 
