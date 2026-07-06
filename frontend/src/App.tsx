@@ -109,7 +109,7 @@ function App() {
   // Check env var status on admin login
   useEffect(() => {
     if (!token || !isAdmin) return;
-    fetch('/api/admin/env-status', { headers: { Authorization: `Bearer ${token}` } })
+    fetch('/api/env-status', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => {
         if (!data.all_present && data.missing?.length > 0) {
