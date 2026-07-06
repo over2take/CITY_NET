@@ -26,16 +26,6 @@ jobs:
         id: version
         run: echo "VERSION=$(jq -r '.version' frontend/package.json)" >> $GITHUB_OUTPUT
 
-      - name: Update docker-compose.yml with version
-        run: |
-          VERSION=$(jq -r '.version' frontend/package.json)
-          sed -i "s/APP_VERSION=.*/APP_VERSION=$VERSION/" docker-compose.yml
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add docker-compose.yml
-          git commit -m "chore: sync APP_VERSION to $VERSION" || true
-          git push origin HEAD:main || true
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -51,6 +41,8 @@ jobs:
           context: .
           file: Dockerfile.backend
           push: true
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.VERSION }}
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/citynet-backend:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/citynet-backend:${{ steps.version.outputs.VERSION }}
