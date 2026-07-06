@@ -23,7 +23,7 @@ function CheckUpdateButton({ token }: { token: string }) {
       return;
     }
     try {
-      const res = await fetch('/api/admin/check-update', {
+      const res = await fetch('/api/check-update', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
