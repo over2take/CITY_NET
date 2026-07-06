@@ -203,32 +203,46 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     });
   });
 
-  // --- Watchtower ---
+  // --- Version Check (Docker Hub) ---
   router.post('/check-update', authenticate, (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
-    const token = process.env.WATCHTOWER_API_TOKEN;
-    if (!token) return res.status(503).json({ error: 'WATCHTOWER_API_TOKEN not configured' });
 
-    const http = require('http');
+    const https = require('https');
+    const currentVersion = require('../../frontend/package.json').version;
+
     const options = {
-      hostname: 'watchtower',
-      port: 8080,
-      path: '/v1/update',
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      hostname: 'hub.docker.com',
+      path: '/v2/repositories/over2take/citynet-frontend/tags?page_size=1',
+      method: 'GET',
     };
-    const request = http.request(options, (upstream) => {
+
+    const request = https.request(options, (upstream) => {
       let body = '';
       upstream.on('data', chunk => { body += chunk; });
       upstream.on('end', () => {
-        res.status(upstream.statusCode).json(
-          body ? (() => { try { return JSON.parse(body); } catch { return { message: body }; } })() : { message: 'Update check triggered' }
-        );
+        try {
+          const data = JSON.parse(body);
+          const latestTag = data.results?.[0]?.name || 'unknown';
+          const hasUpdate = latestTag !== 'unknown' && latestTag !== currentVersion;
+
+          res.json({
+            current: currentVersion,
+            latest: latestTag,
+            hasUpdate,
+            message: hasUpdate
+              ? `Update available: ${currentVersion} → ${latestTag}`
+              : `You're up to date (${currentVersion})`,
+          });
+        } catch (e) {
+          res.status(500).json({ error: 'Failed to parse Docker Hub response' });
+        }
       });
     });
+
     request.on('error', (err) => {
-      res.status(502).json({ error: `Could not reach Watchtower: ${err.message}` });
+      res.status(502).json({ error: `Could not reach Docker Hub: ${err.message}` });
     });
+
     request.end();
   });
 

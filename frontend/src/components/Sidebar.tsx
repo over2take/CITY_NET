@@ -30,14 +30,18 @@ function CheckUpdateButton({ token }: { token: string }) {
       const data = await res.json();
       if (res.ok) {
         setStatus('done');
-        setMessage(data.message || 'Update check complete');
+        setMessage(
+          data.hasUpdate
+            ? `${data.message}\n\nUpdate: docker compose pull && docker compose up -d`
+            : data.message || 'You\'re up to date'
+        );
       } else {
-        setStatus('done');
-        setMessage('To update: docker compose pull && docker compose up -d');
+        setStatus('error');
+        setMessage('Could not check for updates');
       }
     } catch {
-      setStatus('done');
-      setMessage('To update: docker compose pull && docker compose up -d');
+      setStatus('error');
+      setMessage('Connection failed');
     }
     setTimeout(() => setStatus('idle'), 5000);
   };
