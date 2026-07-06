@@ -349,7 +349,7 @@ CITY_NET/
 | Backend | Node.js, Express 5, SQLite3 |
 | Realtime | Socket.IO |
 | Auth | JWT (admin) + bcrypt (player accounts) |
-| Deployment | Docker, Nginx, Watchtower |
+| Deployment | Docker, Nginx, GitHub Actions |
 
 ### Key architectural patterns
 
