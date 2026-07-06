@@ -29,6 +29,8 @@ backend/nodemon.json
 .idea/
 .DS_Store
 Thumbs.db
+.claude/
+.agents/
 
 # Tunnel Configs and Certificates
 ngrok.yml
