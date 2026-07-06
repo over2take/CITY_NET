@@ -176,11 +176,20 @@ If your players are on the same local network, they can connect directly via you
 
 ### 6. Docker (optional)
 
-A `docker-compose.yml` is included. Copy `.env.example` to `backend/.env`, fill it in, then:
+A `docker-compose.yml` is included. Set up environment files:
+
+```bash
+cp backend/.env.example backend/.env
+cp backend/.env.example .env
+```
+
+Edit both files and fill in your values. Then:
 
 ```bash
 docker compose up -d
 ```
+
+> **Note:** `backend/.env` is for the app; `.env` (root) is for docker-compose to substitute variables like `DUCKDNS_SUBDOMAINS` and `TZ`.
 
 The app is exposed on `APP_PORT` (default `80`). The optional `duckdns` service keeps your DuckDNS subdomain pointed at your current IP — set `DUCKDNS_SUBDOMAINS` and `DUCKDNS_TOKEN` in `backend/.env` to enable it, or remove the service block if you're not using DuckDNS.
 
