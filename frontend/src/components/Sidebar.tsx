@@ -9,22 +9,19 @@ import type { ThemeName } from '../theme/themes';
 // ─── CheckUpdateButton ───────────────────────────────────────────────────────
 
 function CheckUpdateButton({ token }: { token: string }) {
-  const [status, setStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle');
-  const [message, setMessage] = useState('');
-  const [hasUpdate, setHasUpdate] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'checking' | 'update-available' | 'updating' | 'up-to-date' | 'error'>('idle');
+  const [versionMessage, setVersionMessage] = useState('');
   const [copied, setCopied] = useState(false);
 
   const updateCommands = 'docker compose down\ndocker compose pull\ndocker compose up -d';
 
   const check = async () => {
     setStatus('checking');
-    setMessage('');
-    setHasUpdate(false);
+    setVersionMessage('');
     if (import.meta.env.DEV) {
-      await new Promise(r => setTimeout(r, 5000));
-      setStatus('done');
-      setMessage('DEV: No updates available');
-      setTimeout(() => setStatus('idle'), 5000);
+      await new Promise(r => setTimeout(r, 1000));
+      setStatus('update-available');
+      setVersionMessage('DEV: Update available: 1.1.9 → 1.2.0');
       return;
     }
     try {
@@ -34,22 +31,40 @@ function CheckUpdateButton({ token }: { token: string }) {
       });
       const data = await res.json();
       if (res.ok) {
-        setStatus('done');
         if (data.hasUpdate) {
-          setHasUpdate(true);
-          setMessage(`${data.message}\n\nUpdate:\n${updateCommands}`);
+          setVersionMessage(data.message);
+          setStatus('update-available');
         } else {
-          setMessage(data.message || 'You\'re up to date');
+          setVersionMessage(data.message || "You're up to date");
+          setStatus('up-to-date');
+          setTimeout(() => setStatus('idle'), 4000);
         }
       } else {
         setStatus('error');
-        setMessage('Could not check for updates');
+        setVersionMessage('Could not check for updates');
+        setTimeout(() => setStatus('idle'), 4000);
       }
     } catch {
       setStatus('error');
-      setMessage('Connection failed');
+      setVersionMessage('Connection failed');
+      setTimeout(() => setStatus('idle'), 4000);
     }
-    setTimeout(() => setStatus('idle'), 5000);
+  };
+
+  const applyUpdate = async () => {
+    setStatus('updating');
+    try {
+      await fetch('/api/update', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setVersionMessage('Update applied — reconnecting...');
+      setTimeout(() => window.location.reload(), 6000);
+    } catch {
+      setStatus('error');
+      setVersionMessage('Update failed — try manually');
+      setTimeout(() => setStatus('idle'), 5000);
+    }
   };
 
   const copyCommands = () => {
@@ -58,29 +73,46 @@ function CheckUpdateButton({ token }: { token: string }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const label = status === 'checking' ? 'CHECKING...' : status === 'done' || status === 'error' ? message : 'Check for update';
-  const color = status === 'error' ? '#ff4444' : status === 'done' ? 'var(--green)' : 'var(--green)';
+  const btnStyle = { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--green)', fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', marginTop: '4px', padding: 0 };
 
-  return (
-    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-      <button
-        onClick={check}
-        disabled={status === 'checking'}
-        style={{ background: 'none', border: 'none', cursor: status === 'checking' ? 'default' : 'pointer', color, fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', marginTop: '4px', padding: 0, textDecoration: status === 'idle' ? 'underline' : 'none', flex: 1 }}
-      >
-        {label}
+  if (status === 'idle') {
+    return (
+      <button onClick={check} style={{ ...btnStyle, textDecoration: 'underline' }}>
+        Check for update
       </button>
-      {hasUpdate && status === 'done' && (
-        <button
-          onClick={copyCommands}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--green)', fontSize: '0.6rem', opacity: 0.7, padding: '2px 4px', marginTop: '4px' }}
-          title="Copy update commands"
-        >
-          {copied ? '✓ COPIED' : 'COPY'}
-        </button>
-      )}
-    </div>
-  );
+    );
+  }
+
+  if (status === 'checking') {
+    return <span style={{ ...btnStyle, cursor: 'default' }}>CHECKING...</span>;
+  }
+
+  if (status === 'up-to-date') {
+    return <span style={{ ...btnStyle, cursor: 'default' }}>{versionMessage}</span>;
+  }
+
+  if (status === 'update-available') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+        <span style={{ color: 'var(--green)', fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px' }}>{versionMessage}</span>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button onClick={applyUpdate} style={{ ...btnStyle, marginTop: 0, textDecoration: 'underline' }}>
+            CLICK TO UPDATE
+          </button>
+          <button onClick={copyCommands} style={{ ...btnStyle, marginTop: 0, opacity: 0.5 }} title="Copy manual update commands">
+            {copied ? '✓ COPIED' : 'COPY'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'updating') {
+    return <span style={{ ...btnStyle, cursor: 'default' }}>{versionMessage || 'UPDATING...'}</span>;
+  }
+
+  // error
+  return <span style={{ ...btnStyle, cursor: 'default', color: '#ff4444' }}>{versionMessage}</span>;
 }
 
 // ─── NavControlsMenu ─────────────────────────────────────────────────────────
