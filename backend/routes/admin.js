@@ -212,7 +212,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
 
     const options = {
       hostname: 'hub.docker.com',
-      path: '/v2/repositories/over2take/citynet-frontend/tags?page_size=1',
+      path: '/v2/repositories/over2take/citynet-frontend/tags?page_size=100',
       method: 'GET',
     };
 
@@ -222,7 +222,19 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       upstream.on('end', () => {
         try {
           const data = JSON.parse(body);
-          const latestTag = data.results?.[0]?.name || 'unknown';
+          // Find version tags (skip 'latest'), sort and get highest version
+          const versionTags = data.results
+            ?.filter(tag => tag.name !== 'latest' && /^\d+\.\d+\.\d+/.test(tag.name))
+            .map(tag => tag.name)
+            .sort((a, b) => {
+              const aParts = a.split('.').map(Number);
+              const bParts = b.split('.').map(Number);
+              for (let i = 0; i < 3; i++) {
+                if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
+              }
+              return 0;
+            }) || [];
+          const latestTag = versionTags[0] || 'unknown';
           const hasUpdate = latestTag !== 'unknown' && latestTag !== currentVersion;
 
           res.json({
