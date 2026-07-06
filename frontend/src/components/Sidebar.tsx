@@ -32,12 +32,12 @@ function CheckUpdateButton({ token }: { token: string }) {
         setStatus('done');
         setMessage(data.message || 'Update check complete');
       } else {
-        setStatus('error');
-        setMessage(data.error || 'Update check failed');
+        setStatus('done');
+        setMessage('To update: docker compose pull && docker compose up -d');
       }
     } catch {
-      setStatus('error');
-      setMessage('Could not reach server');
+      setStatus('done');
+      setMessage('To update: docker compose pull && docker compose up -d');
     }
     setTimeout(() => setStatus('idle'), 5000);
   };
