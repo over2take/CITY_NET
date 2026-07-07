@@ -8,6 +8,7 @@ services:
       - ./backend/.env
     environment:
       - DB_PATH=/app/data/city.db
+    user: root
     volumes:
       - ./backend/data:/app/data
       - ./backend/uploads:/app/uploads
