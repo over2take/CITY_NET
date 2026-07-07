@@ -9,6 +9,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.2.1] - 2026-07-06
+
+### Fixed
+- **One-click in-app update** — admin panel now has a CLICK TO UPDATE button; no SSH required for future updates
+- **APP_VERSION baked into Docker image** — version is now embedded at build time so all users see accurate version info regardless of their local docker-compose.yml
+
+---
+
 ## [1.2.0] - 2026-07-06
 
 ### Fixed
