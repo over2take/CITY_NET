@@ -101,18 +101,6 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
     flexWrap: 'wrap',
   };
 
-  const btn = (color = 'var(--green, #00ff88)'): React.CSSProperties => ({
-    background: 'none',
-    border: `1px solid ${color}`,
-    color,
-    fontFamily: 'monospace',
-    fontSize: '0.6rem',
-    letterSpacing: '1px',
-    padding: '5px 10px',
-    cursor: 'pointer',
-    flex: 1,
-  });
-
   return (
     <div ref={modalRef} style={panelStyle}>
       <div style={headerStyle} onMouseDown={onMouseDown}>
@@ -141,9 +129,9 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
           <>
             {isDocker ? (
               <div style={btnRow}>
-                <button style={btn()} onClick={handleUpdate}>UPDATE NOW</button>
-                <button style={btn()} onClick={onDismiss}>REMIND ME LATER</button>
-                <button style={btn('rgba(0,255,136,0.4)')} onClick={onSkip}>SKIP VERSION</button>
+                <button className="modal-btn" onClick={handleUpdate}>UPDATE NOW</button>
+                <button className="modal-btn" onClick={onDismiss}>REMIND ME LATER</button>
+                <button className="modal-btn muted" onClick={onSkip}>SKIP VERSION</button>
               </div>
             ) : (
               <>
@@ -161,8 +149,8 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
                   </a>
                 </div>
                 <div style={btnRow}>
-                  <button style={btn()} onClick={onDismiss}>REMIND ME LATER</button>
-                  <button style={btn('rgba(0,255,136,0.4)')} onClick={onSkip}>SKIP VERSION</button>
+                  <button className="modal-btn" onClick={onDismiss}>REMIND ME LATER</button>
+                  <button className="modal-btn muted" onClick={onSkip}>SKIP VERSION</button>
                 </div>
               </>
             )}
