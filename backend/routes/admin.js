@@ -263,14 +263,14 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
 
     const { spawn, execSync } = require('child_process');
-    const os = require('os');
+    const fs = require('fs');
 
     res.json({ message: 'Update started' });
 
     // Read this container's compose project name from its own Docker labels
     let projectArgs = [];
     try {
-      const containerId = os.hostname();
+      const containerId = fs.readFileSync('/etc/hostname', 'utf8').trim();
       const label = execSync(
         `docker inspect ${containerId} --format '{{index .Config.Labels "com.docker.compose.project"}}'`,
         { encoding: 'utf8' }
