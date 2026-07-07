@@ -280,10 +280,12 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
 
     const composeArgs = ['compose', '-f', '/app/docker-compose.yml', ...projectArgs];
 
-    const pull = spawn('docker', [...composeArgs, 'pull']);
+    const pull = spawn('docker', [...composeArgs, 'pull'], { detached: true, stdio: 'ignore' });
+    pull.unref();
     pull.on('close', (code) => {
       if (code !== 0) return;
-      spawn('docker', [...composeArgs, 'up', '-d']);
+      const up = spawn('docker', [...composeArgs, 'up', '-d'], { detached: true, stdio: 'ignore' });
+      up.unref();
     });
   });
 
