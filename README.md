@@ -207,12 +207,10 @@ If your players are on the same local network, they can connect directly via you
 
 **Checking for updates**
 
-The admin panel includes a "Check for update" button that queries Docker Hub for new versions. When an update is available, it shows the command to pull and restart:
+The admin panel includes a **Check for update** button that queries Docker Hub for new versions.
 
-```bash
-docker compose pull
-docker compose up -d
-```
+- **Docker installs:** When an update is available, click **CLICK TO UPDATE (docker only)** — the server pulls the latest images and restarts all containers automatically. The page reloads once the new version is live.
+- **Manual installs:** Pull the latest changes from the repo and restart your server manually.
 
 The GitHub Actions workflow automatically tags Docker images with version numbers from `package.json`. When you bump the version and run the release workflow, new images are available on Docker Hub with version tags.
 
