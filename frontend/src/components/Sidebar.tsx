@@ -11,10 +11,6 @@ import type { ThemeName } from '../theme/themes';
 function CheckUpdateButton({ token }: { token: string }) {
   const [status, setStatus] = useState<'idle' | 'checking' | 'update-available' | 'updating' | 'up-to-date' | 'error'>('idle');
   const [versionMessage, setVersionMessage] = useState('');
-  const [copied, setCopied] = useState(false);
-
-  const updateCommands = 'docker compose down\ndocker compose pull\ndocker compose up -d';
-
   const check = async () => {
     setStatus('checking');
     setVersionMessage('');
@@ -67,12 +63,6 @@ function CheckUpdateButton({ token }: { token: string }) {
     }
   };
 
-  const copyCommands = () => {
-    navigator.clipboard.writeText(updateCommands);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   const btnStyle = { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--green)', fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', marginTop: '4px', padding: 0 };
 
   if (status === 'idle') {
@@ -95,14 +85,9 @@ function CheckUpdateButton({ token }: { token: string }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
         <span style={{ color: 'var(--green)', fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', textAlign: 'center' }}>{versionMessage}</span>
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          <button onClick={applyUpdate} style={{ ...btnStyle, marginTop: 0, textDecoration: 'underline' }}>
-            CLICK TO UPDATE
-          </button>
-          <button onClick={copyCommands} style={{ ...btnStyle, marginTop: 0, opacity: 0.5 }} title="Copy manual update commands">
-            {copied ? '✓ COPIED' : 'COPY'}
-          </button>
-        </div>
+        <button onClick={applyUpdate} style={{ ...btnStyle, marginTop: 0, textDecoration: 'underline' }}>
+          CLICK TO UPDATE
+        </button>
         <a href="https://github.com/over2take/CITY_NET/blob/main/README.md#updating" target="_blank" rel="noreferrer" style={{ fontSize: '0.6rem', opacity: 0.5, letterSpacing: '1px', color: 'var(--green)' }}>README ↗</a>
       </div>
     );
