@@ -299,7 +299,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         '-v', `${hostConfigFile}:/tmp/docker-compose.yml:ro`,
         '-v', `${hostEnvFile}:/tmp/backend/.env:ro`,
         'over2take/citynet-backend:latest',
-        'sh', '-c', `docker compose -f /tmp/docker-compose.yml ${projectArgs.join(' ')} up -d`,
+        'sh', '-c', `docker compose --project-directory "${hostWorkingDir}" -f /tmp/docker-compose.yml ${projectArgs.join(' ')} up -d`,
       ], { detached: true, stdio: 'ignore' });
       helper.unref();
     });
