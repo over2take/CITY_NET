@@ -278,7 +278,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       if (label) projectArgs = ['-p', label];
     } catch (_) {}
 
-    const composeArgs = ['compose', '-f', '/app/docker-compose.yml', ...projectArgs];
+    const composeArgs = ['compose', '-f', '/tmp/docker-compose.yml', ...projectArgs];
 
     const pull = spawn('docker', [...composeArgs, 'pull'], { detached: true, stdio: 'ignore' });
     pull.unref();
@@ -289,10 +289,10 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       const helper = spawn('docker', [
         'run', '--rm',
         '-v', '/var/run/docker.sock:/var/run/docker.sock',
-        '-v', '/app/docker-compose.yml:/app/docker-compose.yml:ro',
-        '-v', '/app/backend/.env:/app/backend/.env:ro',
+        '-v', '/app/docker-compose.yml:/tmp/docker-compose.yml:ro',
+        '-v', '/app/backend/.env:/tmp/backend/.env:ro',
         'over2take/citynet-backend:latest',
-        'sh', '-c', `docker compose -f /app/docker-compose.yml ${projectArgs.join(' ')} up -d`,
+        'sh', '-c', `docker compose -f /tmp/docker-compose.yml ${projectArgs.join(' ')} up -d`,
       ], { detached: true, stdio: 'ignore' });
       helper.unref();
     });
