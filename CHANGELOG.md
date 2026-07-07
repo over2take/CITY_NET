@@ -9,13 +9,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [1.2.2] - 2026-07-06
-
-### Fixed
-- **In-app update** — backend now runs as root to access Docker socket; compose project name detected from container labels so correct containers are replaced
-
----
-
 ## [1.2.1] - 2026-07-06
 
 ### Fixed
