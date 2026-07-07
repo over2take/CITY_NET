@@ -929,6 +929,11 @@ header {
   opacity: 0.5;
 }
 
+button:hover, .upload-btn:hover, .utility-btn:hover {
+  filter: brightness(1.4);
+  color: var(--green);
+}
+
 .win95-window .upload-btn:active, button:active, .utility-btn:active {
   background: var(--green) !important;
   color: var(--black) !important;
