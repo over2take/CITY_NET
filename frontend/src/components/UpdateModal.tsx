@@ -5,11 +5,12 @@ interface Props {
   latest: string;
   message: string;
   token: string;
+  isDocker: boolean;
   onDismiss: () => void;
   onSkip: () => void;
 }
 
-export function UpdateModal({ current, latest, message, token, onDismiss, onSkip }: Props) {
+export function UpdateModal({ current, latest, message, token, isDocker, onDismiss, onSkip }: Props) {
   const [phase, setPhase] = useState<'idle' | 'updating' | 'done'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
 
@@ -137,11 +138,35 @@ export function UpdateModal({ current, latest, message, token, onDismiss, onSkip
         </div>
 
         {phase === 'idle' && (
-          <div style={btnRow}>
-            <button style={btn()} onClick={handleUpdate}>UPDATE NOW</button>
-            <button style={btn()} onClick={onDismiss}>REMIND ME LATER</button>
-            <button style={btn('rgba(0,255,136,0.4)')} onClick={onSkip}>SKIP VERSION</button>
-          </div>
+          <>
+            {isDocker ? (
+              <div style={btnRow}>
+                <button style={btn()} onClick={handleUpdate}>UPDATE NOW</button>
+                <button style={btn()} onClick={onDismiss}>REMIND ME LATER</button>
+                <button style={btn('rgba(0,255,136,0.4)')} onClick={onSkip}>SKIP VERSION</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ marginTop: '12px', fontSize: '0.65rem', opacity: 0.7 }}>
+                  Manual install — pull the latest from the repo to update.
+                </div>
+                <div style={{ marginTop: '6px', fontSize: '0.6rem', opacity: 0.5 }}>
+                  <a
+                    href="https://github.com/over2take/CITY_NET/blob/main/README.md#installation"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: 'var(--green, #00ff88)' }}
+                  >
+                    INSTALL INSTRUCTIONS ↗
+                  </a>
+                </div>
+                <div style={btnRow}>
+                  <button style={btn()} onClick={onDismiss}>REMIND ME LATER</button>
+                  <button style={btn('rgba(0,255,136,0.4)')} onClick={onSkip}>SKIP VERSION</button>
+                </div>
+              </>
+            )}
+          </>
         )}
 
         {phase === 'updating' && (

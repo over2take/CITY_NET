@@ -205,7 +205,10 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
 
   // --- Current version (no auth, no Docker Hub) ---
   router.get('/version', (req, res) => {
-    res.json({ version: process.env.APP_VERSION || 'dev' });
+    const { execSync } = require('child_process');
+    let isDocker = false;
+    try { execSync('docker info', { stdio: 'ignore' }); isDocker = true; } catch {}
+    res.json({ version: process.env.APP_VERSION || 'dev', isDocker });
   });
 
   // --- Version Check (Docker Hub) ---
