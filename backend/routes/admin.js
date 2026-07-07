@@ -262,19 +262,28 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   router.post('/update', authenticate, (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
 
-    const { spawn } = require('child_process');
+    const { spawn, execSync } = require('child_process');
+    const os = require('os');
 
     res.json({ message: 'Update started' });
 
-    const update = spawn('docker', [
-      'compose', '-f', '/app/docker-compose.yml', 'pull',
-    ]);
+    // Read this container's compose project name from its own Docker labels
+    let projectArgs = [];
+    try {
+      const containerId = os.hostname();
+      const label = execSync(
+        `docker inspect ${containerId} --format '{{index .Config.Labels "com.docker.compose.project"}}'`,
+        { encoding: 'utf8' }
+      ).trim();
+      if (label) projectArgs = ['-p', label];
+    } catch (_) {}
 
-    update.on('close', (pullCode) => {
-      if (pullCode !== 0) return;
-      spawn('docker', [
-        'compose', '-f', '/app/docker-compose.yml', 'up', '-d',
-      ]);
+    const composeArgs = ['compose', '-f', '/app/docker-compose.yml', ...projectArgs];
+
+    const pull = spawn('docker', [...composeArgs, 'pull']);
+    pull.on('close', (code) => {
+      if (code !== 0) return;
+      spawn('docker', [...composeArgs, 'up', '-d']);
     });
   });
 
