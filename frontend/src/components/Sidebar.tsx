@@ -62,16 +62,13 @@ function CheckUpdateButton({ token }: { token: string }) {
       });
       setVersionMessage('Update in progress — waiting for server...');
 
-      // Poll until the server comes back on a different version
+      // Poll /api/version until the server comes back on a different version
       const poll = async () => {
         try {
-          const res = await fetch('/api/check-update', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const res = await fetch('/api/version');
           if (!res.ok) throw new Error();
           const data = await res.json();
-          if (data.current !== originalCurrent) {
+          if (data.version !== originalCurrent) {
             window.location.href = `/?v=${Date.now()}`;
             return;
           }

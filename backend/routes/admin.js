@@ -203,6 +203,11 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     });
   });
 
+  // --- Current version (no auth, no Docker Hub) ---
+  router.get('/version', (req, res) => {
+    res.json({ version: process.env.APP_VERSION || 'dev' });
+  });
+
   // --- Version Check (Docker Hub) ---
   router.post('/check-update', authenticate, (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
