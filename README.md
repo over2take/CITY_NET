@@ -327,7 +327,10 @@ CITY_NET/
 │   │   │   ├── StatusDisplay.tsx       # Status log and status bar text
 │   │   │   ├── Streamer.tsx            # Camera broadcaster/rig pairs for streamer mode
 │   │   │   ├── StreamerOverlay.tsx     # HUD overlay rendered on the spectator window
-│   │   │   └── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
+│   │   │   ├── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
+│   │   │   ├── UpdateModal.tsx          # Draggable update notification modal (shown on admin login when update available; Update Now / Remind Me Later / Skip Version; docker-aware)
+│   │   │   └── __tests__/              # Component unit tests (Vitest + Testing Library)
+│   │   │       └── UpdateModal.test.tsx # Rendering, docker/non-docker branching, button callbacks, update flow
 │   │   ├── context/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
 │   │   ├── hooks/
