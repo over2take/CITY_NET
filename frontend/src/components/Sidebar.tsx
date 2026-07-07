@@ -50,12 +50,35 @@ function CheckUpdateButton({ token }: { token: string }) {
   const applyUpdate = async () => {
     setStatus('updating');
     try {
+      const checkRes = await fetch('/api/check-update', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const { latest } = await checkRes.json();
+
       await fetch('/api/update', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      setVersionMessage('Update applied — reconnecting...');
-      setTimeout(() => window.location.reload(), 6000);
+      setVersionMessage('Update in progress — waiting for server...');
+
+      // Poll until the server comes back on the new version
+      const poll = async () => {
+        try {
+          const res = await fetch('/api/check-update', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error();
+          const data = await res.json();
+          if (data.current === latest) {
+            window.location.href = `/?v=${Date.now()}`;
+            return;
+          }
+        } catch { /* server still restarting */ }
+        setTimeout(poll, 3000);
+      };
+      setTimeout(poll, 10000);
     } catch {
       setStatus('error');
       setVersionMessage('Update failed — try manually');
