@@ -284,8 +284,17 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     pull.unref();
     pull.on('close', (code) => {
       if (code !== 0) return;
-      const up = spawn('docker', [...composeArgs, 'up', '-d'], { detached: true, stdio: 'ignore' });
-      up.unref();
+      // Spawn a temporary helper container to run up -d so it survives
+      // the backend container being replaced mid-execution
+      const helper = spawn('docker', [
+        'run', '--rm',
+        '-v', '/var/run/docker.sock:/var/run/docker.sock',
+        '-v', '/app/docker-compose.yml:/app/docker-compose.yml:ro',
+        '-v', '/app/backend/.env:/app/backend/.env:ro',
+        'over2take/citynet-backend:latest',
+        'sh', '-c', `docker compose -f /app/docker-compose.yml ${projectArgs.join(' ')} up -d`,
+      ], { detached: true, stdio: 'ignore' });
+      helper.unref();
     });
   });
 
