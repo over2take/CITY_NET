@@ -283,7 +283,6 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       hostWorkingDir = labels['com.docker.compose.project.working_dir'];
     } catch (_) {}
 
-    const hostEnvFile = hostWorkingDir ? `${hostWorkingDir}/backend/.env` : null;
     const composeArgs = ['compose', '-f', '/tmp/docker-compose.yml', ...projectArgs];
 
     const pull = spawn('docker', [...composeArgs, 'pull'], { detached: true, stdio: 'ignore' });
@@ -292,14 +291,15 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       if (code !== 0) return;
       // Spawn a temporary helper container to run up -d so it survives
       // the backend container being replaced mid-execution.
-      // Use host paths for volumes since Docker daemon resolves them on the host.
+      // Mount the host project dir at /project so compose resolves relative
+      // paths (./backend/data etc.) correctly regardless of host OS.
       const helper = spawn('docker', [
         'run', '--rm',
         '-v', '/var/run/docker.sock:/var/run/docker.sock',
+        '-v', `${hostWorkingDir}:/project`,
         '-v', `${hostConfigFile}:/tmp/docker-compose.yml:ro`,
-        '-v', `${hostEnvFile}:/tmp/backend/.env:ro`,
         'over2take/citynet-backend:latest',
-        'sh', '-c', `docker compose --project-directory "${hostWorkingDir}" -f /tmp/docker-compose.yml ${projectArgs.join(' ')} up -d`,
+        'sh', '-c', `docker compose --project-directory /project -f /tmp/docker-compose.yml ${projectArgs.join(' ')} up -d`,
       ], { detached: true, stdio: 'ignore' });
       helper.unref();
     });
