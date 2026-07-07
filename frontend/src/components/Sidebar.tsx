@@ -54,7 +54,7 @@ function CheckUpdateButton({ token }: { token: string }) {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      const { latest } = await checkRes.json();
+      const { current: originalCurrent } = await checkRes.json();
 
       await fetch('/api/update', {
         method: 'POST',
@@ -62,7 +62,7 @@ function CheckUpdateButton({ token }: { token: string }) {
       });
       setVersionMessage('Update in progress — waiting for server...');
 
-      // Poll until the server comes back on the new version
+      // Poll until the server comes back on a different version
       const poll = async () => {
         try {
           const res = await fetch('/api/check-update', {
@@ -71,7 +71,7 @@ function CheckUpdateButton({ token }: { token: string }) {
           });
           if (!res.ok) throw new Error();
           const data = await res.json();
-          if (data.current === latest) {
+          if (data.current !== originalCurrent) {
             window.location.href = `/?v=${Date.now()}`;
             return;
           }
