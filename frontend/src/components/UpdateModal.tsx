@@ -45,10 +45,10 @@ export function UpdateModal({ current, latest, message, token, onDismiss, onSkip
       await fetch('/api/update', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       const poll = async () => {
         try {
-          const res = await fetch('/api/check-update', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+          const res = await fetch('/api/version');
           if (!res.ok) throw new Error();
           const data = await res.json();
-          if (data.current !== current) {
+          if (data.version !== current) {
             window.location.href = `/?v=${Date.now()}`;
             return;
           }
