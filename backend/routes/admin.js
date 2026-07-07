@@ -267,17 +267,23 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
 
     res.json({ message: 'Update started' });
 
-    // Read this container's compose project name from its own Docker labels
+    // Read compose project name and host paths from this container's own Docker labels
     let projectArgs = [];
+    let hostConfigFile = null;
+    let hostWorkingDir = null;
     try {
       const containerId = fs.readFileSync('/etc/hostname', 'utf8').trim();
-      const label = execSync(
-        `docker inspect ${containerId} --format '{{index .Config.Labels "com.docker.compose.project"}}'`,
+      const labels = JSON.parse(execSync(
+        `docker inspect ${containerId} --format '{{json .Config.Labels}}'`,
         { encoding: 'utf8' }
-      ).trim();
-      if (label) projectArgs = ['-p', label];
+      ).trim());
+      const projectName = labels['com.docker.compose.project'];
+      if (projectName) projectArgs = ['-p', projectName];
+      hostConfigFile = labels['com.docker.compose.project.config_files'];
+      hostWorkingDir = labels['com.docker.compose.project.working_dir'];
     } catch (_) {}
 
+    const hostEnvFile = hostWorkingDir ? `${hostWorkingDir}/backend/.env` : null;
     const composeArgs = ['compose', '-f', '/tmp/docker-compose.yml', ...projectArgs];
 
     const pull = spawn('docker', [...composeArgs, 'pull'], { detached: true, stdio: 'ignore' });
@@ -285,12 +291,13 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     pull.on('close', (code) => {
       if (code !== 0) return;
       // Spawn a temporary helper container to run up -d so it survives
-      // the backend container being replaced mid-execution
+      // the backend container being replaced mid-execution.
+      // Use host paths for volumes since Docker daemon resolves them on the host.
       const helper = spawn('docker', [
         'run', '--rm',
         '-v', '/var/run/docker.sock:/var/run/docker.sock',
-        '-v', '/app/docker-compose.yml:/tmp/docker-compose.yml:ro',
-        '-v', '/app/backend/.env:/tmp/backend/.env:ro',
+        '-v', `${hostConfigFile}:/tmp/docker-compose.yml:ro`,
+        '-v', `${hostEnvFile}:/tmp/backend/.env:ro`,
         'over2take/citynet-backend:latest',
         'sh', '-c', `docker compose -f /tmp/docker-compose.yml ${projectArgs.join(' ')} up -d`,
       ], { detached: true, stdio: 'ignore' });
