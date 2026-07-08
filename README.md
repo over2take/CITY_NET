@@ -16,7 +16,7 @@ The GM builds and manages the city; players connect and explore it live. Built w
 </table>
 
 <p>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-brightgreen" alt="MIT license"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-brightgreen" alt="AGPL-3.0 license"/></a>
   <a href="https://github.com/over2take/CITY_NET/stargazers"><img src="https://img.shields.io/github/stars/over2take/CITY_NET?style=flat&color=yellow" alt="GitHub stars"/></a>
   <a href="https://ko-fi.com/over2take"><img src="https://img.shields.io/badge/support-ko--fi-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi"/></a>
   <img src="https://img.shields.io/badge/self--hosted-yes-blueviolet" alt="self-hosted"/>
