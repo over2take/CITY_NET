@@ -9,6 +9,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.0] - 2026-07-08
+
+### Added
+- **PLAYERS panel in admin dashboard** — primary admin can grant or revoke temporary admin access to online players directly from the admin panel; offline players are listed but cannot be granted access
+- **Custom confirm modals** — replaced all browser `confirm()` dialogs (PURGE_ALL_WATER, PURGE_CHAT_HISTORY, PURGE_ROLL_HISTORY) with consistent in-app modals
+- **CUSTOM_STRUCTURE dashboard** — renamed JOIN_STRUCTURE to CUSTOM_STRUCTURE with updated copy explaining prefab structure classification
+- **Non-admin health view** — non-admin players see only the heartbeat monitor and injury map when reviewing a token's health; HP numbers are hidden
+
+### Changed
+- **UI label clarity pass** — ACCESS_CODE → PASSWORD (all forms), JOIN_STRUCTURE → CUSTOM_STRUCTURE, GEOMETRY_PROTOCOLS → TOKEN_PROTOCOLS, all rhombus/beacon labels updated to TOKEN_*, INITIALIZE_RHOMBUS → PLACE_MY_TOKEN, and many more across Sidebar, AdminPanel, BankWindows, and UpdateModal
+- **CUSTOM_SIGNS button** — moved below all `+` placement buttons and prefixed with `+` for consistency
+- **Admin panel section order** — SIDEWALKS/SIGNAGE/SIGN_DENSITY moved above CURRENCY_ICON; BANK_SOUNDS grouped with CURRENCY section
+- **CURRENT_SELECTION panel** — repositioned above `+ ADD_NEW_STRUCTURE` with equal padding for better visibility
+
+### Fixed
+- **Stale `elevatedUsers` bug** — `revokeEditing` and `editingFinished` now remove the user from `elevatedUsers`; previously a grant→revoke→re-request cycle gave full admin instead of an edit window
+- **Stale `pendingRequests` bug** — `editingApproved` and `editingDenied` now broadcast request removal to all clients; newly-promoted temp admins no longer inherit accumulated edit requests from earlier in the session
+
+### Tests
+- `backend/__tests__/sockets.editing.test.js` — 13 cases covering approveEditing, revokeEditing, editingFinished, grant/revoke elevated access, and regression scenarios
+- `frontend/src/hooks/__tests__/useSocket.pendingRequests.test.ts` — 9 cases covering pendingRequests state transitions and the stale-request regression
+
+---
+
 ## [1.2.4] - 2026-07-07
 
 ### Added
