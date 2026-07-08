@@ -244,7 +244,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
             <div style={{flex: 1, fontSize: '0.7rem', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} onClick={() => { setSelectedSignId(s.id); setIsNew(false); }}>
               {s.text}
             </div>
-            <button style={{fontSize: '0.6rem', padding: '1px 5px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', cursor: 'pointer'}} onClick={() => remove(s.id)}>DEL</button>
+            <button className="danger-btn" style={{fontSize: '0.6rem', padding: '1px 5px'}} onClick={() => remove(s.id)}>DEL</button>
           </div>
         ))}
       </div>
@@ -265,7 +265,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
               <div style={{display:'flex', alignItems:'center', gap:'4px', marginBottom:'3px'}}>
                 <span style={{fontSize:'0.65rem', opacity:0.6}}>LINE {i + 1}</span>
                 {formLines.length > 1 && (
-                  <button style={{marginLeft:'auto', fontSize:'0.6rem', padding:'0 4px', background:'transparent', color:'#ff4444', border:'1px solid #ff4444', cursor:'pointer'}} onClick={() => removeLine(i)}>✕</button>
+                  <button className="danger-btn" style={{marginLeft:'auto', fontSize:'0.6rem', padding:'0 4px'}} onClick={() => removeLine(i)}>✕</button>
                 )}
               </div>
               <input
@@ -337,7 +337,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
             {remoteFonts.map(rf => (
               <div key={rf.file} style={{display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', padding: '2px 0'}}>
                 <span style={{flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{rf.name}</span>
-                <button style={{padding: '1px 4px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', cursor: 'pointer', fontSize: '0.6rem'}} onClick={() => deleteFont(rf.file)}>DEL</button>
+                <button className="danger-btn" style={{padding: '1px 4px', fontSize: '0.6rem'}} onClick={() => deleteFont(rf.file)}>DEL</button>
               </div>
             ))}
           </div>
@@ -446,8 +446,8 @@ export function AdminPanel({
       <div className="panel admin-panel" style={{ width: '300px', maxHeight: '90vh', overflowY: 'auto', pointerEvents: 'auto' }}>
         <h3 style={{ textShadow: '0 0 10px #00ff00', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
         <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-          <button className="upload-btn" onClick={() => { setIsDeployingEnemy(!isDeployingEnemy); setIsDeployingFriendly(false); }} style={{ flex: 1, backgroundColor: isDeployingEnemy ? '#ff0000' : '' }}>{isDeployingEnemy ? 'CANCEL_DEPLOY' : 'ADD_ENEMY'}</button>
-          <button className="upload-btn" onClick={() => { setIsDeployingFriendly(!isDeployingFriendly); setIsDeployingEnemy(false); }} style={{ flex: 1, backgroundColor: isDeployingFriendly ? '#00ccff' : '' }}>{isDeployingFriendly ? 'CANCEL_DEPLOY' : 'ADD_FRIENDLY'}</button>
+          <button className={`upload-btn deploy-btn${isDeployingEnemy ? ' deploying-enemy' : ''}`} onClick={() => { setIsDeployingEnemy(!isDeployingEnemy); setIsDeployingFriendly(false); }} style={{ flex: 1 }}>{isDeployingEnemy ? 'CANCEL_DEPLOY' : 'ADD_ENEMY'}</button>
+          <button className={`upload-btn deploy-btn${isDeployingFriendly ? ' deploying-friendly' : ''}`} onClick={() => { setIsDeployingFriendly(!isDeployingFriendly); setIsDeployingEnemy(false); }} style={{ flex: 1 }}>{isDeployingFriendly ? 'CANCEL_DEPLOY' : 'ADD_FRIENDLY'}</button>
         </div>
         <div style={{ marginBottom: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
                 <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>
@@ -487,8 +487,8 @@ export function AdminPanel({
             </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px', borderBottom: '1px solid #00ff00', paddingBottom: '10px' }}>
-           <button style={{ padding: '10px', backgroundColor: '#5500ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleSaveDefault}>SAVE_DEFAULT</button>
-           <button style={{ padding: '10px', backgroundColor: '#aa00ff', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }} onClick={handleLoadDefault}>LOAD_DEFAULT</button>
+           <button className="map-save-btn" onClick={handleSaveDefault}>SAVE_DEFAULT</button>
+           <button className="map-load-btn" onClick={handleLoadDefault}>LOAD_DEFAULT</button>
         </div>
         <button className="utility-btn" onClick={() => setIsAdminPayOpen(true)} style={{ width: '100%', marginBottom: '10px' }}>PAY_PLAYERS</button>
         {!secureModeEnabled && <button className="utility-btn danger-btn" onClick={() => { onLogout(); }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>}
@@ -905,8 +905,8 @@ export function AdminPanel({
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setJoinSelection([]); setView('join'); }}>+ JOIN_STRUCTS</button>
           </div>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
-              <button className="utility-btn" style={{flex: 1, borderColor: '#ff0000', color: '#ff0000'}} onClick={startNewEnemy}>+ ADD_ENEMY</button>
-              <button className="utility-btn" style={{flex: 1, borderColor: '#00ccff', color: '#00ccff'}} onClick={startNewFriendly}>+ ADD_FRIENDLY</button>
+              <button className="utility-btn enemy-btn" style={{flex: 1}} onClick={startNewEnemy}>+ ADD_ENEMY</button>
+              <button className="utility-btn friendly-btn" style={{flex: 1}} onClick={startNewFriendly}>+ ADD_FRIENDLY</button>
           </div>
           <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
               <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>

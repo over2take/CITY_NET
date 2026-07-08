@@ -901,6 +901,88 @@ header {
   box-shadow: var(--glow);
 }
 
+.modal-btn {
+  background: none;
+  border: 1px solid var(--green);
+  color: var(--green);
+  font-family: monospace;
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+  padding: 5px 10px;
+  cursor: pointer;
+  flex: 1;
+  transition: all 0.2s;
+}
+
+.modal-btn:hover {
+  background: color-mix(in srgb, var(--green) 15%, transparent);
+  color: var(--green);
+  filter: brightness(1.4);
+}
+
+.modal-btn:active {
+  box-shadow: var(--glow);
+  background: color-mix(in srgb, var(--green) 20%, transparent);
+}
+
+.modal-btn.muted {
+  opacity: 0.5;
+}
+
+button:hover, .upload-btn:hover, .utility-btn:hover {
+  filter: brightness(1.4);
+}
+
+.danger-btn {
+  background: transparent;
+  color: #ff4444;
+  border: 1px solid #ff4444;
+  cursor: pointer;
+}
+
+.enemy-btn {
+  color: #ff0000;
+  border-color: #ff0000;
+}
+
+.friendly-btn {
+  color: #00ccff;
+  border-color: #00ccff;
+}
+
+.deploy-btn {
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.deploy-btn.deploying-enemy {
+  background: #ff0000;
+  color: var(--black);
+}
+
+.deploy-btn.deploying-friendly {
+  background: #00ccff;
+  color: var(--black);
+}
+
+.map-save-btn {
+  padding: 10px;
+  background: #5500ff;
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.map-load-btn {
+  padding: 10px;
+  background: #aa00ff;
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+}
+
 .win95-window .upload-btn:active, button:active, .utility-btn:active {
   background: var(--green) !important;
   color: var(--black) !important;

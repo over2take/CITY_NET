@@ -13,7 +13,8 @@ services:
       - ./backend/data:/app/data
       - ./backend/uploads:/app/uploads
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./docker-compose.yml:/app/docker-compose.yml:ro
+      - ./docker-compose.yml:/tmp/docker-compose.yml:ro
+      - ./backend/.env:/tmp/backend/.env:ro
     restart: unless-stopped
 
   frontend:
@@ -26,17 +27,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-
-  # Watchtower disabled — GitHub Actions already pushes builds to Docker Hub
-  # To update: docker compose pull && docker compose up -d
-  # watchtower:
-  #   image: containrrr/watchtower:latest
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   environment:
-  #     - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_API_TOKEN}
-  #   command: --schedule "0 0 4 * * *" --http-api-update
-  #   restart: unless-stopped
 
   # ── DuckDNS (optional) ──────────────────────────────────────────────────────
   # Keeps your DuckDNS subdomain pointing at your current public IP.

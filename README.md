@@ -50,7 +50,6 @@ Edit `backend/.env` with your values. See `backend/.env.example` for all options
 ADMIN_USER=your_admin_name
 ADMIN_PASS=your_secure_password
 JWT_SECRET=some_long_random_string
-WATCHTOWER_API_TOKEN=your-random-token
 ```
 
 Generate a strong token:
@@ -207,12 +206,15 @@ If your players are on the same local network, they can connect directly via you
 
 **Checking for updates**
 
-The admin panel includes a "Check for update" button that queries Docker Hub for new versions. When an update is available, it shows the command to pull and restart:
+The admin panel includes a **Check for update** button that queries Docker Hub for new versions.
 
-```bash
-docker compose pull
-docker compose up -d
-```
+- **Docker installs (in-app):** When an update is available, click **CLICK TO UPDATE (docker only)** — the server pulls the latest images and restarts all containers automatically. The page reloads once the new version is live.
+- **Docker installs (manual fallback):** If the button doesn't work, run these on your host:
+  ```bash
+  docker compose pull
+  docker compose up -d
+  ```
+- **Manual installs:** Pull the latest changes from the repo and restart your server manually.
 
 The GitHub Actions workflow automatically tags Docker images with version numbers from `package.json`. When you bump the version and run the release workflow, new images are available on Docker Hub with version tags.
 
@@ -324,7 +326,10 @@ CITY_NET/
 │   │   │   ├── StatusDisplay.tsx       # Status log and status bar text
 │   │   │   ├── Streamer.tsx            # Camera broadcaster/rig pairs for streamer mode
 │   │   │   ├── StreamerOverlay.tsx     # HUD overlay rendered on the spectator window
-│   │   │   └── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
+│   │   │   ├── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
+│   │   │   ├── UpdateModal.tsx          # Draggable update notification modal (shown on admin login when update available; Update Now / Remind Me Later / Skip Version; docker-aware)
+│   │   │   └── __tests__/              # Component unit tests (Vitest + Testing Library)
+│   │   │       └── UpdateModal.test.tsx # Rendering, docker/non-docker branching, button callbacks, update flow
 │   │   ├── context/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
 │   │   ├── hooks/
