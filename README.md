@@ -431,6 +431,12 @@ CITY_NET/
 
 ---
 
+## Upgrading
+
+See [UPGRADE.md](UPGRADE.md) for step-by-step instructions when updating an existing install.
+
+---
+
 ## Contributing
 
 1. Fork the repo and create a branch off `main`
