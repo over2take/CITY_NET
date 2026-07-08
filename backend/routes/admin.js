@@ -48,7 +48,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   router.get('/env-status', authenticate, (req, res) => {
-    const requiredVars = ['JWT_SECRET', 'ADMIN_USER', 'ADMIN_PASS', 'WATCHTOWER_API_TOKEN'];
+    const requiredVars = ['JWT_SECRET', 'ADMIN_USER', 'ADMIN_PASS'];
     const missing = requiredVars.filter(v => !process.env[v]);
     res.json({ missing, all_present: missing.length === 0 });
   });

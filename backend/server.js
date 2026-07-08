@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 // Validate required environment variables
-const requiredEnvVars = ['JWT_SECRET', 'ADMIN_USER', 'ADMIN_PASS', 'WATCHTOWER_API_TOKEN'];
+const requiredEnvVars = ['JWT_SECRET', 'ADMIN_USER', 'ADMIN_PASS'];
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.warn(`⚠️  Missing required environment variables: ${missingVars.join(', ')}`);

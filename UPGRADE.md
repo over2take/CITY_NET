@@ -7,11 +7,10 @@ When pulling a new version of CITY_NET from Docker Hub, follow the upgrade path 
 ## [1.1.7] - 2026-07-05
 
 ### New Environment Variables
-- **`WATCHTOWER_API_TOKEN`** — Required. Enables the manual "Check for update" button in the admin panel. Generate a strong random token.
 - **`APP_PORT`** — Optional. Controls which port the app is exposed on (default `80`). Change to `8080` if your ISP blocks port 80.
 - **`DUCKDNS_SUBDOMAINS`** — Optional. Your DuckDNS subdomain (e.g., `yourcity`). Only needed if using the `duckdns` service.
 - **`DUCKDNS_TOKEN`** — Optional. Your DuckDNS token from https://www.duckdns.org. Only needed if using the `duckdns` service.
-- **`TZ`** — Optional. Timezone for Watchtower schedule and DuckDNS container (e.g., `America/Chicago`).
+- **`TZ`** — Optional. Timezone for DuckDNS container (e.g., `America/Chicago`).
 
 ### Upgrade Steps
 1. Pull the latest images: `docker compose pull`
@@ -23,10 +22,7 @@ When pulling a new version of CITY_NET from Docker Hub, follow the upgrade path 
    ```bash
    diff backend/.env.example backend/.env.example.new
    ```
-4. Add the new variables to `backend/.env`:
-   ```env
-   WATCHTOWER_API_TOKEN=your-strong-random-token-here
-   ```
+4. Add any new variables to `backend/.env` as needed.
 5. Restart: `docker compose up -d`
 6. On startup, the backend will warn you if any required vars are still missing.
 

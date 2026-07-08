@@ -50,7 +50,6 @@ Edit `backend/.env` with your values. See `backend/.env.example` for all options
 ADMIN_USER=your_admin_name
 ADMIN_PASS=your_secure_password
 JWT_SECRET=some_long_random_string
-WATCHTOWER_API_TOKEN=your-random-token
 ```
 
 Generate a strong token:
