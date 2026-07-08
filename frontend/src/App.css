@@ -364,6 +364,14 @@ canvas {
   z-index: 5;
 }
 
+.logo-scene canvas {
+  position: static !important;
+  width: 350px !important;
+  height: 280px !important;
+  z-index: auto;
+  filter: drop-shadow(0 0 6px rgba(0, 255, 0, 0.5));
+}
+
 .editor-controls {
   margin-bottom: 20px;
   border-bottom: 1px solid var(--dark-green);
