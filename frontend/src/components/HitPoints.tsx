@@ -314,11 +314,8 @@ export function HealthReviewWindow({ location, pos, setPos, onClose }: HealthRev
     >
       <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
 
-        {/* HP number row */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-          <div style={{ fontSize: '2rem', color: hpColor, textShadow: `0 0 8px ${hpColor}`, fontWeight: 'bold' }}>
-            {hpCurrent} / {hpMax}
-          </div>
+        {/* Injury map toggle */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
             onClick={() => setReviewInjuriesOpen(o => !o)}
             title="VIEW INJURIES"
@@ -331,11 +328,6 @@ export function HealthReviewWindow({ location, pos, setPos, onClose }: HealthRev
           >
             <PersonSVG color={reviewInjuriesOpen ? '#000' : 'var(--green)'} style={{ width: 16, height: 16, display: 'block' }} />
           </button>
-        </div>
-
-        {/* HP bar */}
-        <div style={{ height: '4px', background: '#111', borderRadius: '2px', overflow: 'hidden' }}>
-          <div style={{ width: `${hpPct * 100}%`, height: '100%', background: hpColor, transition: 'width 0.3s, background 0.3s' }} />
         </div>
 
         {/* Heart monitor — flatlines at 0 HP */}

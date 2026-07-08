@@ -308,11 +308,17 @@ CITY_NET/
 │   └── __tests__/
 │       ├── helpers/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
+│       ├── admin.test.js               # Admin endpoints (auth, settings, undo access)
+│       ├── battle_maps.test.js         # Battle map upload/list/delete
+│       ├── locations.test.js           # Location CRUD and classification
 │       ├── locations.global.test.js    # Custom structure global persistence tests
 │       ├── maps.global.test.js         # Map load/clear global preservation tests
-│       ├── roads.test.js               # Road API (GET / POST / DELETE / DELETE :id)
+│       ├── music.test.js               # Radio Feed library endpoints
 │       ├── overpasses.test.js          # Overpass API (GET / POST / DELETE :id, 400 validation)
+│       ├── player.test.js              # Player auth (register, login, forgot/reset, registration flow)
+│       ├── roads.test.js               # Road API (GET / POST / DELETE / DELETE :id)
 │       ├── signs.test.js               # Sign API (GET / POST / PATCH / DELETE, auth, image-only, filter_intensity clamping, XSS)
+│       ├── sockets.editing.test.js     # Socket editing access flow; regression for stale elevatedUsers bug
 │       └── undo.test.js                # Undo endpoint (all action types, auth, ordering)
 │
 ├── frontend/
@@ -337,27 +343,47 @@ CITY_NET/
 │   │   │   ├── LogoScene.tsx           # Three.js animated login logo (hex badge, wireframe skyline, spinning gem)
 │   │   │   ├── CityDatabase.tsx        # Location search/browse
 │   │   │   ├── DraggableWindow.tsx     # Reusable draggable panel wrapper
+│   │   │   ├── CursorPing.tsx          # Cursor-position ping broadcast and animation
 │   │   │   ├── AttackAnimations.tsx    # Attack hit/miss animations (swipe, projectile, miss text)
 │   │   │   ├── RadioFeed.tsx           # Admin music library panel (folder tree, upload, delete)
 │   │   │   ├── RadioPlayer.tsx         # Playback window (scrubber, transport, per-client volume)
 │   │   │   ├── Camera.tsx              # CameraController and cursor-pivot helpers
 │   │   │   ├── HealthBar.tsx           # 3D health bar rendered above tokens
 │   │   │   ├── MeasurementTool.tsx     # Ruler overlay for distance measurement
-│   │   │   ├── PingEffect.tsx          # Location ping animation
 │   │   │   ├── StatusDisplay.tsx       # Status log and status bar text
 │   │   │   ├── Streamer.tsx            # Camera broadcaster/rig pairs for streamer mode
 │   │   │   ├── StreamerOverlay.tsx     # HUD overlay rendered on the spectator window
 │   │   │   ├── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
 │   │   │   ├── UpdateModal.tsx          # Draggable update notification modal (shown on admin login when update available; Update Now / Remind Me Later / Skip Version; docker-aware)
 │   │   │   └── __tests__/              # Component unit tests (Vitest + Testing Library)
-│   │   │       ├── UpdateModal.test.tsx  # Rendering, docker/non-docker branching, button callbacks, update flow
-│   │   │       └── SecureLogin.test.tsx  # Login, register, approval polling, password reset, deny flows
+│   │   │       ├── AdminPanel.test.tsx
+│   │   │       ├── AttackAnimations.test.tsx
+│   │   │       ├── BankWindows.test.tsx
+│   │   │       ├── Buildings.test.tsx
+│   │   │       ├── Camera.test.tsx
+│   │   │       ├── ChatWindow.test.tsx
+│   │   │       ├── CityDatabase.test.tsx
+│   │   │       ├── CursorPing.test.tsx
+│   │   │       ├── DiceTray.test.tsx
+│   │   │       ├── DraggableWindow.test.tsx
+│   │   │       ├── HitPoints.test.tsx
+│   │   │       ├── MapElements.test.tsx
+│   │   │       ├── MeasurementTool.test.tsx
+│   │   │       ├── RadioFeed.test.tsx
+│   │   │       ├── RadioPlayer.test.tsx
+│   │   │       ├── Rhombuses.test.tsx
+│   │   │       ├── SecureLogin.test.tsx  # Login, register, approval polling, password reset, deny flows
+│   │   │       ├── Sidebar.test.tsx
+│   │   │       └── UpdateModal.test.tsx  # Rendering, docker/non-docker branching, button callbacks, update flow
 │   │   ├── context/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
 │   │   ├── hooks/
 │   │   │   ├── useSocket.ts    # Socket.IO connection and all event listeners
 │   │   │   ├── useApi.ts       # Fetch helpers
-│   │   │   └── useMapData.ts   # Location/district/road/overpass/water body/sign data fetching
+│   │   │   ├── useMapData.ts   # Location/district/road/overpass/water body/sign data fetching
+│   │   │   └── __tests__/
+│   │   │       ├── useApi.test.ts                        # Fetch helper unit tests
+│   │   │       └── useSocket.pendingRequests.test.ts     # Pending edit-request state; regression for stale requests on newly-promoted temp admins
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
 │   │   └── utils/
 │   │       ├── locationHelpers.ts  # Location geometry utilities; exports ZONE_TYPE_NAMES and isUserDefinedName

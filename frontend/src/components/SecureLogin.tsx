@@ -254,7 +254,7 @@ export function SecureLogin({
                 <>
                   <div style={{ fontSize: '0.65rem', opacity: 0.7, textAlign: 'center', letterSpacing: '1px', padding: '4px 0' }}>{securityQuestion}</div>
                   <input value={forgotForm.security_answer} onChange={e => setForgotForm(f => ({ ...f, security_answer: e.target.value }))} placeholder="SECURITY_ANSWER" style={{ textAlign: 'center', width: '100%' }} autoComplete="new-password" />
-                  <button type="submit" className="upload-btn">VERIFY</button>
+                  <button type="submit" className="upload-btn">SUBMIT_ANSWER</button>
                 </>
               )}
               <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setForgotForm({ username: '', security_answer: '' }); setSecurityQuestion(''); setLoginView('login'); setLoginError(''); }}>BACK_TO_LOGIN</button>
@@ -280,7 +280,7 @@ export function SecureLogin({
               <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>SET_NEW_PASSWORD</div>
               <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="NEW_PASSWORD" style={{ textAlign: 'center', width: '100%' }} />
               <input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} placeholder="CONFIRM_PASSWORD" style={{ textAlign: 'center', width: '100%' }} />
-              <button type="submit" className="upload-btn">CONFIRM</button>
+              <button type="submit" className="upload-btn">SET_PASSWORD</button>
             </form>
           )}
         </div>

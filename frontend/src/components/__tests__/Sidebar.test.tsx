@@ -95,9 +95,9 @@ describe('DiceMenu', () => {
     expect(setIsDiceTrayOpen).toHaveBeenCalledWith(true);
   });
 
-  it('shows No Modifiers by default', () => {
+  it('shows NO MODIFIERS by default', () => {
     render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} />);
-    expect(screen.getByText('No Modifiers')).toBeInTheDocument();
+    expect(screen.getByText('NO MODIFIERS')).toBeInTheDocument();
   });
 
   it('adds modifier on ADD click', async () => {
@@ -105,7 +105,7 @@ describe('DiceMenu', () => {
     const modPlusBtns = screen.getAllByText('+');
     await userEvent.click(modPlusBtns[modPlusBtns.length - 1]); // modifier +1 btn in modifier section
     await userEvent.click(screen.getByText('ADD'));
-    expect(screen.queryByText('No Modifiers')).not.toBeInTheDocument();
+    expect(screen.queryByText('NO MODIFIERS')).not.toBeInTheDocument();
   });
 
   it('toggles dice tray on DICE_TRAY.exe click', async () => {

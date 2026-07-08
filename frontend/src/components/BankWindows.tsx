@@ -113,7 +113,7 @@ export function AdminPayWindow({ pos, setPos, onClose, socket, token, activeUser
   return (
     <DraggableWindow title="ADMIN // PAY_PLAYERS" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
       <div style={{ padding: '10px' }}>
-        <label style={{ display: 'block', marginBottom: '5px', color: '#00ff66' }}>Total Amount</label>
+        <label style={{ display: 'block', marginBottom: '5px', color: '#00ff66' }}>TOTAL_AMOUNT</label>
         <input type="number" step="1" min="1" value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '15px', background: '#000', color: '#fff', border: '1px solid #333' }} />
 
         <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #333', padding: '5px', marginBottom: '10px', background: 'rgba(0,0,0,0.5)' }}>
@@ -128,7 +128,7 @@ export function AdminPayWindow({ pos, setPos, onClose, socket, token, activeUser
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="panel-btn" style={{ flex: 1 }} onClick={handleDivideAll} disabled={allUsers.length === 0}>DIVIDE_ALL</button>
+          <button className="panel-btn" style={{ flex: 1 }} onClick={handleDivideAll} disabled={allUsers.length === 0}>SPLIT_AMONG_ALL</button>
           <button className="panel-btn" style={{ flex: 1 }} onClick={handlePay} disabled={selectedUsers.length === 0}>PAY_SELECTED</button>
         </div>
       </div>
@@ -525,23 +525,23 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
     <DraggableWindow title="CITY_NET // BANK" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '420px' }} contentStyle={{ overflow: 'hidden', maxHeight: 'none', minHeight: '220px' }}>
       <div style={{ display: 'flex', gap: '20px', padding: '10px' }}>
         <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>Balance</div>
+          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>BALANCE</div>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: balanceColor, marginBottom: '15px' }}>
             <CurrencyIcon icon={currencyIcon} size={18} color={balanceColor} />
             {formatBankValue(bankData.balance)}
           </div>
-          <button className="panel-btn" style={{ width: '100%' }} onClick={() => setActivePrompt('withdraw')}>withdraw</button>
+          <button className="panel-btn" style={{ width: '100%' }} onClick={() => setActivePrompt('withdraw')}>WITHDRAW</button>
         </div>
 
         <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>Debt</div>
+          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>DEBT</div>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: debtColor, marginBottom: '15px' }}>
             <CurrencyIcon icon={currencyIcon} size={18} color={debtColor} />
             {formatBankValue(bankData.debt)}
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt('borrow')}>borrow</button>
-            <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt('pay')}>pay</button>
+            <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt('borrow')}>BORROW</button>
+            <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt('pay')}>PAY</button>
           </div>
         </div>
       </div>
@@ -551,11 +551,11 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
       {activePrompt && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10 }}>
           <div style={{ background: '#111', border: '1px solid #444', padding: '20px', width: '200px' }}>
-            <div style={{ color: '#00ff66', marginBottom: '10px', textTransform: 'uppercase', textAlign: 'center' }}>Amount to {activePrompt}?</div>
+            <div style={{ color: '#00ff66', marginBottom: '10px', textTransform: 'uppercase', textAlign: 'center' }}>AMOUNT TO {activePrompt === 'pay' ? 'PAY OFF' : activePrompt.toUpperCase()}?</div>
             <input type="number" step="1" min="1" value={promptAmount} onChange={(e) => setPromptAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '10px', background: '#000', color: '#fff', border: '1px solid #333', outline: 'none', textAlign: 'center' }} autoFocus />
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="panel-btn" style={{ flex: 1 }} onClick={handleAction}>Okay</button>
-              <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt(null)}>Cancel</button>
+              <button className="panel-btn" style={{ flex: 1 }} onClick={handleAction}>CONFIRM</button>
+              <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt(null)}>CANCEL</button>
             </div>
           </div>
         </div>

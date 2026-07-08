@@ -419,7 +419,8 @@ canvas {
 
 .selection-panel {
   border: 1px dashed var(--green);
-  padding: 10px;
+  padding: 20px 10px;
+  text-align: center;
 }
 
 .list-item {

@@ -1179,7 +1179,7 @@ function App() {
 
   const cleanupEditModal = () => {
       setIsEditModalOpen(false);
-      if (socketRef.current) socketRef.current.emit('editingFinished');
+      if (socketRef.current) socketRef.current.emit('editingFinished', { userId: userName });
       if (wasGrantedForEditRef.current) {
           if (socketRef.current) socketRef.current.emit('surrenderAccess', { token });
           setToken('');
@@ -1507,6 +1507,9 @@ function App() {
                 setPendingSignPos={setPendingSignPos}
                 selectedSignId={selectedSignId}
                 setSelectedSignId={setSelectedSignId}
+                activeUsers={activeUsers}
+                onGrantAccess={handleGrantAccess}
+                onRevokeAccess={handleRevokeAccess}
                 />
             )}
             {adminBankPlayer && (
