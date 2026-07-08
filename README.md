@@ -7,9 +7,11 @@
 
 ## CITY_NET
 
-**A real-time 3D city map built for tabletop RPG sessions.**
+**A self-hosted, real-time 3D city for tabletop RPG sessions.**
 
-The GM builds and manages the city; players connect and explore it live. Built with React + Three.js, Node.js + SQLite, and Socket.IO. Self-hosted, no accounts required for players.
+The GM generates a living cyberpunk city — procedural districts, roads, overpasses, traffic, and custom signs — while players connect live and interact with it. Run a battle map, manage the economy, roll dice, stream to an audience, and never touch a third-party platform.
+
+Built with React + Three.js · Node.js + SQLite · Socket.IO · Docker
 
 </td>
 </tr>
