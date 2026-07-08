@@ -334,6 +334,7 @@ CITY_NET/
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
 │   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools
 │   │   │   ├── SecureLogin.tsx         # Player login, registration, password reset UI; polls registration status until approved
+│   │   │   ├── LogoScene.tsx           # Three.js animated login logo (hex badge, wireframe skyline, spinning gem)
 │   │   │   ├── CityDatabase.tsx        # Location search/browse
 │   │   │   ├── DraggableWindow.tsx     # Reusable draggable panel wrapper
 │   │   │   ├── AttackAnimations.tsx    # Attack hit/miss animations (swipe, projectile, miss text)
@@ -349,7 +350,8 @@ CITY_NET/
 │   │   │   ├── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
 │   │   │   ├── UpdateModal.tsx          # Draggable update notification modal (shown on admin login when update available; Update Now / Remind Me Later / Skip Version; docker-aware)
 │   │   │   └── __tests__/              # Component unit tests (Vitest + Testing Library)
-│   │   │       └── UpdateModal.test.tsx # Rendering, docker/non-docker branching, button callbacks, update flow
+│   │   │       ├── UpdateModal.test.tsx  # Rendering, docker/non-docker branching, button callbacks, update flow
+│   │   │       └── SecureLogin.test.tsx  # Login, register, approval polling, password reset, deny flows
 │   │   ├── context/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
 │   │   ├── hooks/
