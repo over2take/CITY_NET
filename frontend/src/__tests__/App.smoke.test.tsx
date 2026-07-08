@@ -61,7 +61,6 @@ vi.mock('../assets/rhombus.svg', () => ({ default: 'rhombus.svg' }));
 vi.mock('../assets/terminal-thin.svg', () => ({ default: 'terminal.svg' }));
 vi.mock('../assets/oui--eye.svg', () => ({ default: 'eye.svg' }));
 vi.mock('../assets/oui--eye-closed.svg', () => ({ default: 'eye-closed.svg' }));
-vi.mock('../assets/Credits.svg', () => ({ default: 'credits.svg' }));
 vi.mock('../assets/Credits.png', () => ({ default: 'credits.png' }));
 vi.mock('../assets/Notification-on.svg', () => ({ default: 'notify-on.svg' }));
 vi.mock('../assets/Notification-off.svg', () => ({ default: 'notify-off.svg' }));

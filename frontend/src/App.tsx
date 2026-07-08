@@ -36,8 +36,6 @@ import { UpdateModal } from './components/UpdateModal';
 import terminalIcon from './assets/terminal-thin.svg';
 import eyeIcon from './assets/oui--eye.svg';
 import eyeClosedIcon from './assets/oui--eye-closed.svg';
-import creditsIcon from './assets/Credits.svg';
-import creditsPngIcon from './assets/Credits.png';
 import './App.css';
 
 
