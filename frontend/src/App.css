@@ -931,7 +931,56 @@ header {
 
 button:hover, .upload-btn:hover, .utility-btn:hover {
   filter: brightness(1.4);
-  color: var(--green);
+}
+
+.danger-btn {
+  background: transparent;
+  color: #ff4444;
+  border: 1px solid #ff4444;
+  cursor: pointer;
+}
+
+.enemy-btn {
+  color: #ff0000;
+  border-color: #ff0000;
+}
+
+.friendly-btn {
+  color: #00ccff;
+  border-color: #00ccff;
+}
+
+.deploy-btn {
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.deploy-btn.deploying-enemy {
+  background: #ff0000;
+  color: var(--black);
+}
+
+.deploy-btn.deploying-friendly {
+  background: #00ccff;
+  color: var(--black);
+}
+
+.map-save-btn {
+  padding: 10px;
+  background: #5500ff;
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.map-load-btn {
+  padding: 10px;
+  background: #aa00ff;
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
 }
 
 .win95-window .upload-btn:active, button:active, .utility-btn:active {
