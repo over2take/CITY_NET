@@ -116,11 +116,11 @@ describe('AdminPayWindow', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('emits adminPayPlayers with all users on DIVIDE_ALL', async () => {
+  it('emits adminPayPlayers with all users on SPLIT_AMONG_ALL', async () => {
     const socket = makeSocket();
     render(<AdminPayWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} token="tok" activeUsers={activeUsers} />);
     await userEvent.type(screen.getByRole('spinbutton'), '400');
-    await userEvent.click(screen.getByText('DIVIDE_ALL'));
+    await userEvent.click(screen.getByText('SPLIT_AMONG_ALL'));
     expect(socket.emit).toHaveBeenCalledWith('adminPayPlayers', expect.objectContaining({ usernames: ['GHOST', 'VIPER'], totalAmount: 400 }));
   });
 });
@@ -143,49 +143,49 @@ describe('BankWindow', () => {
 
   it('shows amount prompt overlay on withdraw click', async () => {
     render(<BankWindow pos={basePos} setPos={setPos} onClose={onClose} bankData={bankData} socket={makeSocket()} userName="GHOST" isBankOpen={true} />);
-    await userEvent.click(screen.getByText('withdraw'));
+    await userEvent.click(screen.getByText('WITHDRAW'));
     expect(screen.getByText(/Amount to withdraw/i)).toBeInTheDocument();
   });
 
   it('emits withdrawFunds on confirm', async () => {
     const socket = makeSocket();
     render(<BankWindow pos={basePos} setPos={setPos} onClose={onClose} bankData={bankData} socket={socket} userName="GHOST" isBankOpen={true} />);
-    await userEvent.click(screen.getByText('withdraw'));
+    await userEvent.click(screen.getByText('WITHDRAW'));
     await userEvent.type(screen.getByRole('spinbutton'), '100');
-    await userEvent.click(screen.getByText('Okay'));
+    await userEvent.click(screen.getByText('CONFIRM'));
     expect(socket.emit).toHaveBeenCalledWith('withdrawFunds', { username: 'GHOST', amount: 100 });
   });
 
   it('emits borrowFunds on borrow confirm', async () => {
     const socket = makeSocket();
     render(<BankWindow pos={basePos} setPos={setPos} onClose={onClose} bankData={bankData} socket={socket} userName="GHOST" isBankOpen={true} />);
-    await userEvent.click(screen.getByText('borrow'));
+    await userEvent.click(screen.getByText('BORROW'));
     await userEvent.type(screen.getByRole('spinbutton'), '50');
-    await userEvent.click(screen.getByText('Okay'));
+    await userEvent.click(screen.getByText('CONFIRM'));
     expect(socket.emit).toHaveBeenCalledWith('borrowFunds', { username: 'GHOST', amount: 50 });
   });
 
   it('emits payDebt on pay confirm', async () => {
     const socket = makeSocket();
     render(<BankWindow pos={basePos} setPos={setPos} onClose={onClose} bankData={bankData} socket={socket} userName="GHOST" isBankOpen={true} />);
-    await userEvent.click(screen.getByText('pay'));
+    await userEvent.click(screen.getByText('PAY'));
     await userEvent.type(screen.getByRole('spinbutton'), '25');
-    await userEvent.click(screen.getByText('Okay'));
+    await userEvent.click(screen.getByText('CONFIRM'));
     expect(socket.emit).toHaveBeenCalledWith('payDebt', { username: 'GHOST', amount: 25 });
   });
 
-  it('dismisses prompt on Cancel', async () => {
+  it('dismisses prompt on CANCEL', async () => {
     render(<BankWindow pos={basePos} setPos={setPos} onClose={onClose} bankData={bankData} socket={makeSocket()} userName="GHOST" isBankOpen={true} />);
-    await userEvent.click(screen.getByText('withdraw'));
-    await userEvent.click(screen.getByText('Cancel'));
+    await userEvent.click(screen.getByText('WITHDRAW'));
+    await userEvent.click(screen.getByText('CANCEL'));
     expect(screen.queryByText(/Amount to/i)).not.toBeInTheDocument();
   });
 
   it('does not emit when amount is invalid', async () => {
     const socket = makeSocket();
     render(<BankWindow pos={basePos} setPos={setPos} onClose={onClose} bankData={bankData} socket={socket} userName="GHOST" isBankOpen={true} />);
-    await userEvent.click(screen.getByText('withdraw'));
-    await userEvent.click(screen.getByText('Okay')); // empty input
+    await userEvent.click(screen.getByText('WITHDRAW'));
+    await userEvent.click(screen.getByText('CONFIRM')); // empty input
     expect(socket.emit).not.toHaveBeenCalledWith('withdrawFunds', expect.anything());
   });
 });

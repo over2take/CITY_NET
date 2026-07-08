@@ -579,11 +579,13 @@ export function AdminPanel({
     setEditId(null); setSelectedLocation(null);
     const { tx, tz } = getCenterGroundTarget();
     setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
-    setEditData({ 
-        name: '', description: '', npcs: '', x: tx, y: 0, z: tz, 
-        width: 1.875, height: 1.875, depth: 1.875, 
+    setEditData({
+        name: '', description: '', npcs: '', x: tx, y: 0, z: tz,
+        width: 1.875, height: 1.875, depth: 1.875,
         baseWidth: 1.875, baseHeight: 1.875, baseDepth: 1.875,
-        shape: 'enemy_rhombus', color: '#ff0000', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5
+        shape: 'enemy_rhombus', color: '#ff0000', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5,
+        battle_map_id: activeBattleMapData?.locationId ?? null,
+        floor_index: activeBattleMapData?.currentFloorIndex ?? null,
     });
     setView('editor');
   };
@@ -592,11 +594,13 @@ export function AdminPanel({
     setEditId(null); setSelectedLocation(null);
     const { tx, tz } = getCenterGroundTarget();
     setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
-    setEditData({ 
-        name: '', description: '', npcs: '', x: tx, y: 0, z: tz, 
-        width: 1.875, height: 1.875, depth: 1.875, 
+    setEditData({
+        name: '', description: '', npcs: '', x: tx, y: 0, z: tz,
+        width: 1.875, height: 1.875, depth: 1.875,
         baseWidth: 1.875, baseHeight: 1.875, baseDepth: 1.875,
-        shape: 'friendly_rhombus', color: '#00ccff', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5
+        shape: 'friendly_rhombus', color: '#00ccff', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5,
+        battle_map_id: activeBattleMapData?.locationId ?? null,
+        floor_index: activeBattleMapData?.currentFloorIndex ?? null,
     });
     setView('editor');
   };

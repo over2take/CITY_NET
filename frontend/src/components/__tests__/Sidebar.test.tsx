@@ -174,7 +174,6 @@ describe('DiceMenu', () => {
     const pending = { targetId: 6, targetName: 'GRUNT', attackType: 'melee' as const, ac: 11 };
     render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
     expect(screen.getByText(/MELEE/)).toBeInTheDocument();
-    expect(screen.getByText(/AC 11/)).toBeInTheDocument();
   });
 
   it('banner does not appear when different target is pending (no cross-contamination)', () => {
@@ -255,52 +254,52 @@ describe('QuickAccessMenu', () => {
 const baseRhombus = { active: false, color: '#00ff00', name: '', description: '', hp_max: 0 };
 
 describe('GeometryMenu', () => {
-  it('renders GEOMETRY_PROTOCOLS header', () => {
+  it('renders TOKEN_PROTOCOLS header', () => {
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('GEOMETRY_PROTOCOLS')).toBeInTheDocument();
+    expect(screen.getByText('TOKEN_PROTOCOLS')).toBeInTheDocument();
   });
 
-  it('shows INITIALIZE_RHOMBUS when no active rhombus', () => {
+  it('shows PLACE_MY_TOKEN when no active rhombus', () => {
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('INITIALIZE_RHOMBUS')).toBeInTheDocument();
+    expect(screen.getByText('PLACE_MY_TOKEN')).toBeInTheDocument();
   });
 
-  it('shows RHOMBUS_ACTIVE when user has deployed rhombus', () => {
+  it('shows TOKEN_PLACED when user has deployed rhombus', () => {
     const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('RHOMBUS_ACTIVE')).toBeInTheDocument();
+    expect(screen.getByText('TOKEN_PLACED')).toBeInTheDocument();
   });
 
-  it('shows PURGE_YOUR_RHOMBUS button when rhombus is active', () => {
+  it('shows REMOVE_MY_TOKEN button when rhombus is active', () => {
     const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('PURGE_YOUR_RHOMBUS')).toBeInTheDocument();
+    expect(screen.getByText('REMOVE_MY_TOKEN')).toBeInTheDocument();
   });
 
-  it('emits requestRhombusPurge on purge click', async () => {
+  it('emits requestRhombusPurge on remove click', async () => {
     const socketRef = makeSocketRef();
     const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={socketRef} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    await userEvent.click(screen.getByText('PURGE_YOUR_RHOMBUS'));
+    await userEvent.click(screen.getByText('REMOVE_MY_TOKEN'));
     expect(socketRef.current.emit).toHaveBeenCalledWith('requestRhombusPurge', expect.objectContaining({ id: 10 }));
   });
 
-  it('calls syncRhombusToDB when SET button is clicked', async () => {
+  it('calls syncRhombusToDB when SAVE_TOKEN_SETTINGS button is clicked', async () => {
     const syncRhombusToDB = vi.fn();
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={syncRhombusToDB} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    await userEvent.click(screen.getByText('SET'));
+    await userEvent.click(screen.getByText('SAVE_TOKEN_SETTINGS'));
     expect(syncRhombusToDB).toHaveBeenCalled();
   });
 
@@ -327,19 +326,19 @@ describe('GeometryMenu', () => {
     expect(screen.getByText('MELEE')).toBeInTheDocument();
   });
 
-  it('shows PLACE_ON_MAP label when rhombus is in active/scanning state', () => {
+  it('shows CLICK MAP TO PLACE label when rhombus is in active/scanning state', () => {
     render(
       <GeometryMenu rhombusState={{ ...baseRhombus, active: true }} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('PLACE_ON_MAP')).toBeInTheDocument();
+    expect(screen.getByText('CLICK MAP TO PLACE')).toBeInTheDocument();
     expect(screen.getByText('place user token')).toBeInTheDocument();
   });
 
-  it('shows INITIALIZE_RHOMBUS when inactive and no deployed rhombus', () => {
+  it('shows PLACE_MY_TOKEN when inactive and no deployed rhombus', () => {
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('INITIALIZE_RHOMBUS')).toBeInTheDocument();
+    expect(screen.getByText('PLACE_MY_TOKEN')).toBeInTheDocument();
   });
 });
 

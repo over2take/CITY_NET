@@ -66,8 +66,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       const signs = JSON.parse(row.signs_data || '[]');
 
       db.serialize(() => {
-        // Delete all locations except player/enemy tokens
-        db.run(`DELETE FROM locations WHERE shape IS NULL OR shape NOT IN ('rhombus', 'enemy_rhombus', 'friendly_rhombus')`);
+        // Delete all locations except live player rhombuses; enemy/friendly tokens are map content and get replaced
+        db.run(`DELETE FROM locations WHERE shape IS NULL OR shape != 'rhombus'`);
         db.run('DELETE FROM districts');
         db.run('DELETE FROM roads');
         db.run('DELETE FROM overpasses');
@@ -130,8 +130,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
 
   router.post('/clear', authenticate, (req, res) => {
     db.serialize(() => {
-      // Preserve only player/enemy tokens
-      db.run(`DELETE FROM locations WHERE shape IS NULL OR shape NOT IN ('rhombus', 'enemy_rhombus', 'friendly_rhombus')`);
+      // Preserve only live player rhombuses; enemy/friendly tokens are map content
+      db.run(`DELETE FROM locations WHERE shape IS NULL OR shape != 'rhombus'`);
       db.run('DELETE FROM districts');
       db.run('DELETE FROM roads');
       db.run('DELETE FROM overpasses');
