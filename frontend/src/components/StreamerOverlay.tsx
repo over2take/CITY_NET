@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DirectorState, Location } from '../types';
+import { HeartMonitor, PersonSVG, INJURY_ZONES } from './HitPoints';
 
 interface DiceEvent {
   id: string;
@@ -18,17 +19,21 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
   useEffect(() => {
     if (!socket) return;
     const onRoll = (data: { userName: string; results: Record<string, number[]>; modifiers: number[]; color: string; total: number }) => {
-      const parts = Object.entries(data.results || {})
-        .filter(([, rolls]) => rolls.length > 0)
-        .map(([sides, rolls]) => `${rolls.length}D${sides}`);
-      const modTotal = (data.modifiers || []).reduce((a, b) => a + b, 0);
-      let expression = parts.join(' + ');
-      if (modTotal !== 0) expression += ` ${modTotal > 0 ? '+' : '−'} ${Math.abs(modTotal)}`;
-      const breakdown = Object.values(data.results || {}).flat().join(' · ');
+      // Delay matches the DiceTray rolling animation (5s) so the result isn't
+      // spoiled on stream before the roller sees it themselves.
+      setTimeout(() => {
+        const parts = Object.entries(data.results || {})
+          .filter(([, rolls]) => rolls.length > 0)
+          .map(([sides, rolls]) => `${rolls.length}D${sides}`);
+        const modTotal = (data.modifiers || []).reduce((a, b) => a + b, 0);
+        let expression = parts.join(' + ');
+        if (modTotal !== 0) expression += ` ${modTotal > 0 ? '+' : '−'} ${Math.abs(modTotal)}`;
+        const breakdown = Object.values(data.results || {}).flat().join(' · ');
 
-      const id = Math.random().toString(36).slice(2, 9);
-      setDiceEvents(prev => [...prev.slice(-2), { id, userName: data.userName, total: data.total, expression, breakdown, color: data.color || '#00ff00' }]);
-      setTimeout(() => setDiceEvents(prev => prev.filter(e => e.id !== id)), 8000);
+        const id = Math.random().toString(36).slice(2, 9);
+        setDiceEvents(prev => [...prev.slice(-2), { id, userName: data.userName, total: data.total, expression, breakdown, color: data.color || '#00ff00' }]);
+        setTimeout(() => setDiceEvents(prev => prev.filter(e => e.id !== id)), 8000);
+      }, 5000);
     };
     socket.on('diceRollBroadcast', onRoll);
     return () => { socket.off('diceRollBroadcast', onRoll); };
@@ -109,6 +114,49 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                   <span style={{ color: 'var(--green, #00ff00)' }}>{selectedLocation.district_name}</span>
                 </div>
               )}
+              {isRhombus && (() => {
+                const hpCurrent = selectedLocation.hp_current ?? 0;
+                const hpMax = selectedLocation.hp_max ?? 0;
+                const isDead = hpCurrent <= 0;
+                const hpPct = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
+                const hpColor = isDead ? '#ff3333' : hpPct > 0.5 ? '#00ff00' : hpPct > 0.25 ? '#ffaa00' : '#ff3333';
+                const injuries: Record<string, boolean> = (() => {
+                  try { return JSON.parse((selectedLocation as any).injuries || '{}'); } catch { return {}; }
+                })();
+                const hasInjuries = Object.values(injuries).some(Boolean);
+                return (
+                  <>
+                    <div style={{ borderTop: '1px solid #0a2a0a', paddingTop: '8px' }}>
+                      <HeartMonitor color={hpColor} flatline={isDead} />
+                    </div>
+                    {hasInjuries && (
+                      <div style={{ borderTop: '1px solid #0a2a0a', paddingTop: '8px' }}>
+                        <div style={{ fontSize: '9px', color: '#555', letterSpacing: '1px', textAlign: 'center', marginBottom: '6px' }}>INJURY_MAP</div>
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                          <div style={{ position: 'relative', width: '90px', height: '105px' }}>
+                            <PersonSVG color='#00ff00' style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.4, pointerEvents: 'none' }} />
+                            {Object.keys(INJURY_ZONES).map(zone => (
+                              <div key={zone} style={{
+                                position: 'absolute',
+                                background: injuries[zone] ? 'rgba(255,0,0,0.3)' : 'transparent',
+                                border: injuries[zone] ? '1px solid rgba(255,50,50,0.7)' : '1px solid transparent',
+                                borderRadius: '3px',
+                                pointerEvents: 'none',
+                                ...INJURY_ZONES[zone],
+                              }} />
+                            ))}
+                          </div>
+                        </div>
+                        {(['blind', 'bleeding'] as const).filter(c => injuries[c]).map(cond => (
+                          <div key={cond} style={{ textAlign: 'center', color: '#ff3333', fontSize: '10px', letterSpacing: '1px', marginTop: '4px' }}>
+                            ⚠ {cond.toUpperCase()}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         );

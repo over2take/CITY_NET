@@ -129,12 +129,20 @@ describe('DiceMenu', () => {
     expect(screen.getByText(/ATTACK ROLL — vs ENEMY_NODE/)).toBeInTheDocument();
   });
 
-  it('shows attack type and AC in banner', () => {
+  it('shows attack type, AC and roll threshold to admins', () => {
     const pending = { targetId: 2, targetName: 'BRUTE', attackType: 'ranged' as const, ac: 16 };
-    render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
+    render(<DiceMenu userName="GHOST" token="admin-token" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
     expect(screen.getByText(/RANGED/)).toBeInTheDocument();
     expect(screen.getByText(/AC 16/)).toBeInTheDocument();
     expect(screen.getByText(/Roll 16\+ to hit/)).toBeInTheDocument();
+  });
+
+  it('hides AC and roll threshold from non-admin players', () => {
+    const pending = { targetId: 2, targetName: 'BRUTE', attackType: 'ranged' as const, ac: 16 };
+    render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
+    expect(screen.getByText(/RANGED/)).toBeInTheDocument();
+    expect(screen.queryByText(/AC 16/)).toBeNull();
+    expect(screen.queryByText(/Roll 16\+ to hit/)).toBeNull();
   });
 
   it('renders CANCEL ATTACK button when attackPending is set', () => {
@@ -340,12 +348,18 @@ describe('GeometryMenu', () => {
 // The banner must not expose the target's AC — only the roll value.
 
 describe('Attack result banner AC visibility', () => {
-  it('hit result shows roll number but not AC', () => {
+  it('admin pending banner shows AC; non-admin does not', () => {
     const pending = { targetId: 1, targetName: 'TARGET', attackType: 'melee' as const, ac: 18 };
+
+    // Admin sees AC
+    const { unmount } = render(<DiceMenu userName="GHOST" token="admin-token" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
+    expect(screen.getByText(/AC 18/)).toBeInTheDocument();
+    expect(screen.queryByText(/rolled/)).toBeNull();
+    unmount();
+
+    // Non-admin does not see AC
     render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
-    // The banner text for a result is rendered in App.tsx info window, not DiceMenu.
-    // Verify the attack banner itself doesn't leak AC in the roll-pending state.
-    expect(screen.getByText(/AC 18/)).toBeInTheDocument(); // pending banner shows AC — that's intentional
-    expect(screen.queryByText(/rolled/)).toBeNull();        // no result yet, no roll shown
+    expect(screen.queryByText(/AC 18/)).toBeNull();
+    expect(screen.queryByText(/rolled/)).toBeNull();
   });
 });

@@ -9,6 +9,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.1] - 2026-07-08
+
+### Added
+- **Health in broadcast info card** — when the admin clicks a player/enemy/friendly token in broadcast mode, the spectator info card now shows the heart monitor (animated EKG, flatlines at 0 HP) and injury map (body silhouette with red zone overlays, BLIND/BLEEDING flags); injury map only appears when injuries are present
+- **RETURN_TO_ORIGIN button** — added to the top of the Quick Access menu; smoothly flies the camera back to world center
+
+### Fixed
+- **Broadcast zoom direction** — spectator camera was zooming toward screen center instead of the admin's cursor; fixed by deriving `lookAt` from the camera's actual forward direction rather than the orbit pivot, which `dollyToCursor` does not update
+- **Dice roll broadcast delay** — spectator overlay was showing roll results immediately; now waits the same 5-second animation delay as the roller's own DiceTray
+- **AC hidden from non-admin players** — the attack banner in the DiceMenu and the rhombus info window no longer show AC value or roll threshold to non-admin players; admins still see full detail
+
+---
+
 ## [1.3.0] - 2026-07-08
 
 ### Added

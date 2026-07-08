@@ -448,6 +448,7 @@ export function SystemInfoMenu({ userName, token, currentTheme, onThemeChange }:
 
 interface DiceMenuProps {
   userName: string;
+  token?: string;
   socketRef: React.MutableRefObject<any>;
   rhombusState: any;
   setIsDiceTrayOpen: (v: any) => void;
@@ -456,7 +457,8 @@ interface DiceMenuProps {
   onCancelAttack?: () => void;
 }
 
-export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack }: DiceMenuProps) {
+export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack }: DiceMenuProps) {
+  const isAdmin = !!token;
   const diceTypes = [2, 4, 6, 8, 10, 12, 20, 100];
   const [diceCounts, setDiceCounts] = useState<Record<number, number>>({});
   const [workingMod, setWorkingMod] = useState<number>(0);
@@ -503,7 +505,9 @@ export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen,
             ATTACK ROLL — vs {attackPending.targetName}
           </div>
           <div style={{ color: 'var(--green)', fontSize: '0.75rem', marginBottom: '6px' }}>
-            {attackPending.attackType.toUpperCase()} · AC {attackPending.ac} · Roll {attackPending.ac}+ to hit
+            {isAdmin
+              ? `${attackPending.attackType.toUpperCase()} · AC ${attackPending.ac} · Roll ${attackPending.ac}+ to hit`
+              : attackPending.attackType.toUpperCase()}
           </div>
           <button className="upload-btn" style={{ width: '100%', padding: '5px', fontSize: '0.75rem', backgroundColor: 'transparent', color: '#888', border: '1px solid #444' }} onClick={() => { socketRef.current?.emit('cancelAttack'); onCancelAttack?.(); }}>
             CANCEL ATTACK
@@ -625,6 +629,11 @@ export function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation,
         <h3 style={{ margin: 0 }}>QUICK_ACCESS</h3>
         <button onClick={() => setIsOpen(false)} className="close-btn" style={{ position: 'static' }}>◀</button>
       </header>
+      <button
+        className="utility-btn"
+        style={{ width: '100%', marginBottom: '10px' }}
+        onClick={() => onZoom({ pos: [0, 0, 0], size: 80 })}
+      >⌂ RETURN_TO_ORIGIN</button>
       <div className="location-list" style={{ maxHeight: 'calc(100vh - 250px)' }}>
         {danger.length > 0 && (
           <>
@@ -896,7 +905,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
-          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} />}
+          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} />}
         </div>
       </div>
     </div>
