@@ -21,7 +21,7 @@ The GM builds and manages the city; players connect and explore it live. Built w
   <a href="https://ko-fi.com/over2take"><img src="https://img.shields.io/badge/support-ko--fi-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi"/></a>
   <img src="https://img.shields.io/badge/self--hosted-yes-blueviolet" alt="self-hosted"/>
   <img src="https://img.shields.io/badge/no%20account%20required-players-blue" alt="no account required"/>
-  <img src="https://img.shields.io/badge/version-1.2.3-00cc66" alt="version 1.2.3"/>
+  <img src="https://img.shields.io/github/package-json/v/over2take/CITY_NET?color=00cc66" alt="version"/>
 </p>
 
 ---
