@@ -106,7 +106,7 @@ function CheckUpdateButton({ token }: { token: string }) {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
         <span style={{ color: 'var(--green)', fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', textAlign: 'center' }}>{versionMessage}</span>
         <button onClick={applyUpdate} style={{ ...btnStyle, marginTop: 0, textDecoration: 'underline' }}>
-          CLICK TO UPDATE (docker only)
+          UPDATE NOW (DOCKER ONLY)
         </button>
         <a href="https://github.com/over2take/CITY_NET/blob/main/README.md#updating" target="_blank" rel="noreferrer" style={{ fontSize: '0.6rem', opacity: 0.5, letterSpacing: '1px', color: 'var(--green)' }}>README ↗</a>
       </div>
@@ -244,7 +244,7 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
     <div className="panel sidebar-panel">
       <style>{`@keyframes rainbowHue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }`}</style>
       <header style={{ marginBottom: '20px' }}>
-        <h3 style={{ margin: 0 }}>GEOMETRY_PROTOCOLS</h3>
+        <h3 style={{ margin: 0 }}>TOKEN_PROTOCOLS</h3>
       </header>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
 
@@ -260,7 +260,7 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
               <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
             </svg>
             <span style={{ fontSize: '0.6rem', marginTop: '10px', display: 'block' }}>
-              {userRhombus ? 'RHOMBUS_ACTIVE' : (rhombusState.active ? 'PLACE_ON_MAP' : 'INITIALIZE_RHOMBUS')}
+              {userRhombus ? 'TOKEN_PLACED' : (rhombusState.active ? 'CLICK MAP TO PLACE' : 'PLACE_MY_TOKEN')}
             </span>
           </button>
           {rhombusState.active && !userRhombus && (
@@ -269,17 +269,17 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
         </div>
 
         {userRhombus && (
-          <button className="upload-btn danger-btn" onClick={() => removeRhombus(userRhombus.id)} style={{ width: '100%', fontSize: '0.65rem' }}>PURGE_YOUR_RHOMBUS</button>
+          <button className="upload-btn danger-btn" onClick={() => removeRhombus(userRhombus.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_MY_TOKEN</button>
         )}
         {canRemoveSelected && selectedLocation?.id !== userRhombus?.id && (
-          <button className="upload-btn danger-btn" onClick={() => removeRhombus(selectedLocation.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_SELECTED_RHOMBUS</button>
+          <button className="upload-btn danger-btn" onClick={() => removeRhombus(selectedLocation.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_SELECTED_TOKEN</button>
         )}
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
           {/* 2 — Color */}
           <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>RHOMBUS_CHROMA_SYNC</label>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TOKEN_COLOR</label>
             <input
               type="color"
               value={rhombusState.color}
@@ -294,7 +294,7 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
 
           {/* 3 — Name */}
           <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>BEACON_NAME</label>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TOKEN_NAME</label>
             <input
               placeholder="ID_TAG"
               value={rhombusState.name}
@@ -305,9 +305,9 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
 
           {/* 4 — Description */}
           <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>DATA_DESCRIPTION</label>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TOKEN_NOTES</label>
             <textarea
-              placeholder="BEACON_FEED_SUMMARY"
+              placeholder="Add notes..."
               value={rhombusState.description}
               onChange={(e) => setRhombusState({ ...rhombusState, description: e.target.value })}
               style={{ width: '100%', height: '60px' }}
@@ -354,16 +354,16 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
 
           {/* 7 — SET button */}
           <button className="upload-btn" style={{ width: '100%', marginTop: '4px' }} onClick={handleSet}>
-            SET
+            SAVE_TOKEN_SETTINGS
           </button>
 
         </div>
 
         <div className="info-box" style={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: '1.6', borderTop: '1px solid var(--dark-green)', paddingTop: '15px', width: '100%' }}>
           <p style={{ color: 'var(--green)', fontWeight: 'bold', marginBottom: '5px' }}>INTERFACE_GUIDE:</p>
-          <p>• [CLICK MAP] TO DEPLOY RHOMBUS</p>
+          <p>• [CLICK MAP] TO PLACE YOUR TOKEN</p>
           <p>• [CLICK & DRAG] TO REPOSITION</p>
-          <p>• [PURGE] TO RESET DEPLOYMENT</p>
+          <p>• [REMOVE TOKEN] TO CLEAR YOUR PLACEMENT</p>
         </div>
       </div>
     </div>
@@ -533,7 +533,7 @@ export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen,
         </div>
         <div style={{ display: 'flex', gap: '5px' }}>
           <button className="upload-btn" style={{ flex: 1 }} onClick={() => { if (workingMod !== 0) { setModifiers(p => [...p, workingMod]); setWorkingMod(0); } }}>ADD</button>
-          <button className="upload-btn" style={{ flex: 1 }} onClick={() => { setModifiers(p => p.slice(0, -1)); }}>DELETE LAST</button>
+          <button className="upload-btn" style={{ flex: 1 }} onClick={() => { setModifiers(p => p.slice(0, -1)); }}>REMOVE LAST</button>
         </div>
         <div style={{ display: 'flex', gap: '2px', marginTop: '5px' }}>
           {[3, 2, 1, -1, -2, -3].map(m => (
@@ -543,7 +543,7 @@ export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen,
           ))}
         </div>
         <div style={{ minHeight: '20px', background: 'rgba(0,0,0,0.5)', marginTop: '5px', padding: '5px', fontSize: '0.75rem', wordBreak: 'break-all' }}>
-          {modifiers.length > 0 ? modifiers.map(m => m > 0 ? `+${m}` : m).join(' ') : 'No Modifiers'}
+          {modifiers.length > 0 ? modifiers.map(m => m > 0 ? `+${m}` : m).join(' ') : 'NO MODIFIERS'}
         </div>
       </div>
 
@@ -778,7 +778,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               <path fill="currentColor" d="M208 144h-72V95.19a40 40 0 1 0-16 0V144H48a16 16 0 0 0-16 16v48a16 16 0 0 0 16 16h160a16 16 0 0 0 16-16v-48a16 16 0 0 0-16-16M104 56a24 24 0 1 1 24 24a24 24 0 0 1-24-24m104 152H48v-48h160zm-40-96h32a8 8 0 0 1 0 16h-32a8 8 0 0 1 0-16" />
             </svg>
           </button>
-          <button className={`rail-btn ${activeMenu === 'geometry_protocols' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'geometry_protocols' ? 'none' : 'geometry_protocols')} title="GEOMETRY_PROTOCOLS">
+          <button className={`rail-btn ${activeMenu === 'geometry_protocols' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'geometry_protocols' ? 'none' : 'geometry_protocols')} title="TOKEN_PROTOCOLS">
             <svg width="24" height="24" viewBox="0 0 24 24" fill={rhombusState?.color || 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
             </svg>
