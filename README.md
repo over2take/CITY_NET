@@ -1,10 +1,28 @@
-# CITY_NET
+<table>
+<tr>
+<td width="160" align="center" valign="middle">
+<img src="assets/citynet-logo.svg" width="140" alt="CITY_NET logo"/>
+</td>
+<td valign="middle" style="padding-left: 16px;">
 
-A real-time 3D city map for tabletop RPG sessions. The GM builds and manages the city; players connect and explore it live. Built with React + Three.js on the front, Node.js + SQLite on the back, and Socket.IO stitching it all together.
+## CITY_NET
 
-If CITY_NET adds something to your table, please consider supporting the creator:
+**A real-time 3D city map built for tabletop RPG sessions.**
 
-[![Support on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/over2take)
+The GM builds and manages the city; players connect and explore it live. Built with React + Three.js, Node.js + SQLite, and Socket.IO. Self-hosted, no accounts required for players.
+
+</td>
+</tr>
+</table>
+
+<p>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-brightgreen" alt="MIT license"/></a>
+  <a href="https://github.com/over2take/CITY_NET/stargazers"><img src="https://img.shields.io/github/stars/over2take/CITY_NET?style=flat&color=yellow" alt="GitHub stars"/></a>
+  <a href="https://ko-fi.com/over2take"><img src="https://img.shields.io/badge/support-ko--fi-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi"/></a>
+  <img src="https://img.shields.io/badge/self--hosted-yes-blueviolet" alt="self-hosted"/>
+  <img src="https://img.shields.io/badge/no%20account%20required-players-blue" alt="no account required"/>
+  <img src="https://img.shields.io/badge/version-1.2.3-00cc66" alt="version 1.2.3"/>
+</p>
 
 ---
 
