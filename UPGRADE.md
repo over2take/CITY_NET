@@ -1,47 +1,56 @@
 # Upgrade Guide
 
-When pulling a new version of CITY_NET from Docker Hub, follow the upgrade path for your version. Each section lists what changed and any manual steps required.
+How to update CITY_NET to the latest version.
 
 ---
 
-## [1.1.7] - 2026-07-05
+## Docker (recommended)
 
-### New Environment Variables
-- **`WATCHTOWER_API_TOKEN`** — Required. Enables the manual "Check for update" button in the admin panel. Generate a strong random token.
-- **`APP_PORT`** — Optional. Controls which port the app is exposed on (default `80`). Change to `8080` if your ISP blocks port 80.
-- **`DUCKDNS_SUBDOMAINS`** — Optional. Your DuckDNS subdomain (e.g., `yourcity`). Only needed if using the `duckdns` service.
-- **`DUCKDNS_TOKEN`** — Optional. Your DuckDNS token from https://www.duckdns.org. Only needed if using the `duckdns` service.
-- **`TZ`** — Optional. Timezone for Watchtower schedule and DuckDNS container (e.g., `America/Chicago`).
+### In-app update (1.2.3+)
 
-### Upgrade Steps
-1. Pull the latest images: `docker compose pull`
-2. Copy the updated `.env.example` from the running container:
-   ```bash
-   docker cp citynet-backend:/app/.env.example ./backend/.env.example.new
-   ```
-3. Compare with your current `.env`:
-   ```bash
-   diff backend/.env.example backend/.env.example.new
-   ```
-4. Add the new variables to `backend/.env`:
-   ```env
-   WATCHTOWER_API_TOKEN=your-strong-random-token-here
-   ```
-5. Restart: `docker compose up -d`
-6. On startup, the backend will warn you if any required vars are still missing.
+Log in as admin, open the nav panel, and click **CLICK TO UPDATE (docker only)**. The app will pull the latest image, restart all containers, and reload automatically.
 
-### New Features
-- Manual "Check for update" button in the CITY_NET system info panel (admin only)
-- DuckDNS support for persistent dynamic DNS
-- Configurable host port via `APP_PORT`
-- IPv6 LAN direct connect support (no port forwarding needed for local play)
-- Automatic env var validation on startup with helpful warnings
-- CHANGELOG.md and upgrade guides
+### Manual Docker update
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+The app will be back online in ~30 seconds.
+
+### After updating
+
+On startup the backend checks for missing required env vars and logs a warning if any are absent. If you see a warning banner on login, compare your `backend/.env` against `backend/.env.example` and add any missing keys.
 
 ---
 
-## [1.0.7] and earlier
+## Manual install (non-Docker)
 
-For upgrades from 1.0.6 → 1.0.7, check the CHANGELOG.md for the feature list. No manual env var changes were required for that version.
+```bash
+git pull origin main
+cd frontend && npm install && npm run build
+cd ../backend && npm install
+```
 
-For versions 1.0.0 — 1.0.6, manual setup was simpler and migration steps weren't tracked. Consult CHANGELOG.md for each version's features.
+Then restart your backend process. If you use PM2:
+
+```bash
+pm2 restart citynet-backend
+```
+
+---
+
+## Environment variable changes by version
+
+### [1.2.3]
+No new required vars. `WATCHTOWER_API_TOKEN` is no longer required — you can remove it from your `.env` if present.
+
+### [1.1.7]
+- **`APP_PORT`** — Optional. Port the app is exposed on (default `80`). Change to `8080` if your ISP blocks 80.
+- **`DUCKDNS_SUBDOMAINS`** — Optional. Your DuckDNS subdomain. Only needed if using the `duckdns` service.
+- **`DUCKDNS_TOKEN`** — Optional. Your DuckDNS token from https://www.duckdns.org.
+- **`TZ`** — Optional. Timezone for the DuckDNS container (e.g., `America/Chicago`).
+
+### [1.0.7] and earlier
+No env var changes were required for these versions. See CHANGELOG.md for feature details.

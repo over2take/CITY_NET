@@ -9,10 +9,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.2.3] - 2026-07-07
+
+### Added
+- **Silent update notification modal** — admins see a draggable `SYSTEM_UPDATE` popup on login when a new version is available; supports UPDATE NOW, REMIND ME LATER (session), and SKIP VERSION (persistent)
+- **Docker vs manual install detection** — update modal shows one-click update for Docker installs; manual install users are directed to install instructions instead
+- **`GET /api/version` endpoint** — lightweight no-auth endpoint returning the running version; used for post-update polling without hitting Docker Hub
+
+### Fixed
+- **Post-update page reload** — frontend now polls `/api/version` after triggering an update and reloads only when the version changes, eliminating stuck "Update in progress" state
+- **Nginx cache-busting** — `index.html` served with `Cache-Control: no-cache` so JS bundles always reload after an update
+- **Helper container path resolution** — `docker compose` helper mounts `hostWorkingDir:/project` and uses `--project-directory /project`, fixing cross-OS path failures on Windows hosts
+- **`WATCHTOWER_API_TOKEN` removed from required env vars** — no longer triggers missing env var warning banner on admin login
+
+### Changed
+- **Button hover/active states standardized** — global `button:hover` applies `filter: brightness(1.4)` across all buttons; colored variants (danger, enemy, friendly, deploy, map save/load) use CSS classes instead of inline style overrides
+- Skip version and remind-later state is independent of the manual Check for Updates button in the nav panel — skipping the modal never blocks the sidebar update flow
+
+---
+
 ## [1.2.2] - 2026-07-06
 
 ### Fixed
-- **In-app update** — backend now runs as root to access Docker socket; compose project name detected from container labels so correct containers are replaced
+- **Update polling condition** — poll now compares running version against `originalCurrent` (captured before update), not against Docker Hub `latest`; fixes stale comparison when multiple versions exist on Docker Hub
 
 ---
 

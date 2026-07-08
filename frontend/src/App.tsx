@@ -32,6 +32,7 @@ import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu } from './components/Sidebar';
 import { DiceTrayWindow, DotMatrixScoreboard, DiceScene } from './components/DiceTray';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
+import { UpdateModal } from './components/UpdateModal';
 import terminalIcon from './assets/terminal-thin.svg';
 import eyeIcon from './assets/oui--eye.svg';
 import eyeClosedIcon from './assets/oui--eye-closed.svg';
@@ -115,6 +116,25 @@ function App() {
         if (!data.all_present && data.missing?.length > 0) {
           setNotification(`⚠️ Missing env vars: ${data.missing.join(', ')} — See UPGRADE.md or backend/.env.example`);
         }
+      })
+      .catch(() => {});
+  }, [token, isAdmin]);
+
+  // Silent update check on admin login
+  const [updateInfo, setUpdateInfo] = useState<{ current: string; latest: string; message: string; isDocker: boolean } | null>(null);
+  useEffect(() => {
+    if (!token || !isAdmin) return;
+    const skipped = localStorage.getItem('citynet_skipped_version');
+    const reminded = sessionStorage.getItem('citynet_remind_later');
+    if (reminded) return;
+    Promise.all([
+      fetch('/api/check-update', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch('/api/version').then(r => r.json()),
+    ])
+      .then(([updateData, versionData]) => {
+        if (!updateData.hasUpdate) return;
+        if (skipped === updateData.latest) return;
+        setUpdateInfo({ current: updateData.current, latest: updateData.latest, message: updateData.message, isDocker: versionData.isDocker ?? false });
       })
       .catch(() => {});
   }, [token, isAdmin]);
@@ -1171,6 +1191,23 @@ function App() {
   return (
     <div className={`crt-container theme-${currentTheme}`}>
       <div className="scanlines"></div>
+      {updateInfo && (
+        <UpdateModal
+          current={updateInfo.current}
+          latest={updateInfo.latest}
+          message={updateInfo.message}
+          token={token}
+          isDocker={updateInfo.isDocker}
+          onDismiss={() => {
+            sessionStorage.setItem('citynet_remind_later', 'true');
+            setUpdateInfo(null);
+          }}
+          onSkip={() => {
+            localStorage.setItem('citynet_skipped_version', updateInfo.latest);
+            setUpdateInfo(null);
+          }}
+        />
+      )}
       {!isLoggedIn && !IS_SPECTATOR && (
         <SecureLogin
           secureModeEnabled={secureModeEnabled}

@@ -48,7 +48,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   router.get('/env-status', authenticate, (req, res) => {
-    const requiredVars = ['JWT_SECRET', 'ADMIN_USER', 'ADMIN_PASS', 'WATCHTOWER_API_TOKEN'];
+    const requiredVars = ['JWT_SECRET', 'ADMIN_USER', 'ADMIN_PASS'];
     const missing = requiredVars.filter(v => !process.env[v]);
     res.json({ missing, all_present: missing.length === 0 });
   });
@@ -203,6 +203,14 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     });
   });
 
+  // --- Current version (no auth, no Docker Hub) ---
+  router.get('/version', (req, res) => {
+    const { execSync } = require('child_process');
+    let isDocker = false;
+    try { execSync('docker info', { stdio: 'ignore' }); isDocker = true; } catch {}
+    res.json({ version: process.env.APP_VERSION || 'dev', isDocker });
+  });
+
   // --- Version Check (Docker Hub) ---
   router.post('/check-update', authenticate, (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
@@ -267,23 +275,41 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
 
     res.json({ message: 'Update started' });
 
-    // Read this container's compose project name from its own Docker labels
+    // Read compose project name and host paths from this container's own Docker labels
     let projectArgs = [];
+    let hostConfigFile = null;
+    let hostWorkingDir = null;
     try {
       const containerId = fs.readFileSync('/etc/hostname', 'utf8').trim();
-      const label = execSync(
-        `docker inspect ${containerId} --format '{{index .Config.Labels "com.docker.compose.project"}}'`,
+      const labels = JSON.parse(execSync(
+        `docker inspect ${containerId} --format '{{json .Config.Labels}}'`,
         { encoding: 'utf8' }
-      ).trim();
-      if (label) projectArgs = ['-p', label];
+      ).trim());
+      const projectName = labels['com.docker.compose.project'];
+      if (projectName) projectArgs = ['-p', projectName];
+      hostConfigFile = labels['com.docker.compose.project.config_files'];
+      hostWorkingDir = labels['com.docker.compose.project.working_dir'];
     } catch (_) {}
 
-    const composeArgs = ['compose', '-f', '/app/docker-compose.yml', ...projectArgs];
+    const composeArgs = ['compose', '-f', '/tmp/docker-compose.yml', ...projectArgs];
 
-    const pull = spawn('docker', [...composeArgs, 'pull']);
+    const pull = spawn('docker', [...composeArgs, 'pull'], { detached: true, stdio: 'ignore' });
+    pull.unref();
     pull.on('close', (code) => {
       if (code !== 0) return;
-      spawn('docker', [...composeArgs, 'up', '-d']);
+      // Spawn a temporary helper container to run up -d so it survives
+      // the backend container being replaced mid-execution.
+      // Mount the host project dir at /project so compose resolves relative
+      // paths (./backend/data etc.) correctly regardless of host OS.
+      const helper = spawn('docker', [
+        'run', '--rm',
+        '-v', '/var/run/docker.sock:/var/run/docker.sock',
+        '-v', `${hostWorkingDir}:/project`,
+        '-v', `${hostConfigFile}:/tmp/docker-compose.yml:ro`,
+        'over2take/citynet-backend:latest',
+        'sh', '-c', `docker compose --project-directory /project -f /tmp/docker-compose.yml ${projectArgs.join(' ')} up -d`,
+      ], { detached: true, stdio: 'ignore' });
+      helper.unref();
     });
   });
 

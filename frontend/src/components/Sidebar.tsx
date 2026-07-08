@@ -50,12 +50,32 @@ function CheckUpdateButton({ token }: { token: string }) {
   const applyUpdate = async () => {
     setStatus('updating');
     try {
+      const checkRes = await fetch('/api/check-update', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const { current: originalCurrent } = await checkRes.json();
+
       await fetch('/api/update', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      setVersionMessage('Update applied — reconnecting...');
-      setTimeout(() => window.location.reload(), 6000);
+      setVersionMessage('Update in progress — waiting for server...');
+
+      // Poll /api/version until the server comes back on a different version
+      const poll = async () => {
+        try {
+          const res = await fetch('/api/version');
+          if (!res.ok) throw new Error();
+          const data = await res.json();
+          if (data.version !== originalCurrent) {
+            window.location.href = `/?v=${Date.now()}`;
+            return;
+          }
+        } catch { /* server still restarting */ }
+        setTimeout(poll, 3000);
+      };
+      setTimeout(poll, 10000);
     } catch {
       setStatus('error');
       setVersionMessage('Update failed — try manually');
@@ -86,7 +106,7 @@ function CheckUpdateButton({ token }: { token: string }) {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
         <span style={{ color: 'var(--green)', fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', textAlign: 'center' }}>{versionMessage}</span>
         <button onClick={applyUpdate} style={{ ...btnStyle, marginTop: 0, textDecoration: 'underline' }}>
-          CLICK TO UPDATE
+          CLICK TO UPDATE (docker only)
         </button>
         <a href="https://github.com/over2take/CITY_NET/blob/main/README.md#updating" target="_blank" rel="noreferrer" style={{ fontSize: '0.6rem', opacity: 0.5, letterSpacing: '1px', color: 'var(--green)' }}>README ↗</a>
       </div>
