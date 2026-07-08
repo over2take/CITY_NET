@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import type { Location } from '../types';
 // Inline SVGs so we can tint them with CSS `color` (currentColor)
-const PersonSVG = ({ color = 'currentColor', style }: { color?: string; style?: React.CSSProperties }) => (
+export const PersonSVG = ({ color = 'currentColor', style }: { color?: string; style?: React.CSSProperties }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill={color} style={style}>
     <path d="M128 68a28 28 0 1 0-28-28a28 28 0 0 0 28 28m0-48a20 20 0 1 1-20 20a20 20 0 0 1 20-20m87.42 116.78l-45.25-51.3a28 28 0 0 0-21-9.48h-42.34a28 28 0 0 0-21 9.48l-45.25 51.3a16 16 0 0 0 22.56 22.69L89 138.7l-19.7 74.88a16 16 0 0 0 29.08 13.35L128 176l29.58 51a16 16 0 0 0 29.08-13.35L167 138.7l25.9 20.77a16 16 0 0 0 22.56-22.69Zm-5.76 16.87a8 8 0 0 1-11.31 0a3 3 0 0 0-.33-.29l-35.51-28.48a4 4 0 0 0-6.38 4.13L179 215.94a4 4 0 0 0 .24.67a8 8 0 1 1-14.5 6.76c-.05-.11-.11-.21-.17-.32L131.46 166a4 4 0 0 0-6.92 0l-33.12 57.05c-.06.11-.12.21-.17.32a8 8 0 1 1-14.5-6.76a4 4 0 0 0 .24-.67L99.87 129a4 4 0 0 0-6.38-4.13L58 153.36a3 3 0 0 0-.33.29a8 8 0 0 1-11.31-11.31l.17-.18l45.3-51.39a20 20 0 0 1 15-6.77h42.34a20 20 0 0 1 15 6.77l45.32 51.39l.17.18a8 8 0 0 1 0 11.31" />
   </svg>
@@ -125,14 +125,15 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
     <DraggableWindow
       title={targetRhombus ? `HP: ${targetRhombus.name || 'UNKNOWN'}` : 'HIT_POINTS'}
       pos={pos} setPos={setPos} onClose={onClose}
-      windowStyle={{ width: '300px', overflow: 'visible' }}
+      windowStyle={{ width: '300px', minHeight: '320px', overflow: 'visible' }}
       contentStyle={{ overflow: 'visible' }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '10px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '10px' }}>
 
         {!targetRhombus ? (
           <div style={{ textAlign: 'center', opacity: 0.7, padding: '20px' }}>NO_TARGET_ACQUIRED</div>
         ) : (<>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
             <div style={{ fontSize: '2rem', color: 'var(--green)', textShadow: 'var(--glow)', fontWeight: 'bold' }}>
               {targetRhombus.hp_current || 0} / {targetRhombus.hp_max || 0}
@@ -151,8 +152,9 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
             >
               <PersonSVG color={injuriesOpen ? '#000' : '#00ff00'} style={{ width: 18, height: 18, display: 'block' }} />
             </button>
+          </div>
             {(targetRhombus.hp_temp ?? 0) > 0 && (
-              <div style={{ color: '#00ccff', fontSize: '0.9rem' }}>+ {targetRhombus.hp_temp} TEMP</div>
+              <div style={{ color: '#00ccff', fontSize: '0.85rem', textShadow: '0 0 6px #00ccff' }}>+ {targetRhombus.hp_temp} TEMP</div>
             )}
           </div>
 
@@ -164,7 +166,7 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {token !== '' && (
               <div>
                 <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX_HP</label>
@@ -256,7 +258,7 @@ interface HealthReviewWindowProps {
   onClose: () => void;
 }
 
-function HeartMonitor({ color, flatline }: { color: string; flatline: boolean }) {
+export function HeartMonitor({ color, flatline }: { color: string; flatline: boolean }) {
   return (
     <div style={{ width: '100%', height: '50px', overflow: 'hidden', background: '#000', borderRadius: '3px', border: '1px solid #0a2a0a' }}>
       <style>{`
@@ -282,7 +284,7 @@ function HeartMonitor({ color, flatline }: { color: string; flatline: boolean })
   );
 }
 
-const INJURY_ZONES: Record<string, React.CSSProperties> = {
+export const INJURY_ZONES: Record<string, React.CSSProperties> = {
   head:      { left: '38%', top: '9%',  width: '24%', height: '20%' },
   torso:     { left: '33%', top: '29%', width: '34%', height: '35%' },
   right_arm: { left: '6%',  top: '29%', width: '26%', height: '35%' },

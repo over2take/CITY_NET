@@ -1786,7 +1786,7 @@ function App() {
                       <div style={{ marginTop: '10px' }}>
                         {attackPending?.targetId === selectedLocation.id ? (
                           <div style={{ fontSize: '12px', color: 'var(--green)', border: '1px solid var(--green)', padding: '6px 10px' }}>
-                            AWAITING_ROLL — {attackPending.attackType.toUpperCase()} vs AC {attackPending.ac}
+                            AWAITING_ROLL — {attackPending.attackType.toUpperCase()}{token ? ` vs AC ${attackPending.ac}` : ''}
                           </div>
                         ) : (
                           <>
