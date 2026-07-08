@@ -125,7 +125,7 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
     <DraggableWindow
       title={targetRhombus ? `HP: ${targetRhombus.name || 'UNKNOWN'}` : 'HIT_POINTS'}
       pos={pos} setPos={setPos} onClose={onClose}
-      windowStyle={{ width: '300px', minHeight: '320px', overflow: 'visible' }}
+      windowStyle={{ width: '300px', minHeight: '400px', overflow: 'visible' }}
       contentStyle={{ overflow: 'visible' }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '10px' }}>

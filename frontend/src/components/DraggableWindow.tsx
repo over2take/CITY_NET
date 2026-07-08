@@ -22,6 +22,22 @@ export function DraggableWindow({
 }: DraggableWindowProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const windowRef = React.useRef<HTMLDivElement>(null);
+
+  // Clamp position when the browser is resized so panels never escape the viewport.
+  useEffect(() => {
+    const handleResize = () => {
+      const el = windowRef.current;
+      if (!el) return;
+      const w = el.offsetWidth || 300;
+      const h = el.offsetHeight || 200;
+      const maxX = Math.max(0, window.innerWidth - w);
+      const maxY = Math.max(0, window.innerHeight - h);
+      setPos({ x: Math.min(pos.x, maxX), y: Math.min(pos.y, maxY) });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [pos, setPos]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -44,7 +60,7 @@ export function DraggableWindow({
   }, [isDragging, dragOffset, setPos]);
 
   return (
-    <div className="win95-window" style={{ left: `${pos.x}px`, top: `${pos.y}px`, ...windowStyle }}>
+    <div ref={windowRef} className="win95-window" style={{ left: `${pos.x}px`, top: `${pos.y}px`, ...windowStyle }}>
       <div className="win95-title-bar" onMouseDown={handleMouseDown}>
         <div className="win95-title-text" style={{ fontWeight: 'bold' }}>{title}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
