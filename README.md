@@ -28,6 +28,10 @@ Built with React + Three.js · Node.js + SQLite · Socket.IO · Docker
 
 ---
 
+[![CITY_NET Trailer](https://img.youtube.com/vi/3DfL-aB5MKU/maxresdefault.jpg)](https://youtu.be/3DfL-aB5MKU)
+
+---
+
 ## For Game Masters — Getting Started
 
 ### Prerequisites
