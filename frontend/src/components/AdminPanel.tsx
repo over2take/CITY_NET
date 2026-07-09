@@ -420,6 +420,7 @@ export function AdminPanel({
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
+    activeUsers, onGrantAccess, onRevokeAccess,
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -446,8 +447,8 @@ export function AdminPanel({
       <div className="panel admin-panel" style={{ width: '300px', maxHeight: '90vh', overflowY: 'auto', pointerEvents: 'auto' }}>
         <h3 style={{ textShadow: '0 0 10px #00ff00', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
         <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-          <button className={`upload-btn deploy-btn${isDeployingEnemy ? ' deploying-enemy' : ''}`} onClick={() => { setIsDeployingEnemy(!isDeployingEnemy); setIsDeployingFriendly(false); }} style={{ flex: 1 }}>{isDeployingEnemy ? 'CANCEL_DEPLOY' : 'ADD_ENEMY'}</button>
-          <button className={`upload-btn deploy-btn${isDeployingFriendly ? ' deploying-friendly' : ''}`} onClick={() => { setIsDeployingFriendly(!isDeployingFriendly); setIsDeployingEnemy(false); }} style={{ flex: 1 }}>{isDeployingFriendly ? 'CANCEL_DEPLOY' : 'ADD_FRIENDLY'}</button>
+          <button className={`upload-btn deploy-btn${isDeployingEnemy ? ' deploying-enemy' : ''}`} onClick={() => { setIsDeployingEnemy(!isDeployingEnemy); setIsDeployingFriendly(false); }} style={{ flex: 1 }}>{isDeployingEnemy ? 'STOP_PLACING' : 'ADD_ENEMY'}</button>
+          <button className={`upload-btn deploy-btn${isDeployingFriendly ? ' deploying-friendly' : ''}`} onClick={() => { setIsDeployingFriendly(!isDeployingFriendly); setIsDeployingEnemy(false); }} style={{ flex: 1 }}>{isDeployingFriendly ? 'STOP_PLACING' : 'ADD_FRIENDLY'}</button>
         </div>
         <div style={{ marginBottom: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
                 <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>
@@ -531,9 +532,11 @@ export function AdminPanel({
   }, [socketRef.current]);
 
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [purgeConfirm, setPurgeConfirm] = useState<{ label: string; onConfirm: () => void } | null>(null);
   const [adminAlert, setAdminAlert] = useState<string | null>(null);
   const [showDefined, setShowDefined] = useState(false);
   const [showUndefined, setShowUndefined] = useState(false);
+  const [showPlayers, setShowPlayers] = useState(false);
   const [customLibrary, setCustomLibrary] = useState<any[]>([]);
   const [customLibraryLoading, setCustomLibraryLoading] = useState(false);
   const [roadEraseMode, setRoadEraseModeLocal] = useState<'segment' | 'path'>('segment');
@@ -576,11 +579,13 @@ export function AdminPanel({
     setEditId(null); setSelectedLocation(null);
     const { tx, tz } = getCenterGroundTarget();
     setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
-    setEditData({ 
-        name: '', description: '', npcs: '', x: tx, y: 0, z: tz, 
-        width: 1.875, height: 1.875, depth: 1.875, 
+    setEditData({
+        name: '', description: '', npcs: '', x: tx, y: 0, z: tz,
+        width: 1.875, height: 1.875, depth: 1.875,
         baseWidth: 1.875, baseHeight: 1.875, baseDepth: 1.875,
-        shape: 'enemy_rhombus', color: '#ff0000', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5
+        shape: 'enemy_rhombus', color: '#ff0000', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5,
+        battle_map_id: activeBattleMapData?.locationId ?? null,
+        floor_index: activeBattleMapData?.currentFloorIndex ?? null,
     });
     setView('editor');
   };
@@ -589,11 +594,13 @@ export function AdminPanel({
     setEditId(null); setSelectedLocation(null);
     const { tx, tz } = getCenterGroundTarget();
     setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
-    setEditData({ 
-        name: '', description: '', npcs: '', x: tx, y: 0, z: tz, 
-        width: 1.875, height: 1.875, depth: 1.875, 
+    setEditData({
+        name: '', description: '', npcs: '', x: tx, y: 0, z: tz,
+        width: 1.875, height: 1.875, depth: 1.875,
         baseWidth: 1.875, baseHeight: 1.875, baseDepth: 1.875,
-        shape: 'friendly_rhombus', color: '#00ccff', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5
+        shape: 'friendly_rhombus', color: '#00ccff', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5,
+        battle_map_id: activeBattleMapData?.locationId ?? null,
+        floor_index: activeBattleMapData?.currentFloorIndex ?? null,
     });
     setView('editor');
   };
@@ -621,7 +628,7 @@ export function AdminPanel({
     if (!targetObject) return;
     const finalBuildings = blockBuildings.map(b => ({ ...b, x: b.x + targetObject.position.x, z: b.z + targetObject.position.z, y: b.y + targetObject.position.y }));
     const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalBuildings) });
-    if (res.ok) { setAdminAlert("BLOCK_COMMITTED"); refreshLocations(); setBlockBuildings([]); setView('list'); }
+    if (res.ok) { setAdminAlert("BLOCK_PLACED"); refreshLocations(); setBlockBuildings([]); setView('list'); }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -673,7 +680,7 @@ export function AdminPanel({
                     childParts.forEach(c => c.parent_id = rootId);
                     await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(childParts) });
                 }
-                setAdminAlert("LOCATION_UPLOADED"); 
+                setAdminAlert("STRUCTURE_PLACED"); 
                 targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType(''); 
             }
             return;
@@ -688,7 +695,7 @@ export function AdminPanel({
         }
         const finalData = { ...editData, x: targetObject.position.x, z: targetObject.position.z, y: targetObject.position.y, width: finalW, height: finalH, depth: finalD, rotation: targetObject.rotation.y, rotation_x: targetObject.rotation.x, rotation_z: targetObject.rotation.z };
         const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalData) });
-        if (res.ok) { setAdminAlert("LOCATION_UPLOADED"); targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType(''); }
+        if (res.ok) { setAdminAlert("STRUCTURE_PLACED"); targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType(''); }
         return;
     }
     const children = locations.filter(l => l.parent_id === editId);
@@ -751,7 +758,7 @@ export function AdminPanel({
         for (const childUpdate of updates.filter(u => u.id !== editId)) {
             await fetch(`/api/locations/${childUpdate.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(childUpdate) });
         }
-        setAdminAlert("DATA_UPDATED"); targetObject.scale.set(1, 1, 1); refreshLocations(); setView('list');
+        setAdminAlert("CHANGES_SAVED"); targetObject.scale.set(1, 1, 1); refreshLocations(); setView('list');
     }
   };
 
@@ -798,7 +805,7 @@ export function AdminPanel({
     
     const children = locations.filter((l: any) => String(l.parent_id) === String(root.id));
     setCopyBuffer({ root, children });
-    setAdminAlert("DATA_LINK_COPIED");
+    setAdminAlert("STRUCTURE_COPIED");
   };
 
   const handlePaste = async () => {
@@ -834,7 +841,7 @@ export function AdminPanel({
                 body: JSON.stringify(newChildren) 
             });
         }
-        setAdminAlert("DATA_LINK_PASTED");
+        setAdminAlert("STRUCTURE_PASTED");
         refreshLocations();
     }
   };
@@ -855,8 +862,11 @@ export function AdminPanel({
         </div>,
         document.body
       )}
+      {purgeConfirm && (
+        <div className="modal-overlay"><div className="panel critical-alert"><h2 className="alert-text">!! CONFIRM !!</h2><p>{purgeConfirm.label}</p><div className="button-group" style={{marginTop: '20px'}}><button className="upload-btn danger-btn" onClick={() => { purgeConfirm.onConfirm(); setPurgeConfirm(null); }}>CONFIRM</button><button className="utility-btn" onClick={() => setPurgeConfirm(null)}>CANCEL</button></div></div></div>
+      )}
       {deleteTarget && resolvedDeleteTarget && (
-        <div className="modal-overlay"><div className="panel critical-alert"><h2 className="alert-text">!! CRITICAL_WARNING !!</h2><p>CONFIRM DESTRUCTION OF {locations.filter((l: any) => l.parent_id === resolvedDeleteTarget.id).length > 0 ? 'STRUCTURE GROUP' : 'DATA POINT'}:</p><p className="highlight">[{isUserDefinedName(resolvedDeleteTarget.name) ? resolvedDeleteTarget.name : getStructLabel(resolvedDeleteTarget)}]</p><div className="button-group" style={{marginTop: '20px'}}><button className="upload-btn danger-btn" onClick={executeDelete}>PURGE_DATA</button><button className="utility-btn" onClick={() => setDeleteTarget(null)}>ABORT_OPERATION</button></div></div></div>
+        <div className="modal-overlay"><div className="panel critical-alert"><h2 className="alert-text">!! CONFIRM DELETE !!</h2><p>DELETE {locations.filter((l: any) => l.parent_id === resolvedDeleteTarget.id).length > 0 ? 'STRUCTURE GROUP' : 'STRUCTURE'}:</p><p className="highlight">[{isUserDefinedName(resolvedDeleteTarget.name) ? resolvedDeleteTarget.name : getStructLabel(resolvedDeleteTarget)}]</p><div className="button-group" style={{marginTop: '20px'}}><button className="upload-btn danger-btn" onClick={executeDelete}>DELETE</button><button className="utility-btn" onClick={() => setDeleteTarget(null)}>CANCEL</button></div></div></div>
       )}
       
       {view === 'list' && (
@@ -879,122 +889,8 @@ export function AdminPanel({
             </div>
             <button className="utility-btn" onClick={handleUndo} title="UNDO LAST CHANGE" style={{fontSize: '0.65rem', padding: '2px 8px'}}>⟲ UNDO</button>
           </div>
-          <button className="upload-btn" onClick={startNew}>+ ADD_NEW_DATA_POINT</button>
-          <button className={`utility-btn ${isPlantingTrees ? 'active' : ''}`} onClick={() => setIsPlantingTrees(!isPlantingTrees)} style={{marginTop: '10px', width: '100%'}}>{isPlantingTrees ? 'PLANTING_TREES: ON' : 'PLANTING_TREES: OFF'}</button>
-          {isPlantingTrees && (
-              <div style={{marginTop: '10px', padding: '10px', border: '1px solid #00ff66', background: 'rgba(0, 255, 102, 0.1)'}}>
-                  <label style={{fontSize: '0.7rem', color: '#00ff66'}}>TREES_PER_CLICK: {treeBatchSize}</label>
-                  <input type="range" min="1" max="20" value={treeBatchSize} onChange={e => setTreeBatchSize(parseInt(e.target.value))} style={{width: '100%'}} />
-              </div>
-          )}
-          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
-              <button className="utility-btn" style={{flex: 1}} onClick={() => { 
-                setSelectedLocation(null); 
-                const { tx, tz } = getCenterGroundTarget();
-                setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
-                setView('generator'); generateBlock(); 
-              }}>+ BLOCK_GEN</button>
-              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setRoadSelectionBounds(null); setView('city_gen'); }}>+ CITY_GEN</button>
-          </div>
-          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
-              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setRoadTrail([]); setView('draw_roads'); }}>+ DRAW_ROADS</button>
-              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setWaterTrail([]); setView('draw_water'); }}>+ DRAW_WATER</button>
-          </div>
-          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
-              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setDistrictSelection([]); setEditingDistrict(null); setView('district'); }}>+ MNG_DISTRICT</button>
-              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setJoinSelection([]); setView('join'); }}>+ JOIN_STRUCTS</button>
-          </div>
-          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
-              <button className="utility-btn enemy-btn" style={{flex: 1}} onClick={startNewEnemy}>+ ADD_ENEMY</button>
-              <button className="utility-btn friendly-btn" style={{flex: 1}} onClick={startNewFriendly}>+ ADD_FRIENDLY</button>
-          </div>
-          <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
-              <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>
-                  GLOBAL MAP SCALE (FT/UNIT): {tempCityMapScale !== null ? tempCityMapScale : (globalSettings?.map_scale_multiplier || 5)}
-              </label>
-              <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                  <input type="range" min="0.1" max="50" step="0.1" 
-                      value={tempCityMapScale !== null ? tempCityMapScale : (globalSettings?.map_scale_multiplier || 5)}
-                      onChange={(e) => setTempCityMapScale(e.target.value)} style={{ flex: 1 }} />
-                  <input type="number" step="0.1" 
-                      value={tempCityMapScale !== null ? tempCityMapScale : (globalSettings?.map_scale_multiplier || 5)}
-                      onChange={(e) => setTempCityMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: '#00ff00', border: '1px solid #00ff00', padding: '5px' }} />
-                  <button className="utility-btn" onClick={() => {
-                      if (tempCityMapScale === null) return;
-                      fetch('/api/settings', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                          body: JSON.stringify({ key: 'map_scale_multiplier', value: !isNaN(parseFloat(tempCityMapScale.toString())) ? parseFloat(tempCityMapScale.toString()) : 5 })
-                      }).then(() => {
-                          setTempCityMapScale(null);
-                          fetchGlobalSettings();
-                      });
-                  }}>APPLY</button>
-              </div>
-          </div>
-
-          <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
-            <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
-                <button
-                  key={opt}
-                  className={`utility-btn ${(globalSettings?.currency_icon || 'credits') === opt ? 'active' : ''}`}
-                  style={{ padding: '4px 10px', fontSize: opt === 'credits' ? '0.6rem' : '1rem' }}
-                  onClick={() => {
-                    fetch('/api/settings', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                      body: JSON.stringify({ key: 'currency_icon', value: opt }),
-                    }).then(() => fetchGlobalSettings());
-                  }}
-                >
-                  {opt === 'credits' ? 'DEFAULT' : opt}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
-
-          {/* BANK SOUNDS TEST PANEL */}
-          <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
-
-          <div style={{display: 'flex', gap: '16px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #00ff00'}}>
-            <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
-              <input type="checkbox" checked={renderSidewalks ?? true} onChange={e => setRenderSidewalks(e.target.checked)} />
-              SIDEWALKS
-            </label>
-            <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
-              <input type="checkbox" checked={renderSignage ?? true} onChange={e => setRenderSignage(e.target.checked)} />
-              SIGNAGE
-            </label>
-          </div>
-          {renderSignage && (
-            <div style={{marginTop: '6px'}}>
-              <label style={{fontSize: '0.7rem', opacity: 0.8}}>SIGN_DENSITY: {(signageDensity ?? 1).toFixed(1)}</label>
-              <input type="range" min="0.5" max="5" step="0.5" value={signageDensity ?? 1} onChange={e => setSignageDensity(parseFloat(e.target.value))} style={{width: '100%'}} />
-            </div>
-          )}
-
-          <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setView('signs')}>CUSTOM_SIGNS ({(signs || []).length})</button>
-
-          <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
-          <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={async () => {
-            if (confirm("PURGE ALL WATER DATA?")) {
-              const res = await fetch('/api/water', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-              if (res.ok) {
-                setAdminAlert("ALL WATER PURGED FROM DATABASE");
-                if (fetchWaterBodies) fetchWaterBodies();
-              }
-            }
-          }}>PURGE_ALL_WATER</button>
-          <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={async () => { if (confirm("PURGE ALL CHAT HISTORY?")) { await fetch('/api/chat/purge', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); } }}>PURGE_CHAT_HISTORY</button>
-          <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={() => { if (confirm("PURGE ALL DICE ROLL HISTORY?")) { socketRef.current.emit('purgeDiceHistory', { token }); setAdminAlert("DICE ROLL HISTORY PURGED"); } }}>PURGE_ROLL_HISTORY</button>
-          <button className={`utility-btn ${isBatchSelecting ? 'active' : ''}`} style={{marginTop: '10px', width: '100%'}} onClick={() => { if (isBatchSelecting) setSelectedIds([]); setIsBatchSelecting(!isBatchSelecting); }}>{isBatchSelecting ? 'CANCEL_BATCH_DELETE' : 'BATCH_DELETE_MODE'}</button>
-          {isBatchSelecting && <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={batchDelete}>PURGE_SELECTED ({selectedIds.length})</button>}
           {!isBatchSelecting && (selectedLocation || copyBuffer) && (
-            <div className="panel selection-panel" style={{marginTop: '15px', marginBottom: '15px'}}>
+            <div className="panel selection-panel" style={{marginBottom: '10px'}}>
               <button className="close-btn" onClick={() => setSelectedLocation(null)}>X</button>
               {selectedLocation && (
                 <>
@@ -1025,9 +921,116 @@ export function AdminPanel({
               )}
             </div>
           )}
+          <button className="upload-btn" onClick={startNew}>+ ADD_NEW_STRUCTURE</button>
+          <button className={`utility-btn ${isPlantingTrees ? 'active' : ''}`} onClick={() => setIsPlantingTrees(!isPlantingTrees)} style={{marginTop: '10px', width: '100%'}}>{isPlantingTrees ? 'PLANTING_TREES: ON' : 'PLANTING_TREES: OFF'}</button>
+          {isPlantingTrees && (
+              <div style={{marginTop: '10px', padding: '10px', border: '1px solid #00ff66', background: 'rgba(0, 255, 102, 0.1)'}}>
+                  <label style={{fontSize: '0.7rem', color: '#00ff66'}}>TREES_PER_CLICK: {treeBatchSize}</label>
+                  <input type="range" min="1" max="20" value={treeBatchSize} onChange={e => setTreeBatchSize(parseInt(e.target.value))} style={{width: '100%'}} />
+              </div>
+          )}
+          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+              <button className="utility-btn" style={{flex: 1}} onClick={() => { 
+                setSelectedLocation(null); 
+                const { tx, tz } = getCenterGroundTarget();
+                setTargetObject({ position: new THREE.Vector3(tx, 0, tz), rotation: new THREE.Euler(), scale: new THREE.Vector3(1,1,1) });
+                setView('generator'); generateBlock(); 
+              }}>+ BLOCK_GEN</button>
+              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setRoadSelectionBounds(null); setView('city_gen'); }}>+ CITY_GEN</button>
+          </div>
+          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setRoadTrail([]); setView('draw_roads'); }}>+ DRAW_ROADS</button>
+              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setWaterTrail([]); setView('draw_water'); }}>+ DRAW_WATER</button>
+          </div>
+          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setDistrictSelection([]); setEditingDistrict(null); setView('district'); }}>+ MNG_DISTRICT</button>
+              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setJoinSelection([]); setView('join'); }}>+ CUSTOM_STRUCT</button>
+          </div>
+          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+              <button className="utility-btn enemy-btn" style={{flex: 1}} onClick={startNewEnemy}>+ ADD_ENEMY</button>
+              <button className="utility-btn friendly-btn" style={{flex: 1}} onClick={startNewFriendly}>+ ADD_FRIENDLY</button>
+          </div>
+          <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setView('signs')}>+ CUSTOM_SIGNS ({(signs || []).length})</button>
+          <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+              <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>
+                  GLOBAL MAP SCALE (FT/UNIT): {tempCityMapScale !== null ? tempCityMapScale : (globalSettings?.map_scale_multiplier || 5)}
+              </label>
+              <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                  <input type="range" min="0.1" max="50" step="0.1" 
+                      value={tempCityMapScale !== null ? tempCityMapScale : (globalSettings?.map_scale_multiplier || 5)}
+                      onChange={(e) => setTempCityMapScale(e.target.value)} style={{ flex: 1 }} />
+                  <input type="number" step="0.1" 
+                      value={tempCityMapScale !== null ? tempCityMapScale : (globalSettings?.map_scale_multiplier || 5)}
+                      onChange={(e) => setTempCityMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: '#00ff00', border: '1px solid #00ff00', padding: '5px' }} />
+                  <button className="utility-btn" onClick={() => {
+                      if (tempCityMapScale === null) return;
+                      fetch('/api/settings', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                          body: JSON.stringify({ key: 'map_scale_multiplier', value: !isNaN(parseFloat(tempCityMapScale.toString())) ? parseFloat(tempCityMapScale.toString()) : 5 })
+                      }).then(() => {
+                          setTempCityMapScale(null);
+                          fetchGlobalSettings();
+                      });
+                  }}>APPLY</button>
+              </div>
+          </div>
+
+          <div style={{display: 'flex', gap: '16px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #00ff00'}}>
+            <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+              <input type="checkbox" checked={renderSidewalks ?? true} onChange={e => setRenderSidewalks(e.target.checked)} />
+              SIDEWALKS
+            </label>
+            <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+              <input type="checkbox" checked={renderSignage ?? true} onChange={e => setRenderSignage(e.target.checked)} />
+              SIGNAGE
+            </label>
+          </div>
+          {renderSignage && (
+            <div style={{marginTop: '6px'}}>
+              <label style={{fontSize: '0.7rem', opacity: 0.8}}>SIGN_DENSITY: {(signageDensity ?? 1).toFixed(1)}</label>
+              <input type="range" min="0.5" max="5" step="0.5" value={signageDensity ?? 1} onChange={e => setSignageDensity(parseFloat(e.target.value))} style={{width: '100%'}} />
+            </div>
+          )}
+
+          <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+            <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
+                <button
+                  key={opt}
+                  className={`utility-btn ${(globalSettings?.currency_icon || 'credits') === opt ? 'active' : ''}`}
+                  style={{ padding: '4px 10px', fontSize: opt === 'credits' ? '0.6rem' : '1rem' }}
+                  onClick={() => {
+                    fetch('/api/settings', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                      body: JSON.stringify({ key: 'currency_icon', value: opt }),
+                    }).then(() => fetchGlobalSettings());
+                  }}
+                >
+                  {opt === 'credits' ? 'DEFAULT' : opt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
+
+          {/* BANK SOUNDS TEST PANEL */}
+          <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
+
+          <div style={{marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px'}}>
+            <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
+          </div>
+          <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'DELETE ALL WATER?', onConfirm: async () => { const res = await fetch('/api/water', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); if (res.ok) { setAdminAlert("ALL WATER CLEARED"); if (fetchWaterBodies) fetchWaterBodies(); } } })}>PURGE_ALL_WATER</button>
+          <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'CLEAR ALL CHAT HISTORY?', onConfirm: async () => { await fetch('/api/chat/purge', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); } })}>PURGE_CHAT_HISTORY</button>
+          <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'CLEAR ALL DICE ROLL HISTORY?', onConfirm: () => { socketRef.current.emit('purgeDiceHistory', { token }); setAdminAlert("DICE ROLL HISTORY CLEARED"); } })}>PURGE_ROLL_HISTORY</button>
+          <button className={`utility-btn ${isBatchSelecting ? 'active' : ''}`} style={{marginTop: '10px', width: '100%'}} onClick={() => { if (isBatchSelecting) setSelectedIds([]); setIsBatchSelecting(!isBatchSelecting); }}>{isBatchSelecting ? 'CANCEL_SELECTION' : 'BATCH_SELECT_DELETE'}</button>
+          {isBatchSelecting && <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={batchDelete}>DELETE_SELECTED ({selectedIds.length})</button>}
           {pendingRequests.length > 0 && pendingRequests.map((req: any, i: number) => (
             <div key={i} className="panel" style={{marginTop: '15px', borderColor: 'var(--green)'}}>
-              <h4>ACCESS_REQUEST: {req.userName}</h4>
+              <h4>EDIT_REQUEST: {req.userName}</h4>
               <p style={{fontSize: '0.7rem'}}>TARGET: {isUserDefinedName(req.locationName) ? req.locationName : `STRUCT_${req.locationId}`}</p>
               <div className="button-group" style={{marginTop: '10px'}}>
                 <button className="upload-btn" onClick={() => {
@@ -1041,7 +1044,49 @@ export function AdminPanel({
               </div>
             </div>
           ))}
-          {activeUserEditing && <div className="panel" style={{marginTop: '15px', borderColor: '#ff0000'}}><h4>ACTIVE_EDIT: {activeUserEditing.userId}</h4><button className="upload-btn danger-btn" onClick={() => socketRef.current.emit('revokeEditing', { userId: activeUserEditing.userId })}>REVOKE_ACCESS</button></div>}
+          {activeUserEditing && <div className="panel" style={{marginTop: '15px', borderColor: '#ff0000'}}><h4>EDITING_NOW: {activeUserEditing.userName || activeUserEditing.userId}</h4><button className="upload-btn danger-btn" onClick={() => socketRef.current.emit('revokeEditing', { userId: activeUserEditing.userId })}>KICK_EDITOR</button></div>}
+          {isPrimaryAdmin && (
+            <div className="location-list" style={{marginTop: '15px'}}>
+              <h4 style={{cursor: 'pointer', display: 'flex', alignItems: 'center'}} onClick={() => setShowPlayers(!showPlayers)}>
+                <span style={{width: '20px', display: 'inline-block'}}>{showPlayers ? '▼' : '▶'}</span> PLAYERS
+              </h4>
+              {showPlayers && (
+                <>
+                  <p style={{fontSize: '0.6rem', opacity: 0.5, margin: '4px 0 8px 20px', lineHeight: '1.5'}}>Click GRANT_ADMIN to give a player temporary admin access. Online players only.</p>
+                  {(() => {
+                    const onlineNames: string[] = (activeUsers || []).filter((u: any) => !u.isAdmin && !u.isNPC).map((u: any) => u.userName);
+                    const offlineNames: string[] = locations
+                      .filter((l: any) => l.shape === 'rhombus' && l.owner && !l.owner.startsWith('enemy_') && !l.owner.startsWith('friendly_'))
+                      .map((l: any) => l.owner)
+                      .filter((name: string) => !onlineNames.includes(name));
+                    const allPlayers = [
+                      ...onlineNames.map((name: string) => ({ name, online: true, isTemporaryAdmin: (activeUsers || []).find((u: any) => u.userName === name)?.isTemporaryAdmin })),
+                      ...[...new Set(offlineNames)].map((name: string) => ({ name, online: false, isTemporaryAdmin: false })),
+                    ];
+                    if (allPlayers.length === 0) return <p style={{fontSize: '0.65rem', opacity: 0.5, paddingLeft: '20px'}}>No players found.</p>;
+                    return allPlayers.map(({ name, online, isTemporaryAdmin }) => (
+                      <div key={name} style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '4px 4px 4px 20px'}}>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden'}}>
+                          <span style={{width: '7px', height: '7px', borderRadius: '50%', background: online ? (isTemporaryAdmin ? '#ffaa00' : 'var(--green)') : '#444', flexShrink: 0, boxShadow: online ? `0 0 4px ${isTemporaryAdmin ? '#ffaa00' : 'var(--green)'}` : 'none'}} />
+                          <span style={{fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: online ? 1 : 0.4}}>{name}</span>
+                          {isTemporaryAdmin && <span style={{fontSize: '0.55rem', color: '#ffaa00', opacity: 0.8}}>TEMP_ADMIN</span>}
+                        </div>
+                        {online && (
+                          <button
+                            className={`utility-btn ${isTemporaryAdmin ? 'danger-btn' : ''}`}
+                            style={{fontSize: '0.55rem', padding: '2px 6px', flexShrink: 0}}
+                            onClick={() => isTemporaryAdmin ? onRevokeAccess(name) : onGrantAccess(name)}
+                          >
+                            {isTemporaryAdmin ? 'REVOKE_ADMIN' : 'GRANT_ADMIN'}
+                          </button>
+                        )}
+                      </div>
+                    ));
+                  })()}
+                </>
+              )}
+            </div>
+          )}
           <div className="location-list" style={{maxHeight: '250px', marginTop: '15px'}}>
             <h4 style={{cursor: 'pointer', display: 'flex', alignItems: 'center'}} onClick={() => setShowDefined(!showDefined)}><span style={{width: '20px', display: 'inline-block'}}>{showDefined ? '▼' : '▶'}</span> DEFINED_STRUCTURES ({defined.length})</h4>
             {showDefined && defined.map(loc => (
@@ -1766,17 +1811,23 @@ export function AdminPanel({
 
       {view === 'join' && (
         <>
-          <header style={{marginBottom: '10px'}}><h3>JOIN_STRUCTURES</h3><button onClick={() => { setView('list'); setJoinSelection([]); setSelectedClassification(''); }} className="close-btn" style={{position: 'static'}}>X</button></header>
-          <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}><p>SELECTION: {joinSelection.length} UNITS</p><p style={{opacity: 0.7}}>CLICK BUILDINGS ON MAP TO ADD TO GROUP</p><p style={{opacity: 0.7}}>FIRST SELECTION BECOMES GROUP ROOT</p></div>
+          <header style={{marginBottom: '10px'}}><h3>CUSTOM_STRUCTURE</h3><button onClick={() => { setView('list'); setJoinSelection([]); setSelectedClassification(''); }} className="close-btn" style={{position: 'static'}}>X</button></header>
+          <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px', lineHeight: '1.7'}}>
+            <p>SELECTION: {joinSelection.length} UNITS</p>
+            <p style={{opacity: 0.7}}>Click buildings on the map to group them into a custom structure. The first building selected becomes the group root.</p>
+          </div>
           <div style={{marginTop: '15px'}}>
-            <label style={{fontSize: '0.7rem', display: 'block', marginBottom: '5px'}}>OPTIONAL_CLASSIFICATION</label>
+            <label style={{fontSize: '0.7rem', display: 'block', marginBottom: '5px'}}>CLASSIFICATION <span style={{opacity: 0.5}}>(optional)</span></label>
             <div className="button-group" style={{display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
               {['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'LANDMARK', 'MARKETS', 'CUSTOM'].map(t => (
                 <button key={t} type="button" className={selectedClassification === t ? 'active' : ''} onClick={() => setSelectedClassification(selectedClassification === t ? '' : t)} style={{fontSize: '0.7rem', padding: '4px 8px'}}>{t}</button>
               ))}
             </div>
+            {selectedClassification === 'CUSTOM' && (
+              <p style={{fontSize: '0.65rem', opacity: 0.6, marginTop: '8px', lineHeight: '1.6'}}>This group will be saved as a prefab and appear under ADD_NEW_STRUCTURE when NEXT_STYLE cycles to CUSTOM.</p>
+            )}
           </div>
-          <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => { if (joinSelection.length < 1) return setAdminAlert("SELECT AT LEAST 1 UNIT"); const res = await fetch('/api/locations/join', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: joinSelection, classification: selectedClassification || undefined }) }); if (res.ok) { setAdminAlert("STRUCTURES_CLASSIFIED/JOINED"); refreshLocations(); setView('list'); setJoinSelection([]); setSelectedClassification(''); } }}>JOIN_SELECTED</button>
+          <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => { if (joinSelection.length < 1) return setAdminAlert("SELECT AT LEAST 1 UNIT"); const res = await fetch('/api/locations/join', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: joinSelection, classification: selectedClassification || undefined }) }); if (res.ok) { setAdminAlert("STRUCTURES_CLASSIFIED/JOINED"); refreshLocations(); setView('list'); setJoinSelection([]); setSelectedClassification(''); } }}>SAVE_CUSTOM_STRUCTURE</button>
         </>
       )}
 
@@ -1914,7 +1965,7 @@ export function AdminPanel({
                           const maxStyle = customLibrary.length;
                           if (maxStyle === 0) return (
                             <div style={{ marginTop: '8px', fontSize: '0.65rem', opacity: 0.6 }}>
-                              {customLibraryLoading ? 'LOADING...' : 'No custom structures yet. Use JOIN_STRUCTS → CUSTOM to add.'}
+                              {customLibraryLoading ? 'LOADING...' : 'No custom structures yet. Use CUSTOM_STRUCT → CUSTOM classification to add one.'}
                             </div>
                           );
                           const currentStyle = editorStyleIndex % maxStyle;
@@ -2035,7 +2086,7 @@ function BankSoundsPanel({ token, globalSettings, fetchGlobalSettings }: { token
   };
 
   return (
-    <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+    <div style={{ marginTop: '10px' }}>
       <button
         className="utility-btn"
         style={{ width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}

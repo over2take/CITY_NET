@@ -36,8 +36,6 @@ import { UpdateModal } from './components/UpdateModal';
 import terminalIcon from './assets/terminal-thin.svg';
 import eyeIcon from './assets/oui--eye.svg';
 import eyeClosedIcon from './assets/oui--eye-closed.svg';
-import creditsIcon from './assets/Credits.svg';
-import creditsPngIcon from './assets/Credits.png';
 import './App.css';
 
 
@@ -1179,7 +1177,7 @@ function App() {
 
   const cleanupEditModal = () => {
       setIsEditModalOpen(false);
-      if (socketRef.current) socketRef.current.emit('editingFinished');
+      if (socketRef.current) socketRef.current.emit('editingFinished', { userId: userName });
       if (wasGrantedForEditRef.current) {
           if (socketRef.current) socketRef.current.emit('surrenderAccess', { token });
           setToken('');
@@ -1507,6 +1505,9 @@ function App() {
                 setPendingSignPos={setPendingSignPos}
                 selectedSignId={selectedSignId}
                 setSelectedSignId={setSelectedSignId}
+                activeUsers={activeUsers}
+                onGrantAccess={handleGrantAccess}
+                onRevokeAccess={handleRevokeAccess}
                 />
             )}
             {adminBankPlayer && (
@@ -1783,7 +1784,7 @@ function App() {
                       <div style={{ marginTop: '10px' }}>
                         {attackPending?.targetId === selectedLocation.id ? (
                           <div style={{ fontSize: '12px', color: 'var(--green)', border: '1px solid var(--green)', padding: '6px 10px' }}>
-                            AWAITING_ROLL — {attackPending.attackType.toUpperCase()} vs AC {attackPending.ac}
+                            AWAITING_ROLL — {attackPending.attackType.toUpperCase()}{token ? ` vs AC ${attackPending.ac}` : ''}
                           </div>
                         ) : (
                           <>
@@ -1970,7 +1971,7 @@ function App() {
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <GlobalCameraCapture />
             <CursorPivotControls />
-            <KeyboardPan active={view === 'draw_roads'} />
+            <KeyboardPan active={isAdmin || view === 'draw_roads'} />
             <color attach="background" args={[THEMES[currentTheme].background]} />
             {/* @ts-ignore */}
             {isPlantingTrees && (

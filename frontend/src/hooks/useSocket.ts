@@ -242,7 +242,12 @@ export function useSocket({
 
     newSocket.on('editingStopped', () => setIsSomeoneEditing(false));
 
+    newSocket.on('editingApproved', (data: { userId: string }) => {
+      setPendingRequests(prev => prev.filter(r => r.userId !== data.userId));
+    });
+
     newSocket.on('editingDenied', (data: { userId: string }) => {
+      setPendingRequests(prev => prev.filter(r => r.userId !== data.userId));
       if (data.userId === userNameRef.current) onNotification('EDITING_ACCESS_DENIED_BY_ADMIN');
     });
 

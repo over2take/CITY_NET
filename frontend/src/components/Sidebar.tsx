@@ -106,7 +106,7 @@ function CheckUpdateButton({ token }: { token: string }) {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
         <span style={{ color: 'var(--green)', fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', textAlign: 'center' }}>{versionMessage}</span>
         <button onClick={applyUpdate} style={{ ...btnStyle, marginTop: 0, textDecoration: 'underline' }}>
-          CLICK TO UPDATE (docker only)
+          UPDATE NOW (DOCKER ONLY)
         </button>
         <a href="https://github.com/over2take/CITY_NET/blob/main/README.md#updating" target="_blank" rel="noreferrer" style={{ fontSize: '0.6rem', opacity: 0.5, letterSpacing: '1px', color: 'var(--green)' }}>README ↗</a>
       </div>
@@ -244,7 +244,7 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
     <div className="panel sidebar-panel">
       <style>{`@keyframes rainbowHue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }`}</style>
       <header style={{ marginBottom: '20px' }}>
-        <h3 style={{ margin: 0 }}>GEOMETRY_PROTOCOLS</h3>
+        <h3 style={{ margin: 0 }}>TOKEN_PROTOCOLS</h3>
       </header>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
 
@@ -260,7 +260,7 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
               <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
             </svg>
             <span style={{ fontSize: '0.6rem', marginTop: '10px', display: 'block' }}>
-              {userRhombus ? 'RHOMBUS_ACTIVE' : (rhombusState.active ? 'PLACE_ON_MAP' : 'INITIALIZE_RHOMBUS')}
+              {userRhombus ? 'TOKEN_PLACED' : (rhombusState.active ? 'CLICK MAP TO PLACE' : 'PLACE_MY_TOKEN')}
             </span>
           </button>
           {rhombusState.active && !userRhombus && (
@@ -269,17 +269,17 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
         </div>
 
         {userRhombus && (
-          <button className="upload-btn danger-btn" onClick={() => removeRhombus(userRhombus.id)} style={{ width: '100%', fontSize: '0.65rem' }}>PURGE_YOUR_RHOMBUS</button>
+          <button className="upload-btn danger-btn" onClick={() => removeRhombus(userRhombus.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_MY_TOKEN</button>
         )}
         {canRemoveSelected && selectedLocation?.id !== userRhombus?.id && (
-          <button className="upload-btn danger-btn" onClick={() => removeRhombus(selectedLocation.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_SELECTED_RHOMBUS</button>
+          <button className="upload-btn danger-btn" onClick={() => removeRhombus(selectedLocation.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_SELECTED_TOKEN</button>
         )}
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
           {/* 2 — Color */}
           <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>RHOMBUS_CHROMA_SYNC</label>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TOKEN_COLOR</label>
             <input
               type="color"
               value={rhombusState.color}
@@ -294,7 +294,7 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
 
           {/* 3 — Name */}
           <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>BEACON_NAME</label>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TOKEN_NAME</label>
             <input
               placeholder="ID_TAG"
               value={rhombusState.name}
@@ -305,9 +305,9 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
 
           {/* 4 — Description */}
           <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>DATA_DESCRIPTION</label>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TOKEN_NOTES</label>
             <textarea
-              placeholder="BEACON_FEED_SUMMARY"
+              placeholder="Add notes..."
               value={rhombusState.description}
               onChange={(e) => setRhombusState({ ...rhombusState, description: e.target.value })}
               style={{ width: '100%', height: '60px' }}
@@ -354,16 +354,16 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
 
           {/* 7 — SET button */}
           <button className="upload-btn" style={{ width: '100%', marginTop: '4px' }} onClick={handleSet}>
-            SET
+            SAVE_TOKEN_SETTINGS
           </button>
 
         </div>
 
         <div className="info-box" style={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: '1.6', borderTop: '1px solid var(--dark-green)', paddingTop: '15px', width: '100%' }}>
           <p style={{ color: 'var(--green)', fontWeight: 'bold', marginBottom: '5px' }}>INTERFACE_GUIDE:</p>
-          <p>• [CLICK MAP] TO DEPLOY RHOMBUS</p>
+          <p>• [CLICK MAP] TO PLACE YOUR TOKEN</p>
           <p>• [CLICK & DRAG] TO REPOSITION</p>
-          <p>• [PURGE] TO RESET DEPLOYMENT</p>
+          <p>• [REMOVE TOKEN] TO CLEAR YOUR PLACEMENT</p>
         </div>
       </div>
     </div>
@@ -448,6 +448,7 @@ export function SystemInfoMenu({ userName, token, currentTheme, onThemeChange }:
 
 interface DiceMenuProps {
   userName: string;
+  token?: string;
   socketRef: React.MutableRefObject<any>;
   rhombusState: any;
   setIsDiceTrayOpen: (v: any) => void;
@@ -456,7 +457,8 @@ interface DiceMenuProps {
   onCancelAttack?: () => void;
 }
 
-export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack }: DiceMenuProps) {
+export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack }: DiceMenuProps) {
+  const isAdmin = !!token;
   const diceTypes = [2, 4, 6, 8, 10, 12, 20, 100];
   const [diceCounts, setDiceCounts] = useState<Record<number, number>>({});
   const [workingMod, setWorkingMod] = useState<number>(0);
@@ -503,7 +505,9 @@ export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen,
             ATTACK ROLL — vs {attackPending.targetName}
           </div>
           <div style={{ color: 'var(--green)', fontSize: '0.75rem', marginBottom: '6px' }}>
-            {attackPending.attackType.toUpperCase()} · AC {attackPending.ac} · Roll {attackPending.ac}+ to hit
+            {isAdmin
+              ? `${attackPending.attackType.toUpperCase()} · AC ${attackPending.ac} · Roll ${attackPending.ac}+ to hit`
+              : attackPending.attackType.toUpperCase()}
           </div>
           <button className="upload-btn" style={{ width: '100%', padding: '5px', fontSize: '0.75rem', backgroundColor: 'transparent', color: '#888', border: '1px solid #444' }} onClick={() => { socketRef.current?.emit('cancelAttack'); onCancelAttack?.(); }}>
             CANCEL ATTACK
@@ -533,7 +537,7 @@ export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen,
         </div>
         <div style={{ display: 'flex', gap: '5px' }}>
           <button className="upload-btn" style={{ flex: 1 }} onClick={() => { if (workingMod !== 0) { setModifiers(p => [...p, workingMod]); setWorkingMod(0); } }}>ADD</button>
-          <button className="upload-btn" style={{ flex: 1 }} onClick={() => { setModifiers(p => p.slice(0, -1)); }}>DELETE LAST</button>
+          <button className="upload-btn" style={{ flex: 1 }} onClick={() => { setModifiers(p => p.slice(0, -1)); }}>REMOVE LAST</button>
         </div>
         <div style={{ display: 'flex', gap: '2px', marginTop: '5px' }}>
           {[3, 2, 1, -1, -2, -3].map(m => (
@@ -543,7 +547,7 @@ export function DiceMenu({ userName, socketRef, rhombusState, setIsDiceTrayOpen,
           ))}
         </div>
         <div style={{ minHeight: '20px', background: 'rgba(0,0,0,0.5)', marginTop: '5px', padding: '5px', fontSize: '0.75rem', wordBreak: 'break-all' }}>
-          {modifiers.length > 0 ? modifiers.map(m => m > 0 ? `+${m}` : m).join(' ') : 'No Modifiers'}
+          {modifiers.length > 0 ? modifiers.map(m => m > 0 ? `+${m}` : m).join(' ') : 'NO MODIFIERS'}
         </div>
       </div>
 
@@ -625,6 +629,11 @@ export function QuickAccessMenu({ locations, onSelect, onZoom, selectedLocation,
         <h3 style={{ margin: 0 }}>QUICK_ACCESS</h3>
         <button onClick={() => setIsOpen(false)} className="close-btn" style={{ position: 'static' }}>◀</button>
       </header>
+      <button
+        className="utility-btn"
+        style={{ width: '100%', marginBottom: '10px' }}
+        onClick={() => onZoom({ pos: [0, 0, 0], size: 80 })}
+      >⌂ RETURN_TO_ORIGIN</button>
       <div className="location-list" style={{ maxHeight: 'calc(100vh - 250px)' }}>
         {danger.length > 0 && (
           <>
@@ -751,18 +760,19 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
         <div className="rail-top" style={{ borderBottom: '1px solid var(--dark-green)' }}>
           <button className={`rail-btn system-trigger ${activeMenu === 'system_info' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'system_info' ? 'none' : 'system_info')} title="SYSTEM_INFO">
             <svg width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="system-icon-svg">
-              <g fill="none">
-                <path fill="currentColor" d="M3.75 18a.75.75 0 0 0-1.5 0zm-1.5-4a.75.75 0 0 0 1.5 0zM7 8.75c.964 0 1.612.002 2.095.067c.461.062.659.169.789.3l1.06-1.062c-.455-.455-1.022-.64-1.65-.725c-.606-.082-1.372-.08-2.294-.08zM11.75 12c0-.922.002-1.688-.08-2.294c-.084-.628-.27-1.195-.726-1.65l-1.06 1.06c.13.13.237.328.3.79c.064.482.066 1.13.066 2.094zM7 7.25c-.922 0-1.688-.002-2.294.08c-.628.084-1.195.27-1.65.725l1.06 1.061c.13-.13.328-.237.79-.3c.482-.064 1.13-.066 2.094-.066zM3.75 12c0-.964.002-1.612.067-2.095c.062-.461.169-.659.3-.789l-1.062-1.06c-.455.455-.64 1.022-.725 1.65c-.082.606-.08 1.372-.08 2.294zm0 10v-4h-1.5v4zm0-8v-2h-1.5v2z" />
-                <path stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" d="M7 22v-6c0-1.886 0-2.828.586-3.414S9.114 12 11 12h2c1.886 0 2.828 0 3.414.586c.472.471.564 1.174.582 2.414M17 22v-2.75m4-11.478c0-1.34 0-2.011-.356-2.525s-.984-.75-2.24-1.22c-2.455-.921-3.682-1.381-4.543-.785C13 3.84 13 5.15 13 7.772V12m8 10V12M4 8V6.5c0-.943 0-1.414.293-1.707S5.057 4.5 6 4.5h2c.943 0 1.414 0 1.707.293S10 5.557 10 6.5V8M7 4V2m15 20H2m8-7h.5m3.5 0h-1.5M10 18h4" />
-              </g>
+              <path d="M3 21h18" />
+              <path d="M5 21V9h4v12" />
+              <path d="M9 21V4h6v17" />
+              <path d="M15 21V11h4v10" />
+              <path d="M12 7h.01M12 10h.01M12 13h.01M12 16h.01M7 12h.01M7 15h.01M17 14h.01M17 17h.01" />
             </svg>
           </button>
         </div>
         <div style={{ padding: '10px 0', display: 'flex', justifyContent: 'center' }}>
           <button className="rail-btn" onClick={onLogout} title="TERMINATE_SESSION">
-            <svg width="24" height="24" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path fill="currentColor" d="m22.5 5.74l-1 1.73a11 11 0 1 1-11 0l-1-1.73a13 13 0 1 0 13 0" />
-              <path fill="currentColor" d="M15 2h2v14h-2z" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+              <line x1="12" y1="2" x2="12" y2="12" />
             </svg>
           </button>
         </div>
@@ -774,12 +784,15 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
             </svg>
           </button>
           <button className={`rail-btn ${activeMenu === 'nav_controls' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'nav_controls' ? 'none' : 'nav_controls')} title="NAV_CONTROLS">
-            <svg width="24" height="24" viewBox="0 0 256 256" fill="none" stroke="currentColor" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
-              <path fill="currentColor" d="M208 144h-72V95.19a40 40 0 1 0-16 0V144H48a16 16 0 0 0-16 16v48a16 16 0 0 0 16 16h160a16 16 0 0 0 16-16v-48a16 16 0 0 0-16-16M104 56a24 24 0 1 1 24 24a24 24 0 0 1-24-24m104 152H48v-48h160zm-40-96h32a8 8 0 0 1 0 16h-32a8 8 0 0 1 0-16" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="6" r="3" />
+              <line x1="12" y1="9" x2="12" y2="14" />
+              <rect x="4" y="14" width="16" height="6" rx="2" />
+              <path d="M16.5 17h.01" />
             </svg>
           </button>
-          <button className={`rail-btn ${activeMenu === 'geometry_protocols' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'geometry_protocols' ? 'none' : 'geometry_protocols')} title="GEOMETRY_PROTOCOLS">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill={rhombusState?.color || 'none'} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <button className={`rail-btn ${activeMenu === 'geometry_protocols' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'geometry_protocols' ? 'none' : 'geometry_protocols')} title="TOKEN_PROTOCOLS">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill={rhombusState?.color || 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
             </svg>
           </button>
@@ -789,20 +802,27 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
             </svg>
           </button>
           <button className={`rail-btn ${activeMenu === 'dice_menu' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'dice_menu' ? 'none' : 'dice_menu')} title="DICE_ROLLER">
-            <svg width="24" height="24" viewBox="-5 -10 110 135" fill="currentColor" style={{ transform: 'scale(1.5)' }}>
-              <path d="m32.19,44.88s-.07,0-.1,0l-25.59-5.16c-.18-.04-.33-.17-.38-.35-.05-.18,0-.37.13-.5L40.46,4.83c.16-.16.4-.19.59-.08.19.11.3.33.25.55l-8.62,39.19c-.05.23-.26.39-.49.39Zm-24.58-5.96l24.19,4.87L39.96,6.74,7.61,38.91Z" />
-              <path d="m32.19,44.88c-.13,0-.25-.05-.35-.14-.13-.12-.18-.3-.14-.47L40.32,5.08c.03-.15.14-.28.28-.35.14-.06.31-.06.45.02l44.72,25.03c.18.1.28.3.25.5s-.17.37-.37.42l-53.34,14.16s-.09.02-.13.02ZM41.16,5.95l-8.3,37.73,51.36-13.63L41.16,5.95Z" />
-              <path d="m85.53,30.72c-.08,0-.17-.02-.24-.06L40.57,5.63c-.22-.12-.32-.4-.22-.63.1-.23.36-.36.6-.28l41.45,12.44c.17.05.3.18.34.35l3.26,12.59c.05.19-.02.4-.18.52-.09.07-.2.1-.31.1ZM45.03,6.98l39.72,22.24-2.9-11.19L45.03,6.98Z" />
-              <path d="m72.31,87.15c-.14,0-.27-.06-.36-.16L31.83,44.72c-.12-.13-.17-.31-.12-.48.05-.17.18-.3.35-.35l53.34-14.16c.17-.05.35,0,.48.12.13.12.18.3.14.47l-13.22,56.44c-.04.18-.18.32-.36.37-.04.01-.09.02-.13.02Zm-39.18-42.51l38.9,41,12.82-54.72-51.72,13.73Z" />
-              <path d="m23.28,88.37c-.15,0-.29-.07-.38-.18-.1-.12-.14-.27-.11-.42l8.91-43.5c.04-.18.17-.33.35-.38.18-.05.37,0,.5.14l40.12,42.28c.14.14.17.35.1.54-.08.18-.25.3-.45.31l-49.03,1.22h-.01Zm9.2-42.96l-8.59,41.94,47.28-1.17-38.69-40.77Z" />
-              <path d="m23.28,88.37c-.21,0-.4-.13-.47-.34L6.12,39.38c-.06-.17-.02-.36.1-.49.12-.13.3-.19.47-.16l25.59,5.16c.13.03.24.1.32.21.07.11.1.25.07.38l-8.91,43.5c-.04.22-.23.38-.46.4-.01,0-.02,0-.03,0ZM7.35,39.88l15.81,46.09,8.44-41.21-24.25-4.89Z" />
-              <path d="m62.66,95.31s-.06,0-.09,0l-39.37-6.94c-.25-.04-.43-.27-.41-.53.02-.26.23-.46.49-.46l49.03-1.22c.2,0,.4.12.48.32.08.2.02.42-.14.56l-9.66,8.16c-.09.08-.21.12-.32.12Zm-34.36-7.06l34.22,6.03,8.39-7.09-42.61,1.06Z" />
-              <path d="m72.31,87.15c-.08,0-.16-.02-.23-.05-.2-.1-.31-.34-.26-.56l13.22-56.44c.05-.23.25-.38.48-.39.2-.04.43.16.49.38l7.87,32.15c.04.16,0,.32-.11.45l-21.09,24.28c-.1.11-.24.17-.38.17Zm13.23-54.79l-12.28,52.44,19.6-22.56-7.32-29.88Z" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 20.5 7 20.5 17 12 22 3.5 17 3.5 7" />
+              <polygon points="12 8 16.6 15.2 7.4 15.2" />
+              <line x1="12" y1="2" x2="12" y2="8" />
+              <line x1="12" y1="8" x2="3.5" y2="7" />
+              <line x1="12" y1="8" x2="20.5" y2="7" />
+              <line x1="3.5" y1="7" x2="7.4" y2="15.2" />
+              <line x1="20.5" y1="7" x2="16.6" y2="15.2" />
+              <line x1="3.5" y1="17" x2="7.4" y2="15.2" />
+              <line x1="20.5" y1="17" x2="16.6" y2="15.2" />
+              <line x1="12" y1="22" x2="7.4" y2="15.2" />
+              <line x1="12" y1="22" x2="16.6" y2="15.2" />
             </svg>
           </button>
           <button className={`rail-btn ${measureMode ? 'active' : ''}`} onClick={() => setMeasureMode(!measureMode)} title="MEASURE_TAPE">
-            <svg width="24" height="24" viewBox="0 0 24 24">
-              <path fill="currentColor" d="M22.96 7.404L16.596 1.04a.5.5 0 0 0-.707 0L1.04 15.889a.5.5 0 0 0 0 .707l6.364 6.364a.5.5 0 0 0 .707 0l3.18-3.18l.002-.002l2.827-2.827h.001v-.002l2.829-2.827v-.001l2.828-2.828l3.182-3.182a.5.5 0 0 0 0-.707m-3.535 2.828l-1.768-1.767l-.007-.007a.5.5 0 0 0-.7.714l1.768 1.767l-2.122 2.122l-3.182-3.182l-.007-.007a.5.5 0 0 0-.7.714l3.182 3.182l-2.121 2.121L12 14.121a.5.5 0 0 0-.707.707l1.767 1.768l-2.12 2.122l-3.183-3.183l-.007-.007a.5.5 0 1 0-.7.714l3.182 3.183l-2.475 2.474l-5.656-5.657L16.242 2.101L21.9 7.758z" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0Z" />
+              <path d="m14.5 12.5 2-2" />
+              <path d="m11.5 9.5 2-2" />
+              <path d="m8.5 6.5 2-2" />
+              <path d="m17.5 15.5 2-2" />
             </svg>
           </button>
           {isPrimaryAdmin && (
@@ -815,8 +835,10 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
             </button>
           )}
           <button className={`rail-btn ${isChatOpen ? 'active' : ''} ${hasUnreadChat && !isChatOpen ? 'unread-flash' : ''}`} onClick={() => setIsChatOpen(!isChatOpen)} title="GLOBAL_CHAT">
-            <svg width="24" height="24" viewBox="0 0 256 256" fill="none" stroke="currentColor" strokeWidth="0" strokeLinecap="round" strokeLinejoin="round">
-              <path fill="currentColor" d="M122.5 124.88a4 4 0 0 1 0 6.24l-40 32a4 4 0 0 1-5-6.24L113.6 128L77.5 99.12a4 4 0 0 1 5-6.24ZM176 156h-40a4 4 0 0 0 0 8h40a4 4 0 0 0 0-8m52-100v144a12 12 0 0 1-12 12H40a12 12 0 0 1-12-12V56a12 12 0 0 1 12-12h176a12 12 0 0 1 12 12m-8 0a4 4 0 0 0-4-4H40a4 4 0 0 0-4 4v144a4 4 0 0 0 4 4h176a4 4 0 0 0 4-4Z" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <polyline points="7 9 10 12 7 15" />
+              <line x1="12" y1="15" x2="16" y2="15" />
             </svg>
           </button>
           <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} title="CITY_NET // BANK">
@@ -854,9 +876,9 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
                     onChange={e => setMasterVolume(parseFloat(e.target.value))}
                     className="vol-slider"
                   />
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--green)', opacity: 0.6 }}>
-                    <path d="M20 2H4c-.55 0-1 .45-1 1v18c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1M5 4h14v8H5zm14 16H5v-6h14z" />
-                    <path d="M15 18h3v-2h-3v.5h-3v1h3zm-8-2a1 1 0 1 0 0 2a1 1 0 1 0 0-2" />
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--green)', opacity: 0.6 }}>
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                   </svg>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
@@ -877,12 +899,16 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
             )}
             <button className={`rail-btn ${!audioEnabled ? 'muted' : ''}`} onClick={() => setAudioEnabled(!audioEnabled)} title={`${audioEnabled ? 'CLICK: MUTE_AUDIO' : 'CLICK: UNMUTE_AUDIO'} // HOVER: MASTER_VOLUME`}>
               {audioEnabled ? (
-                <svg width="24" height="24" viewBox="0 0 512 512" fill="none" stroke="currentColor" strokeWidth="32" strokeLinecap="round" strokeLinejoin="round">
-                  <path fill="currentColor" fillRule="evenodd" d="m403.966 426.944l-33.285-26.63c74.193-81.075 74.193-205.015-.001-286.09l33.285-26.628c86.612 96.712 86.61 242.635.001 339.348M319.58 155.105l-33.324 26.659c39.795 42.568 39.794 108.444.001 151.012l33.324 26.658c52.205-58.22 52.205-146.109-.001-204.329m-85.163-69.772l-110.854 87.23H42.667v170.666h81.02l110.73 85.458z" />
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
                 </svg>
               ) : (
-                <svg width="24" height="24" viewBox="0 0 512 512" fill="none" stroke="currentColor" strokeWidth="32" strokeLinecap="round" strokeLinejoin="round">
-                  <path fill="currentColor" fillRule="evenodd" d="m403.375 257.27l59.584 59.584l-30.167 30.166l-59.583-59.583l-59.584 59.583l-30.166-30.166l59.583-59.584l-59.583-59.583l30.166-30.166l59.584 59.583l59.583-59.583l30.167 30.166zM234.417 85.333l-110.854 87.23H42.667v170.666h81.02l110.73 85.458z" />
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <line x1="23" y1="9" x2="17" y2="15" />
+                  <line x1="17" y1="9" x2="23" y2="15" />
                 </svg>
               )}
             </button>
@@ -896,7 +922,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
-          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} />}
+          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} />}
         </div>
       </div>
     </div>

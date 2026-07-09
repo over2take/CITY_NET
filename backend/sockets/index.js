@@ -347,8 +347,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     });
 
     socket.on('denyEditing', (data) => { io.emit('editingDenied', data); });
-    socket.on('revokeEditing', (data) => { io.emit('editingStopped'); io.emit('editingRevoked', data); });
-    socket.on('editingFinished', () => { io.emit('editingStopped'); });
+    socket.on('revokeEditing', (data) => { elevatedUsers.delete(data.userId); io.emit('editingStopped'); io.emit('editingRevoked', data); broadcastActiveUsers(); });
+    socket.on('editingFinished', (data) => { if (data?.userId) elevatedUsers.delete(data.userId); io.emit('editingStopped'); });
 
     socket.on('requestRhombusPurge', (data) => {
       console.log(`Cinematic Purge Requested for owner: ${data.owner}, id: ${data.id}`);

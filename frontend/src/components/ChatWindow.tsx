@@ -267,6 +267,7 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
 
           <div style={{ width: '160px', display: 'flex', flexDirection: 'column', background: 'rgba(0,10,0,0.3)', flexShrink: 0 }}>
             <div style={{ padding: '8px', fontSize: '0.7rem', fontWeight: 'bold', borderBottom: '2px solid var(--dark-green)', color: 'var(--green)', textShadow: 'var(--glow)', textAlign: 'center' }}>OPERATORS_ONLINE</div>
+
             <div style={{ flex: 1, overflowY: 'auto', padding: '10px', position: 'relative' }}>
               {activeUsers.map((user: any) => {
                 const dotColor = user.isAdmin ? '#ff0000' : (user.isTemporaryAdmin ? '#ffaa00' : (user.isNPC ? (user.isActive === false ? '#555' : '#aa00ff') : 'var(--green)'));

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { LogoScene } from './LogoScene';
 
 export type LoginView = 'login' | 'register' | 'forgot' | 'forgot_awaiting' | 'reset' | 'pending';
 
@@ -161,7 +162,10 @@ export function SecureLogin({
 
   return (
     <div className="modal-overlay">
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ width: '350px' }}>
+          <LogoScene />
+        </div>
         <div className="panel login-panel" style={{ textAlign: 'center', minWidth: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div style={{ position: 'absolute', top: '10px', right: '10px' }}>
             <button className={`admin-toggle ${!audioEnabled ? 'muted' : ''}`} onClick={onToggleAudio} style={{ padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -177,8 +181,7 @@ export function SecureLogin({
             </button>
           </div>
 
-          <h1 style={{ fontSize: '3rem', margin: '0', textShadow: 'var(--glow)' }}>CITY_NET</h1>
-          <div style={{ fontSize: '0.65rem', opacity: 0.5, letterSpacing: '4px', marginTop: '35px', marginBottom: '15px' }}>NAV_OS_v{__APP_VERSION__}</div>
+          <div style={{ fontSize: '0.65rem', opacity: 0.5, letterSpacing: '4px', marginBottom: '15px', marginTop: '10px' }}>NAV_OS_v{__APP_VERSION__}</div>
 
           {loginError && (
             <div style={{ fontSize: '0.7rem', color: loginError.includes('updated') ? 'var(--green)' : '#ff3333', marginBottom: '10px', letterSpacing: '1px' }}>
@@ -198,7 +201,7 @@ export function SecureLogin({
           {secureModeEnabled && loginView === 'login' && (
             <form onSubmit={handleSecureLogin} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
               <input value={loginForm.username} onChange={e => setLoginForm(f => ({ ...f, username: e.target.value }))} placeholder="OPERATOR_ID" style={{ textAlign: 'center', width: '100%' }} />
-              <input type="password" value={loginForm.password} onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))} placeholder="ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
+              <input type="password" value={loginForm.password} onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))} placeholder="PASSWORD" style={{ textAlign: 'center', width: '100%' }} />
               <button type="submit" className="upload-btn" style={{ fontSize: '1.1rem', padding: '10px' }}>LOGIN</button>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
                 <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setLoginView('register'); setLoginError(''); }}>REGISTER</button>
@@ -211,8 +214,8 @@ export function SecureLogin({
           {secureModeEnabled && loginView === 'register' && (
             <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
               <input value={registerForm.username} onChange={e => setRegisterForm(f => ({ ...f, username: e.target.value }))} placeholder="OPERATOR_ID" style={{ textAlign: 'center', width: '100%' }} />
-              <input type="password" value={registerForm.password} onChange={e => setRegisterForm(f => ({ ...f, password: e.target.value }))} placeholder="ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
-              <input type="password" value={registerForm.confirmPassword} onChange={e => setRegisterForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="CONFIRM_ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
+              <input type="password" value={registerForm.password} onChange={e => setRegisterForm(f => ({ ...f, password: e.target.value }))} placeholder="PASSWORD" style={{ textAlign: 'center', width: '100%' }} />
+              <input type="password" value={registerForm.confirmPassword} onChange={e => setRegisterForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="CONFIRM_PASSWORD" style={{ textAlign: 'center', width: '100%' }} />
               <select value={registerForm.security_question} onChange={e => setRegisterForm(f => ({ ...f, security_question: e.target.value }))} style={{ width: '100%' }}>
                 <option value="">SELECT_SECURITY_QUESTION</option>
                 <option>What was the color of your first car?</option>
@@ -251,7 +254,7 @@ export function SecureLogin({
                 <>
                   <div style={{ fontSize: '0.65rem', opacity: 0.7, textAlign: 'center', letterSpacing: '1px', padding: '4px 0' }}>{securityQuestion}</div>
                   <input value={forgotForm.security_answer} onChange={e => setForgotForm(f => ({ ...f, security_answer: e.target.value }))} placeholder="SECURITY_ANSWER" style={{ textAlign: 'center', width: '100%' }} autoComplete="new-password" />
-                  <button type="submit" className="upload-btn">VERIFY</button>
+                  <button type="submit" className="upload-btn">SUBMIT_ANSWER</button>
                 </>
               )}
               <button type="button" className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={() => { setForgotForm({ username: '', security_answer: '' }); setSecurityQuestion(''); setLoginView('login'); setLoginError(''); }}>BACK_TO_LOGIN</button>
@@ -274,10 +277,10 @@ export function SecureLogin({
           {secureModeEnabled && loginView === 'reset' && (
             <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
               {resetUsername && <div style={{ fontSize: '0.7rem', opacity: 0.5, letterSpacing: '2px' }}>{resetUsername}</div>}
-              <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>SET_NEW_ACCESS_CODE</div>
-              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="NEW_ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
-              <input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} placeholder="CONFIRM_ACCESS_CODE" style={{ textAlign: 'center', width: '100%' }} />
-              <button type="submit" className="upload-btn">CONFIRM</button>
+              <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>SET_NEW_PASSWORD</div>
+              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="NEW_PASSWORD" style={{ textAlign: 'center', width: '100%' }} />
+              <input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} placeholder="CONFIRM_PASSWORD" style={{ textAlign: 'center', width: '100%' }} />
+              <button type="submit" className="upload-btn">SET_PASSWORD</button>
             </form>
           )}
         </div>

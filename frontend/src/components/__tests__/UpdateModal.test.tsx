@@ -126,7 +126,7 @@ describe('UpdateModal — Update Now', () => {
     render(<UpdateModal {...baseProps} isDocker={true} />);
     await userEvent.click(screen.getByText('UPDATE NOW'));
     await waitFor(() => {
-      expect(screen.getByText(/Update in progress/)).toBeInTheDocument();
+      expect(screen.getByText(/UPDATE IN PROGRESS/)).toBeInTheDocument();
     });
   });
 
