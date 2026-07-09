@@ -95,9 +95,9 @@ describe('DiceMenu', () => {
     expect(setIsDiceTrayOpen).toHaveBeenCalledWith(true);
   });
 
-  it('shows No Modifiers by default', () => {
+  it('shows NO MODIFIERS by default', () => {
     render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} />);
-    expect(screen.getByText('No Modifiers')).toBeInTheDocument();
+    expect(screen.getByText('NO MODIFIERS')).toBeInTheDocument();
   });
 
   it('adds modifier on ADD click', async () => {
@@ -105,7 +105,7 @@ describe('DiceMenu', () => {
     const modPlusBtns = screen.getAllByText('+');
     await userEvent.click(modPlusBtns[modPlusBtns.length - 1]); // modifier +1 btn in modifier section
     await userEvent.click(screen.getByText('ADD'));
-    expect(screen.queryByText('No Modifiers')).not.toBeInTheDocument();
+    expect(screen.queryByText('NO MODIFIERS')).not.toBeInTheDocument();
   });
 
   it('toggles dice tray on DICE_TRAY.exe click', async () => {
@@ -129,12 +129,20 @@ describe('DiceMenu', () => {
     expect(screen.getByText(/ATTACK ROLL — vs ENEMY_NODE/)).toBeInTheDocument();
   });
 
-  it('shows attack type and AC in banner', () => {
+  it('shows attack type, AC and roll threshold to admins', () => {
     const pending = { targetId: 2, targetName: 'BRUTE', attackType: 'ranged' as const, ac: 16 };
-    render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
+    render(<DiceMenu userName="GHOST" token="admin-token" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
     expect(screen.getByText(/RANGED/)).toBeInTheDocument();
     expect(screen.getByText(/AC 16/)).toBeInTheDocument();
     expect(screen.getByText(/Roll 16\+ to hit/)).toBeInTheDocument();
+  });
+
+  it('hides AC and roll threshold from non-admin players', () => {
+    const pending = { targetId: 2, targetName: 'BRUTE', attackType: 'ranged' as const, ac: 16 };
+    render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
+    expect(screen.getByText(/RANGED/)).toBeInTheDocument();
+    expect(screen.queryByText(/AC 16/)).toBeNull();
+    expect(screen.queryByText(/Roll 16\+ to hit/)).toBeNull();
   });
 
   it('renders CANCEL ATTACK button when attackPending is set', () => {
@@ -166,7 +174,6 @@ describe('DiceMenu', () => {
     const pending = { targetId: 6, targetName: 'GRUNT', attackType: 'melee' as const, ac: 11 };
     render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
     expect(screen.getByText(/MELEE/)).toBeInTheDocument();
-    expect(screen.getByText(/AC 11/)).toBeInTheDocument();
   });
 
   it('banner does not appear when different target is pending (no cross-contamination)', () => {
@@ -247,52 +254,52 @@ describe('QuickAccessMenu', () => {
 const baseRhombus = { active: false, color: '#00ff00', name: '', description: '', hp_max: 0 };
 
 describe('GeometryMenu', () => {
-  it('renders GEOMETRY_PROTOCOLS header', () => {
+  it('renders TOKEN_PROTOCOLS header', () => {
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('GEOMETRY_PROTOCOLS')).toBeInTheDocument();
+    expect(screen.getByText('TOKEN_PROTOCOLS')).toBeInTheDocument();
   });
 
-  it('shows INITIALIZE_RHOMBUS when no active rhombus', () => {
+  it('shows PLACE_MY_TOKEN when no active rhombus', () => {
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('INITIALIZE_RHOMBUS')).toBeInTheDocument();
+    expect(screen.getByText('PLACE_MY_TOKEN')).toBeInTheDocument();
   });
 
-  it('shows RHOMBUS_ACTIVE when user has deployed rhombus', () => {
+  it('shows TOKEN_PLACED when user has deployed rhombus', () => {
     const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('RHOMBUS_ACTIVE')).toBeInTheDocument();
+    expect(screen.getByText('TOKEN_PLACED')).toBeInTheDocument();
   });
 
-  it('shows PURGE_YOUR_RHOMBUS button when rhombus is active', () => {
+  it('shows REMOVE_MY_TOKEN button when rhombus is active', () => {
     const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('PURGE_YOUR_RHOMBUS')).toBeInTheDocument();
+    expect(screen.getByText('REMOVE_MY_TOKEN')).toBeInTheDocument();
   });
 
-  it('emits requestRhombusPurge on purge click', async () => {
+  it('emits requestRhombusPurge on remove click', async () => {
     const socketRef = makeSocketRef();
     const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={socketRef} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    await userEvent.click(screen.getByText('PURGE_YOUR_RHOMBUS'));
+    await userEvent.click(screen.getByText('REMOVE_MY_TOKEN'));
     expect(socketRef.current.emit).toHaveBeenCalledWith('requestRhombusPurge', expect.objectContaining({ id: 10 }));
   });
 
-  it('calls syncRhombusToDB when SET button is clicked', async () => {
+  it('calls syncRhombusToDB when SAVE_TOKEN_SETTINGS button is clicked', async () => {
     const syncRhombusToDB = vi.fn();
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={syncRhombusToDB} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    await userEvent.click(screen.getByText('SET'));
+    await userEvent.click(screen.getByText('SAVE_TOKEN_SETTINGS'));
     expect(syncRhombusToDB).toHaveBeenCalled();
   });
 
@@ -319,19 +326,19 @@ describe('GeometryMenu', () => {
     expect(screen.getByText('MELEE')).toBeInTheDocument();
   });
 
-  it('shows PLACE_ON_MAP label when rhombus is in active/scanning state', () => {
+  it('shows CLICK MAP TO PLACE label when rhombus is in active/scanning state', () => {
     render(
       <GeometryMenu rhombusState={{ ...baseRhombus, active: true }} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('PLACE_ON_MAP')).toBeInTheDocument();
+    expect(screen.getByText('CLICK MAP TO PLACE')).toBeInTheDocument();
     expect(screen.getByText('place user token')).toBeInTheDocument();
   });
 
-  it('shows INITIALIZE_RHOMBUS when inactive and no deployed rhombus', () => {
+  it('shows PLACE_MY_TOKEN when inactive and no deployed rhombus', () => {
     render(
       <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('INITIALIZE_RHOMBUS')).toBeInTheDocument();
+    expect(screen.getByText('PLACE_MY_TOKEN')).toBeInTheDocument();
   });
 });
 
@@ -340,12 +347,18 @@ describe('GeometryMenu', () => {
 // The banner must not expose the target's AC — only the roll value.
 
 describe('Attack result banner AC visibility', () => {
-  it('hit result shows roll number but not AC', () => {
+  it('admin pending banner shows AC; non-admin does not', () => {
     const pending = { targetId: 1, targetName: 'TARGET', attackType: 'melee' as const, ac: 18 };
+
+    // Admin sees AC
+    const { unmount } = render(<DiceMenu userName="GHOST" token="admin-token" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
+    expect(screen.getByText(/AC 18/)).toBeInTheDocument();
+    expect(screen.queryByText(/rolled/)).toBeNull();
+    unmount();
+
+    // Non-admin does not see AC
     render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
-    // The banner text for a result is rendered in App.tsx info window, not DiceMenu.
-    // Verify the attack banner itself doesn't leak AC in the roll-pending state.
-    expect(screen.getByText(/AC 18/)).toBeInTheDocument(); // pending banner shows AC — that's intentional
-    expect(screen.queryByText(/rolled/)).toBeNull();        // no result yet, no roll shown
+    expect(screen.queryByText(/AC 18/)).toBeNull();
+    expect(screen.queryByText(/rolled/)).toBeNull();
   });
 });

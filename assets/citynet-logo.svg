@@ -1,0 +1,91 @@
+<svg width="680" height="680" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>CITY_NET logo</title>
+  <desc>Logo for the CITY_NET virtual tabletop app: a faceted rhombus gem over a wireframe city skyline inside a hex badge, with the app name below</desc>
+
+  <style>
+    .plate { fill: #05100a; stroke: #00ff88; stroke-width: 3; }
+    .plate-inner { fill: none; stroke: #00ff88; stroke-width: 1; opacity: 0.35; }
+    .sky-bldg { fill: #05100a; stroke: #00ff88; stroke-width: 1.6; }
+    .sky-bldg-far { fill: #05100a; stroke: #0d7a44; stroke-width: 1.2; }
+    .win { fill: #00ff88; opacity: 0.85; }
+    .win-dim { fill: #00ff88; opacity: 0.35; }
+    .gem { fill: #071c11; stroke: #00ff88; stroke-width: 3; }
+    .facet { stroke: #00ff88; stroke-width: 1.2; fill: none; opacity: 0.7; }
+    .facet-lit { fill: #00ff88; opacity: 0.14; }
+    .gemglow { fill: none; stroke: #00ff88; opacity: 0.2; stroke-width: 1; }
+    .baseline { stroke: #00ff88; stroke-width: 2; }
+    .tick { stroke: #00ff88; stroke-width: 1.5; opacity: 0.6; }
+    .name { font-family: monospace; fill: #00ff88; font-size: 58px; font-weight: bold; letter-spacing: 4px; text-anchor: middle; }
+    .tag { font-family: monospace; fill: #00ff88; font-size: 17px; letter-spacing: 10px; text-anchor: middle; opacity: 0.6; }
+  </style>
+
+  <!-- hex badge -->
+  <polygon points="340,48 560,175 560,400 340,527 120,400 120,175" class="plate"/>
+  <polygon points="340,66 544,184 544,391 340,509 136,391 136,184" class="plate-inner"/>
+
+  <!-- far skyline (dimmer) -->
+  <g>
+    <rect x="172" y="300" width="34" height="120" class="sky-bldg-far"/>
+    <rect x="238" y="268" width="30" height="152" class="sky-bldg-far"/>
+    <rect x="414" y="282" width="30" height="138" class="sky-bldg-far"/>
+    <rect x="474" y="312" width="34" height="108" class="sky-bldg-far"/>
+  </g>
+
+  <!-- near skyline -->
+  <g>
+    <rect x="196" y="330" width="52" height="90" class="sky-bldg"/>
+    <rect x="262" y="296" width="46" height="124" class="sky-bldg"/>
+    <rect x="372" y="304" width="46" height="116" class="sky-bldg"/>
+    <rect x="432" y="336" width="52" height="84" class="sky-bldg"/>
+    <!-- windows -->
+    <rect x="206" y="342" width="8" height="8" class="win"/>
+    <rect x="222" y="342" width="8" height="8" class="win-dim"/>
+    <rect x="206" y="360" width="8" height="8" class="win-dim"/>
+    <rect x="222" y="360" width="8" height="8" class="win"/>
+    <rect x="206" y="378" width="8" height="8" class="win"/>
+    <rect x="222" y="378" width="8" height="8" class="win-dim"/>
+    <rect x="272" y="308" width="8" height="8" class="win"/>
+    <rect x="288" y="308" width="8" height="8" class="win-dim"/>
+    <rect x="272" y="326" width="8" height="8" class="win-dim"/>
+    <rect x="288" y="326" width="8" height="8" class="win"/>
+    <rect x="272" y="344" width="8" height="8" class="win"/>
+    <rect x="288" y="344" width="8" height="8" class="win"/>
+    <rect x="382" y="316" width="8" height="8" class="win-dim"/>
+    <rect x="398" y="316" width="8" height="8" class="win"/>
+    <rect x="382" y="334" width="8" height="8" class="win"/>
+    <rect x="398" y="334" width="8" height="8" class="win-dim"/>
+    <rect x="382" y="352" width="8" height="8" class="win"/>
+    <rect x="398" y="352" width="8" height="8" class="win"/>
+    <rect x="442" y="348" width="8" height="8" class="win"/>
+    <rect x="458" y="348" width="8" height="8" class="win-dim"/>
+    <rect x="442" y="366" width="8" height="8" class="win-dim"/>
+    <rect x="458" y="366" width="8" height="8" class="win"/>
+  </g>
+
+  <!-- ground line with ticks -->
+  <line x1="150" y1="420" x2="530" y2="420" class="baseline"/>
+  <line x1="180" y1="420" x2="180" y2="430" class="tick"/>
+  <line x1="240" y1="420" x2="240" y2="430" class="tick"/>
+  <line x1="300" y1="420" x2="300" y2="430" class="tick"/>
+  <line x1="380" y1="420" x2="380" y2="430" class="tick"/>
+  <line x1="440" y1="420" x2="440" y2="430" class="tick"/>
+  <line x1="500" y1="420" x2="500" y2="430" class="tick"/>
+
+  <!-- rhombus gem floating above the city -->
+  <polygon points="340,118 412,208 340,298 268,208" fill="#05100a"/>
+  <polygon points="340,118 412,208 340,298 268,208" class="gemglow" transform="translate(-340 -208) scale(1.12) translate(303.5 185.7)"/>
+  <polygon points="340,118 412,208 340,298 268,208" class="gem"/>
+  <!-- facets -->
+  <polygon points="340,118 412,208 340,208" class="facet-lit"/>
+  <polygon points="340,208 268,208 340,298" class="facet-lit"/>
+  <line x1="268" y1="208" x2="412" y2="208" class="facet"/>
+  <line x1="340" y1="118" x2="340" y2="298" class="facet"/>
+  <line x1="340" y1="118" x2="304" y2="208" class="facet"/>
+  <line x1="340" y1="118" x2="376" y2="208" class="facet"/>
+  <line x1="304" y1="208" x2="340" y2="298" class="facet"/>
+  <line x1="376" y1="208" x2="340" y2="298" class="facet"/>
+
+  <!-- app name -->
+  <text x="340" y="608" class="name">CITY_NET</text>
+  <text x="340" y="648" class="tag">TACTICAL VTT</text>
+</svg>

@@ -4,6 +4,8 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SecureLogin } from '../SecureLogin';
 
+vi.mock('../LogoScene', () => ({ LogoScene: () => null }));
+
 const StatusLogDisplay = () => <div data-testid="status-log" />;
 
 const baseProps = () => ({
@@ -38,7 +40,7 @@ describe('Non-secure login (secureModeEnabled=false)', () => {
     render(<SecureLogin {...baseProps()} secureModeEnabled={false} />);
     expect(screen.getByPlaceholderText('OPERATOR_ID')).toBeInTheDocument();
     expect(screen.getByText('LOGIN')).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('ACCESS_CODE')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('PASSWORD')).not.toBeInTheDocument();
   });
 
   it('calls onSimpleLogin with the entered name', async () => {
@@ -63,8 +65,8 @@ describe('Secure login registration', () => {
     render(<SecureLogin {...baseProps()} />);
     await userEvent.click(screen.getByText('REGISTER'));
     await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), 'GHOST');
-    await userEvent.type(screen.getByPlaceholderText('ACCESS_CODE'), 'pass1');
-    await userEvent.type(screen.getByPlaceholderText('CONFIRM_ACCESS_CODE'), 'pass2');
+    await userEvent.type(screen.getByPlaceholderText('PASSWORD'), 'pass1');
+    await userEvent.type(screen.getByPlaceholderText('CONFIRM_PASSWORD'), 'pass2');
     await userEvent.click(screen.getByText('CREATE_ACCOUNT'));
     expect(screen.getByText('Passwords do not match')).toBeInTheDocument();
   });
@@ -74,8 +76,8 @@ describe('Secure login registration', () => {
     render(<SecureLogin {...baseProps()} />);
     await userEvent.click(screen.getByText('REGISTER'));
     await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), 'GHOST');
-    await userEvent.type(screen.getByPlaceholderText('ACCESS_CODE'), 'secret');
-    await userEvent.type(screen.getByPlaceholderText('CONFIRM_ACCESS_CODE'), 'secret');
+    await userEvent.type(screen.getByPlaceholderText('PASSWORD'), 'secret');
+    await userEvent.type(screen.getByPlaceholderText('CONFIRM_PASSWORD'), 'secret');
     // pick a preset security question
     await userEvent.selectOptions(screen.getByRole('combobox'), 'What is your favorite movie?');
     await userEvent.type(screen.getByPlaceholderText('SECURITY_ANSWER'), 'Blade Runner');
@@ -89,8 +91,8 @@ describe('Secure login registration', () => {
     render(<SecureLogin {...baseProps()} />);
     await userEvent.click(screen.getByText('REGISTER'));
     await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), 'GHOST');
-    await userEvent.type(screen.getByPlaceholderText('ACCESS_CODE'), 'secret');
-    await userEvent.type(screen.getByPlaceholderText('CONFIRM_ACCESS_CODE'), 'secret');
+    await userEvent.type(screen.getByPlaceholderText('PASSWORD'), 'secret');
+    await userEvent.type(screen.getByPlaceholderText('CONFIRM_PASSWORD'), 'secret');
     await userEvent.selectOptions(screen.getByRole('combobox'), 'What is your favorite movie?');
     await userEvent.type(screen.getByPlaceholderText('SECURITY_ANSWER'), 'Blade Runner');
     await userEvent.click(screen.getByText('CREATE_ACCOUNT'));
@@ -135,8 +137,8 @@ describe('Pending approval polling', () => {
   const registerAs = async (username: string) => {
     await userEvent.click(screen.getByText('REGISTER'));
     await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), username);
-    await userEvent.type(screen.getByPlaceholderText('ACCESS_CODE'), 'secret');
-    await userEvent.type(screen.getByPlaceholderText('CONFIRM_ACCESS_CODE'), 'secret');
+    await userEvent.type(screen.getByPlaceholderText('PASSWORD'), 'secret');
+    await userEvent.type(screen.getByPlaceholderText('CONFIRM_PASSWORD'), 'secret');
     await userEvent.selectOptions(screen.getByRole('combobox'), 'What is your favorite movie?');
     await userEvent.type(screen.getByPlaceholderText('SECURITY_ANSWER'), 'Blade Runner');
     await userEvent.click(screen.getByText('CREATE_ACCOUNT'));
@@ -201,7 +203,7 @@ describe('Successful secure login', () => {
     const props = baseProps();
     render(<SecureLogin {...props} />);
     await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), 'GHOST');
-    await userEvent.type(screen.getByPlaceholderText('ACCESS_CODE'), 'correct');
+    await userEvent.type(screen.getByPlaceholderText('PASSWORD'), 'correct');
     await userEvent.click(screen.getByText('LOGIN'));
     await waitFor(() => expect(props.onSecureLogin).toHaveBeenCalledWith('GHOST', 'tok-abc'));
   });
@@ -215,7 +217,7 @@ describe('Successful secure login', () => {
     const props = baseProps();
     render(<SecureLogin {...props} />);
     await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), 'admin');
-    await userEvent.type(screen.getByPlaceholderText('ACCESS_CODE'), 'adminpass');
+    await userEvent.type(screen.getByPlaceholderText('PASSWORD'), 'adminpass');
     await userEvent.click(screen.getByText('LOGIN'));
     await waitFor(() => expect(props.onAdminLogin).toHaveBeenCalledWith('admin', 'admin-tok'));
   });
@@ -232,7 +234,7 @@ describe('Incorrect password', () => {
     const props = baseProps();
     render(<SecureLogin {...props} />);
     await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), 'GHOST');
-    await userEvent.type(screen.getByPlaceholderText('ACCESS_CODE'), 'wrongpass');
+    await userEvent.type(screen.getByPlaceholderText('PASSWORD'), 'wrongpass');
     await userEvent.click(screen.getByText('LOGIN'));
     await waitFor(() => expect(screen.getByText('Invalid credentials')).toBeInTheDocument());
     expect(props.onSecureLogin).not.toHaveBeenCalled();
@@ -246,7 +248,7 @@ describe('Incorrect password', () => {
     });
     render(<SecureLogin {...baseProps()} />);
     await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), 'GHOST');
-    await userEvent.type(screen.getByPlaceholderText('ACCESS_CODE'), 'secret');
+    await userEvent.type(screen.getByPlaceholderText('PASSWORD'), 'secret');
     await userEvent.click(screen.getByText('LOGIN'));
     await waitFor(() => expect(screen.getByText('Invalid credentials')).toBeInTheDocument());
   });
@@ -282,8 +284,8 @@ describe('Re-registration after deny', () => {
     render(<SecureLogin {...baseProps()} />);
     await userEvent.click(screen.getByText('REGISTER'));
     await userEvent.type(screen.getByPlaceholderText('OPERATOR_ID'), 'GHOST');
-    await userEvent.type(screen.getByPlaceholderText('ACCESS_CODE'), 'newpass');
-    await userEvent.type(screen.getByPlaceholderText('CONFIRM_ACCESS_CODE'), 'newpass');
+    await userEvent.type(screen.getByPlaceholderText('PASSWORD'), 'newpass');
+    await userEvent.type(screen.getByPlaceholderText('CONFIRM_PASSWORD'), 'newpass');
     await userEvent.selectOptions(screen.getByRole('combobox'), 'What was the name of your first pet?');
     await userEvent.type(screen.getByPlaceholderText('SECURITY_ANSWER'), 'Rex');
     await userEvent.click(screen.getByText('CREATE_ACCOUNT'));

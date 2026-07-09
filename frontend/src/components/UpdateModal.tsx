@@ -41,7 +41,7 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
 
   const handleUpdate = async () => {
     setPhase('updating');
-    setStatusMsg('Update in progress — waiting for server...');
+    setStatusMsg('UPDATE IN PROGRESS — WAITING FOR SERVER...');
     try {
       await fetch('/api/update', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       const poll = async () => {

@@ -51,24 +51,26 @@ export function AdminCameraBroadcaster({ socket, controlsRef, enabled }: {
 }) {
   const lastSent = useRef(0);
   const tmpPos = useRef(new THREE.Vector3());
-  const tmpTarget = useRef(new THREE.Vector3());
+  const tmpFwd = useRef(new THREE.Vector3());
 
-  useFrame(() => {
+  useFrame((state) => {
     if (!enabled || !socket) return;
     const now = performance.now();
     if (now - lastSent.current < 100) return;
     lastSent.current = now;
     const controls = controlsRef.current;
     if (!controls) return;
-    // Read position and target as a consistent end-value pair. Mixing the
-    // live camera position with the end target breaks dolly-to-cursor on the
-    // spectator: the two are from different points in the transition, so the
-    // reconstructed ray misses the cursor-anchored point.
+    // Use the camera's actual forward direction to derive lookAt rather than
+    // controls.getTarget(), because dollyToCursor moves the camera toward the
+    // cursor without updating the orbit pivot — so getTarget() returns the old
+    // pivot (near scene center) and the spectator appears to zoom to center.
     controls.getPosition(tmpPos.current, true);
-    controls.getTarget(tmpTarget.current, true);
+    tmpFwd.current.set(0, 0, -1).applyQuaternion(state.camera.quaternion);
     const p = tmpPos.current;
-    const t = tmpTarget.current;
-    socket.emit('streamerCamera', { pos: [p.x, p.y, p.z], lookAt: [t.x, t.y, t.z] });
+    const lx = p.x + tmpFwd.current.x * 200;
+    const ly = p.y + tmpFwd.current.y * 200;
+    const lz = p.z + tmpFwd.current.z * 200;
+    socket.emit('streamerCamera', { pos: [p.x, p.y, p.z], lookAt: [lx, ly, lz] });
   });
 
   return null;
