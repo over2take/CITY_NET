@@ -77,6 +77,7 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
   useEffect(() => {
     if ((view === 'district' || view === 'draw_roads' || view === 'draw_water' || view === 'city_gen' || isBatchSelecting) && controls) {
       if ((controls as any).setLookAt) {
+          if (typeof (controls as any).stop === 'function') (controls as any).stop();
           (controls as any).setLookAt(0, 100, 0.1, 0, 0, 0, false);
       } else {
           camera.position.set(0, 100, 0.1);

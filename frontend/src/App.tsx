@@ -1971,7 +1971,7 @@ function App() {
             <OverlapChecker locations={locations} setOverlapIds={setOverlapIds} />
             <GlobalCameraCapture />
             <CursorPivotControls />
-            <KeyboardPan active={view === 'draw_roads'} />
+            <KeyboardPan active={isAdmin || view === 'draw_roads'} />
             <color attach="background" args={[THEMES[currentTheme].background]} />
             {/* @ts-ignore */}
             {isPlantingTrees && (
