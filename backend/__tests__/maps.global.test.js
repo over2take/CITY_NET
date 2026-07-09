@@ -72,7 +72,7 @@ describe('POST /api/maps/load/:name', () => {
     expect(rows.map(r => r.name)).toContain('SLUMS');
   });
 
-  it('preserves active rhombuses (player tokens)', async () => {
+  it('preserves player rhombuses but replaces enemy/friendly tokens from saved map', async () => {
     await insertLocation(db, { name: 'GHOST', shape: 'rhombus' });
     await insertLocation(db, { name: 'ENEMY', shape: 'enemy_rhombus' });
     await insertLocation(db, { name: 'ALLY', shape: 'friendly_rhombus' });
@@ -83,9 +83,10 @@ describe('POST /api/maps/load/:name', () => {
       .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
 
     const names = (await all(db, 'SELECT name FROM locations')).map(r => r.name);
+    // Player tokens (rhombus) are preserved; enemy/friendly are map content and get replaced from save
     expect(names).toContain('GHOST');
-    expect(names).toContain('ENEMY');
-    expect(names).toContain('ALLY');
+    expect(names).not.toContain('ENEMY');
+    expect(names).not.toContain('ALLY');
   });
 
   it('returns 404 for unknown map name', async () => {
@@ -114,7 +115,7 @@ describe('POST /api/maps/clear', () => {
     expect(rows).toHaveLength(0);
   });
 
-  it('preserves all rhombus types on clear', async () => {
+  it('preserves only player rhombuses on clear', async () => {
     await insertLocation(db, { name: 'GHOST', shape: 'rhombus' });
     await insertLocation(db, { name: 'ENEMY', shape: 'enemy_rhombus' });
     await insertLocation(db, { name: 'ALLY', shape: 'friendly_rhombus' });
@@ -125,9 +126,10 @@ describe('POST /api/maps/clear', () => {
       .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
 
     const names = (await all(db, 'SELECT name FROM locations')).map(r => r.name);
+    // Only live player tokens (rhombus) survive a clear; enemy/friendly are map content
     expect(names).toContain('GHOST');
-    expect(names).toContain('ENEMY');
-    expect(names).toContain('ALLY');
+    expect(names).not.toContain('ENEMY');
+    expect(names).not.toContain('ALLY');
     expect(names).not.toContain('CORPO');
   });
 

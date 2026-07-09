@@ -2,13 +2,22 @@ import React, { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 
-const PAN_SPEED = 0.8;
+const PAN_SPEED = 1.6;
+const FORWARD_SPEED = 2.0;
+
 const PAN_KEYS: Record<string, [number, number]> = {
-  KeyW: [0, -1], ArrowUp: [0, -1],
-  KeyS: [0,  1], ArrowDown: [0,  1],
+  KeyW: [0, -1],
+  KeyS: [0,  1],
   KeyA: [-1, 0], ArrowLeft: [-1, 0],
   KeyD: [1,  0], ArrowRight: [1,  0],
 };
+
+const FORWARD_KEYS: Record<string, number> = {
+  ArrowUp: -1,
+  ArrowDown: 1,
+};
+
+const ALL_HANDLED = new Set([...Object.keys(PAN_KEYS), ...Object.keys(FORWARD_KEYS)]);
 
 export function KeyboardPan({ active }: { active: boolean }) {
   const { controls } = useThree();
@@ -16,19 +25,28 @@ export function KeyboardPan({ active }: { active: boolean }) {
 
   useEffect(() => {
     if (!active) { keys.current.clear(); return; }
-    const down = (e: KeyboardEvent) => { if (PAN_KEYS[e.code]) { e.preventDefault(); keys.current.add(e.code); } };
-    const up   = (e: KeyboardEvent) => keys.current.delete(e.code);
+    const isTyping = () => { const t = document.activeElement?.tagName; return t === 'INPUT' || t === 'TEXTAREA' || (document.activeElement as HTMLElement)?.isContentEditable; };
+    const down = (e: KeyboardEvent) => { if (ALL_HANDLED.has(e.code) && !isTyping()) { e.preventDefault(); keys.current.add(e.code); } };
+    const up    = (e: KeyboardEvent) => keys.current.delete(e.code);
+    const blur  = () => keys.current.clear();
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
-    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); keys.current.clear(); };
+    window.addEventListener('focusin', blur);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('focusin', blur); keys.current.clear(); };
   }, [active]);
 
   useFrame(() => {
     if (!active || !controls || keys.current.size === 0) return;
-    let dx = 0, dy = 0;
-    keys.current.forEach(code => { const d = PAN_KEYS[code]; if (d) { dx += d[0]; dy += d[1]; } });
+
+    let dx = 0, dy = 0, fwd = 0;
+    keys.current.forEach(code => {
+      const p = PAN_KEYS[code]; if (p) { dx += p[0]; dy += p[1]; }
+      const f = FORWARD_KEYS[code]; if (f) fwd += f;
+    });
+
     const len = Math.hypot(dx, dy);
     if (len > 0) (controls as any).truck((dx / len) * PAN_SPEED, (dy / len) * PAN_SPEED, true);
+    if (fwd !== 0) (controls as any).forward(-(fwd / Math.abs(fwd)) * FORWARD_SPEED, true);
   });
 
   return null;

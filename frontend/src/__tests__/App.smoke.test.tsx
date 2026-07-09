@@ -84,6 +84,7 @@ vi.mock('../components/Streamer', () => ({
 }));
 
 vi.mock('../components/StreamerOverlay', () => ({ StreamerOverlay: () => null }));
+vi.mock('../components/LogoScene', () => ({ LogoScene: () => null }));
 vi.mock('../components/StreamerDirectorPanel', () => ({ StreamerDirectorPanel: () => null }));
 vi.mock('../components/AdminPanel', () => ({ AdminPanel: () => null }));
 vi.mock('../BattleMapManager', () => ({ BattleMapManager: () => null }));

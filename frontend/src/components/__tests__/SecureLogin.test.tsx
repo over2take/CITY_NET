@@ -4,6 +4,8 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SecureLogin } from '../SecureLogin';
 
+vi.mock('../LogoScene', () => ({ LogoScene: () => null }));
+
 const StatusLogDisplay = () => <div data-testid="status-log" />;
 
 const baseProps = () => ({
