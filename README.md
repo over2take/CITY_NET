@@ -174,6 +174,8 @@ DuckDNS gives you a free subdomain like `yourcity.duckdns.org` that always point
 
 > **Port note:** port `80` gives a clean URL (`http://yourcity.duckdns.org`) but many residential ISPs block inbound port 80. If yours does, set `APP_PORT=8080` in `backend/.env` and players connect to `http://yourcity.duckdns.org:8080`. Port `443` enables a clean HTTPS URL but requires an SSL certificate (see Certbot below).
 
+> **Firewall note:** OS firewalls (e.g. Windows Defender Firewall) will need a rule to allow incoming connections on your selected port (`80` or `8080`). Without it, the router forwards the port but the host machine silently drops the connection.
+
 1. Register a free subdomain and copy your token at [duckdns.org](https://www.duckdns.org)
 2. In `backend/.env` set:
    ```env
