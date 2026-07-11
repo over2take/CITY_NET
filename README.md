@@ -36,6 +36,7 @@ Built with React + Three.js · Node.js + SQLite · Socket.IO · Docker
 
 ### Prerequisites
 
+- **Install Git:** [Git install](https://git-scm.com/install/)
 - **Docker option:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recommended, easiest setup)
 - **Manual option:** [Node.js](https://nodejs.org/) v18 or newer
 - A terminal (PowerShell, bash, etc.)
