@@ -150,6 +150,55 @@ printf '%s' "$root_env_content" > ./.env
 echo ""
 green "  Configuration written to backend/.env and .env"
 
+# --- Connection info ---------------------------------------------------------
+
+get_lan_ip() {
+  local ip=""
+  # Linux: interface that owns the default route
+  ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -n1)
+  # macOS: getifaddr (guarded - 'ipconfig' is a different tool on Windows)
+  if [ -z "$ip" ] && [ "$(uname)" = "Darwin" ]; then
+    ip=$(ipconfig getifaddr en0 2>/dev/null)
+    [ -z "$ip" ] && ip=$(ipconfig getifaddr en1 2>/dev/null)
+  fi
+  # Generic fallback: first private IPv4 from hostname
+  [ -z "$ip" ] && ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)' | head -n1)
+  echo "$ip"
+}
+
+show_connection_info() {
+  local lan_ip
+  lan_ip=$(get_lan_ip)
+  echo ""
+  green "  --- How to connect ---"
+  echo ""
+  echo "  On this machine:"
+  green "     http://localhost:$app_port"
+  echo ""
+  echo "  Same network (other devices in your home/LAN):"
+  if [ -n "$lan_ip" ]; then
+    green "     http://$lan_ip:$app_port"
+  else
+    green "     http://<this-machine's-IP>:$app_port"
+    gray "     (couldn't auto-detect your LAN IP - try 'ip addr' or 'ifconfig')"
+  fi
+  echo ""
+  if [ "$use_duck" = "y" ]; then
+    echo "  Over the internet (players anywhere):"
+    green "     http://$duck_sub.duckdns.org:$app_port"
+    echo ""
+    gray "     Internet play also needs:"
+    gray "      1. A port-forward rule on your router: external $app_port -> this machine's IP"
+    gray "      2. A firewall rule allowing inbound connections on port $app_port"
+  else
+    gray "  Over the internet: not configured (re-run setup and enable DuckDNS,"
+    gray "  or see the Connectivity section of the README for other options)."
+  fi
+  echo ""
+  echo "  Admin login:  $admin_user"
+  echo ""
+}
+
 # --- Launch -----------------------------------------------------------------
 
 echo ""
@@ -162,21 +211,10 @@ if read_yesno "  Build and start City_Net now?" "y"; then
   green "  ============================================"
   green "        CITY_NET IS RUNNING"
   green "  ============================================"
-  echo ""
-  echo "  On this machine:   http://localhost:$app_port"
-  echo "  On your network:   http://<your-lan-ip>:$app_port"
-  if [ "$use_duck" = "y" ]; then
-    echo "  Over the internet: http://$duck_sub.duckdns.org:$app_port"
-    echo ""
-    gray "  (Internet play also needs a port-forward for $app_port on your router"
-    gray "   and a firewall rule allowing inbound $app_port.)"
-  fi
-  echo ""
-  echo "  Admin login:  $admin_user"
-  echo ""
+  show_connection_info
 else
   echo ""
   green "  Setup complete. Start the app any time with:"
   echo "     docker compose up -d --build"
-  echo ""
+  show_connection_info
 fi

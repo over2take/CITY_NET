@@ -160,6 +160,60 @@ Set-Content -Path ".\.env"         -Value $rootEnvContent -Encoding utf8 -NoNewl
 Write-Host ""
 Write-Host "  Configuration written to backend\.env and .env" -ForegroundColor Green
 
+# --- Connection info ---------------------------------------------------------
+
+function Get-LanIP {
+    # Prefer the interface that owns the default route; fall back to any private IPv4
+    try {
+        $route = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction Stop |
+                 Sort-Object RouteMetric | Select-Object -First 1
+        $ip = (Get-NetIPAddress -InterfaceIndex $route.InterfaceIndex -AddressFamily IPv4 -ErrorAction Stop |
+               Where-Object { $_.IPAddress -notlike '169.254.*' -and $_.IPAddress -ne '127.0.0.1' } |
+               Select-Object -First 1).IPAddress
+        if ($ip) { return $ip }
+    } catch {}
+    try {
+        $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+               Where-Object { $_.IPAddress -match '^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)' } |
+               Select-Object -First 1).IPAddress
+        if ($ip) { return $ip }
+    } catch {}
+    return $null
+}
+
+function Show-ConnectionInfo {
+    $lanIP = Get-LanIP
+    Write-Host ""
+    Write-Host "  --- How to connect ---" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  On this machine:" -ForegroundColor White
+    Write-Host "     http://localhost:$appPort" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Same network (other devices in your home/LAN):" -ForegroundColor White
+    if ($lanIP) {
+        Write-Host "     http://$lanIP`:$appPort" -ForegroundColor Green
+    } else {
+        Write-Host "     http://<this-machine's-IP>:$appPort" -ForegroundColor Green
+        Write-Host "     (couldn't auto-detect your LAN IP - run 'ipconfig' and look for IPv4 Address)" -ForegroundColor DarkGray
+    }
+    Write-Host ""
+    if ($useDuck) {
+        Write-Host "  Over the internet (players anywhere):" -ForegroundColor White
+        Write-Host "     http://$duckSub.duckdns.org`:$appPort" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "     Internet play also needs:" -ForegroundColor DarkGray
+        Write-Host "      1. A port-forward rule on your router: external $appPort -> this machine's IP" -ForegroundColor DarkGray
+        Write-Host "      2. A firewall rule allowing inbound connections on port $appPort" -ForegroundColor DarkGray
+        Write-Host "         (Windows: Windows Defender Firewall > Advanced Settings > Inbound Rules)" -ForegroundColor DarkGray
+    } else {
+        Write-Host "  Over the internet: not configured (re-run setup and enable DuckDNS," -ForegroundColor DarkGray
+        Write-Host "  or see the Connectivity section of the README for other options)." -ForegroundColor DarkGray
+    }
+    Write-Host ""
+    Write-Host "  Admin login:  $adminUser" -ForegroundColor White
+    Write-Host ""
+}
+
 # --- Launch -----------------------------------------------------------------
 
 Write-Host ""
@@ -172,21 +226,10 @@ if (Read-YesNo "  Build and start City_Net now?" $true) {
     Write-Host "  ============================================" -ForegroundColor Green
     Write-Host "        CITY_NET IS RUNNING" -ForegroundColor Green
     Write-Host "  ============================================" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "  On this machine:   http://localhost:$appPort" -ForegroundColor White
-    Write-Host "  On your network:   http://<your-lan-ip>:$appPort" -ForegroundColor White
-    if ($useDuck) {
-        Write-Host "  Over the internet: http://$duckSub.duckdns.org`:$appPort" -ForegroundColor White
-        Write-Host ""
-        Write-Host "  (Internet play also needs a port-forward for $appPort on your router" -ForegroundColor DarkGray
-        Write-Host "   and a firewall rule allowing inbound $appPort.)" -ForegroundColor DarkGray
-    }
-    Write-Host ""
-    Write-Host "  Admin login:  $adminUser" -ForegroundColor White
-    Write-Host ""
+    Show-ConnectionInfo
 } else {
     Write-Host ""
     Write-Host "  Setup complete. Start the app any time with:" -ForegroundColor Green
     Write-Host "     docker compose up -d --build" -ForegroundColor White
-    Write-Host ""
+    Show-ConnectionInfo
 }
