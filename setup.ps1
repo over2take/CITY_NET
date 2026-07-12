@@ -91,7 +91,24 @@ $adminPass = Read-Password "  Admin password"
 Write-Host ""
 Write-Host "  App port: the port players connect on. 80 gives the cleanest URL," -ForegroundColor DarkGray
 Write-Host "  but many home ISPs block inbound 80, so 8080 is the safe default." -ForegroundColor DarkGray
-$appPort = Read-Default "  App port" "8080"
+
+# Warn if another program already owns the chosen port (e.g. NVIDIA Broadcast
+# holds 127.0.0.1:8080 - localhost would then hit that app instead of City_Net).
+do {
+    $appPort = Read-Default "  App port" "8080"
+    $portOk = $true
+    try {
+        $conflicts = Get-NetTCPConnection -LocalPort ([int]$appPort) -State Listen -ErrorAction SilentlyContinue |
+                     Where-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName -notmatch 'docker|wslrelay|vpnkit' }
+        if ($conflicts) {
+            $names = ($conflicts | ForEach-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName } | Sort-Object -Unique) -join ', '
+            Write-Host ""
+            Write-Host "  WARNING: port $appPort is already in use by: $names" -ForegroundColor Yellow
+            Write-Host "  City_Net may be unreachable on http://localhost:$appPort on this machine." -ForegroundColor Yellow
+            if (-not (Read-YesNo "  Use port $appPort anyway?" $false)) { $portOk = $false; Write-Host "" }
+        }
+    } catch {}
+} while (-not $portOk)
 
 Write-Host ""
 Write-Host "  Secure Mode: if ON, players must register an account and be approved." -ForegroundColor DarkGray

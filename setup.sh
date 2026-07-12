@@ -85,7 +85,37 @@ admin_pass=$(read_password "  Admin password")
 echo ""
 gray "  App port: the port players connect on. 80 gives the cleanest URL,"
 gray "  but many home ISPs block inbound 80, so 8080 is the safe default."
-app_port=$(read_default "  App port" "8080")
+
+port_in_use() { # port -> 0 if something is already listening on it
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$1\$"
+  elif command -v netstat >/dev/null 2>&1; then
+    netstat -an 2>/dev/null | grep -i listen | awk '{print $4}' | grep -qE "[:.]$1\$"
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+  else
+    return 1  # no tool available - skip the check
+  fi
+}
+
+# Warn if another program already owns the chosen port - localhost would then
+# hit that app instead of City_Net on this machine.
+while true; do
+  app_port=$(read_default "  App port" "8080")
+  # If it's our own running container holding the port, that's fine
+  if docker ps --format '{{.Ports}}' 2>/dev/null | grep -q ":$app_port->"; then
+    break
+  fi
+  if port_in_use "$app_port"; then
+    echo ""
+    yellow "  WARNING: port $app_port is already in use by another program."
+    yellow "  City_Net may be unreachable on http://localhost:$app_port on this machine."
+    if read_yesno "  Use port $app_port anyway?" "n"; then break; fi
+    echo ""
+  else
+    break
+  fi
+done
 
 echo ""
 gray "  Secure Mode: if ON, players must register an account and be approved."

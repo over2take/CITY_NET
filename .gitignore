@@ -60,3 +60,7 @@ frontend/*.cjs
 frontend/test.js
 frontend/test_output.txt
 frontend/src/*.bak
+
+# Local .env backups (created when testing setup scripts)
+*.env.bak
+*.env.backup
