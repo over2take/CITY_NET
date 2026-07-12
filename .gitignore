@@ -54,6 +54,8 @@ docs/
 !setup.ps1
 !setup.sh
 !setup.bat
+!start.sh
+!start.bat
 
 # Frontend dev scripts and build artifacts
 frontend/*.cjs

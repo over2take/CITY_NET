@@ -337,16 +337,15 @@ if ($mode -eq "docker") {
             node server.js
         } else {
             Write-Host ""
-            Write-Host "  Start the server any time with:" -ForegroundColor Green
-            Write-Host "     cd backend; node server.js" -ForegroundColor White
+            Write-Host "  Start the server any time by double-clicking start.bat" -ForegroundColor Green
             Write-Host ""
         }
     } else {
         Write-Host ""
-        Write-Host "  Setup complete. Install and run manually with:" -ForegroundColor Green
+        Write-Host "  Setup complete. Install and build with:" -ForegroundColor Green
         Write-Host "     cd backend; npm install" -ForegroundColor White
         Write-Host "     cd ..\frontend; npm install; npm run build" -ForegroundColor White
-        Write-Host "     cd ..\backend; node server.js" -ForegroundColor White
+        Write-Host "  Then start the server any time by double-clicking start.bat" -ForegroundColor Green
         Show-ConnectionInfo
         Write-Host "  NOTE: with a manual install the server runs in a terminal." -ForegroundColor Yellow
         Write-Host "  Closing that terminal stops City_Net." -ForegroundColor Yellow
