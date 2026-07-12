@@ -336,15 +336,16 @@ else
     else
       echo ""
       green "  Start the server any time with:"
-      echo "     cd backend && node server.js"
+      echo "     bash start.sh"
       echo ""
     fi
   else
     echo ""
-    green "  Setup complete. Install and run manually with:"
+    green "  Setup complete. Install and build with:"
     echo "     cd backend && npm install"
     echo "     cd frontend && npm install && npm run build"
-    echo "     cd backend && node server.js"
+    green "  Then start the server any time with:"
+    echo "     bash start.sh"
     show_connection_info
     yellow "  NOTE: with a manual install the server runs in a terminal."
     yellow "  Closing that terminal stops City_Net."
