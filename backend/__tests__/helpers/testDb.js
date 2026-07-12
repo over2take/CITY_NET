@@ -162,6 +162,30 @@ function makeTestDb() {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
+      db.run(`CREATE TABLE global_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )`);
+
+      db.run(`CREATE TABLE character_sheets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        system TEXT NOT NULL,
+        data TEXT NOT NULL DEFAULT '{}',
+        portrait_url TEXT,
+        is_npc INTEGER DEFAULT 0,
+        npc_label TEXT,
+        folder TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      db.run(`CREATE UNIQUE INDEX idx_player_sheet ON character_sheets(username, system) WHERE is_npc = 0`);
+
+      db.run(`CREATE TABLE npc_sheet_links (
+        location_id INTEGER NOT NULL UNIQUE,
+        sheet_id INTEGER NOT NULL,
+        FOREIGN KEY(sheet_id) REFERENCES character_sheets(id) ON DELETE CASCADE
+      )`);
+
       db.run(`CREATE TABLE sqlite_sequence (name TEXT, seq INTEGER)`, () => {
         // ignore error — it may already exist
         resolve(db);

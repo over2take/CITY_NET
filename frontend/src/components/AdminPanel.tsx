@@ -1020,6 +1020,9 @@ export function AdminPanel({
           {/* BANK SOUNDS TEST PANEL */}
           <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
 
+          {/* TTRPG SYSTEM (character sheets) */}
+          <TTRPGSystemPanel token={token} />
+
           <div style={{marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px'}}>
             <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
           </div>
@@ -2053,6 +2056,73 @@ const BANK_SOUND_TESTERS: Record<BankSoundKey, (vol: number) => void> = {
   firstpay: playCalibration,
   overdraft: playWompWomp,
 };
+
+function TTRPGSystemPanel({ token }: { token: string }) {
+  const [open, setOpen] = useState(false);
+  const [system, setSystem] = useState<string>('generic');
+  const [systems, setSystems] = useState<{ id: string; name: string }[]>([]);
+  const [sheets, setSheets] = useState<any[]>([]);
+
+  const refresh = () => {
+    fetch('/api/sheets/system').then(r => r.json()).then(d => {
+      if (d.system) setSystem(d.system);
+      if (d.systems) setSystems(d.systems);
+    }).catch(() => {});
+    fetch('/api/sheets', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(rows => setSheets(Array.isArray(rows) ? rows : []))
+      .catch(() => {});
+  };
+
+  useEffect(() => { if (open) refresh(); }, [open]);
+
+  const selectSystem = (id: string) => {
+    fetch('/api/sheets/system', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ system: id }),
+    }).then(r => { if (r.ok) setSystem(id); });
+  };
+
+  return (
+    <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+      <button className="utility-btn" style={{ width: '100%' }} onClick={() => setOpen(!open)}>
+        {open ? '▾' : '▸'} TTRPG_SYSTEM
+      </button>
+      {open && (
+        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '0.7rem' }}>GAME SYSTEM</label>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {systems.map(s => (
+              <button
+                key={s.id}
+                className={`utility-btn ${system === s.id ? 'active' : ''}`}
+                style={{ padding: '4px 10px', fontSize: '0.65rem' }}
+                onClick={() => selectSystem(s.id)}
+              >
+                {s.name.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
+            Player sheets for the current system are kept and restored if you switch back.
+          </p>
+          {sheets.length > 0 && (
+            <div style={{ fontSize: '0.65rem' }}>
+              <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '4px' }}>SHEETS ({sheets.length})</label>
+              {sheets.map(s => (
+                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 4px', opacity: s.system === system ? 1 : 0.5 }}>
+                  <span>{s.is_npc ? `[NPC] ${s.npc_label || s.username}` : s.username}</span>
+                  <span>{s.system}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function BankSoundsPanel({ token, globalSettings, fetchGlobalSettings }: { token: string; globalSettings: any; fetchGlobalSettings: () => void }) {
   const [open, setOpen] = useState(false);

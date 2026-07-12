@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const sheetTemplates = require('../sheets/templates');
 
 const SECRET = process.env.JWT_SECRET;
 
@@ -6,7 +7,9 @@ const userSockets = new Map();
 let activeNPCs = [];
 
 // Streamer mode: spectator sockets are read-only observers, invisible to the game.
-const SPECTATOR_ALLOWED_EVENTS = new Set(['identify', 'requestDiceHistory']);
+// requestQuickSheet is spectator-allowed by design: it only ever returns
+// server-filtered public fields, so stream viewers can see who's who.
+const SPECTATOR_ALLOWED_EVENTS = new Set(['identify', 'requestDiceHistory', 'requestQuickSheet']);
 
 const formatMeasurementPayload = (data, userName, socketId) => ({
   owner: userName ? userName : socketId,
@@ -607,6 +610,108 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     // --- Banking ---
     socket.on('requestBankBalance', (data) => {
       if (data && data.username) sendBankUpdate(data.username);
+    });
+
+    // ── Character Sheets ─────────────────────────────────────────────────────
+    // Player self-service goes through the socket (identity = the socket's
+    // registered userName, never a payload field) so a client can only ever
+    // fetch or edit its own full sheet. Admin access is via REST.
+
+    const getGameSystem = (cb) => {
+      db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (err, row) => {
+        cb(err, row ? row.value : sheetTemplates.DEFAULT_SYSTEM);
+      });
+    };
+
+    socket.on('requestMySheet', () => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      getGameSystem((err, system) => {
+        if (err) return;
+        db.get(
+          `SELECT * FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+          [info.userName, system],
+          (err2, row) => {
+            if (err2) return;
+            if (row) {
+              socket.emit('sheetData', { ...row, data: JSON.parse(row.data || '{}') });
+            } else {
+              // Auto-create a blank sheet on first open, carrying the portrait
+              // over from the player's most recent sheet on another system
+              db.get(
+                `SELECT portrait_url FROM character_sheets WHERE username = ? AND is_npc = 0 ORDER BY updated_at DESC`,
+                [info.userName],
+                (err3, prev) => {
+                  const portrait = prev ? prev.portrait_url : null;
+                  db.run(
+                    `INSERT INTO character_sheets (username, system, data, portrait_url) VALUES (?, ?, '{}', ?)`,
+                    [info.userName, system, portrait],
+                    function (err4) {
+                      if (err4) return;
+                      socket.emit('sheetData', {
+                        id: this.lastID, username: info.userName, system,
+                        data: {}, portrait_url: portrait, is_npc: 0,
+                      });
+                    }
+                  );
+                }
+              );
+            }
+          }
+        );
+      });
+    });
+
+    socket.on('updateSheetField', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      if (!payload || typeof payload.fieldId !== 'string') return;
+      getGameSystem((err, system) => {
+        if (err) return;
+        db.get(
+          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+          [info.userName, system],
+          (err2, row) => {
+            if (err2 || !row) return;
+            const data = JSON.parse(row.data || '{}');
+            data[payload.fieldId] = payload.value;
+            db.run(
+              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+              [JSON.stringify(data), row.id],
+              (err3) => {
+                if (err3) return;
+                io.emit('sheetUpdated', { username: info.userName, system });
+              }
+            );
+          }
+        );
+      });
+    });
+
+    // Public card for another player's token. Server-filtered to the template's
+    // public fields - combat-sensitive values never leave the server. Safe for
+    // spectators (allowlisted above).
+    socket.on('requestQuickSheet', (data) => {
+      if (!data || !data.username) return;
+      getGameSystem((err, system) => {
+        if (err) return;
+        db.get(
+          `SELECT username, system, data, portrait_url FROM character_sheets
+           WHERE username = ? AND system = ? AND is_npc = 0`,
+          [data.username, system],
+          (err2, row) => {
+            if (err2) return;
+            if (!row) return socket.emit('quickSheetData', { username: data.username, exists: false });
+            socket.emit('quickSheetData', {
+              username: row.username,
+              system: row.system,
+              portrait_url: row.portrait_url,
+              exists: true,
+              fields: sheetTemplates.filterPublicData(row.system, row.data),
+            });
+          }
+        );
+      });
     });
 
     socket.on('markFirstPayDone', (data) => {
