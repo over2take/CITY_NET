@@ -70,6 +70,10 @@ bash setup.sh
 
 Requires Docker (recommended) or Node.js v18+ to be installed. For manual configuration instead, follow the options below.
 
+**Starting the app later:**
+- **Docker install:** containers auto-restart; or run `docker compose up -d`
+- **Node.js install:** double-click `start.bat` (Windows) or run `bash start.sh` (Linux/Mac). The server runs in that terminal — closing it stops the app.
+
 ---
 
 ## Option A: Docker (Recommended)
