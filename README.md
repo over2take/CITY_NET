@@ -56,7 +56,7 @@ cd CITY_NET
 >
 > Only use `setup.ps1` / `setup.sh` if you downloaded them **directly from this repository** ([github.com/over2take/CITY_NET](https://github.com/over2take/CITY_NET)). Scripts can do anything your user account can do — if someone sends you a "setup script" for CITY_NET from anywhere else (Discord, forums, a re-upload, a YouTube description), **do not run it.** When in doubt, open the script in a text editor and read it first, or use the manual setup below instead — it's only a few copy-paste steps.
 
-If you'd rather not edit config files by hand, run the guided setup script. It generates a secure `JWT_SECRET` for you, asks for your admin login and port, optionally sets up DuckDNS, writes the `.env` files, and can launch the app — all from a few prompts.
+If you'd rather not edit config files by hand, run the guided setup script. It supports both install methods — Docker (recommended) or manual with Node.js — generates a secure `JWT_SECRET` for you, asks for your admin login and port, optionally sets up DuckDNS (Docker only), writes the `.env` files, and can build and launch the app — all from a few prompts.
 
 **Windows:** double-click `setup.bat`, or from PowerShell:
 ```powershell
@@ -68,7 +68,7 @@ powershell -ExecutionPolicy Bypass -File setup.ps1
 bash setup.sh
 ```
 
-Requires Docker to be installed. For manual configuration instead, follow the options below.
+Requires Docker (recommended) or Node.js v18+ to be installed. For manual configuration instead, follow the options below.
 
 ---
 
