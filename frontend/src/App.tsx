@@ -30,6 +30,7 @@ import { CityDataBaseMenu } from './components/CityDatabase';
 import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './components/BankWindows';
 import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu } from './components/Sidebar';
+import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { DiceTrayWindow, DotMatrixScoreboard, DiceScene } from './components/DiceTray';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
 import { UpdateModal } from './components/UpdateModal';
@@ -210,6 +211,8 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [sheetPos, setSheetPos] = useState(() => ({ x: window.innerWidth / 2 - 220, y: 60 }));
   const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean }>({ balance: 0, debt: 0 });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
@@ -1272,6 +1275,8 @@ function App() {
               locations={locations}
               isBankOpen={isBankOpen}
               setIsBankOpen={setIsBankOpen}
+              isSheetOpen={isSheetOpen}
+              setIsSheetOpen={setIsSheetOpen}
               onSelect={setSelectedLocation}
               onZoom={setCameraTarget}
               selectedLocation={selectedLocation}
@@ -1550,7 +1555,16 @@ function App() {
                 }}
                 currencyIcon={globalSettings?.currency_icon}
             />
-              <ChatWindow 
+            {isSheetOpen && (
+              <CharacterSheetWindow
+                pos={sheetPos}
+                setPos={setSheetPos}
+                onClose={() => setIsSheetOpen(false)}
+                socket={socketRef.current}
+                userName={userName}
+              />
+            )}
+              <ChatWindow
                   pos={chatPos} 
                   setPos={setChatPos} 
                   onClose={() => setIsChatOpen(false)} 

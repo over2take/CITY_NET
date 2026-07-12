@@ -170,9 +170,11 @@ interface GeometryMenuProps {
   activeBattleMapData: any;
   measureMode: boolean;
   setMeasureMode: (v: boolean) => void;
+  isSheetOpen: boolean;
+  setIsSheetOpen: (v: boolean) => void;
 }
 
-export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode }: GeometryMenuProps) {
+export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen }: GeometryMenuProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -267,6 +269,14 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
             <span style={{ fontSize: '0.6rem', opacity: 0.6, letterSpacing: '1px' }}>place user token</span>
           )}
         </div>
+
+        <button
+          className={`upload-btn ${isSheetOpen ? 'active' : ''}`}
+          onClick={() => setIsSheetOpen(!isSheetOpen)}
+          style={{ width: '100%', fontSize: '0.65rem' }}
+        >
+          CHARACTER_SHEET
+        </button>
 
         {userRhombus && (
           <button className="upload-btn danger-btn" onClick={() => removeRhombus(userRhombus.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_MY_TOKEN</button>
@@ -722,6 +732,8 @@ interface SidebarProps {
   setMeasureMode: (v: boolean) => void;
   isBankOpen: boolean;
   setIsBankOpen: (v: boolean) => void;
+  isSheetOpen: boolean;
+  setIsSheetOpen: (v: boolean) => void;
   attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
   onCancelAttack?: () => void;
   isRadioOpen?: boolean;
@@ -732,7 +744,7 @@ interface SidebarProps {
   onThemeChange?: (theme: ThemeName) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -920,7 +932,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'system_info' && <SystemInfoMenu userName={userName} token={token} currentTheme={currentTheme} onThemeChange={onThemeChange} />}
           {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} view={view} activeUsers={activeUsers} />}
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
-          {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} />}
+          {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
           {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} />}
         </div>

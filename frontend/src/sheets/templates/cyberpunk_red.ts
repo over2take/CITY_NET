@@ -1,0 +1,254 @@
+import type { SheetTemplate, SheetField } from '../types';
+
+// Cyberpunk RED template.
+//
+// Licensing note: this file contains stat/skill LABELS and dice math only -
+// game mechanics are not copyrightable, but no rules text, tables, or layout
+// from the book may ever be added here.
+
+const skill = (id: string, label: string, stat: string): SheetField => ({
+  id, label, type: 'number', stat,
+  roll: { formula: `1d10 + @${stat} + @${id}`, label },
+});
+
+export const cyberpunkRed: SheetTemplate = {
+  id: 'cyberpunk_red',
+  name: 'Cyberpunk RED',
+  sections: [
+    {
+      id: 'identity',
+      label: 'IDENTITY',
+      layout: 'list',
+      fields: [
+        { id: 'handle', label: 'Handle', type: 'text', visibility: 'public' },
+        { id: 'role', label: 'Role', type: 'text', visibility: 'public' },
+        { id: 'role_ability', label: 'Role Ability', type: 'text' },
+        { id: 'role_ability_rank', label: 'Rank', type: 'number' },
+        { id: 'description', label: 'Description', type: 'textarea', visibility: 'public' },
+        { id: 'aliases', label: 'Aliases', type: 'text' },
+      ],
+    },
+    {
+      id: 'stats',
+      label: 'STATS',
+      layout: 'grid',
+      columns: 5,
+      fields: [
+        { id: 'int', label: 'INT', type: 'number', roll: { formula: '1d10 + @int', label: 'INT' } },
+        { id: 'ref', label: 'REF', type: 'number', roll: { formula: '1d10 + @ref', label: 'REF' } },
+        { id: 'dex', label: 'DEX', type: 'number', roll: { formula: '1d10 + @dex', label: 'DEX' } },
+        { id: 'tech', label: 'TECH', type: 'number', roll: { formula: '1d10 + @tech', label: 'TECH' } },
+        { id: 'cool', label: 'COOL', type: 'number', roll: { formula: '1d10 + @cool', label: 'COOL' } },
+        { id: 'will', label: 'WILL', type: 'number', roll: { formula: '1d10 + @will', label: 'WILL' } },
+        { id: 'move', label: 'MOVE', type: 'number' },
+        { id: 'body', label: 'BODY', type: 'number' },
+        { id: 'luck', label: 'LUCK', type: 'number', maxField: 'luck_max' },
+        { id: 'luck_max', label: 'LUCK MAX', type: 'number' },
+        { id: 'emp', label: 'EMP', type: 'number', maxField: 'emp_max', roll: { formula: '1d10 + @emp', label: 'EMP' } },
+        { id: 'emp_max', label: 'EMP MAX', type: 'number' },
+      ],
+    },
+    {
+      id: 'health',
+      label: 'HEALTH',
+      layout: 'grid',
+      columns: 4,
+      fields: [
+        { id: 'hp', label: 'HP', type: 'number', maxField: 'hp_max' },
+        { id: 'hp_max', label: 'HP MAX', type: 'number' },
+        { id: 'seriously_wounded', label: 'SERIOUSLY WOUNDED', type: 'number' },
+        { id: 'death_save', label: 'DEATH SAVE', type: 'number' },
+        { id: 'humanity', label: 'HUMANITY', type: 'number', maxField: 'humanity_max' },
+        { id: 'humanity_max', label: 'HUMANITY MAX', type: 'number' },
+      ],
+    },
+    {
+      id: 'armor',
+      label: 'ARMOR',
+      layout: 'grid',
+      columns: 4,
+      fields: [
+        { id: 'sp_head', label: 'SP HEAD', type: 'number', maxField: 'sp_head_max', sensitivity: 'combat' },
+        { id: 'sp_head_max', label: 'SP HEAD MAX', type: 'number', sensitivity: 'combat' },
+        { id: 'sp_body', label: 'SP BODY', type: 'number', maxField: 'sp_body_max', sensitivity: 'combat' },
+        { id: 'sp_body_max', label: 'SP BODY MAX', type: 'number', sensitivity: 'combat' },
+        { id: 'sp_shield', label: 'SP SHIELD', type: 'number', maxField: 'sp_shield_max', sensitivity: 'combat' },
+        { id: 'sp_shield_max', label: 'SP SHIELD MAX', type: 'number', sensitivity: 'combat' },
+        { id: 'armor_penalty', label: 'PENALTY', type: 'number', sensitivity: 'combat' },
+      ],
+    },
+    {
+      id: 'skills_awareness',
+      label: 'AWARENESS',
+      layout: 'skills',
+      fields: [
+        skill('concentration', 'Concentration', 'will'),
+        skill('conceal_reveal', 'Conceal/Reveal Object', 'int'),
+        skill('lip_reading', 'Lip Reading', 'int'),
+        skill('perception', 'Perception', 'int'),
+        skill('tracking', 'Tracking', 'int'),
+      ],
+    },
+    {
+      id: 'skills_body',
+      label: 'BODY',
+      layout: 'skills',
+      fields: [
+        skill('athletics', 'Athletics', 'dex'),
+        skill('contortionist', 'Contortionist', 'dex'),
+        skill('dance', 'Dance', 'dex'),
+        skill('endurance', 'Endurance', 'will'),
+        skill('resist_torture', 'Resist Torture/Drugs', 'will'),
+        skill('stealth', 'Stealth', 'dex'),
+      ],
+    },
+    {
+      id: 'skills_control',
+      label: 'CONTROL',
+      layout: 'skills',
+      fields: [
+        skill('drive_land', 'Drive Land Vehicle', 'ref'),
+        skill('pilot_air', 'Pilot Air Vehicle (x2)', 'ref'),
+        skill('pilot_sea', 'Pilot Sea Vehicle', 'ref'),
+        skill('riding', 'Riding', 'ref'),
+      ],
+    },
+    {
+      id: 'skills_education',
+      label: 'EDUCATION',
+      layout: 'skills',
+      fields: [
+        skill('accounting', 'Accounting', 'int'),
+        skill('animal_handling', 'Animal Handling', 'int'),
+        skill('bureaucracy', 'Bureaucracy', 'int'),
+        skill('business', 'Business', 'int'),
+        skill('composition', 'Composition', 'int'),
+        skill('criminology', 'Criminology', 'int'),
+        skill('cryptography', 'Cryptography', 'int'),
+        skill('deduction', 'Deduction', 'int'),
+        skill('education', 'Education', 'int'),
+        skill('gamble', 'Gamble', 'int'),
+        skill('language_streetslang', 'Language (Streetslang)', 'int'),
+        skill('language_other', 'Language (Other)', 'int'),
+        skill('library_search', 'Library Search', 'int'),
+        skill('local_expert', 'Local Expert (Your Home)', 'int'),
+        skill('science', 'Science', 'int'),
+        skill('tactics', 'Tactics', 'int'),
+        skill('wilderness_survival', 'Wilderness Survival', 'int'),
+      ],
+    },
+    {
+      id: 'skills_fighting',
+      label: 'FIGHTING',
+      layout: 'skills',
+      fields: [
+        skill('brawling', 'Brawling', 'dex'),
+        skill('evasion', 'Evasion', 'dex'),
+        skill('martial_arts', 'Martial Arts (x2)', 'dex'),
+        skill('melee_weapon', 'Melee Weapon', 'dex'),
+      ],
+    },
+    {
+      id: 'skills_performance',
+      label: 'PERFORMANCE',
+      layout: 'skills',
+      fields: [
+        skill('acting', 'Acting', 'cool'),
+        skill('play_instrument', 'Play Instrument', 'tech'),
+      ],
+    },
+    {
+      id: 'skills_ranged',
+      label: 'RANGED WEAPONS',
+      layout: 'skills',
+      fields: [
+        skill('archery', 'Archery', 'ref'),
+        skill('autofire', 'Autofire (x2)', 'ref'),
+        skill('handgun', 'Handgun', 'ref'),
+        skill('heavy_weapons', 'Heavy Weapons (x2)', 'ref'),
+        skill('shoulder_arms', 'Shoulder Arms', 'ref'),
+      ],
+    },
+    {
+      id: 'skills_social',
+      label: 'SOCIAL',
+      layout: 'skills',
+      fields: [
+        skill('bribery', 'Bribery', 'cool'),
+        skill('conversation', 'Conversation', 'emp'),
+        skill('human_perception', 'Human Perception', 'emp'),
+        skill('interrogation', 'Interrogation', 'cool'),
+        skill('persuasion', 'Persuasion', 'cool'),
+        skill('personal_grooming', 'Personal Grooming', 'cool'),
+        skill('streetwise', 'Streetwise', 'cool'),
+        skill('trading', 'Trading', 'cool'),
+        skill('wardrobe_style', 'Wardrobe & Style', 'cool'),
+      ],
+    },
+    {
+      id: 'skills_technique',
+      label: 'TECHNIQUE',
+      layout: 'skills',
+      fields: [
+        skill('air_vehicle_tech', 'Air Vehicle Tech', 'tech'),
+        skill('basic_tech', 'Basic Tech', 'tech'),
+        skill('cybertech', 'Cybertech', 'tech'),
+        skill('demolitions', 'Demolitions (x2)', 'tech'),
+        skill('electronics_security', 'Electronics/Security Tech (x2)', 'tech'),
+        skill('first_aid', 'First Aid', 'tech'),
+        skill('forgery', 'Forgery', 'tech'),
+        skill('land_vehicle_tech', 'Land Vehicle Tech', 'tech'),
+        skill('paint_draw_sculpt', 'Paint/Draw/Sculpt', 'tech'),
+        skill('paramedic', 'Paramedic (x2)', 'tech'),
+        skill('photography_film', 'Photography/Film', 'tech'),
+        skill('pick_lock', 'Pick Lock', 'tech'),
+        skill('pick_pocket', 'Pick Pocket', 'tech'),
+        skill('sea_vehicle_tech', 'Sea Vehicle Tech', 'tech'),
+        skill('weaponstech', 'Weaponstech', 'tech'),
+      ],
+    },
+    {
+      id: 'weapons',
+      label: 'WEAPONS',
+      layout: 'notes',
+      fields: [
+        { id: 'weapons_notes', label: 'Weapons (name / DMG / ammo / ROF / notes)', type: 'textarea' },
+      ],
+    },
+    {
+      id: 'gear',
+      label: 'GEAR & CASH',
+      layout: 'list',
+      fields: [
+        { id: 'cash', label: 'Cash (eb)', type: 'number' },
+        { id: 'ammunition', label: 'Ammunition', type: 'text' },
+        { id: 'gear_notes', label: 'Gear', type: 'textarea' },
+      ],
+    },
+    {
+      id: 'cyberware',
+      label: 'CYBERWARE',
+      layout: 'notes',
+      fields: [
+        { id: 'cyberware_notes', label: 'Cyberware', type: 'textarea' },
+      ],
+    },
+    {
+      id: 'lifepath',
+      label: 'LIFEPATH',
+      layout: 'notes',
+      fields: [
+        { id: 'lifepath_notes', label: 'Lifepath, reputation, IP, contacts', type: 'textarea' },
+      ],
+    },
+    {
+      id: 'injuries',
+      label: 'CRITICAL INJURIES',
+      layout: 'notes',
+      fields: [
+        { id: 'critical_injuries', label: 'Critical injuries', type: 'textarea' },
+        { id: 'addictions', label: 'Addictions', type: 'textarea' },
+      ],
+    },
+  ],
+};
