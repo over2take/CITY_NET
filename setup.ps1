@@ -104,7 +104,7 @@ do {
             $names = ($conflicts | ForEach-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName } | Sort-Object -Unique) -join ', '
             Write-Host ""
             Write-Host "  WARNING: port $appPort is already in use by: $names" -ForegroundColor Yellow
-            Write-Host "  City_Net may be unreachable on http://localhost:$appPort on this machine." -ForegroundColor Yellow
+            Write-Host "  Connections on this port may reach that app instead of City_Net." -ForegroundColor Yellow
             if (-not (Read-YesNo "  Use port $appPort anyway?" $false)) { $portOk = $false; Write-Host "" }
         }
     } catch {}
@@ -203,10 +203,7 @@ function Show-ConnectionInfo {
     Write-Host ""
     Write-Host "  --- How to connect ---" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  On this machine:" -ForegroundColor White
-    Write-Host "     http://localhost:$appPort" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "  Same network (other devices in your home/LAN):" -ForegroundColor White
+    Write-Host "  This machine and your home network (LAN):" -ForegroundColor White
     if ($lanIP) {
         Write-Host "     http://$lanIP`:$appPort" -ForegroundColor Green
     } else {

@@ -109,7 +109,7 @@ while true; do
   if port_in_use "$app_port"; then
     echo ""
     yellow "  WARNING: port $app_port is already in use by another program."
-    yellow "  City_Net may be unreachable on http://localhost:$app_port on this machine."
+    yellow "  Connections on this port may reach that app instead of City_Net."
     if read_yesno "  Use port $app_port anyway?" "n"; then break; fi
     echo ""
   else
@@ -202,10 +202,7 @@ show_connection_info() {
   echo ""
   green "  --- How to connect ---"
   echo ""
-  echo "  On this machine:"
-  green "     http://localhost:$app_port"
-  echo ""
-  echo "  Same network (other devices in your home/LAN):"
+  echo "  This machine and your home network (LAN):"
   if [ -n "$lan_ip" ]; then
     green "     http://$lan_ip:$app_port"
   else
