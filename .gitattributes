@@ -1,0 +1,7 @@
+# Shell scripts must keep LF endings or bash breaks on Linux/Mac
+setup.sh text eol=lf
+*.sh text eol=lf
+
+# Windows batch files need CRLF
+setup.bat text eol=crlf
+*.bat text eol=crlf
