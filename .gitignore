@@ -50,9 +50,19 @@ docs/
 # Local launcher scripts (machine-specific, not needed in repo)
 *.bat
 *.ps1
+# ...but the guided setup scripts ship with the project
+!setup.ps1
+!setup.sh
+!setup.bat
+!start.sh
+!start.bat
 
 # Frontend dev scripts and build artifacts
 frontend/*.cjs
 frontend/test.js
 frontend/test_output.txt
 frontend/src/*.bak
+
+# Local .env backups (created when testing setup scripts)
+*.env.bak
+*.env.backup
