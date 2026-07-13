@@ -1562,6 +1562,7 @@ function App() {
                 onClose={() => setIsSheetOpen(false)}
                 socket={socketRef.current}
                 userName={userName}
+                playerToken={playerToken}
               />
             )}
               <ChatWindow

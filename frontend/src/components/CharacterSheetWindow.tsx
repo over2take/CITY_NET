@@ -12,9 +12,10 @@ interface CharacterSheetWindowProps {
   onClose: () => void;
   socket: any;
   userName: string;
+  playerToken?: string | null;
 }
 
-export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName }: CharacterSheetWindowProps) {
+export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken }: CharacterSheetWindowProps) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -62,12 +63,28 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName }:
       pos={pos}
       setPos={setPos}
       onClose={onClose}
-      titleControls={template ? (
-        <span style={{ border: '1px solid var(--green)', padding: '0 6px', fontSize: '0.6rem', letterSpacing: '1px' }}>
-          {template.name.toUpperCase()}
+      titleControls={
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {template && (
+            <span style={{ border: '1px solid var(--green)', padding: '0 6px', fontSize: '0.6rem', letterSpacing: '1px' }}>
+              {template.name.toUpperCase()}
+            </span>
+          )}
+          <button
+            title="Open in new tab"
+            aria-label="Open in new tab"
+            onClick={() => {
+              // Handshake for the standalone tab: it reads and deletes this key
+              try { localStorage.setItem('sheet_tab_auth', JSON.stringify({ userName, playerToken: playerToken ?? null })); } catch { /* ignore */ }
+              window.open('/?sheet=true', '_blank');
+            }}
+            style={{ background: 'none', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', fontSize: '0.65rem', padding: '0 5px', fontFamily: 'inherit' }}
+          >
+            ⧉
+          </button>
         </span>
-      ) : undefined}
-      windowStyle={{ width: '460px' }}
+      }
+      windowStyle={{ width: '520px', maxWidth: '95vw' }}
       contentStyle={{ height: '68vh', display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
     >
       {sheet && template ? (
