@@ -56,9 +56,9 @@ export const cyberpunkRed: SheetTemplate = {
         { id: 'will', label: 'WILL', type: 'number', roll: { formula: '1d10 + @will', label: 'WILL' } },
         { id: 'move', label: 'MOVE', type: 'number' },
         { id: 'body', label: 'BODY', type: 'number' },
-        { id: 'luck', label: 'LUCK', type: 'number', maxField: 'luck_max' },
+        { id: 'luck', label: 'LUCK', type: 'number', maxField: 'luck_max', hint: 'Spend LUCK points to boost rolls; they refresh at the start of a session. Current / maximum.' },
         { id: 'luck_max', label: 'LUCK MAX', type: 'number' },
-        { id: 'emp', label: 'EMP', type: 'number', maxField: 'emp_max', roll: { formula: '1d10 + @emp', label: 'EMP' } },
+        { id: 'emp', label: 'EMP', type: 'number', maxField: 'emp_max', roll: { formula: '1d10 + @emp', label: 'EMP' }, hint: 'Empathy erodes as Humanity is lost to cyberware. Rolls use CURRENT EMP, not the max.' },
         { id: 'emp_max', label: 'EMP MAX', type: 'number' },
       ],
     },
@@ -71,9 +71,9 @@ export const cyberpunkRed: SheetTemplate = {
       fields: [
         // HP lives on the player's token - the header bar mirrors it live
         // (source: token_hp) and clicking the bar opens the HitPoints window.
-        { id: 'seriously_wounded', label: 'SERIOUSLY WOUNDED', type: 'number' },
-        { id: 'death_save', label: 'DEATH SAVE', type: 'number' },
-        { id: 'humanity', label: 'HUMANITY', type: 'number', maxField: 'humanity_max' },
+        { id: 'seriously_wounded', label: 'SERIOUSLY WOUNDED', type: 'number', hint: 'Wound threshold: at or below this HP you are Seriously Wounded (usually half of max HP).' },
+        { id: 'death_save', label: 'DEATH SAVE', type: 'number', hint: 'Death Save target (equals BODY). At 0 HP, roll under this to stay alive.' },
+        { id: 'humanity', label: 'HUMANITY', type: 'number', maxField: 'humanity_max', hint: 'Drops when cyberware is installed; low Humanity lowers current EMP. Current / maximum.' },
         { id: 'humanity_max', label: 'HUMANITY MAX', type: 'number' },
       ],
     },
@@ -84,13 +84,13 @@ export const cyberpunkRed: SheetTemplate = {
       tab: 'STATS',
       columns: 4,
       fields: [
-        { id: 'sp_head', label: 'SP HEAD', type: 'number', maxField: 'sp_head_max', sensitivity: 'combat' },
+        { id: 'sp_head', label: 'SP HEAD', type: 'number', maxField: 'sp_head_max', sensitivity: 'combat', hint: 'Head armor Stopping Power. Ablates -1 each time it stops damage; repair restores toward max.' },
         { id: 'sp_head_max', label: 'SP HEAD MAX', type: 'number', sensitivity: 'combat' },
-        { id: 'sp_body', label: 'SP BODY', type: 'number', maxField: 'sp_body_max', sensitivity: 'combat' },
+        { id: 'sp_body', label: 'SP BODY', type: 'number', maxField: 'sp_body_max', sensitivity: 'combat', hint: 'Body armor Stopping Power. Ablates -1 each time it stops damage; repair restores toward max.' },
         { id: 'sp_body_max', label: 'SP BODY MAX', type: 'number', sensitivity: 'combat' },
-        { id: 'sp_shield', label: 'SP SHIELD', type: 'number', maxField: 'sp_shield_max', sensitivity: 'combat' },
+        { id: 'sp_shield', label: 'SP SHIELD', type: 'number', maxField: 'sp_shield_max', sensitivity: 'combat', hint: 'Shield hit points (if carried). Current / maximum.' },
         { id: 'sp_shield_max', label: 'SP SHIELD MAX', type: 'number', sensitivity: 'combat' },
-        { id: 'armor_penalty', label: 'PENALTY', type: 'number', sensitivity: 'combat' },
+        { id: 'armor_penalty', label: 'PENALTY', type: 'number', sensitivity: 'combat', hint: 'Stat penalty from heavy armor (applies to REF, DEX and MOVE).' },
       ],
     },
     {
