@@ -13,9 +13,10 @@ interface CharacterSheetWindowProps {
   socket: any;
   userName: string;
   playerToken?: string | null;
+  adminToken?: string;
 }
 
-export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken }: CharacterSheetWindowProps) {
+export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken }: CharacterSheetWindowProps) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -73,12 +74,18 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           <button
             title="Open in new tab"
             aria-label="Open in new tab"
+            className="win95-close-btn"
             onClick={() => {
               // Handshake for the standalone tab: it reads and deletes this key
-              try { localStorage.setItem('sheet_tab_auth', JSON.stringify({ userName, playerToken: playerToken ?? null })); } catch { /* ignore */ }
+              try {
+                localStorage.setItem('sheet_tab_auth', JSON.stringify({
+                  userName,
+                  playerToken: playerToken ?? null,
+                  adminToken: adminToken || null,
+                }));
+              } catch { /* ignore */ }
               window.open('/?sheet=true', '_blank');
             }}
-            style={{ background: 'none', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', fontSize: '0.65rem', padding: '0 5px', fontFamily: 'inherit' }}
           >
             ⧉
           </button>
