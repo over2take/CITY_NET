@@ -35,6 +35,7 @@ export default function SheetPage() {
   const [{ userName, playerToken, adminToken }] = useState(readAuth);
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastRoll, setLastRoll] = useState<string | null>(null);
   const socketRef = useRef<any>(null);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -76,6 +77,10 @@ export default function SheetPage() {
       if (info.username === userName) socket.emit('requestMySheet');
     });
     socket.on('gameSystemChanged', () => socket.emit('requestMySheet'));
+    // No dice tray on this page - show the latest roll inline instead
+    socket.on('diceRollBroadcast', (roll: { historyString?: string }) => {
+      if (roll?.historyString) setLastRoll(roll.historyString);
+    });
 
     return () => { socket.disconnect(); };
   }, [userName, playerToken, adminToken]);
@@ -123,6 +128,14 @@ export default function SheetPage() {
             </span>
           )}
         </div>
+        {lastRoll && (
+          <div style={{
+            border: '1px solid var(--green)', background: 'rgba(0, 30, 0, 0.5)',
+            padding: '4px 10px', marginBottom: '4px', fontSize: '0.7rem', letterSpacing: '1px',
+          }}>
+            ⌁ {lastRoll}
+          </div>
+        )}
         {sheet && template ? (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 90px)' }}>
             <SheetRenderer
