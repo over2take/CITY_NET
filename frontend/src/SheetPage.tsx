@@ -103,6 +103,18 @@ export default function SheetPage() {
 
   const template = sheet ? getTemplate(sheet.system) : null;
 
+  const handlePortraitUpload = useCallback(async (file: File) => {
+    const authToken = adminToken || playerToken;
+    if (!authToken) return;
+    const form = new FormData();
+    form.append('portrait', file);
+    await fetch('/api/sheets/portrait', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: form,
+    });
+  }, [adminToken, playerToken]);
+
   const message = !userName
     ? 'NO OPERATOR IDENTITY FOUND — open this page from CHARACTER_SHEET in the main app.'
     : error
@@ -143,7 +155,14 @@ export default function SheetPage() {
               data={sheet.data}
               portraitUrl={sheet.portrait_url}
               onFieldChange={handleFieldChange}
+              onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
               onRoll={(fieldId) => socketRef.current?.emit('requestSheetRoll', { fieldId })}
+              onResetLuck={adminToken ? () => {
+                const luckMax = sheet.data[template.header?.luckMaxField ?? ''];
+                if (luckMax !== undefined && template.header?.luckField) {
+                  handleFieldChange(template.header.luckField, Number(luckMax));
+                }
+              } : undefined}
             />
           </div>
         ) : (

@@ -31,6 +31,8 @@ import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './
 import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
+import { QuickSheetCard } from './components/QuickSheetCard';
+import { NpcLibrary } from './components/NpcLibrary';
 import { getTemplate } from './sheets';
 import { DiceTrayWindow, DotMatrixScoreboard, DiceScene } from './components/DiceTray';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
@@ -189,6 +191,9 @@ function App() {
 
   const [reviewHealthOwner, setReviewHealthOwner] = useState<string | null>(null);
   const [reviewHealthPos, setReviewHealthPos] = useState(() => ({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 }));
+  const [quickSheetPos, setQuickSheetPos] = useState(() => ({ x: window.innerWidth / 2 + 170, y: window.innerHeight / 2 - 100 }));
+  const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
+  const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
 
   const [infoPanelPos, setInfoPanelPos] = useState(() => ({ x: window.innerWidth / 2 - 175, y: window.innerHeight / 2 - 200 }));
   const [diceTrayPos, setDiceTrayPos] = useState(() => ({ x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 250 }));
@@ -675,6 +680,7 @@ function App() {
       setIsDiceTrayOpen(true);
     },
     onGameSystemChanged: (system) => setGameSystem(system),
+    onNpcSheetGenerated: (data) => setNotification(`NPC_SHEET_CREATED: ${data.npc_label.toUpperCase()}`),
     onAttackResult: (data) => {
       setAttackPending(null);
       // Delay result reveal and animation until after the dice tray's 5-second roll display finishes
@@ -1525,6 +1531,7 @@ function App() {
                 activeUsers={activeUsers}
                 onGrantAccess={handleGrantAccess}
                 onRevokeAccess={handleRevokeAccess}
+                onOpenNpcLibrary={() => setIsNpcLibraryOpen(true)}
                 />
             )}
             {adminBankPlayer && (
@@ -1684,6 +1691,23 @@ function App() {
                 />
               ) : null;
             })()}
+            {reviewHealthOwner && (
+              <QuickSheetCard
+                username={reviewHealthOwner}
+                socket={socketRef.current}
+                pos={quickSheetPos}
+                setPos={setQuickSheetPos}
+                onClose={() => setReviewHealthOwner(null)}
+              />
+            )}
+            {isNpcLibraryOpen && token && (
+              <NpcLibrary
+                token={token}
+                pos={npcLibraryPos}
+                setPos={setNpcLibraryPos}
+                onClose={() => setIsNpcLibraryOpen(false)}
+              />
+            )}
             {isDiceTrayOpen && (
                 <DiceTrayWindow
                     pos={diceTrayPos} 
@@ -1812,6 +1836,11 @@ function App() {
                     )}
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
                       <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
+                    )}
+                    {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
+                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#2200aa'}} onClick={() => {
+                        socketRef.current?.emit('generateNpcSheet', { location_id: selectedLocation.id });
+                      }}>GENERATE_SHEET</button>
                     )}
                     {/* ATTACK — visible to any logged-in player not attacking their own rhombus */}
                     {isRhombus && isLoggedIn && !isOwner && (

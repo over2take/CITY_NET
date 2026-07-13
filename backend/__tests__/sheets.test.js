@@ -260,3 +260,60 @@ describe('character_sheets constraints', () => {
     expect(rows).toHaveLength(2);
   });
 });
+
+// ─── POST /api/sheets/portrait ────────────────────────────────────────────────
+
+describe('POST /api/sheets/portrait', () => {
+  it('rejects unauthenticated requests', async () => {
+    const res = await request(app)
+      .post('/api/sheets/portrait')
+      .attach('portrait', Buffer.from('fake-img'), { filename: 'p.jpg', contentType: 'image/jpeg' });
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects unsupported file extension', async () => {
+    await setSystem(db, 'cyberpunk_red');
+    await insertSheet(db, { username: 'testadmin', system: 'cyberpunk_red' });
+    const res = await request(app)
+      .post('/api/sheets/portrait')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .attach('portrait', Buffer.from('fake-img'), { filename: 'p.exe', contentType: 'application/octet-stream' });
+    expect(res.status).toBe(400);
+  });
+
+  it('admin uploads portrait for themselves and emits sheetUpdated', async () => {
+    await setSystem(db, 'cyberpunk_red');
+    await insertSheet(db, { username: 'testadmin', system: 'cyberpunk_red' });
+    const res = await request(app)
+      .post('/api/sheets/portrait')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .attach('portrait', Buffer.from('fake-png'), { filename: 'me.png', contentType: 'image/png' });
+    expect(res.status).toBe(200);
+    expect(res.body.portrait_url).toMatch(/^\/uploads\/portraits\/.+\.png$/);
+    const evt = emitted.find(e => e.event === 'sheetUpdated');
+    expect(evt?.payload.username).toBe('testadmin');
+  });
+
+  it('player token uploads own portrait', async () => {
+    await setSystem(db, 'cyberpunk_red');
+    await insertSheet(db, { username: 'ghost', system: 'cyberpunk_red' });
+    const res = await request(app)
+      .post('/api/sheets/portrait')
+      .set('Authorization', `Bearer ${PLAYER_TOKEN}`)
+      .attach('portrait', Buffer.from('fake-jpg'), { filename: 'me.jpg', contentType: 'image/jpeg' });
+    expect(res.status).toBe(200);
+    expect(res.body.portrait_url).toMatch(/^\/uploads\/portraits\/.+\.jpg$/);
+  });
+
+  it('admin uploads portrait for a specific user via ?username=', async () => {
+    await setSystem(db, 'cyberpunk_red');
+    await insertSheet(db, { username: 'GHOST', system: 'cyberpunk_red' });
+    const res = await request(app)
+      .post('/api/sheets/portrait?username=GHOST')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .attach('portrait', Buffer.from('fake-webp'), { filename: 'ghost.webp', contentType: 'image/webp' });
+    expect(res.status).toBe(200);
+    const updated = await get(db, `SELECT portrait_url FROM character_sheets WHERE username = 'GHOST'`);
+    expect(updated.portrait_url).toMatch(/\.webp$/);
+  });
+});

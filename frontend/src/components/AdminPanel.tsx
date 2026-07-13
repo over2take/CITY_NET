@@ -420,7 +420,7 @@ export function AdminPanel({
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
-    activeUsers, onGrantAccess, onRevokeAccess,
+    activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary,
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -1021,7 +1021,7 @@ export function AdminPanel({
           <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
 
           {/* TTRPG SYSTEM (character sheets) */}
-          <TTRPGSystemPanel token={token} />
+          <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} />
 
           <div style={{marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px'}}>
             <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
@@ -2057,7 +2057,7 @@ const BANK_SOUND_TESTERS: Record<BankSoundKey, (vol: number) => void> = {
   overdraft: playWompWomp,
 };
 
-function TTRPGSystemPanel({ token }: { token: string }) {
+function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNpcLibrary?: () => void }) {
   const [open, setOpen] = useState(false);
   const [system, setSystem] = useState<string>('generic');
   const [systems, setSystems] = useState<{ id: string; name: string }[]>([]);
@@ -2107,6 +2107,15 @@ function TTRPGSystemPanel({ token }: { token: string }) {
           <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
             Player sheets for the current system are kept and restored if you switch back.
           </p>
+          {onOpenNpcLibrary && (
+            <button
+              className="utility-btn"
+              style={{ fontSize: '0.65rem' }}
+              onClick={onOpenNpcLibrary}
+            >
+              NPC_LIBRARY
+            </button>
+          )}
           {sheets.length > 0 && (
             <div style={{ fontSize: '0.65rem' }}>
               <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '4px' }}>SHEETS ({sheets.length})</label>

@@ -804,6 +804,48 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
+    // Admin: seed an NPC sheet from a token (enemy_rhombus / friendly_rhombus).
+    // Creates a character_sheets row pre-filled with the token's name, description
+    // and current HP, then links it to the location via npc_sheet_links.
+    socket.on('generateNpcSheet', (data) => {
+      const callerInfo = userSockets.get(socket.id);
+      if (!callerInfo || (!callerInfo.isAdmin && !elevatedUsers.has(callerInfo.userName))) return;
+      if (!data || !data.location_id) return;
+      const { location_id } = data;
+      db.get(`SELECT * FROM locations WHERE id = ?`, [location_id], (err, loc) => {
+        if (err || !loc) return;
+        getGameSystem((err2, system) => {
+          if (err2) return;
+          const label = loc.name || `Token #${location_id}`;
+          const sheetData = {
+            name: loc.name || '',
+            description: loc.description || '',
+            handle: loc.name || '',
+            hp: loc.hp_current ?? loc.hp_max ?? 0,
+            hp_max: loc.hp_max ?? 0,
+          };
+          db.run(
+            `INSERT INTO character_sheets (username, system, data, is_npc, npc_label)
+             VALUES (?, ?, ?, 1, ?)`,
+            [callerInfo.userName, system, JSON.stringify(sheetData), label],
+            function (err3) {
+              if (err3) return;
+              const sheetId = this.lastID;
+              db.run(
+                `INSERT INTO npc_sheet_links (location_id, sheet_id) VALUES (?, ?)
+                 ON CONFLICT(location_id) DO UPDATE SET sheet_id = excluded.sheet_id`,
+                [location_id, sheetId],
+                (err4) => {
+                  if (err4) return;
+                  socket.emit('npcSheetGenerated', { location_id, sheet_id: sheetId, npc_label: label });
+                }
+              );
+            }
+          );
+        });
+      });
+    });
+
     socket.on('markFirstPayDone', (data) => {
       if (!data || !data.username) return;
       db.run('UPDATE player_banks SET first_pay_done = 1 WHERE username = ?', [data.username]);

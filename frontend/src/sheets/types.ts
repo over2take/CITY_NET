@@ -55,6 +55,10 @@ export interface SheetHeader {
   hpField?: string;
   hpMaxField?: string;
   chips?: { field: string; label: string }[];
+  /** If set, a row of clickable pips is shown for this field (current/max).
+   *  Clicking a pip decrements the current value by 1 (spend). */
+  luckField?: string;
+  luckMaxField?: string;
 }
 
 /** How this system's defense value appears on tokens. When absent, the
