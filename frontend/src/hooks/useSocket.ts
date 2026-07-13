@@ -37,6 +37,7 @@ interface UseSocketOptions {
   onSpectatorCount?: (count: number) => void;
   onAttackPending?: (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => void;
   onGameSystemChanged?: (system: string) => void;
+  onNpcSheetGenerated?: (data: { location_id: number; sheet_id: number; npc_label: string }) => void;
   onAttackResult?: (data: { hit: boolean; attackerId: string; attackerName: string; targetId: number; targetName: string; attackType: 'melee' | 'ranged'; roll: number; ac: number; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number } }) => void;
   onMusicState?: (state: any) => void;
   onMusicLoad?: (data: { trackId: number; src: string; name: string }) => void;
@@ -56,7 +57,7 @@ export function useSocket({
   onRegistrationPending, onRegistrationUpdated,
   onPasswordResetRequested, onPasswordResetResolved,
   onDirectorUpdate, onSpectatorCount,
-  onAttackPending, onAttackResult, onGameSystemChanged,
+  onAttackPending, onAttackResult, onGameSystemChanged, onNpcSheetGenerated,
   onMusicState, onMusicLoad, onMusicPlay, onMusicPause, onMusicSeek,
   onMusicNext, onMusicPrev, onMusicShuffle, onMusicLoop,
 }: UseSocketOptions) {
@@ -197,6 +198,7 @@ export function useSocket({
 
     newSocket.on('attackPending', (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => onAttackPending?.(data));
     newSocket.on('gameSystemChanged', (data: { system: string }) => onGameSystemChanged?.(data.system));
+    newSocket.on('npcSheetGenerated', (data: { location_id: number; sheet_id: number; npc_label: string }) => onNpcSheetGenerated?.(data));
 
     newSocket.on('attackResult', (data: any) => onAttackResult?.(data));
 

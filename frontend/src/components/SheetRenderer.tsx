@@ -15,12 +15,16 @@ interface SheetRendererProps {
   readOnly?: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
   portraitUrl?: string | null;
+  /** Called with the selected File when the player wants to change their portrait. */
+  onPortraitUpload?: (file: File) => void;
   /** In-app only: linked fields (token HP, bank cash) open their own window
    *  when clicked. Absent on the standalone tab - values still display live. */
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
   /** Roll a rollable field. The server resolves the formula against the
    *  stored sheet - the client only names the field. */
   onRoll?: (fieldId: string) => void;
+  /** Admin-only: reset LUCK to max. */
+  onResetLuck?: () => void;
 }
 
 const num = (v: unknown): number => {
@@ -98,18 +102,23 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
 }
 
 // Targeting-bracket portrait frame - the visual identity of the sheet system
-function BracketPortrait({ initial, portraitUrl, size = 64 }: { initial: string; portraitUrl?: string | null; size?: number }) {
+function BracketPortrait({ initial, portraitUrl, size = 64, onUpload }: { initial: string; portraitUrl?: string | null; size?: number; onUpload?: (file: File) => void }) {
   const b = Math.max(9, Math.round(size * 0.18));
   const corner = (pos: React.CSSProperties): React.CSSProperties => ({
     position: 'absolute', width: `${b}px`, height: `${b}px`, ...pos,
   });
-  return (
-    <div style={{ position: 'relative', width: `${size}px`, height: `${size}px`, background: 'rgba(0, 20, 0, 0.6)', flex: '0 0 auto' }}>
+  const inner = (
+    <div style={{ position: 'relative', width: `${size}px`, height: `${size}px`, background: 'rgba(0, 20, 0, 0.6)', flex: '0 0 auto', cursor: onUpload ? 'pointer' : undefined }}>
       {portraitUrl ? (
         <img src={portraitUrl} alt="portrait" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green)', fontSize: `${Math.round(size * 0.38)}px`, letterSpacing: '1px' }}>
           {initial}
+        </div>
+      )}
+      {onUpload && (
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,30,0,0.75)', color: 'var(--green)', fontSize: '7px', textAlign: 'center', letterSpacing: '0.5px', padding: '2px 0', userSelect: 'none' }}>
+          UPLOAD
         </div>
       )}
       <div style={corner({ top: 0, left: 0, borderTop: '2px solid var(--green)', borderLeft: '2px solid var(--green)' })} />
@@ -118,11 +127,26 @@ function BracketPortrait({ initial, portraitUrl, size = 64 }: { initial: string;
       <div style={corner({ bottom: 0, right: 0, borderBottom: '2px solid var(--green)', borderRight: '2px solid var(--green)' })} />
     </div>
   );
+  if (!onUpload) return inner;
+  return (
+    <label style={{ display: 'contents', cursor: 'pointer' }} title="Click to upload portrait">
+      <input
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }}
+      />
+      {inner}
+    </label>
+  );
 }
 
-function SheetHeaderBlock({ template, data, portraitUrl, onOpenLink }: {
+function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpenLink, onFieldChange, onResetLuck }: {
   template: SheetTemplate; data: SheetData; portraitUrl?: string | null;
+  onPortraitUpload?: (file: File) => void;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
+  onFieldChange: (fieldId: string, value: string | number) => void;
+  onResetLuck?: () => void;
 }) {
   const h = template.header;
   if (!h) return null;
@@ -137,7 +161,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onOpenLink }: {
 
   return (
     <div style={{ display: 'flex', gap: '12px', padding: '10px 2px 8px' }}>
-      <BracketPortrait initial={(name || '?').charAt(0).toUpperCase()} portraitUrl={portraitUrl} size={68} />
+      <BracketPortrait initial={(name || '?').charAt(0).toUpperCase()} portraitUrl={portraitUrl} size={68} onUpload={onPortraitUpload} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: '1rem', color: 'var(--green)', letterSpacing: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {name ? name.toUpperCase() : 'UNNAMED'}
@@ -169,6 +193,53 @@ function SheetHeaderBlock({ template, data, portraitUrl, onOpenLink }: {
             ))}
           </div>
         )}
+        {h.luckField && (() => {
+          const luckCur = num(data[h.luckField!]) ?? 0;
+          const luckMax = h.luckMaxField ? (num(data[h.luckMaxField]) ?? 0) : luckCur;
+          const pips = Math.max(0, luckMax);
+          if (pips === 0) return null;
+          return (
+            <div style={{ marginTop: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '0.5px' }}>LUCK</span>
+                <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
+                  {Array.from({ length: pips }, (_, i) => {
+                    const filled = i < luckCur;
+                    return (
+                      <button
+                        key={i}
+                        aria-label={filled ? `Spend LUCK (${i + 1} of ${pips})` : `LUCK spent (${i + 1} of ${pips})`}
+                        title={filled ? 'Click to spend 1 LUCK' : 'LUCK spent'}
+                        onClick={() => {
+                          if (!filled) return;
+                          onFieldChange(h.luckField!, Math.max(0, luckCur - 1));
+                        }}
+                        style={{
+                          width: '10px', height: '10px', borderRadius: '50%',
+                          border: '1px solid var(--green)',
+                          background: filled ? 'var(--green)' : 'transparent',
+                          cursor: filled ? 'pointer' : 'default',
+                          padding: 0, appearance: 'none',
+                          transition: 'background 0.1s',
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <span style={{ fontSize: '0.55rem', color: 'var(--green)', opacity: 0.8 }}>{luckCur}/{pips}</span>
+                {onResetLuck && (
+                  <button
+                    onClick={onResetLuck}
+                    title="Reset LUCK to max (admin)"
+                    style={{ marginLeft: '4px', fontFamily: 'monospace', fontSize: '7px', background: 'none', border: '1px solid #666', color: '#666', cursor: 'pointer', padding: '1px 4px', borderRadius: 2, letterSpacing: 0.5 }}
+                  >
+                    RESET
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -290,7 +361,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onOpenLink, onRoll }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, onOpenLink, onRoll, onResetLuck }: SheetRendererProps) {
   const tabs = template.tabs ?? ['SHEET'];
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [closedSections, setClosedSections] = useState<Set<string>>(new Set());
@@ -314,7 +385,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         .sheet-input:focus { outline: 1px solid var(--green); }
       `}</style>
 
-      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onOpenLink={onOpenLink} />
+      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onResetLuck={onResetLuck} />
 
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
         {tabHasRolls && (

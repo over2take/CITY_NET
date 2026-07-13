@@ -253,3 +253,136 @@ describe('CharacterSheetWindow', () => {
     expect(socket.off).toHaveBeenCalledWith('sheetUpdated', expect.any(Function));
   });
 });
+
+// ─── Portrait upload ──────────────────────────────────────────────────────────
+
+describe('SheetRenderer portrait upload', () => {
+  const cyberpunkRed = getTemplate('cyberpunk_red');
+
+  it('shows UPLOAD label when onPortraitUpload is provided', () => {
+    const onUpload = vi.fn();
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST' }}
+        onFieldChange={vi.fn()}
+        onPortraitUpload={onUpload}
+      />
+    );
+    expect(screen.getByText('UPLOAD')).toBeTruthy();
+  });
+
+  it('hides UPLOAD label when onPortraitUpload is absent', () => {
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST' }}
+        onFieldChange={vi.fn()}
+      />
+    );
+    expect(screen.queryByText('UPLOAD')).toBeNull();
+  });
+
+  it('calls onPortraitUpload with the selected file', () => {
+    const onUpload = vi.fn();
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST' }}
+        onFieldChange={vi.fn()}
+        onPortraitUpload={onUpload}
+      />
+    );
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    const file = new File(['pixel'], 'avatar.png', { type: 'image/png' });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    fireEvent.change(input);
+    expect(onUpload).toHaveBeenCalledWith(file);
+  });
+});
+
+// ─── LUCK pips ────────────────────────────────────────────────────────────────
+
+describe('SheetRenderer LUCK pips', () => {
+  const cyberpunkRed = getTemplate('cyberpunk_red');
+
+  it('renders pip buttons equal to luck_max', () => {
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST', luck: 3, luck_max: 5 }}
+        onFieldChange={vi.fn()}
+      />
+    );
+    const pips = screen.getAllByRole('button', { name: /LUCK/ });
+    expect(pips).toHaveLength(5);
+  });
+
+  it('filled pips match luck current value', () => {
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST', luck: 2, luck_max: 4 }}
+        onFieldChange={vi.fn()}
+      />
+    );
+    const spendable = screen.getAllByRole('button', { name: /Spend LUCK/ });
+    expect(spendable).toHaveLength(2);
+    const spent = screen.getAllByRole('button', { name: /LUCK spent/ });
+    expect(spent).toHaveLength(2);
+  });
+
+  it('clicking a filled pip calls onFieldChange with luck - 1', () => {
+    const onChange = vi.fn();
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST', luck: 3, luck_max: 5 }}
+        onFieldChange={onChange}
+      />
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: /Spend LUCK/ })[0]);
+    expect(onChange).toHaveBeenCalledWith('luck', 2);
+  });
+
+  it('clicking a spent pip does nothing', () => {
+    const onChange = vi.fn();
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST', luck: 2, luck_max: 4 }}
+        onFieldChange={onChange}
+      />
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: /LUCK spent/ })[0]);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('shows RESET button when onResetLuck is provided', () => {
+    const onReset = vi.fn();
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST', luck: 2, luck_max: 5 }}
+        onFieldChange={vi.fn()}
+        onResetLuck={onReset}
+      />
+    );
+    const resetBtn = screen.getByTitle(/reset luck/i);
+    expect(resetBtn).toBeTruthy();
+    fireEvent.click(resetBtn);
+    expect(onReset).toHaveBeenCalled();
+  });
+
+  it('hides RESET button when onResetLuck is absent', () => {
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST', luck: 2, luck_max: 5 }}
+        onFieldChange={vi.fn()}
+      />
+    );
+    expect(screen.queryByTitle(/reset luck/i)).toBeNull();
+  });
+});

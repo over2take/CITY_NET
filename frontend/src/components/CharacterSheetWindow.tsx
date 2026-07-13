@@ -77,6 +77,19 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
     }, 400));
   }, [socket]);
 
+  const handlePortraitUpload = useCallback(async (file: File) => {
+    const authToken = adminToken || playerToken;
+    if (!authToken) return;
+    const form = new FormData();
+    form.append('portrait', file);
+    await fetch('/api/sheets/portrait', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: form,
+    });
+    // Server emits sheetUpdated → socket listener re-fetches sheet with new portrait_url
+  }, [adminToken, playerToken]);
+
   const template = sheet ? getTemplate(sheet.system) : null;
 
   return (
@@ -126,11 +139,18 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           data={sheet.data}
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
+          onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
           onOpenLink={onOpenLink}
           onRoll={(fieldId) => {
             socket?.emit('requestSheetRoll', { fieldId });
             onRolled?.();
           }}
+          onResetLuck={adminToken ? () => {
+            const luckMax = sheet.data[template.header?.luckMaxField ?? ''];
+            if (luckMax !== undefined && template.header?.luckField) {
+              handleFieldChange(template.header.luckField, Number(luckMax));
+            }
+          } : undefined}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>

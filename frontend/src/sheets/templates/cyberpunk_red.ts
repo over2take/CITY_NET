@@ -25,8 +25,9 @@ export const cyberpunkRed: SheetTemplate = {
     chips: [
       { field: 'move', label: 'MOVE' },
       { field: 'body', label: 'BODY' },
-      { field: 'luck', label: 'LUCK' },
     ],
+    luckField: 'luck',
+    luckMaxField: 'luck_max',
   },
   tabs: ['STATS', 'SKILLS', 'GEAR', 'NOTES'],
   sections: [
