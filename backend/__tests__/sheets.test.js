@@ -4,7 +4,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { makeTestDb, get, all, run } from './helpers/testDb.js';
 import sheetsRouteFactory from '../routes/sheets.js';
-import { TEMPLATES, filterPublicData, isValidSystem } from '../sheets/templates.js';
+import { TEMPLATES, filterPublicData, isValidSystem, getLinkedFields } from '../sheets/templates.js';
 
 const ADMIN_TOKEN = jwt.sign(
   { id: 1, username: 'testadmin', role: 'admin', isTemporary: false },
@@ -76,6 +76,15 @@ describe('sheet template metadata', () => {
   it('filterPublicData tolerates string and object data', () => {
     expect(filterPublicData('cyberpunk_red', '{"handle":"NYX"}')).toEqual({ handle: 'NYX' });
     expect(filterPublicData('cyberpunk_red', null)).toEqual({});
+  });
+
+  it('declares hp/hp_max/cash as linked fields on every shipped system', () => {
+    Object.keys(TEMPLATES).forEach(system => {
+      const linked = getLinkedFields(system);
+      expect(linked.hp).toBe('token_hp');
+      expect(linked.hp_max).toBe('token_hp_max');
+      expect(linked.cash).toBe('bank_balance');
+    });
   });
 });
 
@@ -195,6 +204,21 @@ describe('PUT /api/sheets/user/:username', () => {
     const data = JSON.parse(row.data);
     expect(data).toEqual({ handle: 'GHOST', int: 8, ref: 7 });
     expect(emitted.some(e => e.event === 'sheetUpdated' && e.payload.username === 'GHOST')).toBe(true);
+  });
+
+  it('never stores linked fields (hp, cash) in the sheet JSON', async () => {
+    await setSystem(db, 'cyberpunk_red');
+    await insertSheet(db, { username: 'GHOST', data: JSON.stringify({ handle: 'GHOST' }) });
+
+    const res = await request(app)
+      .put('/api/sheets/user/GHOST')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ fields: { hp: 12, hp_max: 40, cash: 9999, int: 6 } });
+    expect(res.status).toBe(200);
+
+    const row = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    const data = JSON.parse(row.data);
+    expect(data).toEqual({ handle: 'GHOST', int: 6 }); // hp/cash live on token & bank
   });
 
   it('rejects a missing fields object', async () => {

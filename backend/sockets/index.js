@@ -623,6 +623,36 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     };
 
+    // Linked fields (declared per-template) live in other systems: token HP
+    // in locations, cash in player_banks. Overlay their live values onto the
+    // sheet data at read time - they are never stored in the sheet's JSON.
+    const overlayLinkedData = (username, system, data, cb) => {
+      const linked = sheetTemplates.getLinkedFields(system);
+      const out = { ...data };
+      const wantsHp = Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max');
+      const wantsCash = Object.values(linked).includes('bank_balance');
+      const afterHp = (hpRow) => {
+        Object.entries(linked).forEach(([fieldId, source]) => {
+          if (source === 'token_hp') out[fieldId] = hpRow ? hpRow.hp_current : null;
+          if (source === 'token_hp_max') out[fieldId] = hpRow ? hpRow.hp_max : null;
+        });
+        if (!wantsCash) return cb(out);
+        db.get(`SELECT balance FROM player_banks WHERE username = ?`, [username], (err, bank) => {
+          Object.entries(linked).forEach(([fieldId, source]) => {
+            if (source === 'bank_balance') out[fieldId] = bank ? bank.balance : 0;
+          });
+          cb(out);
+        });
+      };
+      if (!wantsHp) return afterHp(null);
+      db.get(
+        `SELECT hp_current, hp_max FROM locations WHERE shape = 'rhombus' AND owner = ?
+         ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
+        [username],
+        (err, hpRow) => afterHp(err ? null : hpRow)
+      );
+    };
+
     socket.on('requestMySheet', () => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
@@ -634,7 +664,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           (err2, row) => {
             if (err2) return;
             if (row) {
-              socket.emit('sheetData', { ...row, data: JSON.parse(row.data || '{}') });
+              overlayLinkedData(info.userName, system, JSON.parse(row.data || '{}'), (data) => {
+                socket.emit('sheetData', { ...row, data });
+              });
             } else {
               // Auto-create a blank sheet on first open, carrying the portrait
               // over from the player's most recent sheet on another system
@@ -648,9 +680,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     [info.userName, system, portrait],
                     function (err4) {
                       if (err4) return;
-                      socket.emit('sheetData', {
-                        id: this.lastID, username: info.userName, system,
-                        data: {}, portrait_url: portrait, is_npc: 0,
+                      const newId = this.lastID;
+                      overlayLinkedData(info.userName, system, {}, (data) => {
+                        socket.emit('sheetData', {
+                          id: newId, username: info.userName, system,
+                          data, portrait_url: portrait, is_npc: 0,
+                        });
                       });
                     }
                   );
@@ -668,6 +703,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!payload || typeof payload.fieldId !== 'string') return;
       getGameSystem((err, system) => {
         if (err) return;
+        // Linked fields are owned by other systems (token HP, bank) - never
+        // stored in sheet JSON, and not writable through the sheet.
+        if (sheetTemplates.getLinkedFields(system)[payload.fieldId]) return;
         db.get(
           `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
           [info.userName, system],

@@ -14,27 +14,45 @@ interface CharacterSheetWindowProps {
   userName: string;
   playerToken?: string | null;
   adminToken?: string;
+  /** Open the window that owns a linked field (HIT_POINTS / BANK). */
+  onOpenLink?: (source: 'token_hp' | 'token_hp_max' | 'bank_balance') => void;
 }
 
-export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken }: CharacterSheetWindowProps) {
+export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink }: CharacterSheetWindowProps) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     if (!socket) return;
     const onSheetData = (data: CharacterSheet) => {
-      if (data.username === userName) setSheet(data);
+      if (data.username !== userName) return;
+      // A re-fetch must not stomp fields the player is mid-typing (debounce
+      // still pending) - keep the local value for those, take the rest.
+      setSheet(prev => {
+        if (!prev || pendingSaves.current.size === 0) return data;
+        const merged = { ...data.data };
+        pendingSaves.current.forEach((_t, fieldId) => {
+          if (prev.data[fieldId] !== undefined) merged[fieldId] = prev.data[fieldId];
+        });
+        return { ...data, data: merged };
+      });
     };
     const onSheetUpdated = (info: { username: string }) => {
-      // Re-sync when someone else (the admin) edits this sheet
+      // Re-sync when the admin edits this sheet or token HP changes
+      if (info.username === userName) socket.emit('requestMySheet');
+    };
+    const onBankUpdate = (info: { username: string }) => {
+      // Cash is a linked field mirroring the bank balance
       if (info.username === userName) socket.emit('requestMySheet');
     };
     socket.on('sheetData', onSheetData);
     socket.on('sheetUpdated', onSheetUpdated);
+    socket.on('bankUpdate', onBankUpdate);
     socket.emit('requestMySheet');
     return () => {
       socket.off('sheetData', onSheetData);
       socket.off('sheetUpdated', onSheetUpdated);
+      socket.off('bankUpdate', onBankUpdate);
     };
   }, [socket, userName]);
 
@@ -100,7 +118,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
     >
       {sheet && template ? (
-        <SheetRenderer template={template} data={sheet.data} portraitUrl={sheet.portrait_url} onFieldChange={handleFieldChange} />
+        <SheetRenderer template={template} data={sheet.data} portraitUrl={sheet.portrait_url} onFieldChange={handleFieldChange} onOpenLink={onOpenLink} />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>
       )}

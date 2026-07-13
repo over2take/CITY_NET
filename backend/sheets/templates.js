@@ -13,16 +13,21 @@
 // The server filter is the only privacy gate; the client never receives
 // fields it shouldn't show.
 
+//  - linkedFields: fields whose value lives in another system (token HP,
+//    bank balance). The server overlays them at read time and refuses to
+//    store them in the sheet's JSON - one source of truth, no drift.
 const TEMPLATES = {
   generic: {
     name: 'Generic',
     publicFields: ['name', 'description'],
     combatFields: [],
+    linkedFields: { hp: 'token_hp', hp_max: 'token_hp_max', cash: 'bank_balance' },
   },
   cyberpunk_red: {
     name: 'Cyberpunk RED',
     publicFields: ['handle', 'role', 'description'],
     combatFields: ['sp_head', 'sp_head_max', 'sp_body', 'sp_body_max', 'sp_shield', 'sp_shield_max'],
+    linkedFields: { hp: 'token_hp', hp_max: 'token_hp_max', cash: 'bank_balance' },
   },
 };
 
@@ -41,4 +46,7 @@ const filterPublicData = (system, data) => {
   return out;
 };
 
-module.exports = { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, filterPublicData };
+const getLinkedFields = (system) =>
+  (TEMPLATES[system] || TEMPLATES[DEFAULT_SYSTEM]).linkedFields || {};
+
+module.exports = { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, filterPublicData, getLinkedFields };

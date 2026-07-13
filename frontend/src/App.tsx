@@ -1564,6 +1564,11 @@ function App() {
                 userName={userName}
                 playerToken={playerToken}
                 adminToken={token}
+                onOpenLink={(source) => {
+                  // Linked fields jump to the window that owns the value
+                  if (source === 'bank_balance') setIsBankOpen(true);
+                  else setIsHitPointsOpen(true);
+                }}
               />
             )}
               <ChatWindow
