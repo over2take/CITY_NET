@@ -1569,6 +1569,7 @@ function App() {
                   if (source === 'bank_balance') setIsBankOpen(true);
                   else setIsHitPointsOpen(true);
                 }}
+                onRolled={() => setIsDiceTrayOpen(true)}
               />
             )}
               <ChatWindow

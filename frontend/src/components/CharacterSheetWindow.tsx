@@ -16,9 +16,12 @@ interface CharacterSheetWindowProps {
   adminToken?: string;
   /** Open the window that owns a linked field (HIT_POINTS / BANK). */
   onOpenLink?: (source: 'token_hp' | 'token_hp_max' | 'bank_balance') => void;
+  /** Called when the player rolls from the sheet - App opens the dice tray
+   *  so the result is visible. */
+  onRolled?: () => void;
 }
 
-export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink }: CharacterSheetWindowProps) {
+export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled }: CharacterSheetWindowProps) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -124,7 +127,10 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
           onOpenLink={onOpenLink}
-          onRoll={(fieldId) => socket?.emit('requestSheetRoll', { fieldId })}
+          onRoll={(fieldId) => {
+            socket?.emit('requestSheetRoll', { fieldId });
+            onRolled?.();
+          }}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>
