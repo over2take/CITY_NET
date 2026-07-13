@@ -57,10 +57,23 @@ export interface SheetHeader {
   chips?: { field: string; label: string }[];
 }
 
+/** How this system's defense value appears on tokens. When absent, the
+ *  default D&D-style AC editor is shown on the token menu. */
+export interface TokenDefense {
+  /** Show the melee/ranged editor on the token menu. False = defense lives
+   *  on the character sheet (e.g. CP:R armor SP) and the menu links there. */
+  editOnToken: boolean;
+  /** What attack banners call the to-hit target ('AC', 'DV'...). */
+  label: string;
+  /** Shown on the token menu when editOnToken is false. */
+  note?: string;
+}
+
 export interface SheetTemplate {
   id: string;
   name: string;
   header?: SheetHeader;
+  tokenDefense?: TokenDefense;
   /** Bottom tab bar, in order. Sections map to tabs via section.tab. */
   tabs?: string[];
   sections: SheetSection[];

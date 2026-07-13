@@ -5,6 +5,11 @@ import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { CurrencyIcon } from './BankWindows';
 import { THEMES } from '../theme/themes';
 import type { ThemeName } from '../theme/themes';
+import { getTemplate } from '../sheets';
+
+// Token defense config for the active game system; default is D&D-style AC
+const getTokenDefense = (gameSystem?: string) =>
+  getTemplate(gameSystem || 'generic').tokenDefense ?? { editOnToken: true, label: 'AC' };
 
 // ─── CheckUpdateButton ───────────────────────────────────────────────────────
 
@@ -172,9 +177,10 @@ interface GeometryMenuProps {
   setMeasureMode: (v: boolean) => void;
   isSheetOpen: boolean;
   setIsSheetOpen: (v: boolean) => void;
+  gameSystem?: string;
 }
 
-export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen }: GeometryMenuProps) {
+export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen, gameSystem }: GeometryMenuProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -187,6 +193,7 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
 
   const [acMelee, setAcMelee] = useState('');
   const [acRanged, setAcRanged] = useState('');
+  const tokenDefense = getTokenDefense(gameSystem);
 
   // Any rhombus the player owns on any map — used for AC/settings regardless of current view
   const anyUserRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
@@ -212,14 +219,16 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
           body: JSON.stringify({ action: 'set_max', hp_max: rhombusState.hp_max }),
         });
       }
-      // AC
-      const meleeVal = acMelee === '' ? null : parseInt(acMelee, 10);
-      const rangedVal = acRanged === '' ? null : parseInt(acRanged, 10);
-      await fetch(`/api/locations/${target.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ ...target, melee_ac: meleeVal, ranged_ac: rangedVal }),
-      });
+      // AC - only when the active system edits defense on the token
+      if (tokenDefense.editOnToken) {
+        const meleeVal = acMelee === '' ? null : parseInt(acMelee, 10);
+        const rangedVal = acRanged === '' ? null : parseInt(acRanged, 10);
+        await fetch(`/api/locations/${target.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ ...target, melee_ac: meleeVal, ranged_ac: rangedVal }),
+        });
+      }
       refreshLocations();
     }
   };
@@ -336,31 +345,46 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
             />
           </div>
 
-          {/* 6 — AC fields (always visible; saved via SET) */}
-          <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>ARMOR_CLASS</label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.65rem', opacity: 0.8, whiteSpace: 'nowrap' }}>MELEE</span>
-              <input
-                type="number"
-                min="0"
-                placeholder="10"
-                value={acMelee}
-                onChange={e => setAcMelee(e.target.value)}
-                style={{ width: '48px', marginBottom: 0, textAlign: 'center' }}
-              />
-              <span style={{ fontSize: '0.65rem', opacity: 0.8, whiteSpace: 'nowrap' }}>RANGED</span>
-              <input
-                type="number"
-                min="0"
-                placeholder={acMelee !== '' ? acMelee : '10'}
-                value={acRanged}
-                onChange={e => setAcRanged(e.target.value)}
-                style={{ width: '48px', marginBottom: 0, textAlign: 'center' }}
-              />
-              <span title="Leave blank to use Melee AC" style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
+          {/* 6 — Defense fields. What shows depends on the active game
+              system's tokenDefense: D&D-likes edit AC here; systems whose
+              armor lives on the sheet (CP:R SP) get a pointer instead. */}
+          {tokenDefense.editOnToken ? (
+            <div>
+              <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>ARMOR_CLASS</label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.65rem', opacity: 0.8, whiteSpace: 'nowrap' }}>MELEE</span>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="10"
+                  value={acMelee}
+                  onChange={e => setAcMelee(e.target.value)}
+                  style={{ width: '48px', marginBottom: 0, textAlign: 'center' }}
+                />
+                <span style={{ fontSize: '0.65rem', opacity: 0.8, whiteSpace: 'nowrap' }}>RANGED</span>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder={acMelee !== '' ? acMelee : '10'}
+                  value={acRanged}
+                  onChange={e => setAcRanged(e.target.value)}
+                  style={{ width: '48px', marginBottom: 0, textAlign: 'center' }}
+                />
+                <span title="Leave blank to use Melee AC" style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>ARMOR</label>
+              <button
+                className="upload-btn"
+                style={{ width: '100%', fontSize: '0.65rem', padding: '5px' }}
+                onClick={() => setIsSheetOpen(true)}
+              >
+                {tokenDefense.note ?? 'MANAGED ON YOUR CHARACTER_SHEET'}
+              </button>
+            </div>
+          )}
 
           {/* 7 — SET button */}
           <button className="upload-btn" style={{ width: '100%', marginTop: '4px' }} onClick={handleSet}>
@@ -465,10 +489,12 @@ interface DiceMenuProps {
   setNotification: (msg: string) => void;
   attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
   onCancelAttack?: () => void;
+  gameSystem?: string;
 }
 
-export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack }: DiceMenuProps) {
+export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack, gameSystem }: DiceMenuProps) {
   const isAdmin = !!token;
+  const defenseLabel = getTokenDefense(gameSystem).label;
   const diceTypes = [2, 4, 6, 8, 10, 12, 20, 100];
   const [diceCounts, setDiceCounts] = useState<Record<number, number>>({});
   const [workingMod, setWorkingMod] = useState<number>(0);
@@ -516,7 +542,7 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
           </div>
           <div style={{ color: 'var(--green)', fontSize: '0.75rem', marginBottom: '6px' }}>
             {isAdmin
-              ? `${attackPending.attackType.toUpperCase()} · AC ${attackPending.ac} · Roll ${attackPending.ac}+ to hit`
+              ? `${attackPending.attackType.toUpperCase()} · ${defenseLabel} ${attackPending.ac} · Roll ${attackPending.ac}+ to hit`
               : attackPending.attackType.toUpperCase()}
           </div>
           <button className="upload-btn" style={{ width: '100%', padding: '5px', fontSize: '0.75rem', backgroundColor: 'transparent', color: '#888', border: '1px solid #444' }} onClick={() => { socketRef.current?.emit('cancelAttack'); onCancelAttack?.(); }}>
@@ -734,6 +760,7 @@ interface SidebarProps {
   setIsBankOpen: (v: boolean) => void;
   isSheetOpen: boolean;
   setIsSheetOpen: (v: boolean) => void;
+  gameSystem?: string;
   attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
   onCancelAttack?: () => void;
   isRadioOpen?: boolean;
@@ -744,7 +771,7 @@ interface SidebarProps {
   onThemeChange?: (theme: ThemeName) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -932,9 +959,9 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'system_info' && <SystemInfoMenu userName={userName} token={token} currentTheme={currentTheme} onThemeChange={onThemeChange} />}
           {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} view={view} activeUsers={activeUsers} />}
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
-          {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} />}
+          {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
-          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} />}
+          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} />}
         </div>
       </div>
     </div>

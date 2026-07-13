@@ -5,6 +5,7 @@ import type { SheetTemplate } from '../types';
 export const generic: SheetTemplate = {
   id: 'generic',
   name: 'Generic',
+  tokenDefense: { editOnToken: true, label: 'AC' },
   header: {
     nameField: 'name',
     subtitleFields: ['concept'],

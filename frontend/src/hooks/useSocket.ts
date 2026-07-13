@@ -36,6 +36,7 @@ interface UseSocketOptions {
   onDirectorUpdate?: (state: DirectorState) => void;
   onSpectatorCount?: (count: number) => void;
   onAttackPending?: (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => void;
+  onGameSystemChanged?: (system: string) => void;
   onAttackResult?: (data: { hit: boolean; attackerId: string; attackerName: string; targetId: number; targetName: string; attackType: 'melee' | 'ranged'; roll: number; ac: number; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number } }) => void;
   onMusicState?: (state: any) => void;
   onMusicLoad?: (data: { trackId: number; src: string; name: string }) => void;
@@ -55,7 +56,7 @@ export function useSocket({
   onRegistrationPending, onRegistrationUpdated,
   onPasswordResetRequested, onPasswordResetResolved,
   onDirectorUpdate, onSpectatorCount,
-  onAttackPending, onAttackResult,
+  onAttackPending, onAttackResult, onGameSystemChanged,
   onMusicState, onMusicLoad, onMusicPlay, onMusicPause, onMusicSeek,
   onMusicNext, onMusicPrev, onMusicShuffle, onMusicLoop,
 }: UseSocketOptions) {
@@ -195,6 +196,7 @@ export function useSocket({
     newSocket.on('spectatorCount', (data: { count: number }) => onSpectatorCount?.(data.count));
 
     newSocket.on('attackPending', (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => onAttackPending?.(data));
+    newSocket.on('gameSystemChanged', (data: { system: string }) => onGameSystemChanged?.(data.system));
 
     newSocket.on('attackResult', (data: any) => onAttackResult?.(data));
 
