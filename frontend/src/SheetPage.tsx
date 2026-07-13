@@ -13,20 +13,26 @@ import { getTemplate, type CharacterSheet } from './sheets';
 // simple-mode login. Secure Mode still verifies the token server-side on
 // identify - this page can't fake its way in.
 
-const readAuth = (): { userName: string | null; playerToken: string | null } => {
+const readAuth = (): { userName: string | null; playerToken: string | null; adminToken: string | null } => {
   try {
     const raw = localStorage.getItem('sheet_tab_auth');
     if (raw) {
       localStorage.removeItem('sheet_tab_auth');
       const parsed = JSON.parse(raw);
-      if (parsed.userName) return { userName: parsed.userName, playerToken: parsed.playerToken ?? null };
+      if (parsed.userName) {
+        return {
+          userName: parsed.userName,
+          playerToken: parsed.playerToken ?? null,
+          adminToken: parsed.adminToken ?? null,
+        };
+      }
     }
   } catch { /* fall through */ }
-  return { userName: localStorage.getItem('userName'), playerToken: null };
+  return { userName: localStorage.getItem('userName'), playerToken: null, adminToken: null };
 };
 
 export default function SheetPage() {
-  const [{ userName, playerToken }] = useState(readAuth);
+  const [{ userName, playerToken, adminToken }] = useState(readAuth);
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<any>(null);
@@ -38,7 +44,13 @@ export default function SheetPage() {
     socketRef.current = socket;
 
     const identify = () => {
-      socket.emit('identify', playerToken ? { userName, playerToken } : userName);
+      if (adminToken) {
+        socket.emit('identify', { userName, isAdmin: true, token: adminToken });
+      } else if (playerToken) {
+        socket.emit('identify', { userName, playerToken });
+      } else {
+        socket.emit('identify', userName);
+      }
       socket.emit('requestMySheet');
     };
 
@@ -53,7 +65,7 @@ export default function SheetPage() {
     socket.on('gameSystemChanged', () => socket.emit('requestMySheet'));
 
     return () => { socket.disconnect(); };
-  }, [userName, playerToken]);
+  }, [userName, playerToken, adminToken]);
 
   useEffect(() => () => {
     pendingSaves.current.forEach(t => clearTimeout(t));

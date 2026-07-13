@@ -1563,6 +1563,7 @@ function App() {
                 socket={socketRef.current}
                 userName={userName}
                 playerToken={playerToken}
+                adminToken={token}
               />
             )}
               <ChatWindow
