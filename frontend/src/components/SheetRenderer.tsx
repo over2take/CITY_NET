@@ -188,14 +188,20 @@ function GridSection({ section, data, readOnly, onFieldChange, onRoll }: {
       {visible.map((field) => {
         const maxField = field.maxField ? section.fields.find(f => f.id === field.maxField) : undefined;
         return (
-          <div key={field.id} style={{ border: '1px solid var(--green)', background: 'rgba(0, 20, 0, 0.35)', textAlign: 'center' }}>
+          <div key={field.id} title={field.hint} style={{ border: '1px solid var(--green)', background: 'rgba(0, 20, 0, 0.35)', textAlign: 'center' }}>
             <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '4px 2px 0' }}>{field.label}</div>
             {maxField ? (
-              <div style={{ display: 'flex', alignItems: 'center', padding: '0 2px' }}>
-                <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
-                <span style={{ opacity: 0.5 }}>/</span>
-                <FieldInput field={maxField} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
-              </div>
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', padding: '0 2px' }}>
+                  <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
+                  <span style={{ opacity: 0.5 }}>/</span>
+                  <FieldInput field={maxField} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
+                </div>
+                <div style={{ display: 'flex', fontSize: '0.45rem', opacity: 0.5, letterSpacing: '1px', padding: '0 6px 2px' }}>
+                  <span style={{ flex: 1 }}>CUR</span>
+                  <span style={{ flex: 1 }}>MAX</span>
+                </div>
+              </>
             ) : (
               <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
             )}
@@ -275,7 +281,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
       {section.fields.map((field) => (
-        <div key={field.id}>
+        <div key={field.id} title={field.hint}>
           <div style={{ fontSize: '0.6rem', opacity: 0.65, letterSpacing: '1px', marginBottom: '2px' }}>{field.label}</div>
           <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />
         </div>

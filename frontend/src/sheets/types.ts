@@ -22,6 +22,8 @@ export interface SheetField {
   stat?: string;
   /** Paired field id holding this field's maximum (renders as current/max). */
   maxField?: string;
+  /** Short helper text shown as a tooltip on the field. */
+  hint?: string;
   /** Hint that this field is rollable (Phase 2 wires the actual roll). */
   roll?: { formula: string; label: string };
   /** Linked field: the value lives in another system and is overlaid by the
