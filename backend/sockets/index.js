@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 const sheetTemplates = require('../sheets/templates');
+const sheetRolls = require('../sheets/rolls');
+const rollEngine = require('../sheets/rollEngine');
 
 const SECRET = process.env.JWT_SECRET;
 
@@ -719,6 +721,56 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               (err3) => {
                 if (err3) return;
                 io.emit('sheetUpdated', { username: info.userName, system });
+              }
+            );
+          }
+        );
+      });
+    });
+
+    // Roll a sheet field. Server-authoritative: the client sends only the
+    // fieldId - the formula and the stat values come from the server-side
+    // roll map and the STORED sheet, so a client can't inflate a roll. The
+    // result flows through the same insert + broadcast as manual dice.
+    socket.on('requestSheetRoll', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      if (!payload || typeof payload.fieldId !== 'string') return;
+      getGameSystem((err, system) => {
+        if (err) return;
+        const rollDef = sheetRolls.getRoll(system, payload.fieldId);
+        if (!rollDef) return;
+        db.get(
+          `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+          [info.userName, system],
+          (err2, row) => {
+            if (err2 || !row) return;
+            let outcome;
+            try {
+              const resolved = rollEngine.resolveFormula(rollDef.formula, JSON.parse(row.data || '{}'));
+              outcome = rollEngine.executeRoll(resolved, rollDef.shape);
+            } catch (e) {
+              return;
+            }
+            const critTag = outcome.critical === 'success' ? ' — CRITICAL!'
+              : outcome.critical === 'failure' ? ' — FUMBLE!' : '';
+            const historyString =
+              `${info.userName} rolled ${rollDef.label} [${outcome.breakdown} = ${outcome.total}]${critTag}`;
+            const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
+            const broadcastData = {
+              userName: info.userName,
+              results: outcome.rolls,
+              modifiers: outcome.modTotal !== 0 ? [outcome.modTotal] : [],
+              color,
+              total: outcome.total,
+              historyString,
+            };
+            db.run(
+              'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
+              [info.userName, outcome.total, JSON.stringify(outcome.rolls), color, historyString],
+              (err3) => {
+                if (err3) console.error('Error saving sheet roll:', err3);
+                io.emit('diceRollBroadcast', broadcastData);
               }
             );
           }
