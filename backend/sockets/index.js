@@ -2,6 +2,8 @@ const jwt = require('jsonwebtoken');
 const sheetTemplates = require('../sheets/templates');
 const sheetRolls = require('../sheets/rolls');
 const rollEngine = require('../sheets/rollEngine');
+const sheetAttack = require('../sheets/attack');
+const npcTiers = require('../sheets/npcTiers');
 
 const SECRET = process.env.JWT_SECRET;
 
@@ -715,12 +717,55 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             if (err2 || !row) return;
             const data = JSON.parse(row.data || '{}');
             data[payload.fieldId] = payload.value;
+            // If the changed field is a max, clamp the paired current field.
+            const curField = sheetTemplates.getMaxPairs(system)[payload.fieldId];
+            if (curField && data[curField] !== undefined) {
+              const newMax = Number(payload.value);
+              if (Number(data[curField]) > newMax) data[curField] = newMax;
+            }
+            // Recompute derived fields (CP:R: EMP = Humanity / 10)
+            sheetTemplates.applyDerived(system, data, payload.fieldId);
             db.run(
               `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
               [JSON.stringify(data), row.id],
               (err3) => {
                 if (err3) return;
                 io.emit('sheetUpdated', { username: info.userName, system });
+              }
+            );
+          }
+        );
+      });
+    });
+
+    // Bulk-apply imported fields to the caller's own sheet (import flow).
+    // Same rules as updateSheetField, one write: linked fields refused,
+    // derived fields recomputed.
+    socket.on('importSheetFields', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      if (!payload || typeof payload.fields !== 'object' || payload.fields === null) return;
+      getGameSystem((err, system) => {
+        if (err) return;
+        const linked = sheetTemplates.getLinkedFields(system);
+        const entries = Object.entries(payload.fields)
+          .filter(([k, v]) => !linked[k] && (typeof v === 'string' || typeof v === 'number'));
+        if (entries.length === 0) return;
+        db.get(
+          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+          [info.userName, system],
+          (err2, row) => {
+            if (err2 || !row) return;
+            const data = JSON.parse(row.data || '{}');
+            entries.forEach(([k, v]) => { data[k] = v; });
+            entries.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
+            db.run(
+              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+              [JSON.stringify(data), row.id],
+              (err3) => {
+                if (err3) return;
+                io.emit('sheetUpdated', { username: info.userName, system });
+                socket.emit('sheetImportApplied', { count: entries.length });
               }
             );
           }
@@ -740,22 +785,64 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (err) return;
         const rollDef = sheetRolls.getRoll(system, payload.fieldId);
         if (!rollDef) return;
+        db.get(`SELECT value FROM global_settings WHERE key = 'luck_negates_fumble'`, (lnErr, lnRow) => {
+        const luckNegatesFumble = !lnErr && lnRow && lnRow.value === '1';
         db.get(
-          `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
           [info.userName, system],
           (err2, row) => {
             if (err2 || !row) return;
+            db.get(
+              `SELECT hp_current FROM locations WHERE shape = 'rhombus' AND owner = ?
+               ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
+              [info.userName],
+              (hpErr, hpRow) =>
+
+            {
+            const data = JSON.parse(row.data || '{}');
+            const hp = !hpErr && hpRow ? hpRow.hp_current : null;
+            // Declared LUCK: flat bonus and/or a 1-pip fumble shield. The
+            // house rule (bonus spend also negates fumbles) is settings-gated.
+            // Fumble negation (shield or bonus) only exists while the
+            // house rule is on - off means a nat-1 always fumbles.
+            const spend = sheetAttack.resolveLuckSpend(
+              data.luck,
+              Number.isInteger(payload.luck) ? payload.luck : 0,
+              payload.luckNegate === true && luckNegatesFumble
+            );
+            const noFumble = spend.negate || (luckNegatesFumble && spend.bonus > 0);
             let outcome;
+            let statField = null;
             try {
-              const resolved = rollEngine.resolveFormula(rollDef.formula, JSON.parse(row.data || '{}'));
-              outcome = rollEngine.executeRoll(resolved, rollDef.shape);
+              const resolved = rollEngine.resolveFormula(rollDef.formula, data);
+              // First @field in the formula is the governing stat (armor
+              // penalty applies to REF/DEX checks)
+              const firstField = rollEngine.parseFormula(rollDef.formula).find(t => t.kind === 'field');
+              statField = firstField ? firstField.field : null;
+              if (spend.bonus > 0) resolved.modifiers.push({ label: 'luck', value: spend.bonus });
+              resolved.modifiers.push(...sheetAttack.checkPenalties(data, statField, hp));
+              outcome = rollEngine.executeRoll(resolved, rollDef.shape, Math.random, { noFumble });
             } catch (e) {
               return;
             }
+            const luck = spend.total;
             const critTag = outcome.critical === 'success' ? ' — CRITICAL!'
               : outcome.critical === 'failure' ? ' — FUMBLE!' : '';
+            const luckTag = (spend.bonus > 0 ? ` (LUCK +${spend.bonus})` : '')
+              + (spend.negate ? ' (LUCK: FUMBLE SHIELD)' : '');
+            const woundTag = hp !== null && hp <= 0 ? ' (MORTALLY WOUNDED -4)'
+              : hp !== null && Number(data.seriously_wounded) > 0 && hp <= Number(data.seriously_wounded) ? ' (WOUNDED -2)' : '';
             const historyString =
-              `${info.userName} rolled ${rollDef.label} [${outcome.breakdown} = ${outcome.total}]${critTag}`;
+              `${info.userName} rolled ${rollDef.label} [${outcome.breakdown} = ${outcome.total}]${luckTag}${woundTag}${critTag}`;
+            // Spend the declared LUCK
+            if (luck > 0) {
+              data.luck = Math.max(0, (Number(data.luck) || 0) - luck);
+              db.run(
+                `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                [JSON.stringify(data), row.id],
+                () => io.emit('sheetUpdated', { username: info.userName, system })
+              );
+            }
             const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
             const broadcastData = {
               userName: info.userName,
@@ -773,8 +860,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 io.emit('diceRollBroadcast', broadcastData);
               }
             );
+            }
+            );
           }
         );
+        });
       });
     });
 
@@ -817,14 +907,20 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         getGameSystem((err2, system) => {
           if (err2) return;
           const label = loc.name || `Token #${location_id}`;
+          // Tier package (per-system power level) seeds stats/skills/armor/
+          // weapons plus token HP and DV. Systems without tiers keep the
+          // bare token-mirroring sheet.
+          const tier = npcTiers.buildTier(system, data.tier);
           const sheetData = {
             name: loc.name || '',
             description: loc.description || '',
             handle: loc.name || '',
-            hp: loc.hp_current ?? loc.hp_max ?? 0,
-            hp_max: loc.hp_max ?? 0,
+            ...(tier ? tier.data : {
+              hp: loc.hp_current ?? loc.hp_max ?? 0,
+              hp_max: loc.hp_max ?? 0,
+            }),
           };
-          db.run(
+          const insertSheet = () => db.run(
             `INSERT INTO character_sheets (username, system, data, is_npc, npc_label)
              VALUES (?, ?, ?, 1, ?)`,
             [callerInfo.userName, system, JSON.stringify(sheetData), label],
@@ -837,11 +933,27 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 [location_id, sheetId],
                 (err4) => {
                   if (err4) return;
-                  socket.emit('npcSheetGenerated', { location_id, sheet_id: sheetId, npc_label: label });
+                  socket.emit('npcSheetGenerated', { location_id, sheet_id: sheetId, npc_label: label, tier: tier ? tier.tierId : null });
                 }
               );
             }
           );
+          if (tier) {
+            // Tiered NPCs also get their token tuned: HP pool + DVs.
+            // Melee DV comes from the sheet (base + DEX + Evasion; base per
+            // the take-10 house-rule toggle) - the GM can still override it
+            // any time via EDIT_DV.
+            db.get(`SELECT value FROM global_settings WHERE key = 'melee_dv_take10'`, (sErr, sRow) => {
+              const meleeDv = sheetAttack.staticMeleeDv(tier.data, !sErr && sRow?.value === '1');
+              db.run(
+                `UPDATE locations SET hp_current = ?, hp_max = ?, melee_ac = ?, ranged_ac = ? WHERE id = ?`,
+                [tier.hp, tier.hp, meleeDv, tier.dv.ranged, location_id],
+                () => { emitUpdate({ isRhombusOnly: true }); insertSheet(); }
+              );
+            });
+          } else {
+            insertSheet();
+          }
         });
       });
     });
@@ -945,6 +1057,303 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
     socket.on('cancelAttack', () => {
       pendingAttacks.delete(socket.id);
+    });
+
+    // ── CP:R attack flow ─────────────────────────────────────────────────────
+    // Fully server-authoritative: the client names a target, one of its own
+    // structured weapon rows, and whether the shot is aimed. Everything else
+    // (to-hit formula, DV, damage dice, SP soak, ablation, HP write) resolves
+    // against stored data.
+    const RHOMBUS_SHAPES = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];
+
+    const broadcastRoll = (userName, outcome, historyString, color, cb) => {
+      const broadcastData = {
+        userName,
+        results: outcome.rolls,
+        modifiers: outcome.modTotal !== 0 ? [outcome.modTotal] : [],
+        color,
+        total: outcome.total,
+        historyString,
+      };
+      db.run(
+        'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
+        [userName, outcome.total, JSON.stringify(outcome.rolls), color, historyString],
+        () => { io.emit('diceRollBroadcast', broadcastData); if (cb) cb(); }
+      );
+    };
+
+    // Defender armor lives on a sheet: the owner's player sheet for player
+    // rhombi, or the linked NPC sheet for enemy/friendly tokens (their owner
+    // field is set too, so branch on shape, not owner). Null when neither
+    // exists (SP treated as 0).
+    const getDefenderSheet = (target, system, cb) => {
+      if (target.shape === 'rhombus' && target.owner) {
+        db.get(
+          `SELECT id, username, data, is_npc FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+          [target.owner, system], (err, row) => cb(err ? null : row || null)
+        );
+      } else {
+        db.get(
+          `SELECT cs.id, cs.username, cs.data, cs.is_npc FROM npc_sheet_links l
+           JOIN character_sheets cs ON cs.id = l.sheet_id WHERE l.location_id = ?`,
+          [target.id], (err, row) => cb(err ? null : row || null)
+        );
+      }
+    };
+
+    // Apply damage to a token's HP: temp HP absorbs first (same rules as the
+    // /health route). Player rhombi update every copy by owner.
+    const applyTokenDamage = (target, amount, cb) => {
+      let temp = target.hp_temp || 0;
+      let current = target.hp_current === null || target.hp_current === undefined
+        ? (target.hp_max || 0) : target.hp_current;
+      let remaining = amount;
+      if (temp > 0) {
+        if (temp >= remaining) { temp -= remaining; remaining = 0; }
+        else { remaining -= temp; temp = 0; }
+      }
+      current = Math.max(0, current - remaining);
+      const done = () => {
+        emitUpdate({ isRhombusOnly: true });
+        if (target.owner) io.emit('sheetUpdated', { username: target.owner });
+        cb(current);
+      };
+      if (target.shape === 'rhombus' && target.owner) {
+        db.run('UPDATE locations SET hp_current = ?, hp_temp = ? WHERE shape = "rhombus" AND owner = ?',
+          [current, temp, target.owner], done);
+      } else {
+        db.run('UPDATE locations SET hp_current = ?, hp_temp = ? WHERE id = ?',
+          [current, temp, target.id], done);
+      }
+    };
+
+    socket.on('sheetAttack', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      if (!payload || !payload.targetId) return;
+      pendingAttacks.delete(socket.id); // CP:R resolves in one step - no manual roll pending
+      const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
+      getGameSystem((err, system) => {
+        if (err || system !== 'cyberpunk_red') return;
+        db.get(
+          `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+          [info.userName, system],
+          (err2, sheetRow) => {
+            if (err2 || !sheetRow) return;
+            const attackerData = JSON.parse(sheetRow.data || '{}');
+            const weapon = sheetAttack.getWeapon(attackerData, payload.weaponIndex);
+            if (!weapon) {
+              return socket.emit('sheetAttackError', { message: 'INVALID_WEAPON // SET NAME, DMG (e.g. 3d6) AND SKILL ON YOUR SHEET' });
+            }
+            const aimed = !!payload.aimed;
+            db.get(
+              `SELECT id, name, owner, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index,
+                      hp_current, hp_max, hp_temp
+               FROM locations WHERE id = ?`,
+              [payload.targetId],
+              (err3, target) => {
+                if (err3 || !target || !RHOMBUS_SHAPES.includes(target.shape)) return;
+                const meleeDv = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 10;
+                const rangedDv = target.ranged_ac !== null && target.ranged_ac !== undefined ? target.ranged_ac : meleeDv;
+                const dv = weapon.attackType === 'ranged' ? rangedDv : meleeDv;
+
+                db.get(
+                  `SELECT hp_current FROM locations WHERE shape = 'rhombus' AND owner = ?
+                   ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
+                  [info.userName],
+                  (hpErr, hpRow) => {
+                db.get(`SELECT value FROM global_settings WHERE key = 'luck_negates_fumble'`, (lnErr, lnRow) => {
+                const luckNegatesFumble = !lnErr && lnRow && lnRow.value === '1';
+                // Declared LUCK on the to-hit: flat bonus and/or 1-pip fumble
+                // shield - the shield only exists while the house rule is on
+                const spend = sheetAttack.resolveLuckSpend(
+                  attackerData.luck,
+                  Number.isInteger(payload.luck) ? payload.luck : 0,
+                  payload.luckNegate === true && luckNegatesFumble
+                );
+                const noFumble = spend.negate || (luckNegatesFumble && spend.bonus > 0);
+                const luck = spend.total;
+                const attackerHp = !hpErr && hpRow ? hpRow.hp_current : null;
+                let toHit;
+                try { toHit = sheetAttack.rollToHit(attackerData, weapon, aimed, Math.random, { luck: spend.bonus, noFumble, hp: attackerHp }); } catch (e) { return; }
+                const hit = toHit.total >= dv;
+                const critTag = toHit.critical === 'success' ? ' — CRITICAL!'
+                  : toHit.critical === 'failure' ? ' — FUMBLE!' : '';
+                const aimedTag = aimed ? ' (AIMED)' : '';
+                const luckTag = (spend.bonus > 0 ? ` (LUCK +${spend.bonus})` : '')
+                  + (spend.negate ? ' (LUCK: FUMBLE SHIELD)' : '');
+                const woundTag = attackerHp !== null && attackerHp <= 0 ? ' (MORTALLY WOUNDED -4)'
+                  : attackerHp !== null && Number(attackerData.seriously_wounded) > 0 && attackerHp <= Number(attackerData.seriously_wounded) ? ' (WOUNDED -2)' : '';
+                const hitHistory =
+                  `${info.userName} attacks ${target.name} with ${weapon.name}${aimedTag}${luckTag}${woundTag} ` +
+                  `[${toHit.breakdown} = ${toHit.total} vs DV ${dv}] — ${hit ? 'HIT' : 'MISS'}${critTag}`;
+                // Spend the declared LUCK
+                if (luck > 0) {
+                  attackerData.luck = Math.max(0, (Number(attackerData.luck) || 0) - luck);
+                  db.run(
+                    `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP
+                     WHERE username = ? AND system = ? AND is_npc = 0`,
+                    [JSON.stringify(attackerData), info.userName, system],
+                    () => io.emit('sheetUpdated', { username: info.userName, system })
+                  );
+                }
+
+                const emitResult = (extra) => {
+                  const onBattleMap = target.battle_map_id !== null && target.battle_map_id !== undefined;
+                  const attackerSql = onBattleMap
+                    ? 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id = ? AND floor_index = ?'
+                    : 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id IS NULL';
+                  const attackerParams = onBattleMap
+                    ? [info.userName, target.battle_map_id, target.floor_index]
+                    : [info.userName];
+                  db.get(attackerSql, attackerParams, (posErr, attackerRow) => {
+                    io.emit('attackResult', {
+                      hit,
+                      attackerId: socket.id,
+                      attackerName: info.userName,
+                      targetId: target.id,
+                      targetName: target.name,
+                      attackType: weapon.attackType,
+                      roll: toHit.total,
+                      ac: dv,
+                      attackerPos: attackerRow ? { x: attackerRow.x, z: attackerRow.z } : null,
+                      targetPos: { x: target.x, z: target.z },
+                      isBattleMap: onBattleMap,
+                      weaponName: weapon.name,
+                      aimed,
+                      ...extra,
+                    });
+                  });
+                };
+
+                if (!hit) return broadcastRoll(info.userName, toHit, hitHistory, color, () => emitResult({}));
+
+                // Hit: damage, SP soak, ablation, HP write-through.
+                broadcastRoll(info.userName, toHit, hitHistory, color, () => {
+                  let dmg;
+                  try { dmg = sheetAttack.rollDamage(weapon); } catch (e) { return emitResult({}); }
+                  getDefenderSheet(target, system, (defender) => {
+                    const defenderData = defender ? JSON.parse(defender.data || '{}') : {};
+                    const spField = aimed ? 'sp_head' : 'sp_body';
+                    const sp = Number(defenderData[spField]) || 0;
+
+                    // Shield intercepts first (only when the defender has a sheet)
+                    const shieldBefore = defender ? (Number(defenderData.sp_shield) || 0) : 0;
+                    const shield = sheetAttack.applyShield(dmg.total, shieldBefore);
+                    // Overflow past the shield soaks against location SP
+                    const { through: armorThrough, ablated } = sheetAttack.applyArmor(shield.remaining, sp, aimed);
+                    // Critical injury (2+ max-face damage dice): bonus damage ignores armor
+                    const crit = sheetAttack.isCriticalInjury(dmg.rolls);
+                    const through = armorThrough + (crit ? sheetAttack.CRIT_BONUS_DAMAGE : 0);
+                    const location = aimed ? 'HEAD' : 'BODY';
+
+                    let dmgHistory = `${weapon.name} damage vs ${target.name} [${dmg.breakdown} = ${dmg.total}]`;
+                    if (shield.absorbed > 0) {
+                      dmgHistory += ` — SHIELD absorbs ${shield.absorbed}${shield.destroyed ? ' (SHIELD DOWN)' : ` (${shield.newShield} left)`}`;
+                    }
+                    if (shield.remaining > 0) {
+                      dmgHistory += ` — SP ${location} ${sp} soaks ${Math.min(sp, shield.remaining)}` +
+                        (armorThrough > 0
+                          ? `, ${armorThrough} DAMAGE THROUGH${aimed ? ' (HEADSHOT x2)' : ''}${ablated && defender ? ', SP ABLATES -1' : ''}`
+                          : ' — NO PENETRATION');
+                    }
+                    if (crit) {
+                      dmgHistory += ` — CRITICAL INJURY! +${sheetAttack.CRIT_BONUS_DAMAGE} DIRECT · GM: ROLL THE INJURY TABLE`;
+                    }
+
+                    const resultExtras = {
+                      damage: dmg.total, sp, through, ablated, location,
+                      shieldAbsorbed: shield.absorbed, shieldLeft: shield.newShield,
+                      criticalInjury: crit,
+                    };
+
+                    const finish = () => {
+                      broadcastRoll(info.userName, dmg, dmgHistory, color, () => {
+                        if (through <= 0) return emitResult({ ...resultExtras, through: 0 });
+                        applyTokenDamage(target, through, (newHp) => {
+                          emitResult({ ...resultExtras, targetHp: newHp, targetDown: newHp <= 0 });
+                        });
+                      });
+                    };
+
+                    const sheetChanged = defender && ((ablated && shield.remaining > 0) || shield.absorbed > 0);
+                    if (sheetChanged) {
+                      if (ablated && shield.remaining > 0) defenderData[spField] = Math.max(0, sp - 1);
+                      if (shield.absorbed > 0) defenderData.sp_shield = shield.newShield;
+                      db.run(
+                        `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                        [JSON.stringify(defenderData), defender.id],
+                        () => {
+                          if (!defender.is_npc) io.emit('sheetUpdated', { username: defender.username, system });
+                          finish();
+                        }
+                      );
+                    } else {
+                      finish();
+                    }
+                  });
+                });
+                });
+                  }
+                );
+              }
+            );
+          }
+        );
+      });
+    });
+
+    // ── CP:R death saves ─────────────────────────────────────────────────────
+    // Only meaningful at 0 HP or less. The escalating penalty lives in the
+    // sheet's own data (death_save_penalty) and resets when healed above 0.
+    socket.on('requestDeathSave', () => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      getGameSystem((err, system) => {
+        if (err || system !== 'cyberpunk_red') return;
+        db.get(
+          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+          [info.userName, system],
+          (err2, row) => {
+            if (err2 || !row) return;
+            db.get(
+              `SELECT hp_current FROM locations WHERE shape = 'rhombus' AND owner = ?
+               ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
+              [info.userName],
+              (err3, hpRow) => {
+                if (err3 || !hpRow) return;
+                if (hpRow.hp_current === null || hpRow.hp_current > 0) return;
+                const data = JSON.parse(row.data || '{}');
+                const body = Number(data.body) || 0;
+                const save = sheetAttack.rollDeathSave(body, data.death_save_penalty);
+                data.death_save_penalty = save.penalty + 1;
+                const penTag = save.penalty > 0 ? `+${save.penalty} ` : '';
+                const historyString =
+                  `${info.userName} DEATH SAVE [${save.die} ${penTag}= ${save.total} vs BODY ${body}] — ` +
+                  (save.success ? 'STABILIZED THIS ROUND' : save.die === 10 ? 'NATURAL 10 — DEAD' : 'DEAD');
+                db.run(
+                  `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                  [JSON.stringify(data), row.id],
+                  () => {
+                    io.emit('sheetUpdated', { username: info.userName, system });
+                    const outcome = { rolls: { 10: [save.die] }, modTotal: save.penalty, total: save.total };
+                    broadcastRoll(info.userName, outcome, historyString, '#ff3333', () => {
+                      io.emit('deathSaveResult', {
+                        userName: info.userName,
+                        die: save.die,
+                        penalty: save.penalty,
+                        total: save.total,
+                        body,
+                        success: save.success,
+                      });
+                    });
+                  }
+                );
+              }
+            );
+          }
+        );
+      });
     });
 
     // ── Radio Feed ──────────────────────────────────────────────────────────────

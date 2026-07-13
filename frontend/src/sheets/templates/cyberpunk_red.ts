@@ -11,12 +11,41 @@ const skill = (id: string, label: string, stat: string): SheetField => ({
   roll: { formula: `1d10 + @${stat} + @${id}`, label },
 });
 
+/** Skills a weapon can attack with (id must match a skill field above). */
+export const CPR_WEAPON_SKILLS: { value: string; label: string }[] = [
+  { value: 'handgun', label: 'Handgun' },
+  { value: 'shoulder_arms', label: 'Shoulder Arms' },
+  { value: 'heavy_weapons', label: 'Heavy Weapons' },
+  { value: 'autofire', label: 'Autofire' },
+  { value: 'archery', label: 'Archery' },
+  { value: 'melee_weapon', label: 'Melee Weapon' },
+  { value: 'brawling', label: 'Brawling' },
+  { value: 'martial_arts', label: 'Martial Arts' },
+];
+
+/** Number of structured weapon rows on the sheet. */
+export const CPR_WEAPON_ROWS = 4;
+
+const weaponRow = (i: number): SheetField[] => [
+  { id: `weapon${i}_name`, label: 'NAME', type: 'text', placeholder: 'Militech Avenger' },
+  { id: `weapon${i}_dmg`, label: 'DMG', type: 'text', placeholder: '3d6', hint: 'Damage dice, e.g. 2d6 or 3d6. Rolled by the server on a hit.' },
+  { id: `weapon${i}_skill`, label: 'SKILL', type: 'select', options: CPR_WEAPON_SKILLS, hint: 'Attack skill used with this weapon.' },
+  { id: `weapon${i}_rof`, label: 'ROF', type: 'number', placeholder: '2', hint: 'Rate of fire: attacks per turn.' },
+];
+
 export const cyberpunkRed: SheetTemplate = {
   id: 'cyberpunk_red',
   name: 'Cyberpunk RED',
   // CP:R has no AC: armor is per-location SP, managed on the sheet's ARMOR
   // section. Attacks target a DV instead.
   tokenDefense: { editOnToken: false, label: 'DV', note: 'ARMOR (SP) IS MANAGED ON YOUR CHARACTER_SHEET' },
+  deathSave: { statField: 'body', penaltyField: 'death_save_penalty' },
+  npcTiers: [
+    { id: 'mook', label: 'MOOK' },
+    { id: 'skilled', label: 'SKILLED' },
+    { id: 'pro', label: 'PRO' },
+    { id: 'elite', label: 'ELITE' },
+  ],
   header: {
     nameField: 'handle',
     subtitleFields: ['role'],
@@ -37,12 +66,12 @@ export const cyberpunkRed: SheetTemplate = {
       layout: 'list',
       tab: 'STATS',
       fields: [
-        { id: 'handle', label: 'Handle', type: 'text', visibility: 'public' },
-        { id: 'role', label: 'Role', type: 'text', visibility: 'public' },
-        { id: 'role_ability', label: 'Role Ability', type: 'text' },
+        { id: 'handle', label: 'Handle', type: 'text', visibility: 'public', placeholder: 'V' },
+        { id: 'role', label: 'Role', type: 'text', visibility: 'public', placeholder: 'Solo' },
+        { id: 'role_ability', label: 'Role Ability', type: 'text', placeholder: 'Combat Awareness' },
         { id: 'role_ability_rank', label: 'Rank', type: 'number' },
-        { id: 'description', label: 'Description', type: 'textarea', visibility: 'public' },
-        { id: 'aliases', label: 'Aliases', type: 'text' },
+        { id: 'description', label: 'Description', type: 'textarea', visibility: 'public', placeholder: 'Chrome arm, mirrored optics, always smoking' },
+        { id: 'aliases', label: 'Aliases', type: 'text', placeholder: 'The Ghost of Watson' },
       ],
     },
     {
@@ -239,10 +268,17 @@ export const cyberpunkRed: SheetTemplate = {
     {
       id: 'weapons',
       label: 'WEAPONS',
+      layout: 'weapons',
+      tab: 'GEAR',
+      fields: Array.from({ length: CPR_WEAPON_ROWS }, (_, i) => weaponRow(i + 1)).flat(),
+    },
+    {
+      id: 'weapon_notes',
+      label: 'WEAPON NOTES',
       layout: 'notes',
       tab: 'GEAR',
       fields: [
-        { id: 'weapons_notes', label: 'Weapons (name / DMG / ammo / ROF / notes)', type: 'textarea' },
+        { id: 'weapons_notes', label: 'Ammo, attachments, notes', type: 'textarea', placeholder: 'Smartgun link on the Avenger; sword is monofilament' },
       ],
     },
     {
@@ -252,8 +288,8 @@ export const cyberpunkRed: SheetTemplate = {
       tab: 'GEAR',
       fields: [
         { id: 'cash', label: 'Cash (eb)', type: 'number', source: 'bank_balance' },
-        { id: 'ammunition', label: 'Ammunition', type: 'text' },
-        { id: 'gear_notes', label: 'Gear', type: 'textarea' },
+        { id: 'ammunition', label: 'Ammunition', type: 'text', placeholder: '30x heavy pistol, 2x grenade' },
+        { id: 'gear_notes', label: 'Gear', type: 'textarea', placeholder: 'Agent, medtech bag, grapple gun, 2x airhypo' },
       ],
     },
     {
@@ -262,7 +298,7 @@ export const cyberpunkRed: SheetTemplate = {
       layout: 'notes',
       tab: 'GEAR',
       fields: [
-        { id: 'cyberware_notes', label: 'Cyberware', type: 'textarea' },
+        { id: 'cyberware_notes', label: 'Cyberware', type: 'textarea', placeholder: 'Cybereye (Low Light), Neural Link, Subdermal Grip' },
       ],
     },
     {
@@ -271,7 +307,7 @@ export const cyberpunkRed: SheetTemplate = {
       layout: 'notes',
       tab: 'NOTES',
       fields: [
-        { id: 'lifepath_notes', label: 'Lifepath, reputation, IP, contacts', type: 'textarea' },
+        { id: 'lifepath_notes', label: 'Lifepath, reputation, IP, contacts', type: 'textarea', placeholder: 'Grew up in the combat zone. Owes a fixer named Cyrus. 20 IP banked.' },
       ],
     },
     {
@@ -280,8 +316,8 @@ export const cyberpunkRed: SheetTemplate = {
       layout: 'notes',
       tab: 'NOTES',
       fields: [
-        { id: 'critical_injuries', label: 'Critical injuries', type: 'textarea' },
-        { id: 'addictions', label: 'Addictions', type: 'textarea' },
+        { id: 'critical_injuries', label: 'Critical injuries', type: 'textarea', placeholder: 'Broken ribs (-2 MOVE until healed)' },
+        { id: 'addictions', label: 'Addictions', type: 'textarea', placeholder: 'Synthcoke - 1 dose/day or -2 to all checks' },
       ],
     },
   ],

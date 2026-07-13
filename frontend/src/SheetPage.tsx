@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
 import { SheetRenderer } from './components/SheetRenderer';
-import { getTemplate, type CharacterSheet } from './sheets';
+import { getTemplate, getMaxPairs, type CharacterSheet } from './sheets';
 
 // Standalone character-sheet tab (?sheet=true). Gives the player a full
 // browser tab for their sheet instead of the in-game floating window.
@@ -36,6 +36,7 @@ export default function SheetPage() {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastRoll, setLastRoll] = useState<string | null>(null);
+  const [allowFumbleShield, setAllowFumbleShield] = useState(false);
   const socketRef = useRef<any>(null);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -77,9 +78,18 @@ export default function SheetPage() {
       if (info.username === userName) socket.emit('requestMySheet');
     });
     socket.on('gameSystemChanged', () => socket.emit('requestMySheet'));
-    // No dice tray on this page - show the latest roll inline instead
+    const fetchRules = () => {
+      fetch('/api/settings').then(r => r.json()).then((rows) => {
+        if (Array.isArray(rows)) {
+          setAllowFumbleShield(rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1');
+        }
+      }).catch(() => {});
+    };
+    fetchRules();
+    socket.on('settingsUpdated', fetchRules);
+    // No dice tray on this page — delay matches the 5s dice animation in the main app
     socket.on('diceRollBroadcast', (roll: { historyString?: string }) => {
-      if (roll?.historyString) setLastRoll(roll.historyString);
+      if (roll?.historyString) setTimeout(() => setLastRoll(roll.historyString!), 5000);
     });
 
     return () => { socket.disconnect(); };
@@ -91,7 +101,18 @@ export default function SheetPage() {
   }, []);
 
   const handleFieldChange = useCallback((fieldId: string, value: string | number) => {
-    setSheet(prev => prev ? { ...prev, data: { ...prev.data, [fieldId]: value } } : prev);
+    setSheet(prev => {
+      if (!prev) return prev;
+      const tmpl = getTemplate(prev.system);
+      const pairs = getMaxPairs(tmpl);
+      const curField = pairs[fieldId];
+      const data = { ...prev.data, [fieldId]: value };
+      if (curField !== undefined && data[curField] !== undefined) {
+        const newMax = Number(value);
+        if (Number(data[curField]) > newMax) data[curField] = newMax;
+      }
+      return { ...prev, data };
+    });
     const timers = pendingSaves.current;
     const existing = timers.get(fieldId);
     if (existing) clearTimeout(existing);
@@ -156,13 +177,9 @@ export default function SheetPage() {
               portraitUrl={sheet.portrait_url}
               onFieldChange={handleFieldChange}
               onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
-              onRoll={(fieldId) => socketRef.current?.emit('requestSheetRoll', { fieldId })}
-              onResetLuck={adminToken ? () => {
-                const luckMax = sheet.data[template.header?.luckMaxField ?? ''];
-                if (luckMax !== undefined && template.header?.luckField) {
-                  handleFieldChange(template.header.luckField, Number(luckMax));
-                }
-              } : undefined}
+              onRoll={(fieldId, luck, negateFumble) => socketRef.current?.emit('requestSheetRoll', { fieldId, luck, luckNegate: negateFumble })}
+              onDeathSave={() => socketRef.current?.emit('requestDeathSave')}
+              allowFumbleShield={allowFumbleShield}
             />
           </div>
         ) : (

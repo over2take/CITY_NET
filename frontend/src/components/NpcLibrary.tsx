@@ -16,6 +16,8 @@ interface NpcLibraryProps {
   onClose: () => void;
   /** If provided, show an "Attach to token" affordance for this location_id */
   attachLocationId?: number | null;
+  /** Open the full NPC sheet for viewing/editing. */
+  onOpenNpc?: (npc: { id: number; npc_label: string }) => void;
 }
 
 const row: React.CSSProperties = {
@@ -39,14 +41,36 @@ function NpcRow({
   onDeleted,
   attachLocationId,
   onLinked,
+  onOpenNpc,
+  folders,
+  onMoved,
 }: {
   npc: NpcRow;
   token: string;
   onDeleted: (id: number) => void;
   attachLocationId?: number | null;
   onLinked?: (npcId: number, locationId: number) => void;
+  onOpenNpc?: (npc: { id: number; npc_label: string }) => void;
+  /** Existing folder names, for the MOVE control. */
+  folders?: string[];
+  /** Reload the list after a folder move. */
+  onMoved?: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [moving, setMoving] = useState(false);
+
+  const handleMove = async (folder: string) => {
+    setMoving(false);
+    const target = folder === '__none__' ? null : folder === '__new__' ? window.prompt('New folder name:')?.trim() || null : folder;
+    if (folder === '__new__' && target === null) return;
+    if ((target ?? null) === (npc.folder ?? null)) return;
+    await fetch(`/api/sheets/npcs/${npc.id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder: target }),
+    });
+    onMoved?.();
+  };
 
   const handleDelete = async () => {
     if (!confirming) { setConfirming(true); return; }
@@ -79,6 +103,31 @@ function NpcRow({
       <span style={{ ...label9, color: 'var(--green)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {npc.npc_label.toUpperCase()}
       </span>
+      {onOpenNpc && (
+        <button style={btnGreen} onClick={() => onOpenNpc(npc)} title="Open this NPC's full character sheet">
+          OPEN
+        </button>
+      )}
+      {onMoved && (
+        moving ? (
+          <select
+            autoFocus
+            aria-label="Move to folder"
+            defaultValue={npc.folder ?? '__none__'}
+            onChange={(e) => handleMove(e.target.value)}
+            onBlur={() => setMoving(false)}
+            style={{ fontFamily: 'monospace', fontSize: 8, background: '#001a00', color: 'var(--green)', border: '1px solid var(--green)', maxWidth: 90 }}
+          >
+            <option value="__none__">(NO FOLDER)</option>
+            {(folders ?? []).map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}
+            <option value="__new__">+ NEW FOLDER…</option>
+          </select>
+        ) : (
+          <button style={btn} onClick={() => setMoving(true)} title="Move to another folder">
+            MOVE
+          </button>
+        )
+      )}
       {attachLocationId && (
         <button style={btnGreen} onClick={handleLink} title="Attach this NPC sheet to the selected token">
           ATTACH
@@ -103,6 +152,9 @@ function FolderGroup({
   onDeleted,
   attachLocationId,
   onLinked,
+  onOpenNpc,
+  folders,
+  onMoved,
 }: {
   folderName: string;
   npcs: NpcRow[];
@@ -110,6 +162,9 @@ function FolderGroup({
   onDeleted: (id: number) => void;
   attachLocationId?: number | null;
   onLinked?: (npcId: number, locationId: number) => void;
+  onOpenNpc?: (npc: { id: number; npc_label: string }) => void;
+  folders?: string[];
+  onMoved?: () => void;
 }) {
   const [open, setOpen] = useState(true);
   return (
@@ -121,13 +176,13 @@ function FolderGroup({
         {open ? '▼' : '▶'} {folderName.toUpperCase()}
       </button>
       {open && npcs.map(n => (
-        <NpcRow key={n.id} npc={n} token={token} onDeleted={onDeleted} attachLocationId={attachLocationId} onLinked={onLinked} />
+        <NpcRow key={n.id} npc={n} token={token} onDeleted={onDeleted} attachLocationId={attachLocationId} onLinked={onLinked} onOpenNpc={onOpenNpc} folders={folders} onMoved={onMoved} />
       ))}
     </div>
   );
 }
 
-export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId }: NpcLibraryProps) {
+export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId, onOpenNpc }: NpcLibraryProps) {
   const [npcs, setNpcs] = useState<NpcRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [newLabel, setNewLabel] = useState('');
@@ -162,6 +217,8 @@ export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId }: Np
   };
 
   const handleDeleted = (id: number) => setNpcs(prev => prev.filter(n => n.id !== id));
+
+  const allFolders = [...new Set(npcs.map(n => n.folder).filter(Boolean))] as string[];
 
   const handleLinked = (npcId: number) => setLinkedNpcId(npcId);
 
@@ -205,10 +262,10 @@ export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId }: Np
           ) : (
             <>
               {ungrouped.map(n => (
-                <NpcRow key={n.id} npc={n} token={token} onDeleted={handleDeleted} attachLocationId={attachLocationId} onLinked={(_npcId, _locId) => handleLinked(_npcId)} />
+                <NpcRow key={n.id} npc={n} token={token} onDeleted={handleDeleted} attachLocationId={attachLocationId} onLinked={(_npcId, _locId) => handleLinked(_npcId)} onOpenNpc={onOpenNpc} folders={allFolders} onMoved={load} />
               ))}
               {Object.entries(grouped).map(([folder, rows]) => (
-                <FolderGroup key={folder} folderName={folder} npcs={rows} token={token} onDeleted={handleDeleted} attachLocationId={attachLocationId} onLinked={(_npcId, _locId) => handleLinked(_npcId)} />
+                <FolderGroup key={folder} folderName={folder} npcs={rows} token={token} onDeleted={handleDeleted} attachLocationId={attachLocationId} onLinked={(_npcId, _locId) => handleLinked(_npcId)} onOpenNpc={onOpenNpc} folders={allFolders} onMoved={load} />
               ))}
             </>
           )}

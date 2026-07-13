@@ -33,6 +33,7 @@ import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, Quick
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
+import { NpcSheetWindow } from './components/NpcSheetWindow';
 import { getTemplate } from './sheets';
 import { DiceTrayWindow, DotMatrixScoreboard, DiceScene } from './components/DiceTray';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
@@ -168,7 +169,7 @@ function App() {
       .then(d => { if (d?.system) setGameSystem(d.system); })
       .catch(() => {});
   }, []);
-  const [lastAttackResult, setLastAttackResult] = useState<{ hit: boolean; roll: number; ac: number; targetName: string } | null>(null);
+  const [lastAttackResult, setLastAttackResult] = useState<{ hit: boolean; roll: number; ac: number; targetName: string; damage?: number; through?: number; targetDown?: boolean; criticalInjury?: boolean; shieldAbsorbed?: number } | null>(null);
   const [attackAnimations, setAttackAnimations] = useState<{ id: string; hit: boolean; attackType: 'melee' | 'ranged'; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number }; targetId: number; isBattleMap: boolean }[]>([]);
 
   // Radio Feed
@@ -190,10 +191,41 @@ function App() {
   const [acEdit, setAcEdit] = useState<{ melee: string; ranged: string } | null>(null);
 
   const [reviewHealthOwner, setReviewHealthOwner] = useState<string | null>(null);
+  // Track the reviewed token by id so the window follows live HP updates
+  // (NPC tokens share owner names; selectedLocation is a stale snapshot)
+  const [reviewHealthLocId, setReviewHealthLocId] = useState<number | null>(null);
   const [reviewHealthPos, setReviewHealthPos] = useState(() => ({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 }));
   const [quickSheetPos, setQuickSheetPos] = useState(() => ({ x: window.innerWidth / 2 + 170, y: window.innerHeight / 2 - 100 }));
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
+  const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string } | null>(null);
+  // NPC sheet linked to the currently selected token (admin) - drives
+  // GENERATE_SHEET vs OPEN_SHEET on the token menu
+  const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; npc_label: string } | null>(null);
+  // Admin view of another player's sheet (opened from their token)
+  const [openPlayerSheetUser, setOpenPlayerSheetUser] = useState<string | null>(null);
+  // Bumped when npc_sheet_links change so the link lookup effect re-runs
+  const [linkRefresh, setLinkRefresh] = useState(0);
+  // Power tier for GENERATE_SHEET (per-system; CP:R: mook..elite)
+  const [genTier, setGenTier] = useState<string>('');
+
+  useEffect(() => {
+    const loc = selectedLocation;
+    if (!token || !loc || !['enemy_rhombus', 'friendly_rhombus'].includes(loc.shape)) {
+      setTokenSheetLink(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/sheets/npcs/link/${loc.id}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled) return;
+        setTokenSheetLink(data?.sheet_id ? { location_id: loc.id, sheet_id: data.sheet_id, npc_label: data.npc_label } : null);
+      })
+      .catch(() => { if (!cancelled) setTokenSheetLink(null); });
+    return () => { cancelled = true; };
+  }, [selectedLocation?.id, selectedLocation?.shape, token, linkRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [npcSheetPos, setNpcSheetPos] = useState(() => ({ x: window.innerWidth / 2 - 260, y: 60 }));
 
   const [infoPanelPos, setInfoPanelPos] = useState(() => ({ x: window.innerWidth / 2 - 175, y: window.innerHeight / 2 - 200 }));
   const [diceTrayPos, setDiceTrayPos] = useState(() => ({ x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 250 }));
@@ -680,12 +712,31 @@ function App() {
       setIsDiceTrayOpen(true);
     },
     onGameSystemChanged: (system) => setGameSystem(system),
-    onNpcSheetGenerated: (data) => setNotification(`NPC_SHEET_CREATED: ${data.npc_label.toUpperCase()}`),
+    onNpcSheetGenerated: (data) => {
+      setNotification(`NPC_SHEET_CREATED: ${data.npc_label.toUpperCase()}`);
+      // Flip the token menu's GENERATE_SHEET to OPEN_SHEET immediately.
+      // Safe unconditionally: the button only reads the link when its
+      // location_id matches the selected token.
+      setTokenSheetLink({ location_id: data.location_id, sheet_id: data.sheet_id, npc_label: data.npc_label });
+    },
+    onNpcLinkChanged: () => setLinkRefresh(n => n + 1),
+    onDiceRollBroadcast: (data) => {
+      // Open the dice tray when any roll arrives for this user — catches rolls
+      // originating from the standalone sheet tab which can't call onRolled().
+      if (data.userName === userName) {
+        setIsDiceTrayOpen(true);
+        setActiveSidebarMenu('dice_menu');
+      }
+    },
     onAttackResult: (data) => {
       setAttackPending(null);
       // Delay result reveal and animation until after the dice tray's 5-second roll display finishes
       setTimeout(() => {
-        setLastAttackResult({ hit: data.hit, roll: data.roll, ac: data.ac, targetName: data.targetName });
+        setLastAttackResult({
+          hit: data.hit, roll: data.roll, ac: data.ac, targetName: data.targetName,
+          damage: (data as any).damage, through: (data as any).through, targetDown: (data as any).targetDown,
+          criticalInjury: (data as any).criticalInjury, shieldAbsorbed: (data as any).shieldAbsorbed,
+        });
         // Skip animation if the target rhombus isn't rendered in this client's current view
         if (!(window as any).activeRhombuses?.[data.targetId]) return;
         setAttackAnimations(prev => [...prev, {
@@ -1680,14 +1731,16 @@ function App() {
               />
             )}
             {reviewHealthOwner && (() => {
-              const reviewLoc = locations.find((l: any) => l.shape === 'rhombus' && l.owner === reviewHealthOwner)
+              const rhombusShapes = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];
+              const reviewLoc = (reviewHealthLocId !== null ? locations.find((l: any) => l.id === reviewHealthLocId) : null)
+                ?? locations.find((l: any) => rhombusShapes.includes(l.shape) && l.owner === reviewHealthOwner)
                 ?? (selectedLocation?.owner === reviewHealthOwner ? selectedLocation : null);
               return reviewLoc ? (
                 <HealthReviewWindow
                   location={reviewLoc}
                   pos={reviewHealthPos}
                   setPos={setReviewHealthPos}
-                  onClose={() => setReviewHealthOwner(null)}
+                  onClose={() => { setReviewHealthOwner(null); setReviewHealthLocId(null); }}
                 />
               ) : null;
             })()}
@@ -1706,6 +1759,31 @@ function App() {
                 pos={npcLibraryPos}
                 setPos={setNpcLibraryPos}
                 onClose={() => setIsNpcLibraryOpen(false)}
+                onOpenNpc={(npc) => setOpenNpcSheet(npc)}
+                attachLocationId={selectedLocation && ['enemy_rhombus', 'friendly_rhombus'].includes(selectedLocation.shape) ? selectedLocation.id : null}
+              />
+            )}
+            {openPlayerSheetUser && token && (
+              <NpcSheetWindow
+                token={token}
+                socket={socketRef.current}
+                npcId={-1}
+                npcLabel={openPlayerSheetUser}
+                playerUsername={openPlayerSheetUser}
+                pos={npcSheetPos}
+                setPos={setNpcSheetPos}
+                onClose={() => setOpenPlayerSheetUser(null)}
+              />
+            )}
+            {openNpcSheet && token && (
+              <NpcSheetWindow
+                token={token}
+                socket={socketRef.current}
+                npcId={openNpcSheet.id}
+                npcLabel={openNpcSheet.npc_label}
+                pos={npcSheetPos}
+                setPos={setNpcSheetPos}
+                onClose={() => setOpenNpcSheet(null)}
               />
             )}
             {isDiceTrayOpen && (
@@ -1737,18 +1815,18 @@ function App() {
                         <>
                           <p><strong>ID_TAG:</strong> {selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : (selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED'))}</p>
                           <p><strong>DATA_DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
-                          {/* AC display — admin can edit; owner can view their own; other players see nothing */}
-                          {(isAdmin || isOwner) && (
+                          {/* Defense display (AC or DV per game system) — admin can edit; owner can view their own; other players see nothing */}
+                          {(isAdmin || isOwner) && (() => { const defLabel = getTemplate(gameSystem).tokenDefense?.label ?? 'AC'; return (
                             isAdmin && acEdit ? (
                               <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <strong style={{ minWidth: '90px' }}>MELEE_AC:</strong>
+                                  <strong style={{ minWidth: '90px' }}>MELEE_{defLabel}:</strong>
                                   <input type="number" min="0" value={acEdit.melee} onChange={e => setAcEdit(a => a ? { ...a, melee: e.target.value } : a)} style={{ width: '60px' }} />
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <strong style={{ minWidth: '90px' }}>RANGED_AC:</strong>
+                                  <strong style={{ minWidth: '90px' }}>RANGED_{defLabel}:</strong>
                                   <input type="number" min="0" value={acEdit.ranged} onChange={e => setAcEdit(a => a ? { ...a, ranged: e.target.value } : a)} style={{ width: '60px' }} />
-                                  <span title="Leave blank to use Melee AC" style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
+                                  <span title={`Leave blank to use Melee ${defLabel}`} style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
                                 </div>
                                 <div style={{ display: 'flex', gap: '6px' }}>
                                   <button className="upload-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={async () => {
@@ -1757,6 +1835,8 @@ function App() {
                                     const loc = selectedLocation;
                                     await fetch(`/api/locations/${loc.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...loc, melee_ac: meleeVal, ranged_ac: rangedVal }) });
                                     fetchLocations();
+                                    // selectedLocation is a snapshot - refresh it so the new values show immediately
+                                    setSelectedLocation((prev: any) => prev && prev.id === loc.id ? { ...prev, melee_ac: meleeVal, ranged_ac: rangedVal } : prev);
                                     setAcEdit(null);
                                   }}>SAVE</button>
                                   <button className="utility-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => setAcEdit(null)}>CANCEL</button>
@@ -1764,14 +1844,14 @@ function App() {
                               </div>
                             ) : (
                               <div style={{ marginTop: '8px' }}>
-                                <p><strong>MELEE_AC:</strong> {selectedLocation.melee_ac ?? 10}</p>
-                                <p><strong>RANGED_AC:</strong> {selectedLocation.ranged_ac != null ? selectedLocation.ranged_ac : <span style={{ color: 'var(--text-muted, #888)' }}>{selectedLocation.melee_ac ?? 10} (melee)</span>}</p>
+                                <p><strong>MELEE_{defLabel}:</strong> {selectedLocation.melee_ac ?? 10}</p>
+                                <p><strong>RANGED_{defLabel}:</strong> {selectedLocation.ranged_ac != null ? selectedLocation.ranged_ac : <span style={{ color: 'var(--text-muted, #888)' }}>{selectedLocation.melee_ac ?? 10} (melee)</span>}</p>
                                 {isAdmin && (
-                                  <button className="utility-btn" style={{ marginTop: '4px', padding: '3px 10px', fontSize: '11px' }} onClick={() => setAcEdit({ melee: String(selectedLocation.melee_ac ?? 10), ranged: selectedLocation.ranged_ac != null ? String(selectedLocation.ranged_ac) : '' })}>EDIT_AC</button>
+                                  <button className="utility-btn" style={{ marginTop: '4px', padding: '3px 10px', fontSize: '11px' }} onClick={() => setAcEdit({ melee: String(selectedLocation.melee_ac ?? 10), ranged: selectedLocation.ranged_ac != null ? String(selectedLocation.ranged_ac) : '' })}>EDIT_{defLabel}</button>
                                 )}
                               </div>
                             )
-                          )}
+                          ); })()}
                         </>
                       ) : (
                         <>
@@ -1838,21 +1918,57 @@ function App() {
                       <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
                     )}
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
-                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#2200aa'}} onClick={() => {
-                        socketRef.current?.emit('generateNpcSheet', { location_id: selectedLocation.id });
-                      }}>GENERATE_SHEET</button>
+                      tokenSheetLink?.location_id === selectedLocation.id ? (
+                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
+                          setOpenNpcSheet({ id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label });
+                        }}>OPEN_SHEET</button>
+                      ) : (() => {
+                        const tiers = getTemplate(gameSystem).npcTiers;
+                        return (
+                          <div style={{ marginTop: '10px', display: 'flex', gap: '6px' }}>
+                            {tiers && tiers.length > 0 && (
+                              <select
+                                aria-label="NPC tier"
+                                value={genTier || tiers[0].id}
+                                onChange={(e) => setGenTier(e.target.value)}
+                                style={{ background: 'rgba(0,10,0,0.7)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.7rem', padding: '2px 4px' }}
+                              >
+                                {tiers.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                              </select>
+                            )}
+                            <button className="upload-btn" style={{ flex: 1, backgroundColor: '#2200aa' }} onClick={() => {
+                              socketRef.current?.emit('generateNpcSheet', {
+                                location_id: selectedLocation.id,
+                                tier: tiers && tiers.length > 0 ? (genTier || tiers[0].id) : undefined,
+                              });
+                            }}>GENERATE_SHEET</button>
+                          </div>
+                        );
+                      })()
+                    )}
+                    {/* Player token sheet: owner opens their own; admin opens any player's */}
+                    {selectedLocation.shape === 'rhombus' && selectedLocation.owner && (isOwner || isAdmin) && (
+                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
+                        if (isOwner) setIsSheetOpen(true);
+                        else setOpenPlayerSheetUser(selectedLocation.owner);
+                      }}>OPEN_SHEET</button>
                     )}
                     {/* ATTACK — visible to any logged-in player not attacking their own rhombus */}
                     {isRhombus && isLoggedIn && !isOwner && (
                       <div style={{ marginTop: '10px' }}>
                         {attackPending?.targetId === selectedLocation.id ? (
                           <div style={{ fontSize: '12px', color: 'var(--green)', border: '1px solid var(--green)', padding: '6px 10px' }}>
-                            AWAITING_ROLL — {attackPending.attackType.toUpperCase()}{token ? ` vs ${getTemplate(gameSystem).tokenDefense?.label ?? 'AC'} ${attackPending.ac}` : ''}
+                            {gameSystem === 'cyberpunk_red'
+                              ? 'SELECT_WEAPON — DICE_ROLLER'
+                              : <>AWAITING_ROLL — {attackPending.attackType.toUpperCase()}{token ? ` vs ${getTemplate(gameSystem).tokenDefense?.label ?? 'AC'} ${attackPending.ac}` : ''}</>}
                           </div>
                         ) : (
                           <>
                             {attackPending ? (
                               <div style={{ fontSize: '11px', color: '#888' }}>Attack in progress vs {attackPending.targetName}</div>
+                            ) : gameSystem === 'cyberpunk_red' ? (
+                              // CP:R: the weapon decides melee vs ranged - one button, pick the weapon in the dice menu
+                              <button className="upload-btn" style={{ width: '100%', backgroundColor: '#cc2200', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'melee' }); }}>⚔ ATTACK</button>
                             ) : (
                               <div style={{ display: 'flex', gap: '6px' }}>
                                 <button className="upload-btn" style={{ flex: 1, backgroundColor: '#cc2200', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'melee' }); }}>⚔ MELEE</button>
@@ -1862,6 +1978,12 @@ function App() {
                             {lastAttackResult && lastAttackResult.targetName === selectedLocation.name && (
                               <div style={{ marginTop: '6px', fontSize: '12px', color: lastAttackResult.hit ? '#00ff66' : '#ff4444', border: `1px solid ${lastAttackResult.hit ? '#00ff66' : '#ff4444'}`, padding: '6px 10px' }}>
                                 {lastAttackResult.hit ? 'HIT!' : 'MISS'} — rolled {lastAttackResult.roll}
+                                {lastAttackResult.damage !== undefined && (
+                                  <> · DMG {lastAttackResult.damage}{lastAttackResult.through !== undefined && ` (${lastAttackResult.through} through armor)`}</>
+                                )}
+                                {(lastAttackResult.shieldAbsorbed ?? 0) > 0 && <> · SHIELD −{lastAttackResult.shieldAbsorbed}</>}
+                                {lastAttackResult.criticalInjury && <> · CRIT INJURY!</>}
+                                {lastAttackResult.targetDown && <> · TARGET DOWN</>}
                               </div>
                             )}
                           </>
@@ -1872,6 +1994,7 @@ function App() {
                         <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
                             setReviewHealthOwner(selectedLocation.owner);
                             setReviewHealthPos({ x: infoPanelPos.x + 320 > window.innerWidth - 300 ? Math.max(0, infoPanelPos.x - 320) : infoPanelPos.x + 320, y: infoPanelPos.y });
+                            setReviewHealthLocId(selectedLocation.id);
                         }}>CHECK_HEALTH</button>
                     )}
                     {isRhombus && (isAdmin || (isPlayerRhombus && selectedLocation.owner === userName)) && (

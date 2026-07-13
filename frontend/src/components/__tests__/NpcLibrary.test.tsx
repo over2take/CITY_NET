@@ -98,3 +98,49 @@ describe('NpcLibrary', () => {
     expect(screen.queryByText('ATTACH')).toBeNull();
   });
 });
+
+describe('NpcLibrary OPEN button', () => {
+  it('shows OPEN on each row when onOpenNpc is provided and calls it with the npc', async () => {
+    mockFetch([
+      { id: 7, npc_label: 'Gang Member', folder: null, portrait_url: null, updated_at: '' },
+    ]);
+    const onOpenNpc = vi.fn();
+    render(<NpcLibrary token={TOKEN} pos={basePos} setPos={setPos} onClose={onClose} onOpenNpc={onOpenNpc} />);
+    await waitFor(() => expect(screen.getByText('GANG MEMBER')).toBeTruthy());
+    fireEvent.click(screen.getByText('OPEN'));
+    expect(onOpenNpc).toHaveBeenCalledWith(expect.objectContaining({ id: 7, npc_label: 'Gang Member' }));
+  });
+
+  it('hides OPEN when onOpenNpc is absent', async () => {
+    mockFetch([
+      { id: 7, npc_label: 'Gang Member', folder: null, portrait_url: null, updated_at: '' },
+    ]);
+    render(<NpcLibrary token={TOKEN} pos={basePos} setPos={setPos} onClose={onClose} />);
+    await waitFor(() => expect(screen.getByText('GANG MEMBER')).toBeTruthy());
+    expect(screen.queryByText('OPEN')).toBeNull();
+  });
+});
+
+describe('NpcLibrary MOVE to folder', () => {
+  it('MOVE opens a folder select and PUTs the chosen folder', async () => {
+    mockFetch([
+      { id: 7, npc_label: 'Gang Member', folder: null, portrait_url: null, updated_at: '' },
+      { id: 8, npc_label: 'Fixer', folder: 'Contacts', portrait_url: null, updated_at: '' },
+    ]);
+    render(<NpcLibrary token={TOKEN} pos={basePos} setPos={setPos} onClose={onClose} />);
+    await waitFor(() => expect(screen.getByText('GANG MEMBER')).toBeTruthy());
+    fireEvent.click(screen.getAllByText('MOVE')[0]);
+    const select = screen.getByLabelText('Move to folder') as HTMLSelectElement;
+    const values = Array.from(select.options).map(o => o.value);
+    expect(values).toContain('Contacts');
+    expect(values).toContain('__none__');
+    expect(values).toContain('__new__');
+    fireEvent.change(select, { target: { value: 'Contacts' } });
+    await waitFor(() => {
+      const put = (global.fetch as any).mock.calls.find((c: any) => c[1]?.method === 'PUT');
+      expect(put).toBeTruthy();
+      expect(put[0]).toBe('/api/sheets/npcs/7');
+      expect(JSON.parse(put[1].body)).toEqual({ folder: 'Contacts' });
+    });
+  });
+});

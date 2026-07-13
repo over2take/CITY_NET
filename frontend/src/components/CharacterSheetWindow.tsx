@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
-import { getTemplate, type CharacterSheet } from '../sheets';
+import { ImportSheetDialog } from './ImportSheetDialog';
+import { getTemplate, getMaxPairs, type CharacterSheet } from '../sheets';
 
 // The player's own character sheet. Identity is the socket's registered
 // user - the server only ever returns / edits the caller's own sheet.
@@ -23,6 +24,9 @@ interface CharacterSheetWindowProps {
 
 export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled }: CharacterSheetWindowProps) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [allowFumbleShield, setAllowFumbleShield] = useState(false);
+  const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
@@ -48,14 +52,25 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       // Cash is a linked field mirroring the bank balance
       if (info.username === userName) socket.emit('requestMySheet');
     };
+    // Fumble-shield house rule: read once, refresh when the admin applies
+    const fetchRules = () => {
+      fetch('/api/settings').then(r => r.json()).then((rows) => {
+        if (Array.isArray(rows)) {
+          setAllowFumbleShield(rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1');
+        }
+      }).catch(() => {});
+    };
+    fetchRules();
     socket.on('sheetData', onSheetData);
     socket.on('sheetUpdated', onSheetUpdated);
     socket.on('bankUpdate', onBankUpdate);
+    socket.on('settingsUpdated', fetchRules);
     socket.emit('requestMySheet');
     return () => {
       socket.off('sheetData', onSheetData);
       socket.off('sheetUpdated', onSheetUpdated);
       socket.off('bankUpdate', onBankUpdate);
+      socket.off('settingsUpdated', fetchRules);
     };
   }, [socket, userName]);
 
@@ -66,8 +81,18 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
   }, []);
 
   const handleFieldChange = useCallback((fieldId: string, value: string | number) => {
-    setSheet(prev => prev ? { ...prev, data: { ...prev.data, [fieldId]: value } } : prev);
-    // Debounced per-field save so typing doesn't spam the socket
+    setSheet(prev => {
+      if (!prev) return prev;
+      const template = getTemplate(prev.system);
+      const pairs = getMaxPairs(template);
+      const curField = pairs[fieldId]; // non-null when fieldId is a max field
+      const data = { ...prev.data, [fieldId]: value };
+      if (curField !== undefined && data[curField] !== undefined) {
+        const newMax = Number(value);
+        if (Number(data[curField]) > newMax) data[curField] = newMax;
+      }
+      return { ...prev, data };
+    });
     const timers = pendingSaves.current;
     const existing = timers.get(fieldId);
     if (existing) clearTimeout(existing);
@@ -100,6 +125,14 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       onClose={onClose}
       titleControls={
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            title="Import from PDF / JSON / text"
+            className="win95-close-btn"
+            style={{ fontSize: '9px', width: 'auto', padding: '0 5px' }}
+            onClick={() => setIsImportOpen(true)}
+          >
+            IMPORT
+          </button>
           {template && (
             <span style={{ border: '1px solid var(--green)', padding: '0 6px', fontSize: '0.6rem', letterSpacing: '1px' }}>
               {template.name.toUpperCase()}
@@ -141,19 +174,29 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           onFieldChange={handleFieldChange}
           onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
           onOpenLink={onOpenLink}
-          onRoll={(fieldId) => {
-            socket?.emit('requestSheetRoll', { fieldId });
+          onRoll={(fieldId, luck, negateFumble) => {
+            socket?.emit('requestSheetRoll', { fieldId, luck, luckNegate: negateFumble });
             onRolled?.();
           }}
-          onResetLuck={adminToken ? () => {
-            const luckMax = sheet.data[template.header?.luckMaxField ?? ''];
-            if (luckMax !== undefined && template.header?.luckField) {
-              handleFieldChange(template.header.luckField, Number(luckMax));
-            }
-          } : undefined}
+          onDeathSave={() => {
+            socket?.emit('requestDeathSave');
+            onRolled?.();
+          }}
+          allowFumbleShield={allowFumbleShield}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>
+      )}
+      {isImportOpen && (
+        <ImportSheetDialog
+          pos={importPos}
+          setPos={setImportPos}
+          onClose={() => setIsImportOpen(false)}
+          onApply={(fields) => {
+            // Server refuses linked fields, recomputes derived, emits sheetUpdated
+            socket?.emit('importSheetFields', { fields });
+          }}
+        />
       )}
     </DraggableWindow>
   );

@@ -304,6 +304,21 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           emitUpdate();
           // Character sheets mirror token HP - tell open sheets to re-fetch
           io.emit('sheetUpdated', { username: row.owner });
+          // Back above 0 HP: no longer mortally wounded, death-save penalty resets
+          if (newCurrent > 0) {
+            db.all('SELECT id, data FROM character_sheets WHERE username = ? AND is_npc = 0', [row.owner], (err3, sheets) => {
+              if (err3 || !sheets) return;
+              sheets.forEach((s) => {
+                try {
+                  const data = JSON.parse(s.data || '{}');
+                  if (Number(data.death_save_penalty) > 0) {
+                    data.death_save_penalty = 0;
+                    db.run('UPDATE character_sheets SET data = ? WHERE id = ?', [JSON.stringify(data), s.id]);
+                  }
+                } catch (e) { /* bad JSON - leave it */ }
+              });
+            });
+          }
           res.json({ id, hp_current: newCurrent, hp_max: newMax, hp_temp: newTemp });
         });
       } else {
