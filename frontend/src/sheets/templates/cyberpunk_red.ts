@@ -14,6 +14,9 @@ const skill = (id: string, label: string, stat: string): SheetField => ({
 export const cyberpunkRed: SheetTemplate = {
   id: 'cyberpunk_red',
   name: 'Cyberpunk RED',
+  // CP:R has no AC: armor is per-location SP, managed on the sheet's ARMOR
+  // section. Attacks target a DV instead.
+  tokenDefense: { editOnToken: false, label: 'DV', note: 'ARMOR (SP) IS MANAGED ON YOUR CHARACTER_SHEET' },
   header: {
     nameField: 'handle',
     subtitleFields: ['role'],

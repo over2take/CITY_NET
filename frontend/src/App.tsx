@@ -31,6 +31,7 @@ import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './
 import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
+import { getTemplate } from './sheets';
 import { DiceTrayWindow, DotMatrixScoreboard, DiceScene } from './components/DiceTray';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
 import { UpdateModal } from './components/UpdateModal';
@@ -156,6 +157,15 @@ function App() {
 
   // Attack state
   const [attackPending, setAttackPending] = useState<{ targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null>(null);
+  // Active TTRPG system - drives token defense labels (AC vs DV) and the
+  // token menu's armor section
+  const [gameSystem, setGameSystem] = useState('generic');
+  useEffect(() => {
+    fetch('/api/sheets/system')
+      .then(r => r.json())
+      .then(d => { if (d?.system) setGameSystem(d.system); })
+      .catch(() => {});
+  }, []);
   const [lastAttackResult, setLastAttackResult] = useState<{ hit: boolean; roll: number; ac: number; targetName: string } | null>(null);
   const [attackAnimations, setAttackAnimations] = useState<{ id: string; hit: boolean; attackType: 'melee' | 'ranged'; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number }; targetId: number; isBattleMap: boolean }[]>([]);
 
@@ -664,6 +674,7 @@ function App() {
       setActiveSidebarMenu('dice_menu');
       setIsDiceTrayOpen(true);
     },
+    onGameSystemChanged: (system) => setGameSystem(system),
     onAttackResult: (data) => {
       setAttackPending(null);
       // Delay result reveal and animation until after the dice tray's 5-second roll display finishes
@@ -1277,6 +1288,7 @@ function App() {
               setIsBankOpen={setIsBankOpen}
               isSheetOpen={isSheetOpen}
               setIsSheetOpen={setIsSheetOpen}
+              gameSystem={gameSystem}
               onSelect={setSelectedLocation}
               onZoom={setCameraTarget}
               selectedLocation={selectedLocation}
@@ -1806,7 +1818,7 @@ function App() {
                       <div style={{ marginTop: '10px' }}>
                         {attackPending?.targetId === selectedLocation.id ? (
                           <div style={{ fontSize: '12px', color: 'var(--green)', border: '1px solid var(--green)', padding: '6px 10px' }}>
-                            AWAITING_ROLL — {attackPending.attackType.toUpperCase()}{token ? ` vs AC ${attackPending.ac}` : ''}
+                            AWAITING_ROLL — {attackPending.attackType.toUpperCase()}{token ? ` vs ${getTemplate(gameSystem).tokenDefense?.label ?? 'AC'} ${attackPending.ac}` : ''}
                           </div>
                         ) : (
                           <>

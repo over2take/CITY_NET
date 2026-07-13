@@ -326,6 +326,32 @@ describe('GeometryMenu', () => {
     expect(screen.getByText('MELEE')).toBeInTheDocument();
   });
 
+  it('CP:R mode replaces the AC editor with a sheet pointer', () => {
+    const setIsSheetOpen = vi.fn();
+    render(
+      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} isSheetOpen={false} setIsSheetOpen={setIsSheetOpen} gameSystem="cyberpunk_red" />
+    );
+    expect(screen.queryByText('ARMOR_CLASS')).not.toBeInTheDocument();
+    expect(screen.queryByText('MELEE')).not.toBeInTheDocument();
+    expect(screen.getByText(/ARMOR \(SP\) IS MANAGED/)).toBeInTheDocument();
+  });
+
+  it('CP:R mode armor button opens the character sheet', async () => {
+    const setIsSheetOpen = vi.fn();
+    render(
+      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} isSheetOpen={false} setIsSheetOpen={setIsSheetOpen} gameSystem="cyberpunk_red" />
+    );
+    await userEvent.click(screen.getByText(/ARMOR \(SP\) IS MANAGED/));
+    expect(setIsSheetOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('generic system keeps the AC editor', () => {
+    render(
+      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} isSheetOpen={false} setIsSheetOpen={vi.fn()} gameSystem="generic" />
+    );
+    expect(screen.getByText('ARMOR_CLASS')).toBeInTheDocument();
+  });
+
   it('shows CLICK MAP TO PLACE label when rhombus is in active/scanning state', () => {
     render(
       <GeometryMenu rhombusState={{ ...baseRhombus, active: true }} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
