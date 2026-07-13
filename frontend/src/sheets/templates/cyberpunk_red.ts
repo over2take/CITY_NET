@@ -14,11 +14,24 @@ const skill = (id: string, label: string, stat: string): SheetField => ({
 export const cyberpunkRed: SheetTemplate = {
   id: 'cyberpunk_red',
   name: 'Cyberpunk RED',
+  header: {
+    nameField: 'handle',
+    subtitleFields: ['role'],
+    hpField: 'hp',
+    hpMaxField: 'hp_max',
+    chips: [
+      { field: 'move', label: 'MOVE' },
+      { field: 'body', label: 'BODY' },
+      { field: 'luck', label: 'LUCK' },
+    ],
+  },
+  tabs: ['STATS', 'SKILLS', 'GEAR', 'NOTES'],
   sections: [
     {
       id: 'identity',
       label: 'IDENTITY',
       layout: 'list',
+      tab: 'STATS',
       fields: [
         { id: 'handle', label: 'Handle', type: 'text', visibility: 'public' },
         { id: 'role', label: 'Role', type: 'text', visibility: 'public' },
@@ -32,6 +45,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'stats',
       label: 'STATS',
       layout: 'grid',
+      tab: 'STATS',
       columns: 5,
       fields: [
         { id: 'int', label: 'INT', type: 'number', roll: { formula: '1d10 + @int', label: 'INT' } },
@@ -52,6 +66,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'health',
       label: 'HEALTH',
       layout: 'grid',
+      tab: 'STATS',
       columns: 4,
       fields: [
         { id: 'hp', label: 'HP', type: 'number', maxField: 'hp_max' },
@@ -66,6 +81,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'armor',
       label: 'ARMOR',
       layout: 'grid',
+      tab: 'STATS',
       columns: 4,
       fields: [
         { id: 'sp_head', label: 'SP HEAD', type: 'number', maxField: 'sp_head_max', sensitivity: 'combat' },
@@ -81,6 +97,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'skills_awareness',
       label: 'AWARENESS',
       layout: 'skills',
+      tab: 'SKILLS',
       fields: [
         skill('concentration', 'Concentration', 'will'),
         skill('conceal_reveal', 'Conceal/Reveal Object', 'int'),
@@ -93,6 +110,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'skills_body',
       label: 'BODY',
       layout: 'skills',
+      tab: 'SKILLS',
       fields: [
         skill('athletics', 'Athletics', 'dex'),
         skill('contortionist', 'Contortionist', 'dex'),
@@ -106,6 +124,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'skills_control',
       label: 'CONTROL',
       layout: 'skills',
+      tab: 'SKILLS',
       fields: [
         skill('drive_land', 'Drive Land Vehicle', 'ref'),
         skill('pilot_air', 'Pilot Air Vehicle (x2)', 'ref'),
@@ -117,6 +136,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'skills_education',
       label: 'EDUCATION',
       layout: 'skills',
+      tab: 'SKILLS',
       fields: [
         skill('accounting', 'Accounting', 'int'),
         skill('animal_handling', 'Animal Handling', 'int'),
@@ -141,6 +161,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'skills_fighting',
       label: 'FIGHTING',
       layout: 'skills',
+      tab: 'SKILLS',
       fields: [
         skill('brawling', 'Brawling', 'dex'),
         skill('evasion', 'Evasion', 'dex'),
@@ -152,6 +173,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'skills_performance',
       label: 'PERFORMANCE',
       layout: 'skills',
+      tab: 'SKILLS',
       fields: [
         skill('acting', 'Acting', 'cool'),
         skill('play_instrument', 'Play Instrument', 'tech'),
@@ -161,6 +183,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'skills_ranged',
       label: 'RANGED WEAPONS',
       layout: 'skills',
+      tab: 'SKILLS',
       fields: [
         skill('archery', 'Archery', 'ref'),
         skill('autofire', 'Autofire (x2)', 'ref'),
@@ -173,6 +196,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'skills_social',
       label: 'SOCIAL',
       layout: 'skills',
+      tab: 'SKILLS',
       fields: [
         skill('bribery', 'Bribery', 'cool'),
         skill('conversation', 'Conversation', 'emp'),
@@ -189,6 +213,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'skills_technique',
       label: 'TECHNIQUE',
       layout: 'skills',
+      tab: 'SKILLS',
       fields: [
         skill('air_vehicle_tech', 'Air Vehicle Tech', 'tech'),
         skill('basic_tech', 'Basic Tech', 'tech'),
@@ -211,6 +236,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'weapons',
       label: 'WEAPONS',
       layout: 'notes',
+      tab: 'GEAR',
       fields: [
         { id: 'weapons_notes', label: 'Weapons (name / DMG / ammo / ROF / notes)', type: 'textarea' },
       ],
@@ -219,6 +245,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'gear',
       label: 'GEAR & CASH',
       layout: 'list',
+      tab: 'GEAR',
       fields: [
         { id: 'cash', label: 'Cash (eb)', type: 'number' },
         { id: 'ammunition', label: 'Ammunition', type: 'text' },
@@ -229,6 +256,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'cyberware',
       label: 'CYBERWARE',
       layout: 'notes',
+      tab: 'GEAR',
       fields: [
         { id: 'cyberware_notes', label: 'Cyberware', type: 'textarea' },
       ],
@@ -237,6 +265,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'lifepath',
       label: 'LIFEPATH',
       layout: 'notes',
+      tab: 'NOTES',
       fields: [
         { id: 'lifepath_notes', label: 'Lifepath, reputation, IP, contacts', type: 'textarea' },
       ],
@@ -245,6 +274,7 @@ export const cyberpunkRed: SheetTemplate = {
       id: 'injuries',
       label: 'CRITICAL INJURIES',
       layout: 'notes',
+      tab: 'NOTES',
       fields: [
         { id: 'critical_injuries', label: 'Critical injuries', type: 'textarea' },
         { id: 'addictions', label: 'Addictions', type: 'textarea' },

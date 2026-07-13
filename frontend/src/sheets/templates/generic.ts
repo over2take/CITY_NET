@@ -5,11 +5,17 @@ import type { SheetTemplate } from '../types';
 export const generic: SheetTemplate = {
   id: 'generic',
   name: 'Generic',
+  header: {
+    nameField: 'name',
+    subtitleFields: ['concept'],
+  },
+  tabs: ['STATS', 'GEAR', 'NOTES'],
   sections: [
     {
       id: 'identity',
       label: 'IDENTITY',
       layout: 'list',
+      tab: 'STATS',
       fields: [
         { id: 'name', label: 'Name', type: 'text', visibility: 'public' },
         { id: 'concept', label: 'Concept / Class', type: 'text' },
@@ -20,6 +26,7 @@ export const generic: SheetTemplate = {
       id: 'stats',
       label: 'STATS',
       layout: 'notes',
+      tab: 'STATS',
       fields: [
         { id: 'stats_notes', label: 'Stats & abilities', type: 'textarea' },
       ],
@@ -28,6 +35,7 @@ export const generic: SheetTemplate = {
       id: 'gear',
       label: 'GEAR',
       layout: 'notes',
+      tab: 'GEAR',
       fields: [
         { id: 'gear_notes', label: 'Gear & inventory', type: 'textarea' },
       ],
@@ -36,6 +44,7 @@ export const generic: SheetTemplate = {
       id: 'notes',
       label: 'NOTES',
       layout: 'notes',
+      tab: 'NOTES',
       fields: [
         { id: 'notes', label: 'Notes', type: 'textarea' },
       ],

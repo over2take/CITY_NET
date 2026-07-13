@@ -34,12 +34,27 @@ export interface SheetSection {
   layout: SectionLayout;
   /** grid layout: number of columns (default 4) */
   columns?: number;
+  /** Which bottom tab this section lives under (default: the first tab). */
+  tab?: string;
   fields: SheetField[];
+}
+
+/** Drives the identity header block: portrait frame, name, subtitle line,
+ *  HP bar, and at-a-glance chips. All values read from sheet data. */
+export interface SheetHeader {
+  nameField: string;
+  subtitleFields?: string[];
+  hpField?: string;
+  hpMaxField?: string;
+  chips?: { field: string; label: string }[];
 }
 
 export interface SheetTemplate {
   id: string;
   name: string;
+  header?: SheetHeader;
+  /** Bottom tab bar, in order. Sections map to tabs via section.tab. */
+  tabs?: string[];
   sections: SheetSection[];
 }
 

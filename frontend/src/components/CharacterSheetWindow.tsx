@@ -67,11 +67,11 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName }:
           {template.name.toUpperCase()}
         </span>
       ) : undefined}
-      windowStyle={{ width: '440px' }}
-      contentStyle={{ maxHeight: '70vh', overflowY: 'auto', padding: '10px' }}
+      windowStyle={{ width: '460px' }}
+      contentStyle={{ height: '68vh', display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
     >
       {sheet && template ? (
-        <SheetRenderer template={template} data={sheet.data} onFieldChange={handleFieldChange} />
+        <SheetRenderer template={template} data={sheet.data} portraitUrl={sheet.portrait_url} onFieldChange={handleFieldChange} />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>
       )}
