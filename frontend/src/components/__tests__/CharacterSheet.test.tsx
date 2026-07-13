@@ -58,10 +58,12 @@ describe('template registry', () => {
 describe('SheetRenderer', () => {
   const template = getTemplate('cyberpunk_red');
 
-  it('renders section headers', () => {
+  it('renders section headers and the tab bar', () => {
     render(<SheetRenderer template={template} data={{}} onFieldChange={vi.fn()} />);
-    expect(screen.getByText(/IDENTITY/)).toBeInTheDocument();
-    expect(screen.getByText(/STATS/)).toBeInTheDocument();
+    expect(screen.getByText(/─── IDENTITY ───/)).toBeInTheDocument();
+    expect(screen.getByText(/─── STATS ───/)).toBeInTheDocument();
+    expect(screen.getByText('SKILLS')).toBeInTheDocument();
+    expect(screen.getByText('GEAR')).toBeInTheDocument();
   });
 
   it('renders open-section fields and calls onFieldChange on edit', async () => {
@@ -72,19 +74,34 @@ describe('SheetRenderer', () => {
     expect(onFieldChange).toHaveBeenCalledWith('handle', 'V');
   });
 
-  it('computes skill BASE as level + stat', async () => {
+  it('computes skill BASE as level + stat on the SKILLS tab', async () => {
     const data = { dex: 6, athletics: 2 };
     render(<SheetRenderer template={template} data={data} onFieldChange={vi.fn()} />);
-    // open the BODY skills section
-    await userEvent.click(screen.getByText(/─── BODY ───/));
+    await userEvent.click(screen.getByText('SKILLS'));
     const row = screen.getByLabelText('Athletics').closest('div');
-    expect(row?.textContent).toContain('8');
+    expect(row?.textContent).toContain('+8');
   });
 
-  it('collapsed sections render no fields', () => {
+  it('inactive tabs render no fields', () => {
     render(<SheetRenderer template={template} data={{}} onFieldChange={vi.fn()} />);
-    // LIFEPATH is far down the template, collapsed by default
+    // LIFEPATH lives on the NOTES tab; STATS is active by default
     expect(screen.queryByLabelText(/Lifepath/)).not.toBeInTheDocument();
+  });
+
+  it('shows the identity header with name, HP bar, and chips', () => {
+    const data = { handle: 'Viper', role: 'Rogue', hp: 27, hp_max: 38, move: 4, body: 6, luck: 5 };
+    render(<SheetRenderer template={template} data={data} onFieldChange={vi.fn()} />);
+    expect(screen.getByText('VIPER')).toBeInTheDocument();
+    expect(screen.getByText('ROGUE')).toBeInTheDocument();
+    expect(screen.getByText('27/38')).toBeInTheDocument();
+    expect(screen.getAllByText(/MOVE/).length).toBeGreaterThan(0);
+  });
+
+  it('sections collapse on header click', async () => {
+    render(<SheetRenderer template={template} data={{}} onFieldChange={vi.fn()} />);
+    expect(screen.getByLabelText('Handle')).toBeInTheDocument();
+    await userEvent.click(screen.getByText(/─── IDENTITY ───/));
+    expect(screen.queryByLabelText('Handle')).not.toBeInTheDocument();
   });
 });
 
