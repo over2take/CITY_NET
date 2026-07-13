@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
-const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem } = require('../sheets/templates');
+const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields } = require('../sheets/templates');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
 // sheet, quick-sheet lookups) goes through socket events, matching how the
@@ -91,7 +91,11 @@ module.exports = (db, io) => {
         (err2, row) => {
           if (err2) return res.status(500).json({ error: err2.message });
           if (!row) return res.status(404).json({ error: 'No sheet for this player on the active system' });
-          const data = { ...JSON.parse(row.data || '{}'), ...fields };
+          // Linked fields (token HP, cash) live in other systems and are
+          // edited through their own windows - never stored in sheet JSON.
+          const linked = getLinkedFields(system);
+          const patch = Object.fromEntries(Object.entries(fields).filter(([k]) => !linked[k]));
+          const data = { ...JSON.parse(row.data || '{}'), ...patch };
           db.run(
             `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
             [JSON.stringify(data), row.id],

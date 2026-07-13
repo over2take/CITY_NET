@@ -8,6 +8,8 @@ export const generic: SheetTemplate = {
   header: {
     nameField: 'name',
     subtitleFields: ['concept'],
+    hpField: 'hp',
+    hpMaxField: 'hp_max',
   },
   tabs: ['STATS', 'GEAR', 'NOTES'],
   sections: [
@@ -34,9 +36,10 @@ export const generic: SheetTemplate = {
     {
       id: 'gear',
       label: 'GEAR',
-      layout: 'notes',
+      layout: 'list',
       tab: 'GEAR',
       fields: [
+        { id: 'cash', label: 'Cash', type: 'number', source: 'bank_balance' },
         { id: 'gear_notes', label: 'Gear & inventory', type: 'textarea' },
       ],
     },

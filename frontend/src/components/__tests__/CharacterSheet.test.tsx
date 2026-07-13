@@ -97,6 +97,29 @@ describe('SheetRenderer', () => {
     expect(screen.getAllByText(/MOVE/).length).toBeGreaterThan(0);
   });
 
+  it('renders linked fields read-only with a LINKED marker (cash on GEAR tab)', async () => {
+    render(<SheetRenderer template={template} data={{ cash: 250 }} onFieldChange={vi.fn()} />);
+    await userEvent.click(screen.getByText('GEAR'));
+    expect(screen.getByText('250')).toBeInTheDocument();
+    expect(screen.getByText('LINKED')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Cash (eb)')).not.toBeInTheDocument(); // no input
+  });
+
+  it('linked field click calls onOpenLink with its source', async () => {
+    const onOpenLink = vi.fn();
+    render(<SheetRenderer template={template} data={{ cash: 250 }} onFieldChange={vi.fn()} onOpenLink={onOpenLink} />);
+    await userEvent.click(screen.getByText('GEAR'));
+    await userEvent.click(screen.getByText('250'));
+    expect(onOpenLink).toHaveBeenCalledWith('bank_balance');
+  });
+
+  it('HP bar click calls onOpenLink with token_hp', async () => {
+    const onOpenLink = vi.fn();
+    render(<SheetRenderer template={template} data={{ handle: 'V', hp: 10, hp_max: 20 }} onFieldChange={vi.fn()} onOpenLink={onOpenLink} />);
+    await userEvent.click(screen.getByText('10/20'));
+    expect(onOpenLink).toHaveBeenCalledWith('token_hp');
+  });
+
   it('sections collapse on header click', async () => {
     render(<SheetRenderer template={template} data={{}} onFieldChange={vi.fn()} />);
     expect(screen.getByLabelText('Handle')).toBeInTheDocument();
@@ -157,6 +180,33 @@ describe('CharacterSheetWindow', () => {
     expect(socket.emit).toHaveBeenCalledWith('requestMySheet');
     act(() => onSheetUpdated({ username: 'VIPER' }));
     expect(socket.emit).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-requests the sheet on bankUpdate for this user (cash mirror)', () => {
+    const socket = makeSocket();
+    render(<CharacterSheetWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} userName="GHOST" />);
+    socket.emit.mockClear();
+    const onBankUpdate = socket.on.mock.calls.find((c: any) => c[0] === 'bankUpdate')[1];
+    act(() => onBankUpdate({ username: 'GHOST', balance: 500 }));
+    expect(socket.emit).toHaveBeenCalledWith('requestMySheet');
+  });
+
+  it('a sheet re-fetch does not stomp a field with a pending debounced edit', () => {
+    vi.useFakeTimers();
+    const socket = makeSocket();
+    render(<CharacterSheetWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} userName="GHOST" />);
+    const onSheetData = socket.on.mock.calls.find((c: any) => c[0] === 'sheetData')[1];
+    act(() => onSheetData({ id: 1, username: 'GHOST', system: 'generic', data: { name: 'OLD' }, portrait_url: null, is_npc: 0 }));
+
+    // Player types; debounce timer now pending on 'name'
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'NEW' } });
+    // A re-fetch lands (e.g. HP changed) carrying the stale name
+    act(() => onSheetData({ id: 1, username: 'GHOST', system: 'generic', data: { name: 'OLD', hp: 5 }, portrait_url: null, is_npc: 0 }));
+
+    expect(screen.getByLabelText('Name')).toHaveValue('NEW'); // local edit preserved
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(socket.emit).toHaveBeenCalledWith('updateSheetField', { fieldId: 'name', value: 'NEW' });
+    vi.useRealTimers();
   });
 
   it('cleans up socket listeners on unmount', () => {

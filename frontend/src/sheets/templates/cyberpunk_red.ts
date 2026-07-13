@@ -69,8 +69,8 @@ export const cyberpunkRed: SheetTemplate = {
       tab: 'STATS',
       columns: 4,
       fields: [
-        { id: 'hp', label: 'HP', type: 'number', maxField: 'hp_max' },
-        { id: 'hp_max', label: 'HP MAX', type: 'number' },
+        // HP lives on the player's token - the header bar mirrors it live
+        // (source: token_hp) and clicking the bar opens the HitPoints window.
         { id: 'seriously_wounded', label: 'SERIOUSLY WOUNDED', type: 'number' },
         { id: 'death_save', label: 'DEATH SAVE', type: 'number' },
         { id: 'humanity', label: 'HUMANITY', type: 'number', maxField: 'humanity_max' },
@@ -247,7 +247,7 @@ export const cyberpunkRed: SheetTemplate = {
       layout: 'list',
       tab: 'GEAR',
       fields: [
-        { id: 'cash', label: 'Cash (eb)', type: 'number' },
+        { id: 'cash', label: 'Cash (eb)', type: 'number', source: 'bank_balance' },
         { id: 'ammunition', label: 'Ammunition', type: 'text' },
         { id: 'gear_notes', label: 'Gear', type: 'textarea' },
       ],

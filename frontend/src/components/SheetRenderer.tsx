@@ -15,6 +15,9 @@ interface SheetRendererProps {
   readOnly?: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
   portraitUrl?: string | null;
+  /** In-app only: linked fields (token HP, bank cash) open their own window
+   *  when clicked. Absent on the standalone tab - values still display live. */
+  onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
 }
 
 const num = (v: unknown): number => {
@@ -33,12 +36,32 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-function FieldInput({ field, data, readOnly, onFieldChange, style }: {
+function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }: {
   field: SheetField; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
   style?: React.CSSProperties;
+  onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
 }) {
   const value = data[field.id] ?? '';
+  if (field.source) {
+    // Linked field: value lives in another system (bank, token HP). Display
+    // only - clicking jumps to the window that owns it, when available.
+    const clickable = !!onOpenLink;
+    return (
+      <div
+        role={clickable ? 'button' : undefined}
+        title={clickable ? 'Open linked window' : 'Synced from the linked system'}
+        onClick={clickable ? () => onOpenLink!(field.source!) : undefined}
+        style={{
+          ...inputStyle, border: '1px dashed var(--green)', cursor: clickable ? 'pointer' : 'default',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', ...style,
+        }}
+      >
+        <span>{value === '' || value === null || value === undefined ? '—' : String(value)}</span>
+        <span style={{ opacity: 0.6, fontSize: '0.6rem' }}>{clickable ? '⇗ LINKED' : 'LINKED'}</span>
+      </div>
+    );
+  }
   if (field.type === 'textarea') {
     return (
       <textarea
@@ -87,7 +110,10 @@ function BracketPortrait({ initial, portraitUrl, size = 64 }: { initial: string;
   );
 }
 
-function SheetHeaderBlock({ template, data, portraitUrl }: { template: SheetTemplate; data: SheetData; portraitUrl?: string | null }) {
+function SheetHeaderBlock({ template, data, portraitUrl, onOpenLink }: {
+  template: SheetTemplate; data: SheetData; portraitUrl?: string | null;
+  onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
+}) {
   const h = template.header;
   if (!h) return null;
   const name = String(data[h.nameField] ?? '').trim();
@@ -110,7 +136,12 @@ function SheetHeaderBlock({ template, data, portraitUrl }: { template: SheetTemp
           <div style={{ fontSize: '0.65rem', opacity: 0.65, marginTop: '1px', letterSpacing: '1px' }}>{subtitle.toUpperCase()}</div>
         )}
         {h.hpField && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+          <div
+            role={onOpenLink ? 'button' : undefined}
+            title={onOpenLink ? 'Synced with your token — click to open HIT_POINTS' : 'Synced with your token'}
+            onClick={onOpenLink ? () => onOpenLink('token_hp') : undefined}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', cursor: onOpenLink ? 'pointer' : 'default' }}
+          >
             <span style={{ fontSize: '0.6rem', opacity: 0.65 }}>HP</span>
             <div style={{ flex: 1, height: '9px', background: 'rgba(0, 20, 0, 0.6)', border: '1px solid var(--green)' }}>
               <div style={{ width: `${hpPct}%`, height: '100%', background: 'var(--green)', transition: 'width 0.2s' }} />
@@ -202,23 +233,24 @@ function SkillsSection({ section, data, readOnly, onFieldChange }: {
   );
 }
 
-function ListSection({ section, data, readOnly, onFieldChange }: {
+function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
+  onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
       {section.fields.map((field) => (
         <div key={field.id}>
           <div style={{ fontSize: '0.6rem', opacity: 0.65, letterSpacing: '1px', marginBottom: '2px' }}>{field.label}</div>
-          <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />
+          <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />
         </div>
       ))}
     </div>
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onOpenLink }: SheetRendererProps) {
   const tabs = template.tabs ?? ['SHEET'];
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [closedSections, setClosedSections] = useState<Set<string>>(new Set());
@@ -242,7 +274,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         .sheet-input:focus { outline: 1px solid var(--green); }
       `}</style>
 
-      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} />
+      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onOpenLink={onOpenLink} />
 
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
         {tabHasRolls && (
@@ -266,7 +298,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                 <div style={{ padding: '4px 0 6px' }}>
                   {section.layout === 'grid' && <GridSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
                   {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
-                  {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
+                  {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
               )}
             </div>

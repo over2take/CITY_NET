@@ -24,6 +24,12 @@ export interface SheetField {
   maxField?: string;
   /** Hint that this field is rollable (Phase 2 wires the actual roll). */
   roll?: { formula: string; label: string };
+  /** Linked field: the value lives in another system and is overlaid by the
+   *  server at read time (never stored in the sheet's JSON).
+   *  - token_hp / token_hp_max: the player's rhombus health (editable;
+   *    writes route to the token)
+   *  - bank_balance: the player's bank balance (read-only on the sheet) */
+  source?: 'token_hp' | 'token_hp_max' | 'bank_balance';
 }
 
 export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes';

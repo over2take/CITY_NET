@@ -57,9 +57,22 @@ export default function SheetPage() {
     socket.on('connect', identify);
     socket.on('authError', (e: { message: string }) => setError(e.message));
     socket.on('sheetData', (data: CharacterSheet) => {
-      if (data.username === userName) setSheet(data);
+      if (data.username !== userName) return;
+      // Don't stomp fields with a pending debounced edit on re-fetch
+      setSheet(prev => {
+        if (!prev || pendingSaves.current.size === 0) return data;
+        const merged = { ...data.data };
+        pendingSaves.current.forEach((_t, fieldId) => {
+          if (prev.data[fieldId] !== undefined) merged[fieldId] = prev.data[fieldId];
+        });
+        return { ...data, data: merged };
+      });
     });
     socket.on('sheetUpdated', (info: { username: string }) => {
+      if (info.username === userName) socket.emit('requestMySheet');
+    });
+    socket.on('bankUpdate', (info: { username: string }) => {
+      // Cash is a linked field mirroring the bank balance
       if (info.username === userName) socket.emit('requestMySheet');
     });
     socket.on('gameSystemChanged', () => socket.emit('requestMySheet'));

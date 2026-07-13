@@ -302,6 +302,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         db.run('UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = "rhombus" AND owner = ?', [newCurrent, newMax, newTemp, row.owner], function(err2) {
           if (err2) return res.status(500).json({ error: err2.message });
           emitUpdate();
+          // Character sheets mirror token HP - tell open sheets to re-fetch
+          io.emit('sheetUpdated', { username: row.owner });
           res.json({ id, hp_current: newCurrent, hp_max: newMax, hp_temp: newTemp });
         });
       } else {
