@@ -51,6 +51,24 @@ describe('template registry', () => {
       });
     });
   });
+
+  it('frontend roll formulas match the server roll map exactly (no drift)', async () => {
+    // The server is roll-authoritative; the frontend formulas are display
+    // copies. This guards the two definitions against diverging.
+    const { ROLLS } = await import('../../../../backend/sheets/rolls.js');
+    Object.entries(TEMPLATES).forEach(([systemId, template]) => {
+      const serverRolls = ROLLS[systemId] ?? {};
+      const frontendRollFields = template.sections.flatMap(s => s.fields).filter(f => f.roll);
+      frontendRollFields.forEach(f => {
+        expect(serverRolls[f.id], `server roll map missing ${systemId}.${f.id}`).toBeTruthy();
+        expect(serverRolls[f.id].formula).toBe(f.roll!.formula);
+      });
+      // And nothing rollable server-side that the sheet can't click
+      Object.keys(serverRolls).forEach(fieldId => {
+        expect(frontendRollFields.some(f => f.id === fieldId), `frontend missing roll on ${systemId}.${fieldId}`).toBe(true);
+      });
+    });
+  });
 });
 
 // ─── SheetRenderer ────────────────────────────────────────────────────────────
@@ -118,6 +136,24 @@ describe('SheetRenderer', () => {
     render(<SheetRenderer template={template} data={{ handle: 'V', hp: 10, hp_max: 20 }} onFieldChange={vi.fn()} onOpenLink={onOpenLink} />);
     await userEvent.click(screen.getByText('10/20'));
     expect(onOpenLink).toHaveBeenCalledWith('token_hp');
+  });
+
+  it('clicking a stat roll button calls onRoll with the field id', async () => {
+    const onRoll = vi.fn();
+    render(<SheetRenderer template={template} data={{ ref: 7 }} onFieldChange={vi.fn()} onRoll={onRoll} />);
+    await userEvent.click(screen.getByLabelText('Roll REF'));
+    expect(onRoll).toHaveBeenCalledWith('ref');
+  });
+
+  it('clicking a skill BASE calls onRoll; buttons disabled without onRoll', async () => {
+    const onRoll = vi.fn();
+    const { rerender } = render(<SheetRenderer template={template} data={{}} onFieldChange={vi.fn()} onRoll={onRoll} />);
+    await userEvent.click(screen.getByText('SKILLS'));
+    await userEvent.click(screen.getByLabelText('Roll Handgun'));
+    expect(onRoll).toHaveBeenCalledWith('handgun');
+
+    rerender(<SheetRenderer template={template} data={{}} onFieldChange={vi.fn()} />);
+    expect(screen.getByLabelText('Roll Handgun')).toBeDisabled();
   });
 
   it('sections collapse on header click', async () => {

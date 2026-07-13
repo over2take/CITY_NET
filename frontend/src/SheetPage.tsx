@@ -125,7 +125,13 @@ export default function SheetPage() {
         </div>
         {sheet && template ? (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 90px)' }}>
-            <SheetRenderer template={template} data={sheet.data} portraitUrl={sheet.portrait_url} onFieldChange={handleFieldChange} />
+            <SheetRenderer
+              template={template}
+              data={sheet.data}
+              portraitUrl={sheet.portrait_url}
+              onFieldChange={handleFieldChange}
+              onRoll={(fieldId) => socketRef.current?.emit('requestSheetRoll', { fieldId })}
+            />
           </div>
         ) : (
           <div style={{ fontSize: '0.75rem', opacity: 0.7, padding: '30px 0', letterSpacing: '1px' }}>{message}</div>

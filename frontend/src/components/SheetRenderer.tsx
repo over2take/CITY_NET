@@ -18,6 +18,9 @@ interface SheetRendererProps {
   /** In-app only: linked fields (token HP, bank cash) open their own window
    *  when clicked. Absent on the standalone tab - values still display live. */
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
+  /** Roll a rollable field. The server resolves the formula against the
+   *  stored sheet - the client only names the field. */
+  onRoll?: (fieldId: string) => void;
 }
 
 const num = (v: unknown): number => {
@@ -171,9 +174,10 @@ function SheetHeaderBlock({ template, data, portraitUrl, onOpenLink }: {
   );
 }
 
-function GridSection({ section, data, readOnly, onFieldChange }: {
+function GridSection({ section, data, readOnly, onFieldChange, onRoll }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
+  onRoll?: (fieldId: string) => void;
 }) {
   // maxField pairs render inside their base field's cell as CUR / MAX
   const maxIds = new Set(section.fields.filter(f => f.maxField).map(f => f.maxField as string));
@@ -196,9 +200,20 @@ function GridSection({ section, data, readOnly, onFieldChange }: {
               <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
             )}
             {field.roll && (
-              <div style={{ borderTop: '1px solid var(--green)', fontSize: '0.6rem', padding: '2px 0', color: 'var(--green)', opacity: 0.75 }} title="Rolls in Phase 2">
-                ⌁
-              </div>
+              <button
+                onClick={onRoll ? () => onRoll(field.id) : undefined}
+                disabled={!onRoll}
+                aria-label={`Roll ${field.roll.label}`}
+                title={onRoll ? `Roll ${field.roll.label}` : 'Roll'}
+                style={{
+                  display: 'block', width: '100%', borderTop: '1px solid var(--green)',
+                  border: 'none', borderTopStyle: 'solid', borderTopWidth: '1px', borderTopColor: 'var(--green)',
+                  background: 'none', fontSize: '0.6rem', padding: '2px 0', color: 'var(--green)',
+                  opacity: onRoll ? 0.9 : 0.5, cursor: onRoll ? 'pointer' : 'default', fontFamily: 'inherit',
+                }}
+              >
+                ⌁ ROLL
+              </button>
             )}
           </div>
         );
@@ -207,9 +222,10 @@ function GridSection({ section, data, readOnly, onFieldChange }: {
   );
 }
 
-function SkillsSection({ section, data, readOnly, onFieldChange }: {
+function SkillsSection({ section, data, readOnly, onFieldChange, onRoll }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
+  onRoll?: (fieldId: string) => void;
 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2px 12px' }}>
@@ -231,9 +247,19 @@ function SkillsSection({ section, data, readOnly, onFieldChange }: {
               onFocus={(e) => e.target.select()}
               onChange={(e) => onFieldChange(field.id, Number(e.target.value))}
             />
-            <span style={{ fontSize: '0.68rem', minWidth: '36px', textAlign: 'right', color: 'var(--green)' }} title="BASE = level + stat · rolls in Phase 2">
+            <button
+              onClick={onRoll && field.roll ? () => onRoll(field.id) : undefined}
+              disabled={!onRoll || !field.roll}
+              aria-label={`Roll ${field.label}`}
+              title={onRoll && field.roll ? `Roll ${field.label} (1d10 ${base >= 0 ? '+' : ''}${base})` : 'BASE = level + stat'}
+              style={{
+                fontSize: '0.68rem', minWidth: '42px', textAlign: 'right', color: 'var(--green)',
+                background: 'none', border: 'none', padding: 0, fontFamily: 'inherit',
+                cursor: onRoll && field.roll ? 'pointer' : 'default',
+              }}
+            >
               {base >= 0 ? `+${base}` : base} ⌁
-            </span>
+            </button>
           </div>
         );
       })}
@@ -258,7 +284,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onOpenLink }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onOpenLink, onRoll }: SheetRendererProps) {
   const tabs = template.tabs ?? ['SHEET'];
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [closedSections, setClosedSections] = useState<Set<string>>(new Set());
@@ -286,7 +312,9 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
 
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
         {tabHasRolls && (
-          <div style={{ textAlign: 'right', fontSize: '0.6rem', opacity: 0.55, letterSpacing: '1px' }}>click to roll ⌁ (phase 2)</div>
+          <div style={{ textAlign: 'right', fontSize: '0.6rem', opacity: 0.55, letterSpacing: '1px' }}>
+            {onRoll ? 'click ⌁ to roll' : 'rolls land in the dice tray'}
+          </div>
         )}
         {sectionsForTab.map((section) => {
           const open = !closedSections.has(section.id);
@@ -304,8 +332,8 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
               </button>
               {open && (
                 <div style={{ padding: '4px 0 6px' }}>
-                  {section.layout === 'grid' && <GridSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
-                  {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
+                  {section.layout === 'grid' && <GridSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={onRoll} />}
+                  {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={onRoll} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
               )}

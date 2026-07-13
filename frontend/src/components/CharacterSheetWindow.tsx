@@ -118,7 +118,14 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
     >
       {sheet && template ? (
-        <SheetRenderer template={template} data={sheet.data} portraitUrl={sheet.portrait_url} onFieldChange={handleFieldChange} onOpenLink={onOpenLink} />
+        <SheetRenderer
+          template={template}
+          data={sheet.data}
+          portraitUrl={sheet.portrait_url}
+          onFieldChange={handleFieldChange}
+          onOpenLink={onOpenLink}
+          onRoll={(fieldId) => socket?.emit('requestSheetRoll', { fieldId })}
+        />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>
       )}
