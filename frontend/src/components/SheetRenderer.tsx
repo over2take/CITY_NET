@@ -235,7 +235,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
   const tabHasRolls = sectionsForTab.some(s => s.fields.some(f => f.roll));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <style>{`
         .sheet-input::-webkit-outer-spin-button, .sheet-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .sheet-input[type=number] { -moz-appearance: textfield; appearance: textfield; }

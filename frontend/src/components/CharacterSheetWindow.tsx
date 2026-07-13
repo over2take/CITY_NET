@@ -75,6 +75,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
             title="Open in new tab"
             aria-label="Open in new tab"
             className="win95-close-btn"
+            style={{ fontSize: '11px' }}
             onClick={() => {
               // Handshake for the standalone tab: it reads and deletes this key
               try {
@@ -96,7 +97,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
         minWidth: '360px', maxWidth: '520px', minHeight: '320px', maxHeight: '92vh',
         resize: 'both', overflow: 'hidden', display: 'flex', flexDirection: 'column',
       }}
-      contentStyle={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
+      contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
     >
       {sheet && template ? (
         <SheetRenderer template={template} data={sheet.data} portraitUrl={sheet.portrait_url} onFieldChange={handleFieldChange} />
