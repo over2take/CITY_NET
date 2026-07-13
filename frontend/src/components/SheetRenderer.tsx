@@ -142,7 +142,7 @@ function GridSection({ section, data, readOnly, onFieldChange }: {
   const visible = section.fields.filter(f => !maxIds.has(f.id));
   const numInput: React.CSSProperties = { textAlign: 'center', fontSize: '0.95rem', padding: '2px', background: 'transparent', border: 'none' };
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${section.columns ?? 4}, 1fr)`, gap: '6px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(82px, 1fr))', gap: '6px' }}>
       {visible.map((field) => {
         const maxField = field.maxField ? section.fields.find(f => f.id === field.maxField) : undefined;
         return (
@@ -174,7 +174,7 @@ function SkillsSection({ section, data, readOnly, onFieldChange }: {
   onFieldChange: (fieldId: string, value: string | number) => void;
 }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 12px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2px 12px' }}>
       {section.fields.map((field) => {
         const lvl = num(data[field.id]);
         const base = lvl + (field.stat ? num(data[field.stat]) : 0);
