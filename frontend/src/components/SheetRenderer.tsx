@@ -74,15 +74,22 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
       />
     );
   }
+  const isNumber = field.type === 'number';
+  // Number fields default to 0 - an untouched sheet reads as all zeroes,
+  // not blanks
+  const display = value === null || value === undefined || value === ''
+    ? (isNumber ? '0' : '')
+    : String(value);
   return (
     <input
       aria-label={field.label}
-      type={field.type === 'number' ? 'number' : 'text'}
+      type={isNumber ? 'number' : 'text'}
       className="sheet-input"
       style={{ ...inputStyle, ...style }}
-      value={value === null || value === undefined ? '' : String(value)}
+      value={display}
       readOnly={readOnly}
-      onChange={(e) => onFieldChange(field.id, field.type === 'number' ? Number(e.target.value) : e.target.value)}
+      onFocus={isNumber ? (e) => e.target.select() : undefined}
+      onChange={(e) => onFieldChange(field.id, isNumber ? Number(e.target.value) : e.target.value)}
     />
   );
 }
@@ -219,8 +226,9 @@ function SkillsSection({ section, data, readOnly, onFieldChange }: {
               type="number"
               className="sheet-input"
               style={{ ...inputStyle, width: '30px', textAlign: 'center', padding: '1px 2px', background: 'transparent' }}
-              value={data[field.id] === null || data[field.id] === undefined || data[field.id] === '' ? '' : String(data[field.id])}
+              value={data[field.id] === null || data[field.id] === undefined || data[field.id] === '' ? '0' : String(data[field.id])}
               readOnly={readOnly}
+              onFocus={(e) => e.target.select()}
               onChange={(e) => onFieldChange(field.id, Number(e.target.value))}
             />
             <span style={{ fontSize: '0.68rem', minWidth: '36px', textAlign: 'right', color: 'var(--green)' }} title="BASE = level + stat · rolls in Phase 2">
