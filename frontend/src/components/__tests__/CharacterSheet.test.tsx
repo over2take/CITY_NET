@@ -142,7 +142,7 @@ describe('SheetRenderer', () => {
     const onRoll = vi.fn();
     render(<SheetRenderer template={template} data={{ ref: 7 }} onFieldChange={vi.fn()} onRoll={onRoll} />);
     await userEvent.click(screen.getByLabelText('Roll REF'));
-    expect(onRoll).toHaveBeenCalledWith('ref');
+    expect(onRoll).toHaveBeenCalledWith('ref', undefined, undefined);
   });
 
   it('clicking a skill BASE calls onRoll; buttons disabled without onRoll', async () => {
@@ -150,7 +150,7 @@ describe('SheetRenderer', () => {
     const { rerender } = render(<SheetRenderer template={template} data={{}} onFieldChange={vi.fn()} onRoll={onRoll} />);
     await userEvent.click(screen.getByText('SKILLS'));
     await userEvent.click(screen.getByLabelText('Roll Handgun'));
-    expect(onRoll).toHaveBeenCalledWith('handgun');
+    expect(onRoll).toHaveBeenCalledWith('handgun', undefined, undefined);
 
     rerender(<SheetRenderer template={template} data={{}} onFieldChange={vi.fn()} />);
     expect(screen.getByLabelText('Roll Handgun')).toBeDisabled();
@@ -269,7 +269,7 @@ describe('SheetRenderer portrait upload', () => {
         onPortraitUpload={onUpload}
       />
     );
-    expect(screen.getByText('UPLOAD')).toBeTruthy();
+    expect(screen.getByText(/UPLOAD/)).toBeTruthy();
   });
 
   it('hides UPLOAD label when onPortraitUpload is absent', () => {
@@ -280,7 +280,7 @@ describe('SheetRenderer portrait upload', () => {
         onFieldChange={vi.fn()}
       />
     );
-    expect(screen.queryByText('UPLOAD')).toBeNull();
+    expect(screen.queryByText(/UPLOAD/)).toBeNull();
   });
 
   it('calls onPortraitUpload with the selected file', () => {
@@ -327,23 +327,24 @@ describe('SheetRenderer LUCK pips', () => {
         onFieldChange={vi.fn()}
       />
     );
-    const spendable = screen.getAllByRole('button', { name: /Spend LUCK/ });
-    expect(spendable).toHaveLength(2);
+    const filled = screen.getAllByRole('button', { name: /^LUCK \d of 4$/ });
+    expect(filled).toHaveLength(2);
     const spent = screen.getAllByRole('button', { name: /LUCK spent/ });
     expect(spent).toHaveLength(2);
   });
 
-  it('clicking a filled pip calls onFieldChange with luck - 1', () => {
+  it('clicking a filled pip never edits the field directly (spend flows through rolls)', () => {
     const onChange = vi.fn();
     render(
       <SheetRenderer
         template={cyberpunkRed}
         data={{ handle: 'GHOST', luck: 3, luck_max: 5 }}
         onFieldChange={onChange}
+        onRoll={vi.fn()}
       />
     );
-    fireEvent.click(screen.getAllByRole('button', { name: /Spend LUCK/ })[0]);
-    expect(onChange).toHaveBeenCalledWith('luck', 2);
+    fireEvent.click(screen.getByLabelText('LUCK 1 of 5'));
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('clicking a spent pip does nothing', () => {
@@ -359,23 +360,7 @@ describe('SheetRenderer LUCK pips', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('shows RESET button when onResetLuck is provided', () => {
-    const onReset = vi.fn();
-    render(
-      <SheetRenderer
-        template={cyberpunkRed}
-        data={{ handle: 'GHOST', luck: 2, luck_max: 5 }}
-        onFieldChange={vi.fn()}
-        onResetLuck={onReset}
-      />
-    );
-    const resetBtn = screen.getByTitle(/reset luck/i);
-    expect(resetBtn).toBeTruthy();
-    fireEvent.click(resetBtn);
-    expect(onReset).toHaveBeenCalled();
-  });
-
-  it('hides RESET button when onResetLuck is absent', () => {
+  it('never shows a RESET button on the sheet (admin resets from admin panel)', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
@@ -384,5 +369,252 @@ describe('SheetRenderer LUCK pips', () => {
       />
     );
     expect(screen.queryByTitle(/reset luck/i)).toBeNull();
+  });
+});
+
+// ─── Segmented HP bar ─────────────────────────────────────────────────────────
+
+describe('SheetRenderer segmented HP bar', () => {
+  const cyberpunkRed = getTemplate('cyberpunk_red');
+
+  const getSegmentContainer = () => {
+    // The bar is the element titled with the token-sync hint
+    const bar = screen.getByTitle(/synced with your token/i);
+    return bar.querySelector('div[style*="flex"]') as HTMLElement;
+  };
+
+  it('renders one segment per max HP point', () => {
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST', hp: 10, hp_max: 20 }}
+        onFieldChange={vi.fn()}
+      />
+    );
+    const container = getSegmentContainer();
+    expect(container.children).toHaveLength(20);
+  });
+
+  it('shows the HP readout in green above half health', () => {
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST', hp: 15, hp_max: 20 }}
+        onFieldChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText('15/20')).toBeTruthy();
+  });
+
+  it('shows the HP readout at low health with red styling', () => {
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST', hp: 4, hp_max: 20 }}
+        onFieldChange={vi.fn()}
+      />
+    );
+    const readout = screen.getByText('4/20');
+    expect(readout.style.color).toBe('rgb(255, 51, 51)');
+  });
+
+  it('shows yellow between 25% and 50% health', () => {
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ handle: 'GHOST', hp: 8, hp_max: 20 }}
+        onFieldChange={vi.fn()}
+      />
+    );
+    const readout = screen.getByText('8/20');
+    expect(readout.style.color).toBe('rgb(255, 204, 0)');
+  });
+});
+
+// ─── Weapon rows ─────────────────────────────────────────────────────────────
+
+describe('SheetRenderer weapon rows', () => {
+  const cyberpunkRed = getTemplate('cyberpunk_red');
+
+  it('renders 4 structured weapon rows on the GEAR tab', async () => {
+    render(<SheetRenderer template={cyberpunkRed} data={{}} onFieldChange={vi.fn()} />);
+    await userEvent.click(screen.getByText('GEAR'));
+    expect(screen.getAllByLabelText('NAME')).toHaveLength(4);
+    expect(screen.getAllByLabelText('DMG')).toHaveLength(4);
+    expect(screen.getAllByLabelText('SKILL')).toHaveLength(4);
+    expect(screen.getAllByLabelText('ROF')).toHaveLength(4);
+  });
+
+  it('weapon skill is a select limited to attack skills', async () => {
+    render(<SheetRenderer template={cyberpunkRed} data={{}} onFieldChange={vi.fn()} />);
+    await userEvent.click(screen.getByText('GEAR'));
+    const select = screen.getAllByLabelText('SKILL')[0] as HTMLSelectElement;
+    const values = Array.from(select.options).map(o => o.value).filter(Boolean);
+    expect(values).toContain('handgun');
+    expect(values).toContain('melee_weapon');
+    expect(values).not.toContain('perception');
+  });
+
+  it('editing a weapon field calls onFieldChange with the row-scoped id', async () => {
+    const onFieldChange = vi.fn();
+    render(<SheetRenderer template={cyberpunkRed} data={{}} onFieldChange={onFieldChange} />);
+    await userEvent.click(screen.getByText('GEAR'));
+    const select = screen.getAllByLabelText('SKILL')[0];
+    await userEvent.selectOptions(select, 'handgun');
+    expect(onFieldChange).toHaveBeenCalledWith('weapon1_skill', 'handgun');
+  });
+});
+
+// ─── Death save banner ───────────────────────────────────────────────────────
+
+describe('SheetRenderer death save banner', () => {
+  const cyberpunkRed = getTemplate('cyberpunk_red');
+
+  it('is hidden while HP is above 0', () => {
+    render(<SheetRenderer template={cyberpunkRed} data={{ hp: 5, hp_max: 20 }} onFieldChange={vi.fn()} />);
+    expect(screen.queryByText(/MORTALLY WOUNDED/)).not.toBeInTheDocument();
+  });
+
+  it('appears at 0 HP with the BODY target and a DEATH SAVE button', () => {
+    const onDeathSave = vi.fn();
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ hp: 0, hp_max: 20, body: 6 }}
+        onFieldChange={vi.fn()}
+        onDeathSave={onDeathSave}
+      />
+    );
+    expect(screen.getByText(/MORTALLY WOUNDED/)).toBeInTheDocument();
+    expect(screen.getByText(/vs BODY 6/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'DEATH SAVE' }));
+    expect(onDeathSave).toHaveBeenCalled();
+  });
+
+  it('shows the escalating penalty', () => {
+    render(
+      <SheetRenderer
+        template={cyberpunkRed}
+        data={{ hp: 0, hp_max: 20, body: 6, death_save_penalty: 2 }}
+        onFieldChange={vi.fn()}
+        onDeathSave={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/1d10 \+2 vs BODY 6/)).toBeInTheDocument();
+  });
+
+  it('does not appear on the generic template', () => {
+    render(<SheetRenderer template={getTemplate('generic')} data={{ hp: 0, hp_max: 20 }} onFieldChange={vi.fn()} />);
+    expect(screen.queryByText(/MORTALLY WOUNDED/)).not.toBeInTheDocument();
+  });
+});
+
+describe('CharacterSheetWindow death save re-roll', () => {
+  it('emits requestDeathSave on every click, including after a sheetUpdated refetch', () => {
+    const socket = makeSocket();
+    render(<CharacterSheetWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} userName="GHOST" />);
+    const onSheetData = socket.on.mock.calls.find((c: any) => c[0] === 'sheetData')[1];
+    const onSheetUpdated = socket.on.mock.calls.find((c: any) => c[0] === 'sheetUpdated')[1];
+    const dying = { id: 1, username: 'GHOST', system: 'cyberpunk_red', portrait_url: null, is_npc: 0 };
+    act(() => onSheetData({ ...dying, data: { handle: 'GHOST', hp: 0, hp_max: 20, body: 6 } }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'DEATH SAVE' }));
+    expect(socket.emit.mock.calls.filter((c: any) => c[0] === 'requestDeathSave')).toHaveLength(1);
+
+    // Server escalates the penalty and pushes sheetUpdated → refetch
+    act(() => onSheetUpdated({ username: 'GHOST' }));
+    act(() => onSheetData({ ...dying, data: { handle: 'GHOST', hp: 0, hp_max: 20, body: 6, death_save_penalty: 1 } }));
+    expect(screen.getByText(/1d10 \+1 vs BODY 6/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'DEATH SAVE' }));
+    expect(socket.emit.mock.calls.filter((c: any) => c[0] === 'requestDeathSave')).toHaveLength(2);
+  });
+});
+
+// ─── Armed LUCK + wounded banner ─────────────────────────────────────────────
+
+describe('SheetRenderer armed LUCK', () => {
+  const cyberpunkRed = getTemplate('cyberpunk_red');
+  const data = { handle: 'GHOST', hp: 20, hp_max: 20, luck: 3, luck_max: 5, int: 6 };
+
+  it('clicking a pip arms LUCK for the next roll instead of spending it', async () => {
+    const onFieldChange = vi.fn();
+    render(<SheetRenderer template={cyberpunkRed} data={data} onFieldChange={onFieldChange} onRoll={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText('LUCK 3 of 5'));
+    expect(screen.getByText(/NEXT ROLL \+1 .* COST 1 LUCK/)).toBeInTheDocument();
+    expect(onFieldChange).not.toHaveBeenCalled(); // no direct decrement any more
+  });
+
+  it('the next roll carries the armed LUCK and resets it', async () => {
+    const onRoll = vi.fn();
+    render(<SheetRenderer template={cyberpunkRed} data={data} onFieldChange={vi.fn()} onRoll={onRoll} />);
+    fireEvent.click(screen.getByLabelText('LUCK 3 of 5'));
+    fireEvent.click(screen.getByLabelText('LUCK 2 of 5'));
+    // two pips armed → roll INT
+    fireEvent.click(screen.getByLabelText('Roll INT'));
+    expect(onRoll).toHaveBeenCalledWith('int', 2, undefined);
+    expect(screen.queryByText(/NEXT ROLL/)).not.toBeInTheDocument();
+  });
+
+  it('CLEAR disarms', async () => {
+    render(<SheetRenderer template={cyberpunkRed} data={data} onFieldChange={vi.fn()} onRoll={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText('LUCK 3 of 5'));
+    fireEvent.click(screen.getByText('CLEAR'));
+    expect(screen.queryByText(/NEXT ROLL/)).not.toBeInTheDocument();
+  });
+
+  it('no arming UI without onRoll (read-only admin view still shows pips)', () => {
+    render(<SheetRenderer template={cyberpunkRed} data={data} onFieldChange={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText('LUCK 3 of 5'));
+    expect(screen.queryByText(/NEXT ROLL/)).not.toBeInTheDocument();
+  });
+});
+
+describe('SheetRenderer seriously wounded banner', () => {
+  const cyberpunkRed = getTemplate('cyberpunk_red');
+
+  it('appears when HP is at or below the threshold (but above 0)', () => {
+    render(<SheetRenderer template={cyberpunkRed} data={{ hp: 8, hp_max: 20, seriously_wounded: 10 }} onFieldChange={vi.fn()} />);
+    expect(screen.getByText(/⚠ SERIOUSLY WOUNDED/)).toBeInTheDocument();
+    expect(screen.queryByText(/MORTALLY WOUNDED/)).not.toBeInTheDocument();
+  });
+
+  it('hidden above the threshold and replaced by MORTALLY WOUNDED at 0', () => {
+    const { rerender } = render(<SheetRenderer template={cyberpunkRed} data={{ hp: 15, hp_max: 20, seriously_wounded: 10 }} onFieldChange={vi.fn()} />);
+    expect(screen.queryByText(/⚠ SERIOUSLY WOUNDED/)).not.toBeInTheDocument();
+    rerender(<SheetRenderer template={cyberpunkRed} data={{ hp: 0, hp_max: 20, seriously_wounded: 10, body: 6 }} onFieldChange={vi.fn()} />);
+    expect(screen.queryByText(/⚠ SERIOUSLY WOUNDED/)).not.toBeInTheDocument();
+    expect(screen.getByText(/MORTALLY WOUNDED/)).toBeInTheDocument();
+  });
+});
+
+
+describe('SheetRenderer fumble shield', () => {
+  const cyberpunkRed = getTemplate('cyberpunk_red');
+  const data = { handle: 'GHOST', hp: 20, hp_max: 20, luck: 3, luck_max: 5, int: 6 };
+
+  it('is hidden while the house rule is off', () => {
+    render(<SheetRenderer template={cyberpunkRed} data={data} onFieldChange={vi.fn()} onRoll={vi.fn()} />);
+    expect(screen.queryByText(/FUMBLE SHIELD/)).not.toBeInTheDocument();
+  });
+
+  it('arming the shield costs 1 LUCK and rides the next roll', () => {
+    const onRoll = vi.fn();
+    render(<SheetRenderer template={cyberpunkRed} data={data} onFieldChange={vi.fn()} onRoll={onRoll} allowFumbleShield />);
+    fireEvent.click(screen.getByText(/FUMBLE SHIELD \(1 LUCK\)/));
+    expect(screen.getByText(/NAT-1 NEGATED .* COST 1 LUCK/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Roll INT'));
+    expect(onRoll).toHaveBeenCalledWith('int', undefined, true);
+    expect(screen.queryByText(/NAT-1 NEGATED/)).not.toBeInTheDocument();
+  });
+
+  it('shield + armed pips both ride and cost stacks', () => {
+    const onRoll = vi.fn();
+    render(<SheetRenderer template={cyberpunkRed} data={data} onFieldChange={vi.fn()} onRoll={onRoll} allowFumbleShield />);
+    fireEvent.click(screen.getByText(/FUMBLE SHIELD \(1 LUCK\)/));
+    fireEvent.click(screen.getByLabelText('LUCK 1 of 5'));
+    expect(screen.getByText(/NEXT ROLL \+1 · NAT-1 NEGATED · COST 2 LUCK/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Roll INT'));
+    expect(onRoll).toHaveBeenCalledWith('int', 1, true);
   });
 });

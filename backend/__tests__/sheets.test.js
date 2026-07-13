@@ -316,4 +316,54 @@ describe('POST /api/sheets/portrait', () => {
     const updated = await get(db, `SELECT portrait_url FROM character_sheets WHERE username = 'GHOST'`);
     expect(updated.portrait_url).toMatch(/\.webp$/);
   });
+
+  it('admin uploads a portrait for an NPC via ?npc_id=', async () => {
+    await setSystem(db, 'cyberpunk_red');
+    const { lastID } = await run(db,
+      `INSERT INTO character_sheets (username, system, data, is_npc, npc_label) VALUES ('testadmin', 'cyberpunk_red', '{}', 1, 'Gang Member')`);
+    const res = await request(app)
+      .post(`/api/sheets/portrait?npc_id=${lastID}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .attach('portrait', Buffer.from('fake-png'), { filename: 'npc.png', contentType: 'image/png' });
+    expect(res.status).toBe(200);
+    const updated = await get(db, `SELECT portrait_url FROM character_sheets WHERE id = ?`, [lastID]);
+    expect(updated.portrait_url).toMatch(/\.png$/);
+  });
+
+  it('npc_id targeting 404s for a missing NPC', async () => {
+    const res = await request(app)
+      .post('/api/sheets/portrait?npc_id=99999')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .attach('portrait', Buffer.from('fake-png'), { filename: 'npc.png', contentType: 'image/png' });
+    expect(res.status).toBe(404);
+  });
+});
+
+// ─── Derived fields (Humanity → EMP) ─────────────────────────────────────────
+
+describe('CP:R Humanity drives EMP', () => {
+  it('admin PUT of humanity recomputes emp = floor(humanity/10)', async () => {
+    await setSystem(db, 'cyberpunk_red');
+    await insertSheet(db, { username: 'GHOST', system: 'cyberpunk_red', data: JSON.stringify({ emp: 7, emp_max: 7 }) });
+    const res = await request(app)
+      .put('/api/sheets/user/GHOST')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ fields: { humanity: 34 } });
+    expect(res.status).toBe(200);
+    const row = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    const data = JSON.parse(row.data);
+    expect(data.humanity).toBe(34);
+    expect(data.emp).toBe(3);
+  });
+
+  it('non-derived fields leave emp alone', async () => {
+    await setSystem(db, 'cyberpunk_red');
+    await insertSheet(db, { username: 'GHOST', system: 'cyberpunk_red', data: JSON.stringify({ emp: 7 }) });
+    await request(app)
+      .put('/api/sheets/user/GHOST')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ fields: { cool: 5 } });
+    const row = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    expect(JSON.parse(row.data).emp).toBe(7);
+  });
 });

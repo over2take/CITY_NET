@@ -67,7 +67,9 @@ const rollDie = (sides, rng) => Math.floor(rng() * sides) + 1;
 // Roll a resolved formula. Returns:
 // { rolls: { [sides]: [values...] }, diceTotal, modTotal, total,
 //   critical: 'success' | 'failure' | null, breakdown: '(6+3) + 12' }
-const executeRoll = (resolved, shape = 'sum', rng = Math.random) => {
+// opts.noFumble: a natural 1 is NOT a critical failure (CP:R: spending any
+// LUCK on the check negates the fumble; the 1 still counts at face value).
+const executeRoll = (resolved, shape = 'sum', rng = Math.random, opts = {}) => {
   if (shape === 'pool') throw new Error('pool rolls are not implemented yet');
 
   const rolls = {};
@@ -87,7 +89,7 @@ const executeRoll = (resolved, shape = 'sum', rng = Math.random) => {
       // CP:R critical: only the first d10 of the formula explodes, once.
       if (shape === 'explode10' && sides === 10 && !firstD10Done) {
         firstD10Done = true;
-        if (v === 10 || v === 1) {
+        if (v === 10 || (v === 1 && !opts.noFumble)) {
           const extra = rollDie(10, rng);
           rolls[sides].push(extra);
           if (v === 10) {

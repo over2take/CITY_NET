@@ -333,7 +333,15 @@ CITY_NET/
 │   │   ├── overpasses.js       # Overpass CRUD (GET all / POST one / DELETE :id)
 │   │   ├── signs.js            # Custom sign CRUD (GET all / POST / PATCH :id / DELETE :id); text optional when image_url set
 │   │   ├── fonts.js            # Font file upload/list/delete (.ttf .otf .woff .woff2); served as static under /uploads/fonts/
-│   │   └── player.js           # Player auth (register, login, forgot, reset, registration status poll)
+│   │   ├── player.js           # Player auth (register, login, forgot, reset, registration status poll)
+│   │   └── sheets.js           # Character sheets — admin sheet access, NPC library, portraits, LUCK reset, import preview
+│   ├── sheets/
+│   │   ├── templates.js        # Server-side template metadata (public/combat/linked fields, max pairs, derived fields)
+│   │   ├── rolls.js            # Per-system roll map (fieldId → formula); server-authoritative
+│   │   ├── rollEngine.js       # Formula parse/resolve/execute (explode10, deterministic RNG for tests)
+│   │   ├── attack.js           # CP:R combat resolution — to-hit, damage, SP soak/ablation, shield, crits, death saves
+│   │   ├── importers.js        # Modular sheet import — PDF form extraction + per-system field mappers
+│   │   └── npcTiers.js         # Per-system NPC power tiers for GENERATE_SHEET (CP:R: Mook→Elite)
 │   ├── sockets/
 │   │   └── index.js            # All Socket.IO event handlers
 │   ├── startup/
@@ -351,6 +359,13 @@ CITY_NET/
 │       ├── player.test.js              # Player auth (register, login, forgot/reset, registration flow)
 │       ├── roads.test.js               # Road API (GET / POST / DELETE / DELETE :id)
 │       ├── signs.test.js               # Sign API (GET / POST / PATCH / DELETE, auth, image-only, filter_intensity clamping, XSS)
+│       ├── sheets.test.js              # Sheet routes (system switch, admin access, portraits, derived fields)
+│       ├── npc_sheets.test.js          # NPC library routes (CRUD, links, folders, LUCK reset, HP overlay)
+│       ├── cpr_attack.test.js          # CP:R attack module (to-hit, armor, shield, crits, death saves)
+│       ├── npc_tiers.test.js           # NPC tier packages (escalation, weapon validity)
+│       ├── sheet_import.test.js        # Import pipeline (PDF form extraction, alias mapping, preview route)
+│       ├── rollEngine.test.js          # Roll formula engine
+│       ├── sockets.deathsave.test.js   # Socket integration: death saves, sheetAttack vs NPC SP, import apply, tiered generation
 │       ├── sockets.editing.test.js     # Socket editing access flow; regression for stale elevatedUsers bug
 │       └── undo.test.js                # Undo endpoint (all action types, auth, ordering)
 │
@@ -387,6 +402,12 @@ CITY_NET/
 │   │   │   ├── Streamer.tsx            # Camera broadcaster/rig pairs for streamer mode
 │   │   │   ├── StreamerOverlay.tsx     # HUD overlay rendered on the spectator window
 │   │   │   ├── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
+│   │   │   ├── CharacterSheetWindow.tsx # Player's own character sheet (socket-based, self-only)
+│   │   │   ├── NpcSheetWindow.tsx       # Admin view/edit of NPC or player sheets (REST-based)
+│   │   │   ├── NpcLibrary.tsx           # NPC sheet library (folders, attach-to-token, move, open)
+│   │   │   ├── SheetRenderer.tsx        # Template-driven sheet renderer (any game system)
+│   │   │   ├── ImportSheetDialog.tsx    # Sheet import — fillable PDF / JSON / stat-block paste with preview
+│   │   │   ├── QuickSheetCard.tsx       # Public sheet card shown to other players
 │   │   │   ├── UpdateModal.tsx          # Draggable update notification modal (shown on admin login when update available; Update Now / Remind Me Later / Skip Version; docker-aware)
 │   │   │   └── __tests__/              # Component unit tests (Vitest + Testing Library)
 │   │   │       ├── AdminPanel.test.tsx
@@ -406,6 +427,10 @@ CITY_NET/
 │   │   │       ├── RadioPlayer.test.tsx
 │   │   │       ├── Rhombuses.test.tsx
 │   │   │       ├── SecureLogin.test.tsx  # Login, register, approval polling, password reset, deny flows
+│   │   │       ├── CharacterSheet.test.tsx   # Template registry, renderer, sheet window, weapon rows, death saves
+│   │   │       ├── NpcLibrary.test.tsx
+│   │   │       ├── ImportSheetDialog.test.tsx
+│   │   │       ├── QuickSheetCard.test.tsx
 │   │   │       ├── Sidebar.test.tsx
 │   │   │       └── UpdateModal.test.tsx  # Rendering, docker/non-docker branching, button callbacks, update flow
 │   │   ├── context/
@@ -417,6 +442,13 @@ CITY_NET/
 │   │   │   └── __tests__/
 │   │   │       ├── useApi.test.ts                        # Fetch helper unit tests
 │   │   │       └── useSocket.pendingRequests.test.ts     # Pending edit-request state; regression for stale requests on newly-promoted temp admins
+│   │   ├── sheets/
+│   │   │   ├── types.ts            # Sheet template type system (fields, sections, header, death saves, NPC tiers)
+│   │   │   ├── index.ts            # Template registry + getMaxPairs helper
+│   │   │   ├── SheetPage entry     # (src/SheetPage.tsx) standalone browser-tab sheet (?sheet=true)
+│   │   │   └── templates/
+│   │   │       ├── generic.ts          # Minimal fallback template
+│   │   │       └── cyberpunk_red.ts    # Cyberpunk RED — stats, skills, weapons, armor, tiers (labels + dice math only, no book content)
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
 │   │   └── utils/
 │   │       ├── locationHelpers.ts  # Location geometry utilities; exports ZONE_TYPE_NAMES and isUserDefinedName

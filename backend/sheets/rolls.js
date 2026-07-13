@@ -107,4 +107,4 @@ const ROLLS = {
 
 const getRoll = (system, fieldId) => (ROLLS[system] || {})[fieldId] || null;
 
-module.exports = { ROLLS, getRoll };
+module.exports = { ROLLS, getRoll, CPR_SKILLS };

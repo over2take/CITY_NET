@@ -4,7 +4,7 @@
 // renderer (SheetRenderer) can draw for any system. Adding a system later
 // means adding a template file, not new UI.
 
-export type SheetFieldType = 'number' | 'text' | 'textarea';
+export type SheetFieldType = 'number' | 'text' | 'textarea' | 'select';
 
 export interface SheetField {
   id: string;
@@ -24,6 +24,8 @@ export interface SheetField {
   maxField?: string;
   /** Short helper text shown as a tooltip on the field. */
   hint?: string;
+  /** Example value shown as ghost text inside an empty field (input placeholder). */
+  placeholder?: string;
   /** Hint that this field is rollable (Phase 2 wires the actual roll). */
   roll?: { formula: string; label: string };
   /** Linked field: the value lives in another system and is overlaid by the
@@ -32,9 +34,13 @@ export interface SheetField {
    *    writes route to the token)
    *  - bank_balance: the player's bank balance (read-only on the sheet) */
   source?: 'token_hp' | 'token_hp_max' | 'bank_balance';
+  /** For 'select' fields: the allowed choices. */
+  options?: { value: string; label: string }[];
 }
 
-export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes';
+/** 'weapons' lays fields out as structured rows (name / dmg / skill / rof),
+ *  chunked in field order - every 4 consecutive fields form one weapon row. */
+export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons';
 
 export interface SheetSection {
   id: string;
@@ -77,6 +83,13 @@ export interface SheetTemplate {
   id: string;
   name: string;
   header?: SheetHeader;
+  /** When set, dropping to 0 HP shows a MORTALLY WOUNDED banner with a
+   *  DEATH SAVE button. The server rolls 1d10 + penalty vs statField and
+   *  tracks the escalating penalty in penaltyField. */
+  deathSave?: { statField: string; penaltyField: string };
+  /** NPC power tiers offered by GENERATE_SHEET (must mirror the server's
+   *  npcTiers registry for this system). Absent = untiered generation. */
+  npcTiers?: { id: string; label: string }[];
   tokenDefense?: TokenDefense;
   /** Bottom tab bar, in order. Sections map to tabs via section.tab. */
   tabs?: string[];

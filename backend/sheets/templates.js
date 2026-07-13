@@ -28,6 +28,22 @@ const TEMPLATES = {
     publicFields: ['handle', 'role', 'description'],
     combatFields: ['sp_head', 'sp_head_max', 'sp_body', 'sp_body_max', 'sp_shield', 'sp_shield_max'],
     linkedFields: { hp: 'token_hp', hp_max: 'token_hp_max', cash: 'bank_balance' },
+    luckField: 'luck',
+    luckMaxField: 'luck_max',
+    // maxField → currentField: when a max is written, clamp current ≤ max
+    maxPairs: {
+      luck_max: 'luck',
+      emp_max: 'emp',
+      humanity_max: 'humanity',
+      sp_head_max: 'sp_head',
+      sp_body_max: 'sp_body',
+      sp_shield_max: 'sp_shield',
+    },
+    // sourceField → { target, divisor }: writing the source recomputes the
+    // target (CP:R: current EMP = Humanity / 10, rounded down)
+    derived: {
+      humanity: { target: 'emp', divisor: 10 },
+    },
   },
 };
 
@@ -49,4 +65,20 @@ const filterPublicData = (system, data) => {
 const getLinkedFields = (system) =>
   (TEMPLATES[system] || TEMPLATES[DEFAULT_SYSTEM]).linkedFields || {};
 
-module.exports = { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, filterPublicData, getLinkedFields };
+// Returns a map of maxFieldId → currentFieldId for the system.
+const getMaxPairs = (system) =>
+  (TEMPLATES[system] || TEMPLATES[DEFAULT_SYSTEM]).maxPairs || {};
+
+// Recompute derived fields after a write. Mutates data; returns the ids of
+// fields it changed (empty when the changed field derives nothing).
+const applyDerived = (system, data, changedFieldId) => {
+  const derived = (TEMPLATES[system] || TEMPLATES[DEFAULT_SYSTEM]).derived || {};
+  const rule = derived[changedFieldId];
+  if (!rule) return [];
+  const src = Number(data[changedFieldId]);
+  if (!Number.isFinite(src)) return [];
+  data[rule.target] = Math.floor(src / rule.divisor);
+  return [rule.target];
+};
+
+module.exports = { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, filterPublicData, getLinkedFields, getMaxPairs, applyDerived };

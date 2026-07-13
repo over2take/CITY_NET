@@ -4,7 +4,9 @@ const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
-const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields } = require('../sheets/templates');
+const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived } = require('../sheets/templates');
+const sheetImporters = require('../sheets/importers');
+const sheetAttack = require('../sheets/attack');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
 // sheet, quick-sheet lookups) goes through socket events, matching how the
@@ -71,7 +73,9 @@ module.exports = (db, io) => {
     );
   });
 
-  // Full sheet for one player on the active system (admin view/edit)
+  // Full sheet for one player on the active system (admin view/edit).
+  // Linked fields (token HP, bank cash) are overlaid at read time, same as
+  // the player's own socket fetch.
   router.get('/user/:username', authenticate, requireAdmin, (req, res) => {
     getGameSystem((err, system) => {
       if (err) return res.status(500).json({ error: err.message });
@@ -81,7 +85,31 @@ module.exports = (db, io) => {
         (err2, row) => {
           if (err2) return res.status(500).json({ error: err2.message });
           if (!row) return res.status(404).json({ error: 'No sheet for this player on the active system' });
-          res.json({ ...row, data: JSON.parse(row.data || '{}') });
+          const data = JSON.parse(row.data || '{}');
+          const linked = getLinkedFields(system);
+          const done = () => res.json({ ...row, data });
+          const overlayCash = () => {
+            if (!Object.values(linked).includes('bank_balance')) return done();
+            db.get(`SELECT balance FROM player_banks WHERE username = ?`, [req.params.username], (e3, bank) => {
+              Object.entries(linked).forEach(([fieldId, source]) => {
+                if (source === 'bank_balance') data[fieldId] = bank ? bank.balance : 0;
+              });
+              done();
+            });
+          };
+          if (!Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max')) return overlayCash();
+          db.get(
+            `SELECT hp_current, hp_max FROM locations WHERE shape = 'rhombus' AND owner = ?
+             ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
+            [req.params.username],
+            (e2, hpRow) => {
+              Object.entries(linked).forEach(([fieldId, source]) => {
+                if (source === 'token_hp') data[fieldId] = hpRow ? hpRow.hp_current : null;
+                if (source === 'token_hp_max') data[fieldId] = hpRow ? hpRow.hp_max : null;
+              });
+              overlayCash();
+            }
+          );
         }
       );
     });
@@ -104,6 +132,7 @@ module.exports = (db, io) => {
           const linked = getLinkedFields(system);
           const patch = Object.fromEntries(Object.entries(fields).filter(([k]) => !linked[k]));
           const data = { ...JSON.parse(row.data || '{}'), ...patch };
+          Object.keys(patch).forEach((f) => applyDerived(system, data, f));
           db.run(
             `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
             [JSON.stringify(data), row.id],
@@ -115,6 +144,41 @@ module.exports = (db, io) => {
           );
         }
       );
+    });
+  });
+
+  // --- Sheet import ---
+
+  // Stage-1+2 preview: extract candidates from a fillable PDF, JSON paste, or
+  // raw text, and map them onto the active system's fields. No auth needed -
+  // it only transforms what the caller sends; applying is where identity is
+  // enforced (socket for players, admin PUTs for admins).
+  router.post('/import/preview', upload.single('pdf'), (req, res) => {
+    getGameSystem(async (err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const importer = sheetImporters.getImporter(system);
+      if (!importer) return res.status(400).json({ error: `No importer for ${system} yet` });
+      try {
+        let raw = null;
+        let source = null;
+        if (req.file) {
+          raw = await sheetImporters.extractPdfFields(req.file.buffer);
+          source = 'pdf-form';
+          if (!raw) return res.status(422).json({ error: 'PDF has no fillable form fields. Copy the character text and paste it instead.' });
+        } else if (req.body && req.body.json) {
+          raw = typeof req.body.json === 'string' ? JSON.parse(req.body.json) : req.body.json;
+          source = 'json';
+        } else if (req.body && req.body.text) {
+          raw = importer.parseText(String(req.body.text));
+          source = 'text';
+        } else {
+          return res.status(400).json({ error: 'Send a PDF file, json, or text' });
+        }
+        const { mapped, unmapped, skipped } = importer.mapFields(raw);
+        res.json({ system, source, mapped, unmapped, skipped });
+      } catch (e) {
+        res.status(422).json({ error: `Could not read input: ${e.message}` });
+      }
     });
   });
 
@@ -137,7 +201,9 @@ module.exports = (db, io) => {
     });
   });
 
-  // Get full NPC sheet data (for editing)
+  // Get full NPC sheet data (for editing). Like player sheets, HP is a
+  // linked field: when the sheet is attached to a token, the token's HP is
+  // overlaid at read time (first link wins if the sheet is on several tokens).
   router.get('/npcs/:id', authenticate, requireAdmin, (req, res) => {
     db.get(
       `SELECT * FROM character_sheets WHERE id = ? AND is_npc = 1`,
@@ -145,7 +211,25 @@ module.exports = (db, io) => {
       (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: 'NPC not found' });
-        res.json({ ...row, data: JSON.parse(row.data || '{}') });
+        const data = JSON.parse(row.data || '{}');
+        const linked = getLinkedFields(row.system);
+        const wantsHp = Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max');
+        if (!wantsHp) return res.json({ ...row, data });
+        db.get(
+          `SELECT loc.hp_current, loc.hp_max FROM npc_sheet_links l
+           JOIN locations loc ON loc.id = l.location_id
+           WHERE l.sheet_id = ? LIMIT 1`,
+          [req.params.id],
+          (err2, hpRow) => {
+            if (!err2 && hpRow) {
+              Object.entries(linked).forEach(([fieldId, source]) => {
+                if (source === 'token_hp') data[fieldId] = hpRow.hp_current;
+                if (source === 'token_hp_max') data[fieldId] = hpRow.hp_max;
+              });
+            }
+            res.json({ ...row, data });
+          }
+        );
       }
     );
   });
@@ -170,13 +254,23 @@ module.exports = (db, io) => {
 
   // Patch NPC sheet data / metadata
   router.put('/npcs/:id', authenticate, requireAdmin, (req, res) => {
-    db.get(`SELECT id, data FROM character_sheets WHERE id = ? AND is_npc = 1`, [req.params.id], (err, row) => {
+    db.get(`SELECT id, data, system FROM character_sheets WHERE id = ? AND is_npc = 1`, [req.params.id], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'NPC not found' });
       const { fields, npc_label, folder } = req.body;
-      const data = fields
-        ? JSON.stringify({ ...JSON.parse(row.data || '{}'), ...fields })
-        : row.data;
+      // Linked fields (token HP) live on the location - never store them in
+      // the sheet's JSON, same rule as player sheets
+      let cleanFields = fields;
+      if (fields) {
+        const linked = getLinkedFields(row.system);
+        cleanFields = Object.fromEntries(Object.entries(fields).filter(([k]) => !linked[k]));
+      }
+      let data = row.data;
+      if (cleanFields) {
+        const merged = { ...JSON.parse(row.data || '{}'), ...cleanFields };
+        Object.keys(cleanFields).forEach((f) => applyDerived(row.system, merged, f));
+        data = JSON.stringify(merged);
+      }
       const sets = ['data = ?', 'updated_at = CURRENT_TIMESTAMP'];
       const params = [data];
       if (npc_label !== undefined) { sets.push('npc_label = ?'); params.push(npc_label); }
@@ -198,11 +292,27 @@ module.exports = (db, io) => {
     });
   });
 
-  // Attach NPC sheet to a token (location)
+  // Which NPC sheet (if any) is linked to a token - drives the token menu's
+  // GENERATE_SHEET vs OPEN_SHEET button
+  router.get('/npcs/link/:location_id', authenticate, requireAdmin, (req, res) => {
+    db.get(
+      `SELECT cs.id AS sheet_id, cs.npc_label FROM npc_sheet_links l
+       JOIN character_sheets cs ON cs.id = l.sheet_id WHERE l.location_id = ?`,
+      [req.params.location_id],
+      (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(row || { sheet_id: null });
+      }
+    );
+  });
+
+  // Attach NPC sheet to a token (location). Under CP:R the sheet also stamps
+  // the token's melee DV (6 + DEX + Evasion) - a starting value the GM can
+  // override any time via EDIT_DV.
   router.post('/npcs/:id/link', authenticate, requireAdmin, (req, res) => {
     const { location_id } = req.body;
     if (!location_id) return res.status(400).json({ error: 'location_id required' });
-    db.get(`SELECT id FROM character_sheets WHERE id = ? AND is_npc = 1`, [req.params.id], (err, row) => {
+    db.get(`SELECT id, system, data FROM character_sheets WHERE id = ? AND is_npc = 1`, [req.params.id], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'NPC not found' });
       db.run(
@@ -211,8 +321,20 @@ module.exports = (db, io) => {
         [location_id, req.params.id],
         (err2) => {
           if (err2) return res.status(500).json({ error: err2.message });
-          io.emit('npcLinkChanged', { location_id, sheet_id: Number(req.params.id) });
-          res.json({ message: 'Linked' });
+          const finish = () => {
+            io.emit('npcLinkChanged', { location_id, sheet_id: Number(req.params.id) });
+            res.json({ message: 'Linked' });
+          };
+          if (row.system !== 'cyberpunk_red') return finish();
+          let data;
+          try { data = JSON.parse(row.data || '{}'); } catch { return finish(); }
+          db.get(`SELECT value FROM global_settings WHERE key = 'melee_dv_take10'`, (sErr, sRow) => {
+            db.run(
+              `UPDATE locations SET melee_ac = ? WHERE id = ?`,
+              [sheetAttack.staticMeleeDv(data, !sErr && sRow?.value === '1'), location_id],
+              () => { io.emit('dataUpdated', { isRhombusOnly: true }); finish(); }
+            );
+          });
         }
       );
     });
@@ -248,6 +370,20 @@ module.exports = (db, io) => {
     // Determine whose sheet to update
     const u = req.user;
     const isAdmin = u && (u.role === 'admin' || u.isTemporary);
+
+    // Admin can target an NPC sheet directly by id
+    if (isAdmin && req.query.npc_id) {
+      return db.run(
+        `UPDATE character_sheets SET portrait_url = ? WHERE id = ? AND is_npc = 1`,
+        [portrait_url, req.query.npc_id],
+        function (err2) {
+          if (err2) return res.status(500).json({ error: err2.message });
+          if (this.changes === 0) return res.status(404).json({ error: 'NPC not found' });
+          res.json({ portrait_url });
+        }
+      );
+    }
+
     const targetUsername = isAdmin && req.query.username ? req.query.username : u.username;
     if (!targetUsername) return res.status(400).json({ error: 'Cannot determine target username' });
 
@@ -260,6 +396,47 @@ module.exports = (db, io) => {
           if (err2) return res.status(500).json({ error: err2.message });
           io.emit('sheetUpdated', { username: targetUsername });
           res.json({ portrait_url });
+        }
+      );
+    });
+  });
+
+  // Reset all player LUCK to max for the active system (admin-only)
+  router.post('/reset-luck', authenticate, requireAdmin, (req, res) => {
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const meta = TEMPLATES[system];
+      if (!meta || !meta.luckField || !meta.luckMaxField) {
+        return res.json({ reset: 0, reason: 'System has no LUCK field' });
+      }
+      const { luckField, luckMaxField } = meta;
+      db.all(
+        `SELECT id, username, data FROM character_sheets WHERE system = ? AND is_npc = 0`,
+        [system],
+        (err2, rows) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+          const updates = [];
+          for (const row of rows) {
+            let data;
+            try { data = JSON.parse(row.data || '{}'); } catch { data = {}; }
+            const max = data[luckMaxField];
+            if (max === undefined || max === null) continue;
+            data[luckField] = Number(max);
+            updates.push({ id: row.id, username: row.username, data: JSON.stringify(data) });
+          }
+          if (updates.length === 0) return res.json({ reset: 0 });
+          let done = 0;
+          for (const u of updates) {
+            db.run(
+              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+              [u.data, u.id],
+              () => {
+                io.emit('sheetUpdated', { username: u.username });
+                done++;
+                if (done === updates.length) res.json({ reset: updates.length });
+              }
+            );
+          }
         }
       );
     });
