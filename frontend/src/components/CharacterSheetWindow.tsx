@@ -91,8 +91,12 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           </button>
         </span>
       }
-      windowStyle={{ width: '520px', maxWidth: '95vw' }}
-      contentStyle={{ height: '68vh', display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
+      windowStyle={{
+        width: '520px', height: '74vh',
+        minWidth: '360px', maxWidth: '520px', minHeight: '320px', maxHeight: '92vh',
+        resize: 'both', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+      }}
+      contentStyle={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
     >
       {sheet && template ? (
         <SheetRenderer template={template} data={sheet.data} portraitUrl={sheet.portrait_url} onFieldChange={handleFieldChange} />
