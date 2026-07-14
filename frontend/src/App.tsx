@@ -1925,18 +1925,18 @@ function App() {
                       ) : (() => {
                         const tiers = getTemplate(gameSystem).npcTiers;
                         return (
-                          <div style={{ marginTop: '10px', display: 'flex', gap: '6px' }}>
+                          <div style={{ marginTop: '10px', display: 'flex', gap: '6px', alignItems: 'center' }}>
                             {tiers && tiers.length > 0 && (
                               <select
                                 aria-label="NPC tier"
                                 value={genTier || tiers[0].id}
                                 onChange={(e) => setGenTier(e.target.value)}
-                                style={{ background: 'rgba(0,10,0,0.7)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.7rem', padding: '2px 4px' }}
+                                style={{ background: 'rgba(0,10,0,0.7)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.7rem', padding: '0 4px', height: '26px', boxSizing: 'border-box', marginTop: '15px' }}
                               >
                                 {tiers.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                               </select>
                             )}
-                            <button className="upload-btn" style={{ flex: 1, backgroundColor: '#2200aa' }} onClick={() => {
+                            <button className="upload-btn" style={{ flex: 1, backgroundColor: '#2200aa', height: '28px', boxSizing: 'border-box' }} onClick={() => {
                               socketRef.current?.emit('generateNpcSheet', {
                                 location_id: selectedLocation.id,
                                 tier: tiers && tiers.length > 0 ? (genTier || tiers[0].id) : undefined,
