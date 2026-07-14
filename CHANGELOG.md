@@ -9,6 +9,45 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.4.0] - 2026-07-13
+
+Cyberpunk RED character sheets: the full Phase 3-5 sheet system, making CP:R the first feature-complete game system.
+
+### Added
+- **Character sheet system** — template-driven sheets (one renderer, per-system templates); player window, admin view of any player/NPC sheet, standalone browser tab (`?sheet=true`), quick-sheet card, portrait upload with TV-glitch effect, segmented HP bar (green/yellow/red)
+- **Server-authoritative rolls** — stat/skill rolls resolve against the stored sheet (exploding CP:R check die); results land in the dice tray and history
+- **CP:R combat flow** — single ATTACK button; weapon picker from structured sheet weapon rows (name/DMG/skill/ROF); to-hit vs token DV; aimed shots (−8, head, ×2 damage through armor); damage auto-rolled, soaked by defender SP, armor ablation on penetration; damage writes through to token HP; attack animation follows the weapon type (melee/ranged)
+- **SP SHIELD** — defender's shield intercepts damage first and breaks down point-for-point; overflow soaks against location SP
+- **Critical injuries** — two+ max-face damage dice trigger +5 direct damage (ignores armor/shield) and prompt the GM to roll the book's injury table (table not embedded)
+- **Death saves** — MORTALLY WOUNDED banner at 0 HP with DEATH SAVE button; 1d10 + escalating penalty vs BODY (natural 10 always fails); penalty resets on healing above 0
+- **Seriously Wounded** — banner at ≤ threshold HP; −2 to all checks applied server-side (−4 while mortally wounded)
+- **Armor penalty** — heavy-armor stat penalty applied to all REF/DEX-keyed checks and attacks
+- **LUCK on rolls** — arm pips on the sheet (declared before the roll, per RAW) for a flat bonus on the next roll; spend is capped/decremented server-side; attack panel has its own LUCK selector
+- **House rules panel** (ADMIN → TTRPG_SYSTEM, staged APPLY/REVERT) — `MELEE_DV TAKE-10` (10 + DEX + Evasion instead of 6 +) and `LUCK BONUS ALSO NEGATES NAT-1` (also unlocks a dedicated 1-LUCK fumble shield); rules apply live via settingsUpdated
+- **LUCK pips + admin reset** — hexagonal pips on the sheet header; RESET_ALL_LUCK in the admin panel restores every player to max
+- **Humanity → EMP** — editing Humanity recomputes current EMP (= Humanity ÷ 10) on every write path (template-declared derived fields)
+- **NPC library** — create/delete NPC sheets, folders with MOVE control, ATTACH sheet to a token, OPEN full sheet editor; NPC sheets mirror their linked token's HP live
+- **Leveled NPC generation** — GENERATE_SHEET takes a per-system tier (CP:R: MOOK/SKILLED/PRO/ELITE) seeding stats, skills, armor, weapons, token HP and DVs; melee DV computed from the sheet (6/10 + DEX + Evasion), GM can override via EDIT_DV
+- **Sheet import** — IMPORT on every sheet window: fillable-PDF form extraction, JSON paste, or stat-block text; per-system alias mapping with preview before apply; linked fields (HP/cash) refused with explanation
+- **Token defense per system** — MELEE_AC/RANGED_AC labels become MELEE_DV/RANGED_DV under CP:R; CP:R hides the two-button melee/ranged flow behind one ATTACK button
+- **OPEN_SHEET on token windows** — players open their own sheet from their token; admins open any player's or NPC's sheet from any token
+- **`npm run dev` (backend)** — nodemon auto-restart so backend code changes apply without manual restarts
+
+### Changed
+- **TTRPG_SYSTEM panel** moved above CURRENCY_ICON in the admin panel; SHEETS list removed
+- **Sheet UX polish** — placeholders (ghost example text) on all free-form fields, upload hint bar attached under the portrait, weapon rows replace the free-text weapons area (notes field retained), CUR ≤ MAX clamping on paired fields (frontend + server)
+- **CHECK_HEALTH window** — now resolves NPC tokens and tracks live HP by token id (was frozen at open and player-only)
+
+### Fixed
+- **NPC armor ignored in attacks** — defender sheet lookup branched on token owner instead of token type, so enemy tokens (which carry an owner) never found their linked NPC sheet; SP always read 0
+- **DV edits not reflected** — EDIT_DV saved correctly but the token window showed the stale snapshot until reopen
+- **Death save / FIRE appearing dead** — stale backend process; mitigated permanently by the new `npm run dev` watcher
+
+### Tests
+- 377 backend / 574 frontend — new suites: `cpr_attack` (to-hit, armor, shield, crits, LUCK, death saves), `sockets.deathsave` (socket integration: death saves, NPC SP, import apply, tiered generation, fumble-shield gating), `sheet_import` (PDF/JSON/text extraction + mapping), `npc_tiers`, plus renderer/library/import-dialog coverage
+
+---
+
 ## [1.3.1] - 2026-07-08
 
 ### Added

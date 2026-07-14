@@ -1,0 +1,324 @@
+import type { SheetTemplate, SheetField } from '../types';
+
+// Cyberpunk RED template.
+//
+// Licensing note: this file contains stat/skill LABELS and dice math only -
+// game mechanics are not copyrightable, but no rules text, tables, or layout
+// from the book may ever be added here.
+
+const skill = (id: string, label: string, stat: string): SheetField => ({
+  id, label, type: 'number', stat,
+  roll: { formula: `1d10 + @${stat} + @${id}`, label },
+});
+
+/** Skills a weapon can attack with (id must match a skill field above). */
+export const CPR_WEAPON_SKILLS: { value: string; label: string }[] = [
+  { value: 'handgun', label: 'Handgun' },
+  { value: 'shoulder_arms', label: 'Shoulder Arms' },
+  { value: 'heavy_weapons', label: 'Heavy Weapons' },
+  { value: 'autofire', label: 'Autofire' },
+  { value: 'archery', label: 'Archery' },
+  { value: 'melee_weapon', label: 'Melee Weapon' },
+  { value: 'brawling', label: 'Brawling' },
+  { value: 'martial_arts', label: 'Martial Arts' },
+];
+
+/** Number of structured weapon rows on the sheet. */
+export const CPR_WEAPON_ROWS = 4;
+
+const weaponRow = (i: number): SheetField[] => [
+  { id: `weapon${i}_name`, label: 'NAME', type: 'text', placeholder: 'Militech Avenger' },
+  { id: `weapon${i}_dmg`, label: 'DMG', type: 'text', placeholder: '3d6', hint: 'Damage dice, e.g. 2d6 or 3d6. Rolled by the server on a hit.' },
+  { id: `weapon${i}_skill`, label: 'SKILL', type: 'select', options: CPR_WEAPON_SKILLS, hint: 'Attack skill used with this weapon.' },
+  { id: `weapon${i}_rof`, label: 'ROF', type: 'number', placeholder: '2', hint: 'Rate of fire: attacks per turn.' },
+];
+
+export const cyberpunkRed: SheetTemplate = {
+  id: 'cyberpunk_red',
+  name: 'Cyberpunk RED',
+  // CP:R has no AC: armor is per-location SP, managed on the sheet's ARMOR
+  // section. Attacks target a DV instead.
+  tokenDefense: { editOnToken: false, label: 'DV', note: 'ARMOR (SP) IS MANAGED ON YOUR CHARACTER_SHEET' },
+  deathSave: { statField: 'body', penaltyField: 'death_save_penalty' },
+  npcTiers: [
+    { id: 'mook', label: 'MOOK' },
+    { id: 'skilled', label: 'SKILLED' },
+    { id: 'pro', label: 'PRO' },
+    { id: 'elite', label: 'ELITE' },
+  ],
+  header: {
+    nameField: 'handle',
+    subtitleFields: ['role'],
+    hpField: 'hp',
+    hpMaxField: 'hp_max',
+    chips: [
+      { field: 'move', label: 'MOVE' },
+      { field: 'body', label: 'BODY' },
+    ],
+    luckField: 'luck',
+    luckMaxField: 'luck_max',
+  },
+  tabs: ['STATS', 'SKILLS', 'GEAR', 'NOTES'],
+  sections: [
+    {
+      id: 'identity',
+      label: 'IDENTITY',
+      layout: 'list',
+      tab: 'STATS',
+      fields: [
+        { id: 'handle', label: 'Handle', type: 'text', visibility: 'public', placeholder: 'V' },
+        { id: 'role', label: 'Role', type: 'text', visibility: 'public', placeholder: 'Solo' },
+        { id: 'role_ability', label: 'Role Ability', type: 'text', placeholder: 'Combat Awareness' },
+        { id: 'role_ability_rank', label: 'Rank', type: 'number' },
+        { id: 'description', label: 'Description', type: 'textarea', visibility: 'public', placeholder: 'Chrome arm, mirrored optics, always smoking' },
+        { id: 'aliases', label: 'Aliases', type: 'text', placeholder: 'The Ghost of Watson' },
+      ],
+    },
+    {
+      id: 'stats',
+      label: 'STATS',
+      layout: 'grid',
+      tab: 'STATS',
+      columns: 5,
+      fields: [
+        { id: 'int', label: 'INT', type: 'number', roll: { formula: '1d10 + @int', label: 'INT' } },
+        { id: 'ref', label: 'REF', type: 'number', roll: { formula: '1d10 + @ref', label: 'REF' } },
+        { id: 'dex', label: 'DEX', type: 'number', roll: { formula: '1d10 + @dex', label: 'DEX' } },
+        { id: 'tech', label: 'TECH', type: 'number', roll: { formula: '1d10 + @tech', label: 'TECH' } },
+        { id: 'cool', label: 'COOL', type: 'number', roll: { formula: '1d10 + @cool', label: 'COOL' } },
+        { id: 'will', label: 'WILL', type: 'number', roll: { formula: '1d10 + @will', label: 'WILL' } },
+        { id: 'move', label: 'MOVE', type: 'number' },
+        { id: 'body', label: 'BODY', type: 'number' },
+        { id: 'luck', label: 'LUCK', type: 'number', maxField: 'luck_max', hint: 'Spend LUCK points to boost rolls; they refresh at the start of a session. Current / maximum.' },
+        { id: 'luck_max', label: 'LUCK MAX', type: 'number' },
+        { id: 'emp', label: 'EMP', type: 'number', maxField: 'emp_max', roll: { formula: '1d10 + @emp', label: 'EMP' }, hint: 'Empathy erodes as Humanity is lost to cyberware. Rolls use CURRENT EMP, not the max.' },
+        { id: 'emp_max', label: 'EMP MAX', type: 'number' },
+      ],
+    },
+    {
+      id: 'health',
+      label: 'HEALTH',
+      layout: 'grid',
+      tab: 'STATS',
+      columns: 4,
+      fields: [
+        // HP lives on the player's token - the header bar mirrors it live
+        // (source: token_hp) and clicking the bar opens the HitPoints window.
+        { id: 'seriously_wounded', label: 'SERIOUSLY WOUNDED', type: 'number', hint: 'Wound threshold: at or below this HP you are Seriously Wounded (usually half of max HP).' },
+        { id: 'death_save', label: 'DEATH SAVE', type: 'number', hint: 'Death Save target (equals BODY). At 0 HP, roll under this to stay alive.' },
+        { id: 'humanity', label: 'HUMANITY', type: 'number', maxField: 'humanity_max', hint: 'Drops when cyberware is installed; low Humanity lowers current EMP. Current / maximum.' },
+        { id: 'humanity_max', label: 'HUMANITY MAX', type: 'number' },
+      ],
+    },
+    {
+      id: 'armor',
+      label: 'ARMOR',
+      layout: 'grid',
+      tab: 'STATS',
+      columns: 4,
+      fields: [
+        { id: 'sp_head', label: 'SP HEAD', type: 'number', maxField: 'sp_head_max', sensitivity: 'combat', hint: 'Head armor Stopping Power. Ablates -1 each time it stops damage; repair restores toward max.' },
+        { id: 'sp_head_max', label: 'SP HEAD MAX', type: 'number', sensitivity: 'combat' },
+        { id: 'sp_body', label: 'SP BODY', type: 'number', maxField: 'sp_body_max', sensitivity: 'combat', hint: 'Body armor Stopping Power. Ablates -1 each time it stops damage; repair restores toward max.' },
+        { id: 'sp_body_max', label: 'SP BODY MAX', type: 'number', sensitivity: 'combat' },
+        { id: 'sp_shield', label: 'SP SHIELD', type: 'number', maxField: 'sp_shield_max', sensitivity: 'combat', hint: 'Shield hit points (if carried). Current / maximum.' },
+        { id: 'sp_shield_max', label: 'SP SHIELD MAX', type: 'number', sensitivity: 'combat' },
+        { id: 'armor_penalty', label: 'PENALTY', type: 'number', sensitivity: 'combat', hint: 'Stat penalty from heavy armor (applies to REF, DEX and MOVE).' },
+      ],
+    },
+    {
+      id: 'skills_awareness',
+      label: 'AWARENESS',
+      layout: 'skills',
+      tab: 'SKILLS',
+      fields: [
+        skill('concentration', 'Concentration', 'will'),
+        skill('conceal_reveal', 'Conceal/Reveal Object', 'int'),
+        skill('lip_reading', 'Lip Reading', 'int'),
+        skill('perception', 'Perception', 'int'),
+        skill('tracking', 'Tracking', 'int'),
+      ],
+    },
+    {
+      id: 'skills_body',
+      label: 'BODY',
+      layout: 'skills',
+      tab: 'SKILLS',
+      fields: [
+        skill('athletics', 'Athletics', 'dex'),
+        skill('contortionist', 'Contortionist', 'dex'),
+        skill('dance', 'Dance', 'dex'),
+        skill('endurance', 'Endurance', 'will'),
+        skill('resist_torture', 'Resist Torture/Drugs', 'will'),
+        skill('stealth', 'Stealth', 'dex'),
+      ],
+    },
+    {
+      id: 'skills_control',
+      label: 'CONTROL',
+      layout: 'skills',
+      tab: 'SKILLS',
+      fields: [
+        skill('drive_land', 'Drive Land Vehicle', 'ref'),
+        skill('pilot_air', 'Pilot Air Vehicle (x2)', 'ref'),
+        skill('pilot_sea', 'Pilot Sea Vehicle', 'ref'),
+        skill('riding', 'Riding', 'ref'),
+      ],
+    },
+    {
+      id: 'skills_education',
+      label: 'EDUCATION',
+      layout: 'skills',
+      tab: 'SKILLS',
+      fields: [
+        skill('accounting', 'Accounting', 'int'),
+        skill('animal_handling', 'Animal Handling', 'int'),
+        skill('bureaucracy', 'Bureaucracy', 'int'),
+        skill('business', 'Business', 'int'),
+        skill('composition', 'Composition', 'int'),
+        skill('criminology', 'Criminology', 'int'),
+        skill('cryptography', 'Cryptography', 'int'),
+        skill('deduction', 'Deduction', 'int'),
+        skill('education', 'Education', 'int'),
+        skill('gamble', 'Gamble', 'int'),
+        skill('language_streetslang', 'Language (Streetslang)', 'int'),
+        skill('language_other', 'Language (Other)', 'int'),
+        skill('library_search', 'Library Search', 'int'),
+        skill('local_expert', 'Local Expert (Your Home)', 'int'),
+        skill('science', 'Science', 'int'),
+        skill('tactics', 'Tactics', 'int'),
+        skill('wilderness_survival', 'Wilderness Survival', 'int'),
+      ],
+    },
+    {
+      id: 'skills_fighting',
+      label: 'FIGHTING',
+      layout: 'skills',
+      tab: 'SKILLS',
+      fields: [
+        skill('brawling', 'Brawling', 'dex'),
+        skill('evasion', 'Evasion', 'dex'),
+        skill('martial_arts', 'Martial Arts (x2)', 'dex'),
+        skill('melee_weapon', 'Melee Weapon', 'dex'),
+      ],
+    },
+    {
+      id: 'skills_performance',
+      label: 'PERFORMANCE',
+      layout: 'skills',
+      tab: 'SKILLS',
+      fields: [
+        skill('acting', 'Acting', 'cool'),
+        skill('play_instrument', 'Play Instrument', 'tech'),
+      ],
+    },
+    {
+      id: 'skills_ranged',
+      label: 'RANGED WEAPONS',
+      layout: 'skills',
+      tab: 'SKILLS',
+      fields: [
+        skill('archery', 'Archery', 'ref'),
+        skill('autofire', 'Autofire (x2)', 'ref'),
+        skill('handgun', 'Handgun', 'ref'),
+        skill('heavy_weapons', 'Heavy Weapons (x2)', 'ref'),
+        skill('shoulder_arms', 'Shoulder Arms', 'ref'),
+      ],
+    },
+    {
+      id: 'skills_social',
+      label: 'SOCIAL',
+      layout: 'skills',
+      tab: 'SKILLS',
+      fields: [
+        skill('bribery', 'Bribery', 'cool'),
+        skill('conversation', 'Conversation', 'emp'),
+        skill('human_perception', 'Human Perception', 'emp'),
+        skill('interrogation', 'Interrogation', 'cool'),
+        skill('persuasion', 'Persuasion', 'cool'),
+        skill('personal_grooming', 'Personal Grooming', 'cool'),
+        skill('streetwise', 'Streetwise', 'cool'),
+        skill('trading', 'Trading', 'cool'),
+        skill('wardrobe_style', 'Wardrobe & Style', 'cool'),
+      ],
+    },
+    {
+      id: 'skills_technique',
+      label: 'TECHNIQUE',
+      layout: 'skills',
+      tab: 'SKILLS',
+      fields: [
+        skill('air_vehicle_tech', 'Air Vehicle Tech', 'tech'),
+        skill('basic_tech', 'Basic Tech', 'tech'),
+        skill('cybertech', 'Cybertech', 'tech'),
+        skill('demolitions', 'Demolitions (x2)', 'tech'),
+        skill('electronics_security', 'Electronics/Security Tech (x2)', 'tech'),
+        skill('first_aid', 'First Aid', 'tech'),
+        skill('forgery', 'Forgery', 'tech'),
+        skill('land_vehicle_tech', 'Land Vehicle Tech', 'tech'),
+        skill('paint_draw_sculpt', 'Paint/Draw/Sculpt', 'tech'),
+        skill('paramedic', 'Paramedic (x2)', 'tech'),
+        skill('photography_film', 'Photography/Film', 'tech'),
+        skill('pick_lock', 'Pick Lock', 'tech'),
+        skill('pick_pocket', 'Pick Pocket', 'tech'),
+        skill('sea_vehicle_tech', 'Sea Vehicle Tech', 'tech'),
+        skill('weaponstech', 'Weaponstech', 'tech'),
+      ],
+    },
+    {
+      id: 'weapons',
+      label: 'WEAPONS',
+      layout: 'weapons',
+      tab: 'GEAR',
+      fields: Array.from({ length: CPR_WEAPON_ROWS }, (_, i) => weaponRow(i + 1)).flat(),
+    },
+    {
+      id: 'weapon_notes',
+      label: 'WEAPON NOTES',
+      layout: 'notes',
+      tab: 'GEAR',
+      fields: [
+        { id: 'weapons_notes', label: 'Ammo, attachments, notes', type: 'textarea', placeholder: 'Smartgun link on the Avenger; sword is monofilament' },
+      ],
+    },
+    {
+      id: 'gear',
+      label: 'GEAR & CASH',
+      layout: 'list',
+      tab: 'GEAR',
+      fields: [
+        { id: 'cash', label: 'Cash (eb)', type: 'number', source: 'bank_balance' },
+        { id: 'ammunition', label: 'Ammunition', type: 'text', placeholder: '30x heavy pistol, 2x grenade' },
+        { id: 'gear_notes', label: 'Gear', type: 'textarea', placeholder: 'Agent, medtech bag, grapple gun, 2x airhypo' },
+      ],
+    },
+    {
+      id: 'cyberware',
+      label: 'CYBERWARE',
+      layout: 'notes',
+      tab: 'GEAR',
+      fields: [
+        { id: 'cyberware_notes', label: 'Cyberware', type: 'textarea', placeholder: 'Cybereye (Low Light), Neural Link, Subdermal Grip' },
+      ],
+    },
+    {
+      id: 'lifepath',
+      label: 'LIFEPATH',
+      layout: 'notes',
+      tab: 'NOTES',
+      fields: [
+        { id: 'lifepath_notes', label: 'Lifepath, reputation, IP, contacts', type: 'textarea', placeholder: 'Grew up in the combat zone. Owes a fixer named Cyrus. 20 IP banked.' },
+      ],
+    },
+    {
+      id: 'injuries',
+      label: 'CRITICAL INJURIES',
+      layout: 'notes',
+      tab: 'NOTES',
+      fields: [
+        { id: 'critical_injuries', label: 'Critical injuries', type: 'textarea', placeholder: 'Broken ribs (-2 MOVE until healed)' },
+        { id: 'addictions', label: 'Addictions', type: 'textarea', placeholder: 'Synthcoke - 1 dose/day or -2 to all checks' },
+      ],
+    },
+  ],
+};

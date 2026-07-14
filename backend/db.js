@@ -312,6 +312,34 @@ db.serialize(() => {
   db.run(`ALTER TABLE signs ADD COLUMN font_family TEXT DEFAULT 'monospace'`, () => {});
   db.run(`ALTER TABLE signs ADD COLUMN lines TEXT`, () => {});
   db.run(`ALTER TABLE signs ADD COLUMN filter_intensity REAL DEFAULT 1.0`, () => {});
+
+  // Character sheets: one sheet per player PER SYSTEM (switching game systems
+  // never destroys sheets - the old system's rows stay dormant until switched back)
+  db.run(`CREATE TABLE IF NOT EXISTS character_sheets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    system TEXT NOT NULL,
+    data TEXT NOT NULL DEFAULT '{}',
+    portrait_url TEXT,
+    is_npc INTEGER DEFAULT 0,
+    npc_label TEXT,
+    folder TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  // One sheet per player per system - but NPC sheets (is_npc=1) are exempt,
+  // the admin owns many of them
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_player_sheet
+          ON character_sheets(username, system) WHERE is_npc = 0`);
+
+  // NPC sheets attach to rhombus tokens via links so one sheet can back many tokens
+  db.run(`CREATE TABLE IF NOT EXISTS npc_sheet_links (
+    location_id INTEGER NOT NULL UNIQUE,
+    sheet_id INTEGER NOT NULL,
+    FOREIGN KEY(sheet_id) REFERENCES character_sheets(id) ON DELETE CASCADE
+  )`);
+
+  // NPC links ride along in map snapshots (location ids are preserved on load)
+  db.run(`ALTER TABLE saved_maps ADD COLUMN npc_links_data TEXT`, () => {});
 });
 
 module.exports = db;
