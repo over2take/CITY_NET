@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import notifyOnIcon from '../assets/Notification-on.svg';
 import notifyOffIcon from '../assets/Notification-off.svg';
 
+let zCounter = 2000;
+
 interface DraggableWindowProps {
   title: string;
   children: React.ReactNode;
@@ -22,7 +24,10 @@ export function DraggableWindow({
 }: DraggableWindowProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [zIndex, setZIndex] = useState(() => ++zCounter);
   const windowRef = React.useRef<HTMLDivElement>(null);
+
+  const bringToFront = () => setZIndex(++zCounter);
 
   // Clamp position when the browser is resized so panels never escape the viewport.
   useEffect(() => {
@@ -60,8 +65,8 @@ export function DraggableWindow({
   }, [isDragging, dragOffset, setPos]);
 
   return (
-    <div ref={windowRef} className="win95-window" style={{ left: `${pos.x}px`, top: `${pos.y}px`, ...windowStyle }}>
-      <div className="win95-title-bar" onMouseDown={handleMouseDown}>
+    <div ref={windowRef} className="win95-window" style={{ left: `${pos.x}px`, top: `${pos.y}px`, zIndex, ...windowStyle }}>
+      <div className="win95-title-bar" onMouseDown={(e) => { bringToFront(); handleMouseDown(e); }}>
         <div className="win95-title-text" style={{ fontWeight: 'bold' }}>{title}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           {titleControls}
