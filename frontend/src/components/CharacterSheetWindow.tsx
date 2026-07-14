@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
 import { ImportSheetDialog } from './ImportSheetDialog';
@@ -118,6 +119,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
   const template = sheet ? getTemplate(sheet.system) : null;
 
   return (
+    <>
     <DraggableWindow
       title={`CHARACTER_SHEET // ${userName.toUpperCase()}`}
       pos={pos}
@@ -187,17 +189,18 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>
       )}
-      {isImportOpen && (
-        <ImportSheetDialog
-          pos={importPos}
-          setPos={setImportPos}
-          onClose={() => setIsImportOpen(false)}
-          onApply={(fields) => {
-            // Server refuses linked fields, recomputes derived, emits sheetUpdated
-            socket?.emit('importSheetFields', { fields });
-          }}
-        />
-      )}
     </DraggableWindow>
+    {isImportOpen && ReactDOM.createPortal(
+      <ImportSheetDialog
+        pos={importPos}
+        setPos={setImportPos}
+        onClose={() => setIsImportOpen(false)}
+        onApply={(fields) => {
+          socket?.emit('importSheetFields', { fields });
+        }}
+      />,
+      document.body
+    )}
+    </>
   );
 }

@@ -21,15 +21,15 @@ interface NpcLibraryProps {
 }
 
 const row: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px',
+  display: 'flex', alignItems: 'center', gap: 16, padding: '8px 12px',
   borderBottom: '1px solid #0a2a0a', cursor: 'pointer', userSelect: 'none',
 };
 const label9: React.CSSProperties = {
-  fontFamily: 'monospace', fontSize: 9, letterSpacing: 0.5,
+  fontFamily: 'monospace', fontSize: 13, letterSpacing: 1,
 };
 const btn: React.CSSProperties = {
-  fontFamily: 'monospace', fontSize: 8, letterSpacing: 1, background: 'none',
-  border: '1px solid #333', color: '#666', cursor: 'pointer', padding: '2px 6px',
+  fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, background: 'none',
+  border: '1px solid #333', color: '#666', cursor: 'pointer', padding: '4px 10px',
   borderRadius: 2,
 };
 const btnGreen: React.CSSProperties = { ...btn, border: '1px solid var(--green)', color: 'var(--green)' };
@@ -94,9 +94,9 @@ function NpcRow({
   return (
     <div style={{ ...row, background: confirming ? 'rgba(80,0,0,0.15)' : undefined }}>
       {npc.portrait_url ? (
-        <img src={npc.portrait_url} alt={npc.npc_label} style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 2, border: '1px solid #1a3a1a', flexShrink: 0 }} />
+        <img src={npc.portrait_url} alt={npc.npc_label} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 2, border: '1px solid #1a3a1a', flexShrink: 0 }} />
       ) : (
-        <div style={{ width: 24, height: 24, background: '#001a00', border: '1px solid #1a3a1a', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green)', fontSize: 10, flexShrink: 0 }}>
+        <div style={{ width: 48, height: 48, background: '#001a00', border: '1px solid #1a3a1a', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green)', fontSize: 18, flexShrink: 0 }}>
           {(npc.npc_label[0] ?? '?').toUpperCase()}
         </div>
       )}
@@ -116,7 +116,7 @@ function NpcRow({
             defaultValue={npc.folder ?? '__none__'}
             onChange={(e) => handleMove(e.target.value)}
             onBlur={() => setMoving(false)}
-            style={{ fontFamily: 'monospace', fontSize: 8, background: '#001a00', color: 'var(--green)', border: '1px solid var(--green)', maxWidth: 90 }}
+            style={{ fontFamily: 'monospace', fontSize: 12, background: '#001a00', color: 'var(--green)', border: '1px solid var(--green)', maxWidth: 140 }}
           >
             <option value="__none__">(NO FOLDER)</option>
             {(folders ?? []).map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}
@@ -171,7 +171,7 @@ function FolderGroup({
     <div style={{ marginBottom: 2 }}>
       <button
         onClick={() => setOpen(o => !o)}
-        style={{ ...label9, width: '100%', textAlign: 'left', background: '#001200', border: 'none', color: '#aaffaa', cursor: 'pointer', padding: '3px 6px', letterSpacing: 1, opacity: 0.8 }}
+        style={{ ...label9, width: '100%', textAlign: 'left', background: '#001200', border: 'none', color: '#aaffaa', cursor: 'pointer', padding: '6px 12px', letterSpacing: 1, opacity: 0.8 }}
       >
         {open ? '▼' : '▶'} {folderName.toUpperCase()}
       </button>
@@ -239,26 +239,26 @@ export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId, onOp
       pos={pos}
       setPos={setPos}
       onClose={onClose}
-      windowStyle={{ width: 300 }}
+      windowStyle={{ width: 600, maxHeight: '90vh' }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '60vh', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: '85vh', overflow: 'hidden' }}>
         {attachLocationId && linkedNpcId === null && (
-          <div style={{ ...label9, color: '#aaffaa', border: '1px solid #1a4a1a', padding: '4px 8px', borderRadius: 2 }}>
+          <div style={{ ...label9, color: '#aaffaa', border: '1px solid #1a4a1a', padding: '8px 12px', borderRadius: 2 }}>
             SELECT AN NPC TO ATTACH TO THIS TOKEN
           </div>
         )}
         {attachLocationId && linkedNpcId !== null && (
-          <div style={{ ...label9, color: 'var(--green)', border: '1px solid var(--green)', padding: '4px 8px', borderRadius: 2 }}>
+          <div style={{ ...label9, color: 'var(--green)', border: '1px solid var(--green)', padding: '8px 12px', borderRadius: 2 }}>
             NPC LINKED — TOKEN NOW USES THIS SHEET
           </div>
         )}
 
         {/* NPC list */}
-        <div style={{ flex: 1, overflowY: 'auto', maxHeight: '40vh' }}>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
           {loading ? (
-            <div style={{ ...label9, opacity: 0.5, padding: '10px 6px' }}>LOADING…</div>
+            <div style={{ ...label9, opacity: 0.5, padding: '16px 12px' }}>LOADING…</div>
           ) : npcs.length === 0 ? (
-            <div style={{ ...label9, opacity: 0.5, padding: '10px 6px' }}>NO NPC SHEETS — CREATE ONE BELOW</div>
+            <div style={{ ...label9, opacity: 0.5, padding: '16px 12px' }}>NO NPC SHEETS — CREATE ONE BELOW</div>
           ) : (
             <>
               {ungrouped.map(n => (
@@ -272,19 +272,19 @@ export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId, onOp
         </div>
 
         {/* Create form */}
-        <form onSubmit={handleCreate} style={{ borderTop: '1px solid #0a2a0a', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ ...label9, color: '#aaffaa', letterSpacing: 1, marginBottom: 2 }}>NEW NPC</div>
+        <form onSubmit={handleCreate} style={{ borderTop: '1px solid #0a2a0a', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ ...label9, color: '#aaffaa', letterSpacing: 1, marginBottom: 4 }}>NEW NPC</div>
           <input
             value={newLabel}
             onChange={e => setNewLabel(e.target.value)}
             placeholder="Label (e.g. Gang Member)"
-            style={{ fontFamily: 'monospace', fontSize: 9, background: '#001a00', border: '1px solid #1a3a1a', color: 'var(--green)', padding: '3px 6px', borderRadius: 2 }}
+            style={{ fontFamily: 'monospace', fontSize: 13, background: '#001a00', border: '1px solid #1a3a1a', color: 'var(--green)', padding: '6px 10px', borderRadius: 2 }}
           />
           <input
             value={newFolder}
             onChange={e => setNewFolder(e.target.value)}
             placeholder="Folder (optional)"
-            style={{ fontFamily: 'monospace', fontSize: 9, background: '#001a00', border: '1px solid #1a3a1a', color: 'var(--green)', padding: '3px 6px', borderRadius: 2 }}
+            style={{ fontFamily: 'monospace', fontSize: 13, background: '#001a00', border: '1px solid #1a3a1a', color: 'var(--green)', padding: '6px 10px', borderRadius: 2 }}
           />
           <button type="submit" disabled={creating || !newLabel.trim()} style={btnGreen}>
             {creating ? 'CREATING…' : 'CREATE NPC'}

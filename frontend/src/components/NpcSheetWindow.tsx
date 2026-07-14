@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
 import { ImportSheetDialog } from './ImportSheetDialog';
@@ -131,6 +132,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
   const template = sheet ? getTemplate(sheet.system) : null;
 
   return (
+    <>
     <DraggableWindow
       title={playerUsername ? `CHARACTER_SHEET // ${playerUsername.toUpperCase()} [ADMIN]` : `NPC_SHEET // ${npcLabel.toUpperCase()}`}
       pos={pos}
@@ -173,17 +175,19 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
           {error ?? 'ACCESSING RECORD...'}
         </div>
       )}
-      {isImportOpen && (
-        <ImportSheetDialog
-          pos={importPos}
-          setPos={setImportPos}
-          onClose={() => setIsImportOpen(false)}
-          onApply={async (fields) => {
-            await saveFields(fields);
-            setReloadKey(k => k + 1);
-          }}
-        />
-      )}
     </DraggableWindow>
+    {isImportOpen && ReactDOM.createPortal(
+      <ImportSheetDialog
+        pos={importPos}
+        setPos={setImportPos}
+        onClose={() => setIsImportOpen(false)}
+        onApply={async (fields) => {
+          await saveFields(fields);
+          setReloadKey(k => k + 1);
+        }}
+      />,
+      document.body
+    )}
+    </>
   );
 }
