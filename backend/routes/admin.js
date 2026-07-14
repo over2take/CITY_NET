@@ -216,7 +216,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
 
     const https = require('https');
-    const currentVersion = process.env.APP_VERSION || '1.1.8';
+    const currentVersion = process.env.APP_VERSION || require('../../package.json').version;
 
     const options = {
       hostname: 'hub.docker.com',
