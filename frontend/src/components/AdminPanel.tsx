@@ -420,7 +420,7 @@ export function AdminPanel({
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
-    activeUsers, onGrantAccess, onRevokeAccess,
+    activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary,
   }: any) {
   if (view === 'battle_map') {
     let resolvedBattleMapScale: number | string = 5;
@@ -992,6 +992,9 @@ export function AdminPanel({
               <input type="range" min="0.5" max="5" step="0.5" value={signageDensity ?? 1} onChange={e => setSignageDensity(parseFloat(e.target.value))} style={{width: '100%'}} />
             </div>
           )}
+
+          {/* TTRPG SYSTEM (character sheets) */}
+          <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} />
 
           <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
             <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
@@ -2053,6 +2056,179 @@ const BANK_SOUND_TESTERS: Record<BankSoundKey, (vol: number) => void> = {
   firstpay: playCalibration,
   overdraft: playWompWomp,
 };
+
+function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNpcLibrary?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [system, setSystem] = useState<string>('generic');
+  const [systems, setSystems] = useState<{ id: string; name: string }[]>([]);
+  const [luckResetMsg, setLuckResetMsg] = useState<string | null>(null);
+  // House rules: staged locally, written on APPLY (not on every click)
+  const [houseRules, setHouseRules] = useState({ meleeTake10: false, luckNegates: false });
+  const [savedRules, setSavedRules] = useState({ meleeTake10: false, luckNegates: false });
+  const [rulesMsg, setRulesMsg] = useState<string | null>(null);
+
+  const refresh = () => {
+    fetch('/api/sheets/system').then(r => r.json()).then(d => {
+      if (d.system) setSystem(d.system);
+      if (d.systems) setSystems(d.systems);
+    }).catch(() => {});
+    fetch('/api/settings').then(r => r.json()).then((rows) => {
+      if (!Array.isArray(rows)) return;
+      const loaded = {
+        meleeTake10: rows.find((r: any) => r.key === 'melee_dv_take10')?.value === '1',
+        luckNegates: rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1',
+      };
+      setHouseRules(loaded);
+      setSavedRules(loaded);
+    }).catch(() => {});
+  };
+
+  useEffect(() => { if (open) refresh(); }, [open]);
+
+  const selectSystem = (id: string) => {
+    fetch('/api/sheets/system', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ system: id }),
+    }).then(r => { if (r.ok) setSystem(id); });
+  };
+
+  return (
+    <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+      <button className="utility-btn" style={{ width: '100%' }} onClick={() => setOpen(!open)}>
+        {open ? '▾' : '▸'} TTRPG_SYSTEM
+      </button>
+      {open && (
+        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '0.7rem' }}>GAME SYSTEM</label>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {systems.map(s => (
+              <button
+                key={s.id}
+                className={`utility-btn ${system === s.id ? 'active' : ''}`}
+                style={{ padding: '4px 10px', fontSize: '0.65rem' }}
+                onClick={() => selectSystem(s.id)}
+              >
+                {s.name.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
+            Player sheets for the current system are kept and restored if you switch back.
+          </p>
+          {system === 'cyberpunk_red' && (() => {
+            const dirty = houseRules.meleeTake10 !== savedRules.meleeTake10
+              || houseRules.luckNegates !== savedRules.luckNegates;
+            const applyRules = async () => {
+              const writes: [string, boolean][] = [
+                ['melee_dv_take10', houseRules.meleeTake10],
+                ['luck_negates_fumble', houseRules.luckNegates],
+              ];
+              try {
+                for (const [key, on] of writes) {
+                  await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ key, value: on ? '1' : '0' }),
+                  });
+                }
+                setSavedRules({ ...houseRules });
+                setRulesMsg('HOUSE RULES APPLIED');
+              } catch {
+                setRulesMsg('APPLY FAILED');
+              }
+              setTimeout(() => setRulesMsg(null), 3000);
+            };
+            return (
+              <div style={{ border: '1px solid var(--dark-green)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label style={{ fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}>HOUSE RULES</label>
+                <label
+                  title="Melee DV stamped at sheet generation/attach: default is 6 + DEX + Evasion (average of the opposed Evasion roll); take-10 uses 10 + DEX + Evasion for a harder melee defense. Existing tokens are not changed."
+                  style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={houseRules.meleeTake10}
+                    onChange={(e) => setHouseRules(r => ({ ...r, meleeTake10: e.target.checked }))}
+                  />
+                  MELEE_DV TAKE-10 (10 + DEX + EVASION INSTEAD OF 6 +)
+                </label>
+                <label
+                  title="House rule: any LUCK spent as a roll bonus also negates a natural-1 critical fumble. Off = RAW: only the dedicated 1-LUCK fumble shield negates. Players always have the shield option either way."
+                  style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={houseRules.luckNegates}
+                    onChange={(e) => setHouseRules(r => ({ ...r, luckNegates: e.target.checked }))}
+                  />
+                  LUCK BONUS ALSO NEGATES NAT-1
+                </label>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <button
+                    className="utility-btn"
+                    style={{ fontSize: '0.65rem', padding: '3px 12px', opacity: dirty ? 1 : 0.4 }}
+                    disabled={!dirty}
+                    onClick={applyRules}
+                  >
+                    APPLY
+                  </button>
+                  {dirty && (
+                    <button
+                      className="utility-btn"
+                      style={{ fontSize: '0.65rem', padding: '3px 12px' }}
+                      onClick={() => setHouseRules({ ...savedRules })}
+                    >
+                      REVERT
+                    </button>
+                  )}
+                  {rulesMsg && (
+                    <span style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>{rulesMsg}</span>
+                  )}
+                  {dirty && !rulesMsg && (
+                    <span style={{ fontSize: '0.6rem', color: '#ffcc00', opacity: 0.8, letterSpacing: '1px' }}>UNSAVED CHANGES</span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {onOpenNpcLibrary && (
+              <button
+                className="utility-btn"
+                style={{ fontSize: '0.65rem', flex: 1 }}
+                onClick={onOpenNpcLibrary}
+              >
+                NPC_LIBRARY
+              </button>
+            )}
+            <button
+              className="utility-btn"
+              style={{ fontSize: '0.65rem', flex: 1 }}
+              title="Reset all player LUCK to their maximum value"
+              onClick={() => {
+                fetch('/api/sheets/reset-luck', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${token}` },
+                }).then(r => r.json()).then(d => {
+                  setLuckResetMsg(d.reason ?? `LUCK RESET — ${d.reset} SHEET${d.reset !== 1 ? 'S' : ''}`);
+                  setTimeout(() => setLuckResetMsg(null), 3000);
+                }).catch(() => setLuckResetMsg('RESET FAILED'));
+              }}
+            >
+              RESET_ALL_LUCK
+            </button>
+          </div>
+          {luckResetMsg && (
+            <div style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>
+              {luckResetMsg}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function BankSoundsPanel({ token, globalSettings, fetchGlobalSettings }: { token: string; globalSettings: any; fetchGlobalSettings: () => void }) {
   const [open, setOpen] = useState(false);

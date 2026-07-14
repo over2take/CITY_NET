@@ -12,10 +12,13 @@ const ADMIN_TOKEN = jwt.sign(
   'test-secret'
 );
 
+let emitted;
+
 const makeApp = (db) => {
   const app = express();
   app.use(express.json());
-  const io = { emit: () => {} };
+  emitted = [];
+  const io = { emit: (event, payload) => emitted.push({ event, payload }) };
   app.use('/api/locations', locationsRouteFactory(db, io, {
     emitUpdate: () => {},
     recordAction: () => {},
@@ -250,6 +253,15 @@ describe('PUT /api/locations/:id/health', () => {
     const row = await get(db, `SELECT hp_current, hp_temp FROM locations WHERE id = ?`, [r.lastID]);
     expect(row.hp_temp).toBe(0);
     expect(row.hp_current).toBe(17); // 5 temp absorbs first, 3 bleeds to current
+  });
+
+  it('emits sheetUpdated for the owner when rhombus HP changes (sheet mirror)', async () => {
+    const r = await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, hp_current, hp_max, hp_temp) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 20, 20, 0)`);
+    await request(app)
+      .put(`/api/locations/${r.lastID}/health`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ action: 'damage', amount: 5 });
+    expect(emitted.some(e => e.event === 'sheetUpdated' && e.payload.username === 'GHOST')).toBe(true);
   });
 
   it('heal action increases hp_current capped at hp_max', async () => {
