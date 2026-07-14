@@ -1231,8 +1231,11 @@ function App() {
         socketRef.current.emit('requestRhombusPurge', { owner: userName });
     }
     
+    setIsSheetOpen(false);
+    setOpenNpcSheet(null);
+    setOpenPlayerSheetUser(null);
     setNotification("TERMINATING_SESSION...");
-    
+
     // 2. Wait for animation to finish before unmounting map
     setTimeout(() => {
         if (socketRef.current) socketRef.current.disconnect();
@@ -1243,6 +1246,7 @@ function App() {
         setSelectedSignId(null);
         setSignMesh(null);
         setSignTransformActive(false);
+        setIsBankOpen(false);
     }, 2500);
   };
 
@@ -1462,7 +1466,7 @@ function App() {
                 token={token}
                 userName={userName}
                 controlsRef={controlsRef}
-                onLogout={() => { setToken(''); setIsAdmin(false); setShowAdminPanel(false); }}
+                onLogout={() => { setToken(''); setIsAdmin(false); setShowAdminPanel(false); setIsSheetOpen(false); setOpenNpcSheet(null); setOpenPlayerSheetUser(null); setIsBankOpen(false); }}
                 tempCityMapScale={tempCityMapScale}
                 setTempCityMapScale={setTempCityMapScale}
                 globalSettings={globalSettings}
