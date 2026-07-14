@@ -1111,6 +1111,16 @@ button:disabled, .utility-btn:disabled, .upload-btn:disabled {
   50% { opacity: 0; }
 }
 
+@keyframes wound-pulse {
+  0%, 100% { color: #ffcc00; text-shadow: none; }
+  50% { color: #ffee55; text-shadow: 0 0 8px #ffee55; }
+}
+
+@keyframes death-pulse {
+  0%, 100% { color: #ff3333; text-shadow: none; }
+  50% { color: #ff6666; text-shadow: 0 0 8px #ff6666; }
+}
+
 .login-panel h1 {
   letter-spacing: 10px;
   margin-bottom: 5px;
