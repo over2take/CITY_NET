@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.4.1] - 2026-07-14
+
+### Fixed
+- **App version fallback** — backend `/api/check-update` now reads the running version from `package.json` when the `APP_VERSION` env var is not set (manual installs and dev environments no longer show a false "update available" prompt)
+
+---
+
 ## [1.4.0] - 2026-07-13
 
 Cyberpunk RED character sheets: the full Phase 3-5 sheet system, making CP:R the first feature-complete game system.
