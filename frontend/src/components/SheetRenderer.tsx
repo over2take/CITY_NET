@@ -282,12 +282,12 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpe
           return (
             <div style={{
               marginTop: '6px', border: '1px solid #ff3333', background: 'rgba(60, 0, 0, 0.45)',
-              padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+              padding: '5px 8px', display: 'flex', flexDirection: 'column', gap: '4px',
             }}>
-              <span style={{ color: '#ff3333', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600 }}>
+              <span style={{ color: '#ff3333', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'death-pulse 1.2s ease-in-out infinite' }}>
                 ⚠ MORTALLY WOUNDED
               </span>
-              <span style={{ color: '#ff3333', fontSize: '0.6rem', opacity: 0.85 }}>
+              <span style={{ color: '#ff3333', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
                 1d10{penalty > 0 ? ` +${penalty}` : ''} vs BODY {body} — roll every turn until stabilized
               </span>
               <button
@@ -295,7 +295,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpe
                 disabled={!onDeathSave}
                 title="First Aid or Paramedic check (DV15) stabilizes; healing above 0 HP clears this."
                 style={{
-                  marginLeft: 'auto', background: 'none', border: '1px solid #ff3333', color: '#ff3333',
+                  alignSelf: 'center', background: 'none', border: '1px solid #ff3333', color: '#ff3333',
                   fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 10px',
                   cursor: onDeathSave ? 'pointer' : 'default', opacity: onDeathSave ? 1 : 0.5,
                   display: 'flex', alignItems: 'center', gap: '4px',
@@ -309,12 +309,12 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpe
         {template.deathSave && h.hpField && (hp ?? 0) > 0 && num(data.seriously_wounded) > 0 && (hp ?? 0) <= num(data.seriously_wounded) && (
           <div style={{
             marginTop: '6px', border: '1px solid #ffcc00', background: 'rgba(60, 45, 0, 0.4)',
-            padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '8px',
+            padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: '2px',
           }}>
-            <span style={{ color: '#ffcc00', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600 }}>
+            <span style={{ color: '#ffcc00', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'wound-pulse 1.6s ease-in-out infinite' }}>
               ⚠ SERIOUSLY WOUNDED
             </span>
-            <span style={{ color: '#ffcc00', fontSize: '0.6rem', opacity: 0.85 }}>
+            <span style={{ color: '#ffcc00', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
               −2 to all checks (applied automatically)
             </span>
           </div>
