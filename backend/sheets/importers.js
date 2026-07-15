@@ -217,6 +217,10 @@ const buildCwnAliases = () => {
 
   // Combat
   alias(['ac', 'armorclass', 'defense', 'armour'], 'ac');
+  alias(['armor', 'armorname'], 'armor_name');
+  alias(['armorac', 'baseac', 'armorbaseac'], 'armor_ac');
+  alias(['maxdex', 'dexcap', 'armordexcap'], 'armor_dex_cap');
+  alias(['shield', 'shieldbonus'], 'shield_bonus');
   alias(['bhb', 'basehitbonus', 'hitbonus', 'attackbonus'], 'base_hit_bonus');
   alias(['systemstrain', 'strain'], 'system_strain');
   alias(['systemstrainmax', 'strainmax'], 'system_strain_max');
@@ -268,6 +272,7 @@ const NUMERIC_CWN_FIELDS = new Set([
   'int', 'int_mod', 'wis', 'wis_mod', 'cha', 'cha_mod',
   'save_physical', 'save_evasion', 'save_mental', 'save_luck',
   'system_strain', 'system_strain_max',
+  'armor_ac', 'armor_dex_cap', 'shield_bonus',
   'frail', 'auto_initiative',
   'cast_skill', 'mage_effort', 'mage_effort_max', 'spells_prepared_max',
   'summon_skill', 'summoner_effort', 'summoner_effort_max',

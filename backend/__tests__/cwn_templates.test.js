@@ -71,6 +71,32 @@ describe('CWN derived fields (recompute hook)', () => {
   });
 });
 
+describe('CWN effective AC from armor', () => {
+  const { cwnEffectiveAc } = require('../sheets/templates');
+
+  it('returns null while armor_ac is unset (manual AC stands)', () => {
+    expect(cwnEffectiveAc({})).toBeNull();
+    expect(cwnEffectiveAc({ armor_ac: '' })).toBeNull();
+    expect(cwnEffectiveAc({ armor_ac: 0 })).toBeNull();
+  });
+
+  it('adds the DEX mod to the armor base', () => {
+    expect(cwnEffectiveAc({ armor_ac: 14, dex: 14 })).toBe(15); // +1 dex
+    expect(cwnEffectiveAc({ armor_ac: 14, dex: 4 })).toBe(13);  // -1 dex
+    expect(cwnEffectiveAc({ armor_ac: 14 })).toBe(14);          // unset dex = 0
+  });
+
+  it('caps the DEX bonus for heavy armor (0 = none, blank = uncapped)', () => {
+    expect(cwnEffectiveAc({ armor_ac: 16, dex: 18, armor_dex_cap: 1 })).toBe(17);
+    expect(cwnEffectiveAc({ armor_ac: 16, dex: 18, armor_dex_cap: 0 })).toBe(16);
+    expect(cwnEffectiveAc({ armor_ac: 16, dex: 18, armor_dex_cap: '' })).toBe(18);
+  });
+
+  it('adds a shield bonus', () => {
+    expect(cwnEffectiveAc({ armor_ac: 13, dex: 10, shield_bonus: 1 })).toBe(14);
+  });
+});
+
 describe('CWN roll map', () => {
   it('skills roll 2d6 + skill + mod in plain sum shape (no explosion)', () => {
     const roll = getRoll('cities_without_number', 'shoot');

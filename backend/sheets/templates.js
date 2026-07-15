@@ -68,6 +68,19 @@ const cwnRecompute = (data) => {
   return changed;
 };
 
+// CWN effective AC from the sheet's armor fields (QRD: armor SETS your AC,
+// DEX mod adds on top - heavy armor may cap it - and a shield adds a bonus).
+// Returns null while armor_ac is unset: the token AC is then managed by hand
+// (token menu / the linked ac field), so we never clobber a manual value.
+const cwnEffectiveAc = (data) => {
+  const base = Number(data.armor_ac);
+  if (!Number.isFinite(base) || base <= 0) return null;
+  const capRaw = data.armor_dex_cap;
+  const cap = (capRaw === undefined || capRaw === null || capRaw === '') ? Infinity : num(capRaw);
+  const shield = num(data.shield_bonus);
+  return Math.max(1, Math.min(99, base + Math.min(cwnMod(data.dex), cap) + shield));
+};
+
 const TEMPLATES = {
   generic: {
     name: 'Generic',
@@ -161,4 +174,4 @@ const applyDerived = (system, data, changedFieldId) => {
   return changed;
 };
 
-module.exports = { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, filterPublicData, getLinkedFields, getMaxPairs, applyDerived };
+module.exports = { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, filterPublicData, getLinkedFields, getMaxPairs, applyDerived, cwnEffectiveAc };
