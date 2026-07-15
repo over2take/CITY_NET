@@ -650,7 +650,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         Object.entries(linked).forEach(([fieldId, source]) => {
           if (source === 'token_hp') out[fieldId] = tokenRow ? tokenRow.hp_current : null;
           if (source === 'token_hp_max') out[fieldId] = tokenRow ? tokenRow.hp_max : null;
-          if (source === 'token_ac') out[fieldId] = tokenRow ? tokenRow.melee_ac : null;
+          // Unset token AC falls back to 10, matching the attack engine's
+          // default - the sheet shows the AC attacks actually resolve against.
+          if (source === 'token_ac') out[fieldId] = tokenRow ? (tokenRow.melee_ac ?? 10) : null;
         });
         if (!wantsCash) return cb(out);
         db.get(`SELECT balance FROM player_banks WHERE username = ?`, [username], (err, bank) => {

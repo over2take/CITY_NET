@@ -106,7 +106,7 @@ module.exports = (db, io) => {
               Object.entries(linked).forEach(([fieldId, source]) => {
                 if (source === 'token_hp') data[fieldId] = hpRow ? hpRow.hp_current : null;
                 if (source === 'token_hp_max') data[fieldId] = hpRow ? hpRow.hp_max : null;
-                if (source === 'token_ac') data[fieldId] = hpRow ? hpRow.melee_ac : null;
+                if (source === 'token_ac') data[fieldId] = hpRow ? (hpRow.melee_ac ?? 10) : null;
               });
               overlayCash();
             }
@@ -240,7 +240,7 @@ module.exports = (db, io) => {
               Object.entries(linked).forEach(([fieldId, source]) => {
                 if (source === 'token_hp') data[fieldId] = hpRow.hp_current;
                 if (source === 'token_hp_max') data[fieldId] = hpRow.hp_max;
-                if (source === 'token_ac') data[fieldId] = hpRow.melee_ac;
+                if (source === 'token_ac') data[fieldId] = hpRow.melee_ac ?? 10;
               });
             }
             res.json({ ...row, data });
