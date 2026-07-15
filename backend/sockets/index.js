@@ -11,8 +11,14 @@ const SECRET = process.env.JWT_SECRET;
 const userSockets = new Map();
 let activeNPCs = [];
 
-// CWN stabilize checks resolve 5s after the roll broadcast (the client dice
-// animation) - block re-rolls on the same target while one is in flight.
+// Rolls whose outcome mutates visible sheet state (death saves, stabilize)
+// broadcast first and apply the consequences after the client's dice
+// animation, so banners don't spoil the result mid-roll. Tests set
+// DICE_ANIM_MS=0 to skip the wait.
+const DICE_ANIM_MS = Number(process.env.DICE_ANIM_MS ?? 5000);
+
+// CWN stabilize checks resolve after the animation delay - block re-rolls on
+// the same target while one is in flight.
 const stabilizeInFlight = new Set();
 
 // Streamer mode: spectator sockets are read-only observers, invisible to the game.
@@ -1457,24 +1463,29 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const historyString =
                   `${info.userName} DEATH SAVE [${save.die} ${penTag}= ${save.total} vs BODY ${body}] — ` +
                   (save.success ? 'STABILIZED THIS ROUND' : save.die === 10 ? 'NATURAL 10 — DEAD' : 'DEAD');
-                db.run(
-                  `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                  [JSON.stringify(data), row.id],
-                  () => {
-                    io.emit('sheetUpdated', { username: info.userName, system });
-                    const outcome = { rolls: { 10: [save.die] }, modTotal: save.penalty, total: save.total };
-                    broadcastRoll(info.userName, outcome, historyString, '#ff3333', () => {
-                      io.emit('deathSaveResult', {
-                        userName: info.userName,
-                        die: save.die,
-                        penalty: save.penalty,
-                        total: save.total,
-                        body,
-                        success: save.success,
-                      });
-                    });
-                  }
-                );
+                // Roll broadcasts first; the penalty write + banner refresh land
+                // after the client's 5s dice animation so the sheet doesn't
+                // change mid-roll.
+                const outcome = { rolls: { 10: [save.die] }, modTotal: save.penalty, total: save.total };
+                broadcastRoll(info.userName, outcome, historyString, '#ff3333', () => {
+                  setTimeout(() => {
+                    db.run(
+                      `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                      [JSON.stringify(data), row.id],
+                      () => {
+                        io.emit('sheetUpdated', { username: info.userName, system });
+                        io.emit('deathSaveResult', {
+                          userName: info.userName,
+                          die: save.die,
+                          penalty: save.penalty,
+                          total: save.total,
+                          body,
+                          success: save.success,
+                        });
+                      }
+                    );
+                  }, DICE_ANIM_MS);
+                });
               }
             );
           }
@@ -1574,7 +1585,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         (dead ? ` — ${attackCwn.MORTAL_WOUND_ROUNDS} ROUNDS DOWN — DEAD` : ` (round ${newRounds} of ${attackCwn.MORTAL_WOUND_ROUNDS})`);
                     }
                     broadcastRoll(info.userName, check, historyString, check.success ? '#00ff00' : '#ff3333', () => {
-                      setTimeout(applyOutcome, 5000);
+                      setTimeout(applyOutcome, DICE_ANIM_MS);
                     });
                   }
                 );

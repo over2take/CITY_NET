@@ -11,6 +11,7 @@ import jwt from 'jsonwebtoken';
 import { makeTestDb, get, run } from './helpers/testDb.js';
 
 process.env.JWT_SECRET = 'test-secret';
+process.env.DICE_ANIM_MS = '0'; // skip the 5s dice-animation delay on outcome writes
 
 const socketsFactory = (await import('../sockets/index.js')).default;
 
