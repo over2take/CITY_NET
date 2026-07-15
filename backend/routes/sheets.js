@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
-const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived } = require('../sheets/templates');
+const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc } = require('../sheets/templates');
 const sheetImporters = require('../sheets/importers');
 const sheetAttack = require('../sheets/attack');
 
@@ -151,7 +151,17 @@ module.exports = (db, io) => {
             [JSON.stringify(data), row.id],
             (err3) => {
               if (err3) return res.status(500).json({ error: err3.message });
-              routeAc(() => {
+              // Armor fields drive the token AC when set (overrides a direct
+              // ac patch - armor is authoritative while equipped).
+              const effAc = system === 'cities_without_number' ? cwnEffectiveAc(data) : null;
+              const pushAc = effAc !== null
+                ? (done) => db.run(
+                    `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
+                    [effAc, effAc, req.params.username],
+                    () => { io.emit('dataUpdated', { isRhombusOnly: true }); done(); }
+                  )
+                : routeAc;
+              pushAc(() => {
                 io.emit('sheetUpdated', { username: req.params.username, system });
                 res.json({ message: 'Sheet updated' });
               });
@@ -295,10 +305,17 @@ module.exports = (db, io) => {
         );
       };
       let data = row.data;
+      let mergedData = null;
       if (cleanFields) {
         const merged = { ...JSON.parse(row.data || '{}'), ...cleanFields };
         Object.keys(cleanFields).forEach((f) => applyDerived(row.system, merged, f));
         data = JSON.stringify(merged);
+        mergedData = merged;
+      }
+      // Armor fields drive the linked token's AC when set
+      if (mergedData && row.system === 'cities_without_number') {
+        const effAc = cwnEffectiveAc(mergedData);
+        if (effAc !== null) acValue = effAc;
       }
       const sets = ['data = ?', 'updated_at = CURRENT_TIMESTAMP'];
       const params = [data];

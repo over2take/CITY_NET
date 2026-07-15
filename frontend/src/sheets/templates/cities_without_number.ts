@@ -159,6 +159,19 @@ export const citiesWithoutNumber: SheetTemplate = {
       ],
     },
     {
+      id: 'armor',
+      label: 'ARMOR',
+      layout: 'grid',
+      tab: 'GEAR',
+      columns: 4,
+      fields: [
+        { id: 'armor_name', label: 'ARMOR', type: 'text', placeholder: 'Armored Vest', hint: 'What you are wearing. Cosmetic - the numbers below do the work.' },
+        { id: 'armor_ac', label: 'BASE AC', type: 'number', placeholder: '14', hint: 'The armor\'s base AC. When set, your token AC is computed automatically: base + DEX mod (capped) + shield. Leave blank to manage AC by hand on the STATS tab or token.' },
+        { id: 'armor_dex_cap', label: 'MAX DEX', type: 'number', hint: 'Heavy armor caps the DEX bonus. Blank = uncapped, 0 = no DEX bonus.' },
+        { id: 'shield_bonus', label: 'SHIELD', type: 'number', placeholder: '0', hint: 'Flat AC bonus from a carried shield.' },
+      ],
+    },
+    {
       id: 'weapons',
       label: 'WEAPONS',
       layout: 'weapons',

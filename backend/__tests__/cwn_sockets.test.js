@@ -345,6 +345,23 @@ describe('CWN token_ac linked field', () => {
     expect(JSON.parse(sheet.data).ac).toBeUndefined(); // never stored on the sheet
   });
 
+  it('armor fields drive the token AC automatically', async () => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
+      [JSON.stringify({ dex: 14, dex_mod: 1 })]);
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 10, 10, 20, 20)`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['updateSheetField']({ fieldId: 'armor_ac', value: 14 });
+    await waitFor(() => emitted.some(e => e.event === 'sheetUpdated'));
+    await flush(50);
+
+    const token = await get(db, `SELECT melee_ac, ranged_ac FROM locations WHERE owner = 'GHOST'`);
+    expect(token.melee_ac).toBe(15); // 14 base + 1 dex mod
+    expect(token.ranged_ac).toBe(15);
+  });
+
   it('rejects garbage AC writes', async () => {
     await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', '{}', 0)`);
     await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 10, 10, 20, 20)`);

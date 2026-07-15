@@ -761,7 +761,22 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               [JSON.stringify(data), row.id],
               (err3) => {
                 if (err3) return;
-                io.emit('sheetUpdated', { username: info.userName, system });
+                // CWN: armor fields drive the token AC (base + capped DEX
+                // mod + shield). Only while armor_ac is set - otherwise the
+                // token AC stays hand-managed.
+                const effAc = system === 'cities_without_number' ? sheetTemplates.cwnEffectiveAc(data) : null;
+                if (effAc !== null) {
+                  db.run(
+                    `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
+                    [effAc, effAc, info.userName],
+                    () => {
+                      emitUpdate({ isRhombusOnly: true });
+                      io.emit('sheetUpdated', { username: info.userName, system });
+                    }
+                  );
+                } else {
+                  io.emit('sheetUpdated', { username: info.userName, system });
+                }
               }
             );
           }
@@ -795,8 +810,20 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               [JSON.stringify(data), row.id],
               (err3) => {
                 if (err3) return;
-                io.emit('sheetUpdated', { username: info.userName, system });
-                socket.emit('sheetImportApplied', { count: entries.length });
+                const effAc = system === 'cities_without_number' ? sheetTemplates.cwnEffectiveAc(data) : null;
+                const finish = () => {
+                  io.emit('sheetUpdated', { username: info.userName, system });
+                  socket.emit('sheetImportApplied', { count: entries.length });
+                };
+                if (effAc !== null) {
+                  db.run(
+                    `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
+                    [effAc, effAc, info.userName],
+                    () => { emitUpdate({ isRhombusOnly: true }); finish(); }
+                  );
+                } else {
+                  finish();
+                }
               }
             );
           }
