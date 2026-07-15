@@ -79,16 +79,23 @@ describe('CWN trauma (optional rule)', () => {
     expect(attackCwn.rollTrauma({ trauma: null }, true)).toBeNull();
   });
 
-  it('flags a traumatic hit when the die meets the rating', () => {
-    // rng 0.9 -> d8 shows 8 >= 3
-    const t = attackCwn.rollTrauma(weapon, true, rngOf(0.9));
+  it('flags a traumatic hit when the die meets the TARGET trauma target', () => {
+    // rng 0.9 -> d8 shows 8 >= TT 6 (default)
+    const t = attackCwn.rollTrauma(weapon, true, undefined, rngOf(0.9));
     expect(t.traumatic).toBe(true);
-    expect(t.rating).toBe(3);
+    expect(t.tt).toBe(6);
+    expect(t.rating).toBe(3); // rating is the damage multiplier, not the threshold
   });
 
-  it('does not flag below the rating', () => {
-    // rng 0 -> d8 shows 1 < 3
-    const t = attackCwn.rollTrauma(weapon, true, rngOf(0));
+  it('does not flag below the trauma target', () => {
+    // rng 0.5 -> d8 shows 5 < TT 6 (would have beaten the old rating-3 threshold)
+    const t = attackCwn.rollTrauma(weapon, true, undefined, rngOf(0.5));
+    expect(t.traumatic).toBe(false);
+  });
+
+  it('respects a raised defender trauma target', () => {
+    // rng 0.9 -> d8 shows 8; TT 9 from armor/cyber -> no trauma
+    const t = attackCwn.rollTrauma(weapon, true, 9, rngOf(0.9));
     expect(t.traumatic).toBe(false);
   });
 });
