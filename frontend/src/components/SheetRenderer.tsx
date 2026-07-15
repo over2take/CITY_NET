@@ -81,6 +81,22 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
 }) {
   const value = data[field.id] ?? '';
+  if (field.source && field.sourceWritable && !readOnly) {
+    // Writable linked field (token AC): edits go through the normal save
+    // path; the server routes them to the owning system instead of storing
+    // them on the sheet. Dashed border keeps the "linked" signal.
+    return (
+      <input
+        aria-label={field.label}
+        className="sheet-input"
+        type="number"
+        style={{ ...inputStyle, border: '1px dashed var(--green)', ...style }}
+        value={String(value ?? '')}
+        placeholder={field.placeholder}
+        onChange={(e) => onFieldChange(field.id, e.target.value === '' ? '' : Number(e.target.value))}
+      />
+    );
+  }
   if (field.source) {
     // Linked field: value lives in another system (bank, token HP). Display
     // only - clicking jumps to the window that owns it, when available.

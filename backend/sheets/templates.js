@@ -101,7 +101,10 @@ const TEMPLATES = {
     name: 'Cities Without Number',
     publicFields: ['name', 'background', 'class', 'description'],
     combatFields: ['ac'],
-    linkedFields: { hp: 'token_hp', hp_max: 'token_hp_max', cash: 'bank_balance' },
+    // ac is a WRITABLE linked field: the token's melee_ac/ranged_ac is the
+    // single source of truth (the attack engine reads the token). Sheet
+    // edits route to the token; the sheet never stores ac in its JSON.
+    linkedFields: { hp: 'token_hp', hp_max: 'token_hp_max', cash: 'bank_balance', ac: 'token_ac' },
     maxPairs: {
       system_strain_max: 'system_strain',
       mage_effort_max: 'mage_effort',

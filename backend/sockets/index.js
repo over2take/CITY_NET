@@ -644,12 +644,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     const overlayLinkedData = (username, system, data, cb) => {
       const linked = sheetTemplates.getLinkedFields(system);
       const out = { ...data };
-      const wantsHp = Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max');
+      const wantsToken = Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max' || s === 'token_ac');
       const wantsCash = Object.values(linked).includes('bank_balance');
-      const afterHp = (hpRow) => {
+      const afterToken = (tokenRow) => {
         Object.entries(linked).forEach(([fieldId, source]) => {
-          if (source === 'token_hp') out[fieldId] = hpRow ? hpRow.hp_current : null;
-          if (source === 'token_hp_max') out[fieldId] = hpRow ? hpRow.hp_max : null;
+          if (source === 'token_hp') out[fieldId] = tokenRow ? tokenRow.hp_current : null;
+          if (source === 'token_hp_max') out[fieldId] = tokenRow ? tokenRow.hp_max : null;
+          if (source === 'token_ac') out[fieldId] = tokenRow ? tokenRow.melee_ac : null;
         });
         if (!wantsCash) return cb(out);
         db.get(`SELECT balance FROM player_banks WHERE username = ?`, [username], (err, bank) => {
@@ -659,12 +660,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           cb(out);
         });
       };
-      if (!wantsHp) return afterHp(null);
+      if (!wantsToken) return afterToken(null);
       db.get(
-        `SELECT hp_current, hp_max FROM locations WHERE shape = 'rhombus' AND owner = ?
+        `SELECT hp_current, hp_max, melee_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
          ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
         [username],
-        (err, hpRow) => afterHp(err ? null : hpRow)
+        (err, tokenRow) => afterToken(err ? null : tokenRow)
       );
     };
 
@@ -719,8 +720,25 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       getGameSystem((err, system) => {
         if (err) return;
         // Linked fields are owned by other systems (token HP, bank) - never
-        // stored in sheet JSON, and not writable through the sheet.
-        if (sheetTemplates.getLinkedFields(system)[payload.fieldId]) return;
+        // stored in sheet JSON. token_ac is the one WRITABLE link: a sheet
+        // edit routes to the player's token (both melee and ranged - CWN
+        // has a single flat AC), keeping the token the source of truth.
+        const linkSource = sheetTemplates.getLinkedFields(system)[payload.fieldId];
+        if (linkSource === 'token_ac') {
+          const ac = Number(payload.value);
+          if (!Number.isFinite(ac) || ac < 0 || ac > 99) return;
+          db.run(
+            `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
+            [ac, ac, info.userName],
+            (e2) => {
+              if (e2) return;
+              emitUpdate({ isRhombusOnly: true });
+              io.emit('sheetUpdated', { username: info.userName, system });
+            }
+          );
+          return;
+        }
+        if (linkSource) return;
         db.get(
           `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
           [info.userName, system],
