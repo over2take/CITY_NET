@@ -184,6 +184,10 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
             socket?.emit('requestDeathSave');
             onRolled?.();
           }}
+          onStabilize={() => {
+            socket?.emit('requestStabilize', { targetUsername: userName });
+            onRolled?.();
+          }}
           allowFumbleShield={allowFumbleShield}
         />
       ) : (

@@ -47,11 +47,16 @@ export const citiesWithoutNumber: SheetTemplate = {
   name: 'Cities Without Number',
   // CWN targets a single flat AC - safe to edit on the token directly.
   tokenDefense: { editOnToken: true, label: 'AC' },
+  // CWN death flow: mortally wounded at 0 HP, stabilize via Heal check.
+  stabilize: true,
   npcTiers: [
     { id: 'mook', label: 'MOOK' },
     { id: 'skilled', label: 'SKILLED' },
     { id: 'veteran', label: 'VETERAN' },
     { id: 'elite', label: 'ELITE' },
+    { id: 'lesser_spirit', label: 'LESSER SPIRIT' },
+    { id: 'spirit', label: 'SPIRIT' },
+    { id: 'greater_spirit', label: 'GREATER SPIRIT' },
   ],
   header: {
     nameField: 'name',

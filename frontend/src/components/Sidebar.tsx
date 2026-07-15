@@ -593,6 +593,77 @@ function CprAttackPanel({ userName, socketRef, targetId, rhombusState, setIsDice
   );
 }
 
+// ─── CWN attack panel ─────────────────────────────────────────────────────────
+// Cities Without Number attacks also resolve in one round-trip: pick a weapon
+// row and fire. The server rolls 1d20 + BHB + skill + attribute mod vs AC,
+// damage (+trauma multiplier when the gritty rule is on), and shock on a miss.
+function CwnAttackPanel({ userName, socketRef, targetId, rhombusState, setIsDiceTrayOpen }: {
+  userName: string;
+  socketRef: React.MutableRefObject<any>;
+  targetId: number;
+  rhombusState: any;
+  setIsDiceTrayOpen: (v: any) => void;
+}) {
+  const [weapons, setWeapons] = useState<{ index: number; name: string; dmg: string; skill: string }[]>([]);
+  const [selected, setSelected] = useState<number | null>(null);
+
+  useEffect(() => {
+    const s = socketRef.current;
+    if (!s) return;
+    const onSheetData = (sheet: any) => {
+      if (!sheet || sheet.username !== userName) return;
+      const rows: { index: number; name: string; dmg: string; skill: string }[] = [];
+      for (let i = 1; i <= 4; i++) {
+        const dmg = String(sheet.data?.[`weapon${i}_dmg`] ?? '').trim();
+        const skill = String(sheet.data?.[`weapon${i}_skill`] ?? '');
+        if (dmg && skill) {
+          rows.push({ index: i, name: String(sheet.data?.[`weapon${i}_name`] ?? '').trim() || `WEAPON ${i}`, dmg, skill });
+        }
+      }
+      setWeapons(rows);
+      setSelected(prev => (prev !== null && rows.some(r => r.index === prev)) ? prev : (rows[0]?.index ?? null));
+    };
+    s.on('sheetData', onSheetData);
+    s.emit('requestMySheet');
+    return () => { s.off('sheetData', onSheetData); };
+  }, [userName]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fire = () => {
+    if (selected === null) return;
+    socketRef.current?.emit('sheetAttack', {
+      targetId,
+      weaponIndex: selected,
+      color: rhombusState?.color || '#00ff00',
+    });
+    setIsDiceTrayOpen(true);
+  };
+
+  if (weapons.length === 0) {
+    return (
+      <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '6px' }}>
+        NO USABLE WEAPONS — set NAME, DMG (e.g. 1d8+1) and SKILL on your CHARACTER_SHEET weapons rows.
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginBottom: '6px' }}>
+      <select
+        aria-label="Weapon"
+        value={selected ?? ''}
+        onChange={(e) => setSelected(Number(e.target.value))}
+        style={{ width: '100%', background: 'rgba(0,10,0,0.7)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px', marginBottom: '5px' }}
+      >
+        {weapons.map(w => (
+          <option key={w.index} value={w.index}>{w.name.toUpperCase()} · {w.dmg} · {w.skill.toUpperCase()}</option>
+        ))}
+      </select>
+      <button className="upload-btn" style={{ width: '100%', padding: '6px', backgroundColor: '#cc2200', color: '#fff', fontWeight: 'bold' }} onClick={fire}>
+        {['stab', 'punch'].includes(weapons.find(w => w.index === selected)?.skill ?? '') ? 'STRIKE' : 'FIRE'}
+      </button>
+    </div>
+  );
+}
+
 // ─── DiceMenu ─────────────────────────────────────────────────────────────────
 
 interface DiceMenuProps {
@@ -656,7 +727,7 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
             ATTACK ROLL — vs {attackPending.targetName}
           </div>
           <div style={{ color: 'var(--green)', fontSize: '0.75rem', marginBottom: '6px' }}>
-            {gameSystem === 'cyberpunk_red'
+            {gameSystem === 'cyberpunk_red' || gameSystem === 'cities_without_number'
               ? 'PICK A WEAPON — TO-HIT, DAMAGE & ARMOR RESOLVE AUTOMATICALLY'
               : isAdmin
                 ? `${attackPending.attackType.toUpperCase()} · ${defenseLabel} ${attackPending.ac} · Roll ${attackPending.ac}+ to hit`
@@ -664,6 +735,15 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
           </div>
           {gameSystem === 'cyberpunk_red' && (
             <CprAttackPanel
+              userName={userName}
+              socketRef={socketRef}
+              targetId={attackPending.targetId}
+              rhombusState={rhombusState}
+              setIsDiceTrayOpen={setIsDiceTrayOpen}
+            />
+          )}
+          {gameSystem === 'cities_without_number' && (
+            <CwnAttackPanel
               userName={userName}
               socketRef={socketRef}
               targetId={attackPending.targetId}

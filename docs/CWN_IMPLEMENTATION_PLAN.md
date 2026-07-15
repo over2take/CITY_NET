@@ -21,7 +21,7 @@ block is committed.
 | 1 ✅  | **Fable**  | 2 (decision) | Decide the derived-field approach (extend `applyDerived` vs inline mods) — settles field ids like `str_mod` before anything else is written. Touches the CP:R Humanity→EMP path, so regression-sensitive. |
 | 2 ✅  | **Fable**  | 1 + 2  | Sheet template + server metadata (`templates.js`, roll map). Everything downstream references these field ids — must land first and correctly. |
 | 3 ✅  | → switch to **Sonnet 4.6** | 6, 7 (UI), 8 | NPC tiers + spirit tiers (copy `npcTiers.js` shape), admin toggles (copy take-10 checkbox), import aliases (copy importer shape). Pure pattern work; the CP:R files are line-by-line blueprints. |
-| 4     | → switch to **Fable** | 3, 4, 5 | `attackCwn.js` (trauma/shock — nothing to copy), death/stabilization state (`rounds_since_downed`, Frail), System Strain, and all System Isolation requirements. |
+| 4 ✅  | → switch to **Fable** | 3, 4, 5 | `attackCwn.js` (trauma/shock — nothing to copy), death/stabilization state (`rounds_since_downed`, Frail), System Strain, and all System Isolation requirements. |
 | 5     | **Fable**  | 9      | Tests, especially the system-switch round-trip test and trauma on/off coverage. Fable wrote the engine, so it writes the tests. |
 
 **Switch rules:**
@@ -360,6 +360,17 @@ self-contained. What's already safe, and what CWN must not break:
 - **Spirit stat blocks** — 2–3 extra NPC tiers, ~20 lines (Phase 6)
 - **`auto_initiative` checkbox** — costs nothing now; future initiative
   tracker reads it instead of needing a sheet migration (Phase 1)
+
+## Known Loose Ends
+
+- **Stabilize is clicked from the downed player's own sheet** (players can
+  only open their own sheet window). The server already rolls the *clicking*
+  socket's Heal skill, so when an ally-facing UI exists (initiative tracker /
+  party panel) it plugs in without backend changes. Until then, self-click or
+  the GM adjusting HP stands in for the ally's Main Action.
+- **Strain sources are manual**: the LONG_REST admin button handles recovery
+  (-1 all CWN sheets), but +1 strain on rapid healing / overcasting is
+  adjusted by hand on the sheet.
 
 ## Out of Scope (Future)
 

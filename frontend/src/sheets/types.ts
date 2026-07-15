@@ -87,6 +87,11 @@ export interface SheetTemplate {
    *  DEATH SAVE button. The server rolls 1d10 + penalty vs statField and
    *  tracks the escalating penalty in penaltyField. */
   deathSave?: { statField: string; penaltyField: string };
+  /** When set, dropping to 0 HP shows a MORTALLY WOUNDED banner with a
+   *  STABILIZE button (CWN-style: an ally's Heal check vs a rising DC; the
+   *  server rolls the clicking user's own sheet). Mutually exclusive with
+   *  deathSave in practice - a template defines one death flow. */
+  stabilize?: boolean;
   /** NPC power tiers offered by GENERATE_SHEET (must mirror the server's
    *  npcTiers registry for this system). Absent = untiered generation. */
   npcTiers?: { id: string; label: string }[];

@@ -49,6 +49,10 @@ interface SheetRendererProps {
   /** Roll a death save (shown at 0 HP when the template defines deathSave).
    *  Server-resolved: 1d10 + tracked penalty vs the save stat. */
   onDeathSave?: () => void;
+  /** Roll a stabilization check (shown at 0 HP when the template sets
+   *  stabilize). Server-resolved: the clicking user's Heal check vs a DC
+   *  that rises each failed round. */
+  onStabilize?: () => void;
 }
 
 const num = (v: unknown): number => {
@@ -207,12 +211,13 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload }: { initia
   );
 }
 
-function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpenLink, onFieldChange, onDeathSave, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, canRoll }: {
+function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpenLink, onFieldChange, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, canRoll }: {
   template: SheetTemplate; data: SheetData; portraitUrl?: string | null;
   onPortraitUpload?: (file: File) => void;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
   onFieldChange: (fieldId: string, value: string | number) => void;
   onDeathSave?: () => void;
+  onStabilize?: () => void;
   /** LUCK armed for the next roll (declared before rolling, per CP:R). */
   armedLuck?: number;
   setArmedLuck?: (n: number) => void;
@@ -306,6 +311,53 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpe
             </div>
           );
         })()}
+        {template.stabilize && h.hpField && (hpMax ?? 0) > 0 && (hp ?? 1) <= 0 && (() => {
+          const rounds = num(data.rounds_since_downed);
+          const frail = num(data.frail) === 1;
+          return (
+            <div style={{
+              marginTop: '6px', border: '1px solid #ff3333', background: 'rgba(60, 0, 0, 0.45)',
+              padding: '5px 8px', display: 'flex', flexDirection: 'column', gap: '4px',
+            }}>
+              <span style={{ color: '#ff3333', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'death-pulse 1.2s ease-in-out infinite' }}>
+                ⚠ {frail ? 'FRAIL — DEAD AT 0 HP' : 'MORTALLY WOUNDED'}
+              </span>
+              {!frail && (
+                <>
+                  <span style={{ color: '#ff3333', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
+                    Dead in {Math.max(0, 6 - rounds)} rounds — 2d6 + Heal + INT vs DC {8 + rounds}, rising each round
+                  </span>
+                  <button
+                    onClick={onStabilize}
+                    disabled={!onStabilize}
+                    title="An ally's Main Action: Heal check vs 8 + rounds down (+2 without tools). Success: 1 HP and the Frail condition."
+                    style={{
+                      alignSelf: 'center', background: 'none', border: '1px solid #ff3333', color: '#ff3333',
+                      fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 10px',
+                      cursor: onStabilize ? 'pointer' : 'default', opacity: onStabilize ? 1 : 0.5,
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                    }}
+                  >
+                    STABILIZE
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })()}
+        {template.stabilize && h.hpField && (hp ?? 0) > 0 && num(data.frail) === 1 && (
+          <div style={{
+            marginTop: '6px', border: '1px solid #ffcc00', background: 'rgba(60, 45, 0, 0.4)',
+            padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: '2px',
+          }}>
+            <span style={{ color: '#ffcc00', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'wound-pulse 1.6s ease-in-out infinite' }}>
+              ⚠ FRAIL
+            </span>
+            <span style={{ color: '#ffcc00', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
+              Hitting 0 HP again is instant death — cleared by a week of care or medical treatment
+            </span>
+          </div>
+        )}
         {template.deathSave && h.hpField && (hp ?? 0) > 0 && num(data.seriously_wounded) > 0 && (hp ?? 0) <= num(data.seriously_wounded) && (
           <div style={{
             marginTop: '6px', border: '1px solid #ffcc00', background: 'rgba(60, 45, 0, 0.4)',
@@ -574,7 +626,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, onOpenLink, onRoll, onDeathSave, allowFumbleShield = false }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false }: SheetRendererProps) {
   const tabs = template.tabs ?? ['SHEET'];
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // LUCK declared for the next roll (CP:R: declare before rolling; any spend
@@ -637,7 +689,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         }
       `}</style>
 
-      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={allowFumbleShield} canRoll={!!onRoll} />
+      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={allowFumbleShield} canRoll={!!onRoll} />
 
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
         {tabHasRolls && (

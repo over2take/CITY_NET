@@ -33,17 +33,6 @@ const cprTier = ({ stats, combatSkills, utilitySkills, sp, hp, dv, weapons }) =>
   return { data, hp, dv };
 };
 
-// CWN mod table (same as templates.js cwnMod — duplicated here to keep this
-// module self-contained; neither file is hot-path enough to worry about).
-const cwnMod = (stat) => {
-  const s = Number(stat) || 0;
-  if (s <= 3) return -2;
-  if (s <= 7) return -1;
-  if (s <= 13) return 0;
-  if (s <= 17) return 1;
-  return 2;
-};
-
 // CWN NPC tier builder.
 // attack_mod = hit dice (CWN rule). Skills = flat level applied to core combat
 // skills. Weapon rows use the condensed 6-field shape (name/dmg/skill/trauma/

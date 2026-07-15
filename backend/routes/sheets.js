@@ -442,5 +442,45 @@ module.exports = (db, io) => {
     });
   });
 
+  // CWN long rest: every character sheet on the active CWN system recovers
+  // 1 System Strain (floored at 0). Admin-triggered, mirrors reset-luck.
+  router.post('/cwn-rest', authenticate, requireAdmin, (req, res) => {
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (system !== 'cities_without_number') {
+        return res.json({ rested: 0, reason: 'Active system is not CWN' });
+      }
+      db.all(
+        `SELECT id, username, data, is_npc FROM character_sheets WHERE system = ?`,
+        [system],
+        (err2, rows) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+          const updates = [];
+          for (const row of rows) {
+            let data;
+            try { data = JSON.parse(row.data || '{}'); } catch { data = {}; }
+            const strain = Number(data.system_strain) || 0;
+            if (strain <= 0) continue;
+            data.system_strain = strain - 1;
+            updates.push({ id: row.id, username: row.username, isNpc: row.is_npc, data: JSON.stringify(data) });
+          }
+          if (updates.length === 0) return res.json({ rested: 0 });
+          let done = 0;
+          for (const u of updates) {
+            db.run(
+              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+              [u.data, u.id],
+              () => {
+                if (!u.isNpc) io.emit('sheetUpdated', { username: u.username });
+                done++;
+                if (done === updates.length) res.json({ rested: updates.length });
+              }
+            );
+          }
+        }
+      );
+    });
+  });
+
   return router;
 };
