@@ -518,19 +518,26 @@ function SkillsSection({ section, data, readOnly, onFieldChange, onRoll }: {
   );
 }
 
-// Structured weapon rows: every 4 consecutive fields (name/dmg/skill/rof)
-// form one weapon. Rendered as a compact table with a header row.
+// Structured weapon rows: every N consecutive fields form one weapon, where
+// N is section.columns (default 4, CP:R's name/dmg/skill/rof). Headers come
+// from the first row's field labels.
 function WeaponsSection({ section, data, readOnly, onFieldChange }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
 }) {
+  const perRow = section.columns ?? 4;
   const rows: SheetField[][] = [];
-  for (let i = 0; i < section.fields.length; i += 4) rows.push(section.fields.slice(i, i + 4));
+  for (let i = 0; i < section.fields.length; i += perRow) rows.push(section.fields.slice(i, i + perRow));
   const cell: React.CSSProperties = { padding: '2px 4px', fontSize: '0.7rem' };
+  // CP:R keeps its hand-tuned column widths; other row shapes get a generic
+  // grid: name column flexes, selects get room, the rest stay compact.
+  const gridTemplateColumns = perRow === 4
+    ? '1fr 70px 130px 44px'
+    : (rows[0] ?? []).map((f, i) => (i === 0 ? '1fr' : f.type === 'select' ? '90px' : '56px')).join(' ');
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 130px 44px', gap: '3px 4px', alignItems: 'center' }}>
-      {['NAME', 'DMG', 'SKILL', 'ROF'].map(h => (
-        <div key={h} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{h}</div>
+    <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
+      {(rows[0] ?? []).map(f => (
+        <div key={f.id} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{f.label}</div>
       ))}
       {rows.map((row) => (
         <React.Fragment key={row[0].id}>
