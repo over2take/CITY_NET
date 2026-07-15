@@ -315,6 +315,19 @@ describe('CWN token_ac linked field', () => {
     expect(sheet.data.data.ac).toBe(14);
   });
 
+  it('shows the attack-engine default (10) when the token AC was never set', async () => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', '{}', 0)`);
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 20, 20)`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['requestMySheet']();
+    await waitFor(() => emitted.some(e => e.event === 'sheetData'));
+    const sheet = emitted.find(e => e.event === 'sheetData');
+    expect(sheet.data.data.ac).toBe(10);
+  });
+
   it('routes a sheet AC edit to the token instead of the sheet JSON', async () => {
     await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', '{}', 0)`);
     await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 10, 10, 20, 20)`);
