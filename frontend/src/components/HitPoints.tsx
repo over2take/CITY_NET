@@ -30,6 +30,8 @@ interface HitPointsMenuProps {
   pos: { x: number; y: number };
   setPos: (pos: { x: number; y: number }) => void;
   onClose: () => void;
+  /** Active game system - CWN shows the STIM_HEAL (+1 STRAIN) button. */
+  gameSystem?: string;
 }
 
 const BODY_PARTS = ['head', 'right_arm', 'torso', 'left_arm', 'right_leg', 'left_leg'] as const;
@@ -76,12 +78,13 @@ const hitZone = (injured: boolean | undefined): React.CSSProperties => ({
   transition: 'background 0.15s, border 0.15s',
 });
 
-export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, setPos, onClose }: HitPointsMenuProps) {
+export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, setPos, onClose, gameSystem }: HitPointsMenuProps) {
   const [actionAmount, setActionAmount] = useState(0);
   const [tempAmount, setTempAmount] = useState(0);
   const [maxAmount, setMaxAmount] = useState(0);
   const [injuriesOpen, setInjuriesOpen] = useState(false);
   const [injuries, setInjuries] = useState<InjuryMap>({});
+  const [healMsg, setHealMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!targetRhombus) return;
@@ -109,11 +112,20 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
     const bodyData: any = { action, amount };
     if (action === 'set_temp') bodyData.hp_temp = amount;
     if (action === 'set_max') bodyData.hp_max = amount;
-    await fetch(`/api/locations/${targetRhombus.id}/health`, {
+    const res = await fetch(`/api/locations/${targetRhombus.id}/health`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify(bodyData),
     });
+    if (action === 'stim_heal') {
+      if (res.status === 409) {
+        const body = await res.json().catch(() => null);
+        setHealMsg(body?.error ?? 'STRAIN MAXED — NO STIM BENEFIT');
+      } else if (res.ok) {
+        setHealMsg('STIM HEAL — +1 STRAIN');
+      }
+      setTimeout(() => setHealMsg(null), 3000);
+    }
     refreshLocations();
   };
 
@@ -164,6 +176,19 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
               <button className="upload-btn" onClick={() => updateHealth('heal', actionAmount)} style={{ flex: 1 }}>HEAL</button>
               <button className="upload-btn danger-btn" onClick={() => updateHealth('damage', actionAmount)} style={{ flex: 1 }}>DAMAGE</button>
             </div>
+            {gameSystem === 'cities_without_number' && (
+              <button
+                className="upload-btn"
+                title="Field healing (stims, medkits): heals and adds +1 System Strain to the character's sheet. Refused when strain is maxed - no stim benefit. Use HEAL for natural/rest healing."
+                onClick={() => updateHealth('stim_heal', actionAmount)}
+                style={{ width: '100%', color: '#ffcc00', borderColor: '#ffcc00' }}
+              >
+                STIM_HEAL (+1 STRAIN)
+              </button>
+            )}
+            {healMsg && (
+              <div style={{ fontSize: '0.65rem', color: '#ffcc00', letterSpacing: '1px', textAlign: 'center' }}>{healMsg}</div>
+            )}
           </div>
 
           <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>

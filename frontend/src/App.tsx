@@ -1727,11 +1727,12 @@ function App() {
                   }
                   return locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName) ?? null;
                 })()}
-                token={token} 
+                token={token}
                 refreshLocations={fetchLocations}
                 pos={hitPointsPos}
                 setPos={setHitPointsPos}
                 onClose={() => setIsHitPointsOpen(false)}
+                gameSystem={gameSystem}
               />
             )}
             {reviewHealthOwner && (() => {
