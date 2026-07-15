@@ -22,7 +22,7 @@ block is committed.
 | 2 ✅  | **Fable**  | 1 + 2  | Sheet template + server metadata (`templates.js`, roll map). Everything downstream references these field ids — must land first and correctly. |
 | 3 ✅  | → switch to **Sonnet 4.6** | 6, 7 (UI), 8 | NPC tiers + spirit tiers (copy `npcTiers.js` shape), admin toggles (copy take-10 checkbox), import aliases (copy importer shape). Pure pattern work; the CP:R files are line-by-line blueprints. |
 | 4 ✅  | → switch to **Fable** | 3, 4, 5 | `attackCwn.js` (trauma/shock — nothing to copy), death/stabilization state (`rounds_since_downed`, Frail), System Strain, and all System Isolation requirements. |
-| 5     | **Fable**  | 9      | Tests, especially the system-switch round-trip test and trauma on/off coverage. Fable wrote the engine, so it writes the tests. |
+| 5 ✅  | **Fable**  | 9      | Tests, especially the system-switch round-trip test and trauma on/off coverage. Fable wrote the engine, so it writes the tests. |
 
 **Switch rules:**
 - Do NOT switch mid-phase. Commit and push the current block before switching.
