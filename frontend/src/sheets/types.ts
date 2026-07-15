@@ -30,10 +30,13 @@ export interface SheetField {
   roll?: { formula: string; label: string };
   /** Linked field: the value lives in another system and is overlaid by the
    *  server at read time (never stored in the sheet's JSON).
-   *  - token_hp / token_hp_max: the player's rhombus health (editable;
-   *    writes route to the token)
-   *  - bank_balance: the player's bank balance (read-only on the sheet) */
-  source?: 'token_hp' | 'token_hp_max' | 'bank_balance';
+   *  - token_hp / token_hp_max: the player's rhombus health
+   *  - bank_balance: the player's bank balance (read-only on the sheet)
+   *  - token_ac: the token's armor class (writable; see sourceWritable) */
+  source?: 'token_hp' | 'token_hp_max' | 'bank_balance' | 'token_ac';
+  /** Writable linked field: renders as a normal input; the server routes the
+   *  write to the owning system (e.g. token_ac -> the token's AC). */
+  sourceWritable?: boolean;
   /** For 'select' fields: the allowed choices. */
   options?: { value: string; label: string }[];
 }

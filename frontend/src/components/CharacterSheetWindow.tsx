@@ -17,7 +17,7 @@ interface CharacterSheetWindowProps {
   playerToken?: string | null;
   adminToken?: string;
   /** Open the window that owns a linked field (HIT_POINTS / BANK). */
-  onOpenLink?: (source: 'token_hp' | 'token_hp_max' | 'bank_balance') => void;
+  onOpenLink?: (source: 'token_hp' | 'token_hp_max' | 'bank_balance' | 'token_ac') => void;
   /** Called when the player rolls from the sheet - App opens the dice tray
    *  so the result is visible. */
   onRolled?: () => void;

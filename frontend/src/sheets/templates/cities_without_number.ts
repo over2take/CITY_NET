@@ -112,7 +112,7 @@ export const citiesWithoutNumber: SheetTemplate = {
       tab: 'STATS',
       columns: 4,
       fields: [
-        { id: 'ac', label: 'AC', type: 'number', sensitivity: 'combat', hint: 'Armor Class - attacks hit at or above this. Also editable on your token.' },
+        { id: 'ac', label: 'AC', type: 'number', sensitivity: 'combat', source: 'token_ac', sourceWritable: true, hint: 'Armor Class - attacks hit at or above this. Linked to your token: editing here updates the token and vice versa.' },
         { id: 'base_hit_bonus', label: 'BHB', type: 'number', hint: 'Base hit bonus from class and level; added to every attack roll.' },
         { id: 'system_strain', label: 'STRAIN', type: 'number', maxField: 'system_strain_max', hint: 'System Strain from cyberware, drugs and rapid healing. Max equals your CON score; recovers 1 per full rest.' },
         { id: 'system_strain_max', label: 'STRAIN MAX', type: 'number', hint: 'Derived: equals CON score, recomputed on every save.' },

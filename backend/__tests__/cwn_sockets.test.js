@@ -300,6 +300,53 @@ describe('CWN requestStabilize', () => {
   });
 });
 
+describe('CWN token_ac linked field', () => {
+  it('overlays the token AC onto the sheet at read time', async () => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', '{"ac": 55}', 0)`);
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 14, 14, 20, 20)`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['requestMySheet']();
+    await waitFor(() => emitted.some(e => e.event === 'sheetData'));
+    const sheet = emitted.find(e => e.event === 'sheetData');
+    // Token wins over any stale value in the sheet JSON
+    expect(sheet.data.data.ac).toBe(14);
+  });
+
+  it('routes a sheet AC edit to the token instead of the sheet JSON', async () => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', '{}', 0)`);
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 10, 10, 20, 20)`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['updateSheetField']({ fieldId: 'ac', value: 16 });
+    await waitFor(() => emitted.some(e => e.event === 'sheetUpdated'));
+
+    const token = await get(db, `SELECT melee_ac, ranged_ac FROM locations WHERE owner = 'GHOST'`);
+    expect(token.melee_ac).toBe(16);
+    expect(token.ranged_ac).toBe(16);
+    const sheet = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    expect(JSON.parse(sheet.data).ac).toBeUndefined(); // never stored on the sheet
+  });
+
+  it('rejects garbage AC writes', async () => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', '{}', 0)`);
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 10, 10, 20, 20)`);
+    const { handlers } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['updateSheetField']({ fieldId: 'ac', value: 'lol' });
+    handlers['updateSheetField']({ fieldId: 'ac', value: -5 });
+    await flush(150);
+    const token = await get(db, `SELECT melee_ac FROM locations WHERE owner = 'GHOST'`);
+    expect(token.melee_ac).toBe(10);
+  });
+});
+
 describe('system-switch round-trip isolation', () => {
   it('keeps both systems sheets and roll maps separate across a switch', async () => {
     // One player, one sheet per system, different values

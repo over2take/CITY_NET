@@ -97,15 +97,16 @@ module.exports = (db, io) => {
               done();
             });
           };
-          if (!Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max')) return overlayCash();
+          if (!Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max' || s === 'token_ac')) return overlayCash();
           db.get(
-            `SELECT hp_current, hp_max FROM locations WHERE shape = 'rhombus' AND owner = ?
+            `SELECT hp_current, hp_max, melee_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
              ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
             [req.params.username],
             (e2, hpRow) => {
               Object.entries(linked).forEach(([fieldId, source]) => {
                 if (source === 'token_hp') data[fieldId] = hpRow ? hpRow.hp_current : null;
                 if (source === 'token_hp_max') data[fieldId] = hpRow ? hpRow.hp_max : null;
+                if (source === 'token_ac') data[fieldId] = hpRow ? hpRow.melee_ac : null;
               });
               overlayCash();
             }
@@ -129,8 +130,20 @@ module.exports = (db, io) => {
           if (!row) return res.status(404).json({ error: 'No sheet for this player on the active system' });
           // Linked fields (token HP, cash) live in other systems and are
           // edited through their own windows - never stored in sheet JSON.
+          // token_ac is writable: it routes to the player's token.
           const linked = getLinkedFields(system);
           const patch = Object.fromEntries(Object.entries(fields).filter(([k]) => !linked[k]));
+          const acEntry = Object.entries(fields).find(([k]) => linked[k] === 'token_ac');
+          const routeAc = (done) => {
+            if (!acEntry) return done();
+            const ac = Number(acEntry[1]);
+            if (!Number.isFinite(ac) || ac < 0 || ac > 99) return done();
+            db.run(
+              `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
+              [ac, ac, req.params.username],
+              () => { io.emit('dataUpdated', { isRhombusOnly: true }); done(); }
+            );
+          };
           const data = { ...JSON.parse(row.data || '{}'), ...patch };
           Object.keys(patch).forEach((f) => applyDerived(system, data, f));
           db.run(
@@ -138,8 +151,10 @@ module.exports = (db, io) => {
             [JSON.stringify(data), row.id],
             (err3) => {
               if (err3) return res.status(500).json({ error: err3.message });
-              io.emit('sheetUpdated', { username: req.params.username, system });
-              res.json({ message: 'Sheet updated' });
+              routeAc(() => {
+                io.emit('sheetUpdated', { username: req.params.username, system });
+                res.json({ message: 'Sheet updated' });
+              });
             }
           );
         }
@@ -213,10 +228,10 @@ module.exports = (db, io) => {
         if (!row) return res.status(404).json({ error: 'NPC not found' });
         const data = JSON.parse(row.data || '{}');
         const linked = getLinkedFields(row.system);
-        const wantsHp = Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max');
+        const wantsHp = Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max' || s === 'token_ac');
         if (!wantsHp) return res.json({ ...row, data });
         db.get(
-          `SELECT loc.hp_current, loc.hp_max FROM npc_sheet_links l
+          `SELECT loc.hp_current, loc.hp_max, loc.melee_ac FROM npc_sheet_links l
            JOIN locations loc ON loc.id = l.location_id
            WHERE l.sheet_id = ? LIMIT 1`,
           [req.params.id],
@@ -225,6 +240,7 @@ module.exports = (db, io) => {
               Object.entries(linked).forEach(([fieldId, source]) => {
                 if (source === 'token_hp') data[fieldId] = hpRow.hp_current;
                 if (source === 'token_hp_max') data[fieldId] = hpRow.hp_max;
+                if (source === 'token_ac') data[fieldId] = hpRow.melee_ac;
               });
             }
             res.json({ ...row, data });
@@ -259,12 +275,25 @@ module.exports = (db, io) => {
       if (!row) return res.status(404).json({ error: 'NPC not found' });
       const { fields, npc_label, folder } = req.body;
       // Linked fields (token HP) live on the location - never store them in
-      // the sheet's JSON, same rule as player sheets
+      // the sheet's JSON, same rule as player sheets. token_ac is writable:
+      // it routes to the linked token when the sheet is attached to one.
       let cleanFields = fields;
+      let acValue;
       if (fields) {
         const linked = getLinkedFields(row.system);
         cleanFields = Object.fromEntries(Object.entries(fields).filter(([k]) => !linked[k]));
+        const acEntry = Object.entries(fields).find(([k]) => linked[k] === 'token_ac');
+        if (acEntry) acValue = Number(acEntry[1]);
       }
+      const routeAc = (done) => {
+        if (!Number.isFinite(acValue) || acValue < 0 || acValue > 99) return done();
+        db.run(
+          `UPDATE locations SET melee_ac = ?, ranged_ac = ?
+           WHERE id = (SELECT location_id FROM npc_sheet_links WHERE sheet_id = ? LIMIT 1)`,
+          [acValue, acValue, req.params.id],
+          function () { if (this && this.changes > 0) io.emit('dataUpdated', { isRhombusOnly: true }); done(); }
+        );
+      };
       let data = row.data;
       if (cleanFields) {
         const merged = { ...JSON.parse(row.data || '{}'), ...cleanFields };
@@ -278,7 +307,7 @@ module.exports = (db, io) => {
       params.push(req.params.id);
       db.run(`UPDATE character_sheets SET ${sets.join(', ')} WHERE id = ?`, params, (err2) => {
         if (err2) return res.status(500).json({ error: err2.message });
-        res.json({ message: 'NPC updated' });
+        routeAc(() => res.json({ message: 'NPC updated' }));
       });
     });
   });
