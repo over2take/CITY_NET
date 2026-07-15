@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { SheetTemplate, SheetSection, SheetField, SheetData } from '../sheets';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
@@ -53,6 +53,9 @@ interface SheetRendererProps {
    *  stabilize). Server-resolved: the clicking user's Heal check vs a DC
    *  that rises each failed round. */
   onStabilize?: () => void;
+  /** Tabs hidden by house rules (e.g. CWN DELUXE while cwn_deluxe is off).
+   *  Their sections are not rendered. */
+  hiddenTabs?: string[];
 }
 
 const num = (v: unknown): number => {
@@ -638,9 +641,14 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false }: SheetRendererProps) {
-  const tabs = template.tabs ?? ['SHEET'];
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs }: SheetRendererProps) {
+  const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
+  // If the active tab gets hidden (house rule toggled off), fall back to the
+  // first visible one.
+  useEffect(() => {
+    if (!tabs.includes(activeTab) && tabs.length > 0) setActiveTab(tabs[0]);
+  }, [tabs.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   // LUCK declared for the next roll (CP:R: declare before rolling; any spend
   // also negates a natural-1 fumble). Consumed and reset by the next roll.
   const [armedLuck, setArmedLuck] = useState(0);

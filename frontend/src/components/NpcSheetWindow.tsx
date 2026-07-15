@@ -34,7 +34,24 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const [reloadKey, setReloadKey] = useState(0);
+  const [cwnDeluxe, setCwnDeluxe] = useState(false);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // House rules gate sheet tabs (CWN DELUXE); refresh when the admin applies
+  useEffect(() => {
+    const fetchRules = () => {
+      fetch('/api/settings').then(r => r.json()).then((rows) => {
+        if (Array.isArray(rows)) {
+          setCwnDeluxe(rows.find((r: any) => r.key === 'cwn_deluxe')?.value === '1');
+        }
+      }).catch(() => {});
+    };
+    fetchRules();
+    if (socket) {
+      socket.on('settingsUpdated', fetchRules);
+      return () => socket.off('settingsUpdated', fetchRules);
+    }
+  }, [socket]);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,6 +186,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
           onPortraitUpload={handlePortraitUpload}
+          hiddenTabs={sheet.system === 'cities_without_number' && !cwnDeluxe ? ['DELUXE'] : undefined}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>
