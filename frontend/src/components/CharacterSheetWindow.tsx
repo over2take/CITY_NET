@@ -190,6 +190,10 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
             socket?.emit('requestStabilize', { targetUsername: userName });
             onRolled?.();
           }}
+          onCastSpell={(index) => {
+            socket?.emit('castSpell', { index });
+            onRolled?.();
+          }}
           allowFumbleShield={allowFumbleShield}
           hiddenTabs={sheet.system === 'cities_without_number' && !cwnDeluxe ? ['DELUXE'] : undefined}
         />

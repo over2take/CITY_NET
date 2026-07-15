@@ -377,6 +377,76 @@ describe('CWN token_ac linked field', () => {
   });
 });
 
+describe('CWN Deluxe castSpell', () => {
+  const MAGE = {
+    mage_effort: 3, mage_effort_max: 3,
+    spell1_name: 'Flickerflash', spell1_effect: 'Blinding burst', spell1_dmg: '2d6', spell1_cost: 1,
+    spell2_name: 'The Unseen Hand', spell2_effect: 'Telekinesis', spell2_dmg: '', spell2_cost: 2,
+  };
+  const seedMage = (data = MAGE) =>
+    run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
+      [JSON.stringify(data)]);
+
+  it('rolls damage, spends effort, and broadcasts the effect', async () => {
+    await run(db, `INSERT INTO global_settings (key, value) VALUES ('cwn_deluxe', '1')`);
+    await seedMage();
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['castSpell']({ index: 1 });
+    await waitFor(() => emitted.some(e => e.event === 'spellCast'));
+
+    const roll = emitted.find(e => e.event === 'diceRollBroadcast');
+    expect(roll.data.historyString).toContain('casts Flickerflash (1 EFFORT)');
+    expect(roll.data.historyString).toContain('Blinding burst');
+    expect(roll.data.historyString).toContain('damage');
+    expect(roll.data.historyString).not.toContain('OVERCAST');
+    const sheet = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    expect(JSON.parse(sheet.data).mage_effort).toBe(2);
+  });
+
+  it('casts a utility spell without dice', async () => {
+    await run(db, `INSERT INTO global_settings (key, value) VALUES ('cwn_deluxe', '1')`);
+    await seedMage();
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['castSpell']({ index: 2 });
+    await waitFor(() => emitted.some(e => e.event === 'spellCast'));
+    const roll = emitted.find(e => e.event === 'diceRollBroadcast');
+    expect(roll.data.historyString).toContain('The Unseen Hand (2 EFFORT)');
+    expect(roll.data.historyString).not.toContain('damage');
+  });
+
+  it('flags an OVERCAST when effort is insufficient and floors the pool at 0', async () => {
+    await run(db, `INSERT INTO global_settings (key, value) VALUES ('cwn_deluxe', '1')`);
+    await seedMage({ ...MAGE, mage_effort: 0 });
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['castSpell']({ index: 1 });
+    await waitFor(() => emitted.some(e => e.event === 'spellCast'));
+    const roll = emitted.find(e => e.event === 'diceRollBroadcast');
+    expect(roll.data.historyString).toContain('OVERCAST');
+    const sheet = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    expect(JSON.parse(sheet.data).mage_effort).toBe(0);
+  });
+
+  it('refuses while the Deluxe house rule is off', async () => {
+    await seedMage();
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['castSpell']({ index: 1 });
+    await flush(200);
+    expect(emitted.some(e => e.event === 'spellCast')).toBe(false);
+  });
+});
+
 describe('system-switch round-trip isolation', () => {
   it('keeps both systems sheets and roll maps separate across a switch', async () => {
     // One player, one sheet per system, different values

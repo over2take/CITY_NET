@@ -1659,6 +1659,75 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
+    // ── CWN Deluxe: cast a spell row ─────────────────────────────────────────
+    // Spells are player-entered (name / effect / dmg dice / effort cost) -
+    // the app knows no spell rules. One click: rolls the damage dice (if
+    // any), spends the Effort cost, and broadcasts the effect. Casting with
+    // insufficient Effort is an OVERCAST - the GM rolls the consequence
+    // table and applies System Strain by hand.
+    socket.on('castSpell', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      const index = Number(payload?.index);
+      if (!Number.isInteger(index) || index < 1 || index > 4) return;
+      getGameSystem((err, system) => {
+        if (err || system !== 'cities_without_number') return;
+        db.get(`SELECT value FROM global_settings WHERE key = 'cwn_deluxe'`, (dErr, dRow) => {
+          if (dErr || !dRow || dRow.value !== '1') return; // Deluxe off
+          db.get(
+            `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+            [info.userName, system],
+            (err2, row) => {
+              if (err2 || !row) return;
+              const data = JSON.parse(row.data || '{}');
+              const name = String(data[`spell${index}_name`] || '').trim();
+              if (!name) return;
+              const effect = String(data[`spell${index}_effect`] || '').trim();
+              const dmgStr = String(data[`spell${index}_dmg`] || '').trim();
+              const cost = Math.max(0, Number(data[`spell${index}_cost`]) || 0);
+              const effort = Math.max(0, Number(data.mage_effort) || 0);
+              const overcast = cost > effort;
+
+              // Optional damage dice (pure dice + flat, same rule as weapons)
+              let dmg = null;
+              if (/^\d+d\d+([+-]\d+)?$/i.test(dmgStr)) {
+                try {
+                  dmg = rollEngine.executeRoll(rollEngine.resolveFormula(dmgStr, {}), 'sum');
+                } catch (e) { dmg = null; }
+              }
+
+              const costTag = cost > 0 ? ` (${cost} EFFORT)` : '';
+              const overcastTag = overcast ? ' — OVERCAST! GM: d20 + Cast + CON mod on the consequence table' : '';
+              const effectTag = effect ? ` — ${effect}` : '';
+              const dmgTag = dmg ? ` [${dmg.breakdown} = ${dmg.total} damage]` : '';
+              const historyString = `${info.userName} casts ${name}${costTag}${dmgTag}${effectTag}${overcastTag}`;
+
+              const finish = () => {
+                const outcome = dmg ?? { rolls: {}, modTotal: 0, total: 0 };
+                broadcastRoll(info.userName, outcome, historyString, overcast ? '#ff3333' : '#bb66ff', () => {
+                  io.emit('spellCast', { userName: info.userName, name, overcast, damage: dmg ? dmg.total : null });
+                });
+              };
+
+              if (cost > 0) {
+                data.mage_effort = Math.max(0, effort - cost);
+                db.run(
+                  `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                  [JSON.stringify(data), row.id],
+                  () => {
+                    io.emit('sheetUpdated', { username: info.userName, system });
+                    finish();
+                  }
+                );
+              } else {
+                finish();
+              }
+            }
+          );
+        });
+      });
+    });
+
     // ── Radio Feed ──────────────────────────────────────────────────────────────
 
     socket.on('musicLoad', (data) => {

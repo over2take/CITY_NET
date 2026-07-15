@@ -56,6 +56,9 @@ interface SheetRendererProps {
   /** Tabs hidden by house rules (e.g. CWN DELUXE while cwn_deluxe is off).
    *  Their sections are not rendered. */
   hiddenTabs?: string[];
+  /** Cast a spell row (1-based index). Server-resolved: rolls the row's
+   *  damage dice and spends its Effort cost off the stored sheet. */
+  onCastSpell?: (index: number) => void;
 }
 
 const num = (v: unknown): number => {
@@ -640,6 +643,58 @@ function WeaponsSection({ section, data, readOnly, onFieldChange }: {
   );
 }
 
+// Spell rows: weapons-style chunked rows plus a CAST button per row. The
+// server rolls the row's damage dice (if any) and spends its Effort cost.
+function SpellsSection({ section, data, readOnly, onFieldChange, onCastSpell }: {
+  section: SheetSection; data: SheetData; readOnly: boolean;
+  onFieldChange: (fieldId: string, value: string | number) => void;
+  onCastSpell?: (index: number) => void;
+}) {
+  const perRow = section.columns ?? 4;
+  const rows: SheetField[][] = [];
+  for (let i = 0; i < section.fields.length; i += perRow) rows.push(section.fields.slice(i, i + perRow));
+  const cell: React.CSSProperties = { padding: '2px 4px', fontSize: '0.7rem' };
+  const gridTemplateColumns = `${(rows[0] ?? []).map((_f, i) => (i <= 1 ? '1fr' : '52px')).join(' ')} 52px`;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
+      {(rows[0] ?? []).map(f => (
+        <div key={f.id} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{f.label}</div>
+      ))}
+      <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>CAST</div>
+      {rows.map((row, rowIdx) => {
+        const named = String(data[row[0].id] ?? '').trim() !== '';
+        const castable = named && !!onCastSpell;
+        return (
+          <React.Fragment key={row[0].id}>
+            {row.map((field) => (
+              <FieldInput
+                key={field.id}
+                field={field}
+                data={data}
+                readOnly={readOnly}
+                onFieldChange={onFieldChange}
+                style={{ ...cell, ...(field.type === 'number' ? { textAlign: 'center' } : null) }}
+              />
+            ))}
+            <button
+              onClick={castable ? () => onCastSpell!(rowIdx + 1) : undefined}
+              disabled={!castable}
+              title={castable ? 'Cast: rolls the damage dice and spends the Effort cost' : 'Name the spell first'}
+              style={{
+                background: 'none', border: '1px solid var(--green)', color: 'var(--green)',
+                fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '3px 2px',
+                cursor: castable ? 'pointer' : 'default', opacity: castable ? 1 : 0.35,
+              }}
+            >
+              CAST
+            </button>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
@@ -657,7 +712,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // If the active tab gets hidden (house rule toggled off), fall back to the
@@ -752,6 +807,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'grid' && <GridSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
                   {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
+                  {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
               )}
