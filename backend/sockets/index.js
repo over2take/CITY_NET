@@ -3,6 +3,7 @@ const sheetTemplates = require('../sheets/templates');
 const sheetRolls = require('../sheets/rolls');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
+const attackCwn = require('../sheets/attackCwn');
 const npcTiers = require('../sheets/npcTiers');
 
 const SECRET = process.env.JWT_SECRET;
@@ -1127,14 +1128,135 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       }
     };
 
+    // ── CWN attacks ──────────────────────────────────────────────────────────
+    // 1d20 + BHB + skill + attribute mod (+weapon atk) vs the token's AC.
+    // Hit: damage + mod straight to HP (no soak - AC prices the armor in),
+    // multiplied on a traumatic hit when the cwn_trauma house rule is on.
+    // Miss: a shock weapon still deals its shock damage if its shock AC
+    // covers the target. Frail defenders die outright at 0 HP.
+    const handleCwnAttack = (info, payload, color) => {
+      const system = 'cities_without_number';
+      db.get(
+        `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+        [info.userName, system],
+        (err2, sheetRow) => {
+          if (err2 || !sheetRow) return;
+          const attackerData = JSON.parse(sheetRow.data || '{}');
+          const weapon = attackCwn.getWeapon(attackerData, payload.weaponIndex);
+          if (!weapon) {
+            return socket.emit('sheetAttackError', { message: 'INVALID_WEAPON // SET NAME, DMG (e.g. 1d8+1) AND SKILL ON YOUR SHEET' });
+          }
+          db.get(
+            `SELECT id, name, owner, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index,
+                    hp_current, hp_max, hp_temp
+             FROM locations WHERE id = ?`,
+            [payload.targetId],
+            (err3, target) => {
+              if (err3 || !target || !RHOMBUS_SHAPES.includes(target.shape)) return;
+              // CWN has one flat AC; melee_ac is the canonical token slot and
+              // ranged falls back to it.
+              const meleeAc = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 10;
+              const ac = weapon.attackType === 'ranged'
+                ? (target.ranged_ac !== null && target.ranged_ac !== undefined ? target.ranged_ac : meleeAc)
+                : meleeAc;
+
+              db.get(`SELECT value FROM global_settings WHERE key = 'cwn_trauma'`, (tErr, tRow) => {
+                const traumaOn = tErr || !tRow || tRow.value !== '0'; // default ON
+                let toHit;
+                try { toHit = attackCwn.rollToHit(attackerData, weapon); } catch (e) { return; }
+                const hit = toHit.total >= ac;
+                const hitHistory =
+                  `${info.userName} attacks ${target.name} with ${weapon.name} ` +
+                  `[${toHit.breakdown} = ${toHit.total} vs AC ${ac}] — ${hit ? 'HIT' : 'MISS'}`;
+
+                const emitResult = (extra) => {
+                  const onBattleMap = target.battle_map_id !== null && target.battle_map_id !== undefined;
+                  const attackerSql = onBattleMap
+                    ? 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id = ? AND floor_index = ?'
+                    : 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id IS NULL';
+                  const attackerParams = onBattleMap
+                    ? [info.userName, target.battle_map_id, target.floor_index]
+                    : [info.userName];
+                  db.get(attackerSql, attackerParams, (posErr, attackerRow) => {
+                    io.emit('attackResult', {
+                      hit,
+                      attackerId: socket.id,
+                      attackerName: info.userName,
+                      targetId: target.id,
+                      targetName: target.name,
+                      attackType: weapon.attackType,
+                      roll: toHit.total,
+                      ac,
+                      attackerPos: attackerRow ? { x: attackerRow.x, z: attackerRow.z } : null,
+                      targetPos: { x: target.x, z: target.z },
+                      isBattleMap: onBattleMap,
+                      weaponName: weapon.name,
+                      aimed: false,
+                      ...extra,
+                    });
+                  });
+                };
+
+                // Applies damage and tags Frail deaths / GM prompts in the result.
+                const dealDamage = (amount, tagHistory, resultExtras, traumatic) => {
+                  getDefenderSheet(target, system, (defender) => {
+                    const defenderData = defender ? JSON.parse(defender.data || '{}') : {};
+                    const frail = Number(defenderData.frail) === 1;
+                    applyTokenDamage(target, amount, (newHp) => {
+                      const down = newHp <= 0;
+                      let history = tagHistory;
+                      if (down && frail) history += ' — FRAIL: INSTANT DEATH';
+                      else if (down && traumatic) history += ' — DOWNED BY A TRAUMATIC HIT · GM: PHYSICAL SAVE OR MAJOR INJURY';
+                      else if (down) history += ' — MORTALLY WOUNDED';
+                      broadcastRoll(info.userName, { rolls: {}, total: amount }, history, color, () => {
+                        emitResult({ ...resultExtras, targetHp: newHp, targetDown: down, frailDeath: down && frail });
+                      });
+                    });
+                  });
+                };
+
+                if (!hit) {
+                  const shock = attackCwn.shockDamage(attackerData, weapon, ac);
+                  return broadcastRoll(info.userName, toHit, hitHistory, color, () => {
+                    if (shock <= 0) return emitResult({});
+                    dealDamage(shock, `${weapon.name} SHOCK vs ${target.name} — ${shock} damage on the miss`, { shock, damage: shock, through: shock }, false);
+                  });
+                }
+
+                broadcastRoll(info.userName, toHit, hitHistory, color, () => {
+                  let dmg;
+                  try { dmg = attackCwn.rollDamage(attackerData, weapon); } catch (e) { return emitResult({}); }
+                  const trauma = attackCwn.rollTrauma(weapon, traumaOn);
+                  const traumatic = !!(trauma && trauma.traumatic);
+                  const total = Math.max(0, traumatic ? dmg.total * trauma.rating : dmg.total);
+                  let dmgHistory = `${weapon.name} damage vs ${target.name} [${dmg.breakdown} = ${dmg.total}]`;
+                  if (trauma) {
+                    dmgHistory += traumatic
+                      ? ` — TRAUMA d${trauma.die}: ${trauma.roll} >= ${trauma.rating} — TRAUMATIC HIT x${trauma.rating} = ${total}`
+                      : ` — trauma d${trauma.die}: ${trauma.roll} < ${trauma.rating}, no trauma`;
+                  }
+                  dealDamage(total, dmgHistory, {
+                    damage: total, through: total,
+                    traumatic, traumaRoll: trauma ? trauma.roll : null,
+                  }, traumatic);
+                });
+              });
+            }
+          );
+        }
+      );
+    };
+
     socket.on('sheetAttack', (payload) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
       if (!payload || !payload.targetId) return;
-      pendingAttacks.delete(socket.id); // CP:R resolves in one step - no manual roll pending
+      pendingAttacks.delete(socket.id); // sheet attacks resolve in one step - no manual roll pending
       const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
       getGameSystem((err, system) => {
-        if (err || system !== 'cyberpunk_red') return;
+        if (err) return;
+        if (system === 'cities_without_number') return handleCwnAttack(info, payload, color);
+        if (system !== 'cyberpunk_red') return;
         db.get(
           `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
           [info.userName, system],
@@ -1347,6 +1469,103 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         success: save.success,
                       });
                     });
+                  }
+                );
+              }
+            );
+          }
+        );
+      });
+    });
+
+    // ── CWN stabilization ────────────────────────────────────────────────────
+    // At 0 HP a CWN character is Mortally Wounded (dead after 6 rounds). The
+    // clicking user's own sheet provides the Heal skill: 2d6 + Heal + INT mod
+    // vs 8 + rounds down. Success: target back to 1 HP with the Frail
+    // condition. Failure burns a round; the tracked count lives on the
+    // TARGET's sheet (rounds_since_downed) and resets when healed above 0.
+    socket.on('requestStabilize', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      const targetUsername = String(payload?.targetUsername || '').trim();
+      if (!targetUsername) return;
+      getGameSystem((err, system) => {
+        if (err || system !== 'cities_without_number') return;
+        db.get(
+          `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+          [info.userName, system],
+          (err2, rollerRow) => {
+            if (err2 || !rollerRow) return;
+            const rollerData = JSON.parse(rollerRow.data || '{}');
+            db.get(
+              `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+              [targetUsername, system],
+              (err3, targetRow) => {
+                if (err3 || !targetRow) return;
+                db.get(
+                  `SELECT hp_current, hp_max FROM locations WHERE shape = 'rhombus' AND owner = ?
+                   ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
+                  [targetUsername],
+                  (err4, hpRow) => {
+                    if (err4 || !hpRow) return;
+                    if (hpRow.hp_current === null || hpRow.hp_current > 0) return;
+                    const targetData = JSON.parse(targetRow.data || '{}');
+                    if (Number(targetData.frail) === 1) return; // Frail at 0 HP = dead, nothing to stabilize
+                    const rounds = Math.max(0, Number(targetData.rounds_since_downed) || 0);
+                    const noTools = payload?.noTools === true;
+                    let check;
+                    try { check = attackCwn.rollStabilize(rollerData, rounds, noTools); } catch (e) { return; }
+
+                    const finishRoll = (historyString, afterBroadcast) => {
+                      broadcastRoll(info.userName, check, historyString, check.success ? '#00ff00' : '#ff3333', () => {
+                        io.emit('stabilizeResult', {
+                          roller: info.userName,
+                          target: targetUsername,
+                          total: check.total,
+                          dc: check.dc,
+                          success: check.success,
+                        });
+                        if (afterBroadcast) afterBroadcast();
+                      });
+                    };
+
+                    if (check.success) {
+                      targetData.frail = 1;
+                      targetData.rounds_since_downed = 0;
+                      db.run(
+                        `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                        [JSON.stringify(targetData), targetRow.id],
+                        () => {
+                          db.run(
+                            `UPDATE locations SET hp_current = 1 WHERE shape = 'rhombus' AND owner = ?`,
+                            [targetUsername],
+                            () => {
+                              emitUpdate({ isRhombusOnly: true });
+                              io.emit('sheetUpdated', { username: targetUsername, system });
+                              finishRoll(
+                                `${info.userName} stabilizes ${targetUsername} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — ` +
+                                `STABILIZED AT 1 HP — NOW FRAIL`
+                              );
+                            }
+                          );
+                        }
+                      );
+                    } else {
+                      const newRounds = rounds + 1;
+                      targetData.rounds_since_downed = newRounds;
+                      const dead = newRounds >= attackCwn.MORTAL_WOUND_ROUNDS;
+                      db.run(
+                        `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                        [JSON.stringify(targetData), targetRow.id],
+                        () => {
+                          io.emit('sheetUpdated', { username: targetUsername, system });
+                          finishRoll(
+                            `${info.userName} tries to stabilize ${targetUsername} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — FAILED` +
+                            (dead ? ` — ${attackCwn.MORTAL_WOUND_ROUNDS} ROUNDS DOWN — DEAD` : ` (round ${newRounds} of ${attackCwn.MORTAL_WOUND_ROUNDS})`)
+                          );
+                        }
+                      );
+                    }
                   }
                 );
               }

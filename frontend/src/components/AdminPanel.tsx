@@ -2281,22 +2281,42 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNp
                 NPC_LIBRARY
               </button>
             )}
-            <button
-              className="utility-btn"
-              style={{ fontSize: '0.65rem', flex: 1 }}
-              title="Reset all player LUCK to their maximum value"
-              onClick={() => {
-                fetch('/api/sheets/reset-luck', {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${token}` },
-                }).then(r => r.json()).then(d => {
-                  setLuckResetMsg(d.reason ?? `LUCK RESET — ${d.reset} SHEET${d.reset !== 1 ? 'S' : ''}`);
-                  setTimeout(() => setLuckResetMsg(null), 3000);
-                }).catch(() => setLuckResetMsg('RESET FAILED'));
-              }}
-            >
-              RESET_ALL_LUCK
-            </button>
+            {system === 'cyberpunk_red' && (
+              <button
+                className="utility-btn"
+                style={{ fontSize: '0.65rem', flex: 1 }}
+                title="Reset all player LUCK to their maximum value"
+                onClick={() => {
+                  fetch('/api/sheets/reset-luck', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                  }).then(r => r.json()).then(d => {
+                    setLuckResetMsg(d.reason ?? `LUCK RESET — ${d.reset} SHEET${d.reset !== 1 ? 'S' : ''}`);
+                    setTimeout(() => setLuckResetMsg(null), 3000);
+                  }).catch(() => setLuckResetMsg('RESET FAILED'));
+                }}
+              >
+                RESET_ALL_LUCK
+              </button>
+            )}
+            {system === 'cities_without_number' && (
+              <button
+                className="utility-btn"
+                style={{ fontSize: '0.65rem', flex: 1 }}
+                title="Long rest: every CWN sheet (players and NPCs) recovers 1 System Strain"
+                onClick={() => {
+                  fetch('/api/sheets/cwn-rest', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                  }).then(r => r.json()).then(d => {
+                    setLuckResetMsg(d.reason ?? `LONG REST — ${d.rested} SHEET${d.rested !== 1 ? 'S' : ''} RECOVERED 1 STRAIN`);
+                    setTimeout(() => setLuckResetMsg(null), 3000);
+                  }).catch(() => setLuckResetMsg('REST FAILED'));
+                }}
+              >
+                LONG_REST (STRAIN −1)
+              </button>
+            )}
           </div>
           {luckResetMsg && (
             <div style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>

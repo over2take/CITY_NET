@@ -311,8 +311,13 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
               sheets.forEach((s) => {
                 try {
                   const data = JSON.parse(s.data || '{}');
-                  if (Number(data.death_save_penalty) > 0) {
-                    data.death_save_penalty = 0;
+                  // CP:R death-save penalty and CWN mortal-wound round count
+                  // both reset above 0 HP. CWN's frail flag deliberately
+                  // persists - it clears via care, not healing.
+                  let changed = false;
+                  if (Number(data.death_save_penalty) > 0) { data.death_save_penalty = 0; changed = true; }
+                  if (Number(data.rounds_since_downed) > 0) { data.rounds_since_downed = 0; changed = true; }
+                  if (changed) {
                     db.run('UPDATE character_sheets SET data = ? WHERE id = ?', [JSON.stringify(data), s.id]);
                   }
                 } catch (e) { /* bad JSON - leave it */ }
