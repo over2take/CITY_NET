@@ -1749,6 +1749,9 @@ function App() {
                   pos={reviewHealthPos}
                   setPos={setReviewHealthPos}
                   onClose={() => { setReviewHealthOwner(null); setReviewHealthLocId(null); }}
+                  socket={socketRef.current}
+                  gameSystem={gameSystem}
+                  onRolled={() => setIsDiceTrayOpen(true)}
                 />
               ) : null;
             })()}

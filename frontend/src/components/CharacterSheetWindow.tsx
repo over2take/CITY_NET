@@ -27,6 +27,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [allowFumbleShield, setAllowFumbleShield] = useState(false);
+  const [cwnDeluxe, setCwnDeluxe] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -53,11 +54,12 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       // Cash is a linked field mirroring the bank balance
       if (info.username === userName) socket.emit('requestMySheet');
     };
-    // Fumble-shield house rule: read once, refresh when the admin applies
+    // House rules: read once, refresh when the admin applies
     const fetchRules = () => {
       fetch('/api/settings').then(r => r.json()).then((rows) => {
         if (Array.isArray(rows)) {
           setAllowFumbleShield(rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1');
+          setCwnDeluxe(rows.find((r: any) => r.key === 'cwn_deluxe')?.value === '1');
         }
       }).catch(() => {});
     };
@@ -189,6 +191,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
             onRolled?.();
           }}
           allowFumbleShield={allowFumbleShield}
+          hiddenTabs={sheet.system === 'cities_without_number' && !cwnDeluxe ? ['DELUXE'] : undefined}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>

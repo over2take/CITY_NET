@@ -363,11 +363,13 @@ self-contained. What's already safe, and what CWN must not break:
 
 ## Known Loose Ends
 
-- **Stabilize is clicked from the downed player's own sheet** (players can
-  only open their own sheet window). The server already rolls the *clicking*
-  socket's Heal skill, so when an ally-facing UI exists (initiative tracker /
-  party panel) it plugs in without backend changes. Until then, self-click or
-  the GM adjusting HP stands in for the ally's Main Action.
+- ~~Stabilize is clicked from the downed player's own sheet~~ RESOLVED: the
+  simple health review window (any player can open it on a downed character)
+  now carries a STABILIZE button that rolls the VIEWER's Heal skill — the
+  ally's Main Action, per RAW. The self-sheet button remains as a fallback.
+- ~~DELUXE tab always visible~~ RESOLVED: the DELUXE tab (spellcasting +
+  summoning) is hidden on player and admin sheet windows while the
+  `cwn_deluxe` house rule is off; toggling it live updates open windows.
 - **Strain sources are manual**: the LONG_REST admin button handles recovery
   (-1 all CWN sheets), but +1 strain on rapid healing / overcasting is
   adjusted by hand on the sheet.
