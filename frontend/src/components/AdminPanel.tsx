@@ -2063,8 +2063,8 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNp
   const [systems, setSystems] = useState<{ id: string; name: string }[]>([]);
   const [luckResetMsg, setLuckResetMsg] = useState<string | null>(null);
   // House rules: staged locally, written on APPLY (not on every click)
-  const [houseRules, setHouseRules] = useState({ meleeTake10: false, luckNegates: false });
-  const [savedRules, setSavedRules] = useState({ meleeTake10: false, luckNegates: false });
+  const [houseRules, setHouseRules] = useState({ meleeTake10: false, luckNegates: false, cwnTrauma: true, cwnDeluxe: false });
+  const [savedRules, setSavedRules] = useState({ meleeTake10: false, luckNegates: false, cwnTrauma: true, cwnDeluxe: false });
   const [rulesMsg, setRulesMsg] = useState<string | null>(null);
 
   const refresh = () => {
@@ -2077,6 +2077,9 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNp
       const loaded = {
         meleeTake10: rows.find((r: any) => r.key === 'melee_dv_take10')?.value === '1',
         luckNegates: rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1',
+        // CWN: trauma defaults ON (absent key = on), deluxe defaults OFF
+        cwnTrauma: rows.find((r: any) => r.key === 'cwn_trauma')?.value !== '0',
+        cwnDeluxe: rows.find((r: any) => r.key === 'cwn_deluxe')?.value === '1',
       };
       setHouseRules(loaded);
       setSavedRules(loaded);
@@ -2116,6 +2119,82 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNp
           <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
             Player sheets for the current system are kept and restored if you switch back.
           </p>
+          {system === 'cities_without_number' && (() => {
+            const dirty = houseRules.cwnTrauma !== savedRules.cwnTrauma
+              || houseRules.cwnDeluxe !== savedRules.cwnDeluxe;
+            const applyRules = async () => {
+              const writes: [string, boolean][] = [
+                ['cwn_trauma', houseRules.cwnTrauma],
+                ['cwn_deluxe', houseRules.cwnDeluxe],
+              ];
+              try {
+                for (const [key, on] of writes) {
+                  await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ key, value: on ? '1' : '0' }),
+                  });
+                }
+                setSavedRules({ ...houseRules });
+                setRulesMsg('HOUSE RULES APPLIED');
+              } catch {
+                setRulesMsg('APPLY FAILED');
+              }
+              setTimeout(() => setRulesMsg(null), 3000);
+            };
+            return (
+              <div style={{ border: '1px solid var(--dark-green)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label style={{ fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}>HOUSE RULES</label>
+                <label
+                  title="Gritty Combat: on a hit, roll the weapon's trauma die — if it meets the trauma rating the damage is multiplied. Also enables the Major Injury flow when a traumatic hit drops a PC to 0 HP. On by default. Off = plain hit/damage + shock only."
+                  style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={houseRules.cwnTrauma}
+                    onChange={(e) => setHouseRules(r => ({ ...r, cwnTrauma: e.target.checked }))}
+                  />
+                  GRITTY COMBAT (TRAUMA DIE + MAJOR INJURIES)
+                </label>
+                <label
+                  title="CWN Deluxe Edition: enables Spellcasting and Summoning fields on character sheets, including Mage Effort, Summoner Effort, and the Overcasting table. Off by default."
+                  style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={houseRules.cwnDeluxe}
+                    onChange={(e) => setHouseRules(r => ({ ...r, cwnDeluxe: e.target.checked }))}
+                  />
+                  DELUXE EDITION (SPELLCASTING + SUMMONING)
+                </label>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <button
+                    className="utility-btn"
+                    style={{ fontSize: '0.65rem', padding: '3px 12px', opacity: dirty ? 1 : 0.4 }}
+                    disabled={!dirty}
+                    onClick={applyRules}
+                  >
+                    APPLY
+                  </button>
+                  {dirty && (
+                    <button
+                      className="utility-btn"
+                      style={{ fontSize: '0.65rem', padding: '3px 12px' }}
+                      onClick={() => setHouseRules({ ...savedRules })}
+                    >
+                      REVERT
+                    </button>
+                  )}
+                  {rulesMsg && (
+                    <span style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>{rulesMsg}</span>
+                  )}
+                  {dirty && !rulesMsg && (
+                    <span style={{ fontSize: '0.6rem', color: '#ffcc00', opacity: 0.8, letterSpacing: '1px' }}>UNSAVED CHANGES</span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
           {system === 'cyberpunk_red' && (() => {
             const dirty = houseRules.meleeTake10 !== savedRules.meleeTake10
               || houseRules.luckNegates !== savedRules.luckNegates;
