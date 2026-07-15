@@ -1571,17 +1571,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       }
                     };
 
+                    const fmt = (n) => (n >= 0 ? `+${n}` : `${n}`);
+                    const partsTag = ` (HEAL ${fmt(check.healSkill)}, INT ${fmt(check.intMod)})`;
                     let historyString;
                     if (check.success) {
                       historyString =
-                        `${info.userName} stabilizes ${targetUsername} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — ` +
+                        `${info.userName} stabilizes ${targetUsername}${partsTag} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — ` +
                         `STABILIZED AT 1 HP — NOW FRAIL`;
                     } else {
                       const newRounds = rounds + 1;
                       targetData.rounds_since_downed = newRounds;
                       const dead = newRounds >= attackCwn.MORTAL_WOUND_ROUNDS;
                       historyString =
-                        `${info.userName} tries to stabilize ${targetUsername} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — FAILED` +
+                        `${info.userName} tries to stabilize ${targetUsername}${partsTag} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — FAILED` +
                         (dead ? ` — ${attackCwn.MORTAL_WOUND_ROUNDS} ROUNDS DOWN — DEAD` : ` (round ${newRounds} of ${attackCwn.MORTAL_WOUND_ROUNDS})`);
                     }
                     broadcastRoll(info.userName, check, historyString, check.success ? '#00ff00' : '#ff3333', () => {

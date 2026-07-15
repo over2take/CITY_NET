@@ -15,6 +15,15 @@ describe('CWN derived fields (recompute hook)', () => {
     expect(data.cha_mod).toBe(2);
   });
 
+  it('treats unset stats as neutral (mod 0), not stat-3', () => {
+    const data = { str: 14 }; // everything else blank on a half-filled sheet
+    applyDerived('cities_without_number', data, 'str');
+    expect(data.str_mod).toBe(1);
+    expect(data.int_mod).toBe(0);
+    expect(data.wis_mod).toBe(0);
+    expect(data.dex_mod).toBe(0);
+  });
+
   it('computes saves as 16 - (level + best relevant mod)', () => {
     const data = { level: 3, str: 14, con: 8, dex: 18, int: 10, wis: 4, cha: 10 };
     applyDerived('cities_without_number', data, 'level');
