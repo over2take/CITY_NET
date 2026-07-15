@@ -348,7 +348,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpe
         {template.stabilize && h.hpField && (hp ?? 0) > 0 && num(data.frail) === 1 && (
           <div style={{
             marginTop: '6px', border: '1px solid #ffcc00', background: 'rgba(60, 45, 0, 0.4)',
-            padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: '2px',
+            padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: '4px',
           }}>
             <span style={{ color: '#ffcc00', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'wound-pulse 1.6s ease-in-out infinite' }}>
               ⚠ FRAIL
@@ -356,6 +356,18 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpe
             <span style={{ color: '#ffcc00', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
               Hitting 0 HP again is instant death — cleared by a week of care or medical treatment
             </span>
+            <button
+              onClick={() => onFieldChange('frail', 0)}
+              disabled={false}
+              title="Click when the GM confirms the recovery conditions are met (a week of bedrest and care, or successful medical treatment)."
+              style={{
+                alignSelf: 'center', background: 'none', border: '1px solid #ffcc00', color: '#ffcc00',
+                fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 10px',
+                cursor: 'pointer',
+              }}
+            >
+              CLEAR FRAIL (GM APPROVED)
+            </button>
           </div>
         )}
         {template.deathSave && h.hpField && (hp ?? 0) > 0 && num(data.seriously_wounded) > 0 && (hp ?? 0) <= num(data.seriously_wounded) && (
