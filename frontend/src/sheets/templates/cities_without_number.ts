@@ -225,12 +225,19 @@ export const citiesWithoutNumber: SheetTemplate = {
     },
     {
       id: 'spells',
-      label: 'SPELLS',
-      layout: 'notes',
+      label: 'PREPARED SPELLS',
+      layout: 'spells',
       tab: 'DELUXE',
-      fields: [
-        { id: 'spells', label: 'Prepared spells', type: 'textarea', placeholder: 'The Unseen Hand, Glimpse the Unseen' },
-      ],
+      columns: 4,
+      fields: Array.from({ length: 4 }, (_, n) => {
+        const i = n + 1;
+        return [
+          { id: `spell${i}_name`, label: 'NAME', type: 'text' as const, placeholder: 'The Unseen Hand' },
+          { id: `spell${i}_effect`, label: 'EFFECT', type: 'text' as const, placeholder: 'Telekinesis, 20m, one scene', hint: 'Free-text effect, broadcast with the cast. The app does not know spell rules - you do.' },
+          { id: `spell${i}_dmg`, label: 'DMG', type: 'text' as const, placeholder: '2d6', hint: 'Optional damage dice (e.g. 2d6 or 3d6+1), rolled by the server on cast. Blank for utility spells.' },
+          { id: `spell${i}_cost`, label: 'EFFORT', type: 'number' as const, placeholder: '1', hint: 'Effort committed on cast, deducted from your pool. Casting with insufficient Effort is an OVERCAST - the GM rolls the consequence table.' },
+        ];
+      }).flat(),
     },
     {
       id: 'summoning',

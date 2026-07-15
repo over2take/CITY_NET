@@ -244,7 +244,9 @@ const buildCwnAliases = () => {
   alias(['mageeffort', 'effort', 'magiceffort'], 'mage_effort');
   alias(['mageeffortmax', 'effortmax'], 'mage_effort_max');
   alias(['spellspreparedmax', 'spellsprepared', 'preparedspells'], 'spells_prepared_max');
-  alias(['spells'], 'spells');
+  for (let i = 1; i <= 4; i++) {
+    ['name', 'effect', 'dmg', 'cost'].forEach((part) => alias([`spell${i}${part}`], `spell${i}_${part}`));
+  }
   alias(['summonskill', 'summon', 'summoning'], 'summon_skill');
   alias(['summonereffort', 'summoneffort'], 'summoner_effort');
   alias(['summonereffortmax', 'summoneffortmax'], 'summoner_effort_max');
@@ -279,6 +281,7 @@ const NUMERIC_CWN_FIELDS = new Set([
   'summon_skill', 'summoner_effort', 'summoner_effort_max',
   ...Object.keys(CWN_SKILLS),
   'weapon1_atk', 'weapon2_atk', 'weapon3_atk', 'weapon4_atk',
+  'spell1_cost', 'spell2_cost', 'spell3_cost', 'spell4_cost',
 ]);
 
 // Fields where importing the value also seeds the current (same as CP:R pattern)

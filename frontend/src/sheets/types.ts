@@ -42,8 +42,10 @@ export interface SheetField {
 }
 
 /** 'weapons' lays fields out as structured rows (name / dmg / skill / rof),
- *  chunked in field order - every 4 consecutive fields form one weapon row. */
-export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons';
+ *  chunked in field order - every section.columns (default 4) consecutive
+ *  fields form one row. 'spells' is the same shape plus a CAST button per
+ *  row (one-click: rolls the row's damage dice and spends its Effort cost). */
+export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells';
 
 export interface SheetSection {
   id: string;
