@@ -181,13 +181,15 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
                 className="upload-btn"
                 title="Field healing (stims, medkits): heals and adds +1 System Strain to the character's sheet. Refused when strain is maxed - no stim benefit. Use HEAL for natural/rest healing."
                 onClick={() => updateHealth('stim_heal', actionAmount)}
-                style={{ width: '100%', color: '#ffcc00', borderColor: '#ffcc00' }}
+                disabled={!!healMsg}
+                style={{
+                  width: '100%',
+                  color: healMsg?.includes('MAXED') ? '#ff3333' : '#ffcc00',
+                  borderColor: healMsg?.includes('MAXED') ? '#ff3333' : '#ffcc00',
+                }}
               >
-                STIM_HEAL (+1 STRAIN)
+                {healMsg ?? 'STIM_HEAL (+1 STRAIN)'}
               </button>
-            )}
-            {healMsg && (
-              <div style={{ fontSize: '0.65rem', color: '#ffcc00', letterSpacing: '1px', textAlign: 'center' }}>{healMsg}</div>
             )}
           </div>
 
