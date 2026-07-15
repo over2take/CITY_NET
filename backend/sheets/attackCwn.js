@@ -110,11 +110,16 @@ const shockDamage = (data, weapon, targetAc) => {
 };
 
 // Stabilization check: 2d6 + Heal + INT mod vs 8 + rounds down (+2 no tools).
+// healSkill / intMod come back separately so the broadcast can show the
+// player exactly what the server read off their sheet.
 const rollStabilize = (data, roundsDown, noTools, rng = Math.random) => {
   const dc = STABILIZE_BASE_DC + Math.max(0, num(roundsDown)) + (noTools ? NO_TOOLS_PENALTY : 0);
   const resolved = rollEngine.resolveFormula('2d6 + @heal + @int_mod', data);
   const outcome = rollEngine.executeRoll(resolved, 'sum', rng);
-  return { ...outcome, dc, success: outcome.total >= dc };
+  return {
+    ...outcome, dc, success: outcome.total >= dc,
+    healSkill: num(data.heal), intMod: num(data.int_mod),
+  };
 };
 
 module.exports = {

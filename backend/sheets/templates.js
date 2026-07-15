@@ -26,6 +26,9 @@ const num = (v) => {
 // 3 -> -2, 4-7 -> -1, 8-13 -> 0, 14-17 -> +1, 18+ -> +2.
 const cwnMod = (stat) => {
   const s = num(stat);
+  // Unset stats (empty field reads as 0) are neutral, not "stat 3" - a
+  // half-filled sheet must not roll at -2 everywhere.
+  if (s <= 0) return 0;
   if (s <= 3) return -2;
   if (s <= 7) return -1;
   if (s <= 13) return 0;
