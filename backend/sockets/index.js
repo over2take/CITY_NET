@@ -11,6 +11,10 @@ const SECRET = process.env.JWT_SECRET;
 const userSockets = new Map();
 let activeNPCs = [];
 
+// CWN stabilize checks resolve 5s after the roll broadcast (the client dice
+// animation) - block re-rolls on the same target while one is in flight.
+const stabilizeInFlight = new Set();
+
 // Streamer mode: spectator sockets are read-only observers, invisible to the game.
 // requestQuickSheet is spectator-allowed by design: it only ever returns
 // server-filtered public fields, so stream viewers can see who's who.
@@ -1511,61 +1515,67 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     if (hpRow.hp_current === null || hpRow.hp_current > 0) return;
                     const targetData = JSON.parse(targetRow.data || '{}');
                     if (Number(targetData.frail) === 1) return; // Frail at 0 HP = dead, nothing to stabilize
+                    if (stabilizeInFlight.has(targetUsername)) return; // roll already resolving
                     const rounds = Math.max(0, Number(targetData.rounds_since_downed) || 0);
                     const noTools = payload?.noTools === true;
                     let check;
                     try { check = attackCwn.rollStabilize(rollerData, rounds, noTools); } catch (e) { return; }
+                    stabilizeInFlight.add(targetUsername);
 
-                    const finishRoll = (historyString, afterBroadcast) => {
-                      broadcastRoll(info.userName, check, historyString, check.success ? '#00ff00' : '#ff3333', () => {
-                        io.emit('stabilizeResult', {
-                          roller: info.userName,
-                          target: targetUsername,
-                          total: check.total,
-                          dc: check.dc,
-                          success: check.success,
-                        });
-                        if (afterBroadcast) afterBroadcast();
+                    // The roll broadcasts first; the sheet/HP consequences land
+                    // after the client's 5s dice animation so the banner doesn't
+                    // spoil the result mid-roll.
+                    const applyOutcome = () => {
+                      stabilizeInFlight.delete(targetUsername);
+                      io.emit('stabilizeResult', {
+                        roller: info.userName,
+                        target: targetUsername,
+                        total: check.total,
+                        dc: check.dc,
+                        success: check.success,
                       });
+                      if (check.success) {
+                        targetData.frail = 1;
+                        targetData.rounds_since_downed = 0;
+                        db.run(
+                          `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                          [JSON.stringify(targetData), targetRow.id],
+                          () => {
+                            db.run(
+                              `UPDATE locations SET hp_current = 1 WHERE shape = 'rhombus' AND owner = ?`,
+                              [targetUsername],
+                              () => {
+                                emitUpdate({ isRhombusOnly: true });
+                                io.emit('sheetUpdated', { username: targetUsername, system });
+                              }
+                            );
+                          }
+                        );
+                      } else {
+                        db.run(
+                          `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                          [JSON.stringify(targetData), targetRow.id],
+                          () => io.emit('sheetUpdated', { username: targetUsername, system })
+                        );
+                      }
                     };
 
+                    let historyString;
                     if (check.success) {
-                      targetData.frail = 1;
-                      targetData.rounds_since_downed = 0;
-                      db.run(
-                        `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                        [JSON.stringify(targetData), targetRow.id],
-                        () => {
-                          db.run(
-                            `UPDATE locations SET hp_current = 1 WHERE shape = 'rhombus' AND owner = ?`,
-                            [targetUsername],
-                            () => {
-                              emitUpdate({ isRhombusOnly: true });
-                              io.emit('sheetUpdated', { username: targetUsername, system });
-                              finishRoll(
-                                `${info.userName} stabilizes ${targetUsername} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — ` +
-                                `STABILIZED AT 1 HP — NOW FRAIL`
-                              );
-                            }
-                          );
-                        }
-                      );
+                      historyString =
+                        `${info.userName} stabilizes ${targetUsername} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — ` +
+                        `STABILIZED AT 1 HP — NOW FRAIL`;
                     } else {
                       const newRounds = rounds + 1;
                       targetData.rounds_since_downed = newRounds;
                       const dead = newRounds >= attackCwn.MORTAL_WOUND_ROUNDS;
-                      db.run(
-                        `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                        [JSON.stringify(targetData), targetRow.id],
-                        () => {
-                          io.emit('sheetUpdated', { username: targetUsername, system });
-                          finishRoll(
-                            `${info.userName} tries to stabilize ${targetUsername} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — FAILED` +
-                            (dead ? ` — ${attackCwn.MORTAL_WOUND_ROUNDS} ROUNDS DOWN — DEAD` : ` (round ${newRounds} of ${attackCwn.MORTAL_WOUND_ROUNDS})`)
-                          );
-                        }
-                      );
+                      historyString =
+                        `${info.userName} tries to stabilize ${targetUsername} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — FAILED` +
+                        (dead ? ` — ${attackCwn.MORTAL_WOUND_ROUNDS} ROUNDS DOWN — DEAD` : ` (round ${newRounds} of ${attackCwn.MORTAL_WOUND_ROUNDS})`);
                     }
+                    broadcastRoll(info.userName, check, historyString, check.success ? '#00ff00' : '#ff3333', () => {
+                      setTimeout(applyOutcome, 5000);
+                    });
                   }
                 );
               }
