@@ -996,8 +996,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               );
             }
           );
-          if (tier) {
-            // Tiered NPCs also get their token tuned: HP pool + DVs.
+          if (tier && system === 'cyberpunk_red') {
+            // Tiered CP:R NPCs get their token tuned: HP pool + DVs.
             // Melee DV comes from the sheet (base + DEX + Evasion; base per
             // the take-10 house-rule toggle) - the GM can still override it
             // any time via EDIT_DV.
@@ -1009,6 +1009,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 () => { emitUpdate({ isRhombusOnly: true }); insertSheet(); }
               );
             });
+          } else if (tier) {
+            // Other systems (CWN): the tier's own defense values stand - no
+            // CP:R melee-DV formula, no take-10 house rule.
+            db.run(
+              `UPDATE locations SET hp_current = ?, hp_max = ?, melee_ac = ?, ranged_ac = ? WHERE id = ?`,
+              [tier.hp, tier.hp, tier.dv.melee, tier.dv.ranged, location_id],
+              () => { emitUpdate({ isRhombusOnly: true }); insertSheet(); }
+            );
           } else {
             insertSheet();
           }
@@ -1283,19 +1291,25 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 broadcastRoll(info.userName, toHit, hitHistory, color, () => {
                   let dmg;
                   try { dmg = attackCwn.rollDamage(attackerData, weapon); } catch (e) { return emitResult({}); }
-                  const trauma = attackCwn.rollTrauma(weapon, traumaOn);
-                  const traumatic = !!(trauma && trauma.traumatic);
-                  const total = Math.max(0, traumatic ? dmg.total * trauma.rating : dmg.total);
-                  let dmgHistory = `${weapon.name} damage vs ${target.name} [${dmg.breakdown} = ${dmg.total}]`;
-                  if (trauma) {
-                    dmgHistory += traumatic
-                      ? ` — TRAUMA d${trauma.die}: ${trauma.roll} >= ${trauma.rating} — TRAUMATIC HIT x${trauma.rating} = ${total}`
-                      : ` — trauma d${trauma.die}: ${trauma.roll} < ${trauma.rating}, no trauma`;
-                  }
-                  dealDamage(total, dmgHistory, {
-                    damage: total, through: total,
-                    traumatic, traumaRoll: trauma ? trauma.roll : null,
-                  }, traumatic);
+                  // Trauma resolves vs the DEFENDER's Trauma Target (sheet
+                  // field trauma_target, default 6); the weapon rating is
+                  // the damage multiplier.
+                  getDefenderSheet(target, system, (defender) => {
+                    const defenderData = defender ? JSON.parse(defender.data || '{}') : {};
+                    const trauma = attackCwn.rollTrauma(weapon, traumaOn, defenderData.trauma_target);
+                    const traumatic = !!(trauma && trauma.traumatic);
+                    const total = Math.max(0, traumatic ? dmg.total * trauma.rating : dmg.total);
+                    let dmgHistory = `${weapon.name} damage vs ${target.name} [${dmg.breakdown} = ${dmg.total}]`;
+                    if (trauma) {
+                      dmgHistory += traumatic
+                        ? ` — TRAUMA d${trauma.die}: ${trauma.roll} vs TT ${trauma.tt} — TRAUMATIC HIT x${trauma.rating} = ${total}`
+                        : ` — trauma d${trauma.die}: ${trauma.roll} < TT ${trauma.tt}, no trauma`;
+                    }
+                    dealDamage(total, dmgHistory, {
+                      damage: total, through: total,
+                      traumatic, traumaRoll: trauma ? trauma.roll : null,
+                    }, traumatic);
+                  });
                 });
               });
             }

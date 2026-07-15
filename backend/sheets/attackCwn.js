@@ -88,16 +88,22 @@ const rollDamage = (data, weapon, rng = Math.random) => {
   return rollEngine.executeRoll(resolved, 'sum', rng);
 };
 
-// Trauma die (optional gritty rule). Returns null when the weapon has no
-// trauma or the rule is off; otherwise { die, rating, roll, traumatic }.
-const rollTrauma = (weapon, traumaEnabled, rng = Math.random) => {
+// Trauma die (optional gritty rule). The die rolls against the DEFENDER's
+// Trauma Target (default 6; cyber/armor can raise it) - the weapon's rating
+// is the damage MULTIPLIER on a traumatic hit, not the threshold.
+// Returns null when the weapon has no trauma or the rule is off; otherwise
+// { die, rating, roll, tt, traumatic }.
+const DEFAULT_TRAUMA_TARGET = 6;
+const rollTrauma = (weapon, traumaEnabled, targetTT = DEFAULT_TRAUMA_TARGET, rng = Math.random) => {
   if (!traumaEnabled || !weapon.trauma) return null;
+  const tt = num(targetTT) > 0 ? num(targetTT) : DEFAULT_TRAUMA_TARGET;
   const roll = Math.floor(rng() * weapon.trauma.die) + 1;
   return {
     die: weapon.trauma.die,
     rating: weapon.trauma.rating,
     roll,
-    traumatic: roll >= weapon.trauma.rating,
+    tt,
+    traumatic: roll >= tt,
   };
 };
 
@@ -124,7 +130,7 @@ const rollStabilize = (data, roundsDown, noTools, rng = Math.random) => {
 
 module.exports = {
   WEAPON_ROWS, WEAPON_SKILLS, MELEE_SKILLS,
-  MORTAL_WOUND_ROUNDS, STABILIZE_BASE_DC, NO_TOOLS_PENALTY,
+  MORTAL_WOUND_ROUNDS, STABILIZE_BASE_DC, NO_TOOLS_PENALTY, DEFAULT_TRAUMA_TARGET,
   parseTrauma, parseShock, getWeapon,
   rollToHit, rollDamage, rollTrauma, shockDamage, rollStabilize,
 };

@@ -52,6 +52,7 @@ const cwnTier = ({ hd, hp, ac, skills, weapons }) => {
     save_mental: 16 - hd,
     save_luck: 16 - hd,
     frail: 0, auto_initiative: 0,
+    trauma_target: 6,
   };
   // Core combat skills at the tier's skill level
   ['punch', 'shoot', 'stab', 'notice', 'sneak', 'survive'].forEach((s) => { data[s] = skills; });

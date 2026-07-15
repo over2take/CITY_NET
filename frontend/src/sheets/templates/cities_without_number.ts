@@ -116,6 +116,7 @@ export const citiesWithoutNumber: SheetTemplate = {
         { id: 'base_hit_bonus', label: 'BHB', type: 'number', hint: 'Base hit bonus from class and level; added to every attack roll.' },
         { id: 'system_strain', label: 'STRAIN', type: 'number', maxField: 'system_strain_max', hint: 'System Strain from cyberware, drugs and rapid healing. Max equals your CON score; recovers 1 per full rest.' },
         { id: 'system_strain_max', label: 'STRAIN MAX', type: 'number', hint: 'Derived: equals CON score, recomputed on every save.' },
+        { id: 'trauma_target', label: 'TRAUMA TGT', type: 'number', placeholder: '6', hint: 'Trauma Target: enemy trauma dice at or above this multiply their damage. Default 6; certain cyberware and armor raise it. Only used when the GRITTY COMBAT house rule is on.' },
       ],
     },
     {
