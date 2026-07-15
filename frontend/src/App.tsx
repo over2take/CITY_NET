@@ -1736,7 +1736,11 @@ function App() {
             )}
             {reviewHealthOwner && (() => {
               const rhombusShapes = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];
+              // Owner fallback must prefer the actual player token: generated
+              // enemy/friendly tokens stamp their creator as owner, and an
+              // older enemy row would otherwise shadow the player's rhombus.
               const reviewLoc = (reviewHealthLocId !== null ? locations.find((l: any) => l.id === reviewHealthLocId) : null)
+                ?? locations.find((l: any) => l.shape === 'rhombus' && l.owner === reviewHealthOwner)
                 ?? locations.find((l: any) => rhombusShapes.includes(l.shape) && l.owner === reviewHealthOwner)
                 ?? (selectedLocation?.owner === reviewHealthOwner ? selectedLocation : null);
               return reviewLoc ? (
