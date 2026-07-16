@@ -1437,7 +1437,7 @@ function App() {
                 {pendingRegistrations.length === 0
                   ? <div style={{ fontSize: '0.65rem', opacity: 0.5 }}>No pending registrations</div>
                   : pendingRegistrations.map(p => (
-                    <div key={p.username} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid rgba(0,255,0,0.1)' }}>
+                    <div key={p.username} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid color-mix(in srgb, var(--green) 10%, transparent)' }}>
                       <div>
                         <div style={{ fontSize: '0.75rem' }}>{p.username}</div>
                         <div style={{ fontSize: '0.6rem', opacity: 0.5 }}>{new Date(p.created_at).toLocaleString()}</div>

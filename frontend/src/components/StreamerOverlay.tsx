@@ -74,7 +74,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
           background: 'rgba(0, 10, 0, 0.82)', border: '1px solid var(--green, #00ff00)',
           borderLeft: '4px solid var(--green, #00ff00)', padding: '8px 18px',
           color: 'var(--green, #00ff00)', letterSpacing: '3px', fontSize: '15px',
-          textTransform: 'uppercase', textShadow: '0 0 8px rgba(0,255,0,0.7)',
+          textTransform: 'uppercase', textShadow: 'var(--glow)',
         }}>
           {directorState.sceneTitle}
         </div>
@@ -92,7 +92,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
             position: 'absolute', top: directorState.letterbox ? 'calc(10vh + 16px)' : '24px', right: '24px',
             animation: 'streamer-chyron-in 0.4s ease-out both',
             width: '300px', border: '1px solid var(--green, #00ff00)', background: 'rgba(0, 5, 0, 0.9)',
-            boxShadow: '0 0 15px rgba(0,255,0,0.25)',
+            boxShadow: '0 0 15px color-mix(in srgb, var(--green) 25%, transparent)',
           }}>
             <div style={{ background: 'var(--green, #00ff00)', color: '#000', fontWeight: 'bold', padding: '6px 12px', fontSize: '13px', letterSpacing: '2px', textTransform: 'uppercase' }}>
               {title}
