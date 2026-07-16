@@ -60,7 +60,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
           position: 'absolute', top: directorState.letterbox ? 'calc(10vh + 16px)' : '20px', left: '50%', transform: 'translateX(-50%)',
           animation: 'streamer-chyron-in 0.5s ease-out both',
           color: 'var(--green, #00ff00)', fontSize: '2em', fontWeight: 'bold',
-          textShadow: '0 0 10px #00ff00', letterSpacing: '3px', textTransform: 'uppercase',
+          textShadow: 'var(--glow)', letterSpacing: '3px', textTransform: 'uppercase',
         }}>
           {battleMapLabel}
         </div>
@@ -119,7 +119,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                 const hpMax = selectedLocation.hp_max ?? 0;
                 const isDead = hpCurrent <= 0;
                 const hpPct = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
-                const hpColor = isDead ? '#ff3333' : hpPct > 0.5 ? '#00ff00' : hpPct > 0.25 ? '#ffaa00' : '#ff3333';
+                const hpColor = isDead ? '#ff3333' : hpPct > 0.5 ? 'var(--green)' : hpPct > 0.25 ? '#ffaa00' : '#ff3333';
                 const injuries: Record<string, boolean> = (() => {
                   try { return JSON.parse((selectedLocation as any).injuries || '{}'); } catch { return {}; }
                 })();
@@ -134,7 +134,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                         <div style={{ fontSize: '9px', color: '#555', letterSpacing: '1px', textAlign: 'center', marginBottom: '6px' }}>INJURY_MAP</div>
                         <div style={{ display: 'flex', justifyContent: 'center' }}>
                           <div style={{ position: 'relative', width: '90px', height: '105px' }}>
-                            <PersonSVG color='#00ff00' style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.4, pointerEvents: 'none' }} />
+                            <PersonSVG color='var(--green)' style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.4, pointerEvents: 'none' }} />
                             {Object.keys(INJURY_ZONES).map(zone => (
                               <div key={zone} style={{
                                 position: 'absolute',

@@ -1321,7 +1321,7 @@ function App() {
       {view === 'battle_map' && activeBattleMapData && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 2000 }}>
           <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'auto' }}>
-            <h2 style={{ margin: 0, textShadow: '0 0 10px #00ff00', fontSize: '2em' }}>{activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation?.toUpperCase() || 'UNKNOWN FLOOR'}</h2>
+            <h2 style={{ margin: 0, textShadow: 'var(--glow)', fontSize: '2em' }}>{activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation?.toUpperCase() || 'UNKNOWN FLOOR'}</h2>
             <button onClick={exitBattleMap} style={{ padding: '10px 30px', marginTop: '10px', backgroundColor: '#ff0000', color: 'white', border: '1px solid #ff0000', cursor: 'pointer', fontWeight: 'bold' }}>EXIT</button>
           </div>
           {isAdmin && isPrimaryAdmin && (
@@ -1334,7 +1334,7 @@ function App() {
                 
                 return (
                   <button key={m.id} 
-                    style={{ padding: '15px', backgroundColor: activeBattleMapData.currentFloorIndex === idx ? '#00ff00' : '#222', color: activeBattleMapData.currentFloorIndex === idx ? '#000' : '#00ff00', border: '1px solid #00ff00', cursor: 'pointer', fontWeight: 'bold' }}
+                    style={{ padding: '15px', backgroundColor: activeBattleMapData.currentFloorIndex === idx ? 'var(--green)' : '#222', color: activeBattleMapData.currentFloorIndex === idx ? '#000' : 'var(--green)', border: '1px solid var(--green)', cursor: 'pointer', fontWeight: 'bold' }}
                     onClick={() => {
                       setActiveBattleMapData((p: any) => ({ ...p, currentFloorIndex: idx }));
                       if (socketRef.current) socketRef.current.emit('admin_force_floor_change', { locationId: activeBattleMapData.locationId, floorIndex: idx });
