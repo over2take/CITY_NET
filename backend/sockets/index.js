@@ -1262,8 +1262,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   });
                 };
 
-                // Applies damage and tags Frail deaths / GM prompts in the result.
-                const dealDamage = (amount, tagHistory, resultExtras, traumatic) => {
+                // Applies damage and tags Frail deaths / GM prompts in the
+                // result. `outcome` carries the actual dice of the damage
+                // roll so the dice tray can render them (shock passes none -
+                // no dice are rolled on shock).
+                const dealDamage = (amount, outcome, tagHistory, resultExtras, traumatic) => {
                   getDefenderSheet(target, system, (defender) => {
                     const defenderData = defender ? JSON.parse(defender.data || '{}') : {};
                     const frail = Number(defenderData.frail) === 1;
@@ -1273,7 +1276,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       if (down && frail) history += ' — FRAIL: INSTANT DEATH';
                       else if (down && traumatic) history += ' — DOWNED BY A TRAUMATIC HIT · GM: PHYSICAL SAVE OR MAJOR INJURY';
                       else if (down) history += ' — MORTALLY WOUNDED';
-                      broadcastRoll(info.userName, { rolls: {}, total: amount }, history, color, () => {
+                      broadcastRoll(info.userName, outcome ?? { rolls: {}, modTotal: 0, total: amount }, history, color, () => {
                         emitResult({ ...resultExtras, targetHp: newHp, targetDown: down, frailDeath: down && frail });
                       });
                     });
@@ -1284,7 +1287,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   const shock = attackCwn.shockDamage(attackerData, weapon, ac);
                   return broadcastRoll(info.userName, toHit, hitHistory, color, () => {
                     if (shock <= 0) return emitResult({});
-                    dealDamage(shock, `${weapon.name} SHOCK vs ${target.name} — ${shock} damage on the miss`, { shock, damage: shock, through: shock }, false);
+                    dealDamage(shock, null, `${weapon.name} SHOCK vs ${target.name} — ${shock} damage on the miss`, { shock, damage: shock, through: shock }, false);
                   });
                 }
 
@@ -1305,7 +1308,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         ? ` — TRAUMA d${trauma.die}: ${trauma.roll} vs TT ${trauma.tt} — TRAUMATIC HIT x${trauma.rating} = ${total}`
                         : ` — trauma d${trauma.die}: ${trauma.roll} < TT ${trauma.tt}, no trauma`;
                     }
-                    dealDamage(total, dmgHistory, {
+                    dealDamage(total, dmg, dmgHistory, {
                       damage: total, through: total,
                       traumatic, traumaRoll: trauma ? trauma.roll : null,
                     }, traumatic);

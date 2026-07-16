@@ -99,6 +99,23 @@ describe('CWN sheetAttack', () => {
     expect(token.hp_current).toBe(30 - result.data.damage);
   });
 
+  it('broadcasts the damage roll WITH its dice so the tray can render them', async () => {
+    await seedAttacker();
+    await seedAttackerToken();
+    const target = await seedTarget(1);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['sheetAttack']({ targetId: target.lastID, weaponIndex: 1 });
+    await waitFor(() => emitted.some(e => e.event === 'attackResult'));
+
+    const dmgRoll = emitted.filter(e => e.event === 'diceRollBroadcast')
+      .find(r => r.data.historyString.includes('damage vs'));
+    expect(dmgRoll).toBeTruthy();
+    expect(dmgRoll.data.results['6']).toHaveLength(1); // the weapon's 1d6
+  });
+
   it('rolls the trauma die when cwn_trauma is on (default)', async () => {
     await seedAttacker();
     await seedAttackerToken();
