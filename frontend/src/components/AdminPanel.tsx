@@ -2057,32 +2057,136 @@ const BANK_SOUND_TESTERS: Record<BankSoundKey, (vol: number) => void> = {
   overdraft: playWompWomp,
 };
 
+// Per-system house rules: staged locally, written to global_settings on
+// APPLY (not on every click). Self-contained - give it the rule definitions
+// and it handles load / stage / apply / revert / status.
+interface HouseRuleDef {
+  settingKey: string;
+  label: string;
+  title: string;
+  /** Rules that are ON when the key is absent (e.g. cwn_trauma). */
+  defaultOn?: boolean;
+}
+
+function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] }) {
+  const [rules, setRules] = useState<Record<string, boolean>>({});
+  const [saved, setSaved] = useState<Record<string, boolean>>({});
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/settings').then(r => r.json()).then((rows) => {
+      if (!Array.isArray(rows)) return;
+      const loaded: Record<string, boolean> = {};
+      defs.forEach((d) => {
+        const value = rows.find((r: any) => r.key === d.settingKey)?.value;
+        loaded[d.settingKey] = d.defaultOn ? value !== '0' : value === '1';
+      });
+      setRules(loaded);
+      setSaved(loaded);
+    }).catch(() => {});
+  }, [defs.map(d => d.settingKey).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dirty = defs.some(d => rules[d.settingKey] !== saved[d.settingKey]);
+  const apply = async () => {
+    try {
+      for (const d of defs) {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ key: d.settingKey, value: rules[d.settingKey] ? '1' : '0' }),
+        });
+      }
+      setSaved({ ...rules });
+      setMsg('HOUSE RULES APPLIED');
+    } catch {
+      setMsg('APPLY FAILED');
+    }
+    setTimeout(() => setMsg(null), 3000);
+  };
+
+  return (
+    <div style={{ border: '1px solid var(--dark-green)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      <label style={{ fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}>HOUSE RULES</label>
+      {defs.map((d) => (
+        <label
+          key={d.settingKey}
+          title={d.title}
+          style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+        >
+          <input
+            type="checkbox"
+            checked={!!rules[d.settingKey]}
+            onChange={(e) => setRules(r => ({ ...r, [d.settingKey]: e.target.checked }))}
+          />
+          {d.label}
+        </label>
+      ))}
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <button
+          className="utility-btn"
+          style={{ fontSize: '0.65rem', padding: '3px 12px', opacity: dirty ? 1 : 0.4 }}
+          disabled={!dirty}
+          onClick={apply}
+        >
+          APPLY
+        </button>
+        {dirty && (
+          <button
+            className="utility-btn"
+            style={{ fontSize: '0.65rem', padding: '3px 12px' }}
+            onClick={() => setRules({ ...saved })}
+          >
+            REVERT
+          </button>
+        )}
+        {msg && (
+          <span style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>{msg}</span>
+        )}
+        {dirty && !msg && (
+          <span style={{ fontSize: '0.6rem', color: '#ffcc00', opacity: 0.8, letterSpacing: '1px' }}>UNSAVED CHANGES</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const CPR_HOUSE_RULES: HouseRuleDef[] = [
+  {
+    settingKey: 'melee_dv_take10',
+    label: 'MELEE_DV TAKE-10 (10 + DEX + EVASION INSTEAD OF 6 +)',
+    title: 'Melee DV stamped at sheet generation/attach: default is 6 + DEX + Evasion (average of the opposed Evasion roll); take-10 uses 10 + DEX + Evasion for a harder melee defense. Existing tokens are not changed.',
+  },
+  {
+    settingKey: 'luck_negates_fumble',
+    label: 'LUCK BONUS ALSO NEGATES NAT-1',
+    title: 'House rule: any LUCK spent as a roll bonus also negates a natural-1 critical fumble. Off = RAW: only the dedicated 1-LUCK fumble shield negates. Players always have the shield option either way.',
+  },
+];
+
+const CWN_HOUSE_RULES: HouseRuleDef[] = [
+  {
+    settingKey: 'cwn_trauma',
+    label: 'GRITTY COMBAT (TRAUMA DIE + MAJOR INJURIES)',
+    title: 'Gritty Combat: on a hit, roll the weapon\'s trauma die — if it meets the target\'s Trauma Target the damage is multiplied. Also enables the Major Injury flow when a traumatic hit drops a PC to 0 HP. On by default. Off = plain hit/damage + shock only.',
+    defaultOn: true,
+  },
+  {
+    settingKey: 'cwn_deluxe',
+    label: 'DELUXE EDITION (SPELLCASTING + SUMMONING)',
+    title: 'CWN Deluxe Edition: enables Spellcasting and Summoning on character sheets, including Mage Effort, Summoner Effort, and one-click casting. Off by default.',
+  },
+];
+
 function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNpcLibrary?: () => void }) {
   const [open, setOpen] = useState(false);
   const [system, setSystem] = useState<string>('generic');
   const [systems, setSystems] = useState<{ id: string; name: string }[]>([]);
   const [luckResetMsg, setLuckResetMsg] = useState<string | null>(null);
-  // House rules: staged locally, written on APPLY (not on every click)
-  const [houseRules, setHouseRules] = useState({ meleeTake10: false, luckNegates: false, cwnTrauma: true, cwnDeluxe: false });
-  const [savedRules, setSavedRules] = useState({ meleeTake10: false, luckNegates: false, cwnTrauma: true, cwnDeluxe: false });
-  const [rulesMsg, setRulesMsg] = useState<string | null>(null);
 
   const refresh = () => {
     fetch('/api/sheets/system').then(r => r.json()).then(d => {
       if (d.system) setSystem(d.system);
       if (d.systems) setSystems(d.systems);
-    }).catch(() => {});
-    fetch('/api/settings').then(r => r.json()).then((rows) => {
-      if (!Array.isArray(rows)) return;
-      const loaded = {
-        meleeTake10: rows.find((r: any) => r.key === 'melee_dv_take10')?.value === '1',
-        luckNegates: rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1',
-        // CWN: trauma defaults ON (absent key = on), deluxe defaults OFF
-        cwnTrauma: rows.find((r: any) => r.key === 'cwn_trauma')?.value !== '0',
-        cwnDeluxe: rows.find((r: any) => r.key === 'cwn_deluxe')?.value === '1',
-      };
-      setHouseRules(loaded);
-      setSavedRules(loaded);
     }).catch(() => {});
   };
 
@@ -2119,158 +2223,8 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNp
           <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
             Player sheets for the current system are kept and restored if you switch back.
           </p>
-          {system === 'cities_without_number' && (() => {
-            const dirty = houseRules.cwnTrauma !== savedRules.cwnTrauma
-              || houseRules.cwnDeluxe !== savedRules.cwnDeluxe;
-            const applyRules = async () => {
-              const writes: [string, boolean][] = [
-                ['cwn_trauma', houseRules.cwnTrauma],
-                ['cwn_deluxe', houseRules.cwnDeluxe],
-              ];
-              try {
-                for (const [key, on] of writes) {
-                  await fetch('/api/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ key, value: on ? '1' : '0' }),
-                  });
-                }
-                setSavedRules({ ...houseRules });
-                setRulesMsg('HOUSE RULES APPLIED');
-              } catch {
-                setRulesMsg('APPLY FAILED');
-              }
-              setTimeout(() => setRulesMsg(null), 3000);
-            };
-            return (
-              <div style={{ border: '1px solid var(--dark-green)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <label style={{ fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}>HOUSE RULES</label>
-                <label
-                  title="Gritty Combat: on a hit, roll the weapon's trauma die — if it meets the trauma rating the damage is multiplied. Also enables the Major Injury flow when a traumatic hit drops a PC to 0 HP. On by default. Off = plain hit/damage + shock only."
-                  style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={houseRules.cwnTrauma}
-                    onChange={(e) => setHouseRules(r => ({ ...r, cwnTrauma: e.target.checked }))}
-                  />
-                  GRITTY COMBAT (TRAUMA DIE + MAJOR INJURIES)
-                </label>
-                <label
-                  title="CWN Deluxe Edition: enables Spellcasting and Summoning fields on character sheets, including Mage Effort, Summoner Effort, and the Overcasting table. Off by default."
-                  style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={houseRules.cwnDeluxe}
-                    onChange={(e) => setHouseRules(r => ({ ...r, cwnDeluxe: e.target.checked }))}
-                  />
-                  DELUXE EDITION (SPELLCASTING + SUMMONING)
-                </label>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  <button
-                    className="utility-btn"
-                    style={{ fontSize: '0.65rem', padding: '3px 12px', opacity: dirty ? 1 : 0.4 }}
-                    disabled={!dirty}
-                    onClick={applyRules}
-                  >
-                    APPLY
-                  </button>
-                  {dirty && (
-                    <button
-                      className="utility-btn"
-                      style={{ fontSize: '0.65rem', padding: '3px 12px' }}
-                      onClick={() => setHouseRules({ ...savedRules })}
-                    >
-                      REVERT
-                    </button>
-                  )}
-                  {rulesMsg && (
-                    <span style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>{rulesMsg}</span>
-                  )}
-                  {dirty && !rulesMsg && (
-                    <span style={{ fontSize: '0.6rem', color: '#ffcc00', opacity: 0.8, letterSpacing: '1px' }}>UNSAVED CHANGES</span>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
-          {system === 'cyberpunk_red' && (() => {
-            const dirty = houseRules.meleeTake10 !== savedRules.meleeTake10
-              || houseRules.luckNegates !== savedRules.luckNegates;
-            const applyRules = async () => {
-              const writes: [string, boolean][] = [
-                ['melee_dv_take10', houseRules.meleeTake10],
-                ['luck_negates_fumble', houseRules.luckNegates],
-              ];
-              try {
-                for (const [key, on] of writes) {
-                  await fetch('/api/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ key, value: on ? '1' : '0' }),
-                  });
-                }
-                setSavedRules({ ...houseRules });
-                setRulesMsg('HOUSE RULES APPLIED');
-              } catch {
-                setRulesMsg('APPLY FAILED');
-              }
-              setTimeout(() => setRulesMsg(null), 3000);
-            };
-            return (
-              <div style={{ border: '1px solid var(--dark-green)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <label style={{ fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}>HOUSE RULES</label>
-                <label
-                  title="Melee DV stamped at sheet generation/attach: default is 6 + DEX + Evasion (average of the opposed Evasion roll); take-10 uses 10 + DEX + Evasion for a harder melee defense. Existing tokens are not changed."
-                  style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={houseRules.meleeTake10}
-                    onChange={(e) => setHouseRules(r => ({ ...r, meleeTake10: e.target.checked }))}
-                  />
-                  MELEE_DV TAKE-10 (10 + DEX + EVASION INSTEAD OF 6 +)
-                </label>
-                <label
-                  title="House rule: any LUCK spent as a roll bonus also negates a natural-1 critical fumble. Off = RAW: only the dedicated 1-LUCK fumble shield negates. Players always have the shield option either way."
-                  style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={houseRules.luckNegates}
-                    onChange={(e) => setHouseRules(r => ({ ...r, luckNegates: e.target.checked }))}
-                  />
-                  LUCK BONUS ALSO NEGATES NAT-1
-                </label>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  <button
-                    className="utility-btn"
-                    style={{ fontSize: '0.65rem', padding: '3px 12px', opacity: dirty ? 1 : 0.4 }}
-                    disabled={!dirty}
-                    onClick={applyRules}
-                  >
-                    APPLY
-                  </button>
-                  {dirty && (
-                    <button
-                      className="utility-btn"
-                      style={{ fontSize: '0.65rem', padding: '3px 12px' }}
-                      onClick={() => setHouseRules({ ...savedRules })}
-                    >
-                      REVERT
-                    </button>
-                  )}
-                  {rulesMsg && (
-                    <span style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>{rulesMsg}</span>
-                  )}
-                  {dirty && !rulesMsg && (
-                    <span style={{ fontSize: '0.6rem', color: '#ffcc00', opacity: 0.8, letterSpacing: '1px' }}>UNSAVED CHANGES</span>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
+          {system === 'cities_without_number' && <HouseRulesPanel token={token} defs={CWN_HOUSE_RULES} />}
+          {system === 'cyberpunk_red' && <HouseRulesPanel token={token} defs={CPR_HOUSE_RULES} />}
           <div style={{ display: 'flex', gap: '6px' }}>
             {onOpenNpcLibrary && (
               <button

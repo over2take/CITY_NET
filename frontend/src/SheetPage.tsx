@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
 import { SheetRenderer } from './components/SheetRenderer';
-import { getTemplate, getMaxPairs, type CharacterSheet } from './sheets';
+import { usePlayerSheet, uploadSheetPortrait } from './hooks/usePlayerSheet';
 import { THEMES } from './theme/themes';
 
 // Standalone character-sheet tab (?sheet=true). Gives the player a full
 // browser tab for their sheet instead of the in-game floating window.
+// All sheet behavior lives in usePlayerSheet, shared with the in-game
+// window (CharacterSheetWindow) - this file only owns the tab chrome.
 //
-// Auth handshake: the main app writes { userName, playerToken } to
+// Auth handshake: the main app writes { userName, playerToken, theme } to
 // localStorage under 'sheet_tab_auth' right before window.open; this page
 // reads it once and deletes it. Fallback: the remembered userName from a
 // simple-mode login. Secure Mode still verifies the token server-side on
@@ -42,108 +44,45 @@ const readAuth = (): { userName: string | null; playerToken: string | null; admi
 
 export default function SheetPage() {
   const [{ userName, playerToken, adminToken, theme }] = useState(readAuth);
-  const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastRoll, setLastRoll] = useState<string | null>(null);
-  const [allowFumbleShield, setAllowFumbleShield] = useState(false);
+  const [socket, setSocket] = useState<any>(null);
   const socketRef = useRef<any>(null);
-  const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     if (!userName) return;
-    const socket = io();
-    socketRef.current = socket;
+    const s = io();
+    socketRef.current = s;
 
     const identify = () => {
       if (adminToken) {
-        socket.emit('identify', { userName, isAdmin: true, token: adminToken });
+        s.emit('identify', { userName, isAdmin: true, token: adminToken });
       } else if (playerToken) {
-        socket.emit('identify', { userName, playerToken });
+        s.emit('identify', { userName, playerToken });
       } else {
-        socket.emit('identify', userName);
+        s.emit('identify', userName);
       }
-      socket.emit('requestMySheet');
+      s.emit('requestMySheet');
     };
 
-    socket.on('connect', identify);
-    socket.on('authError', (e: { message: string }) => setError(e.message));
-    socket.on('sheetData', (data: CharacterSheet) => {
-      if (data.username !== userName) return;
-      // Don't stomp fields with a pending debounced edit on re-fetch
-      setSheet(prev => {
-        if (!prev || pendingSaves.current.size === 0) return data;
-        const merged = { ...data.data };
-        pendingSaves.current.forEach((_t, fieldId) => {
-          if (prev.data[fieldId] !== undefined) merged[fieldId] = prev.data[fieldId];
-        });
-        return { ...data, data: merged };
-      });
-    });
-    socket.on('sheetUpdated', (info: { username: string }) => {
-      if (info.username === userName) socket.emit('requestMySheet');
-    });
-    socket.on('bankUpdate', (info: { username: string }) => {
-      // Cash is a linked field mirroring the bank balance
-      if (info.username === userName) socket.emit('requestMySheet');
-    });
-    socket.on('gameSystemChanged', () => socket.emit('requestMySheet'));
-    const fetchRules = () => {
-      fetch('/api/settings').then(r => r.json()).then((rows) => {
-        if (Array.isArray(rows)) {
-          setAllowFumbleShield(rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1');
-        }
-      }).catch(() => {});
-    };
-    fetchRules();
-    socket.on('settingsUpdated', fetchRules);
+    s.on('connect', identify);
+    s.on('authError', (e: { message: string }) => setError(e.message));
     // No dice tray on this page — delay matches the 5s dice animation in the main app
-    socket.on('diceRollBroadcast', (roll: { historyString?: string }) => {
+    s.on('diceRollBroadcast', (roll: { historyString?: string }) => {
       if (roll?.historyString) setTimeout(() => setLastRoll(roll.historyString!), 5000);
     });
+    setSocket(s);
 
-    return () => { socket.disconnect(); };
+    return () => { s.disconnect(); };
   }, [userName, playerToken, adminToken]);
 
-  useEffect(() => () => {
-    pendingSaves.current.forEach(t => clearTimeout(t));
-    pendingSaves.current.clear();
-  }, []);
+  const { sheet, template, handleFieldChange, allowFumbleShield, hiddenTabs, actions } =
+    usePlayerSheet(socket, userName);
 
-  const handleFieldChange = useCallback((fieldId: string, value: string | number) => {
-    setSheet(prev => {
-      if (!prev) return prev;
-      const tmpl = getTemplate(prev.system);
-      const pairs = getMaxPairs(tmpl);
-      const curField = pairs[fieldId];
-      const data = { ...prev.data, [fieldId]: value };
-      if (curField !== undefined && data[curField] !== undefined) {
-        const newMax = Number(value);
-        if (Number(data[curField]) > newMax) data[curField] = newMax;
-      }
-      return { ...prev, data };
-    });
-    const timers = pendingSaves.current;
-    const existing = timers.get(fieldId);
-    if (existing) clearTimeout(existing);
-    timers.set(fieldId, setTimeout(() => {
-      timers.delete(fieldId);
-      socketRef.current?.emit('updateSheetField', { fieldId, value });
-    }, 400));
-  }, []);
-
-  const template = sheet ? getTemplate(sheet.system) : null;
-
-  const handlePortraitUpload = useCallback(async (file: File) => {
-    const authToken = adminToken || playerToken;
-    if (!authToken) return;
-    const form = new FormData();
-    form.append('portrait', file);
-    await fetch('/api/sheets/portrait', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${authToken}` },
-      body: form,
-    });
-  }, [adminToken, playerToken]);
+  const handlePortraitUpload = useCallback(
+    (file: File) => uploadSheetPortrait(adminToken || playerToken, file),
+    [adminToken, playerToken],
+  );
 
   const message = !userName
     ? 'NO OPERATOR IDENTITY FOUND — open this page from CHARACTER_SHEET in the main app.'
@@ -186,9 +125,12 @@ export default function SheetPage() {
               portraitUrl={sheet.portrait_url}
               onFieldChange={handleFieldChange}
               onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
-              onRoll={(fieldId, luck, negateFumble) => socketRef.current?.emit('requestSheetRoll', { fieldId, luck, luckNegate: negateFumble })}
-              onDeathSave={() => socketRef.current?.emit('requestDeathSave')}
+              onRoll={actions.onRoll}
+              onDeathSave={actions.onDeathSave}
+              onStabilize={actions.onStabilize}
+              onCastSpell={actions.onCastSpell}
               allowFumbleShield={allowFumbleShield}
+              hiddenTabs={hiddenTabs}
             />
           </div>
         ) : (

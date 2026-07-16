@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
 import { ImportSheetDialog } from './ImportSheetDialog';
-import { getTemplate, getMaxPairs, type CharacterSheet } from '../sheets';
+import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 
-// The player's own character sheet. Identity is the socket's registered
-// user - the server only ever returns / edits the caller's own sheet.
+// The player's own character sheet (in-game floating window). Identity is
+// the socket's registered user - the server only ever returns / edits the
+// caller's own sheet. All sheet behavior lives in usePlayerSheet, shared
+// with the standalone tab (SheetPage).
 
 interface CharacterSheetWindowProps {
   pos: { x: number; y: number };
@@ -26,101 +28,15 @@ interface CharacterSheetWindowProps {
 }
 
 export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, currentTheme }: CharacterSheetWindowProps) {
-  const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [allowFumbleShield, setAllowFumbleShield] = useState(false);
-  const [cwnDeluxe, setCwnDeluxe] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
-  const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const { sheet, template, handleFieldChange, allowFumbleShield, hiddenTabs, actions } =
+    usePlayerSheet(socket, userName, { onRolled });
 
-  useEffect(() => {
-    if (!socket) return;
-    const onSheetData = (data: CharacterSheet) => {
-      if (data.username !== userName) return;
-      // A re-fetch must not stomp fields the player is mid-typing (debounce
-      // still pending) - keep the local value for those, take the rest.
-      setSheet(prev => {
-        if (!prev || pendingSaves.current.size === 0) return data;
-        const merged = { ...data.data };
-        pendingSaves.current.forEach((_t, fieldId) => {
-          if (prev.data[fieldId] !== undefined) merged[fieldId] = prev.data[fieldId];
-        });
-        return { ...data, data: merged };
-      });
-    };
-    const onSheetUpdated = (info: { username: string }) => {
-      // Re-sync when the admin edits this sheet or token HP changes
-      if (info.username === userName) socket.emit('requestMySheet');
-    };
-    const onBankUpdate = (info: { username: string }) => {
-      // Cash is a linked field mirroring the bank balance
-      if (info.username === userName) socket.emit('requestMySheet');
-    };
-    // House rules: read once, refresh when the admin applies
-    const fetchRules = () => {
-      fetch('/api/settings').then(r => r.json()).then((rows) => {
-        if (Array.isArray(rows)) {
-          setAllowFumbleShield(rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1');
-          setCwnDeluxe(rows.find((r: any) => r.key === 'cwn_deluxe')?.value === '1');
-        }
-      }).catch(() => {});
-    };
-    fetchRules();
-    socket.on('sheetData', onSheetData);
-    socket.on('sheetUpdated', onSheetUpdated);
-    socket.on('bankUpdate', onBankUpdate);
-    socket.on('settingsUpdated', fetchRules);
-    socket.emit('requestMySheet');
-    return () => {
-      socket.off('sheetData', onSheetData);
-      socket.off('sheetUpdated', onSheetUpdated);
-      socket.off('bankUpdate', onBankUpdate);
-      socket.off('settingsUpdated', fetchRules);
-    };
-  }, [socket, userName]);
-
-  // Cancel outstanding debounce timers on unmount
-  useEffect(() => () => {
-    pendingSaves.current.forEach(t => clearTimeout(t));
-    pendingSaves.current.clear();
-  }, []);
-
-  const handleFieldChange = useCallback((fieldId: string, value: string | number) => {
-    setSheet(prev => {
-      if (!prev) return prev;
-      const template = getTemplate(prev.system);
-      const pairs = getMaxPairs(template);
-      const curField = pairs[fieldId]; // non-null when fieldId is a max field
-      const data = { ...prev.data, [fieldId]: value };
-      if (curField !== undefined && data[curField] !== undefined) {
-        const newMax = Number(value);
-        if (Number(data[curField]) > newMax) data[curField] = newMax;
-      }
-      return { ...prev, data };
-    });
-    const timers = pendingSaves.current;
-    const existing = timers.get(fieldId);
-    if (existing) clearTimeout(existing);
-    timers.set(fieldId, setTimeout(() => {
-      timers.delete(fieldId);
-      socket?.emit('updateSheetField', { fieldId, value });
-    }, 400));
-  }, [socket]);
-
-  const handlePortraitUpload = useCallback(async (file: File) => {
-    const authToken = adminToken || playerToken;
-    if (!authToken) return;
-    const form = new FormData();
-    form.append('portrait', file);
-    await fetch('/api/sheets/portrait', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${authToken}` },
-      body: form,
-    });
-    // Server emits sheetUpdated → socket listener re-fetches sheet with new portrait_url
-  }, [adminToken, playerToken]);
-
-  const template = sheet ? getTemplate(sheet.system) : null;
+  const handlePortraitUpload = useCallback(
+    (file: File) => uploadSheetPortrait(adminToken || playerToken, file),
+    [adminToken, playerToken],
+  );
 
   return (
     <>
@@ -181,24 +97,12 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           onFieldChange={handleFieldChange}
           onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
           onOpenLink={onOpenLink}
-          onRoll={(fieldId, luck, negateFumble) => {
-            socket?.emit('requestSheetRoll', { fieldId, luck, luckNegate: negateFumble });
-            onRolled?.();
-          }}
-          onDeathSave={() => {
-            socket?.emit('requestDeathSave');
-            onRolled?.();
-          }}
-          onStabilize={() => {
-            socket?.emit('requestStabilize', { targetUsername: userName });
-            onRolled?.();
-          }}
-          onCastSpell={(index) => {
-            socket?.emit('castSpell', { index });
-            onRolled?.();
-          }}
+          onRoll={actions.onRoll}
+          onDeathSave={actions.onDeathSave}
+          onStabilize={actions.onStabilize}
+          onCastSpell={actions.onCastSpell}
           allowFumbleShield={allowFumbleShield}
-          hiddenTabs={sheet.system === 'cities_without_number' && !cwnDeluxe ? ['DELUXE'] : undefined}
+          hiddenTabs={hiddenTabs}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>
