@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import './App.css';
 import { SheetRenderer } from './components/SheetRenderer';
 import { getTemplate, getMaxPairs, type CharacterSheet } from './sheets';
+import { THEMES } from './theme/themes';
 
 // Standalone character-sheet tab (?sheet=true). Gives the player a full
 // browser tab for their sheet instead of the in-game floating window.
@@ -13,7 +14,14 @@ import { getTemplate, getMaxPairs, type CharacterSheet } from './sheets';
 // simple-mode login. Secure Mode still verifies the token server-side on
 // identify - this page can't fake its way in.
 
-const readAuth = (): { userName: string | null; playerToken: string | null; adminToken: string | null } => {
+const validTheme = (t: unknown): string | null =>
+  typeof t === 'string' && t in THEMES ? t : null;
+
+const readAuth = (): { userName: string | null; playerToken: string | null; adminToken: string | null; theme: string } => {
+  // Theme: the handshake carries the main app's active theme; fall back to
+  // the login-screen pick, then the classic default.
+  let fallbackTheme = 'classic';
+  try { fallbackTheme = validTheme(localStorage.getItem('citynet_theme')) ?? 'classic'; } catch { /* private mode */ }
   try {
     const raw = localStorage.getItem('sheet_tab_auth');
     if (raw) {
@@ -24,15 +32,16 @@ const readAuth = (): { userName: string | null; playerToken: string | null; admi
           userName: parsed.userName,
           playerToken: parsed.playerToken ?? null,
           adminToken: parsed.adminToken ?? null,
+          theme: validTheme(parsed.theme) ?? fallbackTheme,
         };
       }
     }
   } catch { /* fall through */ }
-  return { userName: localStorage.getItem('userName'), playerToken: null, adminToken: null };
+  return { userName: localStorage.getItem('userName'), playerToken: null, adminToken: null, theme: fallbackTheme };
 };
 
 export default function SheetPage() {
-  const [{ userName, playerToken, adminToken }] = useState(readAuth);
+  const [{ userName, playerToken, adminToken, theme }] = useState(readAuth);
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastRoll, setLastRoll] = useState<string | null>(null);
@@ -143,8 +152,8 @@ export default function SheetPage() {
       : 'ACCESSING RECORD...';
 
   return (
-    <div style={{
-      minHeight: '100vh', background: 'var(--background, #050805)', color: 'var(--green, #00ff00)',
+    <div className={`theme-${theme}`} style={{
+      minHeight: '100vh', background: 'var(--black, #050805)', color: 'var(--green, #00ff00)',
       fontFamily: 'monospace', display: 'flex', justifyContent: 'center', padding: '20px 16px',
       boxSizing: 'border-box',
     }}>

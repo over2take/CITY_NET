@@ -21,9 +21,11 @@ interface CharacterSheetWindowProps {
   /** Called when the player rolls from the sheet - App opens the dice tray
    *  so the result is visible. */
   onRolled?: () => void;
+  /** Active theme name - handed to the standalone tab so it matches. */
+  currentTheme?: string;
 }
 
-export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled }: CharacterSheetWindowProps) {
+export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, currentTheme }: CharacterSheetWindowProps) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [allowFumbleShield, setAllowFumbleShield] = useState(false);
@@ -154,6 +156,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
                   userName,
                   playerToken: playerToken ?? null,
                   adminToken: adminToken || null,
+                  theme: currentTheme ?? null,
                 }));
               } catch { /* ignore */ }
               window.open('/?sheet=true', '_blank');
