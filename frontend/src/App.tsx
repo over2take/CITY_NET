@@ -1309,6 +1309,7 @@ function App() {
           onPendingsFetched={setPendingRegistrations}
           StatusLogDisplay={StatusLogDisplay}
           onThemeChange={setCurrentTheme}
+          currentTheme={currentTheme}
         />
       )}
       {isLoggedIn && (

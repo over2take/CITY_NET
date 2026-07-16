@@ -18,6 +18,8 @@ export interface SecureLoginProps {
    *  green-on-black is hard on some color-blind users). Selection persists
    *  to localStorage immediately and to the player's account on login. */
   onThemeChange?: (theme: ThemeName) => void;
+  /** Active theme - drives the 3D logo's colors. */
+  currentTheme?: ThemeName;
 }
 
 /** localStorage key for the pre-login theme choice. */
@@ -87,6 +89,7 @@ export function SecureLogin({
   onPendingsFetched,
   StatusLogDisplay,
   onThemeChange,
+  currentTheme = 'classic',
 }: SecureLoginProps) {
   const [loginView, setLoginView] = useState<LoginView>('login');
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
@@ -231,7 +234,7 @@ export function SecureLogin({
     <div className="modal-overlay">
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div style={{ width: '350px' }}>
-          <LogoScene />
+          <LogoScene color={THEMES[currentTheme].primary} />
         </div>
         <div className="panel login-panel" style={{ textAlign: 'center', minWidth: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <LoginThemePicker onThemeChange={onThemeChange} />

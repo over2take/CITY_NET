@@ -1179,6 +1179,7 @@ button:disabled, .utility-btn:disabled, .upload-btn:disabled {
   white-space: nowrap;
   width: 100%;
   line-height: 1.4;
+  color: var(--green); /* follow the active theme, not the body default */
 }
 
 .old-line {

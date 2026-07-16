@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
-export function LogoScene() {
+export function LogoScene({ color = '#00ff00' }: { color?: string }) {
   const mountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,9 +24,12 @@ export function LogoScene() {
     const camera = new THREE.PerspectiveCamera(42, W / H, 0.1, 200);
     camera.position.set(0, 0, 31);
 
-    const GREEN = 0x00ff00;
-    const DIMGREEN = 0x0a7a0a;
-    const DARK = 0x041404;
+    // All scene colors derive from the theme primary so the logo re-themes
+    // with the login-screen theme picker.
+    const base = new THREE.Color(color);
+    const GREEN = base.getHex();
+    const DIMGREEN = base.clone().multiplyScalar(0.48).getHex();
+    const DARK = base.clone().multiplyScalar(0.08).getHex();
     const root = new THREE.Group();
     scene.add(root);
 
@@ -112,7 +115,7 @@ export function LogoScene() {
     labelCanvas.height = 96;
     const ctx = labelCanvas.getContext('2d');
     if (ctx) {
-      ctx.fillStyle = '#00ff00';
+      ctx.fillStyle = color;
       ctx.font = '900 68px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -145,7 +148,7 @@ export function LogoScene() {
       renderer.dispose();
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
     };
-  }, []);
+  }, [color]);
 
   return <div ref={mountRef} className="logo-scene" style={{ width: '350px', height: '280px', overflow: 'hidden', margin: '0 auto 24px', position: 'relative' }} />;
 }
