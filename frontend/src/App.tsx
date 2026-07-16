@@ -70,7 +70,15 @@ import type { DirectorState } from './types';
 import { IS_SPECTATOR } from './streamerMode';
 
 function App() {
-  const [currentTheme, setCurrentTheme] = useState<ThemeName>('classic');
+  const [currentTheme, setCurrentTheme] = useState<ThemeName>(() => {
+    // Pre-login theme choice (accessibility) survives refreshes locally;
+    // secure login overlays the account's saved theme from the JWT.
+    try {
+      const stored = localStorage.getItem('citynet_theme');
+      if (stored && THEMES[stored as ThemeName]) return stored as ThemeName;
+    } catch { /* private mode */ }
+    return 'classic';
+  });
   const controlsRef = useRef<any>(null);
   const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, signs, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchSigns, fetchAll } = useMapData();
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
@@ -1300,6 +1308,7 @@ function App() {
           onAdminLogin={(name, adminToken) => { setToken(adminToken); setIsAdmin(true); setShowAdminPanel(true); startBootSequence(name); }}
           onPendingsFetched={setPendingRegistrations}
           StatusLogDisplay={StatusLogDisplay}
+          onThemeChange={setCurrentTheme}
         />
       )}
       {isLoggedIn && (

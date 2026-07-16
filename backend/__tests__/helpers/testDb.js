@@ -144,6 +144,7 @@ function makeTestDb() {
         security_answer_hash TEXT,
         temp_password INTEGER DEFAULT 0,
         status TEXT DEFAULT 'pending',
+        theme TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
