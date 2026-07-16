@@ -336,12 +336,13 @@ CITY_NET/
 │   │   ├── player.js           # Player auth (register, login, forgot, reset, registration status poll)
 │   │   └── sheets.js           # Character sheets — admin sheet access, NPC library, portraits, LUCK reset, import preview
 │   ├── sheets/
-│   │   ├── templates.js        # Server-side template metadata (public/combat/linked fields, max pairs, derived fields)
+│   │   ├── templates.js        # Server-side template metadata (public/combat/linked fields, max pairs, derived fields, per-system recompute hooks)
 │   │   ├── rolls.js            # Per-system roll map (fieldId → formula); server-authoritative
 │   │   ├── rollEngine.js       # Formula parse/resolve/execute (explode10, deterministic RNG for tests)
 │   │   ├── attack.js           # CP:R combat resolution — to-hit, damage, SP soak/ablation, shield, crits, death saves
+│   │   ├── attackCwn.js        # CWN combat resolution — 1d20+BHB roll-to-hit, damage, trauma die vs TT, shock on miss, stabilize roll
 │   │   ├── importers.js        # Modular sheet import — PDF form extraction + per-system field mappers
-│   │   └── npcTiers.js         # Per-system NPC power tiers for GENERATE_SHEET (CP:R: Mook→Elite)
+│   │   └── npcTiers.js         # Per-system NPC power tiers for GENERATE_SHEET (CP:R: Mook→Elite; CWN: Warrior/Expert/Boss/Elite + Spirit tiers)
 │   ├── sockets/
 │   │   └── index.js            # All Socket.IO event handlers
 │   ├── startup/
@@ -365,6 +366,11 @@ CITY_NET/
 │       ├── npc_tiers.test.js           # NPC tier packages (escalation, weapon validity)
 │       ├── sheet_import.test.js        # Import pipeline (PDF form extraction, alias mapping, preview route)
 │       ├── rollEngine.test.js          # Roll formula engine
+│       ├── cwn_templates.test.js       # CWN template metadata (derived fields, AC linking, unset-stat neutrality)
+│       ├── cwn_attack.test.js          # CWN attack module (roll-to-hit, damage, trauma vs TT, shock, stabilize)
+│       ├── cwn_sockets.test.js         # CWN socket integration: attack flow, dice-in-broadcast, system isolation
+│       ├── cwn_stim_heal.test.js       # STIM_HEAL action (strain check, +1 strain, 409 on maxed strain)
+│       ├── login_theme.test.js         # Login theme persistence (localStorage save, DB write on login, JWT round-trip)
 │       ├── sockets.deathsave.test.js   # Socket integration: death saves, sheetAttack vs NPC SP, import apply, tiered generation
 │       ├── sockets.editing.test.js     # Socket editing access flow; regression for stale elevatedUsers bug
 │       └── undo.test.js                # Undo endpoint (all action types, auth, ordering)
@@ -374,8 +380,8 @@ CITY_NET/
 │   │   ├── App.tsx             # Root component — state, routing, socket wiring
 │   │   ├── App.css / index.css # Global styles and CSS variables
 │   │   ├── components/
-│   │   │   ├── AdminPanel.tsx          # GM dashboard; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library
-│   │   │   ├── HitPoints.tsx           # HP tracking + injury panel + HealthReviewWindow
+│   │   │   ├── AdminPanel.tsx          # GM dashboard; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R and CWN rule toggles
+│   │   │   ├── HitPoints.tsx           # HP tracking + injury panel + HealthReviewWindow; STIM_HEAL (CWN), STABILIZE button for allies on mortal wound
 │   │   │   ├── BankWindows.tsx         # Player bank UI
 │   │   │   ├── ChatWindow.tsx          # In-game chat
 │   │   │   ├── DiceTray.tsx            # Dice roller
@@ -386,9 +392,9 @@ CITY_NET/
 │   │   │   ├── Rhombuses.tsx           # Player token meshes
 │   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
-│   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools
-│   │   │   ├── SecureLogin.tsx         # Player login, registration, password reset UI; polls registration status until approved
-│   │   │   ├── LogoScene.tsx           # Three.js animated login logo (hex badge, wireframe skyline, spinning gem)
+│   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools; exports `hasSheetCombat` + `SheetAttackPanel` (system-agnostic via ATTACK_PANEL_CONFIG)
+│   │   │   ├── SecureLogin.tsx         # Player login, registration, password reset UI; theme picker (saves to localStorage + DB on login); polls registration status until approved
+│   │   │   ├── LogoScene.tsx           # Three.js animated login logo (hex badge, wireframe skyline, spinning gem); colour driven by active theme
 │   │   │   ├── CityDatabase.tsx        # Location search/browse
 │   │   │   ├── DraggableWindow.tsx     # Reusable draggable panel wrapper
 │   │   │   ├── CursorPing.tsx          # Cursor-position ping broadcast and animation
@@ -405,7 +411,7 @@ CITY_NET/
 │   │   │   ├── CharacterSheetWindow.tsx # Player's own character sheet (socket-based, self-only)
 │   │   │   ├── NpcSheetWindow.tsx       # Admin view/edit of NPC or player sheets (REST-based)
 │   │   │   ├── NpcLibrary.tsx           # NPC sheet library (folders, attach-to-token, move, open)
-│   │   │   ├── SheetRenderer.tsx        # Template-driven sheet renderer (any game system)
+│   │   │   ├── SheetRenderer.tsx        # Template-driven sheet renderer (any game system); MORTALLY WOUNDED / FRAIL banners, SpellsSection with per-row CAST, hidden-tab gating
 │   │   │   ├── ImportSheetDialog.tsx    # Sheet import — fillable PDF / JSON / stat-block paste with preview
 │   │   │   ├── QuickSheetCard.tsx       # Public sheet card shown to other players
 │   │   │   ├── UpdateModal.tsx          # Draggable update notification modal (shown on admin login when update available; Update Now / Remind Me Later / Skip Version; docker-aware)
@@ -436,19 +442,21 @@ CITY_NET/
 │   │   ├── context/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
 │   │   ├── hooks/
-│   │   │   ├── useSocket.ts    # Socket.IO connection and all event listeners
-│   │   │   ├── useApi.ts       # Fetch helpers
-│   │   │   ├── useMapData.ts   # Location/district/road/overpass/water body/sign data fetching
+│   │   │   ├── useSocket.ts        # Socket.IO connection and all event listeners
+│   │   │   ├── useApi.ts           # Fetch helpers
+│   │   │   ├── useMapData.ts       # Location/district/road/overpass/water body/sign data fetching
+│   │   │   ├── usePlayerSheet.ts   # Shared sheet state, debounced saves, house-rule flags, action emitters (roll/deathSave/stabilize/castSpell); used by CharacterSheetWindow and SheetPage
 │   │   │   └── __tests__/
 │   │   │       ├── useApi.test.ts                        # Fetch helper unit tests
 │   │   │       └── useSocket.pendingRequests.test.ts     # Pending edit-request state; regression for stale requests on newly-promoted temp admins
 │   │   ├── sheets/
 │   │   │   ├── types.ts            # Sheet template type system (fields, sections, header, death saves, NPC tiers)
 │   │   │   ├── index.ts            # Template registry + getMaxPairs helper
-│   │   │   ├── SheetPage entry     # (src/SheetPage.tsx) standalone browser-tab sheet (?sheet=true)
+│   │   │   ├── SheetPage.tsx       # Standalone browser-tab sheet (?sheet=true); reads theme from auth handshake or localStorage; shares logic via usePlayerSheet
 │   │   │   └── templates/
-│   │   │       ├── generic.ts          # Minimal fallback template
-│   │   │       └── cyberpunk_red.ts    # Cyberpunk RED — stats, skills, weapons, armor, tiers (labels + dice math only, no book content)
+│   │   │       ├── generic.ts                  # Minimal fallback template
+│   │   │       ├── cyberpunk_red.ts            # Cyberpunk RED — stats, skills, weapons, armor, tiers (labels + dice math only, no book content)
+│   │   │       └── cities_without_number.ts    # Cities Without Number — attributes + SWN mods, saves, AC (token-linked), armor rows, weapons, Deluxe tab (spells/summoning), conditions
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
 │   │   └── utils/
 │   │       ├── locationHelpers.ts  # Location geometry utilities; exports ZONE_TYPE_NAMES and isUserDefinedName
