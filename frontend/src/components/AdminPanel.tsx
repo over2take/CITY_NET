@@ -24,7 +24,7 @@ const SIGN_PRESETS = [
   { label: 'KEEP OUT', url: '/signs/danger-zone.svg' },
 ];
 
-const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: '#00ff00', border: '1px solid #00ff00', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
+const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: 'var(--green)', border: '1px solid var(--green)', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
 
 function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, remoteFonts, setRemoteFonts, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, controlsRef, signMesh, onClose }: {
   token: string;
@@ -237,10 +237,10 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       </header>
 
       {/* Sign list */}
-      <div style={{maxHeight: '120px', overflowY: 'auto', marginBottom: '10px', border: '1px solid #00ff0044', padding: '4px'}}>
+      <div style={{maxHeight: '120px', overflowY: 'auto', marginBottom: '10px', border: '1px solid color-mix(in srgb, var(--green) 27%, transparent)', padding: '4px'}}>
         {signs.length === 0 && <div style={{fontSize: '0.7rem', opacity: 0.5}}>NO SIGNS PLACED</div>}
         {signs.map(s => (
-          <div key={s.id} style={{display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', borderBottom: '1px solid #00ff0022', background: selectedSignId === s.id ? '#00ff0011' : 'transparent'}}>
+          <div key={s.id} style={{display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', borderBottom: '1px solid color-mix(in srgb, var(--green) 13%, transparent)', background: selectedSignId === s.id ? 'color-mix(in srgb, var(--green) 7%, transparent)' : 'transparent'}}>
             <div style={{flex: 1, fontSize: '0.7rem', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} onClick={() => { setSelectedSignId(s.id); setIsNew(false); }}>
               {s.text}
             </div>
@@ -251,7 +251,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
 
       {/* Form */}
       <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px'}}>
-        <span style={{fontSize:'0.7rem', fontWeight:'bold', color:'#00ff00'}}>{isNew ? 'NEW SIGN' : `EDIT #${selectedSignId}`}</span>
+        <span style={{fontSize:'0.7rem', fontWeight:'bold', color:'var(--green)'}}>{isNew ? 'NEW SIGN' : `EDIT #${selectedSignId}`}</span>
         <label style={{display:'flex', alignItems:'center', gap:'4px', fontSize:'0.7rem', cursor:'pointer'}}>
           <input type="checkbox" checked={isMultiLine} onChange={e => toggleMultiLine(e.target.checked)} />
           MULTI-LINE
@@ -259,9 +259,9 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       </div>
 
       {isMultiLine ? (
-        <div style={{marginBottom:'6px', border:'1px solid #00ff0033', padding:'6px'}}>
+        <div style={{marginBottom:'6px', border:'1px solid color-mix(in srgb, var(--green) 20%, transparent)', padding:'6px'}}>
           {formLines.map((line, i) => (
-            <div key={i} style={{marginBottom:'8px', paddingBottom:'8px', borderBottom: i < formLines.length - 1 ? '1px dashed #00ff0033' : 'none'}}>
+            <div key={i} style={{marginBottom:'8px', paddingBottom:'8px', borderBottom: i < formLines.length - 1 ? '1px dashed color-mix(in srgb, var(--green) 20%, transparent)' : 'none'}}>
               <div style={{display:'flex', alignItems:'center', gap:'4px', marginBottom:'3px'}}>
                 <span style={{fontSize:'0.65rem', opacity:0.6}}>LINE {i + 1}</span>
                 {formLines.length > 1 && (
@@ -303,7 +303,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
           {signTransformActive && (
             <button
               className="utility-btn"
-              style={{width:'100%', fontSize:'0.7rem', marginBottom:'6px', color:'#00ff00', borderColor:'#00ff00'}}
+              style={{width:'100%', fontSize:'0.7rem', marginBottom:'6px', color:'var(--green)', borderColor:'var(--green)'}}
               onClick={handleUpdateSign}
             >UPDATE SIGN POSITION</button>
           )}
@@ -325,7 +325,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       </div>
 
       {/* Font uploader */}
-      <div style={{marginBottom: '8px', padding: '6px', border: '1px dashed #00ff0055'}}>
+      <div style={{marginBottom: '8px', padding: '6px', border: '1px dashed color-mix(in srgb, var(--green) 33%, transparent)'}}>
         <div style={{fontSize: '0.65rem', opacity: 0.7, marginBottom: '4px'}}>UPLOAD FONT (.ttf .otf .woff .woff2)</div>
         <input ref={fileRef} type="file" accept=".ttf,.otf,.woff,.woff2" onChange={uploadFont} style={{display: 'none'}} />
         <button className="utility-btn" style={{width: '100%', fontSize: '0.7rem'}} onClick={() => fileRef.current?.click()} disabled={uploading}>
@@ -445,12 +445,12 @@ export function AdminPanel({
 
     return (
       <div className="panel admin-panel" style={{ width: '300px', maxHeight: '90vh', overflowY: 'auto', pointerEvents: 'auto' }}>
-        <h3 style={{ textShadow: '0 0 10px #00ff00', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
+        <h3 style={{ textShadow: 'var(--glow)', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
         <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
           <button className={`upload-btn deploy-btn${isDeployingEnemy ? ' deploying-enemy' : ''}`} onClick={() => { setIsDeployingEnemy(!isDeployingEnemy); setIsDeployingFriendly(false); }} style={{ flex: 1 }}>{isDeployingEnemy ? 'STOP_PLACING' : 'ADD_ENEMY'}</button>
           <button className={`upload-btn deploy-btn${isDeployingFriendly ? ' deploying-friendly' : ''}`} onClick={() => { setIsDeployingFriendly(!isDeployingFriendly); setIsDeployingEnemy(false); }} style={{ flex: 1 }}>{isDeployingFriendly ? 'STOP_PLACING' : 'ADD_FRIENDLY'}</button>
         </div>
-        <div style={{ marginBottom: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+        <div style={{ marginBottom: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
                 <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>
                     MAP SCALE (FT/UNIT): {resolvedBattleMapScale}
                 </label>
@@ -460,7 +460,7 @@ export function AdminPanel({
                     onChange={(e) => setTempBattleMapScale(e.target.value)} style={{ flex: 1 }} />
                 <input type="number" step="0.1" 
                     value={resolvedBattleMapScale}
-                    onChange={(e) => setTempBattleMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: '#00ff00', border: '1px solid #00ff00', padding: '5px' }} />
+                    onChange={(e) => setTempBattleMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '5px' }} />
                 <button className="utility-btn" onClick={() => {
                     if (tempBattleMapScale === null) return;
                     const loc = locations.find((l:any) => l.id === activeBattleMapData.locationId);
@@ -487,7 +487,7 @@ export function AdminPanel({
                 }}>APPLY</button>
             </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px', borderBottom: '1px solid #00ff00', paddingBottom: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px', borderBottom: '1px solid var(--green)', paddingBottom: '10px' }}>
            <button className="map-save-btn" onClick={handleSaveDefault}>SAVE_DEFAULT</button>
            <button className="map-load-btn" onClick={handleLoadDefault}>LOAD_DEFAULT</button>
         </div>
@@ -951,7 +951,7 @@ export function AdminPanel({
               <button className="utility-btn friendly-btn" style={{flex: 1}} onClick={startNewFriendly}>+ ADD_FRIENDLY</button>
           </div>
           <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setView('signs')}>+ CUSTOM_SIGNS ({(signs || []).length})</button>
-          <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+          <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
               <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>
                   GLOBAL MAP SCALE (FT/UNIT): {tempCityMapScale !== null ? tempCityMapScale : (globalSettings?.map_scale_multiplier || 5)}
               </label>
@@ -961,7 +961,7 @@ export function AdminPanel({
                       onChange={(e) => setTempCityMapScale(e.target.value)} style={{ flex: 1 }} />
                   <input type="number" step="0.1" 
                       value={tempCityMapScale !== null ? tempCityMapScale : (globalSettings?.map_scale_multiplier || 5)}
-                      onChange={(e) => setTempCityMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: '#00ff00', border: '1px solid #00ff00', padding: '5px' }} />
+                      onChange={(e) => setTempCityMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '5px' }} />
                   <button className="utility-btn" onClick={() => {
                       if (tempCityMapScale === null) return;
                       fetch('/api/settings', {
@@ -976,7 +976,7 @@ export function AdminPanel({
               </div>
           </div>
 
-          <div style={{display: 'flex', gap: '16px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #00ff00'}}>
+          <div style={{display: 'flex', gap: '16px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--green)'}}>
             <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
               <input type="checkbox" checked={renderSidewalks ?? true} onChange={e => setRenderSidewalks(e.target.checked)} />
               SIDEWALKS
@@ -996,7 +996,7 @@ export function AdminPanel({
           {/* TTRPG SYSTEM (character sheets) */}
           <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} />
 
-          <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+          <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
             <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
@@ -1023,7 +1023,7 @@ export function AdminPanel({
           {/* BANK SOUNDS TEST PANEL */}
           <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
 
-          <div style={{marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px'}}>
+          <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
             <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
           </div>
           <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'DELETE ALL WATER?', onConfirm: async () => { const res = await fetch('/api/water', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); if (res.ok) { setAdminAlert("ALL WATER CLEARED"); if (fetchWaterBodies) fetchWaterBodies(); } } })}>PURGE_ALL_WATER</button>
@@ -2097,7 +2097,7 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNp
   };
 
   return (
-    <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+    <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
       <button className="utility-btn" style={{ width: '100%' }} onClick={() => setOpen(!open)}>
         {open ? '▾' : '▸'} TTRPG_SYSTEM
       </button>

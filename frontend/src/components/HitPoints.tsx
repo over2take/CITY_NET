@@ -162,7 +162,7 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <PersonSVG color={injuriesOpen ? '#000' : '#00ff00'} style={{ width: 18, height: 18, display: 'block' }} />
+              <PersonSVG color={injuriesOpen ? '#000' : 'var(--green)'} style={{ width: 18, height: 18, display: 'block' }} />
             </button>
           </div>
             {(targetRhombus.hp_temp ?? 0) > 0 && (

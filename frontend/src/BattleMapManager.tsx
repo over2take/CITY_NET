@@ -102,8 +102,8 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
       type="button"
       onClick={() => setTab(id)}
       style={{
-        flex: 1, padding: '6px', background: tab === id ? '#00ff00' : '#111',
-        color: tab === id ? '#000' : '#00ff00', border: '1px solid #00ff00',
+        flex: 1, padding: '6px', background: tab === id ? 'var(--green)' : '#111',
+        color: tab === id ? '#000' : 'var(--green)', border: '1px solid var(--green)',
         fontFamily: 'monospace', cursor: 'pointer', fontWeight: 'bold',
       }}
     >{label}</button>
@@ -115,14 +115,14 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
         <button key={opt} type="button" onClick={() => setDesignationType(opt)} style={{
           margin: 0, padding: '4px 10px',
           fontFamily: 'monospace', fontSize: '0.75rem', letterSpacing: '1px', cursor: 'pointer',
-          backgroundColor: designationType === opt ? '#00ff00' : 'transparent',
-          color: designationType === opt ? '#000' : '#00ff00',
-          border: `1px solid ${designationType === opt ? '#00ff00' : '#555'}`,
+          backgroundColor: designationType === opt ? 'var(--green)' : 'transparent',
+          color: designationType === opt ? '#000' : 'var(--green)',
+          border: `1px solid ${designationType === opt ? 'var(--green)' : '#555'}`,
         }}>{opt.toUpperCase()}</button>
       ))}
       {designationType === 'Level' && (
         <input type="number" min="1" value={levelNumber} onChange={(e) => setLevelNumber(parseInt(e.target.value) || 1)}
-          style={{ width: '50px', backgroundColor: '#000', border: '1px solid #00ff00', color: '#00ff00', padding: '4px', fontFamily: 'monospace' }} />
+          style={{ width: '50px', backgroundColor: '#000', border: '1px solid var(--green)', color: 'var(--green)', padding: '4px', fontFamily: 'monospace' }} />
       )}
     </div>
   );
@@ -134,7 +134,7 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 20000,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <div style={{ background: '#111', border: '1px solid #ff0000', padding: '24px', color: '#00ff00', fontFamily: 'monospace', maxWidth: '360px', width: '90%' }}>
+          <div style={{ background: '#111', border: '1px solid #ff0000', padding: '24px', color: 'var(--green)', fontFamily: 'monospace', maxWidth: '360px', width: '90%' }}>
             <p style={{ marginTop: 0 }}>{confirmModal.message}</p>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button className="utility-btn" onClick={() => setConfirmModal(null)}>CANCEL</button>
@@ -146,8 +146,8 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
 
       <div className="panel" style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-        backgroundColor: '#111', padding: '20px', border: '1px solid #00ff00',
-        zIndex: 10000, color: '#00ff00', pointerEvents: 'auto', width: '480px', maxWidth: '95vw',
+        backgroundColor: '#111', padding: '20px', border: '1px solid var(--green)',
+        zIndex: 10000, color: 'var(--green)', pointerEvents: 'auto', width: '480px', maxWidth: '95vw',
       }}>
         <h3 style={{ margin: '0 0 12px' }}>BATTLE MAPS MANAGEMENT</h3>
         <button style={{ position: 'absolute', top: '10px', right: '10px' }} onClick={onClose}>X</button>
@@ -160,12 +160,12 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
         {tab === 'upload' && (
           <div style={{ marginBottom: '16px', borderBottom: '1px solid #333', paddingBottom: '16px' }}>
             <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-              style={{ display: 'block', marginBottom: '6px', color: '#00ff00' }} />
+              style={{ display: 'block', marginBottom: '6px', color: 'var(--green)' }} />
             {selectedFile && (() => {
               const mb = selectedFile.size / (1024 * 1024);
               const tooBig = mb > 25;
               return (
-                <div style={{ fontSize: '0.65rem', marginBottom: '10px', letterSpacing: '1px', color: tooBig ? '#ff3333' : '#00ff00' }}>
+                <div style={{ fontSize: '0.65rem', marginBottom: '10px', letterSpacing: '1px', color: tooBig ? '#ff3333' : 'var(--green)' }}>
                   {mb.toFixed(2)}MB / 25MB{tooBig ? ' — FILE_TOO_LARGE' : ''}
                 </div>
               );
@@ -185,7 +185,7 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', maxHeight: '260px', overflowY: 'auto', marginBottom: '12px' }}>
                 {allImages.map(img => (
                   <div key={img.filename} onClick={() => setSelectedExistingUrl(img.url)} style={{
-                    cursor: 'pointer', border: `2px solid ${selectedExistingUrl === img.url ? '#00ff00' : '#333'}`,
+                    cursor: 'pointer', border: `2px solid ${selectedExistingUrl === img.url ? 'var(--green)' : '#333'}`,
                     padding: '2px', background: selectedExistingUrl === img.url ? '#001a00' : '#000',
                   }}>
                     <img src={img.url} alt={img.filename} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
