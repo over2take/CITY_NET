@@ -103,4 +103,50 @@ describe('DiceTrayWindow', () => {
     // History is populated — verify no crash and state updated silently
     expect(socketRef.current.emit).toHaveBeenCalledWith('requestDiceHistory');
   });
+
+  it('queues back-to-back broadcasts instead of replacing the roll mid-flight', async () => {
+    // Attacks broadcast to-hit + damage within milliseconds; both must play
+    // and land in history in order.
+    const user = userEvent.setup();
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);
+    await user.click(screen.getByTitle('TOGGLE_HISTORY'));
+    const broadcast = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollBroadcast')[1];
+
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        broadcast({ total: 15, results: { 20: [15] }, color: '#0f0', historyString: 'to-hit' });
+        broadcast({ total: 7, results: { 6: [1] }, color: '#0f0', historyString: 'damage' });
+      });
+      // First roll animating; second waits in the queue
+      act(() => { vi.advanceTimersByTime(5000); });
+      expect(screen.getByText(/to-hit/)).toBeInTheDocument();
+      expect(screen.queryByText(/damage/)).not.toBeInTheDocument();
+      // Second roll finishes its own animation
+      act(() => { vi.advanceTimersByTime(5000); });
+      expect(screen.getByText(/damage/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows dice-less rolls (shock) only briefly', async () => {
+    const user = userEvent.setup();
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);
+    await user.click(screen.getByTitle('TOGGLE_HISTORY'));
+    const broadcast = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollBroadcast')[1];
+
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        broadcast({ total: 3, results: {}, color: '#0f0', historyString: 'shock damage' });
+      });
+      act(() => { vi.advanceTimersByTime(800); });
+      expect(screen.getByText(/shock damage/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
