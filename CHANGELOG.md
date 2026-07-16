@@ -9,6 +9,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.5.0] - 2026-07-16
+
+Cities Without Number (CWN) — second full game system, accessibility theme picker, and a major frontend deduplication pass.
+
+### Added
+
+**Cities Without Number system**
+- **CWN character sheet** — 6 attributes with SWN modifier table (0/unset → neutral, not −2), 3 saving throws, 19 skills (2d6 plain sum), combat stats (BHB, AC as token-linked writable field), System Strain (current/max), conditions (Frail, auto-initiative), and a Deluxe tab (4 spell rows + summoning) gated behind the `cwn_deluxe` house rule
+- **Armor section** — players enter BASE_AC + DEX_CAP + SHIELD_BONUS; `cwnEffectiveAc` computes and pushes the result to the token on every save; field stays hand-managed when armor is blank
+- **CWN combat** — single ATTACK button (same UX as CP:R); 1d20 + BHB + skill + attr mod roll-to-hit vs target AC; damage roll + attr mod; trauma die checked against the defender's Trauma Target (default 6) — rating is the damage multiplier; shock damage on miss if target AC is low enough; all results land in the dice tray
+- **Stabilize flow** — MORTALLY WOUNDED banner at 0 HP; clicking STABILIZE rolls the clicking user's 2d6 + Heal + INT mod vs DC 8 + rounds since downed (+ 2 without tools); on success: target becomes Frail and gains 1 HP after the dice animation completes; on failure: `rounds_since_downed` increments; allies see the STABILIZE button on the Health Review window (their Main Action per RAW)
+- **FRAIL banner** — shown above 0 HP when the `frail` flag is set; CLEAR FRAIL button (GM-approved) clears it
+- **STIM_HEAL** — field-healing shortcut adds +1 System Strain then heals; refuses with STRAIN MAXED (409) when at max
+- **LONG REST** — admin panel button recovers 1 strain on every CWN sheet
+- **Spell rows** — manual name/effect/damage/cost fields; per-row CAST button rolls damage if present, spends Effort, flags OVERCAST! if insufficient
+- **CWN house rules** — `cwn_trauma` (default ON — gates trauma die and major-injury flow) and `cwn_deluxe` (default OFF — gates Deluxe tab); data-driven `HouseRulesPanel` component replaces both old bespoke IIFE blocks
+- **CWN NPC tiers** — Warrior / Expert / Boss / Elite combat tiers + 3 Spirit tiers; each stamped with `trauma_target: 6`; NPC melee DV formula is system-specific (CP:R formula only for `cyberpunk_red`)
+- **CWN sheet import** — alias mapping for all 19 skills, armor fields, spell rows, and `trauma_target`
+
+**Accessibility — login theme picker**
+- **Theme picker on login screen** — custom dropdown ("THEMES ∨") lets players change the UI theme before logging in; each option is styled in its own theme's primary colour
+- Theme saved to `localStorage` immediately; written to `player_accounts.theme` on login
+- Theme returned in the JWT payload and applied on every session without a re-login
+- Logo scene glow, non-animated text, and version badge all follow the active theme
+- Standalone sheet tab reads theme from the socket auth handshake (`currentTheme` prop) or `localStorage` fallback
+
+### Changed
+
+**Frontend deduplication**
+- **`usePlayerSheet` hook** — extracted shared sheet state, debounced saves, house-rule fetches, and action emitters (roll / deathSave / stabilize / castSpell) from both `CharacterSheetWindow` and `SheetPage`; both surfaces now share one implementation and have full CWN feature parity
+- **`SheetAttackPanel`** — unified component replaces the separate `CprAttackPanel` and `CwnAttackPanel`; driven by `ATTACK_PANEL_CONFIG` keyed by game system
+- **`hasSheetCombat(system)`** — exported from `Sidebar.tsx`; all `gameSystem === 'cyberpunk_red' || gameSystem === 'cities_without_number'` checks in App and Sidebar replaced with a single capability predicate; adding ruleset N requires only one config entry
+- **`HouseRulesPanel` component** — data-driven (accepts `HouseRuleDef[]`); CP:R and CWN house-rule panels are now one-liners
+
+**Dice tray**
+- Back-to-back broadcasts (e.g. to-hit + damage from a single attack) are now queued and played sequentially instead of overwriting each other; dice rolls play for 5 s, dice-less results (shock) for 0.8 s
+
+### Fixed
+- Unset stats (value 0) now map to modifier 0 under the SWN table — previously bucketed as ≤ 3 → −2
+- AC on the character sheet now reads from and writes to the token's `melee_ac` / `ranged_ac` fields; unset token AC defaults to 10
+- Health review window was resolving to the enemy's token when both the enemy and the player share the same owner; now prefers the `rhombus` shape
+- Stabilize / death-save outcome (Frail flag, HP write, penalty) now applies after the dice animation completes (`DICE_ANIM_MS` delay), not before
+- NPC tiers generated for non-CP:R systems no longer receive the CP:R melee-DV formula
+- Trauma die now resolves against the defender's Trauma Target (default 6), not the weapon's rating; rating is the damage multiplier
+- Version text on the login screen now uses the theme's `--green` colour with bold weight and glow
+
+---
+
 ## [1.4.1] - 2026-07-14
 
 ### Fixed
