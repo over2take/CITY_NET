@@ -61,9 +61,14 @@ module.exports = (db, io) => {
     );
   });
 
-  // Player login — returns a player JWT
+  // UI themes a player may persist (mirrors frontend theme/themes.ts ids)
+  const VALID_THEMES = ['classic', 'vaporwave', 'cyberpunk', 'crimson', 'ocean', 'solar', 'monochrome'];
+
+  // Player login — returns a player JWT. An optional `theme` (picked on the
+  // login screen, e.g. for color-blind accessibility) is saved to the
+  // account and rides back in the JWT so the app applies it on login.
   router.post('/login', requireSecureMode, async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, theme } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
 
     db.get('SELECT * FROM player_accounts WHERE username = ?', [username], async (err, row) => {
@@ -74,8 +79,17 @@ module.exports = (db, io) => {
       if (!match) return res.status(401).json({ error: 'Invalid username or password' });
       if (row.status === 'pending') return res.status(403).json({ error: 'Account pending admin approval' });
 
+      const pickedTheme = VALID_THEMES.includes(theme) ? theme : null;
+      if (pickedTheme && pickedTheme !== row.theme) {
+        db.run('UPDATE player_accounts SET theme = ? WHERE username = ?', [pickedTheme, row.username]);
+      }
+      const effectiveTheme = pickedTheme || (VALID_THEMES.includes(row.theme) ? row.theme : null);
+
       const playerToken = jwt.sign(
-        { username: row.username, role: 'player', tempPassword: !!row.temp_password },
+        {
+          username: row.username, role: 'player', tempPassword: !!row.temp_password,
+          ...(effectiveTheme ? { theme: effectiveTheme } : {}),
+        },
         SECRET,
         { expiresIn: '7d' }
       );

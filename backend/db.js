@@ -286,6 +286,7 @@ db.serialize(() => {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
   db.run(`ALTER TABLE player_accounts ADD COLUMN status TEXT DEFAULT 'pending'`, () => {});
+  db.run(`ALTER TABLE player_accounts ADD COLUMN theme TEXT`, () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS music_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -478,18 +478,42 @@ export function SystemInfoMenu({ userName, token, currentTheme, onThemeChange }:
   );
 }
 
-// ─── CP:R attack panel ────────────────────────────────────────────────────────
-// Cyberpunk RED attacks resolve in one server round-trip: pick one of your
-// sheet's weapon rows, optionally aim (−8, targets the head, double damage
-// through armor), and fire. The server rolls to-hit, damage, SP soak and
-// ablation against stored data.
-function CprAttackPanel({ userName, socketRef, targetId, rhombusState, setIsDiceTrayOpen }: {
+// ─── Sheet attack panel (CP:R + CWN) ─────────────────────────────────────────
+// Sheet-driven attacks resolve in one server round-trip: pick one of your
+// sheet's weapon rows and fire; the server rolls everything against stored
+// data. Per-system extras: CP:R adds the aimed shot (−8, head, x2 through
+// armor) and declared LUCK; CWN is weapon-only (trauma/shock resolve
+// server-side per the house rules).
+const ATTACK_PANEL_CONFIG = {
+  cyberpunk_red: {
+    dmgExample: '3d6',
+    meleeSkills: ['melee_weapon', 'brawling', 'martial_arts'],
+    hasAimed: true,
+    hasLuck: true,
+  },
+  cities_without_number: {
+    dmgExample: '1d8+1',
+    meleeSkills: ['stab', 'punch'],
+    hasAimed: false,
+    hasLuck: false,
+  },
+} as const;
+
+/** Systems whose attacks resolve from sheet weapon rows (one ATTACK button,
+ *  weapon picked in the dice menu). Adding a config entry above lights up
+ *  the whole flow - no scattered system checks to update. */
+export const hasSheetCombat = (system: string | undefined): system is keyof typeof ATTACK_PANEL_CONFIG =>
+  !!system && system in ATTACK_PANEL_CONFIG;
+
+function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState, setIsDiceTrayOpen }: {
+  system: keyof typeof ATTACK_PANEL_CONFIG;
   userName: string;
   socketRef: React.MutableRefObject<any>;
   targetId: number;
   rhombusState: any;
   setIsDiceTrayOpen: (v: any) => void;
 }) {
+  const cfg = ATTACK_PANEL_CONFIG[system];
   const [weapons, setWeapons] = useState<{ index: number; name: string; dmg: string; skill: string }[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [aimed, setAimed] = useState(false);
@@ -513,28 +537,34 @@ function CprAttackPanel({ userName, socketRef, targetId, rhombusState, setIsDice
       }
       setWeapons(rows);
       setSelected(prev => (prev !== null && rows.some(r => r.index === prev)) ? prev : (rows[0]?.index ?? null));
-      const luck = Number(sheet.data?.luck) || 0;
-      setLuckAvailable(luck);
-      setLuckSpend(prev => Math.min(prev, luck));
+      if (cfg.hasLuck) {
+        const luck = Number(sheet.data?.luck) || 0;
+        setLuckAvailable(luck);
+        setLuckSpend(prev => Math.min(prev, luck));
+      }
     };
     s.on('sheetData', onSheetData);
     s.emit('requestMySheet');
-    fetch('/api/settings').then(r => r.json()).then((rows) => {
-      if (Array.isArray(rows)) {
-        setAllowFumbleShield(rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1');
-      }
-    }).catch(() => {});
+    if (cfg.hasLuck) {
+      fetch('/api/settings').then(r => r.json()).then((rows) => {
+        if (Array.isArray(rows)) {
+          setAllowFumbleShield(rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1');
+        }
+      }).catch(() => {});
+    }
     return () => { s.off('sheetData', onSheetData); };
-  }, [userName]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userName, system]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fire = () => {
     if (selected === null) return;
     socketRef.current?.emit('sheetAttack', {
       targetId,
       weaponIndex: selected,
-      aimed,
-      luck: luckSpend > 0 ? luckSpend : undefined,
-      luckNegate: luckNegate || undefined,
+      ...(cfg.hasAimed ? { aimed } : {}),
+      ...(cfg.hasLuck ? {
+        luck: luckSpend > 0 ? luckSpend : undefined,
+        luckNegate: luckNegate || undefined,
+      } : {}),
       color: rhombusState?.color || '#00ff00',
     });
     setLuckSpend(0);
@@ -545,10 +575,11 @@ function CprAttackPanel({ userName, socketRef, targetId, rhombusState, setIsDice
   if (weapons.length === 0) {
     return (
       <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '6px' }}>
-        NO USABLE WEAPONS — set NAME, DMG (e.g. 3d6) and SKILL on your CHARACTER_SHEET weapons rows.
+        NO USABLE WEAPONS — set NAME, DMG (e.g. {cfg.dmgExample}) and SKILL on your CHARACTER_SHEET weapons rows.
       </div>
     );
   }
+  const isMelee = (cfg.meleeSkills as readonly string[]).includes(weapons.find(w => w.index === selected)?.skill ?? '');
   return (
     <div style={{ marginBottom: '6px' }}>
       <select
@@ -561,11 +592,13 @@ function CprAttackPanel({ userName, socketRef, targetId, rhombusState, setIsDice
           <option key={w.index} value={w.index}>{w.name.toUpperCase()} · {w.dmg} · {w.skill.replace(/_/g, ' ').toUpperCase()}</option>
         ))}
       </select>
-      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: 'var(--green)', marginBottom: '6px', cursor: 'pointer', userSelect: 'none' }}>
-        <input type="checkbox" checked={aimed} onChange={(e) => setAimed(e.target.checked)} />
-        AIMED SHOT (−8 · HEAD · x2 DMG THROUGH ARMOR)
-      </label>
-      {luckAvailable > 0 && (
+      {cfg.hasAimed && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: 'var(--green)', marginBottom: '6px', cursor: 'pointer', userSelect: 'none' }}>
+          <input type="checkbox" checked={aimed} onChange={(e) => setAimed(e.target.checked)} />
+          AIMED SHOT (−8 · HEAD · x2 DMG THROUGH ARMOR)
+        </label>
+      )}
+      {cfg.hasLuck && luckAvailable > 0 && (
         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: luckSpend > 0 ? '#ffcc00' : 'var(--green)', marginBottom: '6px', userSelect: 'none' }} title="Declared before the roll: adds a flat bonus and negates a natural-1 fumble">
           LUCK
           <select
@@ -587,7 +620,7 @@ function CprAttackPanel({ userName, socketRef, targetId, rhombusState, setIsDice
         </label>
       )}
       <button className="upload-btn" style={{ width: '100%', padding: '6px', backgroundColor: '#cc2200', color: '#fff', fontWeight: 'bold' }} onClick={fire}>
-        {['melee_weapon', 'brawling', 'martial_arts'].includes(weapons.find(w => w.index === selected)?.skill ?? '') ? 'SWING' : 'FIRE'}
+        {isMelee ? (system === 'cities_without_number' ? 'STRIKE' : 'SWING') : 'FIRE'}
       </button>
     </div>
   );
@@ -656,14 +689,15 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
             ATTACK ROLL — vs {attackPending.targetName}
           </div>
           <div style={{ color: 'var(--green)', fontSize: '0.75rem', marginBottom: '6px' }}>
-            {gameSystem === 'cyberpunk_red'
+            {hasSheetCombat(gameSystem)
               ? 'PICK A WEAPON — TO-HIT, DAMAGE & ARMOR RESOLVE AUTOMATICALLY'
               : isAdmin
                 ? `${attackPending.attackType.toUpperCase()} · ${defenseLabel} ${attackPending.ac} · Roll ${attackPending.ac}+ to hit`
                 : attackPending.attackType.toUpperCase()}
           </div>
-          {gameSystem === 'cyberpunk_red' && (
-            <CprAttackPanel
+          {hasSheetCombat(gameSystem) && (
+            <SheetAttackPanel
+              system={gameSystem}
               userName={userName}
               socketRef={socketRef}
               targetId={attackPending.targetId}

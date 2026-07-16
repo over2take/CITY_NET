@@ -272,6 +272,27 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         return res.status(401).json({ error: 'Access denied: Unauthenticated users can only update rhombuses.' });
       }
 
+      // Resolve the CWN sheet behind this token (player rhombus by owner,
+      // NPC by sheet link) - used by the stim_heal strain gate below.
+      const resolveCwnSheet = (cb) => {
+        db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
+          if (gErr || !gRow || gRow.value !== 'cities_without_number') return cb(null);
+          if (row.shape === 'rhombus' && row.owner) {
+            db.get(
+              `SELECT id, username, data, is_npc FROM character_sheets WHERE username = ? AND system = 'cities_without_number' AND is_npc = 0`,
+              [row.owner], (e, s) => cb(e ? null : s || null)
+            );
+          } else {
+            db.get(
+              `SELECT cs.id, cs.username, cs.data, cs.is_npc FROM npc_sheet_links l
+               JOIN character_sheets cs ON cs.id = l.sheet_id WHERE l.location_id = ?`,
+              [id], (e, s) => cb(e ? null : s || null)
+            );
+          }
+        });
+      };
+
+      const runHealth = (effAction) => {
       let newCurrent = hp_current !== undefined ? hp_current : row.hp_current;
       let newMax = hp_max !== undefined ? hp_max : row.hp_max;
       let newTemp = hp_temp !== undefined ? hp_temp : row.hp_temp;
@@ -280,21 +301,21 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       if (newMax === null) newMax = 0;
       if (newTemp === null) newTemp = 0;
 
-      if (action === 'set_max' && (row.hp_current === null || row.hp_current === 0)) {
+      if (effAction === 'set_max' && (row.hp_current === null || row.hp_current === 0)) {
         newCurrent = newMax;
       }
 
       // Always clamp current to max — current can never exceed max
       if (newMax > 0 && newCurrent > newMax) newCurrent = newMax;
 
-      if (action === 'damage' && amount > 0) {
+      if (effAction === 'damage' && amount > 0) {
         let remainingDamage = amount;
         if (newTemp > 0) {
           if (newTemp >= remainingDamage) { newTemp -= remainingDamage; remainingDamage = 0; }
           else { remainingDamage -= newTemp; newTemp = 0; }
         }
         if (remainingDamage > 0 && newCurrent !== null) newCurrent = Math.max(0, newCurrent - remainingDamage);
-      } else if (action === 'heal' && amount > 0 && newCurrent !== null && newMax !== null) {
+      } else if (effAction === 'heal' && amount > 0 && newCurrent !== null && newMax !== null) {
         newCurrent = Math.min(newMax, newCurrent + amount);
       }
 
@@ -311,8 +332,13 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
               sheets.forEach((s) => {
                 try {
                   const data = JSON.parse(s.data || '{}');
-                  if (Number(data.death_save_penalty) > 0) {
-                    data.death_save_penalty = 0;
+                  // CP:R death-save penalty and CWN mortal-wound round count
+                  // both reset above 0 HP. CWN's frail flag deliberately
+                  // persists - it clears via care, not healing.
+                  let changed = false;
+                  if (Number(data.death_save_penalty) > 0) { data.death_save_penalty = 0; changed = true; }
+                  if (Number(data.rounds_since_downed) > 0) { data.rounds_since_downed = 0; changed = true; }
+                  if (changed) {
                     db.run('UPDATE character_sheets SET data = ? WHERE id = ?', [JSON.stringify(data), s.id]);
                   }
                 } catch (e) { /* bad JSON - leave it */ }
@@ -327,6 +353,33 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           emitUpdate();
           res.json({ id, hp_current: newCurrent, hp_max: newMax, hp_temp: newTemp });
         });
+      }
+      }; // runHealth
+
+      // CWN stim heal: field healing costs +1 System Strain, and a character
+      // whose strain is maxed gets NO stim benefit (the heal is refused).
+      // Natural/rest healing stays on the plain 'heal' action, strain-free.
+      if (action === 'stim_heal' && amount > 0) {
+        resolveCwnSheet((sheet) => {
+          if (!sheet) return runHealth('heal'); // no CWN sheet - plain heal
+          const data = JSON.parse(sheet.data || '{}');
+          const strain = Number(data.system_strain) || 0;
+          const strainMax = Number(data.system_strain_max) || 0;
+          if (strainMax > 0 && strain >= strainMax) {
+            return res.status(409).json({ error: 'STRAIN MAXED — NO STIM BENEFIT' });
+          }
+          data.system_strain = strain + 1;
+          db.run(
+            `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [JSON.stringify(data), sheet.id],
+            () => {
+              if (!sheet.is_npc) io.emit('sheetUpdated', { username: sheet.username });
+              runHealth('heal');
+            }
+          );
+        });
+      } else {
+        runHealth(action);
       }
     });
   });

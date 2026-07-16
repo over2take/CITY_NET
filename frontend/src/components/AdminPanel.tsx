@@ -24,7 +24,7 @@ const SIGN_PRESETS = [
   { label: 'KEEP OUT', url: '/signs/danger-zone.svg' },
 ];
 
-const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: '#00ff00', border: '1px solid #00ff00', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
+const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: 'var(--green)', border: '1px solid var(--green)', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
 
 function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, remoteFonts, setRemoteFonts, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, controlsRef, signMesh, onClose }: {
   token: string;
@@ -237,10 +237,10 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       </header>
 
       {/* Sign list */}
-      <div style={{maxHeight: '120px', overflowY: 'auto', marginBottom: '10px', border: '1px solid #00ff0044', padding: '4px'}}>
+      <div style={{maxHeight: '120px', overflowY: 'auto', marginBottom: '10px', border: '1px solid color-mix(in srgb, var(--green) 27%, transparent)', padding: '4px'}}>
         {signs.length === 0 && <div style={{fontSize: '0.7rem', opacity: 0.5}}>NO SIGNS PLACED</div>}
         {signs.map(s => (
-          <div key={s.id} style={{display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', borderBottom: '1px solid #00ff0022', background: selectedSignId === s.id ? '#00ff0011' : 'transparent'}}>
+          <div key={s.id} style={{display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', borderBottom: '1px solid color-mix(in srgb, var(--green) 13%, transparent)', background: selectedSignId === s.id ? 'color-mix(in srgb, var(--green) 7%, transparent)' : 'transparent'}}>
             <div style={{flex: 1, fontSize: '0.7rem', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} onClick={() => { setSelectedSignId(s.id); setIsNew(false); }}>
               {s.text}
             </div>
@@ -251,7 +251,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
 
       {/* Form */}
       <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px'}}>
-        <span style={{fontSize:'0.7rem', fontWeight:'bold', color:'#00ff00'}}>{isNew ? 'NEW SIGN' : `EDIT #${selectedSignId}`}</span>
+        <span style={{fontSize:'0.7rem', fontWeight:'bold', color:'var(--green)'}}>{isNew ? 'NEW SIGN' : `EDIT #${selectedSignId}`}</span>
         <label style={{display:'flex', alignItems:'center', gap:'4px', fontSize:'0.7rem', cursor:'pointer'}}>
           <input type="checkbox" checked={isMultiLine} onChange={e => toggleMultiLine(e.target.checked)} />
           MULTI-LINE
@@ -259,9 +259,9 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       </div>
 
       {isMultiLine ? (
-        <div style={{marginBottom:'6px', border:'1px solid #00ff0033', padding:'6px'}}>
+        <div style={{marginBottom:'6px', border:'1px solid color-mix(in srgb, var(--green) 20%, transparent)', padding:'6px'}}>
           {formLines.map((line, i) => (
-            <div key={i} style={{marginBottom:'8px', paddingBottom:'8px', borderBottom: i < formLines.length - 1 ? '1px dashed #00ff0033' : 'none'}}>
+            <div key={i} style={{marginBottom:'8px', paddingBottom:'8px', borderBottom: i < formLines.length - 1 ? '1px dashed color-mix(in srgb, var(--green) 20%, transparent)' : 'none'}}>
               <div style={{display:'flex', alignItems:'center', gap:'4px', marginBottom:'3px'}}>
                 <span style={{fontSize:'0.65rem', opacity:0.6}}>LINE {i + 1}</span>
                 {formLines.length > 1 && (
@@ -303,7 +303,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
           {signTransformActive && (
             <button
               className="utility-btn"
-              style={{width:'100%', fontSize:'0.7rem', marginBottom:'6px', color:'#00ff00', borderColor:'#00ff00'}}
+              style={{width:'100%', fontSize:'0.7rem', marginBottom:'6px', color:'var(--green)', borderColor:'var(--green)'}}
               onClick={handleUpdateSign}
             >UPDATE SIGN POSITION</button>
           )}
@@ -325,7 +325,7 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       </div>
 
       {/* Font uploader */}
-      <div style={{marginBottom: '8px', padding: '6px', border: '1px dashed #00ff0055'}}>
+      <div style={{marginBottom: '8px', padding: '6px', border: '1px dashed color-mix(in srgb, var(--green) 33%, transparent)'}}>
         <div style={{fontSize: '0.65rem', opacity: 0.7, marginBottom: '4px'}}>UPLOAD FONT (.ttf .otf .woff .woff2)</div>
         <input ref={fileRef} type="file" accept=".ttf,.otf,.woff,.woff2" onChange={uploadFont} style={{display: 'none'}} />
         <button className="utility-btn" style={{width: '100%', fontSize: '0.7rem'}} onClick={() => fileRef.current?.click()} disabled={uploading}>
@@ -445,12 +445,12 @@ export function AdminPanel({
 
     return (
       <div className="panel admin-panel" style={{ width: '300px', maxHeight: '90vh', overflowY: 'auto', pointerEvents: 'auto' }}>
-        <h3 style={{ textShadow: '0 0 10px #00ff00', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
+        <h3 style={{ textShadow: 'var(--glow)', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
         <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
           <button className={`upload-btn deploy-btn${isDeployingEnemy ? ' deploying-enemy' : ''}`} onClick={() => { setIsDeployingEnemy(!isDeployingEnemy); setIsDeployingFriendly(false); }} style={{ flex: 1 }}>{isDeployingEnemy ? 'STOP_PLACING' : 'ADD_ENEMY'}</button>
           <button className={`upload-btn deploy-btn${isDeployingFriendly ? ' deploying-friendly' : ''}`} onClick={() => { setIsDeployingFriendly(!isDeployingFriendly); setIsDeployingEnemy(false); }} style={{ flex: 1 }}>{isDeployingFriendly ? 'STOP_PLACING' : 'ADD_FRIENDLY'}</button>
         </div>
-        <div style={{ marginBottom: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+        <div style={{ marginBottom: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
                 <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>
                     MAP SCALE (FT/UNIT): {resolvedBattleMapScale}
                 </label>
@@ -460,7 +460,7 @@ export function AdminPanel({
                     onChange={(e) => setTempBattleMapScale(e.target.value)} style={{ flex: 1 }} />
                 <input type="number" step="0.1" 
                     value={resolvedBattleMapScale}
-                    onChange={(e) => setTempBattleMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: '#00ff00', border: '1px solid #00ff00', padding: '5px' }} />
+                    onChange={(e) => setTempBattleMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '5px' }} />
                 <button className="utility-btn" onClick={() => {
                     if (tempBattleMapScale === null) return;
                     const loc = locations.find((l:any) => l.id === activeBattleMapData.locationId);
@@ -487,7 +487,7 @@ export function AdminPanel({
                 }}>APPLY</button>
             </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px', borderBottom: '1px solid #00ff00', paddingBottom: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px', borderBottom: '1px solid var(--green)', paddingBottom: '10px' }}>
            <button className="map-save-btn" onClick={handleSaveDefault}>SAVE_DEFAULT</button>
            <button className="map-load-btn" onClick={handleLoadDefault}>LOAD_DEFAULT</button>
         </div>
@@ -951,7 +951,7 @@ export function AdminPanel({
               <button className="utility-btn friendly-btn" style={{flex: 1}} onClick={startNewFriendly}>+ ADD_FRIENDLY</button>
           </div>
           <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setView('signs')}>+ CUSTOM_SIGNS ({(signs || []).length})</button>
-          <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+          <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
               <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>
                   GLOBAL MAP SCALE (FT/UNIT): {tempCityMapScale !== null ? tempCityMapScale : (globalSettings?.map_scale_multiplier || 5)}
               </label>
@@ -961,7 +961,7 @@ export function AdminPanel({
                       onChange={(e) => setTempCityMapScale(e.target.value)} style={{ flex: 1 }} />
                   <input type="number" step="0.1" 
                       value={tempCityMapScale !== null ? tempCityMapScale : (globalSettings?.map_scale_multiplier || 5)}
-                      onChange={(e) => setTempCityMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: '#00ff00', border: '1px solid #00ff00', padding: '5px' }} />
+                      onChange={(e) => setTempCityMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '5px' }} />
                   <button className="utility-btn" onClick={() => {
                       if (tempCityMapScale === null) return;
                       fetch('/api/settings', {
@@ -976,7 +976,7 @@ export function AdminPanel({
               </div>
           </div>
 
-          <div style={{display: 'flex', gap: '16px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #00ff00'}}>
+          <div style={{display: 'flex', gap: '16px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--green)'}}>
             <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
               <input type="checkbox" checked={renderSidewalks ?? true} onChange={e => setRenderSidewalks(e.target.checked)} />
               SIDEWALKS
@@ -996,7 +996,7 @@ export function AdminPanel({
           {/* TTRPG SYSTEM (character sheets) */}
           <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} />
 
-          <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+          <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
             <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
@@ -1023,7 +1023,7 @@ export function AdminPanel({
           {/* BANK SOUNDS TEST PANEL */}
           <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
 
-          <div style={{marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px'}}>
+          <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
             <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
           </div>
           <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'DELETE ALL WATER?', onConfirm: async () => { const res = await fetch('/api/water', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); if (res.ok) { setAdminAlert("ALL WATER CLEARED"); if (fetchWaterBodies) fetchWaterBodies(); } } })}>PURGE_ALL_WATER</button>
@@ -2057,29 +2057,136 @@ const BANK_SOUND_TESTERS: Record<BankSoundKey, (vol: number) => void> = {
   overdraft: playWompWomp,
 };
 
+// Per-system house rules: staged locally, written to global_settings on
+// APPLY (not on every click). Self-contained - give it the rule definitions
+// and it handles load / stage / apply / revert / status.
+interface HouseRuleDef {
+  settingKey: string;
+  label: string;
+  title: string;
+  /** Rules that are ON when the key is absent (e.g. cwn_trauma). */
+  defaultOn?: boolean;
+}
+
+function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] }) {
+  const [rules, setRules] = useState<Record<string, boolean>>({});
+  const [saved, setSaved] = useState<Record<string, boolean>>({});
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/settings').then(r => r.json()).then((rows) => {
+      if (!Array.isArray(rows)) return;
+      const loaded: Record<string, boolean> = {};
+      defs.forEach((d) => {
+        const value = rows.find((r: any) => r.key === d.settingKey)?.value;
+        loaded[d.settingKey] = d.defaultOn ? value !== '0' : value === '1';
+      });
+      setRules(loaded);
+      setSaved(loaded);
+    }).catch(() => {});
+  }, [defs.map(d => d.settingKey).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dirty = defs.some(d => rules[d.settingKey] !== saved[d.settingKey]);
+  const apply = async () => {
+    try {
+      for (const d of defs) {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ key: d.settingKey, value: rules[d.settingKey] ? '1' : '0' }),
+        });
+      }
+      setSaved({ ...rules });
+      setMsg('HOUSE RULES APPLIED');
+    } catch {
+      setMsg('APPLY FAILED');
+    }
+    setTimeout(() => setMsg(null), 3000);
+  };
+
+  return (
+    <div style={{ border: '1px solid var(--dark-green)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      <label style={{ fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}>HOUSE RULES</label>
+      {defs.map((d) => (
+        <label
+          key={d.settingKey}
+          title={d.title}
+          style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+        >
+          <input
+            type="checkbox"
+            checked={!!rules[d.settingKey]}
+            onChange={(e) => setRules(r => ({ ...r, [d.settingKey]: e.target.checked }))}
+          />
+          {d.label}
+        </label>
+      ))}
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <button
+          className="utility-btn"
+          style={{ fontSize: '0.65rem', padding: '3px 12px', opacity: dirty ? 1 : 0.4 }}
+          disabled={!dirty}
+          onClick={apply}
+        >
+          APPLY
+        </button>
+        {dirty && (
+          <button
+            className="utility-btn"
+            style={{ fontSize: '0.65rem', padding: '3px 12px' }}
+            onClick={() => setRules({ ...saved })}
+          >
+            REVERT
+          </button>
+        )}
+        {msg && (
+          <span style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>{msg}</span>
+        )}
+        {dirty && !msg && (
+          <span style={{ fontSize: '0.6rem', color: '#ffcc00', opacity: 0.8, letterSpacing: '1px' }}>UNSAVED CHANGES</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const CPR_HOUSE_RULES: HouseRuleDef[] = [
+  {
+    settingKey: 'melee_dv_take10',
+    label: 'MELEE_DV TAKE-10 (10 + DEX + EVASION INSTEAD OF 6 +)',
+    title: 'Melee DV stamped at sheet generation/attach: default is 6 + DEX + Evasion (average of the opposed Evasion roll); take-10 uses 10 + DEX + Evasion for a harder melee defense. Existing tokens are not changed.',
+  },
+  {
+    settingKey: 'luck_negates_fumble',
+    label: 'LUCK BONUS ALSO NEGATES NAT-1',
+    title: 'House rule: any LUCK spent as a roll bonus also negates a natural-1 critical fumble. Off = RAW: only the dedicated 1-LUCK fumble shield negates. Players always have the shield option either way.',
+  },
+];
+
+const CWN_HOUSE_RULES: HouseRuleDef[] = [
+  {
+    settingKey: 'cwn_trauma',
+    label: 'GRITTY COMBAT (TRAUMA DIE + MAJOR INJURIES)',
+    title: 'Gritty Combat: on a hit, roll the weapon\'s trauma die — if it meets the target\'s Trauma Target the damage is multiplied. Also enables the Major Injury flow when a traumatic hit drops a PC to 0 HP. On by default. Off = plain hit/damage + shock only.',
+    defaultOn: true,
+  },
+  {
+    settingKey: 'cwn_deluxe',
+    label: 'DELUXE EDITION (SPELLCASTING + SUMMONING)',
+    title: 'CWN Deluxe Edition: enables Spellcasting and Summoning on character sheets, including Mage Effort, Summoner Effort, and one-click casting. Off by default.',
+  },
+];
+
 function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNpcLibrary?: () => void }) {
   const [open, setOpen] = useState(false);
   const [system, setSystem] = useState<string>('generic');
   const [systems, setSystems] = useState<{ id: string; name: string }[]>([]);
   const [luckResetMsg, setLuckResetMsg] = useState<string | null>(null);
-  // House rules: staged locally, written on APPLY (not on every click)
-  const [houseRules, setHouseRules] = useState({ meleeTake10: false, luckNegates: false });
-  const [savedRules, setSavedRules] = useState({ meleeTake10: false, luckNegates: false });
-  const [rulesMsg, setRulesMsg] = useState<string | null>(null);
 
   const refresh = () => {
     fetch('/api/sheets/system').then(r => r.json()).then(d => {
       if (d.system) setSystem(d.system);
       if (d.systems) setSystems(d.systems);
-    }).catch(() => {});
-    fetch('/api/settings').then(r => r.json()).then((rows) => {
-      if (!Array.isArray(rows)) return;
-      const loaded = {
-        meleeTake10: rows.find((r: any) => r.key === 'melee_dv_take10')?.value === '1',
-        luckNegates: rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1',
-      };
-      setHouseRules(loaded);
-      setSavedRules(loaded);
     }).catch(() => {});
   };
 
@@ -2094,7 +2201,7 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNp
   };
 
   return (
-    <div style={{ marginTop: '10px', borderTop: '1px solid #00ff00', paddingTop: '10px' }}>
+    <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
       <button className="utility-btn" style={{ width: '100%' }} onClick={() => setOpen(!open)}>
         {open ? '▾' : '▸'} TTRPG_SYSTEM
       </button>
@@ -2116,82 +2223,8 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNp
           <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
             Player sheets for the current system are kept and restored if you switch back.
           </p>
-          {system === 'cyberpunk_red' && (() => {
-            const dirty = houseRules.meleeTake10 !== savedRules.meleeTake10
-              || houseRules.luckNegates !== savedRules.luckNegates;
-            const applyRules = async () => {
-              const writes: [string, boolean][] = [
-                ['melee_dv_take10', houseRules.meleeTake10],
-                ['luck_negates_fumble', houseRules.luckNegates],
-              ];
-              try {
-                for (const [key, on] of writes) {
-                  await fetch('/api/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ key, value: on ? '1' : '0' }),
-                  });
-                }
-                setSavedRules({ ...houseRules });
-                setRulesMsg('HOUSE RULES APPLIED');
-              } catch {
-                setRulesMsg('APPLY FAILED');
-              }
-              setTimeout(() => setRulesMsg(null), 3000);
-            };
-            return (
-              <div style={{ border: '1px solid var(--dark-green)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <label style={{ fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}>HOUSE RULES</label>
-                <label
-                  title="Melee DV stamped at sheet generation/attach: default is 6 + DEX + Evasion (average of the opposed Evasion roll); take-10 uses 10 + DEX + Evasion for a harder melee defense. Existing tokens are not changed."
-                  style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={houseRules.meleeTake10}
-                    onChange={(e) => setHouseRules(r => ({ ...r, meleeTake10: e.target.checked }))}
-                  />
-                  MELEE_DV TAKE-10 (10 + DEX + EVASION INSTEAD OF 6 +)
-                </label>
-                <label
-                  title="House rule: any LUCK spent as a roll bonus also negates a natural-1 critical fumble. Off = RAW: only the dedicated 1-LUCK fumble shield negates. Players always have the shield option either way."
-                  style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={houseRules.luckNegates}
-                    onChange={(e) => setHouseRules(r => ({ ...r, luckNegates: e.target.checked }))}
-                  />
-                  LUCK BONUS ALSO NEGATES NAT-1
-                </label>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  <button
-                    className="utility-btn"
-                    style={{ fontSize: '0.65rem', padding: '3px 12px', opacity: dirty ? 1 : 0.4 }}
-                    disabled={!dirty}
-                    onClick={applyRules}
-                  >
-                    APPLY
-                  </button>
-                  {dirty && (
-                    <button
-                      className="utility-btn"
-                      style={{ fontSize: '0.65rem', padding: '3px 12px' }}
-                      onClick={() => setHouseRules({ ...savedRules })}
-                    >
-                      REVERT
-                    </button>
-                  )}
-                  {rulesMsg && (
-                    <span style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>{rulesMsg}</span>
-                  )}
-                  {dirty && !rulesMsg && (
-                    <span style={{ fontSize: '0.6rem', color: '#ffcc00', opacity: 0.8, letterSpacing: '1px' }}>UNSAVED CHANGES</span>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
+          {system === 'cities_without_number' && <HouseRulesPanel token={token} defs={CWN_HOUSE_RULES} />}
+          {system === 'cyberpunk_red' && <HouseRulesPanel token={token} defs={CPR_HOUSE_RULES} />}
           <div style={{ display: 'flex', gap: '6px' }}>
             {onOpenNpcLibrary && (
               <button
@@ -2202,22 +2235,42 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNp
                 NPC_LIBRARY
               </button>
             )}
-            <button
-              className="utility-btn"
-              style={{ fontSize: '0.65rem', flex: 1 }}
-              title="Reset all player LUCK to their maximum value"
-              onClick={() => {
-                fetch('/api/sheets/reset-luck', {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${token}` },
-                }).then(r => r.json()).then(d => {
-                  setLuckResetMsg(d.reason ?? `LUCK RESET — ${d.reset} SHEET${d.reset !== 1 ? 'S' : ''}`);
-                  setTimeout(() => setLuckResetMsg(null), 3000);
-                }).catch(() => setLuckResetMsg('RESET FAILED'));
-              }}
-            >
-              RESET_ALL_LUCK
-            </button>
+            {system === 'cyberpunk_red' && (
+              <button
+                className="utility-btn"
+                style={{ fontSize: '0.65rem', flex: 1 }}
+                title="Reset all player LUCK to their maximum value"
+                onClick={() => {
+                  fetch('/api/sheets/reset-luck', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                  }).then(r => r.json()).then(d => {
+                    setLuckResetMsg(d.reason ?? `LUCK RESET — ${d.reset} SHEET${d.reset !== 1 ? 'S' : ''}`);
+                    setTimeout(() => setLuckResetMsg(null), 3000);
+                  }).catch(() => setLuckResetMsg('RESET FAILED'));
+                }}
+              >
+                RESET_ALL_LUCK
+              </button>
+            )}
+            {system === 'cities_without_number' && (
+              <button
+                className="utility-btn"
+                style={{ fontSize: '0.65rem', flex: 1 }}
+                title="Long rest: every CWN sheet (players and NPCs) recovers 1 System Strain"
+                onClick={() => {
+                  fetch('/api/sheets/cwn-rest', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                  }).then(r => r.json()).then(d => {
+                    setLuckResetMsg(d.reason ?? `LONG REST — ${d.rested} SHEET${d.rested !== 1 ? 'S' : ''} RECOVERED 1 STRAIN`);
+                    setTimeout(() => setLuckResetMsg(null), 3000);
+                  }).catch(() => setLuckResetMsg('REST FAILED'));
+                }}
+              >
+                LONG_REST (STRAIN −1)
+              </button>
+            )}
           </div>
           {luckResetMsg && (
             <div style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>

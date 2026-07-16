@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LogoScene } from './LogoScene';
+import { THEMES } from '../theme/themes';
+import type { ThemeName } from '../theme/themes';
 
 export type LoginView = 'login' | 'register' | 'forgot' | 'forgot_awaiting' | 'reset' | 'pending';
 
@@ -12,6 +14,69 @@ export interface SecureLoginProps {
   onAdminLogin: (username: string, adminToken: string) => void;
   onPendingsFetched: (rows: { username: string; created_at: string }[]) => void;
   StatusLogDisplay: React.ComponentType;
+  /** Live theme switching from the login screen (accessibility: the default
+   *  green-on-black is hard on some color-blind users). Selection persists
+   *  to localStorage immediately and to the player's account on login. */
+  onThemeChange?: (theme: ThemeName) => void;
+  /** Active theme - drives the 3D logo's colors. */
+  currentTheme?: ThemeName;
+}
+
+/** localStorage key for the pre-login theme choice. */
+export const THEME_STORAGE_KEY = 'citynet_theme';
+
+// Custom dropdown (native <option>s can't be styled per-theme): trigger is
+// "THEMES ∨" in yellow with a white outline; each option is drawn in its own
+// theme's colors so a color-blind user can judge the palette before picking.
+function LoginThemePicker({ onThemeChange }: { onThemeChange?: (t: ThemeName) => void }) {
+  const [open, setOpen] = useState(false);
+  const pick = (id: ThemeName) => {
+    try { localStorage.setItem(THEME_STORAGE_KEY, id); } catch { /* private mode */ }
+    onThemeChange?.(id);
+    setOpen(false);
+  };
+  return (
+    <div style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 5, textAlign: 'left' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        style={{
+          background: 'rgba(0,0,0,0.6)', border: '1px solid #ffffff', borderRadius: '3px',
+          fontFamily: 'inherit', fontSize: '0.7rem', letterSpacing: '2px', padding: '4px 10px',
+          cursor: 'pointer', color: '#ffee00',
+          WebkitTextStroke: '0.5px #ffffff',
+          textShadow: '0 0 3px rgba(255,255,255,0.8)',
+        }}
+      >
+        THEMES {open ? '∧' : '∨'}
+      </button>
+      {open && (
+        <div style={{
+          marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '3px',
+          background: 'rgba(0,0,0,0.85)', border: '1px solid #444', borderRadius: '3px', padding: '4px',
+        }}>
+          {(Object.keys(THEMES) as ThemeName[]).map((id) => {
+            const t = THEMES[id];
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => pick(id)}
+                style={{
+                  background: t.panelBg, border: `2px solid ${t.primary}`, borderRadius: '3px',
+                  fontFamily: 'inherit', fontSize: '0.7rem', letterSpacing: '1px', padding: '5px 10px',
+                  cursor: 'pointer', color: t.primary, textAlign: 'left', whiteSpace: 'nowrap',
+                }}
+              >
+                {t.name.toUpperCase()}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SecureLogin({
@@ -23,6 +88,8 @@ export function SecureLogin({
   onAdminLogin,
   onPendingsFetched,
   StatusLogDisplay,
+  onThemeChange,
+  currentTheme = 'classic',
 }: SecureLoginProps) {
   const [loginView, setLoginView] = useState<LoginView>('login');
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
@@ -110,7 +177,10 @@ export function SecureLogin({
         .then(r => r.json()).then(rows => onPendingsFetched(rows)).catch(() => {});
       return;
     }
-    const playerRes = await fetch('/api/player/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginForm.username, password: loginForm.password }) });
+    // A theme picked on this screen persists to the player's account
+    let pickedTheme: string | null = null;
+    try { pickedTheme = localStorage.getItem(THEME_STORAGE_KEY); } catch { /* private mode */ }
+    const playerRes = await fetch('/api/player/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginForm.username, password: loginForm.password, ...(pickedTheme ? { theme: pickedTheme } : {}) }) });
     if (playerRes.ok) {
       const data = await playerRes.json();
       if (data.tempPassword) { setResetToken(data.playerToken); setResetUsername(loginForm.username); setLoginView('reset'); return; }
@@ -164,9 +234,10 @@ export function SecureLogin({
     <div className="modal-overlay">
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div style={{ width: '350px' }}>
-          <LogoScene />
+          <LogoScene color={THEMES[currentTheme].primary} />
         </div>
         <div className="panel login-panel" style={{ textAlign: 'center', minWidth: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <LoginThemePicker onThemeChange={onThemeChange} />
           <div style={{ position: 'absolute', top: '10px', right: '10px' }}>
             <button className={`admin-toggle ${!audioEnabled ? 'muted' : ''}`} onClick={onToggleAudio} style={{ padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {audioEnabled ? (
@@ -181,7 +252,7 @@ export function SecureLogin({
             </button>
           </div>
 
-          <div style={{ fontSize: '0.65rem', opacity: 0.5, letterSpacing: '4px', marginBottom: '15px', marginTop: '10px' }}>NAV_OS_v{__APP_VERSION__}</div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--green)', textShadow: 'var(--glow)', letterSpacing: '4px', marginBottom: '15px', marginTop: '10px' }}>NAV_OS_v{__APP_VERSION__}</div>
 
           {loginError && (
             <div style={{ fontSize: '0.7rem', color: loginError.includes('updated') ? 'var(--green)' : '#ff3333', marginBottom: '10px', letterSpacing: '1px' }}>

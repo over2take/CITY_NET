@@ -30,6 +30,8 @@ interface HitPointsMenuProps {
   pos: { x: number; y: number };
   setPos: (pos: { x: number; y: number }) => void;
   onClose: () => void;
+  /** Active game system - CWN shows the STIM_HEAL (+1 STRAIN) button. */
+  gameSystem?: string;
 }
 
 const BODY_PARTS = ['head', 'right_arm', 'torso', 'left_arm', 'right_leg', 'left_leg'] as const;
@@ -76,12 +78,13 @@ const hitZone = (injured: boolean | undefined): React.CSSProperties => ({
   transition: 'background 0.15s, border 0.15s',
 });
 
-export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, setPos, onClose }: HitPointsMenuProps) {
+export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, setPos, onClose, gameSystem }: HitPointsMenuProps) {
   const [actionAmount, setActionAmount] = useState(0);
   const [tempAmount, setTempAmount] = useState(0);
   const [maxAmount, setMaxAmount] = useState(0);
   const [injuriesOpen, setInjuriesOpen] = useState(false);
   const [injuries, setInjuries] = useState<InjuryMap>({});
+  const [healMsg, setHealMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!targetRhombus) return;
@@ -109,11 +112,20 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
     const bodyData: any = { action, amount };
     if (action === 'set_temp') bodyData.hp_temp = amount;
     if (action === 'set_max') bodyData.hp_max = amount;
-    await fetch(`/api/locations/${targetRhombus.id}/health`, {
+    const res = await fetch(`/api/locations/${targetRhombus.id}/health`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify(bodyData),
     });
+    if (action === 'stim_heal') {
+      if (res.status === 409) {
+        const body = await res.json().catch(() => null);
+        setHealMsg(body?.error ?? 'STRAIN MAXED — NO STIM BENEFIT');
+      } else if (res.ok) {
+        setHealMsg('STIM HEAL — +1 STRAIN');
+      }
+      setTimeout(() => setHealMsg(null), 3000);
+    }
     refreshLocations();
   };
 
@@ -150,7 +162,7 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <PersonSVG color={injuriesOpen ? '#000' : '#00ff00'} style={{ width: 18, height: 18, display: 'block' }} />
+              <PersonSVG color={injuriesOpen ? '#000' : 'var(--green)'} style={{ width: 18, height: 18, display: 'block' }} />
             </button>
           </div>
             {(targetRhombus.hp_temp ?? 0) > 0 && (
@@ -164,6 +176,21 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
               <button className="upload-btn" onClick={() => updateHealth('heal', actionAmount)} style={{ flex: 1 }}>HEAL</button>
               <button className="upload-btn danger-btn" onClick={() => updateHealth('damage', actionAmount)} style={{ flex: 1 }}>DAMAGE</button>
             </div>
+            {gameSystem === 'cities_without_number' && (
+              <button
+                className="upload-btn"
+                title="Field healing (stims, medkits): heals and adds +1 System Strain to the character's sheet. Refused when strain is maxed - no stim benefit. Use HEAL for natural/rest healing."
+                onClick={() => updateHealth('stim_heal', actionAmount)}
+                disabled={!!healMsg}
+                style={{
+                  width: '100%',
+                  color: healMsg?.includes('MAXED') ? '#ff3333' : '#ffcc00',
+                  borderColor: healMsg?.includes('MAXED') ? '#ff3333' : '#ffcc00',
+                }}
+              >
+                {healMsg ?? 'STIM_HEAL (+1 STRAIN)'}
+              </button>
+            )}
           </div>
 
           <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -256,6 +283,13 @@ interface HealthReviewWindowProps {
   pos: { x: number; y: number };
   setPos: (p: { x: number; y: number }) => void;
   onClose: () => void;
+  /** CWN: any player viewing a downed character can attempt to stabilize
+   *  them (an ally's Main Action - the server rolls the CLICKING user's
+   *  Heal skill). Needs the socket and the active system to show. */
+  socket?: any;
+  gameSystem?: string;
+  /** Called after emitting a roll so the app can pop the dice tray. */
+  onRolled?: () => void;
 }
 
 export function HeartMonitor({ color, flatline }: { color: string; flatline: boolean }) {
@@ -293,7 +327,7 @@ export const INJURY_ZONES: Record<string, React.CSSProperties> = {
   left_leg:  { left: '52%', top: '65%', width: '22%', height: '30%' },
 };
 
-export function HealthReviewWindow({ location, pos, setPos, onClose }: HealthReviewWindowProps) {
+export function HealthReviewWindow({ location, pos, setPos, onClose, socket, gameSystem, onRolled }: HealthReviewWindowProps) {
   const [reviewInjuriesOpen, setReviewInjuriesOpen] = useState(false);
 
   const injuries: Record<string, boolean> = (() => {
@@ -334,6 +368,25 @@ export function HealthReviewWindow({ location, pos, setPos, onClose }: HealthRev
 
         {/* Heart monitor — flatlines at 0 HP */}
         <HeartMonitor color={hpColor} flatline={isDead} />
+
+        {/* CWN: downed player - any viewer can attempt the stabilize check
+            (rolls the viewer's own Heal skill server-side) */}
+        {gameSystem === 'cities_without_number' && isDead && socket && location.shape === 'rhombus' && location.owner && (
+          <button
+            onClick={() => {
+              socket.emit('requestStabilize', { targetUsername: location.owner });
+              onRolled?.();
+            }}
+            title="An ally's Main Action: 2d6 + YOUR Heal + INT mod vs 8 + rounds down. Success: they recover to 1 HP with the Frail condition."
+            style={{
+              alignSelf: 'center', background: 'none', border: '1px solid #ff3333', color: '#ff3333',
+              fontFamily: 'monospace', fontSize: '0.7rem', letterSpacing: '1px', padding: '4px 14px',
+              cursor: 'pointer', animation: 'death-pulse 1.2s ease-in-out infinite',
+            }}
+          >
+            STABILIZE (YOUR HEAL CHECK)
+          </button>
+        )}
 
         {/* Temp HP */}
         {hpTemp > 0 && (

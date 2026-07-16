@@ -100,11 +100,59 @@ const cprRolls = () => {
   return rolls;
 };
 
+// CWN skills roll 2d6 + skill level + attribute mod, plain sum (nothing
+// explodes). Mods (str_mod...) are derived fields kept fresh by the
+// templates.js recompute hook. Saves roll a bare d20 - meet or beat the
+// sheet's save target (the client shows the target next to the result).
+const CWN_SKILLS = {
+  administer: ['Administer', 'int_mod'],
+  connect: ['Connect', 'cha_mod'],
+  drive: ['Drive', 'dex_mod'],
+  exert: ['Exert', 'str_mod'],
+  fix: ['Fix', 'int_mod'],
+  heal: ['Heal', 'int_mod'],
+  know: ['Know', 'int_mod'],
+  lead: ['Lead', 'cha_mod'],
+  notice: ['Notice', 'wis_mod'],
+  perform: ['Perform', 'cha_mod'],
+  program: ['Program', 'int_mod'],
+  punch: ['Punch', 'str_mod'],
+  shoot: ['Shoot', 'dex_mod'],
+  sneak: ['Sneak', 'dex_mod'],
+  stab: ['Stab', 'str_mod'],
+  survive: ['Survive', 'wis_mod'],
+  talk: ['Talk', 'cha_mod'],
+  trade: ['Trade', 'cha_mod'],
+  work: ['Work', 'int_mod'],
+  // Deluxe edition
+  cast_skill: ['Cast', 'int_mod'],
+  summon_skill: ['Summon', 'cha_mod'],
+};
+
+const CWN_SAVES = {
+  save_physical: 'Physical Save',
+  save_evasion: 'Evasion Save',
+  save_mental: 'Mental Save',
+  save_luck: 'Luck Save',
+};
+
+const cwnRolls = () => {
+  const rolls = {};
+  Object.entries(CWN_SKILLS).forEach(([id, [label, mod]]) => {
+    rolls[id] = { formula: `2d6 + @${id} + @${mod}`, label, shape: 'sum' };
+  });
+  Object.entries(CWN_SAVES).forEach(([id, label]) => {
+    rolls[id] = { formula: '1d20', label, shape: 'sum' };
+  });
+  return rolls;
+};
+
 const ROLLS = {
   generic: {},
   cyberpunk_red: cprRolls(),
+  cities_without_number: cwnRolls(),
 };
 
 const getRoll = (system, fieldId) => (ROLLS[system] || {})[fieldId] || null;
 
-module.exports = { ROLLS, getRoll, CPR_SKILLS };
+module.exports = { ROLLS, getRoll, CPR_SKILLS, CWN_SKILLS };

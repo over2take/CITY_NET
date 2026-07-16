@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { SheetTemplate, SheetSection, SheetField, SheetData } from '../sheets';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
@@ -49,6 +49,16 @@ interface SheetRendererProps {
   /** Roll a death save (shown at 0 HP when the template defines deathSave).
    *  Server-resolved: 1d10 + tracked penalty vs the save stat. */
   onDeathSave?: () => void;
+  /** Roll a stabilization check (shown at 0 HP when the template sets
+   *  stabilize). Server-resolved: the clicking user's Heal check vs a DC
+   *  that rises each failed round. */
+  onStabilize?: () => void;
+  /** Tabs hidden by house rules (e.g. CWN DELUXE while cwn_deluxe is off).
+   *  Their sections are not rendered. */
+  hiddenTabs?: string[];
+  /** Cast a spell row (1-based index). Server-resolved: rolls the row's
+   *  damage dice and spends its Effort cost off the stored sheet. */
+  onCastSpell?: (index: number) => void;
 }
 
 const num = (v: unknown): number => {
@@ -74,6 +84,22 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
 }) {
   const value = data[field.id] ?? '';
+  if (field.source && field.sourceWritable && !readOnly) {
+    // Writable linked field (token AC): edits go through the normal save
+    // path; the server routes them to the owning system instead of storing
+    // them on the sheet. Dashed border keeps the "linked" signal.
+    return (
+      <input
+        aria-label={field.label}
+        className="sheet-input"
+        type="number"
+        style={{ ...inputStyle, border: '1px dashed var(--green)', ...style }}
+        value={String(value ?? '')}
+        placeholder={field.placeholder}
+        onChange={(e) => onFieldChange(field.id, e.target.value === '' ? '' : Number(e.target.value))}
+      />
+    );
+  }
   if (field.source) {
     // Linked field: value lives in another system (bank, token HP). Display
     // only - clicking jumps to the window that owns it, when available.
@@ -207,12 +233,13 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload }: { initia
   );
 }
 
-function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpenLink, onFieldChange, onDeathSave, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, canRoll }: {
+function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpenLink, onFieldChange, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, canRoll }: {
   template: SheetTemplate; data: SheetData; portraitUrl?: string | null;
   onPortraitUpload?: (file: File) => void;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
   onFieldChange: (fieldId: string, value: string | number) => void;
   onDeathSave?: () => void;
+  onStabilize?: () => void;
   /** LUCK armed for the next roll (declared before rolling, per CP:R). */
   armedLuck?: number;
   setArmedLuck?: (n: number) => void;
@@ -306,6 +333,65 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpe
             </div>
           );
         })()}
+        {template.stabilize && h.hpField && (hpMax ?? 0) > 0 && (hp ?? 1) <= 0 && (() => {
+          const rounds = num(data.rounds_since_downed);
+          const frail = num(data.frail) === 1;
+          return (
+            <div style={{
+              marginTop: '6px', border: '1px solid #ff3333', background: 'rgba(60, 0, 0, 0.45)',
+              padding: '5px 8px', display: 'flex', flexDirection: 'column', gap: '4px',
+            }}>
+              <span style={{ color: '#ff3333', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'death-pulse 1.2s ease-in-out infinite' }}>
+                ⚠ {frail ? 'FRAIL — DEAD AT 0 HP' : 'MORTALLY WOUNDED'}
+              </span>
+              {!frail && (
+                <>
+                  <span style={{ color: '#ff3333', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
+                    Dead in {Math.max(0, 6 - rounds)} rounds — 2d6 + Heal + INT vs DC {8 + rounds}, rising each round
+                  </span>
+                  <button
+                    onClick={onStabilize}
+                    disabled={!onStabilize}
+                    title="An ally's Main Action: Heal check vs 8 + rounds down (+2 without tools). Success: 1 HP and the Frail condition."
+                    style={{
+                      alignSelf: 'center', background: 'none', border: '1px solid #ff3333', color: '#ff3333',
+                      fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 10px',
+                      cursor: onStabilize ? 'pointer' : 'default', opacity: onStabilize ? 1 : 0.5,
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                    }}
+                  >
+                    STABILIZE
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })()}
+        {template.stabilize && h.hpField && (hp ?? 0) > 0 && num(data.frail) === 1 && (
+          <div style={{
+            marginTop: '6px', border: '1px solid #ffcc00', background: 'rgba(60, 45, 0, 0.4)',
+            padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: '4px',
+          }}>
+            <span style={{ color: '#ffcc00', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'wound-pulse 1.6s ease-in-out infinite' }}>
+              ⚠ FRAIL
+            </span>
+            <span style={{ color: '#ffcc00', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
+              Hitting 0 HP again is instant death — cleared by a week of care or medical treatment
+            </span>
+            <button
+              onClick={() => onFieldChange('frail', 0)}
+              disabled={false}
+              title="Click when the GM confirms the recovery conditions are met (a week of bedrest and care, or successful medical treatment)."
+              style={{
+                alignSelf: 'center', background: 'none', border: '1px solid #ffcc00', color: '#ffcc00',
+                fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 10px',
+                cursor: 'pointer',
+              }}
+            >
+              CLEAR FRAIL (GM APPROVED)
+            </button>
+          </div>
+        )}
         {template.deathSave && h.hpField && (hp ?? 0) > 0 && num(data.seriously_wounded) > 0 && (hp ?? 0) <= num(data.seriously_wounded) && (
           <div style={{
             marginTop: '6px', border: '1px solid #ffcc00', background: 'rgba(60, 45, 0, 0.4)',
@@ -518,19 +604,26 @@ function SkillsSection({ section, data, readOnly, onFieldChange, onRoll }: {
   );
 }
 
-// Structured weapon rows: every 4 consecutive fields (name/dmg/skill/rof)
-// form one weapon. Rendered as a compact table with a header row.
+// Structured weapon rows: every N consecutive fields form one weapon, where
+// N is section.columns (default 4, CP:R's name/dmg/skill/rof). Headers come
+// from the first row's field labels.
 function WeaponsSection({ section, data, readOnly, onFieldChange }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
 }) {
+  const perRow = section.columns ?? 4;
   const rows: SheetField[][] = [];
-  for (let i = 0; i < section.fields.length; i += 4) rows.push(section.fields.slice(i, i + 4));
+  for (let i = 0; i < section.fields.length; i += perRow) rows.push(section.fields.slice(i, i + perRow));
   const cell: React.CSSProperties = { padding: '2px 4px', fontSize: '0.7rem' };
+  // CP:R keeps its hand-tuned column widths; other row shapes get a generic
+  // grid: name column flexes, selects get room, the rest stay compact.
+  const gridTemplateColumns = perRow === 4
+    ? '1fr 70px 130px 44px'
+    : (rows[0] ?? []).map((f, i) => (i === 0 ? '1fr' : f.type === 'select' ? '90px' : '56px')).join(' ');
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 130px 44px', gap: '3px 4px', alignItems: 'center' }}>
-      {['NAME', 'DMG', 'SKILL', 'ROF'].map(h => (
-        <div key={h} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{h}</div>
+    <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
+      {(rows[0] ?? []).map(f => (
+        <div key={f.id} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{f.label}</div>
       ))}
       {rows.map((row) => (
         <React.Fragment key={row[0].id}>
@@ -546,6 +639,58 @@ function WeaponsSection({ section, data, readOnly, onFieldChange }: {
           ))}
         </React.Fragment>
       ))}
+    </div>
+  );
+}
+
+// Spell rows: weapons-style chunked rows plus a CAST button per row. The
+// server rolls the row's damage dice (if any) and spends its Effort cost.
+function SpellsSection({ section, data, readOnly, onFieldChange, onCastSpell }: {
+  section: SheetSection; data: SheetData; readOnly: boolean;
+  onFieldChange: (fieldId: string, value: string | number) => void;
+  onCastSpell?: (index: number) => void;
+}) {
+  const perRow = section.columns ?? 4;
+  const rows: SheetField[][] = [];
+  for (let i = 0; i < section.fields.length; i += perRow) rows.push(section.fields.slice(i, i + perRow));
+  const cell: React.CSSProperties = { padding: '2px 4px', fontSize: '0.7rem' };
+  const gridTemplateColumns = `${(rows[0] ?? []).map((_f, i) => (i <= 1 ? '1fr' : '52px')).join(' ')} 52px`;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
+      {(rows[0] ?? []).map(f => (
+        <div key={f.id} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{f.label}</div>
+      ))}
+      <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>CAST</div>
+      {rows.map((row, rowIdx) => {
+        const named = String(data[row[0].id] ?? '').trim() !== '';
+        const castable = named && !!onCastSpell;
+        return (
+          <React.Fragment key={row[0].id}>
+            {row.map((field) => (
+              <FieldInput
+                key={field.id}
+                field={field}
+                data={data}
+                readOnly={readOnly}
+                onFieldChange={onFieldChange}
+                style={{ ...cell, ...(field.type === 'number' ? { textAlign: 'center' } : null) }}
+              />
+            ))}
+            <button
+              onClick={castable ? () => onCastSpell!(rowIdx + 1) : undefined}
+              disabled={!castable}
+              title={castable ? 'Cast: rolls the damage dice and spends the Effort cost' : 'Name the spell first'}
+              style={{
+                background: 'none', border: '1px solid var(--green)', color: 'var(--green)',
+                fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '3px 2px',
+                cursor: castable ? 'pointer' : 'default', opacity: castable ? 1 : 0.35,
+              }}
+            >
+              CAST
+            </button>
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }
@@ -567,9 +712,14 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, onOpenLink, onRoll, onDeathSave, allowFumbleShield = false }: SheetRendererProps) {
-  const tabs = template.tabs ?? ['SHEET'];
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell }: SheetRendererProps) {
+  const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
+  // If the active tab gets hidden (house rule toggled off), fall back to the
+  // first visible one.
+  useEffect(() => {
+    if (!tabs.includes(activeTab) && tabs.length > 0) setActiveTab(tabs[0]);
+  }, [tabs.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   // LUCK declared for the next roll (CP:R: declare before rolling; any spend
   // also negates a natural-1 fumble). Consumed and reset by the next roll.
   const [armedLuck, setArmedLuck] = useState(0);
@@ -630,7 +780,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         }
       `}</style>
 
-      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={allowFumbleShield} canRoll={!!onRoll} />
+      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={allowFumbleShield} canRoll={!!onRoll} />
 
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
         {tabHasRolls && (
@@ -657,6 +807,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'grid' && <GridSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
                   {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
+                  {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
               )}

@@ -13,7 +13,7 @@
 // other systems. They come back in `skipped` so the user knows why.
 
 const { PDFDocument } = require('pdf-lib');
-const { CPR_SKILLS } = require('./rolls');
+const { CPR_SKILLS, CWN_SKILLS } = require('./rolls');
 const { getLinkedFields } = require('./templates');
 
 // 'SP (Head)' / 'sp_head' / 'SP HEAD' all normalize to 'sphead'
@@ -186,10 +186,160 @@ const mapCprFields = (raw) => {
   return { mapped, unmapped, skipped };
 };
 
+// ─── CWN importer ────────────────────────────────────────────────────────────
+
+const buildCwnAliases = () => {
+  const a = {};
+  const alias = (keys, fieldId) => keys.forEach((k) => { a[norm(k)] = fieldId; });
+
+  // Identity
+  alias(['name', 'charactername', 'handle'], 'name');
+  alias(['background', 'bg'], 'background');
+  alias(['class', 'archetype'], 'class');
+  alias(['level', 'lvl', 'charlevel'], 'level');
+  alias(['description', 'appearance'], 'description');
+  alias(['aliases', 'alias'], 'aliases');
+  alias(['faction'], 'faction');
+
+  // Linked fields: surface under `skipped` so the user knows why they weren't imported
+  alias(['hp', 'hitpoints', 'currenthp'], 'hp');
+  alias(['hpmax', 'maxhp', 'hp max'], 'hp_max');
+  alias(['cash', 'money', 'credits'], 'cash');
+
+  // Attributes (raw scores and mods — mods are derived but allow round-tripping)
+  ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((s) => alias([s], s));
+  alias(['strength'], 'str');
+  alias(['dexterity', 'agility'], 'dex');
+  alias(['constitution', 'endurance'], 'con');
+  alias(['intelligence'], 'int');
+  alias(['wisdom'], 'wis');
+  alias(['charisma'], 'cha');
+
+  // Combat
+  alias(['ac', 'armorclass', 'defense', 'armour'], 'ac');
+  alias(['armor', 'armorname'], 'armor_name');
+  alias(['armorac', 'baseac', 'armorbaseac'], 'armor_ac');
+  alias(['maxdex', 'dexcap', 'armordexcap'], 'armor_dex_cap');
+  alias(['shield', 'shieldbonus'], 'shield_bonus');
+  alias(['bhb', 'basehitbonus', 'hitbonus', 'attackbonus'], 'base_hit_bonus');
+  alias(['systemstrain', 'strain'], 'system_strain');
+  alias(['systemstrainmax', 'strainmax'], 'system_strain_max');
+  alias(['traumatarget', 'traumatgt', 'tt'], 'trauma_target');
+
+  // Saves
+  alias(['savephysical', 'physicalsave', 'physical'], 'save_physical');
+  alias(['saveevasion', 'evasionsave', 'evasion'], 'save_evasion');
+  alias(['savemental', 'mentalsave', 'mental'], 'save_mental');
+  alias(['saveluck', 'lucksave'], 'save_luck');
+
+  // Skills: id + label for all 20 + Deluxe
+  Object.entries(CWN_SKILLS).forEach(([id, [label]]) => alias([id, label], id));
+
+  // Conditions
+  alias(['frail'], 'frail');
+  alias(['autoinitiative', 'auto initiative', 'alertfocus'], 'auto_initiative');
+
+  // Deluxe
+  alias(['castskill', 'cast', 'casting'], 'cast_skill');
+  alias(['mageeffort', 'effort', 'magiceffort'], 'mage_effort');
+  alias(['mageeffortmax', 'effortmax'], 'mage_effort_max');
+  alias(['spellspreparedmax', 'spellsprepared', 'preparedspells'], 'spells_prepared_max');
+  for (let i = 1; i <= 4; i++) {
+    ['name', 'effect', 'dmg', 'cost'].forEach((part) => alias([`spell${i}${part}`], `spell${i}_${part}`));
+  }
+  alias(['summonskill', 'summon', 'summoning'], 'summon_skill');
+  alias(['summonereffort', 'summoneffort'], 'summoner_effort');
+  alias(['summonereffortmax', 'summoneffortmax'], 'summoner_effort_max');
+  alias(['spirits'], 'spirits');
+
+  // Notes
+  alias(['weaponsnotes', 'weapons', 'weaponnotes'], 'weapons_notes');
+  alias(['gear', 'gearnotes', 'equipment'], 'gear_notes');
+  alias(['cyberware', 'cyberwarenotes', 'chrome'], 'cyberware_notes');
+  alias(['foci', 'focinotes', 'edges', 'abilities'], 'foci_notes');
+  alias(['contacts', 'contactsnotes'], 'contacts_notes');
+  alias(['injuries', 'injurynotes', 'majorinjuries'], 'injury_notes');
+
+  // Weapon rows round-trip (6 fields each)
+  for (let i = 1; i <= 4; i++) {
+    ['name', 'dmg', 'skill', 'trauma', 'shock', 'atk'].forEach((part) =>
+      alias([`weapon${i}${part}`], `weapon${i}_${part}`)
+    );
+  }
+  return a;
+};
+
+const NUMERIC_CWN_FIELDS = new Set([
+  'level', 'base_hit_bonus', 'ac',
+  'str', 'str_mod', 'dex', 'dex_mod', 'con', 'con_mod',
+  'int', 'int_mod', 'wis', 'wis_mod', 'cha', 'cha_mod',
+  'save_physical', 'save_evasion', 'save_mental', 'save_luck',
+  'system_strain', 'system_strain_max',
+  'armor_ac', 'armor_dex_cap', 'shield_bonus', 'trauma_target',
+  'frail', 'auto_initiative',
+  'cast_skill', 'mage_effort', 'mage_effort_max', 'spells_prepared_max',
+  'summon_skill', 'summoner_effort', 'summoner_effort_max',
+  ...Object.keys(CWN_SKILLS),
+  'weapon1_atk', 'weapon2_atk', 'weapon3_atk', 'weapon4_atk',
+  'spell1_cost', 'spell2_cost', 'spell3_cost', 'spell4_cost',
+]);
+
+// Fields where importing the value also seeds the current (same as CP:R pattern)
+const CWN_MAX_SEEDS = {
+  system_strain_max: 'system_strain',
+  mage_effort_max: 'mage_effort',
+  summoner_effort_max: 'summoner_effort',
+};
+
+const parseCwnText = (text) => {
+  const out = {};
+  const labelPatterns = [
+    ...['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA', 'AC', 'BHB', 'LEVEL'].map(s => [s, s.toLowerCase()]),
+    ...Object.entries(CWN_SKILLS).map(([id, [label]]) => [label, id]),
+  ];
+  for (const [label, key] of labelPatterns) {
+    const esc = label.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+    const re = new RegExp(`(?:^|[^a-zA-Z])${esc}\\s*[:=]?\\s*(\\d{1,2})(?![0-9])`, 'i');
+    const m = text.match(re);
+    if (m) out[key] = m[1];
+  }
+  const name = text.match(/name\s*[:=]?\s*(\S+(?:\s\S+)*?)(?=\s{2,}|\s*[\r\n]|\s+background\b|$)/i);
+  if (name) out.name = name[1].trim();
+  const bg = text.match(/background\s*[:=]?\s*([A-Za-z]+(?:\s[A-Za-z]+)?)(?=\s{2,}|\s*[\r\n]|$)/i);
+  if (bg) out.background = bg[1].trim();
+  return out;
+};
+
+const mapCwnFields = (raw) => {
+  const aliases = buildCwnAliases();
+  const mapped = {};
+  const unmapped = {};
+  const skipped = {};
+  const linked = getLinkedFields('cities_without_number');
+
+  Object.entries(raw || {}).forEach(([key, value]) => {
+    if (value === '' || value === null || value === undefined) return;
+    const fieldId = aliases[norm(key)];
+    if (!fieldId) { unmapped[key] = value; return; }
+    if (linked[fieldId]) { skipped[key] = value; return; }
+    const v = NUMERIC_CWN_FIELDS.has(fieldId) ? Number(value) : String(value);
+    if (NUMERIC_CWN_FIELDS.has(fieldId) && !Number.isFinite(v)) { unmapped[key] = value; return; }
+    mapped[fieldId] = v;
+  });
+
+  Object.entries(CWN_MAX_SEEDS).forEach(([maxField, curField]) => {
+    if (mapped[maxField] !== undefined && mapped[curField] === undefined) {
+      mapped[curField] = mapped[maxField];
+    }
+  });
+  return { mapped, unmapped, skipped };
+};
+
 // ─── Registry ────────────────────────────────────────────────────────────────
 
 const IMPORTERS = {
   cyberpunk_red: { mapFields: mapCprFields, parseText: parseCprText },
+  cities_without_number: { mapFields: mapCwnFields, parseText: parseCwnText },
   // generic: no importer - import is only offered for systems that define one
 };
 

@@ -369,7 +369,7 @@ canvas {
   width: 350px !important;
   height: 280px !important;
   z-index: auto;
-  filter: drop-shadow(0 0 6px rgba(0, 255, 0, 0.5));
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--green) 50%, transparent));
 }
 
 .editor-controls {
@@ -1179,6 +1179,7 @@ button:disabled, .utility-btn:disabled, .upload-btn:disabled {
   white-space: nowrap;
   width: 100%;
   line-height: 1.4;
+  color: var(--green); /* follow the active theme, not the body default */
 }
 
 .old-line {
