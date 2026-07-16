@@ -29,7 +29,7 @@ import { MeasurementTool, MeasurementVisualizer } from './components/Measurement
 import { CityDataBaseMenu } from './components/CityDatabase';
 import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './components/BankWindows';
 import { ChatWindow } from './components/ChatWindow';
-import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu } from './components/Sidebar';
+import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
@@ -1981,7 +1981,7 @@ function App() {
                       <div style={{ marginTop: '10px' }}>
                         {attackPending?.targetId === selectedLocation.id ? (
                           <div style={{ fontSize: '12px', color: 'var(--green)', border: '1px solid var(--green)', padding: '6px 10px' }}>
-                            {gameSystem === 'cyberpunk_red' || gameSystem === 'cities_without_number'
+                            {hasSheetCombat(gameSystem)
                               ? 'SELECT_WEAPON — DICE_ROLLER'
                               : <>AWAITING_ROLL — {attackPending.attackType.toUpperCase()}{token ? ` vs ${getTemplate(gameSystem).tokenDefense?.label ?? 'AC'} ${attackPending.ac}` : ''}</>}
                           </div>
@@ -1989,7 +1989,7 @@ function App() {
                           <>
                             {attackPending ? (
                               <div style={{ fontSize: '11px', color: '#888' }}>Attack in progress vs {attackPending.targetName}</div>
-                            ) : (gameSystem === 'cyberpunk_red' || gameSystem === 'cities_without_number') ? (
+                            ) : hasSheetCombat(gameSystem) ? (
                               // Sheet-driven systems: the weapon decides melee vs
                               // ranged - one button, pick the weapon in the dice menu
                               <button className="upload-btn" style={{ width: '100%', backgroundColor: '#cc2200', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'melee' }); }}>⚔ ATTACK</button>

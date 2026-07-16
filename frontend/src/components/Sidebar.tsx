@@ -499,6 +499,12 @@ const ATTACK_PANEL_CONFIG = {
   },
 } as const;
 
+/** Systems whose attacks resolve from sheet weapon rows (one ATTACK button,
+ *  weapon picked in the dice menu). Adding a config entry above lights up
+ *  the whole flow - no scattered system checks to update. */
+export const hasSheetCombat = (system: string | undefined): system is keyof typeof ATTACK_PANEL_CONFIG =>
+  !!system && system in ATTACK_PANEL_CONFIG;
+
 function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState, setIsDiceTrayOpen }: {
   system: keyof typeof ATTACK_PANEL_CONFIG;
   userName: string;
@@ -683,13 +689,13 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
             ATTACK ROLL — vs {attackPending.targetName}
           </div>
           <div style={{ color: 'var(--green)', fontSize: '0.75rem', marginBottom: '6px' }}>
-            {gameSystem === 'cyberpunk_red' || gameSystem === 'cities_without_number'
+            {hasSheetCombat(gameSystem)
               ? 'PICK A WEAPON — TO-HIT, DAMAGE & ARMOR RESOLVE AUTOMATICALLY'
               : isAdmin
                 ? `${attackPending.attackType.toUpperCase()} · ${defenseLabel} ${attackPending.ac} · Roll ${attackPending.ac}+ to hit`
                 : attackPending.attackType.toUpperCase()}
           </div>
-          {(gameSystem === 'cyberpunk_red' || gameSystem === 'cities_without_number') && (
+          {hasSheetCombat(gameSystem) && (
             <SheetAttackPanel
               system={gameSystem}
               userName={userName}
