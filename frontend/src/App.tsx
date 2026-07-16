@@ -1654,6 +1654,7 @@ function App() {
                   else setIsHitPointsOpen(true);
                 }}
                 onRolled={() => setIsDiceTrayOpen(true)}
+                currentTheme={currentTheme}
               />
             )}
               <ChatWindow
