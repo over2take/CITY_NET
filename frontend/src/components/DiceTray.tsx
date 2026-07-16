@@ -308,16 +308,25 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
   const [displayRoll, setDisplayRoll] = useState<{ total: number; results: any; color: string; timestamp: number } | null>(null);
   const [isRolling, setIsRolling] = useState(false);
   const historyContainerRef = useRef<HTMLDivElement>(null);
+  // Rolls play one at a time: attacks broadcast to-hit and damage
+  // back-to-back, and without a queue the second wiped the first's dice
+  // mid-flight. Dice-less rolls (shock damage) show briefly, not for the
+  // full animation.
+  const rollQueue = useRef<any[]>([]);
+  const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!socketRef.current) return;
     socketRef.current.emit('requestDiceHistory');
 
-    const handleBroadcast = (data: any) => {
+    const playNext = () => {
+      const data = rollQueue.current.shift();
+      if (!data) { rollTimer.current = null; return; }
+      const hasDice = data.results && Object.keys(data.results).length > 0;
       setLatestRoll({ total: data.total, results: data.results, color: data.color, timestamp: Date.now() });
       setIsRolling(true);
       setDisplayRoll(null);
-      setTimeout(() => {
+      rollTimer.current = setTimeout(() => {
         setIsRolling(false);
         setDisplayRoll({ total: data.total, results: data.results, color: data.color, timestamp: Date.now() });
         setHistory(prev => {
@@ -325,7 +334,13 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
           setTimeout(() => { if (historyContainerRef.current) historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight; }, 50);
           return newHistory;
         });
-      }, 5000);
+        playNext();
+      }, hasDice ? 5000 : 800);
+    };
+
+    const handleBroadcast = (data: any) => {
+      rollQueue.current.push(data);
+      if (!rollTimer.current) playNext();
     };
 
     const handleHistory = (data: any[]) => {
@@ -345,6 +360,9 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
     return () => {
       socket.off('diceRollBroadcast', handleBroadcast);
       socket.off('diceRollHistory', handleHistory);
+      if (rollTimer.current) clearTimeout(rollTimer.current);
+      rollTimer.current = null;
+      rollQueue.current = [];
     };
   }, [socketRef.current]);
 
