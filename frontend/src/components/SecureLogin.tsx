@@ -252,7 +252,7 @@ export function SecureLogin({
             </button>
           </div>
 
-          <div style={{ fontSize: '0.65rem', opacity: 0.5, letterSpacing: '4px', marginBottom: '15px', marginTop: '10px' }}>NAV_OS_v{__APP_VERSION__}</div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--green)', textShadow: 'var(--glow)', letterSpacing: '4px', marginBottom: '15px', marginTop: '10px' }}>NAV_OS_v{__APP_VERSION__}</div>
 
           {loginError && (
             <div style={{ fontSize: '0.7rem', color: loginError.includes('updated') ? 'var(--green)' : '#ff3333', marginBottom: '10px', letterSpacing: '1px' }}>
