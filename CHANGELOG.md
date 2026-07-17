@@ -9,6 +9,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.5.1] - 2026-07-17
+
+NPC portraits with a glitchy TV/CRT effect, stock headshot library, and token info window improvements.
+
+### Added
+
+**NPC portraits**
+- **Stock headshot library** — 16 bundled NPC headshots (new art by **PaMuDA**) served from `frontend/public/npc-headshots/`; `GENERATE_SHEET` auto-assigns a random headshot to new NPC sheets
+- **HEADSHOTS picker** — admin button on the NPC sheet window opens a `<  N/16  >` prev/next navigator to browse and assign any stock headshot; seeds to the current portrait when it's a stock image
+- **`TvPortrait` component** — reusable, self-contained glitchy TV/CRT portrait effect (chromatic R/B fringe, scanlines, rolling refresh band, intermittent glitch jitter) usable on any portrait; `BracketPortrait` and the token info window both use it
+- **FX toggle** — per-sheet `portrait_shadow_filter` field with an FX ■/□ button under the sheet portrait enables/disables the TV effect (on by default)
+- **Public token identity route** — `GET /api/sheets/npcs/link-public/:location_id` returns sheet name + portrait only (no stats/description) for enemy and friendly tokens
+
+### Changed
+
+**Token info window**
+- Title now reads `ID: {sheet name}` from the linked NPC sheet instead of `HOSTILE_NODE`
+- Portrait from the linked sheet displays in the window with the TV effect
+- `DATA_DESCRIPTION` pulls from the linked sheet's description (admin view); falls back to the data point's description
+- All players (not just admin) now see a linked token's name and portrait; description and stats remain admin-only — the GM builds mystery manually by leaving a token unlinked or unnamed
+- `EDIT_DATA_POINT` is hidden for tokens linked to a sheet — the sheet drives name/description
+- `CHECK_HEALTH` now opens only the health window; the quick sheet card no longer auto-opens with it
+
+---
+
 ## [1.5.0] - 2026-07-16
 
 Cities Without Number (CWN) — second full game system, accessibility theme picker, and a major frontend deduplication pass.
