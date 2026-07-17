@@ -955,6 +955,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     // Admin: seed an NPC sheet from a token (enemy_rhombus / friendly_rhombus).
     // Creates a character_sheets row pre-filled with the token's name, description
     // and current HP, then links it to the location via npc_sheet_links.
+    const NPC_HEADSHOTS = [
+      '1.png','2.png','14.png','16.png','17.png','21.png','22.png','29.png',
+      '30.png','35.png','36.png','46.png','61.png','85.png','86.png','101.png',
+    ].map(f => `/npc-headshots/${f}`);
+
     socket.on('generateNpcSheet', (data) => {
       const callerInfo = userSockets.get(socket.id);
       if (!callerInfo || (!callerInfo.isAdmin && !elevatedUsers.has(callerInfo.userName))) return;
@@ -969,6 +974,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           // weapons plus token HP and DV. Systems without tiers keep the
           // bare token-mirroring sheet.
           const tier = npcTiers.buildTier(system, data.tier);
+          const randomHeadshot = NPC_HEADSHOTS[Math.floor(Math.random() * NPC_HEADSHOTS.length)];
           const sheetData = {
             name: loc.name || '',
             description: loc.description || '',
@@ -979,9 +985,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             }),
           };
           const insertSheet = () => db.run(
-            `INSERT INTO character_sheets (username, system, data, is_npc, npc_label)
-             VALUES (?, ?, ?, 1, ?)`,
-            [callerInfo.userName, system, JSON.stringify(sheetData), label],
+            `INSERT INTO character_sheets (username, system, data, is_npc, npc_label, portrait_url)
+             VALUES (?, ?, ?, 1, ?, ?)`,
+            [callerInfo.userName, system, JSON.stringify(sheetData), label, randomHeadshot],
             function (err3) {
               if (err3) return;
               const sheetId = this.lastID;

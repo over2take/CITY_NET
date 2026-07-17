@@ -447,6 +447,42 @@ module.exports = (db, io) => {
     });
   });
 
+  // Set portrait to a bundled stock headshot URL (admin-only).
+  // Accepts { npc_id, url } or { username, url }; url must be from /npc-headshots/.
+  router.post('/portrait-url', authenticate, requireAdmin, (req, res) => {
+    const { npc_id, username, url } = req.body || {};
+    if (!url || typeof url !== 'string' || !url.startsWith('/npc-headshots/')) {
+      return res.status(400).json({ error: 'url must be a /npc-headshots/ path' });
+    }
+    if (npc_id) {
+      return db.run(
+        `UPDATE character_sheets SET portrait_url = ? WHERE id = ? AND is_npc = 1`,
+        [url, npc_id],
+        function (err) {
+          if (err) return res.status(500).json({ error: err.message });
+          if (this.changes === 0) return res.status(404).json({ error: 'NPC not found' });
+          res.json({ portrait_url: url });
+        }
+      );
+    }
+    if (username) {
+      getGameSystem((err, system) => {
+        if (err) return res.status(500).json({ error: err.message });
+        db.run(
+          `UPDATE character_sheets SET portrait_url = ? WHERE username = ? AND system = ? AND is_npc = 0`,
+          [url, username, system],
+          (err2) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            io.emit('sheetUpdated', { username });
+            res.json({ portrait_url: url });
+          }
+        );
+      });
+      return;
+    }
+    res.status(400).json({ error: 'npc_id or username required' });
+  });
+
   // Reset all player LUCK to max for the active system (admin-only)
   router.post('/reset-luck', authenticate, requireAdmin, (req, res) => {
     getGameSystem((err, system) => {
