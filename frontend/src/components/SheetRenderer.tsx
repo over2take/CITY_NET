@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { SheetTemplate, SheetSection, SheetField, SheetData } from '../sheets';
+import { TvPortrait } from './TvPortrait';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
   return (
@@ -199,20 +200,7 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilt
     <div style={{ position: 'relative', width: `${size}px`, height: `${size}px`, background: 'rgba(0, 20, 0, 0.6)', flex: '0 0 auto', overflow: 'hidden' }}>
       {portraitUrl ? (
         shadowFilter ? (
-          <div className="portrait-tv" style={{ position: 'absolute', inset: 0 }}>
-            {/* Chromatic fringe: R and B copies offset either side of the base */}
-            <img src={portraitUrl} alt="" aria-hidden style={{ ...imgStyle, filter: 'url(#portrait-red)', transform: 'translateX(1.5px)', mixBlendMode: 'screen', opacity: 0.85 }} />
-            <img src={portraitUrl} alt="" aria-hidden style={{ ...imgStyle, filter: 'url(#portrait-blue)', transform: 'translateX(-1.5px)', mixBlendMode: 'screen', opacity: 0.85 }} />
-            <img src={portraitUrl} alt="portrait" style={{ ...imgStyle, mixBlendMode: 'screen' }} />
-            {/* Scanlines + rolling refresh band */}
-            <div className="portrait-scanlines" />
-            <div className="portrait-rollband" />
-            {/* SVG color-isolation filters for the fringe layers */}
-            <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
-              <filter id="portrait-red"><feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" /></filter>
-              <filter id="portrait-blue"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" /></filter>
-            </svg>
-          </div>
+          <TvPortrait src={portraitUrl} />
         ) : (
           <img src={portraitUrl} alt="portrait" style={{ ...imgStyle, objectFit: 'cover' }} />
         )
@@ -787,33 +775,6 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         .sheet-input[type=number] { -moz-appearance: textfield; appearance: textfield; }
         .sheet-input:focus { outline: 1px solid var(--green); }
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
-
-        /* TV portrait: intermittent glitch jitter — idle most of the cycle */
-        .portrait-tv { animation: portrait-glitch 4s infinite steps(1); }
-        @keyframes portrait-glitch {
-          0%, 91% { transform: none; filter: none; }
-          92% { transform: translateX(2px) skewX(-1deg); }
-          93% { transform: translateX(-2px); filter: brightness(1.3); }
-          94% { transform: translateX(1px) skewX(0.5deg); }
-          95%, 100% { transform: none; filter: none; }
-        }
-        .portrait-scanlines {
-          position: absolute; inset: 0; pointer-events: none;
-          background: repeating-linear-gradient(
-            to bottom,
-            rgba(0, 0, 0, 0) 0px, rgba(0, 0, 0, 0) 2px,
-            rgba(0, 0, 0, 0.28) 2px, rgba(0, 0, 0, 0.28) 3px
-          );
-        }
-        .portrait-rollband {
-          position: absolute; left: 0; right: 0; height: 22%; pointer-events: none;
-          background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0) 100%);
-          animation: portrait-roll 6s linear infinite;
-        }
-        @keyframes portrait-roll {
-          from { top: -25%; }
-          to { top: 105%; }
-        }
       `}</style>
 
       <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={allowFumbleShield} canRoll={!!onRoll} />

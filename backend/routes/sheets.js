@@ -338,6 +338,24 @@ module.exports = (db, io) => {
     });
   });
 
+  // Public: name + portrait only, for enemy/friendly tokens so players see who
+  // it is without exposing the full sheet (description, stats, etc). Admin
+  // can still build mystery manually by leaving a token unlinked or unnamed.
+  router.get('/npcs/link-public/:location_id', (req, res) => {
+    db.get(
+      `SELECT cs.portrait_url, json_extract(cs.data, '$.name') AS sheet_name
+       FROM npc_sheet_links l
+       JOIN character_sheets cs ON cs.id = l.sheet_id
+       JOIN locations loc ON loc.id = l.location_id
+       WHERE l.location_id = ? AND loc.shape IN ('friendly_rhombus', 'enemy_rhombus')`,
+      [req.params.location_id],
+      (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(row || {});
+      }
+    );
+  });
+
   // Which NPC sheet (if any) is linked to a token - drives the token menu's
   // GENERATE_SHEET vs OPEN_SHEET button
   router.get('/npcs/link/:location_id', authenticate, requireAdmin, (req, res) => {

@@ -34,6 +34,7 @@ import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
+import { TvPortrait } from './components/TvPortrait';
 import { getTemplate } from './sheets';
 import { DiceTrayWindow, DotMatrixScoreboard, DiceScene } from './components/DiceTray';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
@@ -221,9 +222,21 @@ function App() {
 
   useEffect(() => {
     const loc = selectedLocation;
-    if (!token || !loc || !['enemy_rhombus', 'friendly_rhombus'].includes(loc.shape)) {
+    if (!loc || !['enemy_rhombus', 'friendly_rhombus'].includes(loc.shape)) {
       setTokenSheetLink(null);
       return;
+    }
+    if (!token) {
+      // Non-admin: name + portrait only (no description/stats) for either shape
+      let cancelled = false;
+      fetch(`/api/sheets/npcs/link-public/${loc.id}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (cancelled) return;
+          setTokenSheetLink(data?.sheet_name || data?.portrait_url ? { location_id: loc.id, sheet_id: 0, npc_label: '', portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: null } : null);
+        })
+        .catch(() => { if (!cancelled) setTokenSheetLink(null); });
+      return () => { cancelled = true; };
     }
     let cancelled = false;
     fetch(`/api/sheets/npcs/link/${loc.id}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -1830,7 +1843,7 @@ function App() {
               if (selectedLocation && (!token || !showAdminPanel || canManage)) {
                 return (
                   <DraggableWindow 
-                    title={isRhombus ? `ID: ${(isAdmin && tokenSheetLink?.sheet_name) || selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}` : (isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation))}
+                    title={isRhombus ? `ID: ${tokenSheetLink?.sheet_name || selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}` : (isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation))}
                     pos={infoPanelPos} 
                     setPos={setInfoPanelPos} 
                     onClose={() => setSelectedLocation(null)}
@@ -1838,13 +1851,11 @@ function App() {
                     <div className="content">
                       {isRhombus ? (
                         <>
-                          {isAdmin && tokenSheetLink?.portrait_url && (
-                            <div style={{ marginBottom: '8px' }}>
-                              <img
-                                src={tokenSheetLink.portrait_url}
-                                alt=""
-                                style={{ width: '100%', maxHeight: '160px', objectFit: 'cover', objectPosition: 'top', border: '1px solid var(--green)', display: 'block' }}
-                              />
+                          {tokenSheetLink?.portrait_url && (
+                            <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                              <div style={{ position: 'relative', width: '120px', height: '120px', border: '1px solid var(--green)', background: 'rgba(0, 20, 0, 0.6)', overflow: 'hidden' }}>
+                                <TvPortrait src={tokenSheetLink.portrait_url} />
+                              </div>
                             </div>
                           )}
                           <p><strong>DATA_DESCRIPTION:</strong> {(isAdmin && tokenSheetLink?.sheet_description) || selectedLocation.description || 'NO_DATA'}</p>
@@ -1947,7 +1958,7 @@ function App() {
                         if (res.ok) { setSelectedLocation(null); fetchLocations(); }
                       }}>PURGE_DATA_POINT</button>
                     )}
-                    {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
+                    {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && tokenSheetLink?.location_id !== selectedLocation.id && (
                       <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
                     )}
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
