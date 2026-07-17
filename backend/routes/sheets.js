@@ -342,7 +342,7 @@ module.exports = (db, io) => {
   // GENERATE_SHEET vs OPEN_SHEET button
   router.get('/npcs/link/:location_id', authenticate, requireAdmin, (req, res) => {
     db.get(
-      `SELECT cs.id AS sheet_id, cs.npc_label FROM npc_sheet_links l
+      `SELECT cs.id AS sheet_id, cs.npc_label, cs.portrait_url FROM npc_sheet_links l
        JOIN character_sheets cs ON cs.id = l.sheet_id WHERE l.location_id = ?`,
       [req.params.location_id],
       (err, row) => {

@@ -203,13 +203,15 @@ function App() {
   // (NPC tokens share owner names; selectedLocation is a stale snapshot)
   const [reviewHealthLocId, setReviewHealthLocId] = useState<number | null>(null);
   const [reviewHealthPos, setReviewHealthPos] = useState(() => ({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 }));
+  // QuickSheetCard is opened explicitly (not auto-opened with CHECK_HEALTH)
+  const [quickSheetOwner, setQuickSheetOwner] = useState<string | null>(null);
   const [quickSheetPos, setQuickSheetPos] = useState(() => ({ x: window.innerWidth / 2 + 170, y: window.innerHeight / 2 - 100 }));
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
   const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string } | null>(null);
   // NPC sheet linked to the currently selected token (admin) - drives
   // GENERATE_SHEET vs OPEN_SHEET on the token menu
-  const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; npc_label: string } | null>(null);
+  const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; npc_label: string; portrait_url?: string | null } | null>(null);
   // Admin view of another player's sheet (opened from their token)
   const [openPlayerSheetUser, setOpenPlayerSheetUser] = useState<string | null>(null);
   // Bumped when npc_sheet_links change so the link lookup effect re-runs
@@ -228,7 +230,7 @@ function App() {
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (cancelled) return;
-        setTokenSheetLink(data?.sheet_id ? { location_id: loc.id, sheet_id: data.sheet_id, npc_label: data.npc_label } : null);
+        setTokenSheetLink(data?.sheet_id ? { location_id: loc.id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null } : null);
       })
       .catch(() => { if (!cancelled) setTokenSheetLink(null); });
     return () => { cancelled = true; };
@@ -725,7 +727,7 @@ function App() {
       // Flip the token menu's GENERATE_SHEET to OPEN_SHEET immediately.
       // Safe unconditionally: the button only reads the link when its
       // location_id matches the selected token.
-      setTokenSheetLink({ location_id: data.location_id, sheet_id: data.sheet_id, npc_label: data.npc_label });
+      setTokenSheetLink({ location_id: data.location_id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null });
     },
     onNpcLinkChanged: () => setLinkRefresh(n => n + 1),
     onDiceRollBroadcast: (data) => {
@@ -1767,13 +1769,13 @@ function App() {
                 />
               ) : null;
             })()}
-            {reviewHealthOwner && (
+            {quickSheetOwner && (
               <QuickSheetCard
-                username={reviewHealthOwner}
+                username={quickSheetOwner}
                 socket={socketRef.current}
                 pos={quickSheetPos}
                 setPos={setQuickSheetPos}
-                onClose={() => setReviewHealthOwner(null)}
+                onClose={() => setQuickSheetOwner(null)}
               />
             )}
             {isNpcLibraryOpen && token && (
@@ -1828,7 +1830,7 @@ function App() {
               if (selectedLocation && (!token || !showAdminPanel || canManage)) {
                 return (
                   <DraggableWindow 
-                    title={isUserDefinedName(selectedLocation.name) ? selectedLocation.name : (selectedLocation.shape === 'enemy_rhombus' ? 'HOSTILE_NODE' : (selectedLocation.shape === 'friendly_rhombus' ? 'FRIENDLY_NPC' : (selectedLocation.shape === 'rhombus' ? 'TACTICAL_BEACON' : getStructLabel(selectedLocation))))}
+                    title={isRhombus ? `ID: ${selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}` : (isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation))}
                     pos={infoPanelPos} 
                     setPos={setInfoPanelPos} 
                     onClose={() => setSelectedLocation(null)}
@@ -1836,7 +1838,15 @@ function App() {
                     <div className="content">
                       {isRhombus ? (
                         <>
-                          <p><strong>ID_TAG:</strong> {selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : (selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED'))}</p>
+                          {tokenSheetLink?.portrait_url && tokenSheetLink.location_id === selectedLocation.id && (
+                            <div style={{ marginBottom: '8px' }}>
+                              <img
+                                src={tokenSheetLink.portrait_url}
+                                alt=""
+                                style={{ width: '100%', maxHeight: '160px', objectFit: 'cover', objectPosition: 'top', border: '1px solid var(--green)', display: 'block' }}
+                              />
+                            </div>
+                          )}
                           <p><strong>DATA_DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
                           {/* Defense display (AC or DV per game system) — admin can edit; owner can view their own; other players see nothing */}
                           {(isAdmin || isOwner) && (() => { const defLabel = getTemplate(gameSystem).tokenDefense?.label ?? 'AC'; return (
@@ -2019,6 +2029,7 @@ function App() {
                             setReviewHealthOwner(selectedLocation.owner);
                             setReviewHealthPos({ x: infoPanelPos.x + 320 > window.innerWidth - 300 ? Math.max(0, infoPanelPos.x - 320) : infoPanelPos.x + 320, y: infoPanelPos.y });
                             setReviewHealthLocId(selectedLocation.id);
+                            // QuickSheetCard is NOT opened from CHECK_HEALTH — health window only
                         }}>CHECK_HEALTH</button>
                     )}
                     {isRhombus && (isAdmin || (isPlayerRhombus && selectedLocation.owner === userName)) && (
