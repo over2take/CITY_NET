@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 const NPC_HEADSHOTS = [
   '1.png','2.png','14.png','16.png','17.png','21.png','22.png','29.png',
@@ -41,6 +41,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
   const [reloadKey, setReloadKey] = useState(0);
   const [cwnDeluxe, setCwnDeluxe] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerIndex, setPickerIndex] = useState(0);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // House rules gate sheet tabs (CWN DELUXE); refresh when the admin applies
@@ -192,7 +193,13 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
               title="Choose a stock NPC headshot"
               className="win95-close-btn"
               style={{ fontSize: '9px', width: 'auto', padding: '0 5px', background: pickerOpen ? 'rgba(0,255,0,0.12)' : undefined }}
-              onClick={() => setPickerOpen(o => !o)}
+              onClick={() => {
+                if (!pickerOpen && sheet?.portrait_url) {
+                  const idx = NPC_HEADSHOTS.indexOf(sheet.portrait_url);
+                  if (idx !== -1) setPickerIndex(idx);
+                }
+                setPickerOpen(o => !o);
+              }}
             >
               HEADSHOTS
             </button>
@@ -213,22 +220,33 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
     >
       {pickerOpen && !playerUsername && (
         <div style={{
-          borderBottom: '1px solid var(--green)', paddingBottom: '8px', marginBottom: '6px',
-          display: 'flex', flexWrap: 'wrap', gap: '4px',
+          borderBottom: '1px solid var(--green)', marginBottom: '6px', paddingBottom: '8px',
+          display: 'flex', alignItems: 'center', gap: '8px',
         }}>
-          {NPC_HEADSHOTS.map(url => (
+          <button
+            onClick={() => setPickerIndex(i => (i - 1 + NPC_HEADSHOTS.length) % NPC_HEADSHOTS.length)}
+            style={{ background: 'none', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '2px 8px', fontSize: '1rem', lineHeight: 1 }}
+          >{'<'}</button>
+          <img
+            src={NPC_HEADSHOTS[pickerIndex]}
+            alt=""
+            style={{ width: 72, height: 72, objectFit: 'cover', border: '1px solid var(--green)', display: 'block' }}
+          />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '0.6rem', color: 'var(--green)', letterSpacing: '1px', opacity: 0.7 }}>
+              {pickerIndex + 1} / {NPC_HEADSHOTS.length}
+            </span>
             <button
-              key={url}
-              onClick={() => { handleSetStockPortrait(url); setPickerOpen(false); }}
-              title={url.split('/').pop()}
-              style={{
-                padding: 0, border: sheet?.portrait_url === url ? '2px solid var(--green)' : '1px solid #1a3a1a',
-                cursor: 'pointer', background: 'transparent', borderRadius: 2,
-              }}
+              onClick={() => { handleSetStockPortrait(NPC_HEADSHOTS[pickerIndex]); setPickerOpen(false); }}
+              style={{ background: 'rgba(0,255,0,0.08)', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '4px 10px', fontSize: '0.65rem', letterSpacing: '1px', fontWeight: 600 }}
             >
-              <img src={url} alt="" style={{ width: 44, height: 44, objectFit: 'cover', display: 'block' }} />
+              USE THIS
             </button>
-          ))}
+          </div>
+          <button
+            onClick={() => setPickerIndex(i => (i + 1) % NPC_HEADSHOTS.length)}
+            style={{ background: 'none', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '2px 8px', fontSize: '1rem', lineHeight: 1 }}
+          >{'>'}</button>
         </div>
       )}
       {sheet && template ? (
