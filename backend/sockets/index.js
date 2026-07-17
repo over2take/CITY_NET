@@ -997,7 +997,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 [location_id, sheetId],
                 (err4) => {
                   if (err4) return;
-                  socket.emit('npcSheetGenerated', { location_id, sheet_id: sheetId, npc_label: label, tier: tier ? tier.tierId : null, portrait_url: randomHeadshot });
+                  socket.emit('npcSheetGenerated', { location_id, sheet_id: sheetId, npc_label: label, tier: tier ? tier.tierId : null, portrait_url: randomHeadshot, sheet_name: sheetData.name || null, sheet_description: sheetData.description || null });
                 }
               );
             }

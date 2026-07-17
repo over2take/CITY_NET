@@ -211,7 +211,7 @@ function App() {
   const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string } | null>(null);
   // NPC sheet linked to the currently selected token (admin) - drives
   // GENERATE_SHEET vs OPEN_SHEET on the token menu
-  const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; npc_label: string; portrait_url?: string | null } | null>(null);
+  const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; npc_label: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null } | null>(null);
   // Admin view of another player's sheet (opened from their token)
   const [openPlayerSheetUser, setOpenPlayerSheetUser] = useState<string | null>(null);
   // Bumped when npc_sheet_links change so the link lookup effect re-runs
@@ -230,7 +230,7 @@ function App() {
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (cancelled) return;
-        setTokenSheetLink(data?.sheet_id ? { location_id: loc.id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null } : null);
+        setTokenSheetLink(data?.sheet_id ? { location_id: loc.id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null } : null);
       })
       .catch(() => { if (!cancelled) setTokenSheetLink(null); });
     return () => { cancelled = true; };
@@ -727,7 +727,7 @@ function App() {
       // Flip the token menu's GENERATE_SHEET to OPEN_SHEET immediately.
       // Safe unconditionally: the button only reads the link when its
       // location_id matches the selected token.
-      setTokenSheetLink({ location_id: data.location_id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null });
+      setTokenSheetLink({ location_id: data.location_id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null });
     },
     onNpcLinkChanged: () => setLinkRefresh(n => n + 1),
     onDiceRollBroadcast: (data) => {
@@ -1830,7 +1830,7 @@ function App() {
               if (selectedLocation && (!token || !showAdminPanel || canManage)) {
                 return (
                   <DraggableWindow 
-                    title={isRhombus ? `ID: ${selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}` : (isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation))}
+                    title={isRhombus ? `ID: ${(isAdmin && tokenSheetLink?.sheet_name) || selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}` : (isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation))}
                     pos={infoPanelPos} 
                     setPos={setInfoPanelPos} 
                     onClose={() => setSelectedLocation(null)}
@@ -1838,7 +1838,7 @@ function App() {
                     <div className="content">
                       {isRhombus ? (
                         <>
-                          {tokenSheetLink?.portrait_url && tokenSheetLink.location_id === selectedLocation.id && (
+                          {isAdmin && tokenSheetLink?.portrait_url && (
                             <div style={{ marginBottom: '8px' }}>
                               <img
                                 src={tokenSheetLink.portrait_url}
@@ -1847,7 +1847,7 @@ function App() {
                               />
                             </div>
                           )}
-                          <p><strong>DATA_DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
+                          <p><strong>DATA_DESCRIPTION:</strong> {(isAdmin && tokenSheetLink?.sheet_description) || selectedLocation.description || 'NO_DATA'}</p>
                           {/* Defense display (AC or DV per game system) — admin can edit; owner can view their own; other players see nothing */}
                           {(isAdmin || isOwner) && (() => { const defLabel = getTemplate(gameSystem).tokenDefense?.label ?? 'AC'; return (
                             isAdmin && acEdit ? (
