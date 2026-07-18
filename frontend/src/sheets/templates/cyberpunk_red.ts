@@ -47,7 +47,7 @@ export const cyberpunkRed: SheetTemplate = {
     { id: 'elite', label: 'ELITE' },
   ],
   header: {
-    nameField: 'handle',
+    nameField: 'name',
     subtitleFields: ['role'],
     hpField: 'hp',
     hpMaxField: 'hp_max',
@@ -66,7 +66,7 @@ export const cyberpunkRed: SheetTemplate = {
       layout: 'list',
       tab: 'STATS',
       fields: [
-        { id: 'handle', label: 'Handle', type: 'text', visibility: 'public', placeholder: 'V' },
+        { id: 'name', label: 'Handle', type: 'text', visibility: 'public', placeholder: 'V' },
         { id: 'role', label: 'Role', type: 'text', visibility: 'public', placeholder: 'Solo' },
         { id: 'role_ability', label: 'Role Ability', type: 'text', placeholder: 'Combat Awareness' },
         { id: 'role_ability_rank', label: 'Rank', type: 'number' },

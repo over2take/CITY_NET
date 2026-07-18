@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { ALL_HEADSHOTS } from '../headshots';
 import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
@@ -17,6 +18,8 @@ interface NpcSheetWindowProps {
   npcLabel: string;
   /** Player mode: view/edit this player's active-system sheet instead. */
   playerUsername?: string;
+  /** Stock headshot pool for the HEADSHOTS picker (defaults to all pools). */
+  headshots?: string[];
   pos: { x: number; y: number };
   setPos: (pos: { x: number; y: number }) => void;
   onClose: () => void;
@@ -25,7 +28,7 @@ interface NpcSheetWindowProps {
   socket?: any;
 }
 
-export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, setPos, onClose, socket }: NpcSheetWindowProps) {
+export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headshots = ALL_HEADSHOTS, pos, setPos, onClose, socket }: NpcSheetWindowProps) {
   const apiPath = playerUsername
     ? `/api/sheets/user/${encodeURIComponent(playerUsername)}`
     : `/api/sheets/npcs/${npcId}`;
@@ -35,6 +38,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const [reloadKey, setReloadKey] = useState(0);
   const [cwnDeluxe, setCwnDeluxe] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerIndex, setPickerIndex] = useState(0);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // House rules gate sheet tabs (CWN DELUXE); refresh when the admin applies
@@ -146,6 +151,24 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
     }
   }, [npcId, playerUsername, token]);
 
+  const handleSetStockPortrait = useCallback(async (url: string) => {
+    const res = await fetch(`/api/sheets/portrait-url`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(playerUsername ? { username: playerUsername, url } : { npc_id: npcId, url }),
+    });
+    if (res.ok) {
+      setSheet(prev => (prev ? { ...prev, portrait_url: url } : prev));
+    }
+  }, [npcId, playerUsername, token]);
+
+  // portrait_shadow_filter: 1 = shadow-silhouette the portrait (hides reused
+  // stock art); the TV effect itself is always on. Default off.
+  const shadowFilter = Number(sheet?.data?.portrait_shadow_filter ?? 0) !== 0;
+  const handleTogglePortraitShadow = useCallback(() => {
+    handleFieldChange('portrait_shadow_filter', shadowFilter ? 0 : 1);
+  }, [handleFieldChange, shadowFilter]);
+
   const template = sheet ? getTemplate(sheet.system) : null;
 
   return (
@@ -165,6 +188,22 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
           >
             IMPORT
           </button>
+          {!playerUsername && (
+            <button
+              title="Choose a stock NPC headshot"
+              className="win95-close-btn"
+              style={{ fontSize: '9px', width: 'auto', padding: '0 5px', background: pickerOpen ? 'rgba(0,255,0,0.12)' : undefined }}
+              onClick={() => {
+                if (!pickerOpen && sheet?.portrait_url) {
+                  const idx = headshots.indexOf(sheet.portrait_url);
+                  if (idx !== -1) setPickerIndex(idx);
+                }
+                setPickerOpen(o => !o);
+              }}
+            >
+              HEADSHOTS
+            </button>
+          )}
           {template && (
             <span style={{ border: '1px solid var(--green)', padding: '0 6px', fontSize: '0.6rem', letterSpacing: '1px' }}>
               {template.name.toUpperCase()}
@@ -179,6 +218,37 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
       }}
       contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
     >
+      {pickerOpen && !playerUsername && (
+        <div style={{
+          borderBottom: '1px solid var(--green)', marginBottom: '6px', paddingBottom: '8px',
+          display: 'flex', alignItems: 'center', gap: '8px',
+        }}>
+          <button
+            onClick={() => setPickerIndex(i => (i - 1 + headshots.length) % headshots.length)}
+            style={{ background: 'none', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '2px 8px', fontSize: '1rem', lineHeight: 1 }}
+          >{'<'}</button>
+          <img
+            src={headshots[pickerIndex]}
+            alt=""
+            style={{ width: 72, height: 72, objectFit: 'cover', border: '1px solid var(--green)', display: 'block' }}
+          />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '0.6rem', color: 'var(--green)', letterSpacing: '1px', opacity: 0.7 }}>
+              {pickerIndex + 1} / {headshots.length}
+            </span>
+            <button
+              onClick={() => { handleSetStockPortrait(headshots[pickerIndex]); setPickerOpen(false); }}
+              style={{ background: 'rgba(0,255,0,0.08)', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '4px 10px', fontSize: '0.65rem', letterSpacing: '1px', fontWeight: 600 }}
+            >
+              USE THIS
+            </button>
+          </div>
+          <button
+            onClick={() => setPickerIndex(i => (i + 1) % headshots.length)}
+            style={{ background: 'none', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '2px 8px', fontSize: '1rem', lineHeight: 1 }}
+          >{'>'}</button>
+        </div>
+      )}
       {sheet && template ? (
         <SheetRenderer
           template={template}
@@ -186,6 +256,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
           onPortraitUpload={handlePortraitUpload}
+          portraitShadow={shadowFilter}
+          onTogglePortraitShadow={handleTogglePortraitShadow}
           hiddenTabs={sheet.system === 'cities_without_number' && !cwnDeluxe ? ['DELUXE'] : undefined}
         />
       ) : (

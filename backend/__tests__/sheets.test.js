@@ -55,9 +55,9 @@ describe('sheet template metadata', () => {
   });
 
   it('filterPublicData keeps only public fields', () => {
-    const data = { handle: 'VIPER', role: 'Rogue', description: 'Ghost of the grid', int: 8, sp_body: 11 };
+    const data = { name: 'VIPER', role: 'Rogue', description: 'Ghost of the grid', int: 8, sp_body: 11 };
     const filtered = filterPublicData('cyberpunk_red', data);
-    expect(filtered).toEqual({ handle: 'VIPER', role: 'Rogue', description: 'Ghost of the grid' });
+    expect(filtered).toEqual({ name: 'VIPER', role: 'Rogue', description: 'Ghost of the grid' });
   });
 
   it('filterPublicData never leaks combat fields even if listed public', () => {
@@ -74,7 +74,7 @@ describe('sheet template metadata', () => {
   });
 
   it('filterPublicData tolerates string and object data', () => {
-    expect(filterPublicData('cyberpunk_red', '{"handle":"NYX"}')).toEqual({ handle: 'NYX' });
+    expect(filterPublicData('cyberpunk_red', '{"name":"NYX"}')).toEqual({ name: 'NYX' });
     expect(filterPublicData('cyberpunk_red', null)).toEqual({});
   });
 
@@ -169,7 +169,7 @@ describe('GET /api/sheets (admin list)', () => {
 describe('GET /api/sheets/user/:username', () => {
   it('returns the full sheet including combat fields for admin', async () => {
     await setSystem(db, 'cyberpunk_red');
-    await insertSheet(db, { username: 'GHOST', data: JSON.stringify({ handle: 'GHOST', sp_body: 11 }) });
+    await insertSheet(db, { username: 'GHOST', data: JSON.stringify({ name: 'GHOST', sp_body: 11 }) });
     const res = await request(app)
       .get('/api/sheets/user/GHOST')
       .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
@@ -192,7 +192,7 @@ describe('GET /api/sheets/user/:username', () => {
 describe('PUT /api/sheets/user/:username', () => {
   it('merges field patches and emits sheetUpdated', async () => {
     await setSystem(db, 'cyberpunk_red');
-    await insertSheet(db, { username: 'GHOST', data: JSON.stringify({ handle: 'GHOST', int: 5 }) });
+    await insertSheet(db, { username: 'GHOST', data: JSON.stringify({ name: 'GHOST', int: 5 }) });
 
     const res = await request(app)
       .put('/api/sheets/user/GHOST')
@@ -202,13 +202,13 @@ describe('PUT /api/sheets/user/:username', () => {
 
     const row = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
     const data = JSON.parse(row.data);
-    expect(data).toEqual({ handle: 'GHOST', int: 8, ref: 7 });
+    expect(data).toEqual({ name: 'GHOST', int: 8, ref: 7 });
     expect(emitted.some(e => e.event === 'sheetUpdated' && e.payload.username === 'GHOST')).toBe(true);
   });
 
   it('never stores linked fields (hp, cash) in the sheet JSON', async () => {
     await setSystem(db, 'cyberpunk_red');
-    await insertSheet(db, { username: 'GHOST', data: JSON.stringify({ handle: 'GHOST' }) });
+    await insertSheet(db, { username: 'GHOST', data: JSON.stringify({ name: 'GHOST' }) });
 
     const res = await request(app)
       .put('/api/sheets/user/GHOST')
@@ -218,7 +218,7 @@ describe('PUT /api/sheets/user/:username', () => {
 
     const row = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
     const data = JSON.parse(row.data);
-    expect(data).toEqual({ handle: 'GHOST', int: 6 }); // hp/cash live on token & bank
+    expect(data).toEqual({ name: 'GHOST', int: 6 }); // hp/cash live on token & bank
   });
 
   it('rejects a missing fields object', async () => {

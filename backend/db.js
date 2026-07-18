@@ -341,6 +341,22 @@ db.serialize(() => {
 
   // NPC links ride along in map snapshots (location ids are preserved on load)
   db.run(`ALTER TABLE saved_maps ADD COLUMN npc_links_data TEXT`, () => {});
+
+  // Migration: CP:R's name field was stored as 'handle'; it is now 'name'
+  // (uniform across systems — the sheet is the source of truth for player
+  // identity, see backend/sheets/identity.js). Copy handle → name once.
+  db.all(`SELECT id, data FROM character_sheets WHERE system = 'cyberpunk_red'`, (err, rows) => {
+    if (err || !rows) return;
+    rows.forEach((row) => {
+      let data;
+      try { data = JSON.parse(row.data || '{}'); } catch { return; }
+      if (data.handle !== undefined && (data.name === undefined || data.name === '')) {
+        data.name = data.handle;
+        delete data.handle;
+        db.run(`UPDATE character_sheets SET data = ? WHERE id = ?`, [JSON.stringify(data), row.id]);
+      }
+    });
+  });
 });
 
 module.exports = db;

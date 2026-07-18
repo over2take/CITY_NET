@@ -7,6 +7,8 @@ const { authenticate } = require('../middleware/auth');
 const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc } = require('../sheets/templates');
 const sheetImporters = require('../sheets/importers');
 const sheetAttack = require('../sheets/attack');
+const headshots = require('../sheets/headshots');
+const identity = require('../sheets/identity');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
 // sheet, quick-sheet lookups) goes through socket events, matching how the
@@ -161,6 +163,13 @@ module.exports = (db, io) => {
                     () => { io.emit('dataUpdated', { isRhombusOnly: true }); done(); }
                   )
                 : routeAc;
+              // Sheet name/description are the source of truth for the
+              // player's token label - mirror them onto their rhombus
+              if (Object.keys(patch).some((k) => k === identity.nameField(system) || k === 'description')) {
+                identity.syncToken(db, system, req.params.username, (changed) => {
+                  if (changed) io.emit('dataUpdated', { isRhombusOnly: true });
+                });
+              }
               pushAc(() => {
                 io.emit('sheetUpdated', { username: req.params.username, system });
                 res.json({ message: 'Sheet updated' });
@@ -324,6 +333,11 @@ module.exports = (db, io) => {
       params.push(req.params.id);
       db.run(`UPDATE character_sheets SET ${sets.join(', ')} WHERE id = ?`, params, (err2) => {
         if (err2) return res.status(500).json({ error: err2.message });
+        // Open token info windows refetch link data (name, description,
+        // portrait shadow) when the sheet behind a linked token changes
+        db.get(`SELECT location_id FROM npc_sheet_links WHERE sheet_id = ? LIMIT 1`, [req.params.id], (e3, link) => {
+          if (!e3 && link) io.emit('npcLinkChanged', { location_id: link.location_id, sheet_id: Number(req.params.id) });
+        });
         routeAc(() => res.json({ message: 'NPC updated' }));
       });
     });
@@ -338,11 +352,35 @@ module.exports = (db, io) => {
     });
   });
 
+  // Public: name, description + portrait for enemy/friendly tokens so players
+  // see who it is without exposing the full sheet (stats, etc). Admin can
+  // still build mystery manually by leaving a token unlinked or unnamed.
+  router.get('/npcs/link-public/:location_id', (req, res) => {
+    db.get(
+      `SELECT cs.portrait_url, json_extract(cs.data, '$.name') AS sheet_name,
+              json_extract(cs.data, '$.description') AS sheet_description,
+              json_extract(cs.data, '$.portrait_shadow_filter') AS portrait_shadow_filter
+       FROM npc_sheet_links l
+       JOIN character_sheets cs ON cs.id = l.sheet_id
+       JOIN locations loc ON loc.id = l.location_id
+       WHERE l.location_id = ? AND loc.shape IN ('friendly_rhombus', 'enemy_rhombus')`,
+      [req.params.location_id],
+      (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(row || {});
+      }
+    );
+  });
+
   // Which NPC sheet (if any) is linked to a token - drives the token menu's
   // GENERATE_SHEET vs OPEN_SHEET button
   router.get('/npcs/link/:location_id', authenticate, requireAdmin, (req, res) => {
     db.get(
-      `SELECT cs.id AS sheet_id, cs.npc_label FROM npc_sheet_links l
+      `SELECT cs.id AS sheet_id, cs.npc_label, cs.portrait_url,
+              json_extract(cs.data, '$.name') AS sheet_name,
+              json_extract(cs.data, '$.description') AS sheet_description,
+              json_extract(cs.data, '$.portrait_shadow_filter') AS portrait_shadow_filter
+       FROM npc_sheet_links l
        JOIN character_sheets cs ON cs.id = l.sheet_id WHERE l.location_id = ?`,
       [req.params.location_id],
       (err, row) => {
@@ -445,6 +483,46 @@ module.exports = (db, io) => {
         }
       );
     });
+  });
+
+  // Set portrait to a bundled stock headshot URL (admin-only).
+  // Accepts { npc_id, url } or { username, url }; url must be a stock headshot.
+  router.post('/portrait-url', authenticate, requireAdmin, (req, res) => {
+    const { npc_id, username, url } = req.body || {};
+    if (!url || typeof url !== 'string' || !headshots.isStockHeadshot(url)) {
+      return res.status(400).json({ error: 'url must be a bundled stock headshot' });
+    }
+    if (npc_id) {
+      return db.run(
+        `UPDATE character_sheets SET portrait_url = ? WHERE id = ? AND is_npc = 1`,
+        [url, npc_id],
+        function (err) {
+          if (err) return res.status(500).json({ error: err.message });
+          if (this.changes === 0) return res.status(404).json({ error: 'NPC not found' });
+          // Refresh any open token info window showing this NPC's portrait
+          db.get(`SELECT location_id FROM npc_sheet_links WHERE sheet_id = ? LIMIT 1`, [npc_id], (e2, link) => {
+            if (!e2 && link) io.emit('npcLinkChanged', { location_id: link.location_id, sheet_id: Number(npc_id) });
+          });
+          res.json({ portrait_url: url });
+        }
+      );
+    }
+    if (username) {
+      getGameSystem((err, system) => {
+        if (err) return res.status(500).json({ error: err.message });
+        db.run(
+          `UPDATE character_sheets SET portrait_url = ? WHERE username = ? AND system = ? AND is_npc = 0`,
+          [url, username, system],
+          (err2) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            io.emit('sheetUpdated', { username });
+            res.json({ portrait_url: url });
+          }
+        );
+      });
+      return;
+    }
+    res.status(400).json({ error: 'npc_id or username required' });
   });
 
   // Reset all player LUCK to max for the active system (admin-only)

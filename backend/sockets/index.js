@@ -5,6 +5,8 @@ const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
 const attackCwn = require('../sheets/attackCwn');
 const npcTiers = require('../sheets/npcTiers');
+const headshots = require('../sheets/headshots');
+const identity = require('../sheets/identity');
 
 const SECRET = process.env.JWT_SECRET;
 
@@ -190,6 +192,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       console.log(`User identified: ${info.userName} (Admin: ${info.isAdmin})`);
       userSockets.set(socket.id, info);
       broadcastActiveUsers();
+
+      // Warm the display-name cache (sheet handle/name) for roll broadcasts
+      if (info.userName) {
+        getGameSystem((e, system) => { if (!e) identity.refresh(db, system, info.userName); });
+      }
 
       db.all('SELECT * FROM chat_logs ORDER BY timestamp DESC LIMIT 50', (err, rows) => {
         if (!err) {
@@ -567,11 +574,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (modifiers.length > 0) mathExpression += ' ' + modifiers.map(m => m > 0 ? `+ ${m}` : `- ${Math.abs(m)}`).join(' ');
 
       const diceBreakdown = allRolls.join('+');
-      let finalString = `${userName} rolled ${mathExpression} [(${diceBreakdown})`;
+      let finalString = `${identity.displayName(userName)} rolled ${mathExpression} [(${diceBreakdown})`;
       if (modTotal !== 0) finalString += ` ${modTotal > 0 ? '+' : '-'} ${Math.abs(modTotal)}`;
       finalString += ` = ${grandTotal}]`;
 
-      const broadcastData = { userName, results, modifiers, color, total: grandTotal, historyString: finalString };
+      const broadcastData = { userName: identity.displayName(userName), results, modifiers, color, total: grandTotal, historyString: finalString };
       db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
         [userName, grandTotal, JSON.stringify(results), color, finalString], (err) => {
           if (err) console.error('Error saving dice roll:', err);
@@ -761,6 +768,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               [JSON.stringify(data), row.id],
               (err3) => {
                 if (err3) return;
+                // Sheet name/description are the single source of truth for
+                // the player's token label and info window - mirror them.
+                if (payload.fieldId === identity.nameField(system) || payload.fieldId === 'description') {
+                  identity.syncToken(db, system, info.userName, (changed) => {
+                    if (changed) emitUpdate({ isRhombusOnly: true });
+                  });
+                }
                 // CWN: armor fields drive the token AC (base + capped DEX
                 // mod + shield). Only while armor_ac is set - otherwise the
                 // token AC stays hand-managed.
@@ -810,6 +824,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               [JSON.stringify(data), row.id],
               (err3) => {
                 if (err3) return;
+                if (entries.some(([k]) => k === identity.nameField(system) || k === 'description')) {
+                  identity.syncToken(db, system, info.userName, (changed) => {
+                    if (changed) emitUpdate({ isRhombusOnly: true });
+                  });
+                }
                 const effAc = system === 'cities_without_number' ? sheetTemplates.cwnEffectiveAc(data) : null;
                 const finish = () => {
                   io.emit('sheetUpdated', { username: info.userName, system });
@@ -891,7 +910,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             const woundTag = hp !== null && hp <= 0 ? ' (MORTALLY WOUNDED -4)'
               : hp !== null && Number(data.seriously_wounded) > 0 && hp <= Number(data.seriously_wounded) ? ' (WOUNDED -2)' : '';
             const historyString =
-              `${info.userName} rolled ${rollDef.label} [${outcome.breakdown} = ${outcome.total}]${luckTag}${woundTag}${critTag}`;
+              `${identity.displayName(info.userName)} rolled ${rollDef.label} [${outcome.breakdown} = ${outcome.total}]${luckTag}${woundTag}${critTag}`;
             // Spend the declared LUCK
             if (luck > 0) {
               data.luck = Math.max(0, (Number(data.luck) || 0) - luck);
@@ -903,7 +922,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             }
             const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
             const broadcastData = {
-              userName: info.userName,
+              userName: identity.displayName(info.userName),
               results: outcome.rolls,
               modifiers: outcome.modTotal !== 0 ? [outcome.modTotal] : [],
               color,
@@ -969,19 +988,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           // weapons plus token HP and DV. Systems without tiers keep the
           // bare token-mirroring sheet.
           const tier = npcTiers.buildTier(system, data.tier);
+          const randomHeadshot = headshots.randomHeadshot(loc.shape);
           const sheetData = {
             name: loc.name || '',
             description: loc.description || '',
-            handle: loc.name || '',
             ...(tier ? tier.data : {
               hp: loc.hp_current ?? loc.hp_max ?? 0,
               hp_max: loc.hp_max ?? 0,
             }),
           };
           const insertSheet = () => db.run(
-            `INSERT INTO character_sheets (username, system, data, is_npc, npc_label)
-             VALUES (?, ?, ?, 1, ?)`,
-            [callerInfo.userName, system, JSON.stringify(sheetData), label],
+            `INSERT INTO character_sheets (username, system, data, is_npc, npc_label, portrait_url)
+             VALUES (?, ?, ?, 1, ?, ?)`,
+            [callerInfo.userName, system, JSON.stringify(sheetData), label, randomHeadshot],
             function (err3) {
               if (err3) return;
               const sheetId = this.lastID;
@@ -991,7 +1010,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 [location_id, sheetId],
                 (err4) => {
                   if (err4) return;
-                  socket.emit('npcSheetGenerated', { location_id, sheet_id: sheetId, npc_label: label, tier: tier ? tier.tierId : null });
+                  socket.emit('npcSheetGenerated', { location_id, sheet_id: sheetId, npc_label: label, tier: tier ? tier.tierId : null, portrait_url: randomHeadshot, sheet_name: sheetData.name || null, sheet_description: sheetData.description || null });
                 }
               );
             }
@@ -1134,7 +1153,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
     const broadcastRoll = (userName, outcome, historyString, color, cb) => {
       const broadcastData = {
-        userName,
+        userName: identity.displayName(userName),
         results: outcome.rolls,
         modifiers: outcome.modTotal !== 0 ? [outcome.modTotal] : [],
         color,
@@ -1231,7 +1250,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 try { toHit = attackCwn.rollToHit(attackerData, weapon); } catch (e) { return; }
                 const hit = toHit.total >= ac;
                 const hitHistory =
-                  `${info.userName} attacks ${target.name} with ${weapon.name} ` +
+                  `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name} ` +
                   `[${toHit.breakdown} = ${toHit.total} vs AC ${ac}] — ${hit ? 'HIT' : 'MISS'}`;
 
                 const emitResult = (extra) => {
@@ -1381,7 +1400,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const woundTag = attackerHp !== null && attackerHp <= 0 ? ' (MORTALLY WOUNDED -4)'
                   : attackerHp !== null && Number(attackerData.seriously_wounded) > 0 && attackerHp <= Number(attackerData.seriously_wounded) ? ' (WOUNDED -2)' : '';
                 const hitHistory =
-                  `${info.userName} attacks ${target.name} with ${weapon.name}${aimedTag}${luckTag}${woundTag} ` +
+                  `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name}${aimedTag}${luckTag}${woundTag} ` +
                   `[${toHit.breakdown} = ${toHit.total} vs DV ${dv}] — ${hit ? 'HIT' : 'MISS'}${critTag}`;
                 // Spend the declared LUCK
                 if (luck > 0) {
@@ -1525,7 +1544,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 data.death_save_penalty = save.penalty + 1;
                 const penTag = save.penalty > 0 ? `+${save.penalty} ` : '';
                 const historyString =
-                  `${info.userName} DEATH SAVE [${save.die} ${penTag}= ${save.total} vs BODY ${body}] — ` +
+                  `${identity.displayName(info.userName)} DEATH SAVE [${save.die} ${penTag}= ${save.total} vs BODY ${body}] — ` +
                   (save.success ? 'STABILIZED THIS ROUND' : save.die === 10 ? 'NATURAL 10 — DEAD' : 'DEAD');
                 // Roll broadcasts first; the penalty write + banner refresh land
                 // after the client's 5s dice animation so the sheet doesn't
@@ -1640,14 +1659,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     let historyString;
                     if (check.success) {
                       historyString =
-                        `${info.userName} stabilizes ${targetUsername}${partsTag} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — ` +
+                        `${identity.displayName(info.userName)} stabilizes ${identity.displayName(targetUsername)}${partsTag} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — ` +
                         `STABILIZED AT 1 HP — NOW FRAIL`;
                     } else {
                       const newRounds = rounds + 1;
                       targetData.rounds_since_downed = newRounds;
                       const dead = newRounds >= attackCwn.MORTAL_WOUND_ROUNDS;
                       historyString =
-                        `${info.userName} tries to stabilize ${targetUsername}${partsTag} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — FAILED` +
+                        `${identity.displayName(info.userName)} tries to stabilize ${identity.displayName(targetUsername)}${partsTag} [${check.breakdown} = ${check.total} vs DC ${check.dc}] — FAILED` +
                         (dead ? ` — ${attackCwn.MORTAL_WOUND_ROUNDS} ROUNDS DOWN — DEAD` : ` (round ${newRounds} of ${attackCwn.MORTAL_WOUND_ROUNDS})`);
                     }
                     broadcastRoll(info.userName, check, historyString, check.success ? '#00ff00' : '#ff3333', () => {
@@ -1703,7 +1722,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               const overcastTag = overcast ? ' — OVERCAST! GM: d20 + Cast + CON mod on the consequence table' : '';
               const effectTag = effect ? ` — ${effect}` : '';
               const dmgTag = dmg ? ` [${dmg.breakdown} = ${dmg.total} damage]` : '';
-              const historyString = `${info.userName} casts ${name}${costTag}${dmgTag}${effectTag}${overcastTag}`;
+              const historyString = `${identity.displayName(info.userName)} casts ${name}${costTag}${dmgTag}${effectTag}${overcastTag}`;
 
               const finish = () => {
                 const outcome = dmg ?? { rolls: {}, modTotal: 0, total: 0 };

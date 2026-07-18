@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { SheetTemplate, SheetSection, SheetField, SheetData } from '../sheets';
+import { TvPortrait } from './TvPortrait';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
   return (
@@ -59,6 +60,11 @@ interface SheetRendererProps {
   /** Cast a spell row (1-based index). Server-resolved: rolls the row's
    *  damage dice and spends its Effort cost off the stored sheet. */
   onCastSpell?: (index: number) => void;
+  /** When false, the TV glitch / scanline / chromatic-fringe shader is
+   *  stripped from the portrait so a plain headshot shows cleanly. */
+  portraitShadow?: boolean;
+  /** Called when the admin clicks the FX toggle button on the portrait. */
+  onTogglePortraitShadow?: () => void;
 }
 
 const num = (v: unknown): number => {
@@ -175,31 +181,23 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
 // R/B chromatic fringe, and an intermittent glitch jitter.
 const PORTRAIT_HINT = 'Best results: a square image, 400×400px or larger. JPG / PNG / WebP / GIF, max 8MB.';
 
-function BracketPortrait({ initial, portraitUrl, size = 64, onUpload }: { initial: string; portraitUrl?: string | null; size?: number; onUpload?: (file: File) => void }) {
+function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilter = false, onToggleShadow }: {
+  initial: string;
+  portraitUrl?: string | null;
+  size?: number;
+  onUpload?: (file: File) => void;
+  /** Darken the portrait to a shadow silhouette (hides reused stock art). */
+  shadowFilter?: boolean;
+  onToggleShadow?: () => void;
+}) {
   const b = Math.max(9, Math.round(size * 0.18));
   const corner = (pos: React.CSSProperties): React.CSSProperties => ({
     position: 'absolute', width: `${b}px`, height: `${b}px`, ...pos,
   });
-  const imgStyle: React.CSSProperties = {
-    position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
-  };
   const frame = (
     <div style={{ position: 'relative', width: `${size}px`, height: `${size}px`, background: 'rgba(0, 20, 0, 0.6)', flex: '0 0 auto', overflow: 'hidden' }}>
       {portraitUrl ? (
-        <div className="portrait-tv" style={{ position: 'absolute', inset: 0 }}>
-          {/* Chromatic fringe: R and B copies offset either side of the base */}
-          <img src={portraitUrl} alt="" aria-hidden style={{ ...imgStyle, filter: 'url(#portrait-red)', transform: 'translateX(1.5px)', mixBlendMode: 'screen', opacity: 0.85 }} />
-          <img src={portraitUrl} alt="" aria-hidden style={{ ...imgStyle, filter: 'url(#portrait-blue)', transform: 'translateX(-1.5px)', mixBlendMode: 'screen', opacity: 0.85 }} />
-          <img src={portraitUrl} alt="portrait" style={{ ...imgStyle, mixBlendMode: 'screen' }} />
-          {/* Scanlines + rolling refresh band */}
-          <div className="portrait-scanlines" />
-          <div className="portrait-rollband" />
-          {/* SVG color-isolation filters for the fringe layers */}
-          <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
-            <filter id="portrait-red"><feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" /></filter>
-            <filter id="portrait-blue"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" /></filter>
-          </svg>
-        </div>
+        <TvPortrait src={portraitUrl} silhouette={shadowFilter} />
       ) : (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green)', fontSize: `${Math.round(size * 0.38)}px`, letterSpacing: '1px' }}>
           {initial}
@@ -211,31 +209,51 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload }: { initia
       <div style={corner({ bottom: 0, right: 0, borderBottom: '2px solid var(--green)', borderRight: '2px solid var(--green)' })} />
     </div>
   );
-  if (!onUpload) return frame;
+  if (!onUpload && !onToggleShadow) return frame;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: '0 0 auto' }}>
       {frame}
-      <label title={PORTRAIT_HINT} style={{
-        cursor: 'pointer', background: 'rgba(0, 0, 0, 0.85)',
-        border: '1px solid var(--green)', borderTop: 'none',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '4px 6px', userSelect: 'none',
-      }}>
-        <input
-          type="file"
-          accept="image/*"
-          style={{ display: 'none' }}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }}
-        />
-        <span style={{ fontSize: '9px', letterSpacing: '1px', color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }}>UPLOAD → ≥400PX · MAX 8MB</span>
-      </label>
+      <div style={{ display: 'flex', gap: '1px' }}>
+        {onUpload && (
+          <label title={PORTRAIT_HINT} style={{
+            cursor: 'pointer', background: 'rgba(0, 0, 0, 0.85)', flex: 1,
+            border: '1px solid var(--green)', borderTop: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '4px 6px', userSelect: 'none',
+          }}>
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }}
+            />
+            <span style={{ fontSize: '9px', letterSpacing: '1px', color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }}>UPLOAD · MAX 8MB</span>
+          </label>
+        )}
+        {onToggleShadow && (
+          <button
+            onClick={onToggleShadow}
+            title={shadowFilter ? 'Reveal portrait' : 'Shadow silhouette — hide reused stock art'}
+            style={{
+              cursor: 'pointer', background: shadowFilter ? 'rgba(0,255,0,0.08)' : 'rgba(0,0,0,0.85)',
+              border: '1px solid var(--green)', borderTop: 'none', borderLeft: onUpload ? 'none' : '1px solid var(--green)',
+              padding: '4px 6px', color: 'var(--green)', fontSize: '9px',
+              letterSpacing: '1px', fontWeight: 600, whiteSpace: 'nowrap',
+            }}
+          >
+            {shadowFilter ? 'SHADOW ■' : 'SHADOW □'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpenLink, onFieldChange, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, canRoll }: {
+function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, canRoll }: {
   template: SheetTemplate; data: SheetData; portraitUrl?: string | null;
   onPortraitUpload?: (file: File) => void;
+  portraitShadow?: boolean;
+  onTogglePortraitShadow?: () => void;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
   onFieldChange: (fieldId: string, value: string | number) => void;
   onDeathSave?: () => void;
@@ -262,7 +280,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, onOpe
 
   return (
     <div style={{ display: 'flex', gap: '12px', padding: '10px 2px 8px' }}>
-      <BracketPortrait initial={(name || '?').charAt(0).toUpperCase()} portraitUrl={portraitUrl} size={192} onUpload={onPortraitUpload} />
+      <BracketPortrait initial={(name || '?').charAt(0).toUpperCase()} portraitUrl={portraitUrl} size={192} onUpload={onPortraitUpload} shadowFilter={portraitShadow ?? false} onToggleShadow={onTogglePortraitShadow} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: '1rem', color: 'var(--green)', letterSpacing: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {name ? name.toUpperCase() : 'UNNAMED'}
@@ -712,7 +730,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // If the active tab gets hidden (house rule toggled off), fall back to the
@@ -751,36 +769,9 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         .sheet-input[type=number] { -moz-appearance: textfield; appearance: textfield; }
         .sheet-input:focus { outline: 1px solid var(--green); }
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
-
-        /* TV portrait: intermittent glitch jitter — idle most of the cycle */
-        .portrait-tv { animation: portrait-glitch 4s infinite steps(1); }
-        @keyframes portrait-glitch {
-          0%, 91% { transform: none; filter: none; }
-          92% { transform: translateX(2px) skewX(-1deg); }
-          93% { transform: translateX(-2px); filter: brightness(1.3); }
-          94% { transform: translateX(1px) skewX(0.5deg); }
-          95%, 100% { transform: none; filter: none; }
-        }
-        .portrait-scanlines {
-          position: absolute; inset: 0; pointer-events: none;
-          background: repeating-linear-gradient(
-            to bottom,
-            rgba(0, 0, 0, 0) 0px, rgba(0, 0, 0, 0) 2px,
-            rgba(0, 0, 0, 0.28) 2px, rgba(0, 0, 0, 0.28) 3px
-          );
-        }
-        .portrait-rollband {
-          position: absolute; left: 0; right: 0; height: 22%; pointer-events: none;
-          background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0) 100%);
-          animation: portrait-roll 6s linear infinite;
-        }
-        @keyframes portrait-roll {
-          from { top: -25%; }
-          to { top: 105%; }
-        }
       `}</style>
 
-      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={allowFumbleShield} canRoll={!!onRoll} />
+      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={allowFumbleShield} canRoll={!!onRoll} />
 
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
         {tabHasRolls && (

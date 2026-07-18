@@ -294,13 +294,13 @@ describe('GeometryMenu', () => {
     expect(socketRef.current.emit).toHaveBeenCalledWith('requestRhombusPurge', expect.objectContaining({ id: 10 }));
   });
 
-  it('calls syncRhombusToDB when SAVE_TOKEN_SETTINGS button is clicked', async () => {
-    const syncRhombusToDB = vi.fn();
+  it('shows SAVE_STATS and no identity fields (name/notes live on the sheet)', () => {
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={syncRhombusToDB} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    await userEvent.click(screen.getByText('SAVE_TOKEN_SETTINGS'));
-    expect(syncRhombusToDB).toHaveBeenCalled();
+    expect(screen.getByText('SAVE_STATS')).toBeInTheDocument();
+    expect(screen.queryByText('TOKEN_NAME')).not.toBeInTheDocument();
+    expect(screen.queryByText('TOKEN_NOTES')).not.toBeInTheDocument();
   });
 
   it('shows ARMOR_CLASS label', () => {

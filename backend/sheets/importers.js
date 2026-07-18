@@ -53,7 +53,7 @@ const buildCprAliases = () => {
   const alias = (keys, fieldId) => keys.forEach((k) => { a[norm(k)] = fieldId; });
 
   // Identity
-  alias(['handle', 'name', 'charactername'], 'handle');
+  alias(['handle', 'name', 'charactername'], 'name');
   alias(['role', 'class'], 'role');
   alias(['roleability', 'role ability'], 'role_ability');
   alias(['rank', 'roleabilityrank'], 'role_ability_rank');
@@ -150,7 +150,7 @@ const parseCprText = (text) => {
   }
   // Names stop at a double space, line end, or the next known label
   const handle = text.match(/handle\s*[:=]?\s*(\S+(?:\s\S+)*?)(?=\s{2,}|\s*[\r\n]|\s+role\b|$)/i);
-  if (handle) out.handle = handle[1].trim();
+  if (handle) out.name = handle[1].trim();
   const role = text.match(/role\s*[:=]?\s*([A-Za-z]+(?:\s[A-Za-z]+)?)(?=\s{2,}|\s*[\r\n]|$)/i);
   if (role) out.role = role[1].trim();
   return out;

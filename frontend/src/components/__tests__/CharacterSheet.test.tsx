@@ -89,7 +89,7 @@ describe('SheetRenderer', () => {
     render(<SheetRenderer template={template} data={{}} onFieldChange={onFieldChange} />);
     const handle = screen.getByLabelText('Handle');
     await userEvent.type(handle, 'V');
-    expect(onFieldChange).toHaveBeenCalledWith('handle', 'V');
+    expect(onFieldChange).toHaveBeenCalledWith('name', 'V');
   });
 
   it('computes skill BASE as level + stat on the SKILLS tab', async () => {
@@ -107,7 +107,7 @@ describe('SheetRenderer', () => {
   });
 
   it('shows the identity header with name, HP bar, and chips', () => {
-    const data = { handle: 'Viper', role: 'Rogue', hp: 27, hp_max: 38, move: 4, body: 6, luck: 5 };
+    const data = { name: 'Viper', role: 'Rogue', hp: 27, hp_max: 38, move: 4, body: 6, luck: 5 };
     render(<SheetRenderer template={template} data={data} onFieldChange={vi.fn()} />);
     expect(screen.getByText('VIPER')).toBeInTheDocument();
     expect(screen.getByText('ROGUE')).toBeInTheDocument();
@@ -133,7 +133,7 @@ describe('SheetRenderer', () => {
 
   it('HP bar click calls onOpenLink with token_hp', async () => {
     const onOpenLink = vi.fn();
-    render(<SheetRenderer template={template} data={{ handle: 'V', hp: 10, hp_max: 20 }} onFieldChange={vi.fn()} onOpenLink={onOpenLink} />);
+    render(<SheetRenderer template={template} data={{ name: 'V', hp: 10, hp_max: 20 }} onFieldChange={vi.fn()} onOpenLink={onOpenLink} />);
     await userEvent.click(screen.getByText('10/20'));
     expect(onOpenLink).toHaveBeenCalledWith('token_hp');
   });
@@ -178,7 +178,7 @@ describe('CharacterSheetWindow', () => {
     const socket = makeSocket();
     render(<CharacterSheetWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} userName="GHOST" />);
     const onSheetData = socket.on.mock.calls.find((c: any) => c[0] === 'sheetData')[1];
-    act(() => onSheetData({ id: 1, username: 'GHOST', system: 'cyberpunk_red', data: { handle: 'GHOST' }, portrait_url: null, is_npc: 0 }));
+    act(() => onSheetData({ id: 1, username: 'GHOST', system: 'cyberpunk_red', data: { name: 'GHOST' }, portrait_url: null, is_npc: 0 }));
     expect(screen.getByTestId('window-title').textContent).toBe('CHARACTER_SHEET // GHOST');
     expect(screen.getByTestId('title-controls').textContent).toContain('CYBERPUNK RED');
     expect(screen.getByLabelText('Handle')).toHaveValue('GHOST');
@@ -264,7 +264,7 @@ describe('SheetRenderer portrait upload', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST' }}
+        data={{ name: 'GHOST' }}
         onFieldChange={vi.fn()}
         onPortraitUpload={onUpload}
       />
@@ -276,7 +276,7 @@ describe('SheetRenderer portrait upload', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST' }}
+        data={{ name: 'GHOST' }}
         onFieldChange={vi.fn()}
       />
     );
@@ -288,7 +288,7 @@ describe('SheetRenderer portrait upload', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST' }}
+        data={{ name: 'GHOST' }}
         onFieldChange={vi.fn()}
         onPortraitUpload={onUpload}
       />
@@ -311,7 +311,7 @@ describe('SheetRenderer LUCK pips', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST', luck: 3, luck_max: 5 }}
+        data={{ name: 'GHOST', luck: 3, luck_max: 5 }}
         onFieldChange={vi.fn()}
       />
     );
@@ -323,7 +323,7 @@ describe('SheetRenderer LUCK pips', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST', luck: 2, luck_max: 4 }}
+        data={{ name: 'GHOST', luck: 2, luck_max: 4 }}
         onFieldChange={vi.fn()}
       />
     );
@@ -338,7 +338,7 @@ describe('SheetRenderer LUCK pips', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST', luck: 3, luck_max: 5 }}
+        data={{ name: 'GHOST', luck: 3, luck_max: 5 }}
         onFieldChange={onChange}
         onRoll={vi.fn()}
       />
@@ -352,7 +352,7 @@ describe('SheetRenderer LUCK pips', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST', luck: 2, luck_max: 4 }}
+        data={{ name: 'GHOST', luck: 2, luck_max: 4 }}
         onFieldChange={onChange}
       />
     );
@@ -364,7 +364,7 @@ describe('SheetRenderer LUCK pips', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST', luck: 2, luck_max: 5 }}
+        data={{ name: 'GHOST', luck: 2, luck_max: 5 }}
         onFieldChange={vi.fn()}
       />
     );
@@ -387,7 +387,7 @@ describe('SheetRenderer segmented HP bar', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST', hp: 10, hp_max: 20 }}
+        data={{ name: 'GHOST', hp: 10, hp_max: 20 }}
         onFieldChange={vi.fn()}
       />
     );
@@ -399,7 +399,7 @@ describe('SheetRenderer segmented HP bar', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST', hp: 15, hp_max: 20 }}
+        data={{ name: 'GHOST', hp: 15, hp_max: 20 }}
         onFieldChange={vi.fn()}
       />
     );
@@ -410,7 +410,7 @@ describe('SheetRenderer segmented HP bar', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST', hp: 4, hp_max: 20 }}
+        data={{ name: 'GHOST', hp: 4, hp_max: 20 }}
         onFieldChange={vi.fn()}
       />
     );
@@ -422,7 +422,7 @@ describe('SheetRenderer segmented HP bar', () => {
     render(
       <SheetRenderer
         template={cyberpunkRed}
-        data={{ handle: 'GHOST', hp: 8, hp_max: 20 }}
+        data={{ name: 'GHOST', hp: 8, hp_max: 20 }}
         onFieldChange={vi.fn()}
       />
     );
@@ -516,14 +516,14 @@ describe('CharacterSheetWindow death save re-roll', () => {
     const onSheetData = socket.on.mock.calls.find((c: any) => c[0] === 'sheetData')[1];
     const onSheetUpdated = socket.on.mock.calls.find((c: any) => c[0] === 'sheetUpdated')[1];
     const dying = { id: 1, username: 'GHOST', system: 'cyberpunk_red', portrait_url: null, is_npc: 0 };
-    act(() => onSheetData({ ...dying, data: { handle: 'GHOST', hp: 0, hp_max: 20, body: 6 } }));
+    act(() => onSheetData({ ...dying, data: { name: 'GHOST', hp: 0, hp_max: 20, body: 6 } }));
 
     fireEvent.click(screen.getByRole('button', { name: 'DEATH SAVE' }));
     expect(socket.emit.mock.calls.filter((c: any) => c[0] === 'requestDeathSave')).toHaveLength(1);
 
     // Server escalates the penalty and pushes sheetUpdated → refetch
     act(() => onSheetUpdated({ username: 'GHOST' }));
-    act(() => onSheetData({ ...dying, data: { handle: 'GHOST', hp: 0, hp_max: 20, body: 6, death_save_penalty: 1 } }));
+    act(() => onSheetData({ ...dying, data: { name: 'GHOST', hp: 0, hp_max: 20, body: 6, death_save_penalty: 1 } }));
     expect(screen.getByText(/1d10 \+1 vs BODY 6/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'DEATH SAVE' }));
@@ -535,7 +535,7 @@ describe('CharacterSheetWindow death save re-roll', () => {
 
 describe('SheetRenderer armed LUCK', () => {
   const cyberpunkRed = getTemplate('cyberpunk_red');
-  const data = { handle: 'GHOST', hp: 20, hp_max: 20, luck: 3, luck_max: 5, int: 6 };
+  const data = { name: 'GHOST', hp: 20, hp_max: 20, luck: 3, luck_max: 5, int: 6 };
 
   it('clicking a pip arms LUCK for the next roll instead of spending it', async () => {
     const onFieldChange = vi.fn();
@@ -591,7 +591,7 @@ describe('SheetRenderer seriously wounded banner', () => {
 
 describe('SheetRenderer fumble shield', () => {
   const cyberpunkRed = getTemplate('cyberpunk_red');
-  const data = { handle: 'GHOST', hp: 20, hp_max: 20, luck: 3, luck_max: 5, int: 6 };
+  const data = { name: 'GHOST', hp: 20, hp_max: 20, luck: 3, luck_max: 5, int: 6 };
 
   it('is hidden while the house rule is off', () => {
     render(<SheetRenderer template={cyberpunkRed} data={data} onFieldChange={vi.fn()} onRoll={vi.fn()} />);

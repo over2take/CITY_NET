@@ -34,6 +34,8 @@ import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
+import { TvPortrait } from './components/TvPortrait';
+import { headshotsForShape } from './headshots';
 import { getTemplate } from './sheets';
 import { DiceTrayWindow, DotMatrixScoreboard, DiceScene } from './components/DiceTray';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
@@ -203,13 +205,15 @@ function App() {
   // (NPC tokens share owner names; selectedLocation is a stale snapshot)
   const [reviewHealthLocId, setReviewHealthLocId] = useState<number | null>(null);
   const [reviewHealthPos, setReviewHealthPos] = useState(() => ({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 }));
+  // QuickSheetCard is opened explicitly (not auto-opened with CHECK_HEALTH)
+  const [quickSheetOwner, setQuickSheetOwner] = useState<string | null>(null);
   const [quickSheetPos, setQuickSheetPos] = useState(() => ({ x: window.innerWidth / 2 + 170, y: window.innerHeight / 2 - 100 }));
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
-  const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string } | null>(null);
+  const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string } | null>(null);
   // NPC sheet linked to the currently selected token (admin) - drives
   // GENERATE_SHEET vs OPEN_SHEET on the token menu
-  const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; npc_label: string } | null>(null);
+  const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; npc_label: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null; portrait_shadow_filter?: number | null } | null>(null);
   // Admin view of another player's sheet (opened from their token)
   const [openPlayerSheetUser, setOpenPlayerSheetUser] = useState<string | null>(null);
   // Bumped when npc_sheet_links change so the link lookup effect re-runs
@@ -219,16 +223,28 @@ function App() {
 
   useEffect(() => {
     const loc = selectedLocation;
-    if (!token || !loc || !['enemy_rhombus', 'friendly_rhombus'].includes(loc.shape)) {
+    if (!loc || !['enemy_rhombus', 'friendly_rhombus'].includes(loc.shape)) {
       setTokenSheetLink(null);
       return;
+    }
+    if (!token) {
+      // Non-admin: name + portrait only (no description/stats) for either shape
+      let cancelled = false;
+      fetch(`/api/sheets/npcs/link-public/${loc.id}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (cancelled) return;
+          setTokenSheetLink(data?.sheet_name || data?.portrait_url ? { location_id: loc.id, sheet_id: 0, npc_label: '', portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null, portrait_shadow_filter: data.portrait_shadow_filter ?? null } : null);
+        })
+        .catch(() => { if (!cancelled) setTokenSheetLink(null); });
+      return () => { cancelled = true; };
     }
     let cancelled = false;
     fetch(`/api/sheets/npcs/link/${loc.id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (cancelled) return;
-        setTokenSheetLink(data?.sheet_id ? { location_id: loc.id, sheet_id: data.sheet_id, npc_label: data.npc_label } : null);
+        setTokenSheetLink(data?.sheet_id ? { location_id: loc.id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null, portrait_shadow_filter: data.portrait_shadow_filter ?? null } : null);
       })
       .catch(() => { if (!cancelled) setTokenSheetLink(null); });
     return () => { cancelled = true; };
@@ -343,13 +359,15 @@ function App() {
   }, [userName, locations.length]);
 
   // Sync player configuration to DB whenever they change it in the sidebar
+  // Color only — name/description come from the character sheet (the backend
+  // mirrors them onto the token; see backend/sheets/identity.js)
   const syncRhombusToDB = async (newState: any) => {
     const existingList = locations.filter((l: any) => l.shape === 'rhombus' && l.owner === userName);
     for (const existing of existingList) {
         await fetch(`/api/locations/${existing.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ ...existing, name: newState.name, description: newState.description, color: newState.color })
+            body: JSON.stringify({ ...existing, color: newState.color })
         });
     }
   };
@@ -725,7 +743,7 @@ function App() {
       // Flip the token menu's GENERATE_SHEET to OPEN_SHEET immediately.
       // Safe unconditionally: the button only reads the link when its
       // location_id matches the selected token.
-      setTokenSheetLink({ location_id: data.location_id, sheet_id: data.sheet_id, npc_label: data.npc_label });
+      setTokenSheetLink({ location_id: data.location_id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null });
     },
     onNpcLinkChanged: () => setLinkRefresh(n => n + 1),
     onDiceRollBroadcast: (data) => {
@@ -1767,13 +1785,13 @@ function App() {
                 />
               ) : null;
             })()}
-            {reviewHealthOwner && (
+            {quickSheetOwner && (
               <QuickSheetCard
-                username={reviewHealthOwner}
+                username={quickSheetOwner}
                 socket={socketRef.current}
                 pos={quickSheetPos}
                 setPos={setQuickSheetPos}
-                onClose={() => setReviewHealthOwner(null)}
+                onClose={() => setQuickSheetOwner(null)}
               />
             )}
             {isNpcLibraryOpen && token && (
@@ -1804,6 +1822,7 @@ function App() {
                 socket={socketRef.current}
                 npcId={openNpcSheet.id}
                 npcLabel={openNpcSheet.npc_label}
+                headshots={headshotsForShape(openNpcSheet.token_shape)}
                 pos={npcSheetPos}
                 setPos={setNpcSheetPos}
                 onClose={() => setOpenNpcSheet(null)}
@@ -1828,7 +1847,7 @@ function App() {
               if (selectedLocation && (!token || !showAdminPanel || canManage)) {
                 return (
                   <DraggableWindow 
-                    title={isUserDefinedName(selectedLocation.name) ? selectedLocation.name : (selectedLocation.shape === 'enemy_rhombus' ? 'HOSTILE_NODE' : (selectedLocation.shape === 'friendly_rhombus' ? 'FRIENDLY_NPC' : (selectedLocation.shape === 'rhombus' ? 'TACTICAL_BEACON' : getStructLabel(selectedLocation))))}
+                    title={isRhombus ? `ID: ${tokenSheetLink?.sheet_name || selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}` : (isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation))}
                     pos={infoPanelPos} 
                     setPos={setInfoPanelPos} 
                     onClose={() => setSelectedLocation(null)}
@@ -1836,8 +1855,14 @@ function App() {
                     <div className="content">
                       {isRhombus ? (
                         <>
-                          <p><strong>ID_TAG:</strong> {selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : (selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED'))}</p>
-                          <p><strong>DATA_DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
+                          {tokenSheetLink?.portrait_url && (
+                            <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                              <div style={{ position: 'relative', width: '120px', height: '120px', border: '1px solid var(--green)', background: 'rgba(0, 20, 0, 0.6)', overflow: 'hidden' }}>
+                                <TvPortrait src={tokenSheetLink.portrait_url} silhouette={Number(tokenSheetLink.portrait_shadow_filter ?? 0) !== 0} />
+                              </div>
+                            </div>
+                          )}
+                          <p><strong>DATA_DESCRIPTION:</strong> {tokenSheetLink?.sheet_description || selectedLocation.description || 'NO_DATA'}</p>
                           {/* Defense display (AC or DV per game system) — admin can edit; owner can view their own; other players see nothing */}
                           {(isAdmin || isOwner) && (() => { const defLabel = getTemplate(gameSystem).tokenDefense?.label ?? 'AC'; return (
                             isAdmin && acEdit ? (
@@ -1937,13 +1962,13 @@ function App() {
                         if (res.ok) { setSelectedLocation(null); fetchLocations(); }
                       }}>PURGE_DATA_POINT</button>
                     )}
-                    {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
+                    {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && tokenSheetLink?.location_id !== selectedLocation.id && (
                       <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
                     )}
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
                       tokenSheetLink?.location_id === selectedLocation.id ? (
                         <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
-                          setOpenNpcSheet({ id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label });
+                          setOpenNpcSheet({ id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label, token_shape: selectedLocation.shape });
                         }}>OPEN_SHEET</button>
                       ) : (() => {
                         const tiers = getTemplate(gameSystem).npcTiers;
@@ -2019,6 +2044,7 @@ function App() {
                             setReviewHealthOwner(selectedLocation.owner);
                             setReviewHealthPos({ x: infoPanelPos.x + 320 > window.innerWidth - 300 ? Math.max(0, infoPanelPos.x - 320) : infoPanelPos.x + 320, y: infoPanelPos.y });
                             setReviewHealthLocId(selectedLocation.id);
+                            // QuickSheetCard is NOT opened from CHECK_HEALTH — health window only
                         }}>CHECK_HEALTH</button>
                     )}
                     {isRhombus && (isAdmin || (isPlayerRhombus && selectedLocation.owner === userName)) && (

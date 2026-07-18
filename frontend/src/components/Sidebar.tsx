@@ -206,9 +206,16 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
     }
   }, [anyUserRhombus?.id, anyUserRhombus?.melee_ac, anyUserRhombus?.ranged_ac]);
 
+  // Color autosaves (debounced) — name/description come from the character sheet
+  const colorSyncTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => {
+    if (!anyUserRhombus || anyUserRhombus.color === rhombusState.color) return;
+    if (colorSyncTimer.current) clearTimeout(colorSyncTimer.current);
+    colorSyncTimer.current = setTimeout(() => syncRhombusToDB(rhombusState), 400);
+    return () => { if (colorSyncTimer.current) clearTimeout(colorSyncTimer.current); };
+  }, [rhombusState.color]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSet = async () => {
-    // Sync name / description / color
-    syncRhombusToDB(rhombusState);
     const target = anyUserRhombus;
     if (target) {
       // HP max
@@ -279,6 +286,30 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
           )}
         </div>
 
+        {/* 2 — Color (autosaves; name/description live on the character sheet) */}
+        <div style={{ width: '100%' }}>
+          <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TOKEN_COLOR</label>
+          <input
+            type="color"
+            value={rhombusState.color}
+            onChange={(e) => setRhombusState({ ...rhombusState, color: e.target.value })}
+            style={{
+              width: '100%', height: '40px', background: 'none',
+              border: '1px solid var(--green)', cursor: 'pointer',
+              animation: isDefaultColor ? 'rainbowHue 4s linear infinite' : 'none',
+            }}
+          />
+        </div>
+
+        {/* 3 — Remove */}
+        {userRhombus && (
+          <button className="upload-btn danger-btn" onClick={() => removeRhombus(userRhombus.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_MY_TOKEN</button>
+        )}
+        {canRemoveSelected && selectedLocation?.id !== userRhombus?.id && (
+          <button className="upload-btn danger-btn" onClick={() => removeRhombus(selectedLocation.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_SELECTED_TOKEN</button>
+        )}
+
+        {/* 4 — Character sheet: source of truth for name and description */}
         <button
           className={`upload-btn ${isSheetOpen ? 'active' : ''}`}
           onClick={() => setIsSheetOpen(!isSheetOpen)}
@@ -287,51 +318,7 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
           CHARACTER_SHEET
         </button>
 
-        {userRhombus && (
-          <button className="upload-btn danger-btn" onClick={() => removeRhombus(userRhombus.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_MY_TOKEN</button>
-        )}
-        {canRemoveSelected && selectedLocation?.id !== userRhombus?.id && (
-          <button className="upload-btn danger-btn" onClick={() => removeRhombus(selectedLocation.id)} style={{ width: '100%', fontSize: '0.65rem' }}>REMOVE_SELECTED_TOKEN</button>
-        )}
-
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-
-          {/* 2 — Color */}
-          <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TOKEN_COLOR</label>
-            <input
-              type="color"
-              value={rhombusState.color}
-              onChange={(e) => setRhombusState({ ...rhombusState, color: e.target.value })}
-              style={{
-                width: '100%', height: '40px', background: 'none',
-                border: '1px solid var(--green)', cursor: 'pointer',
-                animation: isDefaultColor ? 'rainbowHue 4s linear infinite' : 'none',
-              }}
-            />
-          </div>
-
-          {/* 3 — Name */}
-          <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TOKEN_NAME</label>
-            <input
-              placeholder="ID_TAG"
-              value={rhombusState.name}
-              onChange={(e) => setRhombusState({ ...rhombusState, name: e.target.value })}
-              style={{ width: '100%' }}
-            />
-          </div>
-
-          {/* 4 — Description */}
-          <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TOKEN_NOTES</label>
-            <textarea
-              placeholder="Add notes..."
-              value={rhombusState.description}
-              onChange={(e) => setRhombusState({ ...rhombusState, description: e.target.value })}
-              style={{ width: '100%', height: '60px' }}
-            />
-          </div>
 
           {/* 5 — Max health */}
           <div>
@@ -386,9 +373,10 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
             </div>
           )}
 
-          {/* 7 — SET button */}
+          {/* 7 — SET button (health/armor only — color autosaves, identity
+              comes from the character sheet) */}
           <button className="upload-btn" style={{ width: '100%', marginTop: '4px' }} onClick={handleSet}>
-            SAVE_TOKEN_SETTINGS
+            SAVE_STATS
           </button>
 
         </div>
