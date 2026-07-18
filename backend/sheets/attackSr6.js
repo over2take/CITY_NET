@@ -60,6 +60,18 @@ const rollAttack = (data, weapon, rng = Math.random) => {
   return rollEngine.executeRoll(resolved, 'pool', rng);
 };
 
+// Defense pool: REA + INT (SR6 dodge). Rolled automatically when the
+// defender has a sheet; tokens without one don't defend (0 hits).
+// Returns null when the sheet has neither attribute set - a bare NPC sheet
+// shouldn't roll a 1-die floor pool it was never given.
+const rollDefense = (data, rng = Math.random) => {
+  const rea = Number(data.reaction);
+  const int = Number(data.intuition);
+  if (!Number.isFinite(rea) && !Number.isFinite(int)) return null;
+  const resolved = rollEngine.resolveFormula('pool:@reaction+@intuition', data, { allowNoDice: true });
+  return rollEngine.executeRoll(resolved, 'pool', rng);
+};
+
 // AR vs the defender's Armor Rating -> DV modifier.
 const arDvMod = (weapon, targetArmorRating) => {
   const armor = num(targetArmorRating);
@@ -68,10 +80,12 @@ const arDvMod = (weapon, targetArmorRating) => {
   return 0;
 };
 
-// Potential damage on a hit: weapon DV + AR modifier (soak is manual).
-const finalDamage = (weapon, dvMod) => Math.max(0, weapon.dv.value + dvMod);
+// Potential damage on a hit: weapon DV + AR modifier + net hits over the
+// defense (SR6: net hits amp the DV). Soak stays manual.
+const finalDamage = (weapon, dvMod, netHits = 0) =>
+  Math.max(0, weapon.dv.value + dvMod + Math.max(0, netHits));
 
 module.exports = {
   WEAPON_ROWS, WEAPON_SKILLS, MELEE_SKILLS,
-  parseDv, getWeapon, rollAttack, arDvMod, finalDamage,
+  parseDv, getWeapon, rollAttack, rollDefense, arDvMod, finalDamage,
 };

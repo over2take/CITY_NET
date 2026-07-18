@@ -19,7 +19,9 @@ Shadowrun 6E — third full game system, built entirely on the existing sheet/ro
 - **SR6 character sheet** — 9 attributes (BOD–EDG), Essence/Magic/Resonance, 16 consolidated skills rolled as d6 pools, 4 weapon rows (DV / AR / mode / atk), Edge pips (spend-by-click, CP:R LUCK pattern), derived Physical/Stun monitors, initiative score and composure recomputed on every save
 - **Pool dice engine** — new `pool` roll shape: pool size = attribute + skill (+mods), 5s and 6s are hits, glitch when half or more of the pool shows 1, critical glitch on a glitch with zero hits; results land in the dice tray as `N hits / M dice`
 - **Two damage tracks** — Physical monitor lives on the token (HP bar as usual); Stun is a sheet track that clamps at the Stun Monitor and overflows the excess into Physical automatically, server-side
-- **SR6 attacks** — one ATTACK button: attack pool vs manual defense, weapon Attack Rating compared to the target token's Armor Rating shifts DV ±1, potential damage applies to Physical with a "GM: soak BOD+ARMOR" prompt (soak stays manual per RAW-lite)
+- **SR6 attacks** — one ATTACK button: attack pool, weapon Attack Rating compared to the target token's Armor Rating shifts DV ±1, damage applies to Physical with a "GM: soak BOD+ARMOR" prompt (soak stays manual per RAW-lite)
+- **Auto-rolled defense** — defenders backed by a sheet dodge automatically (REA + INT pool, shown in the dice tray); net hits decide the hit and add to the DV; sheetless tokens don't defend
+- **Stun bar in the health window** — SR6 health review shows the Stun track (cyan bar, red + overflow warning when full) under the Physical monitor, live-updating; served by a public two-number stun endpoint
 - **AWAKENED / EMERGED tabs** — gated behind the new `sr6_awakened` and `sr6_emerged` house rules (spells/powers/tradition and complex forms/sprites)
 - **SR6 NPC tiers** — Ganger / Street Tough / Shadowrunner / Prime Runner for GENERATE_SHEET, with consistent monitors, armor and weapon rows
 - **SR6 sheet import** — attribute/skill aliases (BOD, AGI, cc, perc…), Edge max seeds current, plain-text stat block parser

@@ -130,6 +130,55 @@ describe('SR6 sheetAttack', () => {
     expect(emitted.find(e => e.event === 'attackResult')).toBeFalsy();
   });
 
+  it('defenders with a sheet auto-dodge: a huge REA+INT pool forces a miss', async () => {
+    await seedAttacker();
+    await seedAttackerToken();
+    const target = await seedTarget(6);
+    // Linked NPC sheet with a 200-die dodge pool: net hits < 0 -> guaranteed miss
+    const npc = await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('SYSTEM', 'shadowrun_6e', ?, 1)`,
+      [JSON.stringify({ reaction: 100, intuition: 100 })]);
+    await run(db, `INSERT INTO npc_sheet_links (location_id, sheet_id) VALUES (?, ?)`, [target.lastID, npc.lastID]);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['sheetAttack']({ targetId: target.lastID, weaponIndex: 1 });
+    await waitFor(() => emitted.some(e => e.event === 'attackResult'));
+
+    const result = emitted.find(e => e.event === 'attackResult');
+    expect(result.data.hit).toBe(false);
+    const dodge = emitted.filter(e => e.event === 'diceRollBroadcast')
+      .find(r => r.data.historyString.includes('dodges'));
+    expect(dodge).toBeTruthy();
+    expect(dodge.data.historyString).toMatch(/\/ 200 dice/);
+    const token = await get(db, `SELECT hp_current FROM locations WHERE id = ?`, [target.lastID]);
+    expect(token.hp_current).toBe(30); // untouched
+  });
+
+  it('net hits add to the DV when the defense pool is tiny', async () => {
+    await seedAttacker();
+    await seedAttackerToken();
+    const target = await seedTarget(6, 60);
+    // 2-die dodge pool vs 60-die attack: expect a hit with damage > base 4
+    const npc = await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('SYSTEM', 'shadowrun_6e', ?, 1)`,
+      [JSON.stringify({ reaction: 1, intuition: 1 })]);
+    await run(db, `INSERT INTO npc_sheet_links (location_id, sheet_id) VALUES (?, ?)`, [target.lastID, npc.lastID]);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['sheetAttack']({ targetId: target.lastID, weaponIndex: 1 });
+    await waitFor(() => emitted.some(e => e.event === 'attackResult'));
+
+    const result = emitted.find(e => e.event === 'attackResult');
+    expect(result.data.hit).toBe(true);
+    // DV 3 + 1 (AR) + net hits: with ~20 hits vs <=2 dodge hits this far exceeds base
+    expect(result.data.damage).toBeGreaterThan(4);
+    const attack = emitted.filter(e => e.event === 'diceRollBroadcast')
+      .find(r => r.data.historyString.includes('vs dodge'));
+    expect(attack.data.historyString).toMatch(/net \d+/);
+  });
+
   it('CWN sheets do not answer SR6 attacks (system isolation)', async () => {
     await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
       [JSON.stringify({ base_hit_bonus: 30, shoot: 1, weapon1_name: 'P', weapon1_dmg: '1d6', weapon1_skill: 'shoot' })]);

@@ -329,6 +329,34 @@ export const INJURY_ZONES: Record<string, React.CSSProperties> = {
 
 export function HealthReviewWindow({ location, pos, setPos, onClose, socket, gameSystem, onRolled }: HealthReviewWindowProps) {
   const [reviewInjuriesOpen, setReviewInjuriesOpen] = useState(false);
+  const [stun, setStun] = useState<{ stun_current: number; stun_monitor: number } | null>(null);
+
+  // SR6: second damage track - Stun lives on the sheet backing this token.
+  // Refetches on sheet/token updates so damage shows live.
+  useEffect(() => {
+    if (gameSystem !== 'shadowrun_6e') { setStun(null); return; }
+    let cancelled = false;
+    const load = () => {
+      fetch(`/api/sheets/stun/${location.id}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => {
+          if (cancelled) return;
+          setStun(d && d.stun_monitor > 0 ? d : null);
+        })
+        .catch(() => { if (!cancelled) setStun(null); });
+    };
+    load();
+    if (socket) {
+      socket.on('sheetUpdated', load);
+      socket.on('dataUpdated', load);
+      return () => {
+        cancelled = true;
+        socket.off('sheetUpdated', load);
+        socket.off('dataUpdated', load);
+      };
+    }
+    return () => { cancelled = true; };
+  }, [gameSystem, location.id, socket]);
 
   const injuries: Record<string, boolean> = (() => {
     try { return JSON.parse((location as any).injuries || '{}'); } catch { return {}; }
@@ -368,6 +396,24 @@ export function HealthReviewWindow({ location, pos, setPos, onClose, socket, gam
 
         {/* Heart monitor — flatlines at 0 HP */}
         <HeartMonitor color={hpColor} flatline={isDead} />
+
+        {/* SR6 Stun track (Physical is the token HP above) */}
+        {stun && (() => {
+          const stunPct = Math.max(0, Math.min(1, stun.stun_current / stun.stun_monitor));
+          const full = stun.stun_current >= stun.stun_monitor;
+          const stunColor = full ? '#ff3333' : '#00ccff';
+          return (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontFamily: 'monospace', letterSpacing: '1px', color: stunColor, marginBottom: '2px' }}>
+                <span>STUN{full ? ' — FULL · OVERFLOW → PHYSICAL' : ''}</span>
+                <span>{stun.stun_current} / {stun.stun_monitor}</span>
+              </div>
+              <div style={{ height: '8px', background: '#001a1f', border: `1px solid ${stunColor}`, borderRadius: '2px', overflow: 'hidden' }}>
+                <div style={{ width: `${stunPct * 100}%`, height: '100%', background: stunColor, transition: 'width 0.3s ease' }} />
+              </div>
+            </div>
+          );
+        })()}
 
         {/* CWN: downed player - any viewer can attempt the stabilize check
             (rolls the viewer's own Heal skill server-side) */}

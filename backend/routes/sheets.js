@@ -372,6 +372,35 @@ module.exports = (db, io) => {
     );
   });
 
+  // Public: the SR6 Stun track for the sheet backing a token (player sheet
+  // by owner, or the linked NPC sheet). Drives the STUN bar in the health
+  // review window. Two numbers only - no other sheet data leaks.
+  router.get('/stun/:location_id', (req, res) => {
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (system !== 'shadowrun_6e') return res.json({});
+      db.get(`SELECT id, shape, owner FROM locations WHERE id = ?`, [req.params.location_id], (err2, loc) => {
+        if (err2 || !loc) return res.json({});
+        const send = (row) => {
+          if (!row) return res.json({});
+          let data;
+          try { data = JSON.parse(row.data || '{}'); } catch { return res.json({}); }
+          res.json({
+            stun_current: Number(data.stun_current) || 0,
+            stun_monitor: Number(data.stun_monitor) || 0,
+          });
+        };
+        if (loc.shape === 'rhombus' && loc.owner) {
+          db.get(`SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+            [loc.owner, system], (e3, row) => send(e3 ? null : row));
+        } else {
+          db.get(`SELECT cs.data FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id WHERE l.location_id = ?`,
+            [loc.id], (e3, row) => send(e3 ? null : row));
+        }
+      });
+    });
+  });
+
   // Which NPC sheet (if any) is linked to a token - drives the token menu's
   // GENERATE_SHEET vs OPEN_SHEET button
   router.get('/npcs/link/:location_id', authenticate, requireAdmin, (req, res) => {

@@ -1298,21 +1298,44 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             const armor = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 0;
             let pool;
             try { pool = attackSr6.rollAttack(attackerData, weapon); } catch (e) { return; }
-            const hit = pool.hits > 0;
             const dvMod = attackSr6.arDvMod(weapon, armor);
-            const damage = attackSr6.finalDamage(weapon, dvMod);
             const arTag = dvMod > 0 ? ` (AR ${weapon.ar} > ARMOR ${armor}: +1 DV)`
               : dvMod < 0 ? ` (AR ${weapon.ar} < ARMOR ${armor}: -1 DV)` : '';
-            const hitHistory =
-              `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name} ` +
-              `[${pool.breakdown}] — ${hit ? `HIT · ${damage}${weapon.dv.track} potential${arTag} · GM: soak BOD+ARMOR` : 'MISS'}`;
-            const emitResult = makeEmitResult(info, target, weapon, { hit, roll: pool.hits, ac: armor, glitch: pool.glitch });
 
-            broadcastRoll(info.userName, pool, hitHistory, hit ? color : '#ff3333', () => {
-              if (!hit || damage <= 0) return emitResult({});
-              applyTokenDamage(target, damage, (newHp) => {
-                emitResult({ damage, through: damage, targetHp: newHp, targetDown: newHp <= 0 });
-              });
+            // Defender with a sheet dodges automatically (REA+INT pool);
+            // net hits decide the hit and amp the DV. Sheetless tokens
+            // don't defend - any attacker hit lands at base DV.
+            getDefenderSheet(target, system, (defenderRow) => {
+              const defenderData = defenderRow ? JSON.parse(defenderRow.data || '{}') : {};
+              const defense = defenderRow ? attackSr6.rollDefense(defenderData) : null;
+              const netHits = defense ? pool.hits - defense.hits : pool.hits;
+              const hit = defense ? netHits > 0 : pool.hits > 0;
+              // SR6: net hits add to the Damage Value
+              const damage = attackSr6.finalDamage(weapon, dvMod, defense ? netHits : 0);
+              const defenderName = target.owner && target.shape === 'rhombus'
+                ? identity.displayName(target.owner) : target.name;
+
+              const hitHistory =
+                `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name} ` +
+                `[${pool.breakdown}]` +
+                (defense ? ` vs dodge [${defense.breakdown}] — net ${Math.max(0, netHits)}` : '') +
+                ` — ${hit ? `HIT · ${damage}${weapon.dv.track}${arTag} · GM: soak BOD+ARMOR` : 'MISS'}`;
+              const emitResult = makeEmitResult(info, target, weapon, { hit, roll: pool.hits, ac: armor, glitch: pool.glitch });
+
+              const resolve = () => {
+                broadcastRoll(info.userName, pool, hitHistory, hit ? color : '#ff3333', () => {
+                  if (!hit || damage <= 0) return emitResult({});
+                  applyTokenDamage(target, damage, (newHp) => {
+                    emitResult({ damage, through: damage, targetHp: newHp, targetDown: newHp <= 0 });
+                  });
+                });
+              };
+              if (defense) {
+                broadcastRoll(defenderName, defense,
+                  `${defenderName} dodges [${defense.breakdown}]`, '#00ccff', resolve);
+              } else {
+                resolve();
+              }
             });
           });
         }

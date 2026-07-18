@@ -49,8 +49,16 @@ describe('SR6 attack module', () => {
     expect(attackSr6.finalDamage(w, -1)).toBe(2); // 3P - 1
   });
 
-  it('finalDamage never goes negative', () => {
+  it('finalDamage never goes negative and adds net hits', () => {
     const w = { dv: { value: 0, track: 'P' } };
     expect(attackSr6.finalDamage(w, -1)).toBe(0);
+    expect(attackSr6.finalDamage({ dv: { value: 3, track: 'P' } }, 1, 2)).toBe(6); // DV 3 +1 AR +2 net
+  });
+
+  it('rollDefense rolls REA+INT; null when the sheet has neither attribute', () => {
+    const out = attackSr6.rollDefense({ reaction: 3, intuition: 2 }, rigged([6, 5, 1, 2, 3]));
+    expect(out.poolSize).toBe(5);
+    expect(out.hits).toBe(2);
+    expect(attackSr6.rollDefense({ firearms: 5 })).toBeNull();
   });
 });
