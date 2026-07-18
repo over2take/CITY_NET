@@ -156,35 +156,49 @@ const parseCprText = (text) => {
   return out;
 };
 
-// Map raw candidates onto CP:R sheet fields.
-const mapCprFields = (raw) => {
-  const aliases = buildCprAliases();
+// Shared field mapper: raw candidates -> { mapped, unmapped, skipped }.
+// Per-system behavior is entirely data: an alias table, a numeric-field
+// set, max->current seed pairs, and an optional post hook. Adding a system
+// means supplying those, never re-writing this loop.
+const makeMapFields = ({ system, buildAliases, numericFields, maxSeeds = {}, post }) => (raw) => {
+  const aliases = buildAliases();
   const mapped = {};
   const unmapped = {};
   const skipped = {};
-  const linked = getLinkedFields('cyberpunk_red');
+  const linked = getLinkedFields(system);
 
   Object.entries(raw || {}).forEach(([key, value]) => {
     if (value === '' || value === null || value === undefined) return;
     const fieldId = aliases[norm(key)];
     if (!fieldId) { unmapped[key] = value; return; }
     if (linked[fieldId]) { skipped[key] = value; return; }
-    const v = NUMERIC_CPR_FIELDS.has(fieldId) ? Number(value) : String(value);
-    if (NUMERIC_CPR_FIELDS.has(fieldId) && !Number.isFinite(v)) { unmapped[key] = value; return; }
+    const v = numericFields.has(fieldId) ? Number(value) : String(value);
+    if (numericFields.has(fieldId) && !Number.isFinite(v)) { unmapped[key] = value; return; }
     mapped[fieldId] = v;
   });
 
   // A single imported value seeds both max and current for paired fields
-  Object.entries(CPR_MAX_SEEDS).forEach(([maxField, curField]) => {
+  Object.entries(maxSeeds).forEach(([maxField, curField]) => {
     if (mapped[maxField] !== undefined && mapped[curField] === undefined) {
       mapped[curField] = mapped[maxField];
     }
   });
-  if (mapped.humanity !== undefined && mapped.humanity_max === undefined) {
-    mapped.humanity_max = mapped.humanity;
-  }
+  if (post) post(mapped);
   return { mapped, unmapped, skipped };
 };
+
+// Map raw candidates onto CP:R sheet fields.
+const mapCprFields = makeMapFields({
+  system: 'cyberpunk_red',
+  buildAliases: buildCprAliases,
+  numericFields: NUMERIC_CPR_FIELDS,
+  maxSeeds: CPR_MAX_SEEDS,
+  post: (mapped) => {
+    if (mapped.humanity !== undefined && mapped.humanity_max === undefined) {
+      mapped.humanity_max = mapped.humanity;
+    }
+  },
+});
 
 // ─── CWN importer ────────────────────────────────────────────────────────────
 
@@ -310,30 +324,12 @@ const parseCwnText = (text) => {
   return out;
 };
 
-const mapCwnFields = (raw) => {
-  const aliases = buildCwnAliases();
-  const mapped = {};
-  const unmapped = {};
-  const skipped = {};
-  const linked = getLinkedFields('cities_without_number');
-
-  Object.entries(raw || {}).forEach(([key, value]) => {
-    if (value === '' || value === null || value === undefined) return;
-    const fieldId = aliases[norm(key)];
-    if (!fieldId) { unmapped[key] = value; return; }
-    if (linked[fieldId]) { skipped[key] = value; return; }
-    const v = NUMERIC_CWN_FIELDS.has(fieldId) ? Number(value) : String(value);
-    if (NUMERIC_CWN_FIELDS.has(fieldId) && !Number.isFinite(v)) { unmapped[key] = value; return; }
-    mapped[fieldId] = v;
-  });
-
-  Object.entries(CWN_MAX_SEEDS).forEach(([maxField, curField]) => {
-    if (mapped[maxField] !== undefined && mapped[curField] === undefined) {
-      mapped[curField] = mapped[maxField];
-    }
-  });
-  return { mapped, unmapped, skipped };
-};
+const mapCwnFields = makeMapFields({
+  system: 'cities_without_number',
+  buildAliases: buildCwnAliases,
+  numericFields: NUMERIC_CWN_FIELDS,
+  maxSeeds: CWN_MAX_SEEDS,
+});
 
 // ─── Shadowrun 6E ────────────────────────────────────────────────────────────
 
@@ -414,29 +410,12 @@ const parseSr6Text = (text) => {
   return out;
 };
 
-const mapSr6Fields = (raw) => {
-  const aliases = buildSr6Aliases();
-  const mapped = {};
-  const unmapped = {};
-  const skipped = {};
-  const linked = getLinkedFields('shadowrun_6e');
-
-  Object.entries(raw || {}).forEach(([key, value]) => {
-    if (value === '' || value === null || value === undefined) return;
-    const fieldId = aliases[norm(key)];
-    if (!fieldId) { unmapped[key] = value; return; }
-    if (linked[fieldId]) { skipped[key] = value; return; }
-    const v = NUMERIC_SR6_FIELDS.has(fieldId) ? Number(value) : String(value);
-    if (NUMERIC_SR6_FIELDS.has(fieldId) && !Number.isFinite(v)) { unmapped[key] = value; return; }
-    mapped[fieldId] = v;
-  });
-
-  // Importing Edge max seeds current Edge
-  if (mapped.edge_max !== undefined && mapped.edge === undefined) {
-    mapped.edge = mapped.edge_max;
-  }
-  return { mapped, unmapped, skipped };
-};
+const mapSr6Fields = makeMapFields({
+  system: 'shadowrun_6e',
+  buildAliases: buildSr6Aliases,
+  numericFields: NUMERIC_SR6_FIELDS,
+  maxSeeds: { edge_max: 'edge' },
+});
 
 // ─── Registry ────────────────────────────────────────────────────────────────
 

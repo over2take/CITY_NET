@@ -1233,6 +1233,49 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       }
     };
 
+    // Shared attack scaffolding for sheet-driven systems (CWN, SR6):
+    // fetch + validate the target token, and build the attackResult emitter
+    // (attacker position resolved per map). Per-system handlers only supply
+    // the rules — pools, DVs, damage.
+    const getAttackTarget = (targetId, cb) => {
+      db.get(
+        `SELECT id, name, owner, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index,
+                hp_current, hp_max, hp_temp
+         FROM locations WHERE id = ?`,
+        [targetId],
+        (err, target) => {
+          if (err || !target || !RHOMBUS_SHAPES.includes(target.shape)) return;
+          cb(target);
+        }
+      );
+    };
+
+    const makeEmitResult = (info, target, weapon, base = {}) => (extra) => {
+      const onBattleMap = target.battle_map_id !== null && target.battle_map_id !== undefined;
+      const attackerSql = onBattleMap
+        ? 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id = ? AND floor_index = ?'
+        : 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id IS NULL';
+      const attackerParams = onBattleMap
+        ? [info.userName, target.battle_map_id, target.floor_index]
+        : [info.userName];
+      db.get(attackerSql, attackerParams, (posErr, attackerRow) => {
+        io.emit('attackResult', {
+          attackerId: socket.id,
+          attackerName: info.userName,
+          targetId: target.id,
+          targetName: target.name,
+          attackType: weapon.attackType,
+          attackerPos: attackerRow ? { x: attackerRow.x, z: attackerRow.z } : null,
+          targetPos: { x: target.x, z: target.z },
+          isBattleMap: onBattleMap,
+          weaponName: weapon.name,
+          aimed: false,
+          ...base,
+          ...extra,
+        });
+      });
+    };
+
     // ── SR6 attacks ──────────────────────────────────────────────────────────
     // Attack pool (AGI + skill + weapon dice) - 5s/6s are hits, 0 hits is a
     // miss. AR vs the token's Armor Rating (melee_ac slot) shifts the DV by
@@ -1250,63 +1293,28 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           if (!weapon) {
             return socket.emit('sheetAttackError', { message: 'INVALID_WEAPON // SET NAME, DV (e.g. 3P) AND SKILL ON YOUR SHEET' });
           }
-          db.get(
-            `SELECT id, name, owner, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index,
-                    hp_current, hp_max, hp_temp
-             FROM locations WHERE id = ?`,
-            [payload.targetId],
-            (err3, target) => {
-              if (err3 || !target || !RHOMBUS_SHAPES.includes(target.shape)) return;
-              // Armor Rating lives in the melee_ac slot (0 when unset)
-              const armor = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 0;
-              let pool;
-              try { pool = attackSr6.rollAttack(attackerData, weapon); } catch (e) { return; }
-              const hit = pool.hits > 0;
-              const dvMod = attackSr6.arDvMod(weapon, armor);
-              const damage = attackSr6.finalDamage(weapon, dvMod);
-              const arTag = dvMod > 0 ? ` (AR ${weapon.ar} > ARMOR ${armor}: +1 DV)`
-                : dvMod < 0 ? ` (AR ${weapon.ar} < ARMOR ${armor}: -1 DV)` : '';
-              const hitHistory =
-                `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name} ` +
-                `[${pool.breakdown}] — ${hit ? `HIT · ${damage}${weapon.dv.track} potential${arTag} · GM: soak BOD+ARMOR` : 'MISS'}`;
+          getAttackTarget(payload.targetId, (target) => {
+            // Armor Rating lives in the melee_ac slot (0 when unset)
+            const armor = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 0;
+            let pool;
+            try { pool = attackSr6.rollAttack(attackerData, weapon); } catch (e) { return; }
+            const hit = pool.hits > 0;
+            const dvMod = attackSr6.arDvMod(weapon, armor);
+            const damage = attackSr6.finalDamage(weapon, dvMod);
+            const arTag = dvMod > 0 ? ` (AR ${weapon.ar} > ARMOR ${armor}: +1 DV)`
+              : dvMod < 0 ? ` (AR ${weapon.ar} < ARMOR ${armor}: -1 DV)` : '';
+            const hitHistory =
+              `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name} ` +
+              `[${pool.breakdown}] — ${hit ? `HIT · ${damage}${weapon.dv.track} potential${arTag} · GM: soak BOD+ARMOR` : 'MISS'}`;
+            const emitResult = makeEmitResult(info, target, weapon, { hit, roll: pool.hits, ac: armor, glitch: pool.glitch });
 
-              const emitResult = (extra) => {
-                const onBattleMap = target.battle_map_id !== null && target.battle_map_id !== undefined;
-                const attackerSql = onBattleMap
-                  ? 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id = ? AND floor_index = ?'
-                  : 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id IS NULL';
-                const attackerParams = onBattleMap
-                  ? [info.userName, target.battle_map_id, target.floor_index]
-                  : [info.userName];
-                db.get(attackerSql, attackerParams, (posErr, attackerRow) => {
-                  io.emit('attackResult', {
-                    hit,
-                    attackerId: socket.id,
-                    attackerName: info.userName,
-                    targetId: target.id,
-                    targetName: target.name,
-                    attackType: weapon.attackType,
-                    roll: pool.hits,
-                    ac: armor,
-                    attackerPos: attackerRow ? { x: attackerRow.x, z: attackerRow.z } : null,
-                    targetPos: { x: target.x, z: target.z },
-                    isBattleMap: onBattleMap,
-                    weaponName: weapon.name,
-                    aimed: false,
-                    glitch: pool.glitch,
-                    ...extra,
-                  });
-                });
-              };
-
-              broadcastRoll(info.userName, pool, hitHistory, hit ? color : '#ff3333', () => {
-                if (!hit || damage <= 0) return emitResult({});
-                applyTokenDamage(target, damage, (newHp) => {
-                  emitResult({ damage, through: damage, targetHp: newHp, targetDown: newHp <= 0 });
-                });
+            broadcastRoll(info.userName, pool, hitHistory, hit ? color : '#ff3333', () => {
+              if (!hit || damage <= 0) return emitResult({});
+              applyTokenDamage(target, damage, (newHp) => {
+                emitResult({ damage, through: damage, targetHp: newHp, targetDown: newHp <= 0 });
               });
-            }
-          );
+            });
+          });
         }
       );
     };
@@ -1329,13 +1337,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           if (!weapon) {
             return socket.emit('sheetAttackError', { message: 'INVALID_WEAPON // SET NAME, DMG (e.g. 1d8+1) AND SKILL ON YOUR SHEET' });
           }
-          db.get(
-            `SELECT id, name, owner, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index,
-                    hp_current, hp_max, hp_temp
-             FROM locations WHERE id = ?`,
-            [payload.targetId],
-            (err3, target) => {
-              if (err3 || !target || !RHOMBUS_SHAPES.includes(target.shape)) return;
+          getAttackTarget(payload.targetId, (target) => {
               // CWN has one flat AC; melee_ac is the canonical token slot and
               // ranged falls back to it.
               const meleeAc = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 10;
@@ -1352,33 +1354,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name} ` +
                   `[${toHit.breakdown} = ${toHit.total} vs AC ${ac}] — ${hit ? 'HIT' : 'MISS'}`;
 
-                const emitResult = (extra) => {
-                  const onBattleMap = target.battle_map_id !== null && target.battle_map_id !== undefined;
-                  const attackerSql = onBattleMap
-                    ? 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id = ? AND floor_index = ?'
-                    : 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id IS NULL';
-                  const attackerParams = onBattleMap
-                    ? [info.userName, target.battle_map_id, target.floor_index]
-                    : [info.userName];
-                  db.get(attackerSql, attackerParams, (posErr, attackerRow) => {
-                    io.emit('attackResult', {
-                      hit,
-                      attackerId: socket.id,
-                      attackerName: info.userName,
-                      targetId: target.id,
-                      targetName: target.name,
-                      attackType: weapon.attackType,
-                      roll: toHit.total,
-                      ac,
-                      attackerPos: attackerRow ? { x: attackerRow.x, z: attackerRow.z } : null,
-                      targetPos: { x: target.x, z: target.z },
-                      isBattleMap: onBattleMap,
-                      weaponName: weapon.name,
-                      aimed: false,
-                      ...extra,
-                    });
-                  });
-                };
+                const emitResult = makeEmitResult(info, target, weapon, { hit, roll: toHit.total, ac });
 
                 // Applies damage and tags Frail deaths / GM prompts in the
                 // result. `outcome` carries the actual dice of the damage

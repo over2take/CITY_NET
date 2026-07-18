@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getTemplate, getMaxPairs, type CharacterSheet } from '../sheets';
+import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet } from '../sheets';
 
 // Shared client logic for the player's own character sheet, used by both
 // surfaces that render it: the in-game floating window
@@ -23,9 +23,7 @@ export function usePlayerSheet(
 ) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [allowFumbleShield, setAllowFumbleShield] = useState(false);
-  const [cwnDeluxe, setCwnDeluxe] = useState(false);
-  const [sr6Awakened, setSr6Awakened] = useState(false);
-  const [sr6Emerged, setSr6Emerged] = useState(false);
+  const [ruleSettings, setRuleSettings] = useState<{ key: string; value: string }[]>([]);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const onRolledRef = useRef(opts.onRolled);
   onRolledRef.current = opts.onRolled;
@@ -55,9 +53,7 @@ export function usePlayerSheet(
       fetch('/api/settings').then(r => r.json()).then((rows) => {
         if (Array.isArray(rows)) {
           setAllowFumbleShield(rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1');
-          setCwnDeluxe(rows.find((r: any) => r.key === 'cwn_deluxe')?.value === '1');
-          setSr6Awakened(rows.find((r: any) => r.key === 'sr6_awakened')?.value === '1');
-          setSr6Emerged(rows.find((r: any) => r.key === 'sr6_emerged')?.value === '1');
+          setRuleSettings(rows);
         }
       }).catch(() => {});
     };
@@ -118,18 +114,7 @@ export function usePlayerSheet(
   };
 
   const template = sheet ? getTemplate(sheet.system) : null;
-  const hiddenTabs = (() => {
-    if (!sheet) return undefined;
-    if (sheet.system === 'cities_without_number' && !cwnDeluxe) return ['DELUXE'];
-    if (sheet.system === 'shadowrun_6e') {
-      const hidden = [
-        ...(!sr6Awakened ? ['AWAKENED'] : []),
-        ...(!sr6Emerged ? ['EMERGED'] : []),
-      ];
-      return hidden.length > 0 ? hidden : undefined;
-    }
-    return undefined;
-  })();
+  const hiddenTabs = hiddenTabsFor(sheet?.system, ruleSettings);
 
   return { sheet, template, handleFieldChange, allowFumbleShield, hiddenTabs, actions };
 }
