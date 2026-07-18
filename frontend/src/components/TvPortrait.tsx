@@ -5,10 +5,13 @@ import React from 'react';
 // carries its own CSS and SVG filters so it works anywhere a portrait is
 // shown (sheets, token windows, ...). Fills its parent; give the parent
 // position:relative and an explicit size.
-export function TvPortrait({ src }: { src: string }) {
+// silhouette: darkens the image to an ominous shadow figure — lets the GM
+// reuse stock art without players recognizing a repeated character.
+export function TvPortrait({ src, silhouette = false }: { src: string; silhouette?: boolean }) {
   const imgStyle: React.CSSProperties = {
     position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
   };
+  const dark = silhouette ? ' brightness(0.12) contrast(1.4)' : '';
   return (
     <div className="portrait-tv" style={{ position: 'absolute', inset: 0 }}>
       <style>{`
@@ -39,9 +42,9 @@ export function TvPortrait({ src }: { src: string }) {
         }
       `}</style>
       {/* Chromatic fringe: R and B copies offset either side of the base */}
-      <img src={src} alt="" aria-hidden style={{ ...imgStyle, filter: 'url(#portrait-red)', transform: 'translateX(1.5px)', mixBlendMode: 'screen', opacity: 0.85 }} />
-      <img src={src} alt="" aria-hidden style={{ ...imgStyle, filter: 'url(#portrait-blue)', transform: 'translateX(-1.5px)', mixBlendMode: 'screen', opacity: 0.85 }} />
-      <img src={src} alt="portrait" style={{ ...imgStyle, mixBlendMode: 'screen' }} />
+      <img src={src} alt="" aria-hidden style={{ ...imgStyle, filter: `url(#portrait-red)${dark}`, transform: 'translateX(1.5px)', mixBlendMode: 'screen', opacity: 0.85 }} />
+      <img src={src} alt="" aria-hidden style={{ ...imgStyle, filter: `url(#portrait-blue)${dark}`, transform: 'translateX(-1.5px)', mixBlendMode: 'screen', opacity: 0.85 }} />
+      <img src={src} alt="portrait" style={{ ...imgStyle, filter: dark || undefined, mixBlendMode: 'screen' }} />
       {/* Scanlines + rolling refresh band */}
       <div className="portrait-scanlines" />
       <div className="portrait-rollband" />

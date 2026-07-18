@@ -1,9 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-
-const NPC_HEADSHOTS = [
-  '1.png','2.png','14.png','16.png','17.png','21.png','22.png','29.png',
-  '30.png','35.png','36.png','46.png','61.png','85.png','86.png','101.png',
-].map(f => `/npc-headshots/${f}`);
+import { ALL_HEADSHOTS } from '../headshots';
 import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
@@ -22,6 +18,8 @@ interface NpcSheetWindowProps {
   npcLabel: string;
   /** Player mode: view/edit this player's active-system sheet instead. */
   playerUsername?: string;
+  /** Stock headshot pool for the HEADSHOTS picker (defaults to all pools). */
+  headshots?: string[];
   pos: { x: number; y: number };
   setPos: (pos: { x: number; y: number }) => void;
   onClose: () => void;
@@ -30,7 +28,7 @@ interface NpcSheetWindowProps {
   socket?: any;
 }
 
-export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, setPos, onClose, socket }: NpcSheetWindowProps) {
+export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headshots = ALL_HEADSHOTS, pos, setPos, onClose, socket }: NpcSheetWindowProps) {
   const apiPath = playerUsername
     ? `/api/sheets/user/${encodeURIComponent(playerUsername)}`
     : `/api/sheets/npcs/${npcId}`;
@@ -164,7 +162,9 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
     }
   }, [npcId, playerUsername, token]);
 
-  const shadowFilter = Number(sheet?.data?.portrait_shadow_filter ?? 1) !== 0;
+  // portrait_shadow_filter: 1 = shadow-silhouette the portrait (hides reused
+  // stock art); the TV effect itself is always on. Default off.
+  const shadowFilter = Number(sheet?.data?.portrait_shadow_filter ?? 0) !== 0;
   const handleTogglePortraitShadow = useCallback(() => {
     handleFieldChange('portrait_shadow_filter', shadowFilter ? 0 : 1);
   }, [handleFieldChange, shadowFilter]);
@@ -195,7 +195,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
               style={{ fontSize: '9px', width: 'auto', padding: '0 5px', background: pickerOpen ? 'rgba(0,255,0,0.12)' : undefined }}
               onClick={() => {
                 if (!pickerOpen && sheet?.portrait_url) {
-                  const idx = NPC_HEADSHOTS.indexOf(sheet.portrait_url);
+                  const idx = headshots.indexOf(sheet.portrait_url);
                   if (idx !== -1) setPickerIndex(idx);
                 }
                 setPickerOpen(o => !o);
@@ -224,27 +224,27 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, pos, se
           display: 'flex', alignItems: 'center', gap: '8px',
         }}>
           <button
-            onClick={() => setPickerIndex(i => (i - 1 + NPC_HEADSHOTS.length) % NPC_HEADSHOTS.length)}
+            onClick={() => setPickerIndex(i => (i - 1 + headshots.length) % headshots.length)}
             style={{ background: 'none', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '2px 8px', fontSize: '1rem', lineHeight: 1 }}
           >{'<'}</button>
           <img
-            src={NPC_HEADSHOTS[pickerIndex]}
+            src={headshots[pickerIndex]}
             alt=""
             style={{ width: 72, height: 72, objectFit: 'cover', border: '1px solid var(--green)', display: 'block' }}
           />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <span style={{ fontSize: '0.6rem', color: 'var(--green)', letterSpacing: '1px', opacity: 0.7 }}>
-              {pickerIndex + 1} / {NPC_HEADSHOTS.length}
+              {pickerIndex + 1} / {headshots.length}
             </span>
             <button
-              onClick={() => { handleSetStockPortrait(NPC_HEADSHOTS[pickerIndex]); setPickerOpen(false); }}
+              onClick={() => { handleSetStockPortrait(headshots[pickerIndex]); setPickerOpen(false); }}
               style={{ background: 'rgba(0,255,0,0.08)', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '4px 10px', fontSize: '0.65rem', letterSpacing: '1px', fontWeight: 600 }}
             >
               USE THIS
             </button>
           </div>
           <button
-            onClick={() => setPickerIndex(i => (i + 1) % NPC_HEADSHOTS.length)}
+            onClick={() => setPickerIndex(i => (i + 1) % headshots.length)}
             style={{ background: 'none', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '2px 8px', fontSize: '1rem', lineHeight: 1 }}
           >{'>'}</button>
         </div>

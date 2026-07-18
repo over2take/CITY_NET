@@ -181,11 +181,12 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
 // R/B chromatic fringe, and an intermittent glitch jitter.
 const PORTRAIT_HINT = 'Best results: a square image, 400×400px or larger. JPG / PNG / WebP / GIF, max 8MB.';
 
-function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilter = true, onToggleShadow }: {
+function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilter = false, onToggleShadow }: {
   initial: string;
   portraitUrl?: string | null;
   size?: number;
   onUpload?: (file: File) => void;
+  /** Darken the portrait to a shadow silhouette (hides reused stock art). */
   shadowFilter?: boolean;
   onToggleShadow?: () => void;
 }) {
@@ -193,17 +194,10 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilt
   const corner = (pos: React.CSSProperties): React.CSSProperties => ({
     position: 'absolute', width: `${b}px`, height: `${b}px`, ...pos,
   });
-  const imgStyle: React.CSSProperties = {
-    position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
-  };
   const frame = (
     <div style={{ position: 'relative', width: `${size}px`, height: `${size}px`, background: 'rgba(0, 20, 0, 0.6)', flex: '0 0 auto', overflow: 'hidden' }}>
       {portraitUrl ? (
-        shadowFilter ? (
-          <TvPortrait src={portraitUrl} />
-        ) : (
-          <img src={portraitUrl} alt="portrait" style={{ ...imgStyle, objectFit: 'cover' }} />
-        )
+        <TvPortrait src={portraitUrl} silhouette={shadowFilter} />
       ) : (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green)', fontSize: `${Math.round(size * 0.38)}px`, letterSpacing: '1px' }}>
           {initial}
@@ -239,7 +233,7 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilt
         {onToggleShadow && (
           <button
             onClick={onToggleShadow}
-            title={shadowFilter ? 'Disable TV filter' : 'Enable TV filter'}
+            title={shadowFilter ? 'Reveal portrait' : 'Shadow silhouette — hide reused stock art'}
             style={{
               cursor: 'pointer', background: shadowFilter ? 'rgba(0,255,0,0.08)' : 'rgba(0,0,0,0.85)',
               border: '1px solid var(--green)', borderTop: 'none', borderLeft: onUpload ? 'none' : '1px solid var(--green)',
@@ -247,7 +241,7 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilt
               letterSpacing: '1px', fontWeight: 600, whiteSpace: 'nowrap',
             }}
           >
-            {shadowFilter ? 'FX ■' : 'FX □'}
+            {shadowFilter ? 'SHADOW ■' : 'SHADOW □'}
           </button>
         )}
       </div>
@@ -286,7 +280,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
 
   return (
     <div style={{ display: 'flex', gap: '12px', padding: '10px 2px 8px' }}>
-      <BracketPortrait initial={(name || '?').charAt(0).toUpperCase()} portraitUrl={portraitUrl} size={192} onUpload={onPortraitUpload} shadowFilter={portraitShadow ?? true} onToggleShadow={onTogglePortraitShadow} />
+      <BracketPortrait initial={(name || '?').charAt(0).toUpperCase()} portraitUrl={portraitUrl} size={192} onUpload={onPortraitUpload} shadowFilter={portraitShadow ?? false} onToggleShadow={onTogglePortraitShadow} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: '1rem', color: 'var(--green)', letterSpacing: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {name ? name.toUpperCase() : 'UNNAMED'}

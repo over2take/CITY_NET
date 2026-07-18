@@ -35,6 +35,7 @@ import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
 import { TvPortrait } from './components/TvPortrait';
+import { headshotsForShape } from './headshots';
 import { getTemplate } from './sheets';
 import { DiceTrayWindow, DotMatrixScoreboard, DiceScene } from './components/DiceTray';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
@@ -209,10 +210,10 @@ function App() {
   const [quickSheetPos, setQuickSheetPos] = useState(() => ({ x: window.innerWidth / 2 + 170, y: window.innerHeight / 2 - 100 }));
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
-  const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string } | null>(null);
+  const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string } | null>(null);
   // NPC sheet linked to the currently selected token (admin) - drives
   // GENERATE_SHEET vs OPEN_SHEET on the token menu
-  const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; npc_label: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null } | null>(null);
+  const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; npc_label: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null; portrait_shadow_filter?: number | null } | null>(null);
   // Admin view of another player's sheet (opened from their token)
   const [openPlayerSheetUser, setOpenPlayerSheetUser] = useState<string | null>(null);
   // Bumped when npc_sheet_links change so the link lookup effect re-runs
@@ -233,7 +234,7 @@ function App() {
         .then(r => r.ok ? r.json() : null)
         .then(data => {
           if (cancelled) return;
-          setTokenSheetLink(data?.sheet_name || data?.portrait_url ? { location_id: loc.id, sheet_id: 0, npc_label: '', portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: null } : null);
+          setTokenSheetLink(data?.sheet_name || data?.portrait_url ? { location_id: loc.id, sheet_id: 0, npc_label: '', portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null, portrait_shadow_filter: data.portrait_shadow_filter ?? null } : null);
         })
         .catch(() => { if (!cancelled) setTokenSheetLink(null); });
       return () => { cancelled = true; };
@@ -243,7 +244,7 @@ function App() {
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (cancelled) return;
-        setTokenSheetLink(data?.sheet_id ? { location_id: loc.id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null } : null);
+        setTokenSheetLink(data?.sheet_id ? { location_id: loc.id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null, portrait_shadow_filter: data.portrait_shadow_filter ?? null } : null);
       })
       .catch(() => { if (!cancelled) setTokenSheetLink(null); });
     return () => { cancelled = true; };
@@ -1819,6 +1820,7 @@ function App() {
                 socket={socketRef.current}
                 npcId={openNpcSheet.id}
                 npcLabel={openNpcSheet.npc_label}
+                headshots={headshotsForShape(openNpcSheet.token_shape)}
                 pos={npcSheetPos}
                 setPos={setNpcSheetPos}
                 onClose={() => setOpenNpcSheet(null)}
@@ -1854,11 +1856,11 @@ function App() {
                           {tokenSheetLink?.portrait_url && (
                             <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
                               <div style={{ position: 'relative', width: '120px', height: '120px', border: '1px solid var(--green)', background: 'rgba(0, 20, 0, 0.6)', overflow: 'hidden' }}>
-                                <TvPortrait src={tokenSheetLink.portrait_url} />
+                                <TvPortrait src={tokenSheetLink.portrait_url} silhouette={Number(tokenSheetLink.portrait_shadow_filter ?? 0) !== 0} />
                               </div>
                             </div>
                           )}
-                          <p><strong>DATA_DESCRIPTION:</strong> {(isAdmin && tokenSheetLink?.sheet_description) || selectedLocation.description || 'NO_DATA'}</p>
+                          <p><strong>DATA_DESCRIPTION:</strong> {tokenSheetLink?.sheet_description || selectedLocation.description || 'NO_DATA'}</p>
                           {/* Defense display (AC or DV per game system) — admin can edit; owner can view their own; other players see nothing */}
                           {(isAdmin || isOwner) && (() => { const defLabel = getTemplate(gameSystem).tokenDefense?.label ?? 'AC'; return (
                             isAdmin && acEdit ? (
@@ -1964,7 +1966,7 @@ function App() {
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
                       tokenSheetLink?.location_id === selectedLocation.id ? (
                         <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
-                          setOpenNpcSheet({ id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label });
+                          setOpenNpcSheet({ id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label, token_shape: selectedLocation.shape });
                         }}>OPEN_SHEET</button>
                       ) : (() => {
                         const tiers = getTemplate(gameSystem).npcTiers;
