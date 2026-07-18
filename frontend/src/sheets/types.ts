@@ -61,6 +61,13 @@ export interface SheetSection {
 /** Drives the identity header block: portrait frame, name, subtitle line,
  *  HP bar, and at-a-glance chips. All values read from sheet data. */
 export interface SheetHeader {
+  /** IMPORTANT: the sheet is the single source of truth for player identity.
+   *  The backend mirrors this field (plus `description`) onto the player's
+   *  token and uses it as the roll display name — via its own map in
+   *  backend/sheets/identity.js NAME_FIELDS, which defaults to 'name'.
+   *  Use 'name' as the id (relabel it per system — CP:R labels it Handle).
+   *  If a template must use another id, add a matching entry to
+   *  NAME_FIELDS or tokens/rolls will fall back to the login username. */
   nameField: string;
   subtitleFields?: string[];
   hpField?: string;

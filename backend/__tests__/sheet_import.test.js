@@ -63,7 +63,7 @@ describe('CP:R importer mapping', () => {
       Handle: 'V', Role: 'Solo', INT: '6', REF: '7', 'SP (Head)': '11',
       Handgun: '5', 'Pilot Air Vehicle (x2)': '2', mystery_field: 'x',
     });
-    expect(mapped.handle).toBe('V');
+    expect(mapped.name).toBe('V');
     expect(mapped.role).toBe('Solo');
     expect(mapped.int).toBe(6);
     expect(mapped.ref).toBe(7);
@@ -101,7 +101,7 @@ describe('CP:R importer mapping', () => {
   it('parses a plain stat block', () => {
     const raw = importer.parseText('HANDLE: Nyx  Role: Netrunner\nINT 8 REF 6 TECH 7\nHandgun: 3  Stealth 4');
     const { mapped } = importer.mapFields(raw);
-    expect(mapped.handle).toBe('Nyx');
+    expect(mapped.name).toBe('Nyx');
     expect(mapped.int).toBe(8);
     expect(mapped.tech).toBe(7);
     expect(mapped.handgun).toBe(3);
@@ -117,7 +117,7 @@ describe('POST /api/sheets/import/preview', () => {
       .attach('pdf', pdf, { filename: 'sheet.pdf', contentType: 'application/pdf' });
     expect(res.status).toBe(200);
     expect(res.body.source).toBe('pdf-form');
-    expect(res.body.mapped.handle).toBe('V');
+    expect(res.body.mapped.name).toBe('V');
     expect(res.body.mapped.ref).toBe(7);
     expect(res.body.mapped.handgun).toBe(5);
   });

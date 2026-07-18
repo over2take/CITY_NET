@@ -2,6 +2,8 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { authenticate, optionalAuthenticate } = require('../middleware/auth');
+const identity = require('../sheets/identity');
+const { DEFAULT_SYSTEM } = require('../sheets/templates');
 
 const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY', 'LANDMARK', 'MARKETS', 'CUSTOM']);
 const isUserDefinedName = (name) => !!name && name.trim() !== '' && !ZONE_TYPE_NAMES.has(name.trim());
@@ -132,6 +134,17 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           results.forEach(loc => {
             if (loc.shape === 'rhombus') io.emit('rhombusAppearing', { id: loc.id, owner: loc.owner });
           });
+          // Player tokens take their name/description from the owner's
+          // character sheet (single source of truth)
+          const owners = [...new Set(results.filter(r => r.shape === 'rhombus' && r.owner).map(r => r.owner))];
+          if (owners.length > 0) {
+            db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (eGs, rowGs) => {
+              const system = rowGs ? rowGs.value : DEFAULT_SYSTEM;
+              owners.forEach(o => identity.syncToken(db, system, o, (changed) => {
+                if (changed) emitUpdate({ isRhombusOnly: true });
+              }));
+            });
+          }
         }
         const isRhombusOnly = results.length > 0 && results.every(r => r.shape === 'rhombus');
         emitUpdate({ isRhombusOnly });

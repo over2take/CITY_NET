@@ -58,7 +58,7 @@ describe('QuickSheetCard', () => {
   it('ignores quickSheetData for a different username', () => {
     const socket = makeSocket();
     render(<QuickSheetCard username="GHOST" socket={socket} pos={basePos} setPos={setPos} onClose={onClose} />);
-    act(() => socket.trigger('quickSheetData', { username: 'VIPER', exists: true, fields: { handle: 'VIPER' }, portrait_url: null }));
+    act(() => socket.trigger('quickSheetData', { username: 'VIPER', exists: true, fields: { name: 'VIPER' }, portrait_url: null }));
     expect(screen.getByText(/FETCHING_IDENT/)).toBeTruthy();
   });
 
@@ -70,7 +70,7 @@ describe('QuickSheetCard', () => {
       exists: true,
       system: 'cyberpunk_red',
       portrait_url: null,
-      fields: { handle: 'Ghost', role: 'Solo', description: 'Runs the shadows.' },
+      fields: { name: 'Ghost', role: 'Solo', description: 'Runs the shadows.' },
     }));
     expect(screen.getByText('GHOST')).toBeTruthy();
     expect(screen.getByText('SOLO')).toBeTruthy();
@@ -98,7 +98,7 @@ describe('QuickSheetCard', () => {
       exists: true,
       system: 'cyberpunk_red',
       portrait_url: '/uploads/ghost.jpg',
-      fields: { handle: 'Ghost' },
+      fields: { name: 'Ghost' },
     }));
     const img = document.querySelector('img') as HTMLImageElement;
     expect(img).toBeTruthy();

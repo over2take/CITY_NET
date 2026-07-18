@@ -359,13 +359,15 @@ function App() {
   }, [userName, locations.length]);
 
   // Sync player configuration to DB whenever they change it in the sidebar
+  // Color only — name/description come from the character sheet (the backend
+  // mirrors them onto the token; see backend/sheets/identity.js)
   const syncRhombusToDB = async (newState: any) => {
     const existingList = locations.filter((l: any) => l.shape === 'rhombus' && l.owner === userName);
     for (const existing of existingList) {
         await fetch(`/api/locations/${existing.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ ...existing, name: newState.name, description: newState.description, color: newState.color })
+            body: JSON.stringify({ ...existing, color: newState.color })
         });
     }
   };

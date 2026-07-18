@@ -90,7 +90,7 @@ const TEMPLATES = {
   },
   cyberpunk_red: {
     name: 'Cyberpunk RED',
-    publicFields: ['handle', 'role', 'description'],
+    publicFields: ['name', 'role', 'description'],
     combatFields: ['sp_head', 'sp_head_max', 'sp_body', 'sp_body_max', 'sp_shield', 'sp_shield_max'],
     linkedFields: { hp: 'token_hp', hp_max: 'token_hp_max', cash: 'bank_balance' },
     luckField: 'luck',

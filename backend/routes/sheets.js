@@ -8,6 +8,7 @@ const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived,
 const sheetImporters = require('../sheets/importers');
 const sheetAttack = require('../sheets/attack');
 const headshots = require('../sheets/headshots');
+const identity = require('../sheets/identity');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
 // sheet, quick-sheet lookups) goes through socket events, matching how the
@@ -162,6 +163,13 @@ module.exports = (db, io) => {
                     () => { io.emit('dataUpdated', { isRhombusOnly: true }); done(); }
                   )
                 : routeAc;
+              // Sheet name/description are the source of truth for the
+              // player's token label - mirror them onto their rhombus
+              if (Object.keys(patch).some((k) => k === identity.nameField(system) || k === 'description')) {
+                identity.syncToken(db, system, req.params.username, (changed) => {
+                  if (changed) io.emit('dataUpdated', { isRhombusOnly: true });
+                });
+              }
               pushAc(() => {
                 io.emit('sheetUpdated', { username: req.params.username, system });
                 res.json({ message: 'Sheet updated' });
