@@ -38,6 +38,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const [reloadKey, setReloadKey] = useState(0);
   const [cwnDeluxe, setCwnDeluxe] = useState(false);
+  const [sr6Awakened, setSr6Awakened] = useState(false);
+  const [sr6Emerged, setSr6Emerged] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerIndex, setPickerIndex] = useState(0);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -48,6 +50,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
       fetch('/api/settings').then(r => r.json()).then((rows) => {
         if (Array.isArray(rows)) {
           setCwnDeluxe(rows.find((r: any) => r.key === 'cwn_deluxe')?.value === '1');
+          setSr6Awakened(rows.find((r: any) => r.key === 'sr6_awakened')?.value === '1');
+          setSr6Emerged(rows.find((r: any) => r.key === 'sr6_emerged')?.value === '1');
         }
       }).catch(() => {});
     };
@@ -258,7 +262,14 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           onPortraitUpload={handlePortraitUpload}
           portraitShadow={shadowFilter}
           onTogglePortraitShadow={handleTogglePortraitShadow}
-          hiddenTabs={sheet.system === 'cities_without_number' && !cwnDeluxe ? ['DELUXE'] : undefined}
+          hiddenTabs={
+            sheet.system === 'cities_without_number' && !cwnDeluxe ? ['DELUXE']
+            : sheet.system === 'shadowrun_6e' ? [
+                ...(!sr6Awakened ? ['AWAKENED'] : []),
+                ...(!sr6Emerged ? ['EMERGED'] : []),
+              ]
+            : undefined
+          }
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>

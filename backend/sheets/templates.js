@@ -81,6 +81,29 @@ const cwnEffectiveAc = (data) => {
   return Math.max(1, Math.min(99, base + Math.min(cwnMod(data.dex), cap) + shield));
 };
 
+// Recompute SR6 derived fields (monitors, initiative, composure). Mutates
+// data; returns the ids of fields whose value changed.
+//   Physical monitor = 8 + ceil(BOD/2)   (mirrors token hp_max)
+//   Stun monitor     = 8 + ceil(WIL/2)
+//   Initiative score = REA + INT (the roll adds 1d6)
+//   Composure        = WIL + CHA (rolled as a pool)
+const sr6Recompute = (data) => {
+  const out = {
+    physical_monitor: 8 + Math.ceil(num(data.body) / 2),
+    stun_monitor: 8 + Math.ceil(num(data.willpower) / 2),
+    initiative_score: num(data.reaction) + num(data.intuition),
+    composure: num(data.willpower) + num(data.charisma),
+  };
+  const changed = [];
+  Object.entries(out).forEach(([id, value]) => {
+    if (num(data[id]) !== value || data[id] === undefined) {
+      data[id] = value;
+      changed.push(id);
+    }
+  });
+  return changed;
+};
+
 const TEMPLATES = {
   generic: {
     name: 'Generic',
@@ -128,6 +151,21 @@ const TEMPLATES = {
     // of per-field divisor rules the whole derived layer is recomputed after
     // any write.
     recompute: cwnRecompute,
+  },
+  shadowrun_6e: {
+    name: 'Shadowrun 6E',
+    publicFields: ['name', 'metatype', 'role', 'description'],
+    combatFields: ['armor_rating'],
+    // armor_rating is a WRITABLE linked field: the token's melee_ac slot
+    // stores the Armor Rating (AR-vs-armor DV comparison reads the token).
+    linkedFields: { hp: 'token_hp', hp_max: 'token_hp_max', cash: 'bank_balance', armor_rating: 'token_ac' },
+    luckField: 'edge',
+    luckMaxField: 'edge_max',
+    maxPairs: {
+      edge_max: 'edge',
+      stun_monitor: 'stun_current',
+    },
+    recompute: sr6Recompute,
   },
 };
 

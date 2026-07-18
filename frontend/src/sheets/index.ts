@@ -2,6 +2,7 @@ import type { SheetTemplate } from './types';
 import { generic } from './templates/generic';
 import { cyberpunkRed } from './templates/cyberpunk_red';
 import { citiesWithoutNumber } from './templates/cities_without_number';
+import { shadowrun6e } from './templates/shadowrun_6e';
 
 export * from './types';
 
@@ -9,6 +10,7 @@ export const TEMPLATES: Record<string, SheetTemplate> = {
   generic,
   cyberpunk_red: cyberpunkRed,
   cities_without_number: citiesWithoutNumber,
+  shadowrun_6e: shadowrun6e,
 };
 
 export const getTemplate = (system: string): SheetTemplate =>

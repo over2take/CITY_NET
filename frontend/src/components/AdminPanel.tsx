@@ -2177,6 +2177,19 @@ const CWN_HOUSE_RULES: HouseRuleDef[] = [
   },
 ];
 
+const SR6_HOUSE_RULES: HouseRuleDef[] = [
+  {
+    settingKey: 'sr6_awakened',
+    label: 'AWAKENED (MAGIC)',
+    title: 'Unlocks the AWAKENED tab on character sheets: spells, powers, tradition, and the Magic attribute. Off by default.',
+  },
+  {
+    settingKey: 'sr6_emerged',
+    label: 'EMERGED (RESONANCE)',
+    title: 'Unlocks the EMERGED tab on character sheets: complex forms, sprites, and the Resonance attribute. Off by default.',
+  },
+];
+
 function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNpcLibrary?: () => void }) {
   const [open, setOpen] = useState(false);
   const [system, setSystem] = useState<string>('generic');
@@ -2225,6 +2238,7 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNp
           </p>
           {system === 'cities_without_number' && <HouseRulesPanel token={token} defs={CWN_HOUSE_RULES} />}
           {system === 'cyberpunk_red' && <HouseRulesPanel token={token} defs={CPR_HOUSE_RULES} />}
+          {system === 'shadowrun_6e' && <HouseRulesPanel token={token} defs={SR6_HOUSE_RULES} />}
           <div style={{ display: 'flex', gap: '6px' }}>
             {onOpenNpcLibrary && (
               <button

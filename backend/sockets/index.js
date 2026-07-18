@@ -4,6 +4,7 @@ const sheetRolls = require('../sheets/rolls');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
 const attackCwn = require('../sheets/attackCwn');
+const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
@@ -763,6 +764,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             }
             // Recompute derived fields (CP:R: EMP = Humanity / 10)
             sheetTemplates.applyDerived(system, data, payload.fieldId);
+            // SR6: stun past the Stun Monitor overflows into Physical damage
+            // (token HP). Clamp the track and carry the excess.
+            let stunOverflow = 0;
+            if (system === 'shadowrun_6e' && payload.fieldId === 'stun_current') {
+              const mon = Number(data.stun_monitor) || 0;
+              const val = Number(data.stun_current) || 0;
+              if (mon > 0 && val > mon) {
+                stunOverflow = val - mon;
+                data.stun_current = mon;
+              }
+            }
             db.run(
               `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
               [JSON.stringify(data), row.id],
@@ -774,6 +786,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   identity.syncToken(db, system, info.userName, (changed) => {
                     if (changed) emitUpdate({ isRhombusOnly: true });
                   });
+                }
+                // SR6 stun overflow lands on the token's Physical track
+                if (stunOverflow > 0) {
+                  db.run(
+                    `UPDATE locations SET hp_current = MAX(0, COALESCE(hp_current, 0) - ?)
+                     WHERE shape = 'rhombus' AND owner = ?`,
+                    [stunOverflow, info.userName],
+                    () => emitUpdate({ isRhombusOnly: true })
+                  );
                 }
                 // CWN: armor fields drive the token AC (base + capped DEX
                 // mod + shield). Only while armor_ac is set - otherwise the
@@ -891,7 +912,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             let outcome;
             let statField = null;
             try {
-              const resolved = rollEngine.resolveFormula(rollDef.formula, data);
+              const resolved = rollEngine.resolveFormula(rollDef.formula, data, { allowNoDice: rollDef.shape === 'pool' });
               // First @field in the formula is the governing stat (armor
               // penalty applies to REF/DEX checks)
               const firstField = rollEngine.parseFormula(rollDef.formula).find(t => t.kind === 'field');
@@ -1212,6 +1233,84 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       }
     };
 
+    // ── SR6 attacks ──────────────────────────────────────────────────────────
+    // Attack pool (AGI + skill + weapon dice) - 5s/6s are hits, 0 hits is a
+    // miss. AR vs the token's Armor Rating (melee_ac slot) shifts the DV by
+    // ±1. On a hit the potential DV applies to Physical HP; the soak roll is
+    // adjudicated manually (GM can heal back what was soaked).
+    const handleSr6Attack = (info, payload, color) => {
+      const system = 'shadowrun_6e';
+      db.get(
+        `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+        [info.userName, system],
+        (err2, sheetRow) => {
+          if (err2 || !sheetRow) return;
+          const attackerData = JSON.parse(sheetRow.data || '{}');
+          const weapon = attackSr6.getWeapon(attackerData, payload.weaponIndex);
+          if (!weapon) {
+            return socket.emit('sheetAttackError', { message: 'INVALID_WEAPON // SET NAME, DV (e.g. 3P) AND SKILL ON YOUR SHEET' });
+          }
+          db.get(
+            `SELECT id, name, owner, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index,
+                    hp_current, hp_max, hp_temp
+             FROM locations WHERE id = ?`,
+            [payload.targetId],
+            (err3, target) => {
+              if (err3 || !target || !RHOMBUS_SHAPES.includes(target.shape)) return;
+              // Armor Rating lives in the melee_ac slot (0 when unset)
+              const armor = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 0;
+              let pool;
+              try { pool = attackSr6.rollAttack(attackerData, weapon); } catch (e) { return; }
+              const hit = pool.hits > 0;
+              const dvMod = attackSr6.arDvMod(weapon, armor);
+              const damage = attackSr6.finalDamage(weapon, dvMod);
+              const arTag = dvMod > 0 ? ` (AR ${weapon.ar} > ARMOR ${armor}: +1 DV)`
+                : dvMod < 0 ? ` (AR ${weapon.ar} < ARMOR ${armor}: -1 DV)` : '';
+              const hitHistory =
+                `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name} ` +
+                `[${pool.breakdown}] — ${hit ? `HIT · ${damage}${weapon.dv.track} potential${arTag} · GM: soak BOD+ARMOR` : 'MISS'}`;
+
+              const emitResult = (extra) => {
+                const onBattleMap = target.battle_map_id !== null && target.battle_map_id !== undefined;
+                const attackerSql = onBattleMap
+                  ? 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id = ? AND floor_index = ?'
+                  : 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id IS NULL';
+                const attackerParams = onBattleMap
+                  ? [info.userName, target.battle_map_id, target.floor_index]
+                  : [info.userName];
+                db.get(attackerSql, attackerParams, (posErr, attackerRow) => {
+                  io.emit('attackResult', {
+                    hit,
+                    attackerId: socket.id,
+                    attackerName: info.userName,
+                    targetId: target.id,
+                    targetName: target.name,
+                    attackType: weapon.attackType,
+                    roll: pool.hits,
+                    ac: armor,
+                    attackerPos: attackerRow ? { x: attackerRow.x, z: attackerRow.z } : null,
+                    targetPos: { x: target.x, z: target.z },
+                    isBattleMap: onBattleMap,
+                    weaponName: weapon.name,
+                    aimed: false,
+                    glitch: pool.glitch,
+                    ...extra,
+                  });
+                });
+              };
+
+              broadcastRoll(info.userName, pool, hitHistory, hit ? color : '#ff3333', () => {
+                if (!hit || damage <= 0) return emitResult({});
+                applyTokenDamage(target, damage, (newHp) => {
+                  emitResult({ damage, through: damage, targetHp: newHp, targetDown: newHp <= 0 });
+                });
+              });
+            }
+          );
+        }
+      );
+    };
+
     // ── CWN attacks ──────────────────────────────────────────────────────────
     // 1d20 + BHB + skill + attribute mod (+weapon atk) vs the token's AC.
     // Hit: damage + mod straight to HP (no soak - AC prices the armor in),
@@ -1349,6 +1448,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       getGameSystem((err, system) => {
         if (err) return;
         if (system === 'cities_without_number') return handleCwnAttack(info, payload, color);
+        if (system === 'shadowrun_6e') return handleSr6Attack(info, payload, color);
         if (system !== 'cyberpunk_red') return;
         db.get(
           `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,

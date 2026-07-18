@@ -24,6 +24,8 @@ export function usePlayerSheet(
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [allowFumbleShield, setAllowFumbleShield] = useState(false);
   const [cwnDeluxe, setCwnDeluxe] = useState(false);
+  const [sr6Awakened, setSr6Awakened] = useState(false);
+  const [sr6Emerged, setSr6Emerged] = useState(false);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const onRolledRef = useRef(opts.onRolled);
   onRolledRef.current = opts.onRolled;
@@ -54,6 +56,8 @@ export function usePlayerSheet(
         if (Array.isArray(rows)) {
           setAllowFumbleShield(rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1');
           setCwnDeluxe(rows.find((r: any) => r.key === 'cwn_deluxe')?.value === '1');
+          setSr6Awakened(rows.find((r: any) => r.key === 'sr6_awakened')?.value === '1');
+          setSr6Emerged(rows.find((r: any) => r.key === 'sr6_emerged')?.value === '1');
         }
       }).catch(() => {});
     };
@@ -114,7 +118,18 @@ export function usePlayerSheet(
   };
 
   const template = sheet ? getTemplate(sheet.system) : null;
-  const hiddenTabs = sheet && sheet.system === 'cities_without_number' && !cwnDeluxe ? ['DELUXE'] : undefined;
+  const hiddenTabs = (() => {
+    if (!sheet) return undefined;
+    if (sheet.system === 'cities_without_number' && !cwnDeluxe) return ['DELUXE'];
+    if (sheet.system === 'shadowrun_6e') {
+      const hidden = [
+        ...(!sr6Awakened ? ['AWAKENED'] : []),
+        ...(!sr6Emerged ? ['EMERGED'] : []),
+      ];
+      return hidden.length > 0 ? hidden : undefined;
+    }
+    return undefined;
+  })();
 
   return { sheet, template, handleFieldChange, allowFumbleShield, hiddenTabs, actions };
 }

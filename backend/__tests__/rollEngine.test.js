@@ -94,9 +94,11 @@ describe('executeRoll — explode10 (CP:R check die)', () => {
 });
 
 describe('executeRoll — pool', () => {
-  it('is reserved but not implemented', () => {
+  it('counts hits on 5s and 6s (full coverage in sr6_rollEngine.test.js)', () => {
     const resolved = resolveFormula('6d6', {});
-    expect(() => executeRoll(resolved, 'pool')).toThrow(/not implemented/);
+    const out = executeRoll(resolved, 'pool', () => 0.99); // all 6s
+    expect(out.poolSize).toBe(6);
+    expect(out.total).toBe(6);
   });
 });
 
