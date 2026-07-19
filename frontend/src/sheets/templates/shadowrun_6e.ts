@@ -83,6 +83,7 @@ export const shadowrun6e: SheetTemplate = {
     ],
     luckField: 'edge',
     luckMaxField: 'edge_max',
+    luckLabel: 'EDGE',
   },
   tabs: ['CORE', 'SKILLS', 'GEAR', 'AWAKENED', 'EMERGED', 'NOTES'],
   sections: [

@@ -455,7 +455,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
           return (
             <div style={{ marginTop: '6px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.7rem', opacity: 0.65, letterSpacing: '0.5px' }}>LUCK</span>
+                <span style={{ fontSize: '0.7rem', opacity: 0.65, letterSpacing: '0.5px' }}>{h.luckLabel ?? 'LUCK'}</span>
                 <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
                   {Array.from({ length: pips }, (_, i) => {
                     const filled = i < luckCur;

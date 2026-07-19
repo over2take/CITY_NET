@@ -91,6 +91,8 @@ export interface SheetHeader {
    *  Clicking a pip decrements the current value by 1 (spend). */
   luckField?: string;
   luckMaxField?: string;
+  /** Label shown above the pip row. Defaults to 'LUCK'. */
+  luckLabel?: string;
 }
 
 /** How this system's defense value appears on tokens. When absent, the
