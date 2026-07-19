@@ -306,6 +306,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [latestRoll, setLatestRoll] = useState<{ total: number; results: any; color: string; timestamp: number } | null>(null);
   const [displayRoll, setDisplayRoll] = useState<{ total: number; results: any; color: string; timestamp: number } | null>(null);
+  const [glitchState, setGlitchState] = useState<'none' | 'glitch' | 'critical'> ('none');
   const [isRolling, setIsRolling] = useState(false);
   const historyContainerRef = useRef<HTMLDivElement>(null);
   // Rolls play one at a time: attacks broadcast to-hit and damage
@@ -326,9 +327,12 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
       setLatestRoll({ total: data.total, results: data.results, color: data.color, timestamp: Date.now() });
       setIsRolling(true);
       setDisplayRoll(null);
+      setGlitchState('none');
       rollTimer.current = setTimeout(() => {
         setIsRolling(false);
         setDisplayRoll({ total: data.total, results: data.results, color: data.color, timestamp: Date.now() });
+        if (data.criticalGlitch) setGlitchState('critical');
+        else if (data.glitch) setGlitchState('glitch');
         setHistory(prev => {
           const newHistory = [...prev, data];
           setTimeout(() => { if (historyContainerRef.current) historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight; }, 50);
@@ -394,6 +398,21 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
             timestamp={displayRoll?.timestamp || 0}
             isRolling={isRolling}
           />
+          {glitchState !== 'none' && (
+            <div style={{
+              marginTop: '10px',
+              padding: '6px 12px',
+              border: `2px solid ${glitchState === 'critical' ? '#ff3333' : '#ffcc00'}`,
+              background: glitchState === 'critical' ? 'rgba(60,0,0,0.5)' : 'rgba(60,45,0,0.5)',
+              color: glitchState === 'critical' ? '#ff3333' : '#ffcc00',
+              fontSize: '0.75rem',
+              letterSpacing: '2px',
+              fontWeight: 700,
+              animation: 'death-pulse 1.2s ease-in-out infinite',
+            }}>
+              {glitchState === 'critical' ? '⚠ CRITICAL GLITCH' : '⚠ GLITCH'}
+            </div>
+          )}
         </div>
 
         <div style={{ height: '320px', width: '100%', position: 'relative' }}>

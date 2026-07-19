@@ -950,6 +950,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               color,
               total: outcome.total,
               historyString,
+              glitch: outcome.glitch ?? false,
+              criticalGlitch: !!(outcome.glitch && outcome.critical === 'failure'),
             };
             db.run(
               'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
@@ -1002,6 +1004,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               color: '#00ff00',
               total: outcome.total,
               historyString,
+              glitch: outcome.glitch ?? false,
+              criticalGlitch: !!(outcome.glitch && outcome.critical === 'failure'),
             };
             db.run(
               'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
