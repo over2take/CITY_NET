@@ -23,6 +23,20 @@ const skill = (id: string, label: string, attr: string): SheetField => ({
   roll: { formula: `pool:@${attr}+@${id}`, label },
 });
 
+/** SR6 attributes available as roll bases in ability_list sections. */
+export const SR6_ATTRS = [
+  { value: 'body',      label: 'BOD' },
+  { value: 'agility',   label: 'AGI' },
+  { value: 'reaction',  label: 'REA' },
+  { value: 'strength',  label: 'STR' },
+  { value: 'willpower', label: 'WIL' },
+  { value: 'logic',     label: 'LOG' },
+  { value: 'intuition', label: 'INT' },
+  { value: 'charisma',  label: 'CHA' },
+  { value: 'magic',     label: 'MAG' },
+  { value: 'resonance', label: 'RES' },
+];
+
 /** Skills a weapon can attack with (id must match a skill field). */
 export const SR6_WEAPON_SKILLS: { value: string; label: string }[] = [
   { value: 'firearms', label: 'Firearms' },
@@ -192,21 +206,16 @@ export const shadowrun6e: SheetTemplate = {
       ],
     },
     // AWAKENED tab — gated by the sr6_awakened house rule
+    //
+    // Mages: dynamic spell list (DRAIN cost, attribute + dice pool, free-text
+    // effect). One list for all spells; add/remove rows at will.
     {
       id: 'spells',
-      label: 'SPELLS & POWERS',
-      layout: 'spells',
+      label: 'SPELLS',
+      layout: 'ability_list',
       tab: 'AWAKENED',
-      columns: 4,
-      fields: Array.from({ length: 4 }, (_, n) => {
-        const i = n + 1;
-        return [
-          { id: `spell${i}_name`, label: 'NAME', type: 'text' as const, placeholder: 'Manabolt' },
-          { id: `spell${i}_effect`, label: 'EFFECT', type: 'text' as const, placeholder: 'Direct combat spell, LOS', hint: 'Free-text effect, broadcast with the cast. The app does not know spell rules — you do.' },
-          { id: `spell${i}_dmg`, label: 'DMG', type: 'text' as const, placeholder: '2d6', hint: 'Optional damage dice rolled by the server on cast. Blank for utility spells.' },
-          { id: `spell${i}_cost`, label: 'DRAIN', type: 'number' as const, placeholder: '4', hint: 'Drain value, shown with the cast. Resist with WIL+LOG manually.' },
-        ];
-      }).flat(),
+      listConfig: { costLabel: 'DRAIN', attrs: SR6_ATTRS, rollLabel: 'CAST' },
+      fields: [{ id: 'mage_spells', label: 'Spells', type: 'text' }],
     },
     {
       id: 'awakened_notes',
@@ -217,6 +226,27 @@ export const shadowrun6e: SheetTemplate = {
         { id: 'tradition', label: 'Tradition', type: 'text', placeholder: 'Hermetic' },
         { id: 'foci_notes', label: 'Foci, spirits, notes', type: 'textarea', placeholder: 'Power focus 2; bound fire spirit (2 services)' },
       ],
+    },
+    // Adepts: dynamic power list. PP cost per power is summed by the backend
+    // recompute into power_points_spent / power_points_remaining.
+    {
+      id: 'power_points',
+      label: 'POWER POINTS  (max = MAG on CORE tab)',
+      layout: 'grid',
+      tab: 'AWAKENED',
+      columns: 2,
+      fields: [
+        { id: 'power_points_spent', label: 'PP SPENT', type: 'number', hint: 'Auto-summed from adept power costs below. Recalculated on save.' },
+        { id: 'power_points_remaining', label: 'PP LEFT', type: 'number', hint: 'Derived: MAGIC − PP spent.' },
+      ],
+    },
+    {
+      id: 'adept_powers',
+      label: 'ADEPT POWERS',
+      layout: 'ability_list',
+      tab: 'AWAKENED',
+      listConfig: { costLabel: 'PP', attrs: SR6_ATTRS },
+      fields: [{ id: 'adept_powers', label: 'Adept Powers', type: 'text' }],
     },
     // EMERGED tab — gated by the sr6_emerged house rule
     {

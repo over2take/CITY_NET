@@ -88,11 +88,24 @@ const cwnEffectiveAc = (data) => {
 //   Initiative score = REA + INT (the roll adds 1d6)
 //   Composure        = WIL + CHA (rolled as a pool)
 const sr6Recompute = (data) => {
+  // Sum PP costs from the adept powers JSON array
+  let ppSpent = 0;
+  try {
+    const powers = JSON.parse(data.adept_powers || '[]');
+    if (Array.isArray(powers)) {
+      ppSpent = powers.reduce((sum, p) => sum + (parseFloat(p.cost) || 0), 0);
+      // Round to 2 decimal places to avoid floating-point drift
+      ppSpent = Math.round(ppSpent * 100) / 100;
+    }
+  } catch { /* ignore corrupt JSON */ }
+
   const out = {
     physical_monitor: 8 + Math.ceil(num(data.body) / 2),
     stun_monitor: 8 + Math.ceil(num(data.willpower) / 2),
     initiative_score: num(data.reaction) + num(data.intuition),
     composure: num(data.willpower) + num(data.charisma),
+    power_points_spent: ppSpent,
+    power_points_remaining: Math.round((num(data.magic) - ppSpent) * 100) / 100,
   };
   const changed = [];
   Object.entries(out).forEach(([id, value]) => {

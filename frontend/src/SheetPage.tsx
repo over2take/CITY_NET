@@ -129,6 +129,7 @@ export default function SheetPage() {
               onDeathSave={actions.onDeathSave}
               onStabilize={actions.onStabilize}
               onCastSpell={actions.onCastSpell}
+              onRollAbility={actions.onRollAbility}
               allowFumbleShield={allowFumbleShield}
               hiddenTabs={hiddenTabs}
             />

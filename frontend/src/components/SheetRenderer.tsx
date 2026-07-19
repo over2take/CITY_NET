@@ -60,6 +60,10 @@ interface SheetRendererProps {
   /** Cast a spell row (1-based index). Server-resolved: rolls the row's
    *  damage dice and spends its Effort cost off the stored sheet. */
   onCastSpell?: (index: number) => void;
+  /** Roll an ability from an ability_list section (formula built client-side
+   *  from the item's attr + die; values resolved server-side against the
+   *  stored sheet so the server stays authoritative on attribute values). */
+  onRollAbility?: (formula: string, label: string) => void;
   /** When false, the TV glitch / scanline / chromatic-fringe shader is
    *  stripped from the portrait so a plain headshot shows cleanly. */
   portraitShadow?: boolean;
@@ -713,6 +717,129 @@ function SpellsSection({ section, data, readOnly, onFieldChange, onCastSpell }: 
   );
 }
 
+interface AbilityItem {
+  name?: string;
+  cost?: string | number;
+  attr?: string;
+  die?: string;
+  effect?: string;
+}
+
+function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbility }: {
+  section: SheetSection; data: SheetData; readOnly: boolean;
+  onFieldChange: (fieldId: string, value: string | number) => void;
+  onRollAbility?: (formula: string, label: string) => void;
+}) {
+  const fieldId = section.fields[0]?.id ?? '';
+  const config = section.listConfig ?? {};
+  const costLabel = config.costLabel ?? 'COST';
+  const rollLabel = config.rollLabel ?? 'ROLL';
+  const attrs = config.attrs ?? [];
+  const hasAttrs = attrs.length > 0;
+
+  let items: AbilityItem[] = [];
+  try {
+    const raw = data[fieldId];
+    if (raw) {
+      const parsed = JSON.parse(String(raw));
+      if (Array.isArray(parsed)) items = parsed;
+    }
+  } catch { /* start fresh on corrupt data */ }
+
+  const save = (next: AbilityItem[]) => onFieldChange(fieldId, JSON.stringify(next));
+  const update = (idx: number, key: keyof AbilityItem, val: string | number) =>
+    save(items.map((item, i) => i === idx ? { ...item, [key]: val } : item));
+  const add = () => save([...items, {}]);
+  const remove = (idx: number) => save(items.filter((_, i) => i !== idx));
+
+  const buildFormula = (item: AbilityItem): string | null => {
+    const { attr, die } = item;
+    if (attr && die) return `pool:@${attr}+${die}`;
+    if (attr) return `pool:@${attr}`;
+    if (die) return String(die);
+    return null;
+  };
+
+  const cols = hasAttrs
+    ? '2fr 46px 80px 54px 1fr 36px 22px'
+    : '2fr 46px 54px 1fr 36px 22px';
+
+  const inp: React.CSSProperties = { ...inputStyle, padding: '2px 4px', fontSize: '0.7rem' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+      {items.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: cols, gap: '3px 4px' }}>
+          {['NAME', costLabel, ...(hasAttrs ? ['ATTR'] : []), 'DICE', 'EFFECT', rollLabel, ''].map((h, i) => (
+            <div key={i} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{h}</div>
+          ))}
+        </div>
+      )}
+      {items.map((item, idx) => {
+        const formula = buildFormula(item);
+        const canRoll = !!formula && !!onRollAbility && !!item.name;
+        return (
+          <div key={idx} style={{ display: 'grid', gridTemplateColumns: cols, gap: '3px 4px', alignItems: 'center' }}>
+            <input type="text" aria-label="Name" className="sheet-input" style={inp}
+              value={item.name ?? ''} placeholder="Power name" readOnly={readOnly}
+              onChange={e => update(idx, 'name', e.target.value)} />
+            <input type="number" aria-label={costLabel} className="sheet-input"
+              style={{ ...inp, textAlign: 'center' }} step="0.25"
+              value={item.cost ?? ''} placeholder="0.5" readOnly={readOnly}
+              onChange={e => update(idx, 'cost', e.target.value)} />
+            {hasAttrs && (
+              <select aria-label="Attribute" className="sheet-input" style={inp}
+                value={item.attr ?? ''} disabled={readOnly}
+                onChange={e => update(idx, 'attr', e.target.value)}>
+                <option value="">—</option>
+                {attrs.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+              </select>
+            )}
+            <input type="text" aria-label="Dice" className="sheet-input"
+              style={{ ...inp, textAlign: 'center' }}
+              value={item.die ?? ''} placeholder="+2" readOnly={readOnly}
+              onChange={e => update(idx, 'die', e.target.value)} />
+            <input type="text" aria-label="Effect" className="sheet-input" style={inp}
+              value={item.effect ?? ''} placeholder="Description" readOnly={readOnly}
+              onChange={e => update(idx, 'effect', e.target.value)} />
+            <button
+              onClick={canRoll ? () => onRollAbility!(formula!, item.name ?? 'Ability') : undefined}
+              disabled={!canRoll}
+              title={canRoll ? `Roll ${item.name}: ${formula}` : 'Set name + attr/dice to enable roll'}
+              style={{
+                background: 'none', border: '1px solid var(--green)', color: 'var(--green)',
+                fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '2px',
+                cursor: canRoll ? 'pointer' : 'default', opacity: canRoll ? 1 : 0.35,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px',
+              }}
+            >
+              <DiceIcon size={11} />
+            </button>
+            <button
+              onClick={!readOnly ? () => remove(idx) : undefined}
+              disabled={readOnly}
+              aria-label="Remove"
+              style={{
+                background: 'none', border: '1px solid var(--green)', color: 'var(--green)',
+                fontFamily: 'inherit', fontSize: '0.75rem', padding: '1px 4px',
+                cursor: readOnly ? 'default' : 'pointer', opacity: readOnly ? 0.35 : 0.7,
+              }}
+            >×</button>
+          </div>
+        );
+      })}
+      {!readOnly && (
+        <button onClick={add} style={{
+          alignSelf: 'flex-start', marginTop: '4px',
+          background: 'none', border: '1px solid var(--green)', color: 'var(--green)',
+          fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '3px 10px',
+          cursor: 'pointer',
+        }}>+ ADD</button>
+      )}
+    </div>
+  );
+}
+
 function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
@@ -730,7 +857,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // If the active tab gets hidden (house rule toggled off), fall back to the
@@ -799,6 +926,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
+                  {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
               )}

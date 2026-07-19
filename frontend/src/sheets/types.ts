@@ -44,8 +44,20 @@ export interface SheetField {
 /** 'weapons' lays fields out as structured rows (name / dmg / skill / rof),
  *  chunked in field order - every section.columns (default 4) consecutive
  *  fields form one row. 'spells' is the same shape plus a CAST button per
- *  row (one-click: rolls the row's damage dice and spends its Effort cost). */
-export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells';
+ *  row (one-click: rolls the row's damage dice and spends its Effort cost).
+ *  'ability_list' is a dynamic add/remove list stored as JSON in a single
+ *  field; each item has name, cost, attr (dropdown), die, and effect. */
+export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list';
+
+/** Configuration for the 'ability_list' section layout. */
+export interface AbilityListConfig {
+  /** Label for the cost column (default: 'COST'). */
+  costLabel?: string;
+  /** Attribute dropdown options. Omit to hide the attribute column. */
+  attrs?: { value: string; label: string }[];
+  /** Roll/cast button label (default: 'ROLL'). */
+  rollLabel?: string;
+}
 
 export interface SheetSection {
   id: string;
@@ -56,6 +68,8 @@ export interface SheetSection {
   /** Which bottom tab this section lives under (default: the first tab). */
   tab?: string;
   fields: SheetField[];
+  /** ability_list layout configuration. */
+  listConfig?: AbilityListConfig;
 }
 
 /** Drives the identity header block: portrait frame, name, subtitle line,

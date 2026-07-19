@@ -101,6 +101,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           onDeathSave={actions.onDeathSave}
           onStabilize={actions.onStabilize}
           onCastSpell={actions.onCastSpell}
+          onRollAbility={actions.onRollAbility}
           allowFumbleShield={allowFumbleShield}
           hiddenTabs={hiddenTabs}
         />

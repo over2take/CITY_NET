@@ -967,6 +967,52 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
+    // Roll an ability from an ability_list section. The client sends the
+    // formula it built from the item's attr+die; the server resolves @field
+    // references against the STORED sheet so attribute values can't be
+    // spoofed by the client.
+    socket.on('rollAbility', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      if (!payload || typeof payload.formula !== 'string' || !payload.formula.trim()) return;
+      const formula = payload.formula.trim();
+      const label = typeof payload.label === 'string' && payload.label.trim() ? payload.label.trim() : 'Ability';
+      const shape = formula.startsWith('pool:') ? 'pool' : 'normal';
+      getGameSystem((err, system) => {
+        if (err) return;
+        db.get(
+          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+          [info.userName, system],
+          (err2, row) => {
+            if (err2 || !row) return;
+            const data = JSON.parse(row.data || '{}');
+            let outcome;
+            try {
+              const resolved = rollEngine.resolveFormula(formula, data, { allowNoDice: shape === 'pool' });
+              outcome = rollEngine.executeRoll(resolved, shape, Math.random);
+            } catch (e) {
+              return;
+            }
+            const historyString = `${identity.displayName(info.userName)} rolled ${label} [${outcome.breakdown} = ${outcome.total}]`;
+            const broadcastData = {
+              userName: identity.displayName(info.userName),
+              account: info.userName,
+              results: outcome.rolls,
+              modifiers: outcome.modTotal !== 0 ? [outcome.modTotal] : [],
+              color: '#00ff00',
+              total: outcome.total,
+              historyString,
+            };
+            db.run(
+              'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
+              [info.userName, outcome.total, JSON.stringify(outcome.rolls), '#00ff00', historyString],
+              () => io.emit('diceRollBroadcast', broadcastData)
+            );
+          }
+        );
+      });
+    });
+
     // Public card for another player's token. Server-filtered to the template's
     // public fields - combat-sensitive values never leave the server. Safe for
     // spectators (allowlisted above).
