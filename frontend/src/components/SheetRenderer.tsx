@@ -797,7 +797,7 @@ function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbil
             )}
             <input type="text" aria-label="Dice" className="sheet-input"
               style={{ ...inp, textAlign: 'center' }}
-              value={item.die ?? ''} placeholder="+2" readOnly={readOnly}
+              value={item.die ?? ''} placeholder="d6" readOnly={readOnly}
               onChange={e => update(idx, 'die', e.target.value)} />
             <input type="text" aria-label="Effect" className="sheet-input" style={inp}
               value={item.effect ?? ''} placeholder="Description" readOnly={readOnly}
