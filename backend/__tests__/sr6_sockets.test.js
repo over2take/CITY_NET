@@ -231,3 +231,81 @@ describe('SR6 stun overflow', () => {
     expect(token.hp_current).toBe(11);
   });
 });
+
+describe('SR6 resistDrain', () => {
+  // WIL 30 + LOG 30 = 60-die pool: statistically certain to get many hits,
+  // so net drain = max(0, DV - hits) will be 0 for reasonable DV values.
+  const MAGE = { willpower: 30, logic: 30, stun_monitor: 10, stun_current: 0 };
+
+  const seedMage = (data = MAGE) =>
+    run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('MYSTIC', 'shadowrun_6e', ?, 0)`,
+      [JSON.stringify(data)]);
+
+  const seedMageToken = (hp = 10) =>
+    run(db, `INSERT INTO locations (name, x, y, z, shape, owner, hp_current, hp_max) VALUES ('MYSTIC', 0, 0, 0, 'rhombus', 'MYSTIC', ?, ?)`,
+      [hp, hp]);
+
+  it('resists all drain with a large pool and broadcasts a yellow roll', async () => {
+    await seedMage();
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('MYSTIC');
+    await flush(50);
+
+    handlers['resistDrain']({ drainValue: 4, attr: 'logic', label: 'Fireball Drain' });
+    await waitFor(() => emitted.some(e => e.event === 'diceRollBroadcast'));
+
+    const roll = emitted.find(e => e.event === 'diceRollBroadcast');
+    expect(roll.data.color).toBe('#ffcc00');
+    expect(roll.data.historyString).toContain('resists Fireball Drain');
+    expect(roll.data.historyString).toContain('no drain');
+    const sheet = await get(db, `SELECT data FROM character_sheets WHERE username = 'MYSTIC'`);
+    expect(JSON.parse(sheet.data).stun_current).toBe(0);
+  });
+
+  it('applies net drain to stun_current when resist pool is small', async () => {
+    // WIL 1 + LOG 1 = 2-die pool vs DV 6: almost certain to take 4+ Stun
+    await seedMage({ willpower: 1, logic: 1, stun_monitor: 10, stun_current: 0 });
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('MYSTIC');
+    await flush(50);
+
+    handlers['resistDrain']({ drainValue: 6, attr: 'logic', label: 'Ball Lightning Drain' });
+    await waitFor(() => emitted.some(e => e.event === 'sheetUpdated'));
+
+    const sheet = await get(db, `SELECT data FROM character_sheets WHERE username = 'MYSTIC'`);
+    const stun = JSON.parse(sheet.data).stun_current;
+    expect(stun).toBeGreaterThan(0);
+    expect(stun).toBeLessThanOrEqual(10);
+  });
+
+  it('overflows excess drain into Physical HP when stun track fills', async () => {
+    // Stun track already at 8/10, DV 6 with a 2-die pool: near-certain overflow
+    await seedMage({ willpower: 1, logic: 1, stun_monitor: 10, stun_current: 8 });
+    await seedMageToken(10);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('MYSTIC');
+    await flush(50);
+
+    handlers['resistDrain']({ drainValue: 6, attr: 'logic', label: 'Drain' });
+    await waitFor(() => emitted.some(e => e.event === 'dataUpdated'));
+
+    const sheet = await get(db, `SELECT data FROM character_sheets WHERE username = 'MYSTIC'`);
+    expect(JSON.parse(sheet.data).stun_current).toBe(10); // clamped at monitor
+    const token = await get(db, `SELECT hp_current FROM locations WHERE owner = 'MYSTIC'`);
+    expect(token.hp_current).toBeLessThan(10); // overflow hit Physical
+  });
+
+  it('ignores resistDrain with missing or invalid payload', async () => {
+    await seedMage();
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('MYSTIC');
+    await flush(50);
+
+    handlers['resistDrain']({ drainValue: 0, attr: 'logic', label: 'x' });  // DV=0 ignored
+    handlers['resistDrain']({ drainValue: 4, attr: '', label: 'x' });        // no attr
+    handlers['resistDrain'](null);                                            // null payload
+    await flush(100);
+
+    expect(emitted.find(e => e.event === 'diceRollBroadcast')).toBeFalsy();
+  });
+});

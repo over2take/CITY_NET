@@ -64,6 +64,10 @@ interface SheetRendererProps {
    *  from the item's attr + die; values resolved server-side against the
    *  stored sheet so the server stays authoritative on attribute values). */
   onRollAbility?: (formula: string, label: string) => void;
+  /** Roll Drain resistance for a spell and apply net Drain to stun_current.
+   *  drainValue = numeric DV from the spell row; attr = resist attribute (WIL
+   *  is always included server-side; this is the tradition secondary). */
+  onResistDrain?: (drainValue: number, attr: string, label: string) => void;
   /** When false, the TV glitch / scanline / chromatic-fringe shader is
    *  stripped from the portrait so a plain headshot shows cleanly. */
   portraitShadow?: boolean;
@@ -738,10 +742,11 @@ interface AbilityItem {
   effect?: string;
 }
 
-function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbility }: {
+function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbility, onResistDrain }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
   onRollAbility?: (formula: string, label: string) => void;
+  onResistDrain?: (drainValue: number, attr: string, label: string) => void;
 }) {
   const fieldId = section.fields[0]?.id ?? '';
   const config = section.listConfig ?? {};
@@ -749,6 +754,7 @@ function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbil
   const rollLabel = config.rollLabel ?? 'ROLL';
   const attrs = config.attrs ?? [];
   const hasAttrs = attrs.length > 0;
+  const isDrain = costLabel === 'DRAIN';
 
   const parseItems = (raw: unknown): AbilityItem[] => {
     try {
@@ -788,7 +794,7 @@ function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbil
   };
 
   const cols = hasAttrs
-    ? '2fr 46px 80px 54px 1fr 36px 22px'
+    ? (isDrain ? '2fr 46px 80px 54px 1fr 36px 36px 22px' : '2fr 46px 80px 54px 1fr 36px 22px')
     : '2fr 46px 54px 1fr 36px 22px';
 
   const inp: React.CSSProperties = { ...inputStyle, padding: '2px 4px', fontSize: '0.7rem' };
@@ -797,7 +803,7 @@ function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbil
     <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
       {items.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: cols, gap: '3px 4px' }}>
-          {['NAME', costLabel, ...(hasAttrs ? ['ATTR'] : []), 'DICE', 'EFFECT', rollLabel, ''].map((h, i) => (
+          {['NAME', costLabel, ...(hasAttrs ? ['ATTR'] : []), 'DICE', 'EFFECT', rollLabel, ...(isDrain ? ['RES'] : []), ''].map((h, i) => (
             <div key={i} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{h}</div>
           ))}
         </div>
@@ -805,6 +811,8 @@ function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbil
       {items.map((item, idx) => {
         const formula = buildFormula(item);
         const canRoll = !!formula && !!onRollAbility && !!item.name;
+        const drainValue = parseFloat(String(item.cost ?? ''));
+        const canResist = isDrain && !!onResistDrain && !!item.attr && !isNaN(drainValue) && drainValue > 0;
         return (
           <div key={idx} style={{ display: 'grid', gridTemplateColumns: cols, gap: '3px 4px', alignItems: 'center' }}>
             <input type="text" aria-label="Name" className="sheet-input" style={inp}
@@ -842,6 +850,18 @@ function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbil
             >
               <DiceIcon size={11} />
             </button>
+            {isDrain && (
+              <button
+                onClick={canResist ? () => onResistDrain!(drainValue, item.attr!, `${item.name ?? 'Spell'} Drain`) : undefined}
+                disabled={!canResist}
+                title={canResist ? `Resist ${item.name} Drain (DV ${drainValue}): WIL + attr pool` : 'Set attr and numeric drain to enable'}
+                style={{
+                  background: 'none', border: '1px solid #ffcc00', color: '#ffcc00',
+                  fontFamily: 'inherit', fontSize: '0.5rem', letterSpacing: '0.5px', padding: '2px 1px',
+                  cursor: canResist ? 'pointer' : 'default', opacity: canResist ? 1 : 0.3,
+                }}
+              >RES</button>
+            )}
             <button
               onClick={!readOnly ? () => remove(idx) : undefined}
               disabled={readOnly}
@@ -884,7 +904,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // If the active tab gets hidden (house rule toggled off), fall back to the
@@ -954,7 +974,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
-                  {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} />}
+                  {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
               )}

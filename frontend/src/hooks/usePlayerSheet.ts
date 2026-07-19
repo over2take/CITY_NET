@@ -15,6 +15,7 @@ export interface PlayerSheetActions {
   onStabilize: () => void;
   onCastSpell: (index: number) => void;
   onRollAbility: (formula: string, label: string) => void;
+  onResistDrain: (drainValue: number, attr: string, label: string) => void;
 }
 
 export function usePlayerSheet(
@@ -113,6 +114,7 @@ export function usePlayerSheet(
     onStabilize: () => { socket?.emit('requestStabilize', { targetUsername: userName }); rolled(); },
     onCastSpell: (index: number) => { socket?.emit('castSpell', { index }); rolled(); },
     onRollAbility: (formula: string, label: string) => { socket?.emit('rollAbility', { formula, label }); rolled(); },
+    onResistDrain: (drainValue: number, attr: string, label: string) => { socket?.emit('resistDrain', { drainValue, attr, label }); rolled(); },
   };
 
   const template = sheet ? getTemplate(sheet.system) : null;

@@ -1017,6 +1017,85 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
+    // Resist Drain after casting a spell (SR6). Client sends the numeric DV
+    // and the tradition secondary attribute (e.g. 'logic' for Hermetics). The
+    // server rolls WIL + attr as a d6 pool, computes net drain = DV - hits
+    // (min 0), and writes it to stun_current with overflow into Physical HP.
+    socket.on('resistDrain', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      const drainValue = Number(payload?.drainValue);
+      const attr = typeof payload?.attr === 'string' ? payload.attr.trim() : '';
+      const label = typeof payload?.label === 'string' && payload.label.trim() ? payload.label.trim() : 'Drain';
+      if (!Number.isFinite(drainValue) || drainValue <= 0 || !attr) return;
+      getGameSystem((err, system) => {
+        if (err) return;
+        db.get(
+          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+          [info.userName, system],
+          (err2, row) => {
+            if (err2 || !row) return;
+            const data = JSON.parse(row.data || '{}');
+            // Resistance pool: WIL + tradition secondary attr (both from stored sheet)
+            const formula = `pool:@willpower+@${attr}`;
+            let outcome;
+            try {
+              const resolved = rollEngine.resolveFormula(formula, data, { allowNoDice: true });
+              outcome = rollEngine.executeRoll(resolved, 'pool', Math.random);
+            } catch (e) { return; }
+            const netDrain = Math.max(0, drainValue - outcome.hits);
+            // Apply net drain to stun track, overflow into Physical
+            const stunMax = Number(data.stun_monitor) || 0;
+            const stunCur = Number(data.stun_current) || 0;
+            const stunAfter = stunCur + netDrain;
+            let stunOverflow = 0;
+            if (stunMax > 0 && stunAfter > stunMax) {
+              stunOverflow = stunAfter - stunMax;
+              data.stun_current = stunMax;
+            } else {
+              data.stun_current = stunAfter;
+            }
+            const drainTag = netDrain === 0 ? ' — no drain' : ` — ${netDrain} Stun damage${stunOverflow > 0 ? ` (${stunOverflow} overflow → Physical)` : ''}`;
+            const historyString = `${identity.displayName(info.userName)} resists ${label} [${outcome.breakdown}]${drainTag}`;
+            const broadcastData = {
+              userName: identity.displayName(info.userName),
+              account: info.userName,
+              results: outcome.rolls,
+              modifiers: [],
+              color: '#ffcc00',
+              total: outcome.hits,
+              historyString,
+              glitch: outcome.glitch ?? false,
+              criticalGlitch: !!(outcome.glitch && outcome.critical === 'failure'),
+            };
+            db.run(
+              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+              [JSON.stringify(data), row.id],
+              (err3) => {
+                if (err3) return;
+                db.run(
+                  'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
+                  [info.userName, outcome.hits, JSON.stringify(outcome.rolls), '#ffcc00', historyString],
+                  () => {
+                    io.emit('diceRollBroadcast', broadcastData);
+                    io.emit('sheetUpdated', { username: info.userName });
+                    if (stunOverflow > 0) {
+                      db.run(
+                        `UPDATE locations SET hp_current = MAX(0, COALESCE(hp_current, 0) - ?)
+                         WHERE shape = 'rhombus' AND owner = ?`,
+                        [stunOverflow, info.userName],
+                        () => io.emit('dataUpdated')
+                      );
+                    }
+                  }
+                );
+              }
+            );
+          }
+        );
+      });
+    });
+
     // Public card for another player's token. Server-filtered to the template's
     // public fields - combat-sensitive values never leave the server. Safe for
     // spectators (allowlisted above).
@@ -1082,7 +1161,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 [location_id, sheetId],
                 (err4) => {
                   if (err4) return;
-                  socket.emit('npcSheetGenerated', { location_id, sheet_id: sheetId, npc_label: label, tier: tier ? tier.tierId : null, portrait_url: randomHeadshot, sheet_name: sheetData.name || null, sheet_description: sheetData.description || null });
+                  socket.emit('npcSheetGenerated', { location_id, sheet_id: sheetId, system, npc_label: label, tier: tier ? tier.tierId : null, portrait_url: randomHeadshot, sheet_name: sheetData.name || null, sheet_description: sheetData.description || null });
                 }
               );
             }
