@@ -14,7 +14,7 @@
 //               d6s, hits = 5s and 6s, glitch when half or more show 1,
 //               critical glitch = glitch with zero hits. total = hits.
 
-const TERM_DICE = /^(\d+)d(\d+)$/i;
+const TERM_DICE = /^(\d*)d(\d+)$/i; // leading count optional: 'd6' === '1d6'
 const TERM_FIELD = /^@([a-z0-9_]+)$/i;
 const TERM_INT = /^\d+$/;
 
@@ -33,7 +33,7 @@ const parseFormula = (formula) => {
   return tokenize(formula).map(({ sign, raw }) => {
     let m;
     if ((m = raw.match(TERM_DICE))) {
-      const count = parseInt(m[1], 10);
+      const count = m[1] ? parseInt(m[1], 10) : 1;
       const sides = parseInt(m[2], 10);
       if (count < 1 || count > 100 || sides < 2 || sides > 1000) {
         throw new Error(`Dice term out of range: ${raw}`);
