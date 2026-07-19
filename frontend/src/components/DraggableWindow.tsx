@@ -29,20 +29,31 @@ export function DraggableWindow({
 
   const bringToFront = () => setZIndex(++zCounter);
 
-  // Clamp position when the browser is resized so panels never escape the viewport.
-  useEffect(() => {
-    const handleResize = () => {
-      const el = windowRef.current;
-      if (!el) return;
-      const w = el.offsetWidth || 300;
-      const h = el.offsetHeight || 200;
-      const maxX = Math.max(0, window.innerWidth - w);
-      const maxY = Math.max(0, window.innerHeight - h);
-      setPos({ x: Math.min(pos.x, maxX), y: Math.min(pos.y, maxY) });
+  // Keep the window fully inside the viewport. When the window is taller
+  // than the viewport, pin its top edge (y=0) so the title bar - and with
+  // it dragging and the close button - always stays reachable.
+  const clamp = (p: { x: number; y: number }) => {
+    const el = windowRef.current;
+    const w = el?.offsetWidth || 300;
+    const h = el?.offsetHeight || 200;
+    return {
+      x: Math.max(0, Math.min(p.x, window.innerWidth - w)),
+      y: Math.max(0, Math.min(p.y, window.innerHeight - h)),
     };
+  };
+  const setClampedPos = (p: { x: number; y: number }) => {
+    const c = clamp(p);
+    if (c.x !== pos.x || c.y !== pos.y) setPos(c);
+  };
+
+  // Clamp on mount (a stored/default position may be off-screen for this
+  // viewport) and whenever the browser is resized.
+  useEffect(() => {
+    setClampedPos(pos);
+    const handleResize = () => setClampedPos(pos);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [pos, setPos]);
+  }, [pos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -51,7 +62,7 @@ export function DraggableWindow({
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) setPos({ x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y });
+      if (isDragging) setPos(clamp({ x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y }));
     };
     const handleMouseUp = () => setIsDragging(false);
     if (isDragging) {
@@ -62,7 +73,7 @@ export function DraggableWindow({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, dragOffset, setPos]);
+  }, [isDragging, dragOffset, setPos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div ref={windowRef} className="win95-window" style={{ left: `${pos.x}px`, top: `${pos.y}px`, zIndex, ...windowStyle }}>
