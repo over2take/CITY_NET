@@ -336,7 +336,22 @@ module.exports = (db, io) => {
         // Open token info windows refetch link data (name, description,
         // portrait shadow) when the sheet behind a linked token changes
         db.get(`SELECT location_id FROM npc_sheet_links WHERE sheet_id = ? LIMIT 1`, [req.params.id], (e3, link) => {
-          if (!e3 && link) io.emit('npcLinkChanged', { location_id: link.location_id, sheet_id: Number(req.params.id) });
+          if (!e3 && link) {
+            io.emit('npcLinkChanged', { location_id: link.location_id, sheet_id: Number(req.params.id) });
+            // Mirror name/description back to the linked token so the map
+            // label and info panel stay in sync with the sheet.
+            if (cleanFields) {
+              const locCols = [];
+              const locVals = [];
+              if ('name' in cleanFields) { locCols.push('name = ?'); locVals.push(cleanFields.name); }
+              if ('description' in cleanFields) { locCols.push('description = ?'); locVals.push(cleanFields.description); }
+              if (locCols.length > 0) {
+                locVals.push(link.location_id);
+                db.run(`UPDATE locations SET ${locCols.join(', ')} WHERE id = ?`, locVals,
+                  () => io.emit('dataUpdated', { isRhombusOnly: true }));
+              }
+            }
+          }
         });
         routeAc(() => res.json({ message: 'NPC updated' }));
       });
@@ -405,7 +420,7 @@ module.exports = (db, io) => {
   // GENERATE_SHEET vs OPEN_SHEET button
   router.get('/npcs/link/:location_id', authenticate, requireAdmin, (req, res) => {
     db.get(
-      `SELECT cs.id AS sheet_id, cs.npc_label, cs.portrait_url,
+      `SELECT cs.id AS sheet_id, cs.system, cs.npc_label, cs.portrait_url,
               json_extract(cs.data, '$.name') AS sheet_name,
               json_extract(cs.data, '$.description') AS sheet_description,
               json_extract(cs.data, '$.portrait_shadow_filter') AS portrait_shadow_filter
