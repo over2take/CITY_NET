@@ -994,7 +994,7 @@ export function AdminPanel({
           )}
 
           {/* TTRPG SYSTEM (character sheets) */}
-          <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} />
+          <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
 
           <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
             <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
@@ -2190,11 +2190,12 @@ const SR6_HOUSE_RULES: HouseRuleDef[] = [
   },
 ];
 
-function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNpcLibrary?: () => void }) {
+function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: string; onOpenNpcLibrary?: () => void; activeUsers?: any[] }) {
   const [open, setOpen] = useState(false);
   const [system, setSystem] = useState<string>('generic');
   const [systems, setSystems] = useState<{ id: string; name: string }[]>([]);
   const [luckResetMsg, setLuckResetMsg] = useState<string | null>(null);
+  const [edgeGrantTarget, setEdgeGrantTarget] = useState<string>('');
 
   const refresh = () => {
     fetch('/api/sheets/system').then(r => r.json()).then(d => {
@@ -2239,6 +2240,67 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary }: { token: string; onOpenNp
           {system === 'cities_without_number' && <HouseRulesPanel token={token} defs={CWN_HOUSE_RULES} />}
           {system === 'cyberpunk_red' && <HouseRulesPanel token={token} defs={CPR_HOUSE_RULES} />}
           {system === 'shadowrun_6e' && <HouseRulesPanel token={token} defs={SR6_HOUSE_RULES} />}
+          {system === 'shadowrun_6e' && (() => {
+            const onlinePlayers = (activeUsers || []).filter((u: any) => !u.isAdmin && !u.isNPC).map((u: any) => u.userName);
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid var(--green)', paddingTop: '6px', marginTop: '2px' }}>
+                <label style={{ fontSize: '0.65rem', opacity: 0.7, letterSpacing: '1px' }}>EDGE MANAGEMENT</label>
+                <button
+                  className="utility-btn"
+                  style={{ fontSize: '0.65rem' }}
+                  title="Restore all SR6 players' Edge to their Edge Max"
+                  onClick={() => {
+                    fetch('/api/sheets/reset-edge', {
+                      method: 'POST',
+                      headers: { Authorization: `Bearer ${token}` },
+                    }).then(r => r.json()).then(d => {
+                      setLuckResetMsg(d.reason ?? `EDGE REPLENISHED — ${d.reset} SHEET${d.reset !== 1 ? 'S' : ''}`);
+                      setTimeout(() => setLuckResetMsg(null), 3000);
+                    }).catch(() => setLuckResetMsg('REPLENISH FAILED'));
+                  }}
+                >
+                  REPLENISH ALL EDGE
+                </button>
+                {onlinePlayers.length > 0 && (
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <select
+                      value={edgeGrantTarget}
+                      onChange={e => setEdgeGrantTarget(e.target.value)}
+                      style={{ flex: 1, fontSize: '0.65rem', background: 'var(--bg)', color: 'var(--green)', border: '1px solid var(--green)', padding: '3px 4px' }}
+                    >
+                      <option value="">— PLAYER —</option>
+                      {onlinePlayers.map((name: string) => (
+                        <option key={name} value={name}>{name.toUpperCase()}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="utility-btn"
+                      style={{ fontSize: '0.65rem', whiteSpace: 'nowrap' }}
+                      disabled={!edgeGrantTarget}
+                      title="Give 1 Edge to the selected player (capped at their Edge Max)"
+                      onClick={() => {
+                        if (!edgeGrantTarget) return;
+                        fetch('/api/sheets/grant-edge', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                          body: JSON.stringify({ username: edgeGrantTarget }),
+                        }).then(r => r.json()).then(d => {
+                          if (d.granted) {
+                            setLuckResetMsg(`${edgeGrantTarget.toUpperCase()} → EDGE ${d.edge}/${d.edge_max}`);
+                          } else {
+                            setLuckResetMsg(d.reason ?? 'GRANT FAILED');
+                          }
+                          setTimeout(() => setLuckResetMsg(null), 3000);
+                        }).catch(() => setLuckResetMsg('GRANT FAILED'));
+                      }}
+                    >
+                      GIVE 1 EDGE
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           <div style={{ display: 'flex', gap: '6px' }}>
             {onOpenNpcLibrary && (
               <button

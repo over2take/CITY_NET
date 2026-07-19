@@ -440,7 +440,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
         {h.luckField && (() => {
           const luckCur = num(data[h.luckField!]) ?? 0;
           const luckMax = h.luckMaxField ? (num(data[h.luckMaxField]) ?? 0) : luckCur;
-          const pips = Math.max(0, luckMax);
+          const pips = Math.max(luckCur, luckMax);
           if (pips === 0) return null;
           const hexSize = 20;
           const hexPoints = Array.from({ length: 6 }, (_, i) => {
