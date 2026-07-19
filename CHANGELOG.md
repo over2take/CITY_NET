@@ -9,6 +9,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.6.1] - 2026-07-19
+
+SR6 polish: drain resistance, glitch feedback, Edge management, NPC sheet fixes, and name/description sync.
+
+### Added
+
+- **Drain resistance** — each spell row in the AWAKENED tab gains a yellow RES button (enabled when Drain Value and tradition attribute are set); clicking it rolls WIL + tradition attr, applies net drain to the Stun track, and overflows excess into Physical HP automatically
+- **Glitch / Critical Glitch banner** — dice tray displays a pulsing yellow GLITCH or red CRITICAL GLITCH banner after any SR6 pool roll that qualifies; clears on the next roll
+- **SR6 Edge management (admin)** — Admin Panel SR6 section adds REPLENISH ALL EDGE (resets every player's Edge to their max) and a per-player GIVE 1 EDGE button (online non-admin players only, capped at max)
+
+### Fixed
+
+- **NPC sheet system mismatch** — OPEN_SHEET now only shows when the linked sheet's system matches the active game system; a CWN sheet no longer surfaces under SR6 and vice versa
+- **GENERATE_SHEET → OPEN_SHEET flip** — button switches immediately after generation without requiring the token window to be closed and reopened; `system` is now included in the `npcSheetGenerated` socket event
+- **Edge pips not rendering** — pip display now uses the higher of current or max edge so pips appear even before `edge_max` has been explicitly saved
+- **NPC sheet name/description sync** — editing name or description on an NPC sheet updates the linked map token label live (sheet → token); saving an enemy/friendly token with a changed name or description patches the linked sheet (token → sheet); generation already seeded both fields from the token
+
+---
+
 ## [1.6.0] - 2026-07-18
 
 Shadowrun 6E — third full game system, built entirely on the existing sheet/roll/attack architecture.
