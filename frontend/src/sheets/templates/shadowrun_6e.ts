@@ -66,6 +66,7 @@ export const shadowrun6e: SheetTemplate = {
   tokenDefense: { editOnToken: true, label: 'ARMOR' },
   // No CWN-style stabilize; SR6 overflow damage is handled manually
   stabilize: false,
+  allowFumbleShield: false,
   npcTiers: [
     { id: 'ganger', label: 'GANGER' },
     { id: 'street_tough', label: 'STREET TOUGH' },

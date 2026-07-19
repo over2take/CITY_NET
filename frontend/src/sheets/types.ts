@@ -123,6 +123,11 @@ export interface SheetTemplate {
   /** NPC power tiers offered by GENERATE_SHEET (must mirror the server's
    *  npcTiers registry for this system). Absent = untiered generation. */
   npcTiers?: { id: string; label: string }[];
+  /** When false, the fumble-shield pip control is hidden even if the
+   *  luck_negates_fumble house rule is on. Set false for systems whose
+   *  critical-failure mechanic is not a nat-1 on a single die (e.g. SR6
+   *  glitches are pool-based). Defaults to true. */
+  allowFumbleShield?: boolean;
   tokenDefense?: TokenDefense;
   /** Bottom tab bar, in order. Sections map to tabs via section.tab. */
   tabs?: string[];

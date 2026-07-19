@@ -881,6 +881,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
   }, [tabs.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   // LUCK declared for the next roll (CP:R: declare before rolling; any spend
   // also negates a natural-1 fumble). Consumed and reset by the next roll.
+  const effectiveAllowFumbleShield = allowFumbleShield && template.allowFumbleShield !== false;
   const [armedLuck, setArmedLuck] = useState(0);
   const [armedNegate, setArmedNegate] = useState(false);
   const handleRoll = onRoll
@@ -912,7 +913,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
       `}</style>
 
-      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={allowFumbleShield} canRoll={!!onRoll} />
+      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} canRoll={!!onRoll} />
 
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
         {tabHasRolls && (
