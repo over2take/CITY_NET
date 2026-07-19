@@ -492,20 +492,33 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
                   {allowFumbleShield && setArmedNegate && luckCur > 0 && (
                     <button
                       onClick={() => setArmedNegate!(!negate)}
-                      title="Burn 1 LUCK so a natural 1 on the next roll is not a critical fumble. No bonus to the roll."
+                      title={`Burn 1 ${h.luckLabel ?? 'LUCK'} so a natural 1 on the next roll is not a critical fumble. No bonus to the roll.`}
                       style={{
                         background: negate ? '#ffcc00' : 'none', border: '1px solid #ffcc00',
                         color: negate ? '#000' : '#ffcc00', fontFamily: 'inherit',
                         fontSize: '0.55rem', letterSpacing: '1px', padding: '1px 6px', cursor: 'pointer',
                       }}
                     >
-                      {negate ? '✓ ' : ''}FUMBLE SHIELD (1 LUCK)
+                      {negate ? '✓ ' : ''}FUMBLE SHIELD (1 {h.luckLabel ?? 'LUCK'})
+                    </button>
+                  )}
+                  {luckCur > 0 && (
+                    <button
+                      onClick={() => onFieldChange(h.luckField!, Math.max(0, luckCur - 1))}
+                      title={`Spend 1 ${h.luckLabel ?? 'LUCK'} for a non-roll effect (reroll, push the limit, etc.)`}
+                      style={{
+                        background: 'none', border: '1px solid #ffcc00', color: '#ffcc00',
+                        fontFamily: 'inherit', fontSize: '0.55rem', letterSpacing: '1px',
+                        padding: '1px 6px', cursor: 'pointer',
+                      }}
+                    >
+                      SPEND 1 {h.luckLabel ?? 'LUCK'}
                     </button>
                   )}
                   {committed > 0 && (
                     <>
                       <span style={{ fontSize: '0.62rem', color: '#ffcc00', letterSpacing: '1px' }}>
-                        NEXT ROLL{armed > 0 ? ` +${armed}` : ''}{negate ? ' · NAT-1 NEGATED' : ''} · COST {committed} LUCK
+                        NEXT ROLL{armed > 0 ? ` +${armed}` : ''}{negate ? ' · NAT-1 NEGATED' : ''} · COST {committed} {h.luckLabel ?? 'LUCK'}
                       </span>
                       <button
                         onClick={() => { setArmedLuck!(0); setArmedNegate?.(false); }}
