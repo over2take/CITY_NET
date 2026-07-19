@@ -749,7 +749,9 @@ function App() {
     onDiceRollBroadcast: (data) => {
       // Open the dice tray when any roll arrives for this user — catches rolls
       // originating from the standalone sheet tab which can't call onRolled().
-      if (data.userName === userName) {
+      // Match on the login account: userName in the broadcast is the sheet's
+      // display name (handle), which may differ.
+      if ((data.account ?? data.userName) === userName) {
         setIsDiceTrayOpen(true);
         setActiveSidebarMenu('dice_menu');
       }

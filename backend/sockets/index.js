@@ -579,7 +579,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (modTotal !== 0) finalString += ` ${modTotal > 0 ? '+' : '-'} ${Math.abs(modTotal)}`;
       finalString += ` = ${grandTotal}]`;
 
-      const broadcastData = { userName: identity.displayName(userName), results, modifiers, color, total: grandTotal, historyString: finalString };
+      const broadcastData = { userName: identity.displayName(userName), account: userName, results, modifiers, color, total: grandTotal, historyString: finalString };
       db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
         [userName, grandTotal, JSON.stringify(results), color, finalString], (err) => {
           if (err) console.error('Error saving dice roll:', err);
@@ -944,6 +944,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
             const broadcastData = {
               userName: identity.displayName(info.userName),
+              account: info.userName,
               results: outcome.rolls,
               modifiers: outcome.modTotal !== 0 ? [outcome.modTotal] : [],
               color,
@@ -1175,6 +1176,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     const broadcastRoll = (userName, outcome, historyString, color, cb) => {
       const broadcastData = {
         userName: identity.displayName(userName),
+        account: userName,
         results: outcome.rolls,
         modifiers: outcome.modTotal !== 0 ? [outcome.modTotal] : [],
         color,
