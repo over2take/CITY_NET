@@ -737,16 +737,30 @@ function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbil
   const attrs = config.attrs ?? [];
   const hasAttrs = attrs.length > 0;
 
-  let items: AbilityItem[] = [];
-  try {
-    const raw = data[fieldId];
-    if (raw) {
-      const parsed = JSON.parse(String(raw));
-      if (Array.isArray(parsed)) items = parsed;
-    }
-  } catch { /* start fresh on corrupt data */ }
+  const parseItems = (raw: unknown): AbilityItem[] => {
+    try {
+      const parsed = JSON.parse(String(raw ?? '[]'));
+      if (Array.isArray(parsed)) return parsed;
+    } catch { /* ignore corrupt JSON */ }
+    return [];
+  };
 
-  const save = (next: AbilityItem[]) => onFieldChange(fieldId, JSON.stringify(next));
+  // Local state so rapid edits across columns don't lose each other to the
+  // parent's debounce cycle. Syncs from parent only when external changes
+  // arrive (server push, admin edit) — detected by reference inequality.
+  const [items, setItems] = useState<AbilityItem[]>(() => parseItems(data[fieldId]));
+  const prevRaw = React.useRef(data[fieldId]);
+  useEffect(() => {
+    if (data[fieldId] !== prevRaw.current) {
+      prevRaw.current = data[fieldId];
+      setItems(parseItems(data[fieldId]));
+    }
+  }, [data[fieldId]]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = (next: AbilityItem[]) => {
+    setItems(next);
+    onFieldChange(fieldId, JSON.stringify(next));
+  };
   const update = (idx: number, key: keyof AbilityItem, val: string | number) =>
     save(items.map((item, i) => i === idx ? { ...item, [key]: val } : item));
   const add = () => save([...items, {}]);
