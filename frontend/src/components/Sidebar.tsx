@@ -485,6 +485,12 @@ const ATTACK_PANEL_CONFIG = {
     hasAimed: false,
     hasLuck: false,
   },
+  shadowrun_6e: {
+    dmgExample: '3P',
+    meleeSkills: ['close_combat'],
+    hasAimed: false,
+    hasLuck: false,
+  },
 } as const;
 
 /** Systems whose attacks resolve from sheet weapon rows (one ATTACK button,

@@ -312,6 +312,7 @@ Click `ADMIN_LOGIN` in the top bar once you're on the map. Enter your `.env` `AD
 - Battle map uploads
 - City database and district management
 - Custom sign placement (text, image, multi-line; free-transform gizmo for wall placement; custom font upload)
+- Character sheets — game system selection, house rules, NPC library, per-system admin actions (CP:R LUCK reset, SR6 Edge replenishment)
 
 ---
 
@@ -335,15 +336,18 @@ CITY_NET/
 │   │   ├── signs.js            # Custom sign CRUD (GET all / POST / PATCH :id / DELETE :id); text optional when image_url set
 │   │   ├── fonts.js            # Font file upload/list/delete (.ttf .otf .woff .woff2); served as static under /uploads/fonts/
 │   │   ├── player.js           # Player auth (register, login, forgot, reset, registration status poll)
-│   │   └── sheets.js           # Character sheets — admin sheet access, NPC library, portraits, LUCK reset, import preview
+│   │   └── sheets.js           # Character sheets — admin sheet access, NPC library, portraits, LUCK/Edge reset & grant, import preview
 │   ├── sheets/
 │   │   ├── templates.js        # Server-side template metadata (public/combat/linked fields, max pairs, derived fields, per-system recompute hooks)
 │   │   ├── rolls.js            # Per-system roll map (fieldId → formula); server-authoritative
-│   │   ├── rollEngine.js       # Formula parse/resolve/execute (explode10, deterministic RNG for tests)
+│   │   ├── rollEngine.js       # Formula parse/resolve/execute (explode10, SR6 d6 hit-counting pool, deterministic RNG for tests)
 │   │   ├── attack.js           # CP:R combat resolution — to-hit, damage, SP soak/ablation, shield, crits, death saves
 │   │   ├── attackCwn.js        # CWN combat resolution — 1d20+BHB roll-to-hit, damage, trauma die vs TT, shock on miss, stabilize roll
-│   │   ├── importers.js        # Modular sheet import — PDF form extraction + per-system field mappers
-│   │   └── npcTiers.js         # Per-system NPC power tiers for GENERATE_SHEET (CP:R: Mook→Elite; CWN: Warrior/Expert/Boss/Elite + Spirit tiers)
+│   │   ├── attackSr6.js        # SR6 combat resolution — attack pool (hits/glitch), AR vs Armor Rating DV modifier, potential damage (soak manual)
+│   │   ├── identity.js         # Sheet = source of truth for player identity: mirrors name/description to tokens, display-name cache for rolls
+│   │   ├── headshots.js        # Stock NPC headshot pools (enemy/friendly), random assignment, URL validation
+│   │   ├── importers.js        # Modular sheet import — PDF form extraction + data-driven per-system field mappers (makeMapFields)
+│   │   └── npcTiers.js         # Per-system NPC power tiers for GENERATE_SHEET (CP:R: Mook→Elite; CWN: +Spirits; SR6: Ganger→Prime Runner)
 │   ├── sockets/
 │   │   └── index.js            # All Socket.IO event handlers
 │   ├── startup/
@@ -372,6 +376,12 @@ CITY_NET/
 │       ├── cwn_sockets.test.js         # CWN socket integration: attack flow, dice-in-broadcast, system isolation
 │       ├── cwn_stim_heal.test.js       # STIM_HEAL action (strain check, +1 strain, 409 on maxed strain)
 │       ├── login_theme.test.js         # Login theme persistence (localStorage save, DB write on login, JWT round-trip)
+│       ├── headshots.test.js           # Stock headshot pools (shape routing, URL validation, files exist)
+│       ├── identity.test.js            # Player identity (name-field mapping, display-name cache, token mirroring)
+│       ├── sr6_rollEngine.test.js      # SR6 pool shape (hits, glitch thresholds, critical glitch, pool floor)
+│       ├── sr6_templates.test.js       # SR6 template metadata (monitor derivation, armor linking, tiers, importer)
+│       ├── sr6_attack.test.js          # SR6 attack module (DV parsing, attack pool, AR vs armor, damage floor)
+│       ├── sr6_sockets.test.js         # SR6 socket integration: pool attack flow, stun overflow, system isolation
 │       ├── sockets.deathsave.test.js   # Socket integration: death saves, sheetAttack vs NPC SP, import apply, tiered generation
 │       ├── sockets.editing.test.js     # Socket editing access flow; regression for stale elevatedUsers bug
 │       └── undo.test.js                # Undo endpoint (all action types, auth, ordering)
@@ -381,11 +391,11 @@ CITY_NET/
 │   │   ├── App.tsx             # Root component — state, routing, socket wiring
 │   │   ├── App.css / index.css # Global styles and CSS variables
 │   │   ├── components/
-│   │   │   ├── AdminPanel.tsx          # GM dashboard; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R and CWN rule toggles
+│   │   │   ├── AdminPanel.tsx          # GM dashboard; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R, CWN, and SR6; SR6 Edge replenishment (reset all / give 1 to player)
 │   │   │   ├── HitPoints.tsx           # HP tracking + injury panel + HealthReviewWindow; STIM_HEAL (CWN), STABILIZE button for allies on mortal wound
 │   │   │   ├── BankWindows.tsx         # Player bank UI
 │   │   │   ├── ChatWindow.tsx          # In-game chat
-│   │   │   ├── DiceTray.tsx            # Dice roller
+│   │   │   ├── DiceTray.tsx            # Dice roller; SR6 pool results show a pulsing GLITCH / CRITICAL GLITCH banner
 │   │   │   ├── Buildings.tsx           # 3D building meshes
 │   │   │   ├── Sidewalks.tsx           # Road-flanking pavement strips (mitered quad ribbons, no geometry under roads) + neon curb line overlays
 │   │   │   ├── AutoSignage.tsx         # Procedural signs on building faces (seeded RNG, weighted type pool: text, preset SVG images, vertical neon; overlap check)
@@ -412,9 +422,10 @@ CITY_NET/
 │   │   │   ├── CharacterSheetWindow.tsx # Player's own character sheet (socket-based, self-only)
 │   │   │   ├── NpcSheetWindow.tsx       # Admin view/edit of NPC or player sheets (REST-based)
 │   │   │   ├── NpcLibrary.tsx           # NPC sheet library (folders, attach-to-token, move, open)
-│   │   │   ├── SheetRenderer.tsx        # Template-driven sheet renderer (any game system); MORTALLY WOUNDED / FRAIL banners, SpellsSection with per-row CAST, hidden-tab gating
+│   │   │   ├── SheetRenderer.tsx        # Template-driven sheet renderer (any game system); MORTALLY WOUNDED / FRAIL banners, ability_list layout (dynamic add/remove rows with attr dropdown, cost, die, roll), hidden-tab gating
 │   │   │   ├── ImportSheetDialog.tsx    # Sheet import — fillable PDF / JSON / stat-block paste with preview
 │   │   │   ├── QuickSheetCard.tsx       # Public sheet card shown to other players
+│   │   │   ├── TvPortrait.tsx           # Reusable glitchy TV/CRT portrait effect (chromatic fringe, scanlines, rollband); optional shadow silhouette
 │   │   │   ├── UpdateModal.tsx          # Draggable update notification modal (shown on admin login when update available; Update Now / Remind Me Later / Skip Version; docker-aware)
 │   │   │   └── __tests__/              # Component unit tests (Vitest + Testing Library)
 │   │   │       ├── AdminPanel.test.tsx
@@ -452,12 +463,13 @@ CITY_NET/
 │   │   │       └── useSocket.pendingRequests.test.ts     # Pending edit-request state; regression for stale requests on newly-promoted temp admins
 │   │   ├── sheets/
 │   │   │   ├── types.ts            # Sheet template type system (fields, sections, header, death saves, NPC tiers)
-│   │   │   ├── index.ts            # Template registry + getMaxPairs helper
+│   │   │   ├── index.ts            # Template registry, getMaxPairs, GATED_TABS/hiddenTabsFor (house-rule-gated sheet tabs)
 │   │   │   ├── SheetPage.tsx       # Standalone browser-tab sheet (?sheet=true); reads theme from auth handshake or localStorage; shares logic via usePlayerSheet
 │   │   │   └── templates/
 │   │   │       ├── generic.ts                  # Minimal fallback template
 │   │   │       ├── cyberpunk_red.ts            # Cyberpunk RED — stats, skills, weapons, armor, tiers (labels + dice math only, no book content)
-│   │   │       └── cities_without_number.ts    # Cities Without Number — attributes + SWN mods, saves, AC (token-linked), armor rows, weapons, Deluxe tab (spells/summoning), conditions
+│   │   │       ├── cities_without_number.ts    # Cities Without Number — attributes + SWN mods, saves, AC (token-linked), armor rows, weapons, Deluxe tab (spells/summoning), conditions
+│   │   │       └── shadowrun_6e.ts             # Shadowrun 6E — attributes, d6 pool skills, Edge pips (SPEND button, admin replenish), weapons (DV/AR), Stun track, gated AWAKENED/EMERGED tabs; dynamic spell list (DRAIN/CAST) and adept power list (PP cost auto-summed)
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
 │   │   └── utils/
 │   │       ├── locationHelpers.ts  # Location geometry utilities; exports ZONE_TYPE_NAMES and isUserDefinedName

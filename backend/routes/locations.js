@@ -269,6 +269,23 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         recordAction('location_update', { id: req.params.id, old_data: oldRow });
         emitUpdate();
         res.json({ id: req.params.id, ...req.body });
+        // Mirror name/description to any linked NPC sheet so the sheet stays
+        // in sync with the token label (enemy_rhombus / friendly_rhombus only).
+        const nameChanged = name !== oldRow.name;
+        const descChanged = description !== oldRow.description;
+        if ((nameChanged || descChanged) && (oldRow.shape === 'enemy_rhombus' || oldRow.shape === 'friendly_rhombus')) {
+          db.get(`SELECT sheet_id FROM npc_sheet_links WHERE location_id = ? LIMIT 1`, [req.params.id], (le, link) => {
+            if (le || !link) return;
+            db.get(`SELECT id, data FROM character_sheets WHERE id = ? AND is_npc = 1`, [link.sheet_id], (se, sheet) => {
+              if (se || !sheet) return;
+              const data = { ...JSON.parse(sheet.data || '{}') };
+              if (nameChanged) data.name = name;
+              if (descChanged) data.description = description;
+              db.run(`UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                [JSON.stringify(data), sheet.id]);
+            });
+          });
+        }
       });
     });
   });

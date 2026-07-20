@@ -156,35 +156,49 @@ const parseCprText = (text) => {
   return out;
 };
 
-// Map raw candidates onto CP:R sheet fields.
-const mapCprFields = (raw) => {
-  const aliases = buildCprAliases();
+// Shared field mapper: raw candidates -> { mapped, unmapped, skipped }.
+// Per-system behavior is entirely data: an alias table, a numeric-field
+// set, max->current seed pairs, and an optional post hook. Adding a system
+// means supplying those, never re-writing this loop.
+const makeMapFields = ({ system, buildAliases, numericFields, maxSeeds = {}, post }) => (raw) => {
+  const aliases = buildAliases();
   const mapped = {};
   const unmapped = {};
   const skipped = {};
-  const linked = getLinkedFields('cyberpunk_red');
+  const linked = getLinkedFields(system);
 
   Object.entries(raw || {}).forEach(([key, value]) => {
     if (value === '' || value === null || value === undefined) return;
     const fieldId = aliases[norm(key)];
     if (!fieldId) { unmapped[key] = value; return; }
     if (linked[fieldId]) { skipped[key] = value; return; }
-    const v = NUMERIC_CPR_FIELDS.has(fieldId) ? Number(value) : String(value);
-    if (NUMERIC_CPR_FIELDS.has(fieldId) && !Number.isFinite(v)) { unmapped[key] = value; return; }
+    const v = numericFields.has(fieldId) ? Number(value) : String(value);
+    if (numericFields.has(fieldId) && !Number.isFinite(v)) { unmapped[key] = value; return; }
     mapped[fieldId] = v;
   });
 
   // A single imported value seeds both max and current for paired fields
-  Object.entries(CPR_MAX_SEEDS).forEach(([maxField, curField]) => {
+  Object.entries(maxSeeds).forEach(([maxField, curField]) => {
     if (mapped[maxField] !== undefined && mapped[curField] === undefined) {
       mapped[curField] = mapped[maxField];
     }
   });
-  if (mapped.humanity !== undefined && mapped.humanity_max === undefined) {
-    mapped.humanity_max = mapped.humanity;
-  }
+  if (post) post(mapped);
   return { mapped, unmapped, skipped };
 };
+
+// Map raw candidates onto CP:R sheet fields.
+const mapCprFields = makeMapFields({
+  system: 'cyberpunk_red',
+  buildAliases: buildCprAliases,
+  numericFields: NUMERIC_CPR_FIELDS,
+  maxSeeds: CPR_MAX_SEEDS,
+  post: (mapped) => {
+    if (mapped.humanity !== undefined && mapped.humanity_max === undefined) {
+      mapped.humanity_max = mapped.humanity;
+    }
+  },
+});
 
 // ─── CWN importer ────────────────────────────────────────────────────────────
 
@@ -310,36 +324,105 @@ const parseCwnText = (text) => {
   return out;
 };
 
-const mapCwnFields = (raw) => {
-  const aliases = buildCwnAliases();
-  const mapped = {};
-  const unmapped = {};
-  const skipped = {};
-  const linked = getLinkedFields('cities_without_number');
+const mapCwnFields = makeMapFields({
+  system: 'cities_without_number',
+  buildAliases: buildCwnAliases,
+  numericFields: NUMERIC_CWN_FIELDS,
+  maxSeeds: CWN_MAX_SEEDS,
+});
 
-  Object.entries(raw || {}).forEach(([key, value]) => {
-    if (value === '' || value === null || value === undefined) return;
-    const fieldId = aliases[norm(key)];
-    if (!fieldId) { unmapped[key] = value; return; }
-    if (linked[fieldId]) { skipped[key] = value; return; }
-    const v = NUMERIC_CWN_FIELDS.has(fieldId) ? Number(value) : String(value);
-    if (NUMERIC_CWN_FIELDS.has(fieldId) && !Number.isFinite(v)) { unmapped[key] = value; return; }
-    mapped[fieldId] = v;
-  });
+// ─── Shadowrun 6E ────────────────────────────────────────────────────────────
 
-  Object.entries(CWN_MAX_SEEDS).forEach(([maxField, curField]) => {
-    if (mapped[maxField] !== undefined && mapped[curField] === undefined) {
-      mapped[curField] = mapped[maxField];
-    }
-  });
-  return { mapped, unmapped, skipped };
+const SR6_ATTRS = ['body', 'agility', 'reaction', 'strength', 'willpower', 'logic', 'intuition', 'charisma'];
+const SR6_SKILL_IDS = [
+  'athletics', 'biotech', 'close_combat', 'con', 'cracking', 'electronics', 'engineering',
+  'exotic_weapons', 'firearms', 'influence', 'outdoors', 'perception', 'piloting',
+  'sorcery', 'stealth', 'tasking',
+];
+
+const buildSr6Aliases = () => {
+  const a = {};
+  const alias = (keys, fieldId) => keys.forEach((k) => { a[norm(k)] = fieldId; });
+
+  alias(['name', 'charactername', 'streetname', 'alias'], 'name');
+  alias(['metatype', 'race'], 'metatype');
+  alias(['role', 'archetype', 'class'], 'role');
+  alias(['description', 'appearance'], 'description');
+  alias(['aliases'], 'aliases');
+
+  alias(['body', 'bod'], 'body');
+  alias(['agility', 'agi'], 'agility');
+  alias(['reaction', 'rea'], 'reaction');
+  alias(['strength', 'str'], 'strength');
+  alias(['willpower', 'wil', 'will'], 'willpower');
+  alias(['logic', 'log'], 'logic');
+  alias(['intuition', 'int'], 'intuition');
+  alias(['charisma', 'cha'], 'charisma');
+  alias(['edge', 'edg'], 'edge_max');
+  alias(['edgemax'], 'edge_max');
+  alias(['essence', 'ess'], 'essence');
+  alias(['magic', 'mag'], 'magic');
+  alias(['resonance', 'res'], 'resonance');
+  alias(['armor', 'armorrating', 'defenserating', 'dr'], 'armor_rating');
+
+  SR6_SKILL_IDS.forEach((id) => alias([id], id));
+  alias(['closecombat', 'cc'], 'close_combat');
+  alias(['exoticweapons'], 'exotic_weapons');
+  alias(['perc'], 'perception');
+  alias(['ath'], 'athletics');
+
+  // Weapon rows round-trip (6 fields each)
+  for (let i = 1; i <= 4; i++) {
+    ['name', 'dv', 'ar', 'skill', 'mode', 'atk'].forEach((part) =>
+      alias([`weapon${i}${part}`], `weapon${i}_${part}`)
+    );
+  }
+  return a;
 };
+
+const NUMERIC_SR6_FIELDS = new Set([
+  ...SR6_ATTRS, ...SR6_SKILL_IDS,
+  'edge', 'edge_max', 'essence', 'magic', 'resonance', 'armor_rating',
+  'physical_monitor', 'stun_monitor', 'stun_current',
+  'initiative_score', 'composure',
+  'weapon1_ar', 'weapon2_ar', 'weapon3_ar', 'weapon4_ar',
+  'weapon1_atk', 'weapon2_atk', 'weapon3_atk', 'weapon4_atk',
+]);
+
+const parseSr6Text = (text) => {
+  const out = {};
+  const labelPatterns = [
+    ...[['BOD', 'body'], ['AGI', 'agility'], ['REA', 'reaction'], ['STR', 'strength'],
+        ['WIL', 'willpower'], ['LOG', 'logic'], ['INT', 'intuition'], ['CHA', 'charisma'],
+        ['EDG', 'edge_max'], ['Edge', 'edge_max'], ['Armor', 'armor_rating']],
+    ...SR6_SKILL_IDS.map((id) => [id.replace(/_/g, ' '), id]),
+  ];
+  for (const [label, key] of labelPatterns) {
+    const esc = label.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+    const re = new RegExp(`(?:^|[^a-zA-Z])${esc}\\s*[:=]?\\s*(\\d{1,2})(?![0-9])`, 'i');
+    const m = text.match(re);
+    if (m) out[key] = m[1];
+  }
+  const name = text.match(/name\s*[:=]?\s*(\S+(?:\s\S+)*?)(?=\s{2,}|\s*[\r\n]|\s+metatype\b|$)/i);
+  if (name) out.name = name[1].trim();
+  const meta = text.match(/metatype\s*[:=]?\s*([A-Za-z]+)(?=\s{2,}|\s*[\r\n]|$)/i);
+  if (meta) out.metatype = meta[1].trim();
+  return out;
+};
+
+const mapSr6Fields = makeMapFields({
+  system: 'shadowrun_6e',
+  buildAliases: buildSr6Aliases,
+  numericFields: NUMERIC_SR6_FIELDS,
+  maxSeeds: { edge_max: 'edge' },
+});
 
 // ─── Registry ────────────────────────────────────────────────────────────────
 
 const IMPORTERS = {
   cyberpunk_red: { mapFields: mapCprFields, parseText: parseCprText },
   cities_without_number: { mapFields: mapCwnFields, parseText: parseCwnText },
+  shadowrun_6e: { mapFields: mapSr6Fields, parseText: parseSr6Text },
   // generic: no importer - import is only offered for systems that define one
 };
 

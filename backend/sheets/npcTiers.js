@@ -77,6 +77,35 @@ const spiritTier = ({ hd, hp, ac }) =>
     weapons: [{ name: 'Spirit Strike', dmg: `${hd}d6`, skill: 'punch', trauma: '', shock: '' }],
   });
 
+// SR6 NPC tier builder. Attribute spread + skill ratings + one or two
+// weapon rows (6-field shape: name/dv/ar/skill/mode/atk matching
+// SR6_WEAPON_COLUMNS). Monitors are pre-computed the same way as the
+// sr6Recompute hook so generated sheets are internally consistent.
+const sr6Tier = ({ attrs, skills, armor, edge, weapons }) => {
+  const data = {
+    body: attrs, agility: attrs, reaction: attrs, strength: attrs,
+    willpower: attrs, logic: Math.max(1, attrs - 1), intuition: attrs, charisma: Math.max(1, attrs - 1),
+    edge, edge_max: edge, essence: 6,
+    physical_monitor: 8 + Math.ceil(attrs / 2),
+    stun_monitor: 8 + Math.ceil(attrs / 2),
+    stun_current: 0,
+    initiative_score: attrs * 2,
+    composure: attrs + Math.max(1, attrs - 1),
+    armor_rating: armor,
+  };
+  ['firearms', 'close_combat', 'perception', 'stealth', 'athletics'].forEach((s) => { data[s] = skills; });
+  weapons.forEach((w, i) => {
+    const n = i + 1;
+    data[`weapon${n}_name`] = w.name;
+    data[`weapon${n}_dv`] = w.dv;
+    data[`weapon${n}_ar`] = w.ar;
+    data[`weapon${n}_skill`] = w.skill;
+    data[`weapon${n}_mode`] = w.mode ?? '';
+    data[`weapon${n}_atk`] = w.atk ?? 0;
+  });
+  return { data, hp: 8 + Math.ceil(attrs / 2), dv: { melee: armor, ranged: armor } };
+};
+
 const TIERS = {
   cyberpunk_red: {
     default: 'mook',
@@ -158,6 +187,42 @@ const TIERS = {
       lesser_spirit: () => spiritTier({ hd: 2, hp: 10, ac: 14 }),
       spirit:        () => spiritTier({ hd: 5, hp: 25, ac: 16 }),
       greater_spirit:() => spiritTier({ hd: 8, hp: 40, ac: 18 }),
+    },
+  },
+  shadowrun_6e: {
+    default: 'ganger',
+    options: [
+      { id: 'ganger', label: 'GANGER' },
+      { id: 'street_tough', label: 'STREET TOUGH' },
+      { id: 'shadowrunner', label: 'SHADOWRUNNER' },
+      { id: 'prime_runner', label: 'PRIME RUNNER' },
+    ],
+    build: {
+      ganger: () => sr6Tier({
+        attrs: 2, skills: 2, armor: 6, edge: 1,
+        weapons: [{ name: 'Streetline Special', dv: '2P', ar: 8, skill: 'firearms', mode: 'SA' }],
+      }),
+      street_tough: () => sr6Tier({
+        attrs: 3, skills: 3, armor: 8, edge: 2,
+        weapons: [
+          { name: 'Ares Predator', dv: '3P', ar: 10, skill: 'firearms', mode: 'SA' },
+          { name: 'Knife', dv: '2P', ar: 6, skill: 'close_combat' },
+        ],
+      }),
+      shadowrunner: () => sr6Tier({
+        attrs: 4, skills: 4, armor: 10, edge: 3,
+        weapons: [
+          { name: 'AK-97', dv: '5P', ar: 11, skill: 'firearms', mode: 'SA/BF/FA' },
+          { name: 'Combat Axe', dv: '4P', ar: 9, skill: 'close_combat' },
+        ],
+      }),
+      prime_runner: () => sr6Tier({
+        attrs: 6, skills: 6, armor: 13, edge: 4,
+        weapons: [
+          { name: 'Panther XXL', dv: '7P', ar: 13, skill: 'firearms', mode: 'SS', atk: 1 },
+          { name: 'Monofilament Sword', dv: '5P', ar: 11, skill: 'close_combat', atk: 1 },
+        ],
+      }),
     },
   },
 };

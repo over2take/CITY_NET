@@ -9,6 +9,51 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.6.1] - 2026-07-19
+
+SR6 polish: drain resistance, glitch feedback, Edge management, NPC sheet fixes, and name/description sync.
+
+### Added
+
+- **Drain resistance** — each spell row in the AWAKENED tab gains a yellow RES button (enabled when Drain Value and tradition attribute are set); clicking it rolls WIL + tradition attr, applies net drain to the Stun track, and overflows excess into Physical HP automatically
+- **Glitch / Critical Glitch banner** — dice tray displays a pulsing yellow GLITCH or red CRITICAL GLITCH banner after any SR6 pool roll that qualifies; clears on the next roll
+- **SR6 Edge management (admin)** — Admin Panel SR6 section adds REPLENISH ALL EDGE (resets every player's Edge to their max) and a per-player GIVE 1 EDGE button (online non-admin players only, capped at max)
+
+### Fixed
+
+- **NPC sheet system mismatch** — OPEN_SHEET now only shows when the linked sheet's system matches the active game system; a CWN sheet no longer surfaces under SR6 and vice versa
+- **GENERATE_SHEET → OPEN_SHEET flip** — button switches immediately after generation without requiring the token window to be closed and reopened; `system` is now included in the `npcSheetGenerated` socket event
+- **Edge pips not rendering** — pip display now uses the higher of current or max edge so pips appear even before `edge_max` has been explicitly saved
+- **NPC sheet name/description sync** — editing name or description on an NPC sheet updates the linked map token label live (sheet → token); saving an enemy/friendly token with a changed name or description patches the linked sheet (token → sheet); generation already seeded both fields from the token
+
+---
+
+## [1.6.0] - 2026-07-18
+
+Shadowrun 6E — third full game system, built entirely on the existing sheet/roll/attack architecture.
+
+### Added
+
+**Shadowrun 6E system**
+- **SR6 character sheet** — 9 attributes (BOD–EDG), Essence/Magic/Resonance, 16 consolidated skills rolled as d6 pools, 4 weapon rows (DV / AR / mode / atk), Edge pips (spend-by-click, CP:R LUCK pattern), derived Physical/Stun monitors, initiative score and composure recomputed on every save
+- **Pool dice engine** — new `pool` roll shape: pool size = attribute + skill (+mods), 5s and 6s are hits, glitch when half or more of the pool shows 1, critical glitch on a glitch with zero hits; results land in the dice tray as `N hits / M dice`
+- **Two damage tracks** — Physical monitor lives on the token (HP bar as usual); Stun is a sheet track that clamps at the Stun Monitor and overflows the excess into Physical automatically, server-side
+- **SR6 attacks** — one ATTACK button: attack pool, weapon Attack Rating compared to the target token's Armor Rating shifts DV ±1, damage applies to Physical with a "GM: soak BOD+ARMOR" prompt (soak stays manual per RAW-lite)
+- **Auto-rolled defense** — defenders backed by a sheet dodge automatically (REA + INT pool, shown in the dice tray); net hits decide the hit and add to the DV; sheetless tokens don't defend
+- **Stun bar in the health window** — SR6 health review shows the Stun track (cyan bar, red + overflow warning when full) under the Physical monitor, live-updating; served by a public two-number stun endpoint
+- **AWAKENED / EMERGED tabs** — gated behind the new `sr6_awakened` and `sr6_emerged` house rules (spells/powers/tradition and complex forms/sprites)
+- **SR6 NPC tiers** — Ganger / Street Tough / Shadowrunner / Prime Runner for GENERATE_SHEET, with consistent monitors, armor and weapon rows
+- **SR6 sheet import** — attribute/skill aliases (BOD, AGI, cc, perc…), Edge max seeds current, plain-text stat block parser
+
+### Changed
+
+**Modularity pass**
+- **Gated sheet tabs are data** — `GATED_TABS`/`hiddenTabsFor` config replaces per-system conditionals in the player sheet hook and the admin NPC window
+- **One import mapper** — `makeMapFields` factory: CP:R / CWN / SR6 importers are now alias tables + numeric sets around a single shared loop
+- **Shared attack scaffolding** — target lookup and `attackResult` emission extracted from the CWN and SR6 handlers; per-system attack code is rules only
+
+---
+
 ## [1.5.1] - 2026-07-17
 
 NPC portraits with a glitchy TV/CRT effect, stock headshot library, and token info window improvements.

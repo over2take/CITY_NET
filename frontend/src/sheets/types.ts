@@ -44,8 +44,20 @@ export interface SheetField {
 /** 'weapons' lays fields out as structured rows (name / dmg / skill / rof),
  *  chunked in field order - every section.columns (default 4) consecutive
  *  fields form one row. 'spells' is the same shape plus a CAST button per
- *  row (one-click: rolls the row's damage dice and spends its Effort cost). */
-export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells';
+ *  row (one-click: rolls the row's damage dice and spends its Effort cost).
+ *  'ability_list' is a dynamic add/remove list stored as JSON in a single
+ *  field; each item has name, cost, attr (dropdown), die, and effect. */
+export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list';
+
+/** Configuration for the 'ability_list' section layout. */
+export interface AbilityListConfig {
+  /** Label for the cost column (default: 'COST'). */
+  costLabel?: string;
+  /** Attribute dropdown options. Omit to hide the attribute column. */
+  attrs?: { value: string; label: string }[];
+  /** Roll/cast button label (default: 'ROLL'). */
+  rollLabel?: string;
+}
 
 export interface SheetSection {
   id: string;
@@ -56,6 +68,8 @@ export interface SheetSection {
   /** Which bottom tab this section lives under (default: the first tab). */
   tab?: string;
   fields: SheetField[];
+  /** ability_list layout configuration. */
+  listConfig?: AbilityListConfig;
 }
 
 /** Drives the identity header block: portrait frame, name, subtitle line,
@@ -77,6 +91,8 @@ export interface SheetHeader {
    *  Clicking a pip decrements the current value by 1 (spend). */
   luckField?: string;
   luckMaxField?: string;
+  /** Label shown above the pip row. Defaults to 'LUCK'. */
+  luckLabel?: string;
 }
 
 /** How this system's defense value appears on tokens. When absent, the
@@ -107,6 +123,11 @@ export interface SheetTemplate {
   /** NPC power tiers offered by GENERATE_SHEET (must mirror the server's
    *  npcTiers registry for this system). Absent = untiered generation. */
   npcTiers?: { id: string; label: string }[];
+  /** When false, the fumble-shield pip control is hidden even if the
+   *  luck_negates_fumble house rule is on. Set false for systems whose
+   *  critical-failure mechanic is not a nat-1 on a single die (e.g. SR6
+   *  glitches are pool-based). Defaults to true. */
+  allowFumbleShield?: boolean;
   tokenDefense?: TokenDefense;
   /** Bottom tab bar, in order. Sections map to tabs via section.tab. */
   tabs?: string[];

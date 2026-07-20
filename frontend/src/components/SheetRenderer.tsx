@@ -60,6 +60,14 @@ interface SheetRendererProps {
   /** Cast a spell row (1-based index). Server-resolved: rolls the row's
    *  damage dice and spends its Effort cost off the stored sheet. */
   onCastSpell?: (index: number) => void;
+  /** Roll an ability from an ability_list section (formula built client-side
+   *  from the item's attr + die; values resolved server-side against the
+   *  stored sheet so the server stays authoritative on attribute values). */
+  onRollAbility?: (formula: string, label: string) => void;
+  /** Roll Drain resistance for a spell and apply net Drain to stun_current.
+   *  drainValue = numeric DV from the spell row; attr = resist attribute (WIL
+   *  is always included server-side; this is the tradition secondary). */
+  onResistDrain?: (drainValue: number, attr: string, label: string) => void;
   /** When false, the TV glitch / scanline / chromatic-fringe shader is
    *  stripped from the portrait so a plain headshot shows cleanly. */
   portraitShadow?: boolean;
@@ -436,7 +444,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
         {h.luckField && (() => {
           const luckCur = num(data[h.luckField!]) ?? 0;
           const luckMax = h.luckMaxField ? (num(data[h.luckMaxField]) ?? 0) : luckCur;
-          const pips = Math.max(0, luckMax);
+          const pips = Math.max(luckCur, luckMax);
           if (pips === 0) return null;
           const hexSize = 20;
           const hexPoints = Array.from({ length: 6 }, (_, i) => {
@@ -451,7 +459,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
           return (
             <div style={{ marginTop: '6px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.7rem', opacity: 0.65, letterSpacing: '0.5px' }}>LUCK</span>
+                <span style={{ fontSize: '0.7rem', opacity: 0.65, letterSpacing: '0.5px' }}>{h.luckLabel ?? 'LUCK'}</span>
                 <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
                   {Array.from({ length: pips }, (_, i) => {
                     const filled = i < luckCur;
@@ -488,20 +496,33 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
                   {allowFumbleShield && setArmedNegate && luckCur > 0 && (
                     <button
                       onClick={() => setArmedNegate!(!negate)}
-                      title="Burn 1 LUCK so a natural 1 on the next roll is not a critical fumble. No bonus to the roll."
+                      title={`Burn 1 ${h.luckLabel ?? 'LUCK'} so a natural 1 on the next roll is not a critical fumble. No bonus to the roll.`}
                       style={{
                         background: negate ? '#ffcc00' : 'none', border: '1px solid #ffcc00',
                         color: negate ? '#000' : '#ffcc00', fontFamily: 'inherit',
                         fontSize: '0.55rem', letterSpacing: '1px', padding: '1px 6px', cursor: 'pointer',
                       }}
                     >
-                      {negate ? '✓ ' : ''}FUMBLE SHIELD (1 LUCK)
+                      {negate ? '✓ ' : ''}FUMBLE SHIELD (1 {h.luckLabel ?? 'LUCK'})
+                    </button>
+                  )}
+                  {luckCur > 0 && (
+                    <button
+                      onClick={() => onFieldChange(h.luckField!, Math.max(0, luckCur - 1))}
+                      title={`Spend 1 ${h.luckLabel ?? 'LUCK'} for a non-roll effect (reroll, push the limit, etc.)`}
+                      style={{
+                        background: 'none', border: '1px solid #ffcc00', color: '#ffcc00',
+                        fontFamily: 'inherit', fontSize: '0.55rem', letterSpacing: '1px',
+                        padding: '1px 6px', cursor: 'pointer',
+                      }}
+                    >
+                      SPEND 1 {h.luckLabel ?? 'LUCK'}
                     </button>
                   )}
                   {committed > 0 && (
                     <>
                       <span style={{ fontSize: '0.62rem', color: '#ffcc00', letterSpacing: '1px' }}>
-                        NEXT ROLL{armed > 0 ? ` +${armed}` : ''}{negate ? ' · NAT-1 NEGATED' : ''} · COST {committed} LUCK
+                        NEXT ROLL{armed > 0 ? ` +${armed}` : ''}{negate ? ' · NAT-1 NEGATED' : ''} · COST {committed} {h.luckLabel ?? 'LUCK'}
                       </span>
                       <button
                         onClick={() => { setArmedLuck!(0); setArmedNegate?.(false); }}
@@ -713,6 +734,159 @@ function SpellsSection({ section, data, readOnly, onFieldChange, onCastSpell }: 
   );
 }
 
+interface AbilityItem {
+  name?: string;
+  cost?: string | number;
+  attr?: string;
+  die?: string;
+  effect?: string;
+}
+
+function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbility, onResistDrain }: {
+  section: SheetSection; data: SheetData; readOnly: boolean;
+  onFieldChange: (fieldId: string, value: string | number) => void;
+  onRollAbility?: (formula: string, label: string) => void;
+  onResistDrain?: (drainValue: number, attr: string, label: string) => void;
+}) {
+  const fieldId = section.fields[0]?.id ?? '';
+  const config = section.listConfig ?? {};
+  const costLabel = config.costLabel ?? 'COST';
+  const rollLabel = config.rollLabel ?? 'ROLL';
+  const attrs = config.attrs ?? [];
+  const hasAttrs = attrs.length > 0;
+  const isDrain = costLabel === 'DRAIN';
+
+  const parseItems = (raw: unknown): AbilityItem[] => {
+    try {
+      const parsed = JSON.parse(String(raw ?? '[]'));
+      if (Array.isArray(parsed)) return parsed;
+    } catch { /* ignore corrupt JSON */ }
+    return [];
+  };
+
+  // Local state so rapid edits across columns don't lose each other to the
+  // parent's debounce cycle. Syncs from parent only when external changes
+  // arrive (server push, admin edit) — detected by reference inequality.
+  const [items, setItems] = useState<AbilityItem[]>(() => parseItems(data[fieldId]));
+  const prevRaw = React.useRef(data[fieldId]);
+  useEffect(() => {
+    if (data[fieldId] !== prevRaw.current) {
+      prevRaw.current = data[fieldId];
+      setItems(parseItems(data[fieldId]));
+    }
+  }, [data[fieldId]]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = (next: AbilityItem[]) => {
+    setItems(next);
+    onFieldChange(fieldId, JSON.stringify(next));
+  };
+  const update = (idx: number, key: keyof AbilityItem, val: string | number) =>
+    save(items.map((item, i) => i === idx ? { ...item, [key]: val } : item));
+  const add = () => save([...items, {}]);
+  const remove = (idx: number) => save(items.filter((_, i) => i !== idx));
+
+  const buildFormula = (item: AbilityItem): string | null => {
+    const { attr, die } = item;
+    if (attr && die) return `pool:@${attr}+${die}`;
+    if (attr) return `pool:@${attr}`;
+    if (die) return String(die);
+    return null;
+  };
+
+  const cols = hasAttrs
+    ? (isDrain ? '2fr 46px 80px 54px 1fr 36px 36px 22px' : '2fr 46px 80px 54px 1fr 36px 22px')
+    : '2fr 46px 54px 1fr 36px 22px';
+
+  const inp: React.CSSProperties = { ...inputStyle, padding: '2px 4px', fontSize: '0.7rem' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+      {items.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: cols, gap: '3px 4px' }}>
+          {['NAME', costLabel, ...(hasAttrs ? ['ATTR'] : []), 'DICE', 'EFFECT', rollLabel, ...(isDrain ? ['RES'] : []), ''].map((h, i) => (
+            <div key={i} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{h}</div>
+          ))}
+        </div>
+      )}
+      {items.map((item, idx) => {
+        const formula = buildFormula(item);
+        const canRoll = !!formula && !!onRollAbility && !!item.name;
+        const drainValue = parseFloat(String(item.cost ?? ''));
+        const canResist = isDrain && !!onResistDrain && !!item.attr && !isNaN(drainValue) && drainValue > 0;
+        return (
+          <div key={idx} style={{ display: 'grid', gridTemplateColumns: cols, gap: '3px 4px', alignItems: 'center' }}>
+            <input type="text" aria-label="Name" className="sheet-input" style={inp}
+              value={item.name ?? ''} placeholder="Power name" readOnly={readOnly}
+              onChange={e => update(idx, 'name', e.target.value)} />
+            <input type="number" aria-label={costLabel} className="sheet-input"
+              style={{ ...inp, textAlign: 'center' }} step="0.25"
+              value={item.cost ?? ''} placeholder="0.5" readOnly={readOnly}
+              onChange={e => update(idx, 'cost', e.target.value)} />
+            {hasAttrs && (
+              <select aria-label="Attribute" className="sheet-input" style={inp}
+                value={item.attr ?? ''} disabled={readOnly}
+                onChange={e => update(idx, 'attr', e.target.value)}>
+                <option value="">—</option>
+                {attrs.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+              </select>
+            )}
+            <input type="text" aria-label="Dice" className="sheet-input"
+              style={{ ...inp, textAlign: 'center' }}
+              value={item.die ?? ''} placeholder="0" readOnly={readOnly}
+              onChange={e => update(idx, 'die', e.target.value)} />
+            <input type="text" aria-label="Effect" className="sheet-input" style={inp}
+              value={item.effect ?? ''} placeholder="Description" readOnly={readOnly}
+              onChange={e => update(idx, 'effect', e.target.value)} />
+            <button
+              onClick={canRoll ? () => onRollAbility!(formula!, item.name ?? 'Ability') : undefined}
+              disabled={!canRoll}
+              title={canRoll ? `Roll ${item.name}: ${formula}` : 'Set name + attr/dice to enable roll'}
+              style={{
+                background: 'none', border: '1px solid var(--green)', color: 'var(--green)',
+                fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '2px',
+                cursor: canRoll ? 'pointer' : 'default', opacity: canRoll ? 1 : 0.35,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px',
+              }}
+            >
+              <DiceIcon size={11} />
+            </button>
+            {isDrain && (
+              <button
+                onClick={canResist ? () => onResistDrain!(drainValue, item.attr!, `${item.name ?? 'Spell'} Drain`) : undefined}
+                disabled={!canResist}
+                title={canResist ? `Resist ${item.name} Drain (DV ${drainValue}): WIL + attr pool` : 'Set attr and numeric drain to enable'}
+                style={{
+                  background: 'none', border: '1px solid #ffcc00', color: '#ffcc00',
+                  fontFamily: 'inherit', fontSize: '0.5rem', letterSpacing: '0.5px', padding: '2px 1px',
+                  cursor: canResist ? 'pointer' : 'default', opacity: canResist ? 1 : 0.3,
+                }}
+              >RES</button>
+            )}
+            <button
+              onClick={!readOnly ? () => remove(idx) : undefined}
+              disabled={readOnly}
+              aria-label="Remove"
+              style={{
+                background: 'none', border: '1px solid var(--green)', color: 'var(--green)',
+                fontFamily: 'inherit', fontSize: '0.75rem', padding: '1px 4px',
+                cursor: readOnly ? 'default' : 'pointer', opacity: readOnly ? 0.35 : 0.7,
+              }}
+            >×</button>
+          </div>
+        );
+      })}
+      {!readOnly && (
+        <button onClick={add} style={{
+          alignSelf: 'flex-start', marginTop: '4px',
+          background: 'none', border: '1px solid var(--green)', color: 'var(--green)',
+          fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '3px 10px',
+          cursor: 'pointer',
+        }}>+ ADD</button>
+      )}
+    </div>
+  );
+}
+
 function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
@@ -730,7 +904,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // If the active tab gets hidden (house rule toggled off), fall back to the
@@ -740,6 +914,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
   }, [tabs.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   // LUCK declared for the next roll (CP:R: declare before rolling; any spend
   // also negates a natural-1 fumble). Consumed and reset by the next roll.
+  const effectiveAllowFumbleShield = allowFumbleShield && template.allowFumbleShield !== false;
   const [armedLuck, setArmedLuck] = useState(0);
   const [armedNegate, setArmedNegate] = useState(false);
   const handleRoll = onRoll
@@ -771,7 +946,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
       `}</style>
 
-      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={allowFumbleShield} canRoll={!!onRoll} />
+      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} canRoll={!!onRoll} />
 
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
         {tabHasRolls && (
@@ -799,6 +974,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
+                  {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
               )}

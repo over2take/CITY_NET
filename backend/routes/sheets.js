@@ -336,7 +336,22 @@ module.exports = (db, io) => {
         // Open token info windows refetch link data (name, description,
         // portrait shadow) when the sheet behind a linked token changes
         db.get(`SELECT location_id FROM npc_sheet_links WHERE sheet_id = ? LIMIT 1`, [req.params.id], (e3, link) => {
-          if (!e3 && link) io.emit('npcLinkChanged', { location_id: link.location_id, sheet_id: Number(req.params.id) });
+          if (!e3 && link) {
+            io.emit('npcLinkChanged', { location_id: link.location_id, sheet_id: Number(req.params.id) });
+            // Mirror name/description back to the linked token so the map
+            // label and info panel stay in sync with the sheet.
+            if (cleanFields) {
+              const locCols = [];
+              const locVals = [];
+              if ('name' in cleanFields) { locCols.push('name = ?'); locVals.push(cleanFields.name); }
+              if ('description' in cleanFields) { locCols.push('description = ?'); locVals.push(cleanFields.description); }
+              if (locCols.length > 0) {
+                locVals.push(link.location_id);
+                db.run(`UPDATE locations SET ${locCols.join(', ')} WHERE id = ?`, locVals,
+                  () => io.emit('dataUpdated', { isRhombusOnly: true }));
+              }
+            }
+          }
         });
         routeAc(() => res.json({ message: 'NPC updated' }));
       });
@@ -372,11 +387,40 @@ module.exports = (db, io) => {
     );
   });
 
+  // Public: the SR6 Stun track for the sheet backing a token (player sheet
+  // by owner, or the linked NPC sheet). Drives the STUN bar in the health
+  // review window. Two numbers only - no other sheet data leaks.
+  router.get('/stun/:location_id', (req, res) => {
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (system !== 'shadowrun_6e') return res.json({});
+      db.get(`SELECT id, shape, owner FROM locations WHERE id = ?`, [req.params.location_id], (err2, loc) => {
+        if (err2 || !loc) return res.json({});
+        const send = (row) => {
+          if (!row) return res.json({});
+          let data;
+          try { data = JSON.parse(row.data || '{}'); } catch { return res.json({}); }
+          res.json({
+            stun_current: Number(data.stun_current) || 0,
+            stun_monitor: Number(data.stun_monitor) || 0,
+          });
+        };
+        if (loc.shape === 'rhombus' && loc.owner) {
+          db.get(`SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+            [loc.owner, system], (e3, row) => send(e3 ? null : row));
+        } else {
+          db.get(`SELECT cs.data FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id WHERE l.location_id = ?`,
+            [loc.id], (e3, row) => send(e3 ? null : row));
+        }
+      });
+    });
+  });
+
   // Which NPC sheet (if any) is linked to a token - drives the token menu's
   // GENERATE_SHEET vs OPEN_SHEET button
   router.get('/npcs/link/:location_id', authenticate, requireAdmin, (req, res) => {
     db.get(
-      `SELECT cs.id AS sheet_id, cs.npc_label, cs.portrait_url,
+      `SELECT cs.id AS sheet_id, cs.system, cs.npc_label, cs.portrait_url,
               json_extract(cs.data, '$.name') AS sheet_name,
               json_extract(cs.data, '$.description') AS sheet_description,
               json_extract(cs.data, '$.portrait_shadow_filter') AS portrait_shadow_filter
@@ -601,6 +645,81 @@ module.exports = (db, io) => {
               }
             );
           }
+        }
+      );
+    });
+  });
+
+  // SR6 Edge replenishment: reset all player sheets' edge to their edge_max.
+  router.post('/reset-edge', authenticate, requireAdmin, (req, res) => {
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (system !== 'shadowrun_6e') {
+        return res.json({ reset: 0, reason: 'Active system is not Shadowrun 6E' });
+      }
+      db.all(
+        `SELECT id, username, data FROM character_sheets WHERE system = ? AND is_npc = 0`,
+        [system],
+        (err2, rows) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+          const updates = [];
+          for (const row of rows) {
+            let data;
+            try { data = JSON.parse(row.data || '{}'); } catch { data = {}; }
+            const max = data['edge_max'];
+            if (max === undefined || max === null) continue;
+            data['edge'] = Number(max);
+            updates.push({ id: row.id, username: row.username, data: JSON.stringify(data) });
+          }
+          if (updates.length === 0) return res.json({ reset: 0 });
+          let done = 0;
+          for (const u of updates) {
+            db.run(
+              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+              [u.data, u.id],
+              () => {
+                io.emit('sheetUpdated', { username: u.username });
+                done++;
+                if (done === updates.length) res.json({ reset: updates.length });
+              }
+            );
+          }
+        }
+      );
+    });
+  });
+
+  // SR6 Edge grant: give 1 Edge to a specific player (capped at edge_max).
+  // Body: { username: string }
+  router.post('/grant-edge', authenticate, requireAdmin, (req, res) => {
+    const { username } = req.body || {};
+    if (!username) return res.status(400).json({ error: 'username required' });
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (system !== 'shadowrun_6e') {
+        return res.json({ granted: false, reason: 'Active system is not Shadowrun 6E' });
+      }
+      db.get(
+        `SELECT id, data FROM character_sheets WHERE system = ? AND username = ? AND is_npc = 0`,
+        [system, username],
+        (err2, row) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+          if (!row) return res.status(404).json({ error: 'Sheet not found' });
+          let data;
+          try { data = JSON.parse(row.data || '{}'); } catch { data = {}; }
+          const max = Number(data['edge_max']) || 0;
+          const cur = Number(data['edge']) || 0;
+          if (cur >= max) return res.json({ granted: false, reason: 'Already at maximum Edge', edge: cur, edge_max: max });
+          data['edge'] = cur + 1;
+          db.run(
+            `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [JSON.stringify(data), row.id],
+            (err3) => {
+              if (err3) return res.status(500).json({ error: err3.message });
+              io.emit('sheetUpdated', { username });
+              res.json({ granted: true, edge: data['edge'], edge_max: max });
+            }
+          );
         }
       );
     });

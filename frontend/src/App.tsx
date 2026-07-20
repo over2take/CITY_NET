@@ -213,7 +213,7 @@ function App() {
   const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string } | null>(null);
   // NPC sheet linked to the currently selected token (admin) - drives
   // GENERATE_SHEET vs OPEN_SHEET on the token menu
-  const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; npc_label: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null; portrait_shadow_filter?: number | null } | null>(null);
+  const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; system?: string; npc_label: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null; portrait_shadow_filter?: number | null } | null>(null);
   // Admin view of another player's sheet (opened from their token)
   const [openPlayerSheetUser, setOpenPlayerSheetUser] = useState<string | null>(null);
   // Bumped when npc_sheet_links change so the link lookup effect re-runs
@@ -244,7 +244,7 @@ function App() {
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (cancelled) return;
-        setTokenSheetLink(data?.sheet_id ? { location_id: loc.id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null, portrait_shadow_filter: data.portrait_shadow_filter ?? null } : null);
+        setTokenSheetLink(data?.sheet_id ? { location_id: loc.id, sheet_id: data.sheet_id, system: data.system ?? undefined, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null, portrait_shadow_filter: data.portrait_shadow_filter ?? null } : null);
       })
       .catch(() => { if (!cancelled) setTokenSheetLink(null); });
     return () => { cancelled = true; };
@@ -743,13 +743,15 @@ function App() {
       // Flip the token menu's GENERATE_SHEET to OPEN_SHEET immediately.
       // Safe unconditionally: the button only reads the link when its
       // location_id matches the selected token.
-      setTokenSheetLink({ location_id: data.location_id, sheet_id: data.sheet_id, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null });
+      setTokenSheetLink({ location_id: data.location_id, sheet_id: data.sheet_id, system: data.system ?? undefined, npc_label: data.npc_label, portrait_url: data.portrait_url ?? null, sheet_name: data.sheet_name ?? null, sheet_description: data.sheet_description ?? null });
     },
     onNpcLinkChanged: () => setLinkRefresh(n => n + 1),
     onDiceRollBroadcast: (data) => {
       // Open the dice tray when any roll arrives for this user — catches rolls
       // originating from the standalone sheet tab which can't call onRolled().
-      if (data.userName === userName) {
+      // Match on the login account: userName in the broadcast is the sheet's
+      // display name (handle), which may differ.
+      if ((data.account ?? data.userName) === userName) {
         setIsDiceTrayOpen(true);
         setActiveSidebarMenu('dice_menu');
       }
@@ -1966,7 +1968,7 @@ function App() {
                       <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
                     )}
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
-                      tokenSheetLink?.location_id === selectedLocation.id ? (
+                      tokenSheetLink?.location_id === selectedLocation.id && tokenSheetLink?.system === gameSystem ? (
                         <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
                           setOpenNpcSheet({ id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label, token_shape: selectedLocation.shape });
                         }}>OPEN_SHEET</button>

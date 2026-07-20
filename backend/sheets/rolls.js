@@ -147,12 +147,45 @@ const cwnRolls = () => {
   return rolls;
 };
 
+// SR6 skills roll attribute + rating as a d6 pool (5s and 6s are hits).
+// The 'pool:' prefix is cosmetic (stripped by the engine); shape does the
+// work. Attributes also roll solo pools (attribute-only tests).
+const SR6_SKILLS = {
+  athletics: ['Athletics', 'agility'],
+  biotech: ['Biotech', 'logic'],
+  close_combat: ['Close Combat', 'agility'],
+  con: ['Con', 'charisma'],
+  cracking: ['Cracking', 'logic'],
+  electronics: ['Electronics', 'logic'],
+  engineering: ['Engineering', 'logic'],
+  exotic_weapons: ['Exotic Weapons', 'agility'],
+  firearms: ['Firearms', 'agility'],
+  influence: ['Influence', 'charisma'],
+  outdoors: ['Outdoors', 'intuition'],
+  perception: ['Perception', 'intuition'],
+  piloting: ['Piloting', 'reaction'],
+  sorcery: ['Sorcery', 'magic'],
+  stealth: ['Stealth', 'agility'],
+  tasking: ['Tasking', 'resonance'],
+};
+
+const sr6Rolls = () => {
+  const rolls = {};
+  Object.entries(SR6_SKILLS).forEach(([id, [label, attr]]) => {
+    rolls[id] = { formula: `pool:@${attr}+@${id}`, label, shape: 'pool' };
+  });
+  rolls.composure = { formula: 'pool:@composure', label: 'Composure', shape: 'pool' };
+  rolls.initiative_score = { formula: '1d6 + @initiative_score', label: 'Initiative', shape: 'sum' };
+  return rolls;
+};
+
 const ROLLS = {
   generic: {},
   cyberpunk_red: cprRolls(),
   cities_without_number: cwnRolls(),
+  shadowrun_6e: sr6Rolls(),
 };
 
 const getRoll = (system, fieldId) => (ROLLS[system] || {})[fieldId] || null;
 
-module.exports = { ROLLS, getRoll, CPR_SKILLS, CWN_SKILLS };
+module.exports = { ROLLS, getRoll, CPR_SKILLS, CWN_SKILLS, SR6_SKILLS };

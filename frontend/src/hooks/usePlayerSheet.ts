@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getTemplate, getMaxPairs, type CharacterSheet } from '../sheets';
+import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet } from '../sheets';
 
 // Shared client logic for the player's own character sheet, used by both
 // surfaces that render it: the in-game floating window
@@ -14,6 +14,8 @@ export interface PlayerSheetActions {
   onDeathSave: () => void;
   onStabilize: () => void;
   onCastSpell: (index: number) => void;
+  onRollAbility: (formula: string, label: string) => void;
+  onResistDrain: (drainValue: number, attr: string, label: string) => void;
 }
 
 export function usePlayerSheet(
@@ -23,7 +25,7 @@ export function usePlayerSheet(
 ) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [allowFumbleShield, setAllowFumbleShield] = useState(false);
-  const [cwnDeluxe, setCwnDeluxe] = useState(false);
+  const [ruleSettings, setRuleSettings] = useState<{ key: string; value: string }[]>([]);
   const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const onRolledRef = useRef(opts.onRolled);
   onRolledRef.current = opts.onRolled;
@@ -53,7 +55,7 @@ export function usePlayerSheet(
       fetch('/api/settings').then(r => r.json()).then((rows) => {
         if (Array.isArray(rows)) {
           setAllowFumbleShield(rows.find((r: any) => r.key === 'luck_negates_fumble')?.value === '1');
-          setCwnDeluxe(rows.find((r: any) => r.key === 'cwn_deluxe')?.value === '1');
+          setRuleSettings(rows);
         }
       }).catch(() => {});
     };
@@ -111,10 +113,12 @@ export function usePlayerSheet(
     onDeathSave: () => { socket?.emit('requestDeathSave'); rolled(); },
     onStabilize: () => { socket?.emit('requestStabilize', { targetUsername: userName }); rolled(); },
     onCastSpell: (index: number) => { socket?.emit('castSpell', { index }); rolled(); },
+    onRollAbility: (formula: string, label: string) => { socket?.emit('rollAbility', { formula, label }); rolled(); },
+    onResistDrain: (drainValue: number, attr: string, label: string) => { socket?.emit('resistDrain', { drainValue, attr, label }); rolled(); },
   };
 
   const template = sheet ? getTemplate(sheet.system) : null;
-  const hiddenTabs = sheet && sheet.system === 'cities_without_number' && !cwnDeluxe ? ['DELUXE'] : undefined;
+  const hiddenTabs = hiddenTabsFor(sheet?.system, ruleSettings);
 
   return { sheet, template, handleFieldChange, allowFumbleShield, hiddenTabs, actions };
 }

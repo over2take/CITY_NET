@@ -367,3 +367,28 @@ describe('CP:R Humanity drives EMP', () => {
     expect(JSON.parse(row.data).emp).toBe(7);
   });
 });
+
+describe('GET /api/sheets/stun/:location_id (SR6 stun track)', () => {
+  it('returns the owner sheet stun for a player token; {} off-system', async () => {
+    await setSystem(db, 'shadowrun_6e');
+    await insertSheet(db, { username: 'GHOST', system: 'shadowrun_6e', data: JSON.stringify({ stun_current: 4, stun_monitor: 10 }) });
+    const loc = await run(db, `INSERT INTO locations (name, x, y, z, shape, owner) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST')`);
+    const res = await request(app).get(`/api/sheets/stun/${loc.lastID}`);
+    expect(res.body).toEqual({ stun_current: 4, stun_monitor: 10 });
+  });
+
+  it('returns the linked NPC sheet stun for an enemy token', async () => {
+    await setSystem(db, 'shadowrun_6e');
+    const npc = await insertSheet(db, { username: 'admin', system: 'shadowrun_6e', is_npc: 1, npc_label: 'Punk', data: JSON.stringify({ stun_current: 2, stun_monitor: 9 }) });
+    const loc = await run(db, `INSERT INTO locations (name, x, y, z, shape) VALUES ('Punk', 0, 0, 0, 'enemy_rhombus')`);
+    await run(db, `INSERT INTO npc_sheet_links (location_id, sheet_id) VALUES (?, ?)`, [loc.lastID, npc.lastID]);
+    const res = await request(app).get(`/api/sheets/stun/${loc.lastID}`);
+    expect(res.body).toEqual({ stun_current: 2, stun_monitor: 9 });
+  });
+
+  it('returns {} when the system is not SR6 or nothing backs the token', async () => {
+    await setSystem(db, 'cyberpunk_red');
+    const loc = await run(db, `INSERT INTO locations (name, x, y, z, shape, owner) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST')`);
+    expect((await request(app).get(`/api/sheets/stun/${loc.lastID}`)).body).toEqual({});
+  });
+});

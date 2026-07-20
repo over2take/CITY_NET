@@ -10,16 +10,19 @@
 //   sum       - plain total (default)
 //   explode10 - CP:R check die: first d10 natural 10 -> +1 extra d10 added,
 //               natural 1 -> +1 extra d10 subtracted. Never chains.
-//   pool      - reserved for hit-counting systems (SR6/CY_BORG); not yet
-//               implemented.
+//   pool      - hit-counting (SR6): modifier sum = pool size, roll that many
+//               d6s, hits = 5s and 6s, glitch when half or more show 1,
+//               critical glitch = glitch with zero hits. total = hits.
 
-const TERM_DICE = /^(\d+)d(\d+)$/i;
+const TERM_DICE = /^(\d*)d(\d+)$/i; // leading count optional: 'd6' === '1d6'
 const TERM_FIELD = /^@([a-z0-9_]+)$/i;
 const TERM_INT = /^\d+$/;
 
 // '1d10 + @ref - 2' -> [{ sign: 1, raw: '1d10' }, { sign: 1, raw: '@ref' }, { sign: -1, raw: '2' }]
+// A leading 'pool:' prefix (SR6 pool formulas) is stripped — the shape
+// parameter carries the pool semantics, the prefix is just for readability.
 const tokenize = (formula) => {
-  const parts = String(formula).replace(/\s+/g, '').match(/[+-]?[^+-]+/g) || [];
+  const parts = String(formula).replace(/^\s*pool:/i, '').replace(/\s+/g, '').match(/[+-]?[^+-]+/g) || [];
   return parts.map((p) => {
     const sign = p.startsWith('-') ? -1 : 1;
     return { sign, raw: p.replace(/^[+-]/, '') };
@@ -30,7 +33,7 @@ const parseFormula = (formula) => {
   return tokenize(formula).map(({ sign, raw }) => {
     let m;
     if ((m = raw.match(TERM_DICE))) {
-      const count = parseInt(m[1], 10);
+      const count = m[1] ? parseInt(m[1], 10) : 1;
       const sides = parseInt(m[2], 10);
       if (count < 1 || count > 100 || sides < 2 || sides > 1000) {
         throw new Error(`Dice term out of range: ${raw}`);
@@ -50,7 +53,9 @@ const numeric = (v) => {
 
 // Substitute @field terms with the sheet's stored values.
 // Returns { dice: [{count, sides, sign}], modifiers: [{label, value}] }
-const resolveFormula = (formula, data) => {
+// opts.allowNoDice: pool formulas are pure modifiers (the modifier sum IS
+// the pool size), so a formula without a dice term is valid for them.
+const resolveFormula = (formula, data, opts = {}) => {
   const dice = [];
   const modifiers = [];
   parseFormula(formula).forEach((t) => {
@@ -58,7 +63,7 @@ const resolveFormula = (formula, data) => {
     else if (t.kind === 'field') modifiers.push({ label: t.field, value: t.sign * numeric(data[t.field]) });
     else modifiers.push({ label: null, value: t.sign * t.value });
   });
-  if (dice.length === 0) throw new Error('Formula has no dice term');
+  if (dice.length === 0 && !opts.allowNoDice) throw new Error('Formula has no dice term');
   return { dice, modifiers };
 };
 
@@ -70,7 +75,33 @@ const rollDie = (sides, rng) => Math.floor(rng() * sides) + 1;
 // opts.noFumble: a natural 1 is NOT a critical failure (CP:R: spending any
 // LUCK on the check negates the fumble; the 1 still counts at face value).
 const executeRoll = (resolved, shape = 'sum', rng = Math.random, opts = {}) => {
-  if (shape === 'pool') throw new Error('pool rolls are not implemented yet');
+  if (shape === 'pool') {
+    // SR6 dice pool: modifier sum = pool size (min 1), roll d6s, count hits.
+    // Any dice terms in the formula also contribute their COUNT to the pool
+    // (not their rolled value) so 'pool:2d6+@skill' means pool of 2+skill.
+    const diceCount = resolved.dice.reduce((a, d) => a + d.sign * d.count, 0);
+    const modTotal = resolved.modifiers.reduce((a, m) => a + m.value, 0);
+    const poolSize = Math.max(1, diceCount + modTotal);
+    const values = [];
+    for (let i = 0; i < poolSize; i++) values.push(rollDie(6, rng));
+    const hits = values.filter((v) => v >= 5).length;
+    const ones = values.filter((v) => v === 1).length;
+    const glitch = ones >= Math.ceil(poolSize / 2);
+    const criticalGlitch = glitch && hits === 0;
+    return {
+      rolls: { 6: values },
+      diceTotal: hits,
+      modTotal: 0,
+      total: hits,
+      poolSize,
+      hits,
+      ones,
+      glitch,
+      critical: criticalGlitch ? 'failure' : null,
+      breakdown: `${hits} hit${hits === 1 ? '' : 's'} / ${poolSize} dice`
+        + (criticalGlitch ? ' — CRITICAL GLITCH' : glitch ? ' — GLITCH' : ''),
+    };
+  }
 
   const rolls = {};
   const parts = [];
