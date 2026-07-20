@@ -37,7 +37,7 @@ interface UseSocketOptions {
   onSpectatorCount?: (count: number) => void;
   onAttackPending?: (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => void;
   onGameSystemChanged?: (system: string) => void;
-  onNpcSheetGenerated?: (data: { location_id: number; sheet_id: number; npc_label: string }) => void;
+  onNpcSheetGenerated?: (data: { location_id: number; sheet_id: number; npc_label: string; system?: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null }) => void;
   /** NPC sheet attached to / detached from a token (admin library ATTACH). */
   onNpcLinkChanged?: (data: { location_id: number; sheet_id: number | null }) => void;
   /** Fires whenever diceRollBroadcast is received for the local user — used to pop the dice tray from the standalone sheet tab. */
@@ -202,7 +202,7 @@ export function useSocket({
 
     newSocket.on('attackPending', (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => onAttackPending?.(data));
     newSocket.on('gameSystemChanged', (data: { system: string }) => onGameSystemChanged?.(data.system));
-    newSocket.on('npcSheetGenerated', (data: { location_id: number; sheet_id: number; npc_label: string }) => onNpcSheetGenerated?.(data));
+    newSocket.on('npcSheetGenerated', (data: { location_id: number; sheet_id: number; npc_label: string; system?: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null }) => onNpcSheetGenerated?.(data));
     newSocket.on('npcLinkChanged', (data: { location_id: number; sheet_id: number | null }) => onNpcLinkChanged?.(data));
     newSocket.on('diceRollBroadcast', (data: { userName: string; account?: string }) => onDiceRollBroadcast?.(data));
     newSocket.on('sheetAttackError', (data: { message: string }) => onNotification(data.message));
