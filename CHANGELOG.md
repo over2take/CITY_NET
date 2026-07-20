@@ -9,6 +9,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.6.2] - 2026-07-19
+
+### Fixed
+
+- **Docker build** — extend `npcSheetGenerated` socket type in `useSocket.ts` to include `system`, `portrait_url`, `sheet_name`, and `sheet_description`; TypeScript was rejecting the fields added in 1.6.1 and failing the production build
+
+---
+
 ## [1.6.1] - 2026-07-19
 
 SR6 polish: drain resistance, glitch feedback, Edge management, NPC sheet fixes, and name/description sync.
