@@ -12,6 +12,25 @@ on:
       - main
 
 jobs:
+  validate-docker-config:
+    name: Docker Config Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Dockerfile sets ENV DB_PATH
+        run: grep -q "ENV DB_PATH=/app/data/city.db" Dockerfile.backend
+
+      - name: Dockerfile creates /app/data at build time
+        run: grep -q "mkdir -p" Dockerfile.backend
+
+      - name: .dockerignore excludes backend/data/
+        run: grep -qx "backend/data/" .dockerignore
+
+      - name: .dockerignore excludes backend/uploads/
+        run: grep -q "backend/uploads" .dockerignore
+
   test-backend:
     name: Backend Tests
     runs-on: ubuntu-latest

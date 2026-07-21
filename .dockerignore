@@ -2,7 +2,8 @@
 **/.git
 frontend/dist
 backend/city.db
-backend/uploads
+backend/data/
+backend/uploads/
 backend/.env
 *.bat
 *.ps1

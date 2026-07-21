@@ -2,6 +2,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 const dbPath = process.env.DB_PATH || path.resolve(__dirname, 'city.db');
+console.log(`[db] opening database at: ${dbPath}`);
 const db = new sqlite3.Database(dbPath);
 
 db.serialize(() => {
