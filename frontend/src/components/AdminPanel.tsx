@@ -1022,6 +1022,8 @@ export function AdminPanel({
             </div>
           )}
 
+          <button className={`utility-btn ${isBatchSelecting ? 'active' : ''}`} style={{marginTop: '10px', width: '100%'}} onClick={() => { if (isBatchSelecting) setSelectedIds([]); setIsBatchSelecting(!isBatchSelecting); }}>{isBatchSelecting ? 'CANCEL_SELECTION' : 'BATCH_SELECT_DELETE'}</button>
+          {isBatchSelecting && <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={batchDelete}>DELETE_SELECTED ({selectedIds.length})</button>}
           <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
             <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
             <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'DELETE ALL WATER?', onConfirm: async () => { const res = await fetch('/api/water', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); if (res.ok) { setAdminAlert("ALL WATER CLEARED"); if (fetchWaterBodies) fetchWaterBodies(); } } })}>PURGE_ALL_WATER</button>
