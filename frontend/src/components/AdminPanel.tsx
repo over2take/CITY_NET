@@ -534,9 +534,6 @@ export function AdminPanel({
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [purgeConfirm, setPurgeConfirm] = useState<{ label: string; onConfirm: () => void } | null>(null);
   const [adminAlert, setAdminAlert] = useState<string | null>(null);
-  const [showDefined, setShowDefined] = useState(false);
-  const [showUndefined, setShowUndefined] = useState(false);
-  const [showPlayers, setShowPlayers] = useState(false);
   const [adminTab, setAdminTab] = useState<'city' | 'game' | 'players'>('city');
   const [showOfflinePlayers, setShowOfflinePlayers] = useState(false);
   const [customLibrary, setCustomLibrary] = useState<any[]>([]);
@@ -545,8 +542,6 @@ export function AdminPanel({
   const setRoadEraseMode = (m: 'segment' | 'path') => { setRoadEraseModeLocal(m); onRoadEraseModeChange?.(m); };
   const [roadPurgeConfirming, setRoadPurgeConfirming] = useState(false);
   const [overpassPurgeConfirming, setOverpassPurgeConfirming] = useState(false);
-  const defined = locations.filter((l: any) => !l.parent_id && isUserDefinedName(l.name));
-  const undefinedLocs = locations.filter((l: any) => !l.parent_id && !isUserDefinedName(l.name));
 
 
   const getCenterGroundTarget = () => {
