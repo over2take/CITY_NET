@@ -9,6 +9,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.6.4] - 2026-07-20
+
+### Changed
+
+- **Admin panel tabs** — reorganized the admin panel into three tabs: `CITY` (map and structure tools), `GAME` (TTRPG system, currency, pay players, bank sounds, purge chat/rolls), and `PLAYERS` (online/offline player lists with grant/revoke admin, edit requests, active editor).
+
+---
+
 ## [1.6.3] - 2026-07-20
 
 ### Fixed

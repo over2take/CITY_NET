@@ -133,14 +133,16 @@ describe('AdminPanel list view', () => {
     expect(props.onLogout).toHaveBeenCalled();
   });
 
-  it('shows PAY_PLAYERS button', () => {
+  it('shows PAY_PLAYERS button on game tab', async () => {
     render(<AdminPanel {...baseProps()} />);
+    await userEvent.click(screen.getByText('GAME'));
     expect(screen.getByText('PAY_PLAYERS')).toBeInTheDocument();
   });
 
   it('calls setIsAdminPayOpen when PAY_PLAYERS is clicked', async () => {
     const props = baseProps();
     render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GAME'));
     await userEvent.click(screen.getByText('PAY_PLAYERS'));
     expect(props.setIsAdminPayOpen).toHaveBeenCalledWith(true);
   });
@@ -199,10 +201,11 @@ describe('AdminPanel list view road tools', () => {
 const makePendingRequest = () => ({ userId: 'user-99', userName: 'GHOST', locationId: 42, locationName: '' });
 
 describe('AdminPanel pending requests', () => {
-  it('shows APPROVE and DENY for pending requests', () => {
+  it('shows APPROVE and DENY for pending requests on players tab', async () => {
     const props = baseProps();
     props.pendingRequests = [makePendingRequest()];
     render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('PLAYERS'));
     expect(screen.getByText('APPROVE')).toBeInTheDocument();
     expect(screen.getByText('DENY')).toBeInTheDocument();
   });
@@ -211,6 +214,7 @@ describe('AdminPanel pending requests', () => {
     const props = baseProps();
     props.pendingRequests = [makePendingRequest()];
     render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('PLAYERS'));
     await userEvent.click(screen.getByText('APPROVE'));
     expect(props.socketRef.current.emit).toHaveBeenCalledWith('approveEditing', expect.objectContaining({ userId: 'user-99' }));
   });
@@ -219,6 +223,7 @@ describe('AdminPanel pending requests', () => {
     const props = baseProps();
     props.pendingRequests = [makePendingRequest()];
     render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('PLAYERS'));
     await userEvent.click(screen.getByText('DENY'));
     expect(props.socketRef.current.emit).toHaveBeenCalledWith('denyEditing', expect.objectContaining({ userId: 'user-99' }));
   });
