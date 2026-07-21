@@ -6,5 +6,9 @@ RUN npm ci --omit=dev
 COPY backend/ .
 ARG APP_VERSION=dev
 ENV APP_VERSION=$APP_VERSION
+# Default DB and uploads paths so the container works correctly even when
+# run without docker-compose (volume mount still required for persistence).
+ENV DB_PATH=/app/data/city.db
+RUN mkdir -p /app/data /app/uploads
 EXPOSE 5000
 CMD ["node", "server.js"]
