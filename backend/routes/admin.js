@@ -299,15 +299,19 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       if (code !== 0) return;
       // Spawn a temporary helper container to run up -d so it survives
       // the backend container being replaced mid-execution.
-      // Mount the host project dir at /project so compose resolves relative
-      // paths (./backend/data etc.) correctly regardless of host OS.
+      // Mount the host project dir at its *own host path* (not /project) so
+      // that when compose resolves relative paths like ./backend/data, the
+      // resulting absolute path matches what the host Docker daemon sees.
+      // Using a different mountpoint (e.g. /project) caused the daemon to
+      // look for /project/backend/data on the host, which doesn't exist,
+      // creating a new empty bind mount and wiping data on every update.
       const helper = spawn('docker', [
         'run', '--rm',
         '-v', '/var/run/docker.sock:/var/run/docker.sock',
-        '-v', `${hostWorkingDir}:/project`,
+        '-v', `${hostWorkingDir}:${hostWorkingDir}`,
         '-v', `${hostConfigFile}:/tmp/docker-compose.yml:ro`,
         'over2take/citynet-backend:latest',
-        'sh', '-c', `docker compose --project-directory /project -f /tmp/docker-compose.yml ${projectArgs.join(' ')} up -d`,
+        'sh', '-c', `docker compose --project-directory "${hostWorkingDir}" -f /tmp/docker-compose.yml ${projectArgs.join(' ')} up -d`,
       ], { detached: true, stdio: 'ignore' });
       helper.unref();
     });

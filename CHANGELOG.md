@@ -24,6 +24,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   now explicitly excluded.
 - **DB path startup log** — the resolved database path is now printed on boot
   (`[db] opening database at: …`) for easier deployment debugging.
+- **In-app update wipes data** — the self-update route mounted the host project
+  directory at `/project` inside the helper container, so compose resolved
+  `./backend/data` to `/project/backend/data` and passed that to the host Docker
+  daemon. The daemon found no such path and created a new empty bind mount,
+  wiping all map data on every in-app update. Fixed by mounting at the host's
+  own absolute path so the daemon receives paths it can actually resolve.
 
 ### Added
 
