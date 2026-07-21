@@ -6,6 +6,28 @@ const { authenticate } = require('../middleware/auth');
 const SECRET = process.env.JWT_SECRET;
 let currentController = 'GM';
 
+/**
+ * Build the docker-run argument list for the self-update helper container.
+ *
+ * The host project directory MUST be mounted at its own absolute path, not at
+ * an alias like /project. Compose passes volume host-paths straight to the
+ * Docker daemon; if those paths don't exist on the host the daemon silently
+ * creates a new empty directory, wiping existing bind-mount data (issue that
+ * caused data loss on in-app updates prior to 1.6.3).
+ */
+function buildUpdateHelperArgs(hostWorkingDir, hostConfigFile, projectArgs) {
+  const projectArgsStr = projectArgs.join(' ');
+  return [
+    'run', '--rm',
+    '-v', '/var/run/docker.sock:/var/run/docker.sock',
+    '-v', `${hostWorkingDir}:${hostWorkingDir}`,
+    '-v', `${hostConfigFile}:/tmp/docker-compose.yml:ro`,
+    'over2take/citynet-backend:latest',
+    'sh', '-c',
+    `docker compose --project-directory "${hostWorkingDir}" -f /tmp/docker-compose.yml ${projectArgsStr} up -d`,
+  ];
+}
+
 module.exports = (db, io, { emitUpdate, recordAction }) => {
   const router = express.Router();
 
@@ -305,14 +327,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       // Using a different mountpoint (e.g. /project) caused the daemon to
       // look for /project/backend/data on the host, which doesn't exist,
       // creating a new empty bind mount and wiping data on every update.
-      const helper = spawn('docker', [
-        'run', '--rm',
-        '-v', '/var/run/docker.sock:/var/run/docker.sock',
-        '-v', `${hostWorkingDir}:${hostWorkingDir}`,
-        '-v', `${hostConfigFile}:/tmp/docker-compose.yml:ro`,
-        'over2take/citynet-backend:latest',
-        'sh', '-c', `docker compose --project-directory "${hostWorkingDir}" -f /tmp/docker-compose.yml ${projectArgs.join(' ')} up -d`,
-      ], { detached: true, stdio: 'ignore' });
+      const helper = spawn('docker', buildUpdateHelperArgs(hostWorkingDir, hostConfigFile, projectArgs), { detached: true, stdio: 'ignore' });
       helper.unref();
     });
   });
@@ -332,3 +347,5 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
 
   return router;
 };
+
+module.exports.buildUpdateHelperArgs = buildUpdateHelperArgs;
