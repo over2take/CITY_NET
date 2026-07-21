@@ -9,6 +9,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.6.3] - 2026-07-20
+
+### Fixed
+
+- **Docker data persistence** — all map and character data was lost on container
+  restart or image update because `DB_PATH` was only set in `docker-compose.yml`.
+  Running the container without compose fell back to the ephemeral `/app/city.db`
+  inside the container. `ENV DB_PATH=/app/data/city.db` is now baked into
+  `Dockerfile.backend` so the correct mounted path is always used.
+- **Dirty image builds** — `backend/data/` was missing from `.dockerignore`,
+  meaning a locally-built image could accidentally bundle the developer's database
+  into the published artifact. Both `backend/data/` and `backend/uploads/` are
+  now explicitly excluded.
+- **DB path startup log** — the resolved database path is now printed on boot
+  (`[db] opening database at: …`) for easier deployment debugging.
+
+### Added
+
+- **Docker config regression tests** — `backend/__tests__/docker_config.test.js`
+  asserts that `Dockerfile.backend` contains the required `ENV DB_PATH` and
+  `mkdir` directives and that `.dockerignore` excludes the data and uploads
+  directories; failures block CI before any image is built.
+- **CI Docker validation job** — `validate-docker-config` job in `ci.yml` runs
+  shell-level grep checks against `Dockerfile.backend` and `.dockerignore` on
+  every PR and push to main, catching regressions before the release workflow runs.
+
+---
+
 ## [1.6.2] - 2026-07-19
 
 ### Fixed
