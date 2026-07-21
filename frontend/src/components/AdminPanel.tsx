@@ -537,6 +537,8 @@ export function AdminPanel({
   const [showDefined, setShowDefined] = useState(false);
   const [showUndefined, setShowUndefined] = useState(false);
   const [showPlayers, setShowPlayers] = useState(false);
+  const [adminTab, setAdminTab] = useState<'city' | 'game' | 'players'>('city');
+  const [showOfflinePlayers, setShowOfflinePlayers] = useState(false);
   const [customLibrary, setCustomLibrary] = useState<any[]>([]);
   const [customLibraryLoading, setCustomLibraryLoading] = useState(false);
   const [roadEraseMode, setRoadEraseModeLocal] = useState<'segment' | 'path'>('segment');
@@ -889,6 +891,33 @@ export function AdminPanel({
             </div>
             <button className="utility-btn" onClick={handleUndo} title="UNDO LAST CHANGE" style={{fontSize: '0.65rem', padding: '2px 8px'}}>⟲ UNDO</button>
           </div>
+
+          {/* Tab bar */}
+          <div style={{display: 'flex', borderBottom: '1px solid var(--green)', marginTop: '8px', marginBottom: '12px'}}>
+            {(['city', 'game', 'players'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setAdminTab(tab)}
+                style={{
+                  flex: 1,
+                  padding: '5px 4px',
+                  fontSize: '0.65rem',
+                  fontFamily: 'monospace',
+                  letterSpacing: '1px',
+                  background: adminTab === tab ? 'color-mix(in srgb, var(--green) 12%, transparent)' : 'transparent',
+                  color: adminTab === tab ? 'var(--green)' : 'color-mix(in srgb, var(--green) 50%, transparent)',
+                  border: 'none',
+                  borderBottom: adminTab === tab ? '2px solid var(--green)' : '2px solid transparent',
+                  cursor: 'pointer',
+                }}
+              >
+                {tab.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          {/* ── CITY TAB ── */}
+          {adminTab === 'city' && <>
           {!isBatchSelecting && (selectedLocation || copyBuffer) && (
             <div className="panel selection-panel" style={{marginBottom: '10px'}}>
               <button className="close-btn" onClick={() => setSelectedLocation(null)}>X</button>
@@ -993,103 +1022,12 @@ export function AdminPanel({
             </div>
           )}
 
-          {/* TTRPG SYSTEM (character sheets) */}
-          <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
-
-          <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
-            <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
-                <button
-                  key={opt}
-                  className={`utility-btn ${(globalSettings?.currency_icon || 'credits') === opt ? 'active' : ''}`}
-                  style={{ padding: '4px 10px', fontSize: opt === 'credits' ? '0.6rem' : '1rem' }}
-                  onClick={() => {
-                    fetch('/api/settings', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                      body: JSON.stringify({ key: 'currency_icon', value: opt }),
-                    }).then(() => fetchGlobalSettings());
-                  }}
-                >
-                  {opt === 'credits' ? 'DEFAULT' : opt}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
-
-          {/* BANK SOUNDS TEST PANEL */}
-          <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
-
-          <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
-            <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
-          </div>
-          <button className="utility-btn danger-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'DELETE ALL WATER?', onConfirm: async () => { const res = await fetch('/api/water', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); if (res.ok) { setAdminAlert("ALL WATER CLEARED"); if (fetchWaterBodies) fetchWaterBodies(); } } })}>PURGE_ALL_WATER</button>
-          <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'CLEAR ALL CHAT HISTORY?', onConfirm: async () => { await fetch('/api/chat/purge', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); } })}>PURGE_CHAT_HISTORY</button>
-          <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'CLEAR ALL DICE ROLL HISTORY?', onConfirm: () => { socketRef.current.emit('purgeDiceHistory', { token }); setAdminAlert("DICE ROLL HISTORY CLEARED"); } })}>PURGE_ROLL_HISTORY</button>
           <button className={`utility-btn ${isBatchSelecting ? 'active' : ''}`} style={{marginTop: '10px', width: '100%'}} onClick={() => { if (isBatchSelecting) setSelectedIds([]); setIsBatchSelecting(!isBatchSelecting); }}>{isBatchSelecting ? 'CANCEL_SELECTION' : 'BATCH_SELECT_DELETE'}</button>
           {isBatchSelecting && <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={batchDelete}>DELETE_SELECTED ({selectedIds.length})</button>}
-          {pendingRequests.length > 0 && pendingRequests.map((req: any, i: number) => (
-            <div key={i} className="panel" style={{marginTop: '15px', borderColor: 'var(--green)'}}>
-              <h4>EDIT_REQUEST: {req.userName}</h4>
-              <p style={{fontSize: '0.7rem'}}>TARGET: {isUserDefinedName(req.locationName) ? req.locationName : `STRUCT_${req.locationId}`}</p>
-              <div className="button-group" style={{marginTop: '10px'}}>
-                <button className="upload-btn" onClick={() => {
-                  socketRef.current.emit('approveEditing', { userId: req.userId, location: locations.find((l: any) => String(l.id) === String(req.locationId)) });
-                  setPendingRequests((prev: any[]) => prev.filter(r => r.userId !== req.userId));
-                }}>APPROVE</button>
-                <button className="upload-btn danger-btn" onClick={() => {
-                  socketRef.current.emit('denyEditing', { userId: req.userId });
-                  setPendingRequests((prev: any[]) => prev.filter(r => r.userId !== req.userId));
-                }}>DENY</button>
-              </div>
-            </div>
-          ))}
-          {activeUserEditing && <div className="panel" style={{marginTop: '15px', borderColor: '#ff0000'}}><h4>EDITING_NOW: {activeUserEditing.userName || activeUserEditing.userId}</h4><button className="upload-btn danger-btn" onClick={() => socketRef.current.emit('revokeEditing', { userId: activeUserEditing.userId })}>KICK_EDITOR</button></div>}
-          {isPrimaryAdmin && (
-            <div className="location-list" style={{marginTop: '15px'}}>
-              <h4 style={{cursor: 'pointer', display: 'flex', alignItems: 'center'}} onClick={() => setShowPlayers(!showPlayers)}>
-                <span style={{width: '20px', display: 'inline-block'}}>{showPlayers ? '▼' : '▶'}</span> PLAYERS
-              </h4>
-              {showPlayers && (
-                <>
-                  <p style={{fontSize: '0.6rem', opacity: 0.5, margin: '4px 0 8px 20px', lineHeight: '1.5'}}>Click GRANT_ADMIN to give a player temporary admin access. Online players only.</p>
-                  {(() => {
-                    const onlineNames: string[] = (activeUsers || []).filter((u: any) => !u.isAdmin && !u.isNPC).map((u: any) => u.userName);
-                    const offlineNames: string[] = locations
-                      .filter((l: any) => l.shape === 'rhombus' && l.owner && !l.owner.startsWith('enemy_') && !l.owner.startsWith('friendly_'))
-                      .map((l: any) => l.owner)
-                      .filter((name: string) => !onlineNames.includes(name));
-                    const allPlayers = [
-                      ...onlineNames.map((name: string) => ({ name, online: true, isTemporaryAdmin: (activeUsers || []).find((u: any) => u.userName === name)?.isTemporaryAdmin })),
-                      ...[...new Set(offlineNames)].map((name: string) => ({ name, online: false, isTemporaryAdmin: false })),
-                    ];
-                    if (allPlayers.length === 0) return <p style={{fontSize: '0.65rem', opacity: 0.5, paddingLeft: '20px'}}>No players found.</p>;
-                    return allPlayers.map(({ name, online, isTemporaryAdmin }) => (
-                      <div key={name} style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '4px 4px 4px 20px'}}>
-                        <div style={{display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden'}}>
-                          <span style={{width: '7px', height: '7px', borderRadius: '50%', background: online ? (isTemporaryAdmin ? '#ffaa00' : 'var(--green)') : '#444', flexShrink: 0, boxShadow: online ? `0 0 4px ${isTemporaryAdmin ? '#ffaa00' : 'var(--green)'}` : 'none'}} />
-                          <span style={{fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: online ? 1 : 0.4}}>{name}</span>
-                          {isTemporaryAdmin && <span style={{fontSize: '0.55rem', color: '#ffaa00', opacity: 0.8}}>TEMP_ADMIN</span>}
-                        </div>
-                        {online && (
-                          <button
-                            className={`utility-btn ${isTemporaryAdmin ? 'danger-btn' : ''}`}
-                            style={{fontSize: '0.55rem', padding: '2px 6px', flexShrink: 0}}
-                            onClick={() => isTemporaryAdmin ? onRevokeAccess(name) : onGrantAccess(name)}
-                          >
-                            {isTemporaryAdmin ? 'REVOKE_ADMIN' : 'GRANT_ADMIN'}
-                          </button>
-                        )}
-                      </div>
-                    ));
-                  })()}
-                </>
-              )}
-            </div>
-          )}
+          <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
+            <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setView('purge_roads')}>PURGE_ROADS</button>
+            <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'DELETE ALL WATER?', onConfirm: async () => { const res = await fetch('/api/water', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); if (res.ok) { setAdminAlert("ALL WATER CLEARED"); if (fetchWaterBodies) fetchWaterBodies(); } } })}>PURGE_ALL_WATER</button>
+          </div>
           <div className="location-list" style={{maxHeight: '250px', marginTop: '15px'}}>
             <h4 style={{cursor: 'pointer', display: 'flex', alignItems: 'center'}} onClick={() => setShowDefined(!showDefined)}><span style={{width: '20px', display: 'inline-block'}}>{showDefined ? '▼' : '▶'}</span> DEFINED_STRUCTURES ({defined.length})</h4>
             {showDefined && defined.map(loc => (
@@ -1101,6 +1039,115 @@ export function AdminPanel({
             ))}
           </div>
           {!secureModeEnabled && <button onClick={onLogout} className="logout-btn">EXIT_ADMIN_MODE</button>}
+          </> /* end CITY tab */}
+
+          {/* ── GAME TAB ── */}
+          {adminTab === 'game' && (
+            <>
+              <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
+              <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
+                <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
+                    <button
+                      key={opt}
+                      className={`utility-btn ${(globalSettings?.currency_icon || 'credits') === opt ? 'active' : ''}`}
+                      style={{ padding: '4px 10px', fontSize: opt === 'credits' ? '0.6rem' : '1rem' }}
+                      onClick={() => {
+                        fetch('/api/settings', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                          body: JSON.stringify({ key: 'currency_icon', value: opt }),
+                        }).then(() => fetchGlobalSettings());
+                      }}
+                    >
+                      {opt === 'credits' ? 'DEFAULT' : opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
+              <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
+              <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
+                <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setPurgeConfirm({ label: 'CLEAR ALL CHAT HISTORY?', onConfirm: async () => { await fetch('/api/chat/purge', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); } })}>PURGE_CHAT_HISTORY</button>
+                <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'CLEAR ALL DICE ROLL HISTORY?', onConfirm: () => { socketRef.current.emit('purgeDiceHistory', { token }); setAdminAlert("DICE ROLL HISTORY CLEARED"); } })}>PURGE_ROLL_HISTORY</button>
+              </div>
+            </>
+          )}
+
+          {/* ── PLAYERS TAB ── */}
+          {adminTab === 'players' && (
+            <>
+              {pendingRequests.length > 0 && pendingRequests.map((req: any, i: number) => (
+                <div key={i} className="panel" style={{marginBottom: '10px', borderColor: 'var(--green)'}}>
+                  <h4>EDIT_REQUEST: {req.userName}</h4>
+                  <p style={{fontSize: '0.7rem'}}>TARGET: {isUserDefinedName(req.locationName) ? req.locationName : `STRUCT_${req.locationId}`}</p>
+                  <div className="button-group" style={{marginTop: '10px'}}>
+                    <button className="upload-btn" onClick={() => {
+                      socketRef.current.emit('approveEditing', { userId: req.userId, location: locations.find((l: any) => String(l.id) === String(req.locationId)) });
+                      setPendingRequests((prev: any[]) => prev.filter(r => r.userId !== req.userId));
+                    }}>APPROVE</button>
+                    <button className="upload-btn danger-btn" onClick={() => {
+                      socketRef.current.emit('denyEditing', { userId: req.userId });
+                      setPendingRequests((prev: any[]) => prev.filter(r => r.userId !== req.userId));
+                    }}>DENY</button>
+                  </div>
+                </div>
+              ))}
+              {activeUserEditing && (
+                <div className="panel" style={{marginBottom: '10px', borderColor: '#ff0000'}}>
+                  <h4>EDITING_NOW: {activeUserEditing.userName || activeUserEditing.userId}</h4>
+                  <button className="upload-btn danger-btn" onClick={() => socketRef.current.emit('revokeEditing', { userId: activeUserEditing.userId })}>KICK_EDITOR</button>
+                </div>
+              )}
+              {isPrimaryAdmin && (() => {
+                const onlineUsers = (activeUsers || []).filter((u: any) => !u.isAdmin && !u.isNPC);
+                const onlineNames: string[] = onlineUsers.map((u: any) => u.userName);
+                const offlineNames: string[] = [...new Set<string>(
+                  locations
+                    .filter((l: any) => l.shape === 'rhombus' && l.owner && !l.owner.startsWith('enemy_') && !l.owner.startsWith('friendly_'))
+                    .map((l: any) => l.owner)
+                    .filter((name: string) => !onlineNames.includes(name))
+                )];
+                return (
+                  <>
+                    <div className="location-list" style={{marginBottom: '10px'}}>
+                      <h4 style={{display: 'flex', alignItems: 'center', marginBottom: '6px'}}>
+                        <span style={{width: '8px', height: '8px', borderRadius: '50%', background: 'var(--green)', display: 'inline-block', marginRight: '8px', boxShadow: '0 0 4px var(--green)'}} />
+                        ONLINE ({onlineNames.length})
+                      </h4>
+                      {onlineNames.length === 0 && <p style={{fontSize: '0.65rem', opacity: 0.5, paddingLeft: '16px'}}>No players online.</p>}
+                      {onlineUsers.map((u: any) => (
+                        <div key={u.userName} style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '4px 4px 4px 16px'}}>
+                          <div style={{display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden'}}>
+                            <span style={{fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{u.userName}</span>
+                            {u.isTemporaryAdmin && <span style={{fontSize: '0.55rem', color: '#ffaa00', opacity: 0.8}}>TEMP_ADMIN</span>}
+                          </div>
+                          <button
+                            className={`utility-btn ${u.isTemporaryAdmin ? 'danger-btn' : ''}`}
+                            style={{fontSize: '0.55rem', padding: '2px 6px', flexShrink: 0}}
+                            onClick={() => u.isTemporaryAdmin ? onRevokeAccess(u.userName) : onGrantAccess(u.userName)}
+                          >
+                            {u.isTemporaryAdmin ? 'REVOKE_ADMIN' : 'GRANT_ADMIN'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="location-list">
+                      <h4 style={{cursor: 'pointer', display: 'flex', alignItems: 'center', marginBottom: '6px'}} onClick={() => setShowOfflinePlayers(!showOfflinePlayers)}>
+                        <span style={{width: '20px', display: 'inline-block'}}>{showOfflinePlayers ? '▼' : '▶'}</span>
+                        <span style={{width: '8px', height: '8px', borderRadius: '50%', background: '#444', display: 'inline-block', marginRight: '8px'}} />
+                        OFFLINE ({offlineNames.length})
+                      </h4>
+                      {showOfflinePlayers && offlineNames.map((name: string) => (
+                        <div key={name} style={{padding: '4px 4px 4px 36px', fontSize: '0.7rem', opacity: 0.4}}>{name}</div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+            </>
+          )}
         </>
       )}
 
