@@ -16,11 +16,13 @@ interface Props {
   onEnd: () => void;
   onRemove: (id: string) => void;
   onReorder: (from: number, to: number) => void;
+  inSidebar?: boolean;
 }
 
 export function InitiativeWindow({
   state, activeCombats, sceneKey, sceneLabel, isAdmin,
   onClose, onStart, onListCombats, onNext, onEnd, onRemove, onReorder,
+  inSidebar = false,
 }: Props) {
   const [pos, setPos] = useState({ x: 80, y: 120 });
   const [showJoin, setShowJoin] = useState(false);
@@ -35,23 +37,15 @@ export function InitiativeWindow({
     dragFrom.current = null;
   };
 
-  const headerLabel = state
-    ? `TURN ${state.turnCounter}`
-    : 'INITIATIVE';
+  const headerLabel = state ? `TURN ${state.turnCounter}` : 'INITIATIVE';
 
-  return (
-    <DraggableWindow
-      title={headerLabel}
-      pos={pos}
-      setPos={setPos}
-      onClose={onClose}
-      windowStyle={{ width: 300, minHeight: 120 }}
-    >
+  const content = (
+    <>
       <div style={{ fontSize: '0.65rem', color: 'var(--dark-green)', letterSpacing: '1px', marginBottom: '8px' }}>
         {sceneLabel}
       </div>
 
-      {/* ── No active initiative ─────────────────────────────────────────── */}
+      {/* ── No active initiative ───────────────────────────────────────── */}
       {!state && isAdmin && (
         <div>
           {!showJoin ? (
@@ -97,7 +91,7 @@ export function InitiativeWindow({
         </div>
       )}
 
-      {/* ── Active initiative ────────────────────────────────────────────── */}
+      {/* ── Active initiative ──────────────────────────────────────────── */}
       {state && (
         <div>
           <div style={{ marginBottom: '8px', borderBottom: '1px solid var(--dark-green)', paddingBottom: '4px' }}>
@@ -122,7 +116,6 @@ export function InitiativeWindow({
             )}
           </div>
 
-          {/* Admin controls */}
           {isAdmin && (
             <div style={{ display: 'flex', gap: '6px' }}>
               <button
@@ -144,6 +137,30 @@ export function InitiativeWindow({
           )}
         </div>
       )}
+    </>
+  );
+
+  if (inSidebar) {
+    return (
+      <div className="panel sidebar-panel">
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <h3 style={{ margin: 0 }}>{headerLabel}</h3>
+          <button onClick={onClose} className="close-btn" style={{ position: 'static' }}>◀</button>
+        </header>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <DraggableWindow
+      title={headerLabel}
+      pos={pos}
+      setPos={setPos}
+      onClose={onClose}
+      windowStyle={{ width: 300, minHeight: 120 }}
+    >
+      {content}
     </DraggableWindow>
   );
 }

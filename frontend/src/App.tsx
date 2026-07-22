@@ -1451,6 +1451,17 @@ function App() {
               isInitiativeOpen={isInitiativeOpen}
               onToggleInitiative={() => setIsInitiativeOpen((v) => !v)}
               initiativeActive={!!initiative.state}
+              initiativeMenuProps={{
+                state: initiative.state,
+                activeCombats: initiative.activeCombats,
+                sceneLabel: initiativeSceneLabel,
+                onStart: (combatId) => { initiative.startInitiative(combatId); initiative.listCombats(); },
+                onListCombats: initiative.listCombats,
+                onNext: initiative.nextTurn,
+                onEnd: initiative.endInitiative,
+                onRemove: initiative.removeCombatant,
+                onReorder: initiative.reorder,
+              }}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -1764,21 +1775,21 @@ function App() {
               />
             )}
 
-            {/* ── Initiative Tracker windows ─────────────────────────────────────── */}
-            {isInitiativeOpen && (
+            {/* ── Initiative Tracker — player floating window ────────────────────── */}
+            {!token && isInitiativeOpen && initiative.state && (
               <InitiativeWindow
                 state={initiative.state}
-                activeCombats={initiative.activeCombats}
+                activeCombats={[]}
                 sceneKey={initiativeSceneKey}
                 sceneLabel={initiativeSceneLabel}
-                isAdmin={!!token}
+                isAdmin={false}
                 onClose={() => setIsInitiativeOpen(false)}
-                onStart={(combatId) => { initiative.startInitiative(combatId); initiative.listCombats(); }}
-                onListCombats={initiative.listCombats}
-                onNext={initiative.nextTurn}
-                onEnd={initiative.endInitiative}
-                onRemove={initiative.removeCombatant}
-                onReorder={initiative.reorder}
+                onStart={() => {}}
+                onListCombats={() => {}}
+                onNext={() => {}}
+                onEnd={() => {}}
+                onRemove={() => {}}
+                onReorder={() => {}}
               />
             )}
 
