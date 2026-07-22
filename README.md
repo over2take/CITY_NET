@@ -23,7 +23,7 @@ Built with React + Three.js · Node.js + SQLite · Socket.IO · Docker
   <a href="https://ko-fi.com/over2take"><img src="https://img.shields.io/badge/support-ko--fi-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi"/></a>
   <a href="https://discord.gg/Zc3GVztTAD"><img src="https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white" alt="Join our Discord"/></a>
   <img src="https://img.shields.io/badge/self--hosted-yes-blueviolet" alt="self-hosted"/>
-  <img src="https://img.shields.io/badge/no%20account%20required-players-blue" alt="no account required"/>
+  <img src="https://img.shields.io/badge/no%20account%20required-players-blue" alt="no install required"/>
   <img src="https://img.shields.io/github/package-json/v/over2take/CITY_NET?color=00cc66" alt="version"/>
 </p>
 
