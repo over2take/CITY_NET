@@ -213,12 +213,13 @@ function registerInitiativeHandlers(io, db) {
           const list = JSON.parse(row.combatants || '[]');
           if (fromIndex < 0 || toIndex < 0 || fromIndex >= list.length || toIndex >= list.length) return;
 
+          // Capture active combatant id BEFORE mutating the list
+          const activeId = list[row.turn_index]?.id;
+
           const [moved] = list.splice(fromIndex, 1);
           list.splice(toIndex, 0, moved);
 
-          // Keep turn_index pointing at the same combatant after reorder
           let newTurnIndex = row.turn_index;
-          const activeId = list[row.turn_index]?.id;
           const recalc = list.findIndex((c) => c.id === activeId);
           if (recalc >= 0) newTurnIndex = recalc;
 
