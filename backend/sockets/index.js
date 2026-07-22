@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
 const sheetRolls = require('../sheets/rolls');
 const rollEngine = require('../sheets/rollEngine');
@@ -43,6 +44,7 @@ const formatMeasurementPayload = (data, userName, socketId) => ({
 });
 
 module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
+  registerInitiativeHandlers(io, db);
   // Streamer mode: last director state, replayed to spectators when they join.
   let directorState = null;
 

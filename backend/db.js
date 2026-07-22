@@ -343,6 +343,25 @@ db.serialize(() => {
   // NPC links ride along in map snapshots (location ids are preserved on load)
   db.run(`ALTER TABLE saved_maps ADD COLUMN npc_links_data TEXT`, () => {});
 
+  // ── Initiative Tracker ────────────────────────────────────────────────────────
+  // One row per active combat; owns the shared turn / pass counters.
+  db.run(`CREATE TABLE IF NOT EXISTS initiative_combat (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    turn_counter INTEGER DEFAULT 1,
+    pass_counter INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // One row per active scene; combatants JSON ordered highest → lowest.
+  db.run(`CREATE TABLE IF NOT EXISTS initiative_scene (
+    scene_key TEXT PRIMARY KEY,
+    combat_id INTEGER NOT NULL,
+    combatants TEXT NOT NULL DEFAULT '[]',
+    turn_index INTEGER DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(combat_id) REFERENCES initiative_combat(id) ON DELETE CASCADE
+  )`);
+
   // Migration: CP:R's name field was stored as 'handle'; it is now 'name'
   // (uniform across systems — the sheet is the source of truth for player
   // identity, see backend/sheets/identity.js). Copy handle → name once.

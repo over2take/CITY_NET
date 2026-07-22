@@ -58,6 +58,7 @@ import { Signs, type SignData } from './components/Signs';
 import { type RemoteFont } from './utils/fontLoader';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
+import { InitiativeWindow, InitiativeRollPrompt, useInitiative } from './modules/initiative';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
 import { AttackAnimations } from './components/AttackAnimations';
 import { RadioFeed } from './components/RadioFeed';
@@ -190,6 +191,8 @@ function App() {
   const [musicVolume, setMusicVolume] = useState(() => parseFloat(localStorage.getItem('musicVolume') ?? '0.8'));
   const [isRadioFeedOpen, setIsRadioFeedOpen] = useState(false);
   const [isRadioPlayerOpen, setIsRadioPlayerOpen] = useState(false);
+  const [isInitiativeOpen, setIsInitiativeOpen] = useState(false);
+  const [showRollPrompt, setShowRollPrompt] = useState(false);
   const [radioFeedPos, setRadioFeedPos] = useState(() => ({ x: window.innerWidth / 2 - 176, y: window.innerHeight / 2 - 220 }));
   const [radioPlayerPos, setRadioPlayerPos] = useState(() => ({ x: window.innerWidth / 2 - 176 + 340 + 8, y: window.innerHeight / 2 - 220 }));
   const [selectedTrackId, setSelectedTrackId] = useState<number | null>(null);
@@ -839,6 +842,27 @@ function App() {
     },
   });
 
+  // ── Initiative Tracker ────────────────────────────────────────────────────────
+  const initiativeSceneKey = view === 'battle_map' && activeBattleMapData
+    ? `${activeBattleMapData.locationId}:${activeBattleMapData.currentFloorIndex}`
+    : 'city:0';
+
+  const initiative = useInitiative(socketRef, initiativeSceneKey);
+
+  const initiativeSceneLabel = view === 'battle_map' && activeBattleMapData
+    ? (() => {
+        const loc = locations.find((l: any) => l.id === activeBattleMapData.locationId);
+        const maps = (loc as any)?._battleMaps ?? [];
+        const floor = maps[activeBattleMapData.currentFloorIndex]?.designation ?? `LV ${activeBattleMapData.currentFloorIndex}`;
+        return loc ? `${loc.name.toUpperCase()} — ${floor}` : `SCENE ${activeBattleMapData.locationId}`;
+      })()
+    : 'CITY MAP';
+
+  // Show roll prompt to players when initiative starts in their scene
+  useEffect(() => {
+    if (initiative.state && !token) setShowRollPrompt(true);
+  }, [!!initiative.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Radio Feed: admin keeps a flat copy of the library so Next/Prev/auto-advance
   // can pick the sibling track. Players never need this — the server tells them
   // what to play.
@@ -1424,6 +1448,9 @@ function App() {
               currencyIcon={globalSettings?.currency_icon}
               currentTheme={currentTheme}
               onThemeChange={setCurrentTheme}
+              isInitiativeOpen={isInitiativeOpen}
+              onToggleInitiative={() => setIsInitiativeOpen((v) => !v)}
+              initiativeActive={!!initiative.state}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -1734,6 +1761,45 @@ function App() {
                 onVolumeChange={setMusicVolume}
                 onNext={() => advanceTrack(1)}
                 onPrev={() => advanceTrack(-1)}
+              />
+            )}
+
+            {/* ── Initiative Tracker windows ─────────────────────────────────────── */}
+            {isInitiativeOpen && (
+              <InitiativeWindow
+                state={initiative.state}
+                activeCombats={initiative.activeCombats}
+                sceneKey={initiativeSceneKey}
+                sceneLabel={initiativeSceneLabel}
+                isAdmin={!!token}
+                onClose={() => setIsInitiativeOpen(false)}
+                onStart={(combatId) => { initiative.startInitiative(combatId); initiative.listCombats(); }}
+                onListCombats={initiative.listCombats}
+                onNext={initiative.nextTurn}
+                onEnd={initiative.endInitiative}
+                onRemove={initiative.removeCombatant}
+                onReorder={initiative.reorder}
+              />
+            )}
+
+            {!token && showRollPrompt && initiative.state && (
+              <InitiativeRollPrompt
+                sceneLabel={initiativeSceneLabel}
+                userName={userName}
+                userId={userName}
+                onRoll={(score) => {
+                  const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
+                  initiative.submitRoll({
+                    id: `player:${userName}`,
+                    name: userName,
+                    portraitUrl: (userRhombus as any)?.portrait_url ?? undefined,
+                    score,
+                    isNpc: false,
+                  });
+                  setShowRollPrompt(false);
+                  setIsInitiativeOpen(true);
+                }}
+                onClose={() => setShowRollPrompt(false)}
               />
             )}
 

@@ -921,11 +921,14 @@ interface SidebarProps {
   onToggleRadio?: () => void;
   musicPlaying?: boolean;
   currencyIcon?: string;
+  isInitiativeOpen?: boolean;
+  onToggleInitiative?: () => void;
+  initiativeActive?: boolean;
   currentTheme?: ThemeName;
   onThemeChange?: (theme: ThemeName) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -1056,6 +1059,26 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               }} />
             )}
           </button>
+          {(token || initiativeActive) && (
+            <button
+              className={`rail-btn ${isInitiativeOpen ? 'active' : ''}`}
+              onClick={onToggleInitiative}
+              title="INITIATIVE_TRACKER"
+              style={{ position: 'relative' }}
+            >
+              {/* stopwatch icon */}
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="13" r="8" />
+                <path d="M12 9v4l2 2" />
+                <path d="M9 2h6" />
+                <path d="M12 2v2" />
+                <path d="M19.07 4.93l-1.41 1.41" />
+              </svg>
+              {initiativeActive && !isInitiativeOpen && (
+                <span style={{ position: 'absolute', top: '2px', right: '2px', width: '7px', height: '7px', borderRadius: '50%', background: 'var(--green)', display: 'block' }} />
+              )}
+            </button>
+          )}
         </div>
         <div className="rail-bottom" style={{ paddingBottom: '20px', display: 'flex', justifyContent: 'center' }}>
           <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }} onMouseEnter={handleVolumeEnter} onMouseLeave={handleVolumeLeave}>
