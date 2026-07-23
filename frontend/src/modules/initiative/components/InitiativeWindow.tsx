@@ -216,7 +216,7 @@ export function InitiativeWindow({
             {activeSystem === 'shadowrun_6e'
               ? `ROLL REA + INT + ${1 + (extraDice ?? 0)}d6 — ADDED TO BOTTOM`
               : activeSystem === 'cyberpunk_red'
-              ? 'ROLL REF/2 + 1d10 — ADDED TO BOTTOM'
+              ? 'ROLL REF + 1d10 — ADDED TO BOTTOM'
               : 'ROLL 1d20 — ADDED TO BOTTOM'}
           </div>
         </div>

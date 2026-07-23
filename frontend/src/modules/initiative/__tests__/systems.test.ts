@@ -130,30 +130,29 @@ describe('cpr system', () => {
     expect(cpr.passDecay).toBe(false);
   });
 
-  it('rollNpc uses ceil(REF/2) + 1d10', () => {
+  it('rollNpc uses REF + 1d10', () => {
     const sheet = { ref: 6 };
     for (let i = 0; i < 50; i++) {
       const { score } = cpr.rollNpc(sheet);
-      // ceil(6/2)=3, roll 1–10 → score 4–13
-      expect(score).toBeGreaterThanOrEqual(4);
-      expect(score).toBeLessThanOrEqual(13);
+      // REF(6) + roll 1–10 → score 7–16
+      expect(score).toBeGreaterThanOrEqual(7);
+      expect(score).toBeLessThanOrEqual(16);
     }
   });
 
-  it('rollNpc breakdown contains REF/2 base and d10 roll', () => {
+  it('rollNpc breakdown contains REF and d10 roll', () => {
     const sheet = { ref: 7 };
     const { score, breakdown } = cpr.rollNpc(sheet);
-    // ceil(7/2) = 4
-    expect(breakdown).toMatch(/REF\/2\(4\) \+ 1d10\(\d+\) = \d+/);
+    expect(breakdown).toMatch(/REF\(7\) \+ 1d10\(\d+\) = \d+/);
     expect(breakdown).toContain(`= ${score}`);
   });
 
   it('rollNpc falls back to ref=5 when sheet is missing', () => {
     for (let i = 0; i < 50; i++) {
       const { score } = cpr.rollNpc();
-      // ceil(5/2)=3, roll 1–10 → score 4–13
-      expect(score).toBeGreaterThanOrEqual(4);
-      expect(score).toBeLessThanOrEqual(13);
+      // REF(5) + roll 1–10 → score 6–15
+      expect(score).toBeGreaterThanOrEqual(6);
+      expect(score).toBeLessThanOrEqual(15);
     }
   });
 
@@ -161,9 +160,9 @@ describe('cpr system', () => {
     const sheet = { data: { ref: 8 } };
     for (let i = 0; i < 50; i++) {
       const { score } = cpr.rollPlayer(sheet);
-      // ceil(8/2)=4, roll 1–10 → score 5–14
-      expect(score).toBeGreaterThanOrEqual(5);
-      expect(score).toBeLessThanOrEqual(14);
+      // REF(8) + roll 1–10 → score 9–18
+      expect(score).toBeGreaterThanOrEqual(9);
+      expect(score).toBeLessThanOrEqual(18);
     }
   });
 
