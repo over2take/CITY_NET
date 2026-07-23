@@ -3,6 +3,7 @@ import { getInitiativeSystem } from '../systems';
 import { generic } from '../systems/generic';
 import { sr6 } from '../systems/sr6';
 import { cpr } from '../systems/cpr';
+import { cwn } from '../systems/cwn';
 
 describe('getInitiativeSystem', () => {
   it('returns generic for unknown keys', () => {
@@ -19,6 +20,10 @@ describe('getInitiativeSystem', () => {
 
   it('returns cpr for "cyberpunk_red"', () => {
     expect(getInitiativeSystem('cyberpunk_red')).toBe(cpr);
+  });
+
+  it('returns cwn for "cities_without_number"', () => {
+    expect(getInitiativeSystem('cities_without_number')).toBe(cwn);
   });
 });
 
@@ -196,5 +201,55 @@ describe('cpr system', () => {
     Math.random = original;
 
     expect(diceResults['10']).toEqual([10, 10, 3]);
+  });
+});
+
+describe('cwn system', () => {
+  it('has counterLabel ROUND', () => {
+    expect(cwn.counterLabel).toBe('ROUND');
+  });
+
+  it('passDecay is false', () => {
+    expect(cwn.passDecay).toBe(false);
+  });
+
+  it('rollNpc uses DEX MOD + 1d8', () => {
+    const sheet = { dex_mod: 2 };
+    for (let i = 0; i < 50; i++) {
+      const { score } = cwn.rollNpc(sheet);
+      expect(score).toBeGreaterThanOrEqual(3);
+      expect(score).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('rollNpc breakdown contains DEX MOD and d8 roll', () => {
+    const sheet = { dex_mod: 1 };
+    const { score, breakdown } = cwn.rollNpc(sheet);
+    expect(breakdown).toMatch(/DEX MOD\(1\) \+ 1d8\(\d\) = \d+/);
+    expect(breakdown).toContain(`= ${score}`);
+  });
+
+  it('rollNpc falls back to dex_mod=0 when sheet is missing', () => {
+    for (let i = 0; i < 50; i++) {
+      const { score } = cwn.rollNpc();
+      expect(score).toBeGreaterThanOrEqual(1);
+      expect(score).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it('rollPlayer reads dex_mod from sheet.data if not top-level', () => {
+    const sheet = { data: { dex_mod: 2 } };
+    for (let i = 0; i < 50; i++) {
+      const { score } = cwn.rollPlayer(sheet);
+      expect(score).toBeGreaterThanOrEqual(3);
+      expect(score).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('diceResults uses string key "8"', () => {
+    const { diceResults } = cwn.rollNpc();
+    expect(diceResults).toHaveProperty('8');
+    expect(Array.isArray(diceResults['8'])).toBe(true);
+    expect(diceResults['8']).toHaveLength(1);
   });
 });

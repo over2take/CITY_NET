@@ -14,12 +14,14 @@ function makeDb() {
         turn_counter INTEGER DEFAULT 1,
         pass_counter INTEGER DEFAULT 1,
         system TEXT DEFAULT 'generic',
+        mode TEXT DEFAULT 'individual',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
       db.run(`CREATE TABLE initiative_scene (
         scene_key TEXT PRIMARY KEY,
         combat_id INTEGER NOT NULL,
         combatants TEXT NOT NULL DEFAULT '[]',
+        sides TEXT NOT NULL DEFAULT '[]',
         turn_index INTEGER DEFAULT 0,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(combat_id) REFERENCES initiative_combat(id) ON DELETE CASCADE
@@ -37,8 +39,8 @@ const all = (db, sql, params = []) =>
 
 // ── Helpers that mirror the socket handler logic ──────────────────────────────
 
-async function startCombat(db, system = 'generic') {
-  const result = await run(db, `INSERT INTO initiative_combat (turn_counter, pass_counter, system) VALUES (1, 1, ?)`, [system]);
+async function startCombat(db, system = 'generic', mode = 'individual') {
+  const result = await run(db, `INSERT INTO initiative_combat (turn_counter, pass_counter, system, mode) VALUES (1, 1, ?, ?)`, [system, mode]);
   return result.lastID;
 }
 
@@ -68,16 +70,28 @@ async function nextTurnSr6(db, sceneKey) {
   return { wrapped: true, newRound };
 }
 
-async function startScene(db, sceneKey, combatId) {
-  await run(db, `INSERT OR IGNORE INTO initiative_scene (scene_key, combat_id, combatants, turn_index) VALUES (?, ?, '[]', 0)`, [sceneKey, combatId]);
+async function startScene(db, sceneKey, combatId, sides = '[]') {
+  await run(db, `INSERT OR IGNORE INTO initiative_scene (scene_key, combat_id, combatants, sides, turn_index) VALUES (?, ?, '[]', ?, 0)`, [sceneKey, combatId, sides]);
 }
 
 async function addCombatant(db, sceneKey, combatant) {
-  const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = ?`, [sceneKey]);
+  const row = await get(db,
+    `SELECT s.combatants, c.system FROM initiative_scene s JOIN initiative_combat c ON c.id = s.combat_id WHERE s.scene_key = ?`,
+    [sceneKey]);
+  const system = row.system || 'generic';
   const list = JSON.parse(row.combatants || '[]');
   const filtered = list.filter((c) => c.id !== combatant.id);
   filtered.push({ ...combatant, insertOrder: Date.now() });
-  filtered.sort((a, b) => b.score - a.score || a.insertOrder - b.insertOrder);
+  filtered.sort((a, b) => {
+    const scoreDiff = b.score - a.score;
+    if (scoreDiff !== 0) return scoreDiff;
+    if (system === 'cities_without_number') {
+      const aNpc = a.isNpc ? 1 : 0;
+      const bNpc = b.isNpc ? 1 : 0;
+      if (aNpc !== bNpc) return aNpc - bNpc;
+    }
+    return a.insertOrder - b.insertOrder;
+  });
   await run(db, `UPDATE initiative_scene SET combatants = ? WHERE scene_key = ?`, [JSON.stringify(filtered), sceneKey]);
 }
 
@@ -419,6 +433,130 @@ describe('initiative — CP:R round behaviour', () => {
 
     await nextTurn(db, 'city:0');
     const row = await get(db, `SELECT turn_counter FROM initiative_combat WHERE id = ?`, [cid]);
+    expect(row.turn_counter).toBe(2);
+  });
+});
+
+describe('initiative — CWN PC-wins-ties ordering', () => {
+  it('places a PC before an NPC on equal score', async () => {
+    const cid = await startCombat(db, 'cities_without_number');
+    await startScene(db, 'city:0', cid);
+    await addCombatant(db, 'city:0', { id: 'npc:1', name: 'Grunt', score: 10, isNpc: true });
+    await addCombatant(db, 'city:0', { id: 'player:a', name: 'Alice', score: 10, isNpc: false });
+
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = 'city:0'`);
+    const list = JSON.parse(row.combatants);
+    expect(list[0].name).toBe('Alice');
+    expect(list[1].name).toBe('Grunt');
+  });
+
+  it('still sorts higher scores first regardless of PC/NPC', async () => {
+    const cid = await startCombat(db, 'cities_without_number');
+    await startScene(db, 'city:0', cid);
+    await addCombatant(db, 'city:0', { id: 'player:a', name: 'Alice', score: 7, isNpc: false });
+    await addCombatant(db, 'city:0', { id: 'npc:1', name: 'Grunt', score: 12, isNpc: true });
+
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = 'city:0'`);
+    const list = JSON.parse(row.combatants);
+    expect(list[0].name).toBe('Grunt');
+    expect(list[1].name).toBe('Alice');
+  });
+
+  it('PC-wins-ties does not affect generic system', async () => {
+    const cid = await startCombat(db, 'generic');
+    await startScene(db, 'city:0', cid);
+    // NPC rolls first (lower insertOrder), gets tiebreak by insertOrder
+    await addCombatant(db, 'city:0', { id: 'npc:1', name: 'Grunt', score: 10, isNpc: true });
+    await addCombatant(db, 'city:0', { id: 'player:a', name: 'Alice', score: 10, isNpc: false });
+
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = 'city:0'`);
+    const list = JSON.parse(row.combatants);
+    // insertOrder tiebreak — Grunt rolled first so appears first
+    expect(list[0].name).toBe('Grunt');
+  });
+});
+
+describe('initiative — side mode', () => {
+  it('starts with PC side pre-populated in sides', async () => {
+    const cid = await startCombat(db, 'cities_without_number', 'side');
+    const initialSides = JSON.stringify([{ id: 'pc', name: 'PLAYERS', score: 0, isPlayerSide: true }]);
+    await startScene(db, 'city:0', cid, initialSides);
+
+    const row = await get(db, `SELECT sides FROM initiative_scene WHERE scene_key = 'city:0'`);
+    const sides = JSON.parse(row.sides);
+    expect(sides).toHaveLength(1);
+    expect(sides[0].id).toBe('pc');
+    expect(sides[0].isPlayerSide).toBe(true);
+  });
+
+  it('PC roll slots into pc side and updates PC side score', async () => {
+    const cid = await startCombat(db, 'cities_without_number', 'side');
+    const initialSides = JSON.stringify([{ id: 'pc', name: 'PLAYERS', score: 0, isPlayerSide: true }]);
+    await startScene(db, 'city:0', cid, initialSides);
+
+    // Simulate a PC rolling (sideId: 'pc')
+    const combatant = { id: 'player:a', name: 'Alice', score: 9, isNpc: false, sideId: 'pc', insertOrder: 1 };
+    const row = await get(db, `SELECT combatants, sides FROM initiative_scene WHERE scene_key = 'city:0'`);
+    const list = JSON.parse(row.combatants);
+    list.push(combatant);
+    const sides = JSON.parse(row.sides);
+    const updatedSides = sides.map((s) => s.id === 'pc' ? { ...s, score: 9 } : s);
+    await run(db, `UPDATE initiative_scene SET combatants = ?, sides = ? WHERE scene_key = 'city:0'`,
+      [JSON.stringify(list), JSON.stringify(updatedSides)]);
+
+    const updated = await get(db, `SELECT combatants, sides FROM initiative_scene WHERE scene_key = 'city:0'`);
+    const updatedSidesRead = JSON.parse(updated.sides);
+    expect(updatedSidesRead[0].score).toBe(9);
+    expect(JSON.parse(updated.combatants)[0].sideId).toBe('pc');
+  });
+
+  it('NPC side roll creates NPC side entry', async () => {
+    const cid = await startCombat(db, 'cities_without_number', 'side');
+    const initialSides = JSON.stringify([{ id: 'pc', name: 'PLAYERS', score: 9, isPlayerSide: true }]);
+    await startScene(db, 'city:0', cid, initialSides);
+
+    const row = await get(db, `SELECT sides FROM initiative_scene WHERE scene_key = 'city:0'`);
+    const sides = JSON.parse(row.sides);
+    sides.push({ id: 'npc', name: 'NPC', score: 5, isPlayerSide: false });
+    await run(db, `UPDATE initiative_scene SET sides = ? WHERE scene_key = 'city:0'`, [JSON.stringify(sides)]);
+
+    const updated = await get(db, `SELECT sides FROM initiative_scene WHERE scene_key = 'city:0'`);
+    const updatedSides = JSON.parse(updated.sides);
+    expect(updatedSides).toHaveLength(2);
+    expect(updatedSides.find((s) => s.id === 'npc').score).toBe(5);
+  });
+
+  it('side with higher score goes first; PC wins tie', async () => {
+    const sides = [
+      { id: 'pc', name: 'PLAYERS', score: 7, isPlayerSide: true },
+      { id: 'npc', name: 'NPC', score: 7, isPlayerSide: false },
+    ];
+    const sorted = [...sides].sort((a, b) => {
+      const diff = b.score - a.score;
+      if (diff !== 0) return diff;
+      return a.isPlayerSide ? -1 : 1;
+    });
+    expect(sorted[0].id).toBe('pc');
+    expect(sorted[1].id).toBe('npc');
+  });
+
+  it('next turn advances turn_index through sides and wraps', async () => {
+    const cid = await startCombat(db, 'cities_without_number', 'side');
+    const sides = JSON.stringify([
+      { id: 'pc', name: 'PLAYERS', score: 9, isPlayerSide: true },
+      { id: 'npc', name: 'NPC', score: 5, isPlayerSide: false },
+    ]);
+    await startScene(db, 'city:0', cid, sides);
+
+    // Advance once
+    await run(db, `UPDATE initiative_scene SET turn_index = 1 WHERE scene_key = 'city:0'`);
+    let row = await get(db, `SELECT turn_index FROM initiative_scene WHERE scene_key = 'city:0'`);
+    expect(row.turn_index).toBe(1);
+
+    // Wrap
+    await run(db, `UPDATE initiative_scene SET turn_index = 0 WHERE scene_key = 'city:0'`);
+    await run(db, `UPDATE initiative_combat SET turn_counter = turn_counter + 1 WHERE id = ?`, [cid]);
+    row = await get(db, `SELECT turn_counter FROM initiative_combat WHERE id = ?`, [cid]);
     expect(row.turn_counter).toBe(2);
   });
 });

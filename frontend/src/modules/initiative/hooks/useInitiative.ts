@@ -9,18 +9,30 @@ export interface Combatant {
   diceResults?: Record<string, number[]>;
   exploded?: boolean;
   isNpc: boolean;
+  isFriendly?: boolean;
   insertOrder?: number;
   floorIndex?: number;
+  /** Side mode: which side this combatant belongs to ('pc' | 'npc') */
+  sideId?: string;
+}
+
+export interface Side {
+  id: string;
+  name: string;
+  score: number;
+  isPlayerSide: boolean;
 }
 
 export interface InitiativeState {
   sceneKey: string;
   combatId: number;
   combatants: Combatant[];
+  sides: Side[];
   turnIndex: number;
   turnCounter: number;
   passCounter: number;
   system: string;
+  mode: 'individual' | 'side';
   /** SR6: true when end-of-pass decay eliminated everyone — everyone must reroll */
   newRound?: boolean;
 }
@@ -41,8 +53,6 @@ export function useInitiative(
   const [activeCombats, setActiveCombats] = useState<ActiveCombat[]>([]);
   const currentSceneKey = useRef(sceneKey);
   currentSceneKey.current = sceneKey;
-  // Incremented when the socket becomes available after a delayed connect,
-  // forcing the effect to re-run so listeners are registered properly.
   const [socketReadyCount, forceReady] = useReducer((n: number) => n + 1, 0);
 
   useEffect(() => {
@@ -50,7 +60,7 @@ export function useInitiative(
       const interval = setInterval(() => {
         if (socketRef.current) {
           clearInterval(interval);
-          forceReady(); // re-runs this effect with the socket now available
+          forceReady();
         }
       }, 200);
       return () => clearInterval(interval);
@@ -58,7 +68,6 @@ export function useInitiative(
 
     const s = socketRef.current;
 
-    // Clear stale state from previous scene immediately on scene change
     setState(null);
 
     const onState = (data: InitiativeState) => {
@@ -69,8 +78,6 @@ export function useInitiative(
     };
 
     const onStarted = (data: { sceneKey: string }) => {
-      // No state seeded here — broadcastScene fires immediately after and delivers
-      // the authoritative system value via onState, avoiding a 'generic' flash.
       if (data.sceneKey !== currentSceneKey.current) return;
     };
 
@@ -103,9 +110,9 @@ export function useInitiative(
     socketRef.current?.emit('initiative:list_combats');
   }, [socketRef]);
 
-  const startInitiative = useCallback((combatId?: number) => {
+  const startInitiative = useCallback((combatId?: number, mode?: string) => {
     if (!sceneKey) return;
-    socketRef.current?.emit('initiative:start', { sceneKey, combatId: combatId ?? null, system });
+    socketRef.current?.emit('initiative:start', { sceneKey, combatId: combatId ?? null, system, mode });
   }, [socketRef, sceneKey, system]);
 
   const submitRoll = useCallback((combatant: Omit<Combatant, 'insertOrder'>) => {
@@ -118,6 +125,11 @@ export function useInitiative(
     socketRef.current?.emit('initiative:roll', { sceneKey, combatant, appendToEnd: true });
   }, [socketRef, sceneKey]);
 
+  const rollNpcSide = useCallback((score: number, breakdown?: string, diceResults?: Record<string, number[]>) => {
+    if (!sceneKey) return;
+    socketRef.current?.emit('initiative:roll_side', { sceneKey, score, breakdown, diceResults });
+  }, [socketRef, sceneKey]);
+
   const nextTurn = useCallback(() => {
     if (!sceneKey) return;
     socketRef.current?.emit('initiative:next', { sceneKey });
@@ -128,9 +140,9 @@ export function useInitiative(
     socketRef.current?.emit('initiative:remove', { sceneKey, combatantId });
   }, [socketRef, sceneKey]);
 
-  const reorder = useCallback((fromIndex: number, toIndex: number) => {
+  const reorder = useCallback((fromIndex: number, toIndex: number, sideId?: string) => {
     if (!sceneKey) return;
-    socketRef.current?.emit('initiative:reorder', { sceneKey, fromIndex, toIndex });
+    socketRef.current?.emit('initiative:reorder', { sceneKey, fromIndex, toIndex, sideId });
   }, [socketRef, sceneKey]);
 
   const endInitiative = useCallback(() => {
@@ -145,6 +157,7 @@ export function useInitiative(
     startInitiative,
     submitRoll,
     submitJoin,
+    rollNpcSide,
     nextTurn,
     removeCombatant,
     reorder,

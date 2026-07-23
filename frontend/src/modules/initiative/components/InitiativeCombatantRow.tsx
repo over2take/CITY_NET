@@ -42,14 +42,23 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
       style={rowStyle}
       className={showExplod ? 'initiative-explod-row' : undefined}
       draggable={isAdmin}
-      onDragStart={() => isAdmin && onDragStart(index)}
+      onDragStart={(e) => {
+        if (!isAdmin) return;
+        const ghost = document.createElement('div');
+        ghost.style.position = 'absolute';
+        ghost.style.top = '-9999px';
+        document.body.appendChild(ghost);
+        e.dataTransfer.setDragImage(ghost, 0, 0);
+        setTimeout(() => document.body.removeChild(ghost), 0);
+        onDragStart(index);
+      }}
       onDragOver={(e) => { e.preventDefault(); isAdmin && onDragOver(index); }}
       onDrop={() => isAdmin && onDrop()}
     >
       {/* Portrait */}
       <div style={{ width: 28, height: 28, borderRadius: 2, overflow: 'hidden', flexShrink: 0, background: 'rgba(0,40,0,0.6)', border: '1px solid var(--dark-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {combatant.portraitUrl
-          ? <img src={combatant.portraitUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+          ? <img src={combatant.portraitUrl} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
           : <span style={{ fontSize: '0.6rem', color: 'var(--dark-green)' }}>{combatant.isNpc ? '◆' : '◈'}</span>
         }
       </div>

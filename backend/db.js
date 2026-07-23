@@ -350,20 +350,24 @@ db.serialize(() => {
     turn_counter INTEGER DEFAULT 1,
     pass_counter INTEGER DEFAULT 1,
     system TEXT DEFAULT 'generic',
+    mode TEXT DEFAULT 'individual',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
-  // Migration: add system column for existing DBs
+  // Migrations: add columns for existing DBs
   db.run(`ALTER TABLE initiative_combat ADD COLUMN system TEXT DEFAULT 'generic'`, () => {});
+  db.run(`ALTER TABLE initiative_combat ADD COLUMN mode TEXT DEFAULT 'individual'`, () => {});
 
   // One row per active scene; combatants JSON ordered highest → lowest.
   db.run(`CREATE TABLE IF NOT EXISTS initiative_scene (
     scene_key TEXT PRIMARY KEY,
     combat_id INTEGER NOT NULL,
     combatants TEXT NOT NULL DEFAULT '[]',
+    sides TEXT NOT NULL DEFAULT '[]',
     turn_index INTEGER DEFAULT 0,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(combat_id) REFERENCES initiative_combat(id) ON DELETE CASCADE
   )`);
+  db.run(`ALTER TABLE initiative_scene ADD COLUMN sides TEXT NOT NULL DEFAULT '[]'`, () => {});
 
   // Migration: CP:R's name field was stored as 'handle'; it is now 'name'
   // (uniform across systems — the sheet is the source of truth for player

@@ -2278,6 +2278,11 @@ const CPR_HOUSE_RULES: HouseRuleDef[] = [
 
 const CWN_HOUSE_RULES: HouseRuleDef[] = [
   {
+    settingKey: 'cwn_individual_initiative',
+    label: 'INDIVIDUAL INITIATIVE',
+    title: 'House rule: each combatant rolls their own 1d8 + DEX mod and acts in individual order. RAW: the whole party rolls once using the best DEX mod, acting as one side against the NPC side.',
+  },
+  {
     settingKey: 'cwn_trauma',
     label: 'GRITTY COMBAT (TRAUMA DIE + MAJOR INJURIES)',
     title: 'Gritty Combat: on a hit, roll the weapon\'s trauma die — if it meets the target\'s Trauma Target the damage is multiplied. Also enables the Major Injury flow when a traumatic hit drops a PC to 0 HP. On by default. Off = plain hit/damage + shock only.',

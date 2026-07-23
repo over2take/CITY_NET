@@ -864,6 +864,9 @@ function App() {
 
   const initiativeSystem = globalSettings['game_system'] || 'generic';
   const initiativeRollOptions = { explodingInitiative: globalSettings['cpr_exploding_initiative'] === '1' };
+  const initiativeMode = initiativeSystem === 'cities_without_number'
+    ? (globalSettings['cwn_individual_initiative'] === '1' ? 'individual' : 'side')
+    : 'individual';
   const initiative = useInitiative(socketRef, initiativeSceneKey, initiativeSystem);
 
   const initiativeSceneLabel = view === 'battle_map' && activeBattleMapData
@@ -1518,7 +1521,7 @@ function App() {
                 locations.filter((l: any) => l.shape === 'friendly_rhombus' && inScene(l)).forEach((l: any) => {
                   const sheet = l.sheet_data ? (typeof l.sheet_data === 'string' ? JSON.parse(l.sheet_data) : l.sheet_data) : undefined;
                   const { score, breakdown, diceResults, exploded } = getInitiativeSystem(initiativeSystem).rollNpc(sheet, initiativeRollOptions);
-                  initiative.submitRoll({ id: `npc:${l.id}`, name: l.name || `FRIENDLY_${l.id}`, portraitUrl: (l as any).portrait_url ?? undefined, score, breakdown, diceResults, exploded, isNpc: true, floorIndex: activeBattleMapData?.currentFloorIndex });
+                  initiative.submitRoll({ id: `npc:${l.id}`, name: l.name || `FRIENDLY_${l.id}`, portraitUrl: (l as any).portrait_url ?? undefined, score, breakdown, diceResults, exploded, isNpc: true, isFriendly: true, floorIndex: activeBattleMapData?.currentFloorIndex });
                 });
               }}
               />
@@ -1843,7 +1846,7 @@ function App() {
                 sceneLabel={initiativeSceneLabel}
                 isAdmin={true}
                 onClose={() => setIsInitiativeOpen(false)}
-                onStart={(combatId) => { initiative.startInitiative(combatId); initiative.listCombats(); }}
+                onStart={(combatId) => { initiative.startInitiative(combatId, combatId ? undefined : initiativeMode); initiative.listCombats(); }}
                 onListCombats={initiative.listCombats}
                 onNext={initiative.nextTurn}
                 onEnd={initiative.endInitiative}
@@ -2193,6 +2196,7 @@ function App() {
                                 breakdown: `MANUAL(${score}) = ${score}`,
                                 diceResults: {},
                                 isNpc: true,
+                                isFriendly: selectedLocation.shape === 'friendly_rhombus',
                                 floorIndex: activeBattleMapData?.currentFloorIndex,
                               });
                               setManualInitScore('');
