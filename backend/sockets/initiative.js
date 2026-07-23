@@ -5,7 +5,7 @@
 function getSceneState(db, sceneKey, cb) {
   db.get(
     `SELECT s.scene_key, s.combat_id, s.combatants, s.turn_index,
-            c.turn_counter, c.pass_counter
+            c.turn_counter, c.pass_counter, c.system
      FROM initiative_scene s
      JOIN initiative_combat c ON c.id = s.combat_id
      WHERE s.scene_key = ?`,
@@ -14,17 +14,23 @@ function getSceneState(db, sceneKey, cb) {
   );
 }
 
-function broadcastScene(io, db, sceneKey) {
+function buildStatePayload(row, sceneKey, extra = {}) {
+  return {
+    sceneKey,
+    combatId: row.combat_id,
+    combatants: JSON.parse(row.combatants || '[]'),
+    turnIndex: row.turn_index,
+    turnCounter: row.turn_counter,
+    passCounter: row.pass_counter,
+    system: row.system || 'generic',
+    ...extra,
+  };
+}
+
+function broadcastScene(io, db, sceneKey, extra = {}) {
   getSceneState(db, sceneKey, (err, row) => {
     if (err || !row) return;
-    io.emit('initiative:state', {
-      sceneKey,
-      combatId: row.combat_id,
-      combatants: JSON.parse(row.combatants || '[]'),
-      turnIndex: row.turn_index,
-      turnCounter: row.turn_counter,
-      passCounter: row.pass_counter,
-    });
+    io.emit('initiative:state', buildStatePayload(row, sceneKey, extra));
   });
 }
 
@@ -36,14 +42,7 @@ function registerInitiativeHandlers(io, db) {
       if (!sceneKey) return;
       getSceneState(db, sceneKey, (err, row) => {
         if (err || !row) return;
-        socket.emit('initiative:state', {
-          sceneKey,
-          combatId: row.combat_id,
-          combatants: JSON.parse(row.combatants || '[]'),
-          turnIndex: row.turn_index,
-          turnCounter: row.turn_counter,
-          passCounter: row.pass_counter,
-        });
+        socket.emit('initiative:state', buildStatePayload(row, sceneKey));
       });
     });
 
@@ -118,8 +117,10 @@ function registerInitiativeHandlers(io, db) {
 
     // ── Start initiative ───────────────────────────────────────────────────────
     // combatId: null = new combat, number = join existing
-    socket.on('initiative:start', ({ sceneKey, combatId }) => {
+    // system: ttrpg system key (e.g. 'generic', 'shadowrun_6e')
+    socket.on('initiative:start', ({ sceneKey, combatId, system }) => {
       if (!sceneKey) return;
+      const safeSystem = system || 'generic';
 
       const insertScene = (cid) => {
         db.run(
@@ -138,8 +139,8 @@ function registerInitiativeHandlers(io, db) {
         insertScene(combatId);
       } else {
         db.run(
-          `INSERT INTO initiative_combat (turn_counter, pass_counter) VALUES (1, 1)`,
-          [],
+          `INSERT INTO initiative_combat (turn_counter, pass_counter, system) VALUES (1, 1, ?)`,
+          [safeSystem],
           function (err) {
             if (err) return;
             insertScene(this.lastID);
@@ -174,6 +175,26 @@ function registerInitiativeHandlers(io, db) {
             (err) => {
               if (err) return;
               broadcastScene(io, db, sceneKey);
+
+              // Log to roll history so it appears in the dice tray
+              const historyString = combatant.breakdown
+                ? `${combatant.name} INITIATIVE: ${combatant.breakdown}`
+                : `${combatant.name} rolled INITIATIVE [${combatant.score}]`;
+              const results = combatant.diceResults || { 20: [combatant.score] };
+              const resultsJson = JSON.stringify(results);
+              db.run(
+                `INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)`,
+                [combatant.name, combatant.score, resultsJson, '#00ff00', historyString],
+                () => io.emit('diceRollBroadcast', {
+                  userName: combatant.name,
+                  account: combatant.name,
+                  results,
+                  modifiers: [],
+                  color: '#00ff00',
+                  total: combatant.score,
+                  historyString,
+                })
+              );
             }
           );
         }
@@ -185,7 +206,7 @@ function registerInitiativeHandlers(io, db) {
       if (!sceneKey) return;
 
       db.get(
-        `SELECT s.combatants, s.turn_index, s.combat_id, c.turn_counter
+        `SELECT s.combatants, s.turn_index, s.combat_id, c.turn_counter, c.pass_counter, c.system
          FROM initiative_scene s
          JOIN initiative_combat c ON c.id = s.combat_id
          WHERE s.scene_key = ?`,
@@ -199,25 +220,51 @@ function registerInitiativeHandlers(io, db) {
           const nextIndex = row.turn_index + 1;
           const wrapped = nextIndex >= combatants.length;
           const newTurnIndex = wrapped ? 0 : nextIndex;
-          const newTurnCounter = wrapped ? row.turn_counter + 1 : row.turn_counter;
 
-          db.run(
-            `UPDATE initiative_scene SET turn_index = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE scene_key = ?`,
-            [newTurnIndex, sceneKey],
-            (err) => {
-              if (err) return;
-              if (wrapped) {
+          if (!wrapped) {
+            db.run(
+              `UPDATE initiative_scene SET turn_index = ?, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
+              [newTurnIndex, sceneKey],
+              (err) => { if (!err) broadcastScene(io, db, sceneKey); }
+            );
+            return;
+          }
+
+          // ── End of rotation ───────────────────────────────────────────────
+          if (row.system === 'shadowrun_6e') {
+            // SR6: subtract 10 from all scores; drop anyone at ≤ 0
+            const decayed = combatants.map((c) => ({ ...c, score: c.score - 10 }));
+            const survivors = decayed.filter((c) => c.score > 0);
+            const newRound = survivors.length === 0;
+            const nextCombatants = newRound ? [] : survivors;
+
+            db.run(
+              `UPDATE initiative_scene SET combatants = ?, turn_index = 0, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
+              [JSON.stringify(nextCombatants), sceneKey],
+              (err) => {
+                if (err) return;
                 db.run(
-                  `UPDATE initiative_combat SET turn_counter = ? WHERE id = ?`,
-                  [newTurnCounter, row.combat_id],
+                  `UPDATE initiative_combat SET pass_counter = pass_counter + 1 WHERE id = ?`,
+                  [row.combat_id],
+                  () => broadcastScene(io, db, sceneKey, { newRound })
+                );
+              }
+            );
+          } else {
+            // Generic / other systems: just bump the turn counter
+            db.run(
+              `UPDATE initiative_scene SET turn_index = 0, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
+              [sceneKey],
+              (err) => {
+                if (err) return;
+                db.run(
+                  `UPDATE initiative_combat SET turn_counter = turn_counter + 1 WHERE id = ?`,
+                  [row.combat_id],
                   () => broadcastScene(io, db, sceneKey)
                 );
-              } else {
-                broadcastScene(io, db, sceneKey);
               }
-            }
-          );
+            );
+          }
         }
       );
     });

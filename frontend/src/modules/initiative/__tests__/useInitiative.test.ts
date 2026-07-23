@@ -100,7 +100,7 @@ describe('useInitiative — state updates', () => {
     expect(result.current.state).toBeNull();
   });
 
-  it('sets state when initiative:started arrives for current scene', () => {
+  it('does not seed state on initiative:started — waits for initiative:state broadcast', () => {
     const socket = makeSocket();
     const socketRef = { current: socket };
     const { result } = renderHook(() => useInitiative(socketRef, 'city:0'));
@@ -109,8 +109,15 @@ describe('useInitiative — state updates', () => {
       socket.trigger('initiative:started', { sceneKey: 'city:0', combatId: 3 });
     });
 
+    // State is only set by the subsequent initiative:state broadcast, not by started alone
+    expect(result.current.state).toBeNull();
+
+    act(() => {
+      socket.trigger('initiative:state', { sceneKey: 'city:0', combatId: 3, combatants: [], turnIndex: 0, turnCounter: 1, passCounter: 1, system: 'shadowrun_6e' });
+    });
+
     expect(result.current.state?.combatId).toBe(3);
-    expect(result.current.state?.combatants).toEqual([]);
+    expect(result.current.state?.system).toBe('shadowrun_6e');
   });
 
   it('clears state when initiative:ended arrives for current scene', () => {
@@ -152,7 +159,7 @@ describe('useInitiative — actions', () => {
 
     act(() => { result.current.startInitiative(); });
 
-    expect(socket.emit).toHaveBeenCalledWith('initiative:start', { sceneKey: 'city:0', combatId: null });
+    expect(socket.emit).toHaveBeenCalledWith('initiative:start', { sceneKey: 'city:0', combatId: null, system: 'generic' });
   });
 
   it('startInitiative passes combatId when joining existing', () => {
@@ -162,7 +169,7 @@ describe('useInitiative — actions', () => {
 
     act(() => { result.current.startInitiative(7); });
 
-    expect(socket.emit).toHaveBeenCalledWith('initiative:start', { sceneKey: 'city:0', combatId: 7 });
+    expect(socket.emit).toHaveBeenCalledWith('initiative:start', { sceneKey: 'city:0', combatId: 7, system: 'generic' });
   });
 
   it('nextTurn emits initiative:next', () => {

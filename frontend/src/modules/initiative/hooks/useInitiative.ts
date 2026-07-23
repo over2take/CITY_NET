@@ -5,6 +5,8 @@ export interface Combatant {
   name: string;
   portraitUrl?: string;
   score: number;
+  breakdown?: string;
+  diceResults?: Record<string, number[]>;
   isNpc: boolean;
   insertOrder?: number;
   floorIndex?: number;
@@ -17,6 +19,9 @@ export interface InitiativeState {
   turnIndex: number;
   turnCounter: number;
   passCounter: number;
+  system: string;
+  /** SR6: true when end-of-pass decay eliminated everyone — everyone must reroll */
+  newRound?: boolean;
 }
 
 export interface ActiveCombat {
@@ -29,6 +34,7 @@ export interface ActiveCombat {
 export function useInitiative(
   socketRef: React.MutableRefObject<any>,
   sceneKey: string | null,
+  system = 'generic',
 ) {
   const [state, setState] = useState<InitiativeState | null>(null);
   const [activeCombats, setActiveCombats] = useState<ActiveCombat[]>([]);
@@ -61,10 +67,10 @@ export function useInitiative(
       }
     };
 
-    const onStarted = (data: { sceneKey: string; combatId: number }) => {
-      if (data.sceneKey === currentSceneKey.current) {
-        setState({ sceneKey: data.sceneKey, combatId: data.combatId, combatants: [], turnIndex: 0, turnCounter: 1, passCounter: 1 });
-      }
+    const onStarted = (data: { sceneKey: string }) => {
+      // No state seeded here — broadcastScene fires immediately after and delivers
+      // the authoritative system value via onState, avoiding a 'generic' flash.
+      if (data.sceneKey !== currentSceneKey.current) return;
     };
 
     const onEnded = (data: { sceneKey: string }) => {
@@ -98,8 +104,8 @@ export function useInitiative(
 
   const startInitiative = useCallback((combatId?: number) => {
     if (!sceneKey) return;
-    socketRef.current?.emit('initiative:start', { sceneKey, combatId: combatId ?? null });
-  }, [socketRef, sceneKey]);
+    socketRef.current?.emit('initiative:start', { sceneKey, combatId: combatId ?? null, system });
+  }, [socketRef, sceneKey, system]);
 
   const submitRoll = useCallback((combatant: Omit<Combatant, 'insertOrder'>) => {
     if (!sceneKey) return;

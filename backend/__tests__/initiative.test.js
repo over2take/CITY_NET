@@ -13,6 +13,7 @@ function makeDb() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         turn_counter INTEGER DEFAULT 1,
         pass_counter INTEGER DEFAULT 1,
+        system TEXT DEFAULT 'generic',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
       db.run(`CREATE TABLE initiative_scene (
@@ -36,9 +37,35 @@ const all = (db, sql, params = []) =>
 
 // ── Helpers that mirror the socket handler logic ──────────────────────────────
 
-async function startCombat(db) {
-  const result = await run(db, `INSERT INTO initiative_combat (turn_counter, pass_counter) VALUES (1, 1)`);
+async function startCombat(db, system = 'generic') {
+  const result = await run(db, `INSERT INTO initiative_combat (turn_counter, pass_counter, system) VALUES (1, 1, ?)`, [system]);
   return result.lastID;
+}
+
+// Mirrors SR6 pass-decay logic from backend/sockets/initiative.js
+async function nextTurnSr6(db, sceneKey) {
+  const row = await get(db,
+    `SELECT s.combatants, s.turn_index, s.combat_id, c.turn_counter, c.pass_counter, c.system
+     FROM initiative_scene s JOIN initiative_combat c ON c.id = s.combat_id
+     WHERE s.scene_key = ?`, [sceneKey]);
+
+  const combatants = JSON.parse(row.combatants || '[]');
+  const nextIndex = row.turn_index + 1;
+  const wrapped = nextIndex >= combatants.length;
+
+  if (!wrapped) {
+    await run(db, `UPDATE initiative_scene SET turn_index = ? WHERE scene_key = ?`, [nextIndex, sceneKey]);
+    return { wrapped: false, newRound: false };
+  }
+
+  // End of pass — SR6 decay
+  const decayed = combatants.map((c) => ({ ...c, score: c.score - 10 }));
+  const survivors = decayed.filter((c) => c.score > 0);
+  const newRound = survivors.length === 0;
+  await run(db, `UPDATE initiative_scene SET combatants = ?, turn_index = 0 WHERE scene_key = ?`,
+    [JSON.stringify(newRound ? [] : survivors), sceneKey]);
+  await run(db, `UPDATE initiative_combat SET pass_counter = pass_counter + 1 WHERE id = ?`, [row.combat_id]);
+  return { wrapped: true, newRound };
 }
 
 async function startScene(db, sceneKey, combatId) {
@@ -252,5 +279,120 @@ describe('initiative — reorder', () => {
     const row = await get(db, `SELECT combatants, turn_index FROM initiative_scene WHERE scene_key = ?`, ['city:0']);
     const list = JSON.parse(row.combatants);
     expect(list[row.turn_index].id).toBe('b'); // Bob still active
+  });
+});
+
+describe('initiative — SR6 pass decay', () => {
+  it('subtracts 10 from all scores at end of pass', async () => {
+    const combatId = await startCombat(db, 'shadowrun_6e');
+    await startScene(db, 'city:0', combatId);
+    await addCombatant(db, 'city:0', { id: 'a', name: 'Alice', score: 15, isNpc: false });
+    await nextTurnSr6(db, 'city:0'); // wraps — triggers decay
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = ?`, ['city:0']);
+    const list = JSON.parse(row.combatants);
+    expect(list[0].score).toBe(5);
+  });
+
+  it('removes combatants whose score drops to 0 or below', async () => {
+    const combatId = await startCombat(db, 'shadowrun_6e');
+    await startScene(db, 'city:0', combatId);
+    await addCombatant(db, 'city:0', { id: 'a', name: 'Alice', score: 15, isNpc: false });
+    await addCombatant(db, 'city:0', { id: 'b', name: 'Bob', score: 8, isNpc: false });
+    await nextTurnSr6(db, 'city:0'); // Alice → 5, Bob → -2 (removed)
+    await nextTurnSr6(db, 'city:0'); // advance past Bob (already gone)
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = ?`, ['city:0']);
+    const list = JSON.parse(row.combatants);
+    expect(list.every((c) => c.score > 0)).toBe(true);
+    expect(list.find((c) => c.id === 'b')).toBeUndefined();
+  });
+
+  it('increments pass_counter at end of each pass', async () => {
+    const combatId = await startCombat(db, 'shadowrun_6e');
+    await startScene(db, 'city:0', combatId);
+    await addCombatant(db, 'city:0', { id: 'a', name: 'Alice', score: 15, isNpc: false });
+    await nextTurnSr6(db, 'city:0'); // end of pass 1
+    const combat = await get(db, `SELECT pass_counter FROM initiative_combat WHERE id = ?`, [combatId]);
+    expect(combat.pass_counter).toBe(2);
+  });
+
+  it('signals newRound when all scores drop to 0 or below', async () => {
+    const combatId = await startCombat(db, 'shadowrun_6e');
+    await startScene(db, 'city:0', combatId);
+    await addCombatant(db, 'city:0', { id: 'a', name: 'Alice', score: 8, isNpc: false });
+    const { newRound } = await nextTurnSr6(db, 'city:0'); // 8 - 10 = -2 → everyone out
+    expect(newRound).toBe(true);
+  });
+
+  it('clears the combatant list on new round', async () => {
+    const combatId = await startCombat(db, 'shadowrun_6e');
+    await startScene(db, 'city:0', combatId);
+    await addCombatant(db, 'city:0', { id: 'a', name: 'Alice', score: 8, isNpc: false });
+    await nextTurnSr6(db, 'city:0');
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = ?`, ['city:0']);
+    expect(JSON.parse(row.combatants)).toHaveLength(0);
+  });
+
+  it('survivors keep their decayed scores for the next pass', async () => {
+    const combatId = await startCombat(db, 'shadowrun_6e');
+    await startScene(db, 'city:0', combatId);
+    await addCombatant(db, 'city:0', { id: 'a', name: 'Alice', score: 22, isNpc: false });
+    await addCombatant(db, 'city:0', { id: 'b', name: 'Bob', score: 14, isNpc: false });
+    // Pass 1 end: Alice → 12, Bob → 4
+    await nextTurnSr6(db, 'city:0');
+    await nextTurnSr6(db, 'city:0');
+    // Pass 2 end: Alice → 2, Bob → -6 (removed)
+    await nextTurnSr6(db, 'city:0');
+    await nextTurnSr6(db, 'city:0');
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = ?`, ['city:0']);
+    const list = JSON.parse(row.combatants);
+    expect(list).toHaveLength(1);
+    expect(list[0].id).toBe('a');
+    expect(list[0].score).toBe(2);
+  });
+
+  it('does not apply decay mid-pass (only on wrap)', async () => {
+    const combatId = await startCombat(db, 'shadowrun_6e');
+    await startScene(db, 'city:0', combatId);
+    await addCombatant(db, 'city:0', { id: 'a', name: 'Alice', score: 15, isNpc: false });
+    await addCombatant(db, 'city:0', { id: 'b', name: 'Bob', score: 12, isNpc: false });
+    await nextTurnSr6(db, 'city:0'); // advance to Bob — no decay yet
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = ?`, ['city:0']);
+    const list = JSON.parse(row.combatants);
+    expect(list[0].score).toBe(15); // Alice untouched
+    expect(list[1].score).toBe(12); // Bob untouched
+  });
+});
+
+describe('initiative — roll breakdown and diceResults', () => {
+  it('stores breakdown on the combatant when provided', async () => {
+    const combatId = await startCombat(db);
+    await startScene(db, 'city:0', combatId);
+    await addCombatant(db, 'city:0', { id: 'a', name: 'Alice', score: 13, breakdown: 'REA(5) + INT(2) + 1d6(6) = 13', diceResults: { 6: [6] }, isNpc: false });
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = ?`, ['city:0']);
+    const list = JSON.parse(row.combatants);
+    expect(list[0].breakdown).toBe('REA(5) + INT(2) + 1d6(6) = 13');
+    expect(list[0].diceResults).toEqual({ 6: [6] });
+  });
+
+  it('stores generic breakdown on the combatant', async () => {
+    const combatId = await startCombat(db);
+    await startScene(db, 'city:0', combatId);
+    await addCombatant(db, 'city:0', { id: 'b', name: 'Bob', score: 15, breakdown: '1d20(15) = 15', diceResults: { 20: [15] }, isNpc: false });
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = ?`, ['city:0']);
+    const list = JSON.parse(row.combatants);
+    expect(list[0].breakdown).toBe('1d20(15) = 15');
+    expect(list[0].diceResults).toEqual({ 20: [15] });
+  });
+
+  it('breakdown is preserved after a re-roll', async () => {
+    const combatId = await startCombat(db);
+    await startScene(db, 'city:0', combatId);
+    await addCombatant(db, 'city:0', { id: 'a', name: 'Alice', score: 8, breakdown: 'REA(3) + INT(3) + 1d6(2) = 8', diceResults: { 6: [2] }, isNpc: false });
+    await addCombatant(db, 'city:0', { id: 'a', name: 'Alice', score: 14, breakdown: 'REA(5) + INT(3) + 1d6(6) = 14', diceResults: { 6: [6] }, isNpc: false });
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = ?`, ['city:0']);
+    const list = JSON.parse(row.combatants);
+    expect(list).toHaveLength(1);
+    expect(list[0].score).toBe(14);
+    expect(list[0].breakdown).toBe('REA(5) + INT(3) + 1d6(6) = 14');
   });
 });
