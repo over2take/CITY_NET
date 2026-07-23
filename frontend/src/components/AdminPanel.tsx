@@ -2259,6 +2259,11 @@ const GLOBAL_HOUSE_RULES: HouseRuleDef[] = [
 
 const CPR_HOUSE_RULES: HouseRuleDef[] = [
   {
+    settingKey: 'cpr_exploding_initiative',
+    label: 'EXPLODING INITIATIVE DIE (HOUSE RULE)',
+    title: 'House rule: rolling a 10 on the initiative d10 adds 10 to the score and triggers another d10 roll, which is also added. Keeps exploding on consecutive 10s. Off by default (RAW: single d10, no explosion).',
+  },
+  {
     settingKey: 'melee_dv_take10',
     label: 'MELEE_DV TAKE-10 (10 + DEX + EVASION INSTEAD OF 6 +)',
     title: 'Melee DV stamped at sheet generation/attach: default is 6 + DEX + Evasion (average of the opposed Evasion roll); take-10 uses 10 + DEX + Evasion for a harder melee defense. Existing tokens are not changed.',

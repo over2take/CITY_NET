@@ -7,16 +7,21 @@ export interface RollResult {
   breakdown: string;
   /** Dice to display in the tray — key is sides (as string), value is array of individual rolls */
   diceResults: Record<string, number[]>;
-  /** True when a d10 rolled 10 and triggered at least one extra roll (CP:R exploding die) */
+  /** True when an exploding die triggered at least one extra roll */
   exploded?: boolean;
+}
+
+export interface RollOptions {
+  extraDice?: number;
+  explodingInitiative?: boolean;
 }
 
 export interface InitiativeSystem {
   key: string;
   counterLabel: string;
   passDecay: boolean;
-  rollNpc(sheet?: any): RollResult;
-  rollPlayer(sheet?: any, extraDice?: number): RollResult;
+  rollNpc(sheet?: any, options?: RollOptions): RollResult;
+  rollPlayer(sheet?: any, options?: RollOptions): RollResult;
 }
 
 const SYSTEMS: Record<string, InitiativeSystem> = {

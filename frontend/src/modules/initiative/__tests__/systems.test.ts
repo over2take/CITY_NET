@@ -89,7 +89,7 @@ describe('sr6 system', () => {
   it('rollPlayer with no extra dice uses REA + INT + 1d6', () => {
     const sheet = { reaction: 5, intuition: 4 };
     for (let i = 0; i < 50; i++) {
-      const { score } = sr6.rollPlayer(sheet, 0);
+      const { score } = sr6.rollPlayer(sheet, { extraDice: 0 });
       expect(score).toBeGreaterThanOrEqual(10);
       expect(score).toBeLessThanOrEqual(15);
     }
@@ -98,7 +98,7 @@ describe('sr6 system', () => {
   it('rollPlayer adds extra d6 dice (e.g. Wired Reflexes)', () => {
     const sheet = { reaction: 4, intuition: 4 };
     for (let i = 0; i < 50; i++) {
-      const { score } = sr6.rollPlayer(sheet, 2);
+      const { score } = sr6.rollPlayer(sheet, { extraDice: 2 });
       expect(score).toBeGreaterThanOrEqual(11);
       expect(score).toBeLessThanOrEqual(26);
     }
@@ -106,7 +106,7 @@ describe('sr6 system', () => {
 
   it('rollPlayer breakdown shows extra dice', () => {
     const sheet = { reaction: 4, intuition: 4 };
-    const { score, breakdown } = sr6.rollPlayer(sheet, 2);
+    const { score, breakdown } = sr6.rollPlayer(sheet, { extraDice: 2 });
     expect(breakdown).toMatch(/REA\(4\) \+ INT\(4\) \+ 3d6\(.+\) = \d+/);
     expect(breakdown).toContain(`= ${score}`);
   });
@@ -114,7 +114,7 @@ describe('sr6 system', () => {
   it('rollPlayer reads stats from sheet.data if not top-level', () => {
     const sheet = { data: { reaction: 6, intuition: 5 } };
     for (let i = 0; i < 50; i++) {
-      const { score } = sr6.rollPlayer(sheet, 0);
+      const { score } = sr6.rollPlayer(sheet, { extraDice: 0 });
       expect(score).toBeGreaterThanOrEqual(12);
       expect(score).toBeLessThanOrEqual(17);
     }
@@ -130,11 +130,12 @@ describe('cpr system', () => {
     expect(cpr.passDecay).toBe(false);
   });
 
-  it('rollNpc uses REF + 1d10 (min is ref+1)', () => {
+  it('rollNpc uses REF + 1d10', () => {
     const sheet = { ref: 6 };
     for (let i = 0; i < 50; i++) {
       const { score } = cpr.rollNpc(sheet);
-      expect(score).toBeGreaterThanOrEqual(7); // REF(6) + min 1
+      expect(score).toBeGreaterThanOrEqual(7);
+      expect(score).toBeLessThanOrEqual(16);
     }
   });
 
@@ -148,7 +149,8 @@ describe('cpr system', () => {
   it('rollNpc falls back to ref=5 when sheet is missing', () => {
     for (let i = 0; i < 50; i++) {
       const { score } = cpr.rollNpc();
-      expect(score).toBeGreaterThanOrEqual(6); // REF(5) + min 1
+      expect(score).toBeGreaterThanOrEqual(6);
+      expect(score).toBeLessThanOrEqual(15);
     }
   });
 
@@ -156,7 +158,8 @@ describe('cpr system', () => {
     const sheet = { data: { ref: 8 } };
     for (let i = 0; i < 50; i++) {
       const { score } = cpr.rollPlayer(sheet);
-      expect(score).toBeGreaterThanOrEqual(9); // REF(8) + min 1
+      expect(score).toBeGreaterThanOrEqual(9);
+      expect(score).toBeLessThanOrEqual(18);
     }
   });
 
@@ -166,22 +169,18 @@ describe('cpr system', () => {
     expect(Array.isArray(diceResults['10'])).toBe(true);
   });
 
-  it('exploded is false when no 10 is rolled', () => {
-    // Force a non-10 by running many trials — statistically guaranteed within reasonable count
-    let sawNonExplod = false;
-    for (let i = 0; i < 200; i++) {
-      const { exploded, diceResults } = cpr.rollNpc();
-      if (!exploded) { sawNonExplod = true; expect(diceResults['10']).toHaveLength(1); break; }
+  it('does not explode by default (RAW)', () => {
+    for (let i = 0; i < 100; i++) {
+      const { diceResults } = cpr.rollNpc();
+      expect(diceResults['10']).toHaveLength(1);
     }
-    expect(sawNonExplod).toBe(true);
   });
 
-  it('exploded is true and multiple dice recorded when a 10 is rolled', () => {
-    // Mock Math.random to force 10, then 5
+  it('explodes when explodingInitiative option is true and a 10 is rolled', () => {
     const original = Math.random;
     let call = 0;
-    Math.random = () => call++ === 0 ? 0.9999 : 0.4; // first call → 10, second → 5
-    const { exploded, diceResults, breakdown } = cpr.rollNpc({ ref: 6 });
+    Math.random = () => call++ === 0 ? 0.9999 : 0.4;
+    const { exploded, diceResults, breakdown } = cpr.rollNpc({ ref: 6 }, { explodingInitiative: true });
     Math.random = original;
 
     expect(exploded).toBe(true);
@@ -189,15 +188,13 @@ describe('cpr system', () => {
     expect(breakdown).toContain('[EXPLOD]');
   });
 
-  it('keeps exploding while 10s keep coming', () => {
+  it('keeps exploding on consecutive 10s when option is on', () => {
     const original = Math.random;
     let call = 0;
-    // Force 10, 10, 3
     Math.random = () => [0.9999, 0.9999, 0.2][call++] ?? 0.5;
-    const { diceResults, exploded } = cpr.rollNpc({ ref: 5 });
+    const { diceResults } = cpr.rollNpc({ ref: 5 }, { explodingInitiative: true });
     Math.random = original;
 
-    expect(exploded).toBe(true);
     expect(diceResults['10']).toEqual([10, 10, 3]);
   });
 });

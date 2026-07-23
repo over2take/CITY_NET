@@ -1,4 +1,4 @@
-import type { InitiativeSystem } from './index';
+import type { InitiativeSystem, RollOptions } from './index';
 
 const d6 = () => Math.floor(Math.random() * 6) + 1;
 const stat = (sheet: any, key: string) => Number(sheet?.[key] ?? sheet?.data?.[key] ?? 3);
@@ -20,7 +20,8 @@ export const sr6: InitiativeSystem = {
     };
   },
 
-  rollPlayer(sheet, extraDice = 0) {
+  rollPlayer(sheet, options?: RollOptions) {
+    const extraDice = options?.extraDice ?? 0;
     const rea = stat(sheet, 'reaction');
     const int_ = stat(sheet, 'intuition');
     const rolls = Array.from({ length: 1 + extraDice }, d6);

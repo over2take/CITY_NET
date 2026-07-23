@@ -16,7 +16,6 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
   const rowRef = useRef<HTMLDivElement>(null);
   const [showExplod, setShowExplod] = useState(combatant.exploded ?? false);
 
-  // Re-trigger the animation whenever this combatant's exploded flag changes
   useEffect(() => {
     if (combatant.exploded) {
       setShowExplod(true);
@@ -65,7 +64,8 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
         {combatant.score}
       </span>
 
-      {/* EXPLOD badge — visible while animation runs */}
+
+      {/* EXPLOD badge */}
       {showExplod && (
         <span style={{ fontSize: '0.55rem', letterSpacing: '1px', color: '#ffffff', background: 'var(--green)', padding: '1px 4px', borderRadius: 2, fontWeight: 'bold', flexShrink: 0 }}>
           EXPLOD

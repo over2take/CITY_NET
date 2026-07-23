@@ -1,14 +1,14 @@
-import type { InitiativeSystem } from './index';
+import type { InitiativeSystem, RollOptions } from './index';
 
 const stat = (sheet: any, key: string, fallback: number) =>
   Number(sheet?.[key] ?? sheet?.data?.[key] ?? fallback);
 
-function rollInit(sheet: any) {
+function rollInit(sheet: any, explodingDie = false) {
   const ref = stat(sheet, 'ref', 5);
   const rolls: number[] = [];
   let next = Math.floor(Math.random() * 10) + 1;
   rolls.push(next);
-  while (next === 10) {
+  while (explodingDie && next === 10) {
     next = Math.floor(Math.random() * 10) + 1;
     rolls.push(next);
   }
@@ -28,6 +28,6 @@ export const cpr: InitiativeSystem = {
   key: 'cyberpunk_red',
   counterLabel: 'ROUND',
   passDecay: false,
-  rollNpc: rollInit,
-  rollPlayer: rollInit,
+  rollNpc: (sheet, options?: RollOptions) => rollInit(sheet, options?.explodingInitiative),
+  rollPlayer: (sheet, options?: RollOptions) => rollInit(sheet, options?.explodingInitiative),
 };
