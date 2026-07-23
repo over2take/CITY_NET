@@ -2209,12 +2209,13 @@ function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] 
           <label
             key={d.settingKey}
             title={d.title}
-            style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+            style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'flex-start', gap: '6px', cursor: 'pointer' }}
           >
             <input
               type="checkbox"
               checked={!!rules[d.settingKey]}
               onChange={(e) => setRules(r => ({ ...r, [d.settingKey]: e.target.checked }))}
+              style={{ flexShrink: 0, marginTop: '2px' }}
             />
             {d.label}
           </label>
