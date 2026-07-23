@@ -7,32 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Added
-
-- **Cities Without Number initiative system** — side-based initiative (RAW default) and individual initiative (opt-in house rule).
-  - **1d8 + DEX mod** roll per combatant; ROUND counter; PCs win ties against NPCs.
-  - **Side-based mode** — two sides: PLAYERS and NPC. All PCs roll individually; the best individual PC roll becomes the PLAYERS side score. NPC side is auto-created on the first enemy roll with its own 1d8. Friendly NPCs slot into the PLAYERS side (RAW: allies act with the party).
-  - **Sub-ordering within sides** — combatants are displayed by individual score within each side and are drag-to-reorder.
-  - **Player JOIN INITIATIVE** button appears in the side view when a PC hasn't rolled yet; they slot to the bottom of the PLAYERS side.
-  - **Individual initiative** available as an opt-in house rule in AdminPanel under CWN rules — enables per-combatant ordering identical to other systems.
-- **`InitiativeSideView` component** — parallel render path for side-based mode; zero changes to the individual mode path. Active side highlighted with green border; NEXT/END INIT admin controls; drag-and-drop scoped within each side.
-- **`cwn.ts` initiative system module** — isolated definition: `key: 'cities_without_number'`, `counterLabel: 'ROUND'`, `passDecay: false`, `defaultMode: 'side'`.
-
-### Fixed
-
-- **Combatant row drag** — browser was intercepting the avatar portrait as a native image drag instead of triggering the row's drag handler. Fixed by adding `draggable={false}` to portrait `<img>` elements and setting a transparent ghost image on drag start.
-- **Side-view drag-and-drop** — `dragSideId` was stored as React state, causing it to be stale (`null`) when the first `dragOver` event fired immediately after `dragStart`. Converted to a ref so handlers are always synchronously current; visual indicator state (`dragOverSideId`) kept separate. Also tightened `onDragLeave` to only reset on genuine container exit (via `relatedTarget` check) rather than on every child-element transition.
-
 ---
 
 ## [1.7.0] - 2026-07-23
 
 ### Added
 
-- **Initiative tracker** — full real-time initiative system across all three supported TTRPG systems. Start/end initiative per scene, roll and re-roll, drag-to-reorder, admin remove, late-join flow, and multi-scene combats that share a single turn counter.
+- **Initiative tracker** — full real-time initiative system across all supported TTRPG systems. Start/end initiative per scene, roll and re-roll, drag-to-reorder, admin remove, late-join flow, and multi-scene combats that share a single turn counter.
   - **Generic** — 1d20 roll; TURN counter; order held for entire combat.
   - **Shadowrun 6e** — REA + INT + Nd6 roll (Wired Reflexes extra dice selector); PASS counter; end-of-pass −10 score decay; survivors carry decayed scores into the next pass; new-round banner when all scores drop to zero.
   - **Cyberpunk RED** — REF + 1d10 roll; ROUND counter; order held for entire combat (RAW). Exploding d10 available as an opt-in house rule (rolling 10 adds 10 and triggers another roll, chaining while 10s keep coming).
+  - **Cities Without Number** — side-based initiative (RAW default) and individual initiative (opt-in house rule). 1d8 + DEX mod per combatant; ROUND counter; PCs win ties. PLAYERS side score auto-derived from the best individual PC roll; NPC side auto-created on the first enemy roll with its own 1d8; friendly NPCs slot into the PLAYERS side. Sub-ordering within sides is drag-to-reorder. Individual initiative available as an opt-in house rule in AdminPanel.
 - **Initiative sidebar panel** — admin sees the tracker inline in the sidebar; players see it as a floating window or sidebar panel depending on layout.
 - **Initiative nav button blink** — the initiative button pulses green (matching the unread-chat animation) when the admin starts initiative or a new SR6 round begins, prompting players to roll.
 - **Sheetless NPC manual roll** — admin can type a score directly into the token context menu and add a sheetless NPC to the initiative order without a linked sheet.
@@ -48,6 +33,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Initiative system registry** — `InitiativeSystem` interface and `getInitiativeSystem(key)` registry extracted to `frontend/src/modules/initiative/systems/`; each system is an isolated module (`generic.ts`, `sr6.ts`, `cpr.ts`).
 - **`RollOptions` interface** — shared options bag (`extraDice`, `explodingInitiative`) replaces positional args; each system reads only its own fields.
 - **`diceResults` keys** — changed from `Record<number, number[]>` to `Record<string, number[]>` to match JSON serialization (object keys are always strings after a round-trip through SQLite).
+- **Initiative system registry** now includes `cwn.ts`; `InitiativeSystem` interface gains `defaultMode?: 'individual' | 'side'`.
+
+### Fixed
+
+- **Combatant row drag** — browser was intercepting the avatar portrait as a native image drag instead of triggering the row's drag handler. Fixed by adding `draggable={false}` to portrait `<img>` elements and setting a transparent ghost image on drag start.
+- **Side-view drag-and-drop** — `dragSideId` was stored as React state, causing it to be stale (`null`) when the first `dragOver` event fired immediately after `dragStart`. Converted to a ref so handlers are always synchronously current; visual indicator state (`dragOverSideId`) kept separate. Also tightened `onDragLeave` to only reset on genuine container exit (via `relatedTarget` check) rather than on every child-element transition.
 
 ---
 
