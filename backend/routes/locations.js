@@ -49,7 +49,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
 
   router.get('/', (req, res) => {
     db.all(
-      `SELECT l.*, COALESCE(npc_cs.portrait_url, CASE WHEN l.shape = 'rhombus' THEN player_cs.portrait_url END) AS portrait_url
+      `SELECT l.*, COALESCE(npc_cs.portrait_url, CASE WHEN l.shape = 'rhombus' THEN player_cs.portrait_url END) AS portrait_url,
+              npc_cs.data AS sheet_data
        FROM locations l
        LEFT JOIN npc_sheet_links nsl ON nsl.location_id = l.id
        LEFT JOIN character_sheets npc_cs ON npc_cs.id = nsl.sheet_id

@@ -9,6 +9,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.7.0] - 2026-07-23
+
+### Added
+
+- **Initiative tracker** — full real-time initiative system across all three supported TTRPG systems. Start/end initiative per scene, roll and re-roll, drag-to-reorder, admin remove, late-join flow, and multi-scene combats that share a single turn counter.
+  - **Generic** — 1d20 roll; TURN counter; order held for entire combat.
+  - **Shadowrun 6e** — REA + INT + Nd6 roll (Wired Reflexes extra dice selector); PASS counter; end-of-pass −10 score decay; survivors carry decayed scores into the next pass; new-round banner when all scores drop to zero.
+  - **Cyberpunk RED** — REF + 1d10 roll; ROUND counter; order held for entire combat (RAW). Exploding d10 available as an opt-in house rule (rolling 10 adds 10 and triggers another roll, chaining while 10s keep coming).
+- **Initiative sidebar panel** — admin sees the tracker inline in the sidebar; players see it as a floating window or sidebar panel depending on layout.
+- **Initiative nav button blink** — the initiative button pulses green (matching the unread-chat animation) when the admin starts initiative or a new SR6 round begins, prompting players to roll.
+- **Sheetless NPC manual roll** — admin can type a score directly into the token context menu and add a sheetless NPC to the initiative order without a linked sheet.
+- **Floor-aware NPC display** — in building battle maps, the tracker only shows NPCs on the current floor; players and city-map combatants are always shown.
+- **Roll breakdown in dice tray** — initiative rolls appear in DICE_TRAY.EXE history with full breakdown: `REA(5) + INT(2) + 1d6(4) = 11` for SR6, `REF(6) + 1d10(8) = 14` for CP:R.
+- **EXPLOD animation** — when the CP:R exploding-die house rule is active and a 10 fires, the combatant row flashes white→green and displays an EXPLOD badge; the dice tray history appends 💥EXPLOD.
+- **SR6 NPC sheet stats** — bulk NPC rolls read REA/INT from the linked character sheet (`sheet_data` joined on location GET) rather than falling back to 3+3.
+- **Player sheet stats** — player JOIN rolls fetch the player's own sheet via `GET /api/sheets/own` so REA/INT/REF are used instead of defaults.
+- **House rule: Exploding Initiative Die (CP:R)** — added to the CP:R section of the House Rules panel in AdminPanel.
+
+### Changed
+
+- **Initiative system registry** — `InitiativeSystem` interface and `getInitiativeSystem(key)` registry extracted to `frontend/src/modules/initiative/systems/`; each system is an isolated module (`generic.ts`, `sr6.ts`, `cpr.ts`).
+- **`RollOptions` interface** — shared options bag (`extraDice`, `explodingInitiative`) replaces positional args; each system reads only its own fields.
+- **`diceResults` keys** — changed from `Record<number, number[]>` to `Record<string, number[]>` to match JSON serialization (object keys are always strings after a round-trip through SQLite).
+
+---
+
 ## [1.6.4] - 2026-07-20
 
 ### Changed

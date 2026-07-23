@@ -349,8 +349,11 @@ db.serialize(() => {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     turn_counter INTEGER DEFAULT 1,
     pass_counter INTEGER DEFAULT 1,
+    system TEXT DEFAULT 'generic',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+  // Migration: add system column for existing DBs
+  db.run(`ALTER TABLE initiative_combat ADD COLUMN system TEXT DEFAULT 'generic'`, () => {});
 
   // One row per active scene; combatants JSON ordered highest → lowest.
   db.run(`CREATE TABLE IF NOT EXISTS initiative_scene (
