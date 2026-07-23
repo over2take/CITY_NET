@@ -250,6 +250,20 @@ function registerInitiativeHandlers(io, db) {
                 );
               }
             );
+          } else if (row.system === 'cyberpunk_red') {
+            // CP:R: everyone rerolls each round — clear the list and signal newRound
+            db.run(
+              `UPDATE initiative_scene SET combatants = '[]', turn_index = 0, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
+              [sceneKey],
+              (err) => {
+                if (err) return;
+                db.run(
+                  `UPDATE initiative_combat SET turn_counter = turn_counter + 1 WHERE id = ?`,
+                  [row.combat_id],
+                  () => broadcastScene(io, db, sceneKey, { newRound: true })
+                );
+              }
+            );
           } else {
             // Generic / other systems: just bump the turn counter
             db.run(

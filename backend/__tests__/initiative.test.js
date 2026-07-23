@@ -42,6 +42,28 @@ async function startCombat(db, system = 'generic') {
   return result.lastID;
 }
 
+// Mirrors CP:R full-reroll logic from backend/sockets/initiative.js
+async function nextTurnCpr(db, sceneKey) {
+  const row = await get(db,
+    `SELECT s.combatants, s.turn_index, s.combat_id, c.turn_counter
+     FROM initiative_scene s JOIN initiative_combat c ON c.id = s.combat_id
+     WHERE s.scene_key = ?`, [sceneKey]);
+
+  const combatants = JSON.parse(row.combatants || '[]');
+  const nextIndex = row.turn_index + 1;
+  const wrapped = nextIndex >= combatants.length;
+
+  if (!wrapped) {
+    await run(db, `UPDATE initiative_scene SET turn_index = ? WHERE scene_key = ?`, [nextIndex, sceneKey]);
+    return { wrapped: false, newRound: false };
+  }
+
+  // End of round — clear everyone, bump turn_counter
+  await run(db, `UPDATE initiative_scene SET combatants = '[]', turn_index = 0 WHERE scene_key = ?`, [sceneKey]);
+  await run(db, `UPDATE initiative_combat SET turn_counter = turn_counter + 1 WHERE id = ?`, [row.combat_id]);
+  return { wrapped: true, newRound: true };
+}
+
 // Mirrors SR6 pass-decay logic from backend/sockets/initiative.js
 async function nextTurnSr6(db, sceneKey) {
   const row = await get(db,
@@ -394,5 +416,44 @@ describe('initiative — roll breakdown and diceResults', () => {
     expect(list).toHaveLength(1);
     expect(list[0].score).toBe(14);
     expect(list[0].breakdown).toBe('REA(5) + INT(3) + 1d6(6) = 14');
+  });
+});
+
+describe('initiative — CP:R full reroll', () => {
+  it('clears all combatants at end of round', async () => {
+    const cid = await startCombat(db, 'cyberpunk_red');
+    await startScene(db, 'city:0', cid);
+    await addCombatant(db, 'city:0', { id: 'player:a', name: 'A', score: 12, isNpc: false });
+    await addCombatant(db, 'city:0', { id: 'npc:1', name: 'B', score: 8, isNpc: true });
+
+    // Advance past last combatant (wrap)
+    await nextTurnCpr(db, 'city:0');
+    const { newRound } = await nextTurnCpr(db, 'city:0');
+
+    expect(newRound).toBe(true);
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = 'city:0'`);
+    expect(JSON.parse(row.combatants)).toHaveLength(0);
+  });
+
+  it('increments turn_counter at end of round', async () => {
+    const cid = await startCombat(db, 'cyberpunk_red');
+    await startScene(db, 'city:0', cid);
+    await addCombatant(db, 'city:0', { id: 'player:a', name: 'A', score: 10, isNpc: false });
+
+    await nextTurnCpr(db, 'city:0');
+    const row = await get(db, `SELECT turn_counter FROM initiative_combat WHERE id = ?`, [cid]);
+    expect(row.turn_counter).toBe(2);
+  });
+
+  it('does not clear combatants mid-round', async () => {
+    const cid = await startCombat(db, 'cyberpunk_red');
+    await startScene(db, 'city:0', cid);
+    await addCombatant(db, 'city:0', { id: 'player:a', name: 'A', score: 12, isNpc: false });
+    await addCombatant(db, 'city:0', { id: 'npc:1', name: 'B', score: 8, isNpc: true });
+
+    const { newRound } = await nextTurnCpr(db, 'city:0');
+    expect(newRound).toBe(false);
+    const row = await get(db, `SELECT combatants FROM initiative_scene WHERE scene_key = 'city:0'`);
+    expect(JSON.parse(row.combatants)).toHaveLength(2);
   });
 });

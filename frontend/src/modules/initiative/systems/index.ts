@@ -1,5 +1,6 @@
 import { generic } from './generic';
 import { sr6 } from './sr6';
+import { cpr } from './cpr';
 
 export interface RollResult {
   score: number;
@@ -19,6 +20,7 @@ export interface InitiativeSystem {
 const SYSTEMS: Record<string, InitiativeSystem> = {
   generic,
   shadowrun_6e: sr6,
+  cyberpunk_red: cpr,
 };
 
 export function getInitiativeSystem(key: string): InitiativeSystem {

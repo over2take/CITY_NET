@@ -61,9 +61,7 @@ export function InitiativeWindow({
         <div style={{ fontSize: '0.65rem', color: 'var(--dark-green)', letterSpacing: '1px' }}>{sceneLabel}</div>
         {state && (
           <div style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', color: 'var(--green)', textShadow: 'var(--glow)', marginTop: '2px' }}>
-            {activeSystem === 'shadowrun_6e'
-              ? `PASS ${state.passCounter}`
-              : `TURN ${state.turnCounter}`}
+            {`${getInitiativeSystem(activeSystem).counterLabel} ${activeSystem === 'shadowrun_6e' ? state.passCounter : state.turnCounter}`}
           </div>
         )}
       </div>
@@ -217,6 +215,8 @@ export function InitiativeWindow({
           <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', textAlign: 'center', marginTop: '4px' }}>
             {activeSystem === 'shadowrun_6e'
               ? `ROLL REA + INT + ${1 + (extraDice ?? 0)}d6 — ADDED TO BOTTOM`
+              : activeSystem === 'cyberpunk_red'
+              ? 'ROLL REF/2 + 1d10 — ADDED TO BOTTOM'
               : 'ROLL 1d20 — ADDED TO BOTTOM'}
           </div>
         </div>

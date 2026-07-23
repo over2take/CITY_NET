@@ -463,9 +463,10 @@ CITY_NET/
 │   │   │       ├── systems/
 │   │   │       │   ├── index.ts                # InitiativeSystem interface + getInitiativeSystem(key) registry
 │   │   │       │   ├── generic.ts              # 1d20 roll; TURN counter; no pass decay
-│   │   │       │   └── sr6.ts                  # REA+INT+Xd6 roll; PASS counter; end-of-pass −10 decay; Wired Reflexes extra dice
+│   │   │       │   ├── sr6.ts                  # REA+INT+Xd6 roll; PASS counter; end-of-pass −10 decay; Wired Reflexes extra dice
+│   │   │       │   └── cpr.ts                  # ceil(REF/2)+1d10 roll; ROUND counter; full reroll every round
 │   │   │       └── __tests__/
-│   │   │           ├── systems.test.ts          # Registry lookup, generic bounds, SR6 formula, extra dice, breakdown format, diceResults shape
+│   │   │           ├── systems.test.ts          # Registry lookup, generic/SR6/CP:R formulas, extra dice, breakdown format, diceResults shape
 │   │   │           └── useInitiative.test.ts    # Hook state transitions, socket emit payloads
 │   │   ├── context/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
