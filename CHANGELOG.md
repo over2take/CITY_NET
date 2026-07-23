@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Cities Without Number initiative system** — side-based initiative (RAW default) and individual initiative (opt-in house rule).
+  - **1d8 + DEX mod** roll per combatant; ROUND counter; PCs win ties against NPCs.
+  - **Side-based mode** — two sides: PLAYERS and NPC. All PCs roll individually; the best individual PC roll becomes the PLAYERS side score. NPC side is auto-created on the first enemy roll with its own 1d8. Friendly NPCs slot into the PLAYERS side (RAW: allies act with the party).
+  - **Sub-ordering within sides** — combatants are displayed by individual score within each side and are drag-to-reorder.
+  - **Player JOIN INITIATIVE** button appears in the side view when a PC hasn't rolled yet; they slot to the bottom of the PLAYERS side.
+  - **Individual initiative** available as an opt-in house rule in AdminPanel under CWN rules — enables per-combatant ordering identical to other systems.
+- **`InitiativeSideView` component** — parallel render path for side-based mode; zero changes to the individual mode path. Active side highlighted with green border; NEXT/END INIT admin controls; drag-and-drop scoped within each side.
+- **`cwn.ts` initiative system module** — isolated definition: `key: 'cities_without_number'`, `counterLabel: 'ROUND'`, `passDecay: false`, `defaultMode: 'side'`.
+
+### Fixed
+
+- **Combatant row drag** — browser was intercepting the avatar portrait as a native image drag instead of triggering the row's drag handler. Fixed by adding `draggable={false}` to portrait `<img>` elements and setting a transparent ghost image on drag start.
+- **Side-view drag-and-drop** — `dragSideId` was stored as React state, causing it to be stale (`null`) when the first `dragOver` event fired immediately after `dragStart`. Converted to a ref so handlers are always synchronously current; visual indicator state (`dragOverSideId`) kept separate. Also tightened `onDragLeave` to only reset on genuine container exit (via `relatedTarget` check) rather than on every child-element transition.
+
 ---
 
 ## [1.7.0] - 2026-07-23

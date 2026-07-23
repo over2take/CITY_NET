@@ -350,7 +350,7 @@ CITY_NET/
 │   │   └── npcTiers.js         # Per-system NPC power tiers for GENERATE_SHEET (CP:R: Mook→Elite; CWN: +Spirits; SR6: Ganger→Prime Runner)
 │   ├── sockets/
 │   │   ├── index.js            # All Socket.IO event handlers
-│   │   └── initiative.js       # Initiative tracker socket events (start, roll, next, remove, reorder, end); SR6 pass-decay on wrap; roll history broadcast
+│   │   └── initiative.js       # Initiative tracker socket events (start, roll, next, remove, reorder, end); individual and side-based modes; SR6 pass-decay on wrap; CWN side auto-create, PC-side score derivation, friendly-NPC routing; roll history broadcast
 │   ├── startup/
 │   │   └── sanity_checks.js    # In-memory DB checks on boot
 │   └── __tests__/
@@ -386,7 +386,7 @@ CITY_NET/
 │       ├── sockets.deathsave.test.js   # Socket integration: death saves, sheetAttack vs NPC SP, import apply, tiered generation
 │       ├── sockets.editing.test.js     # Socket editing access flow; regression for stale elevatedUsers bug
 │       ├── undo.test.js                # Undo endpoint (all action types, auth, ordering)
-│       └── initiative.test.js          # Initiative tracker (start, roll ordering, next turn, SR6 pass-decay, breakdown/diceResults persistence)
+│       └── initiative.test.js          # Initiative tracker (start, roll ordering, next turn, SR6 pass-decay, breakdown/diceResults persistence, CWN PC-wins-ties, side mode)
 │
 ├── frontend/
 │   ├── src/
@@ -456,17 +456,19 @@ CITY_NET/
 │   │   ├── modules/
 │   │   │   └── initiative/
 │   │   │       ├── hooks/
-│   │   │       │   └── useInitiative.ts        # Socket-backed initiative state (start, roll, join, next, remove, reorder, end)
+│   │   │       │   └── useInitiative.ts        # Socket-backed initiative state (start, roll, join, next, remove, reorder, end); Side interface; side mode support
 │   │   │       ├── components/
-│   │   │       │   ├── InitiativeWindow.tsx     # Floating/sidebar tracker UI; SR6 pass counter, new-round banner, extra-dice selector, floor-aware NPC filtering
+│   │   │       │   ├── InitiativeWindow.tsx     # Floating/sidebar tracker UI; branches on mode ('individual'/'side'); SR6 pass counter, new-round banner, extra-dice selector, floor-aware NPC filtering
+│   │   │       │   ├── InitiativeSideView.tsx   # Side-based render path (CWN RAW); side panels with active highlight, sub-ordering, within-side drag-and-drop, player JOIN button
 │   │   │       │   └── InitiativeCombatantRow.tsx # Single combatant row with drag-to-reorder and admin remove
 │   │   │       ├── systems/
-│   │   │       │   ├── index.ts                # InitiativeSystem interface + getInitiativeSystem(key) registry
+│   │   │       │   ├── index.ts                # InitiativeSystem interface (+ defaultMode) + getInitiativeSystem(key) registry
 │   │   │       │   ├── generic.ts              # 1d20 roll; TURN counter; no pass decay
 │   │   │       │   ├── sr6.ts                  # REA+INT+Xd6 roll; PASS counter; end-of-pass −10 decay; Wired Reflexes extra dice
-│   │   │       │   └── cpr.ts                  # REF+1d10 roll; ROUND counter; order held for entire combat; exploding d10 via house rule
+│   │   │       │   ├── cpr.ts                  # REF+1d10 roll; ROUND counter; order held for entire combat; exploding d10 via house rule
+│   │   │       │   └── cwn.ts                  # 1d8+DEX mod roll; ROUND counter; PCs win ties; defaultMode: 'side'
 │   │   │       └── __tests__/
-│   │   │           ├── systems.test.ts          # Registry lookup, generic/SR6/CP:R formulas, extra dice, breakdown format, diceResults shape
+│   │   │           ├── systems.test.ts          # Registry lookup, generic/SR6/CP:R/CWN formulas, extra dice, breakdown format, diceResults shape
 │   │   │           └── useInitiative.test.ts    # Hook state transitions, socket emit payloads
 │   │   ├── context/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
