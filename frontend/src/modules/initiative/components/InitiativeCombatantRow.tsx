@@ -45,7 +45,7 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
       </div>
 
       {/* Name */}
-      <span style={{ flex: 1, fontSize: '0.75rem', color: isActive ? 'var(--green)' : 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span title={combatant.name.toUpperCase()} style={{ flex: 1, fontSize: '0.75rem', color: isActive ? 'var(--green)' : 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {isActive && '▶ '}{combatant.name.toUpperCase()}
       </span>
 

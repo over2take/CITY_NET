@@ -49,18 +49,71 @@ function registerInitiativeHandlers(io, db) {
 
     // ── List active combats (for the "join existing" prompt) ──────────────────
     socket.on('initiative:list_combats', () => {
-      db.all(
-        `SELECT c.id, c.turn_counter, c.pass_counter,
-                GROUP_CONCAT(s.scene_key) as scenes
-         FROM initiative_combat c
-         LEFT JOIN initiative_scene s ON s.combat_id = c.id
-         GROUP BY c.id`,
-        [],
-        (err, rows) => {
-          if (err) return;
-          socket.emit('initiative:combats', rows || []);
-        }
-      );
+      db.all(`SELECT c.id, c.turn_counter FROM initiative_combat c`, [], (err, combats) => {
+        if (err) return;
+        if (!combats || combats.length === 0) { socket.emit('initiative:combats', []); return; }
+
+        db.all(`SELECT combat_id, scene_key FROM initiative_scene`, [], (err2, scenes) => {
+          if (err2) return;
+
+          // Collect unique location ids from non-city scene keys
+          // Handles both "locId:floorIdx" and "building:locId" formats
+          const allKeys = (scenes || []).map((s) => s.scene_key);
+          const buildingKeys = allKeys.filter((sk) => sk.startsWith('building:'));
+          const floorKeys = allKeys.filter((sk) => sk !== 'city:0' && !sk.startsWith('building:'));
+          const locationIds = [...new Set([
+            ...floorKeys.map((sk) => parseInt(sk.split(':')[0], 10)),
+            ...buildingKeys.map((sk) => parseInt(sk.split(':')[1], 10)),
+          ].filter(Boolean))];
+
+          const buildResult = (labelMap) => {
+            const scenesByCombat = {};
+            (scenes || []).forEach((s) => {
+              if (!scenesByCombat[s.combat_id]) scenesByCombat[s.combat_id] = [];
+              scenesByCombat[s.combat_id].push(s.scene_key);
+            });
+            return combats.map((c) => ({
+              ...c,
+              scene_keys: scenesByCombat[c.id] || [],
+              scene_labels: Object.fromEntries(
+                (scenesByCombat[c.id] || []).map((sk) => [sk, labelMap[sk] || sk])
+              ),
+            }));
+          };
+
+          if (locationIds.length === 0) {
+            socket.emit('initiative:combats', buildResult({ 'city:0': 'CITY MAP' }));
+            return;
+          }
+
+          const placeholders = locationIds.map(() => '?').join(',');
+          db.all(
+            `SELECT bm.location_id, bm.designation, bm.order_index, l.name AS loc_name
+             FROM battle_maps bm
+             JOIN locations l ON l.id = bm.location_id
+             WHERE bm.location_id IN (${placeholders})
+             ORDER BY bm.location_id, bm.order_index`,
+            locationIds,
+            (err3, floors) => {
+              const labelMap = { 'city:0': 'CITY MAP' };
+              // Group floors by location and assign 0-based indices matching frontend
+              const byLoc = {};
+              (floors || []).forEach((f) => {
+                if (!byLoc[f.location_id]) byLoc[f.location_id] = [];
+                byLoc[f.location_id].push(f);
+              });
+              Object.entries(byLoc).forEach(([locId, locFloors]) => {
+                const locName = (locFloors[0].loc_name || 'UNKNOWN').toUpperCase();
+                labelMap[`building:${locId}`] = locName;
+                locFloors.forEach((f, idx) => {
+                  labelMap[`${locId}:${idx}`] = `${locName} — ${f.designation.toUpperCase()}`;
+                });
+              });
+              socket.emit('initiative:combats', buildResult(labelMap));
+            }
+          );
+        });
+      });
     });
 
     // ── Start initiative ───────────────────────────────────────────────────────
@@ -96,8 +149,9 @@ function registerInitiativeHandlers(io, db) {
     });
 
     // ── Submit roll ───────────────────────────────────────────────────────────
-    // { sceneKey, combatant: { id, name, portraitUrl, score, isNpc } }
-    socket.on('initiative:roll', ({ sceneKey, combatant }) => {
+    // { sceneKey, combatant: { id, name, portraitUrl, score, isNpc }, appendToEnd? }
+    // appendToEnd=true: insert at bottom without re-sorting (late-join flow)
+    socket.on('initiative:roll', ({ sceneKey, combatant, appendToEnd }) => {
       if (!sceneKey || !combatant) return;
 
       db.get(
@@ -107,10 +161,11 @@ function registerInitiativeHandlers(io, db) {
           if (err || !row) return;
 
           const list = JSON.parse(row.combatants || '[]');
-          // Remove any existing entry for this combatant then re-insert sorted
           const filtered = list.filter((c) => c.id !== combatant.id);
           filtered.push({ ...combatant, insertOrder: Date.now() });
-          filtered.sort((a, b) => b.score - a.score || a.insertOrder - b.insertOrder);
+          if (!appendToEnd) {
+            filtered.sort((a, b) => b.score - a.score || a.insertOrder - b.insertOrder);
+          }
 
           db.run(
             `UPDATE initiative_scene SET combatants = ?, updated_at = CURRENT_TIMESTAMP

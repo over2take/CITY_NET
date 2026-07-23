@@ -57,13 +57,13 @@ describe('InitiativeWindow — no active initiative', () => {
   });
 
   it('shows JOIN EXISTING COMBAT when activeCombats available', () => {
-    const combats: ActiveCombat[] = [{ id: 1, turn_counter: 3, pass_counter: 1, scenes: 'map:1:0' }];
+    const combats: ActiveCombat[] = [{ id: 1, turn_counter: 3, pass_counter: 1, scene_keys: 'map:1:0' }];
     render(<InitiativeWindow {...baseProps({ activeCombats: combats })} />);
     expect(screen.getByText('JOIN EXISTING COMBAT')).toBeInTheDocument();
   });
 
   it('shows combat list after clicking JOIN EXISTING COMBAT', async () => {
-    const combats: ActiveCombat[] = [{ id: 1, turn_counter: 3, pass_counter: 1, scenes: 'map:1:0' }];
+    const combats: ActiveCombat[] = [{ id: 1, turn_counter: 3, pass_counter: 1, scene_keys: 'map:1:0' }];
     render(<InitiativeWindow {...baseProps({ activeCombats: combats })} />);
     await userEvent.click(screen.getByText('JOIN EXISTING COMBAT'));
     expect(screen.getByText(/COMBAT #1/)).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe('InitiativeWindow — no active initiative', () => {
   });
 
   it('calls onStart with combatId when joining existing combat', async () => {
-    const props = baseProps({ activeCombats: [{ id: 2, turn_counter: 5, pass_counter: 1, scenes: '' }] });
+    const props = baseProps({ activeCombats: [{ id: 2, turn_counter: 5, pass_counter: 1, scene_keys: '' }] });
     render(<InitiativeWindow {...props} />);
     await userEvent.click(screen.getByText('JOIN EXISTING COMBAT'));
     await userEvent.click(screen.getByText(/COMBAT #2/));

@@ -395,6 +395,123 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function BattleAdminPanel({
+  token, isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly,
+  tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, locations, refreshLocations,
+  handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, secureModeEnabled, onLogout,
+  globalSettings, fetchGlobalSettings, onOpenNpcLibrary, activeUsers,
+}: any) {
+  const [tab, setTab] = useState<'battle_map' | 'game'>('battle_map');
+
+  const resolvedBattleMapScale = (() => {
+    if (tempBattleMapScale !== null) return tempBattleMapScale;
+    const loc = locations.find((l: any) => l.id === activeBattleMapData?.locationId);
+    if (!loc) return 5;
+    const idx = activeBattleMapData?.currentFloorIndex || 0;
+    if (typeof loc.map_scale_multiplier === 'string' && loc.map_scale_multiplier.startsWith('[')) {
+      try {
+        const arr = JSON.parse(loc.map_scale_multiplier);
+        return arr[idx] ?? 5;
+      } catch { return 5; }
+    }
+    return parseFloat(loc.map_scale_multiplier) || 5;
+  })();
+
+  const tabStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1, padding: '6px 4px', fontSize: '0.65rem', letterSpacing: '1px',
+    background: active ? 'color-mix(in srgb, var(--green) 12%, transparent)' : 'transparent',
+    color: active ? 'var(--green)' : 'color-mix(in srgb, var(--green) 50%, transparent)',
+    border: 'none', borderBottom: active ? '2px solid var(--green)' : '2px solid transparent',
+    cursor: 'pointer',
+  });
+
+  return (
+    <div className="panel admin-panel" style={{ width: '300px', maxHeight: '90vh', overflowY: 'auto', pointerEvents: 'auto' }}>
+      <h3 style={{ textShadow: 'var(--glow)', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
+
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--dark-green)', marginBottom: '12px' }}>
+        <button style={tabStyle(tab === 'battle_map')} onClick={() => setTab('battle_map')}>BATTLE MAP</button>
+        <button style={tabStyle(tab === 'game')} onClick={() => setTab('game')}>GAME</button>
+      </div>
+
+      {tab === 'battle_map' && <>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+          <button className={`upload-btn deploy-btn${isDeployingEnemy ? ' deploying-enemy' : ''}`} onClick={() => { setIsDeployingEnemy(!isDeployingEnemy); setIsDeployingFriendly(false); }} style={{ flex: 1 }}>{isDeployingEnemy ? 'STOP_PLACING' : 'ADD_ENEMY'}</button>
+          <button className={`upload-btn deploy-btn${isDeployingFriendly ? ' deploying-friendly' : ''}`} onClick={() => { setIsDeployingFriendly(!isDeployingFriendly); setIsDeployingEnemy(false); }} style={{ flex: 1 }}>{isDeployingFriendly ? 'STOP_PLACING' : 'ADD_FRIENDLY'}</button>
+        </div>
+        <div style={{ marginBottom: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
+          <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>
+            MAP SCALE (FT/UNIT): {resolvedBattleMapScale}
+          </label>
+          <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+            <input type="range" min="0.1" max="50" step="0.1"
+              value={resolvedBattleMapScale}
+              onChange={(e) => setTempBattleMapScale(e.target.value)} style={{ flex: 1 }} />
+            <input type="number" step="0.1"
+              value={resolvedBattleMapScale}
+              onChange={(e) => setTempBattleMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '5px' }} />
+            <button className="utility-btn" onClick={() => {
+              if (tempBattleMapScale === null) return;
+              const loc = locations.find((l: any) => l.id === activeBattleMapData.locationId);
+              if (loc) {
+                let currentArr: any[] = [];
+                if (typeof loc.map_scale_multiplier === 'string' && loc.map_scale_multiplier.startsWith('[')) {
+                  try { currentArr = JSON.parse(loc.map_scale_multiplier); } catch (e) {}
+                } else {
+                  currentArr = [parseFloat(loc.map_scale_multiplier) || 5];
+                }
+                const idx = activeBattleMapData?.currentFloorIndex || 0;
+                const parsedScale = parseFloat(tempBattleMapScale.toString());
+                currentArr[idx] = !isNaN(parsedScale) ? parsedScale : 5;
+                fetch(`/api/locations/${loc.id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify({ ...loc, map_scale_multiplier: JSON.stringify(currentArr) }),
+                }).then(() => { setTempBattleMapScale(null); refreshLocations(); });
+              }
+            }}>APPLY</button>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px', borderBottom: '1px solid var(--green)', paddingBottom: '10px' }}>
+          <button className="map-save-btn" onClick={handleSaveDefault}>SAVE_DEFAULT</button>
+          <button className="map-load-btn" onClick={handleLoadDefault}>LOAD_DEFAULT</button>
+        </div>
+        <button className="utility-btn" onClick={() => setIsAdminPayOpen(true)} style={{ width: '100%', marginBottom: '10px' }}>PAY_PLAYERS</button>
+        {!secureModeEnabled && <button className="utility-btn danger-btn" onClick={() => { onLogout(); }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>}
+      </>}
+
+      {tab === 'game' && <>
+        <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
+        <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
+          <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
+              <button
+                key={opt}
+                className={`utility-btn ${(globalSettings?.currency_icon || 'credits') === opt ? 'active' : ''}`}
+                style={{ padding: '4px 10px', fontSize: opt === 'credits' ? '0.6rem' : '1rem' }}
+                onClick={() => {
+                  fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ key: 'currency_icon', value: opt }),
+                  }).then(() => fetchGlobalSettings());
+                }}
+              >
+                {opt === 'credits' ? 'DEFAULT' : opt}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
+        <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
+      </>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function AdminPanel({
   socketRef, token, onLogout, refreshLocations, refreshRoads, locations, roads, editData, setEditData, editId, setEditId,
   transformMode, setTransformMode, targetObject, blockBuildings, setBlockBuildings, selectedLocation,
@@ -423,77 +540,18 @@ export function AdminPanel({
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary,
   }: any) {
   if (view === 'battle_map') {
-    let resolvedBattleMapScale: number | string = 5;
-    if (tempBattleMapScale !== null) {
-        resolvedBattleMapScale = tempBattleMapScale;
-    } else if (activeBattleMapData) {
-        const loc = locations.find((l:any) => l.id === activeBattleMapData.locationId);
-        if (loc) {
-            let scaleData = loc.map_scale_multiplier;
-            if (typeof scaleData === 'string' && scaleData.startsWith('[')) {
-                try {
-                    const arr = JSON.parse(scaleData);
-                    const idx = activeBattleMapData?.currentFloorIndex || 0;
-                    if (arr[idx] !== undefined && arr[idx] !== null) resolvedBattleMapScale = arr[idx];
-                    else resolvedBattleMapScale = arr[0] || 5;
-                } catch(e) {}
-            } else {
-                resolvedBattleMapScale = parseFloat(scaleData) || 5;
-            }
-        }
-    }
-
     return (
-      <div className="panel admin-panel" style={{ width: '300px', maxHeight: '90vh', overflowY: 'auto', pointerEvents: 'auto' }}>
-        <h3 style={{ textShadow: 'var(--glow)', margin: '0 0 10px 0' }}>BATTLE ADMIN</h3>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-          <button className={`upload-btn deploy-btn${isDeployingEnemy ? ' deploying-enemy' : ''}`} onClick={() => { setIsDeployingEnemy(!isDeployingEnemy); setIsDeployingFriendly(false); }} style={{ flex: 1 }}>{isDeployingEnemy ? 'STOP_PLACING' : 'ADD_ENEMY'}</button>
-          <button className={`upload-btn deploy-btn${isDeployingFriendly ? ' deploying-friendly' : ''}`} onClick={() => { setIsDeployingFriendly(!isDeployingFriendly); setIsDeployingEnemy(false); }} style={{ flex: 1 }}>{isDeployingFriendly ? 'STOP_PLACING' : 'ADD_FRIENDLY'}</button>
-        </div>
-        <div style={{ marginBottom: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
-                <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>
-                    MAP SCALE (FT/UNIT): {resolvedBattleMapScale}
-                </label>
-            <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                <input type="range" min="0.1" max="50" step="0.1" 
-                    value={resolvedBattleMapScale}
-                    onChange={(e) => setTempBattleMapScale(e.target.value)} style={{ flex: 1 }} />
-                <input type="number" step="0.1" 
-                    value={resolvedBattleMapScale}
-                    onChange={(e) => setTempBattleMapScale(e.target.value)} style={{ width: '60px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '5px' }} />
-                <button className="utility-btn" onClick={() => {
-                    if (tempBattleMapScale === null) return;
-                    const loc = locations.find((l:any) => l.id === activeBattleMapData.locationId);
-                    if (loc) {
-                        let currentArr: any[] = [];
-                        if (typeof loc.map_scale_multiplier === 'string' && loc.map_scale_multiplier.startsWith('[')) {
-                            try { currentArr = JSON.parse(loc.map_scale_multiplier); } catch(e) {}
-                        } else {
-                            currentArr = [parseFloat(loc.map_scale_multiplier) || 5];
-                        }
-                        const idx = activeBattleMapData?.currentFloorIndex || 0;
-                        const parsedScale = parseFloat(tempBattleMapScale.toString());
-                        currentArr[idx] = !isNaN(parsedScale) ? parsedScale : 5;
-                        
-                        fetch(`/api/locations/${loc.id}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                            body: JSON.stringify({ ...loc, map_scale_multiplier: JSON.stringify(currentArr) })
-                        }).then(() => {
-                            setTempBattleMapScale(null);
-                            refreshLocations();
-                        });
-                    }
-                }}>APPLY</button>
-            </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px', borderBottom: '1px solid var(--green)', paddingBottom: '10px' }}>
-           <button className="map-save-btn" onClick={handleSaveDefault}>SAVE_DEFAULT</button>
-           <button className="map-load-btn" onClick={handleLoadDefault}>LOAD_DEFAULT</button>
-        </div>
-        <button className="utility-btn" onClick={() => setIsAdminPayOpen(true)} style={{ width: '100%', marginBottom: '10px' }}>PAY_PLAYERS</button>
-        {!secureModeEnabled && <button className="utility-btn danger-btn" onClick={() => { onLogout(); }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>}
-      </div>
+      <BattleAdminPanel
+        token={token}
+        isDeployingEnemy={isDeployingEnemy} setIsDeployingEnemy={setIsDeployingEnemy}
+        isDeployingFriendly={isDeployingFriendly} setIsDeployingFriendly={setIsDeployingFriendly}
+        tempBattleMapScale={tempBattleMapScale} setTempBattleMapScale={setTempBattleMapScale}
+        activeBattleMapData={activeBattleMapData} locations={locations} refreshLocations={refreshLocations}
+        handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
+        setIsAdminPayOpen={setIsAdminPayOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
+        globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings}
+        onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers}
+      />
     );
   }
 
@@ -2104,6 +2162,7 @@ function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] 
   const [rules, setRules] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [msg, setMsg] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then((rows) => {
@@ -2138,49 +2197,65 @@ function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] 
 
   return (
     <div style={{ border: '1px solid var(--dark-green)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-      <label style={{ fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}>HOUSE RULES</label>
-      {defs.map((d) => (
-        <label
-          key={d.settingKey}
-          title={d.title}
-          style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-        >
-          <input
-            type="checkbox"
-            checked={!!rules[d.settingKey]}
-            onChange={(e) => setRules(r => ({ ...r, [d.settingKey]: e.target.checked }))}
-          />
-          {d.label}
-        </label>
-      ))}
-      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-        <button
-          className="utility-btn"
-          style={{ fontSize: '0.65rem', padding: '3px 12px', opacity: dirty ? 1 : 0.4 }}
-          disabled={!dirty}
-          onClick={apply}
-        >
-          APPLY
-        </button>
-        {dirty && (
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 0, color: 'var(--green)', fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}
+      >
+        <span>HOUSE RULES</span>
+        <span>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && <>
+        {defs.map((d) => (
+          <label
+            key={d.settingKey}
+            title={d.title}
+            style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+          >
+            <input
+              type="checkbox"
+              checked={!!rules[d.settingKey]}
+              onChange={(e) => setRules(r => ({ ...r, [d.settingKey]: e.target.checked }))}
+            />
+            {d.label}
+          </label>
+        ))}
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <button
             className="utility-btn"
-            style={{ fontSize: '0.65rem', padding: '3px 12px' }}
-            onClick={() => setRules({ ...saved })}
+            style={{ fontSize: '0.65rem', padding: '3px 12px', opacity: dirty ? 1 : 0.4 }}
+            disabled={!dirty}
+            onClick={apply}
           >
-            REVERT
+            APPLY
           </button>
-        )}
-        {msg && (
-          <span style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>{msg}</span>
-        )}
-        {dirty && !msg && (
-          <span style={{ fontSize: '0.6rem', color: '#ffcc00', opacity: 0.8, letterSpacing: '1px' }}>UNSAVED CHANGES</span>
-        )}
-      </div>
+          {dirty && (
+            <button
+              className="utility-btn"
+              style={{ fontSize: '0.65rem', padding: '3px 12px' }}
+              onClick={() => setRules({ ...saved })}
+            >
+              REVERT
+            </button>
+          )}
+          {msg && (
+            <span style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>{msg}</span>
+          )}
+          {dirty && !msg && (
+            <span style={{ fontSize: '0.6rem', color: '#ffcc00', opacity: 0.8, letterSpacing: '1px' }}>UNSAVED CHANGES</span>
+          )}
+        </div>
+      </>}
     </div>
   );
 }
+
+const GLOBAL_HOUSE_RULES: HouseRuleDef[] = [
+  {
+    settingKey: 'initiative_follows_building',
+    label: 'INITIATIVE FOLLOWS BUILDING (ALL FLOORS SHARE ONE TRACKER)',
+    title: 'When enabled, all floors of the same building share a single initiative tracker. Players moving between floors stay in the same combat order. Each building and the city map still have their own separate initiatives.',
+  },
+];
 
 const CPR_HOUSE_RULES: HouseRuleDef[] = [
   {
@@ -2269,9 +2344,12 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: str
           <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
             Player sheets for the current system are kept and restored if you switch back.
           </p>
-          {system === 'cities_without_number' && <HouseRulesPanel token={token} defs={CWN_HOUSE_RULES} />}
-          {system === 'cyberpunk_red' && <HouseRulesPanel token={token} defs={CPR_HOUSE_RULES} />}
-          {system === 'shadowrun_6e' && <HouseRulesPanel token={token} defs={SR6_HOUSE_RULES} />}
+          <HouseRulesPanel token={token} defs={[
+            ...GLOBAL_HOUSE_RULES,
+            ...(system === 'cities_without_number' ? CWN_HOUSE_RULES : []),
+            ...(system === 'cyberpunk_red' ? CPR_HOUSE_RULES : []),
+            ...(system === 'shadowrun_6e' ? SR6_HOUSE_RULES : []),
+          ]} />
           {system === 'shadowrun_6e' && (() => {
             const onlinePlayers = (activeUsers || []).filter((u: any) => !u.isAdmin && !u.isNPC).map((u: any) => u.userName);
             return (

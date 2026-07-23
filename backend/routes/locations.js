@@ -48,10 +48,22 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   const router = express.Router();
 
   router.get('/', (req, res) => {
-    db.all('SELECT * FROM locations', [], (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json(rows);
-    });
+    db.all(
+      `SELECT l.*, COALESCE(npc_cs.portrait_url, CASE WHEN l.shape = 'rhombus' THEN player_cs.portrait_url END) AS portrait_url
+       FROM locations l
+       LEFT JOIN npc_sheet_links nsl ON nsl.location_id = l.id
+       LEFT JOIN character_sheets npc_cs ON npc_cs.id = nsl.sheet_id
+       LEFT JOIN (
+         SELECT username, portrait_url FROM character_sheets
+         WHERE is_npc = 0 AND portrait_url IS NOT NULL
+         GROUP BY username
+       ) player_cs ON player_cs.username = l.owner`,
+      [],
+      (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+      }
+    );
   });
 
   // Custom structure library — structures saved via JOIN → CUSTOM classification

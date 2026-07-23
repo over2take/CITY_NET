@@ -26,9 +26,11 @@ interface NpcSheetWindowProps {
   /** When provided, the window re-fetches on dataUpdated so linked token HP
    *  stays live (attacks, HIT_POINTS edits). */
   socket?: any;
+  /** When provided, a ROLL INIT button appears in the title bar. */
+  onRollInitiative?: (portraitUrl: string | undefined) => void;
 }
 
-export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headshots = ALL_HEADSHOTS, pos, setPos, onClose, socket }: NpcSheetWindowProps) {
+export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headshots = ALL_HEADSHOTS, pos, setPos, onClose, socket, onRollInitiative }: NpcSheetWindowProps) {
   const apiPath = playerUsername
     ? `/api/sheets/user/${encodeURIComponent(playerUsername)}`
     : `/api/sheets/npcs/${npcId}`;
@@ -186,6 +188,16 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           >
             IMPORT
           </button>
+          {onRollInitiative && !playerUsername && (
+            <button
+              title="Roll 1d20 and add to initiative (appended to bottom)"
+              className="win95-close-btn"
+              style={{ fontSize: '9px', width: 'auto', padding: '0 5px' }}
+              onClick={() => onRollInitiative(sheet?.portrait_url ?? undefined)}
+            >
+              ROLL INIT
+            </button>
+          )}
           {!playerUsername && (
             <button
               title="Choose a stock NPC headshot"

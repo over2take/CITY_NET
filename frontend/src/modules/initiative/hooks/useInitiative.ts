@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useReducer } from 'react';
 
 export interface Combatant {
   id: string;
@@ -7,6 +7,7 @@ export interface Combatant {
   score: number;
   isNpc: boolean;
   insertOrder?: number;
+  floorIndex?: number;
 }
 
 export interface InitiativeState {
@@ -21,7 +22,8 @@ export interface InitiativeState {
 export interface ActiveCombat {
   id: number;
   turn_counter: number;
-  scenes: string;
+  scene_keys: string[];
+  scene_labels: Record<string, string>;
 }
 
 export function useInitiative(
@@ -32,33 +34,53 @@ export function useInitiative(
   const [activeCombats, setActiveCombats] = useState<ActiveCombat[]>([]);
   const currentSceneKey = useRef(sceneKey);
   currentSceneKey.current = sceneKey;
+  // Incremented when the socket becomes available after a delayed connect,
+  // forcing the effect to re-run so listeners are registered properly.
+  const [socketReadyCount, forceReady] = useReducer((n: number) => n + 1, 0);
 
   useEffect(() => {
+    if (!socketRef.current) {
+      const interval = setInterval(() => {
+        if (socketRef.current) {
+          clearInterval(interval);
+          forceReady(); // re-runs this effect with the socket now available
+        }
+      }, 200);
+      return () => clearInterval(interval);
+    }
+
     const s = socketRef.current;
-    if (!s) return;
+
+    // Clear stale state from previous scene immediately on scene change
+    setState(null);
 
     const onState = (data: InitiativeState) => {
-      if (data.sceneKey === currentSceneKey.current) setState(data);
+      if (data.sceneKey === currentSceneKey.current) {
+        setState(data);
+        s.emit('initiative:list_combats');
+      }
     };
 
     const onStarted = (data: { sceneKey: string; combatId: number }) => {
-      if (data.sceneKey === currentSceneKey.current && !state) {
+      if (data.sceneKey === currentSceneKey.current) {
         setState({ sceneKey: data.sceneKey, combatId: data.combatId, combatants: [], turnIndex: 0, turnCounter: 1, passCounter: 1 });
       }
     };
 
     const onEnded = (data: { sceneKey: string }) => {
       if (data.sceneKey === currentSceneKey.current) setState(null);
+      s.emit('initiative:list_combats');
     };
 
     const onCombats = (rows: ActiveCombat[]) => setActiveCombats(rows);
+    const onReconnect = () => { if (sceneKey) s.emit('initiative:join', { sceneKey }); };
 
     s.on('initiative:state', onState);
     s.on('initiative:started', onStarted);
     s.on('initiative:ended', onEnded);
     s.on('initiative:combats', onCombats);
+    s.on('connect', onReconnect);
 
-    // Rejoin on reconnect / scene change
     if (sceneKey) s.emit('initiative:join', { sceneKey });
 
     return () => {
@@ -66,8 +88,9 @@ export function useInitiative(
       s.off('initiative:started', onStarted);
       s.off('initiative:ended', onEnded);
       s.off('initiative:combats', onCombats);
+      s.off('connect', onReconnect);
     };
-  }, [socketRef, sceneKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [socketRef, sceneKey, socketReadyCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const listCombats = useCallback(() => {
     socketRef.current?.emit('initiative:list_combats');
@@ -81,6 +104,11 @@ export function useInitiative(
   const submitRoll = useCallback((combatant: Omit<Combatant, 'insertOrder'>) => {
     if (!sceneKey) return;
     socketRef.current?.emit('initiative:roll', { sceneKey, combatant });
+  }, [socketRef, sceneKey]);
+
+  const submitJoin = useCallback((combatant: Omit<Combatant, 'insertOrder'>) => {
+    if (!sceneKey) return;
+    socketRef.current?.emit('initiative:roll', { sceneKey, combatant, appendToEnd: true });
   }, [socketRef, sceneKey]);
 
   const nextTurn = useCallback(() => {
@@ -109,6 +137,7 @@ export function useInitiative(
     listCombats,
     startInitiative,
     submitRoll,
+    submitJoin,
     nextTurn,
     removeCombatant,
     reorder,
