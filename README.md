@@ -327,7 +327,7 @@ CITY_NET/
 │   │   └── auth.js             # JWT verify middleware (admin + elevated users)
 │   ├── routes/
 │   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs
-│   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only)
+│   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only); GET / includes sheet_data for NPC initiative rolls
 │   │   ├── battle_maps.js      # Battle map image upload/management
 │   │   ├── maps.js             # Saved map snapshots (locations, districts, roads, overpasses, water bodies); preserves only rhombus tokens on load/clear
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload
@@ -349,7 +349,8 @@ CITY_NET/
 │   │   ├── importers.js        # Modular sheet import — PDF form extraction + data-driven per-system field mappers (makeMapFields)
 │   │   └── npcTiers.js         # Per-system NPC power tiers for GENERATE_SHEET (CP:R: Mook→Elite; CWN: +Spirits; SR6: Ganger→Prime Runner)
 │   ├── sockets/
-│   │   └── index.js            # All Socket.IO event handlers
+│   │   ├── index.js            # All Socket.IO event handlers
+│   │   └── initiative.js       # Initiative tracker socket events (start, roll, next, remove, reorder, end); SR6 pass-decay on wrap; roll history broadcast
 │   ├── startup/
 │   │   └── sanity_checks.js    # In-memory DB checks on boot
 │   └── __tests__/
@@ -365,7 +366,7 @@ CITY_NET/
 │       ├── player.test.js              # Player auth (register, login, forgot/reset, registration flow)
 │       ├── roads.test.js               # Road API (GET / POST / DELETE / DELETE :id)
 │       ├── signs.test.js               # Sign API (GET / POST / PATCH / DELETE, auth, image-only, filter_intensity clamping, XSS)
-│       ├── sheets.test.js              # Sheet routes (system switch, admin access, portraits, derived fields)
+│       ├── sheets.test.js              # Sheet routes (system switch, admin access, portraits, derived fields, GET /own player self-fetch)
 │       ├── npc_sheets.test.js          # NPC library routes (CRUD, links, folders, LUCK reset, HP overlay)
 │       ├── cpr_attack.test.js          # CP:R attack module (to-hit, armor, shield, crits, death saves)
 │       ├── npc_tiers.test.js           # NPC tier packages (escalation, weapon validity)
@@ -384,7 +385,8 @@ CITY_NET/
 │       ├── sr6_sockets.test.js         # SR6 socket integration: pool attack flow, stun overflow, system isolation
 │       ├── sockets.deathsave.test.js   # Socket integration: death saves, sheetAttack vs NPC SP, import apply, tiered generation
 │       ├── sockets.editing.test.js     # Socket editing access flow; regression for stale elevatedUsers bug
-│       └── undo.test.js                # Undo endpoint (all action types, auth, ordering)
+│       ├── undo.test.js                # Undo endpoint (all action types, auth, ordering)
+│       └── initiative.test.js          # Initiative tracker (start, roll ordering, next turn, SR6 pass-decay, breakdown/diceResults persistence)
 │
 ├── frontend/
 │   ├── src/
@@ -395,7 +397,7 @@ CITY_NET/
 │   │   │   ├── HitPoints.tsx           # HP tracking + injury panel + HealthReviewWindow; STIM_HEAL (CWN), STABILIZE button for allies on mortal wound
 │   │   │   ├── BankWindows.tsx         # Player bank UI
 │   │   │   ├── ChatWindow.tsx          # In-game chat
-│   │   │   ├── DiceTray.tsx            # Dice roller; SR6 pool results show a pulsing GLITCH / CRITICAL GLITCH banner
+│   │   │   ├── DiceTray.tsx            # Dice roller; SR6 pool results show a pulsing GLITCH / CRITICAL GLITCH banner; initiative rolls appear with full breakdown
 │   │   │   ├── Buildings.tsx           # 3D building meshes
 │   │   │   ├── Sidewalks.tsx           # Road-flanking pavement strips (mitered quad ribbons, no geometry under roads) + neon curb line overlays
 │   │   │   ├── AutoSignage.tsx         # Procedural signs on building faces (seeded RNG, weighted type pool: text, preset SVG images, vertical neon; overlap check)
@@ -403,7 +405,7 @@ CITY_NET/
 │   │   │   ├── Rhombuses.tsx           # Player token meshes
 │   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
-│   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools; exports `hasSheetCombat` + `SheetAttackPanel` (system-agnostic via ATTACK_PANEL_CONFIG)
+│   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools; initiative button blinks when a roll is needed; exports `hasSheetCombat` + `SheetAttackPanel` (system-agnostic via ATTACK_PANEL_CONFIG)
 │   │   │   ├── SecureLogin.tsx         # Player login, registration, password reset UI; theme picker (saves to localStorage + DB on login); polls registration status until approved
 │   │   │   ├── LogoScene.tsx           # Three.js animated login logo (hex badge, wireframe skyline, spinning gem); colour driven by active theme
 │   │   │   ├── CityDatabase.tsx        # Location search/browse
@@ -451,6 +453,20 @@ CITY_NET/
 │   │   │       ├── QuickSheetCard.test.tsx
 │   │   │       ├── Sidebar.test.tsx
 │   │   │       └── UpdateModal.test.tsx  # Rendering, docker/non-docker branching, button callbacks, update flow
+│   │   ├── modules/
+│   │   │   └── initiative/
+│   │   │       ├── hooks/
+│   │   │       │   └── useInitiative.ts        # Socket-backed initiative state (start, roll, join, next, remove, reorder, end)
+│   │   │       ├── components/
+│   │   │       │   ├── InitiativeWindow.tsx     # Floating/sidebar tracker UI; SR6 pass counter, new-round banner, extra-dice selector, floor-aware NPC filtering
+│   │   │       │   └── InitiativeCombatantRow.tsx # Single combatant row with drag-to-reorder and admin remove
+│   │   │       ├── systems/
+│   │   │       │   ├── index.ts                # InitiativeSystem interface + getInitiativeSystem(key) registry
+│   │   │       │   ├── generic.ts              # 1d20 roll; TURN counter; no pass decay
+│   │   │       │   └── sr6.ts                  # REA+INT+Xd6 roll; PASS counter; end-of-pass −10 decay; Wired Reflexes extra dice
+│   │   │       └── __tests__/
+│   │   │           ├── systems.test.ts          # Registry lookup, generic bounds, SR6 formula, extra dice, breakdown format, diceResults shape
+│   │   │           └── useInitiative.test.ts    # Hook state transitions, socket emit payloads
 │   │   ├── context/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
 │   │   ├── hooks/
