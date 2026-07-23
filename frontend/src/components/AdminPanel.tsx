@@ -2215,9 +2215,9 @@ function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] 
               type="checkbox"
               checked={!!rules[d.settingKey]}
               onChange={(e) => setRules(r => ({ ...r, [d.settingKey]: e.target.checked }))}
-              style={{ flexShrink: 0, marginTop: '2px' }}
+              style={{ flexShrink: 0 }}
             />
-            {d.label}
+            <span style={{ textAlign: 'left' }}>{d.label}</span>
           </label>
         ))}
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
