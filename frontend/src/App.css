@@ -660,6 +660,10 @@ header {
   box-shadow: var(--glow);
 }
 
+.rail-btn.initiative-needs-roll {
+  animation: chat-alert 1s infinite;
+}
+
 .rail-bottom .rail-btn {
   color: var(--green);
   opacity: 0.7;
@@ -688,6 +692,18 @@ header {
   0% { background: var(--black); color: var(--green); }
   50% { background: var(--green); color: var(--black); }
   100% { background: var(--black); color: var(--green); }
+}
+
+@keyframes explod-flash {
+  0%   { background: var(--green); color: var(--black); box-shadow: var(--glow); }
+  15%  { background: #ffffff;      color: var(--black); box-shadow: 0 0 24px #fff; }
+  40%  { background: var(--green); color: var(--black); box-shadow: var(--glow); }
+  70%  { background: var(--black); color: var(--green); box-shadow: none; }
+  100% { background: transparent;  color: inherit;      box-shadow: none; }
+}
+
+.initiative-explod-row {
+  animation: explod-flash 1.4s ease-out forwards;
 }
 
 .system-trigger {

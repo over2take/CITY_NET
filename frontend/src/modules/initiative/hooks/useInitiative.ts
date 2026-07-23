@@ -7,6 +7,7 @@ export interface Combatant {
   score: number;
   breakdown?: string;
   diceResults?: Record<string, number[]>;
+  exploded?: boolean;
   isNpc: boolean;
   insertOrder?: number;
   floorIndex?: number;

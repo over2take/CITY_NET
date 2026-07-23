@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import type { Combatant } from '../hooks/useInitiative';
 
 interface Props {
@@ -14,6 +14,16 @@ interface Props {
 
 export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, onRemove, onDragStart, onDragOver, onDrop }: Props) {
   const rowRef = useRef<HTMLDivElement>(null);
+  const [showExplod, setShowExplod] = useState(combatant.exploded ?? false);
+
+  // Re-trigger the animation whenever this combatant's exploded flag changes
+  useEffect(() => {
+    if (combatant.exploded) {
+      setShowExplod(true);
+      const t = setTimeout(() => setShowExplod(false), 1400);
+      return () => clearTimeout(t);
+    }
+  }, [combatant.id, combatant.exploded]);
 
   const rowStyle: React.CSSProperties = {
     display: 'flex',
@@ -31,6 +41,7 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
     <div
       ref={rowRef}
       style={rowStyle}
+      className={showExplod ? 'initiative-explod-row' : undefined}
       draggable={isAdmin}
       onDragStart={() => isAdmin && onDragStart(index)}
       onDragOver={(e) => { e.preventDefault(); isAdmin && onDragOver(index); }}
@@ -53,6 +64,13 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
       <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: isActive ? 'var(--green)' : 'inherit', minWidth: 24, textAlign: 'right' }}>
         {combatant.score}
       </span>
+
+      {/* EXPLOD badge — visible while animation runs */}
+      {showExplod && (
+        <span style={{ fontSize: '0.55rem', letterSpacing: '1px', color: '#ffffff', background: 'var(--green)', padding: '1px 4px', borderRadius: 2, fontWeight: 'bold', flexShrink: 0 }}>
+          EXPLOD
+        </span>
+      )}
 
       {/* Admin trash */}
       {isAdmin && (

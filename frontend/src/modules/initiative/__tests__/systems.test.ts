@@ -130,13 +130,11 @@ describe('cpr system', () => {
     expect(cpr.passDecay).toBe(false);
   });
 
-  it('rollNpc uses REF + 1d10', () => {
+  it('rollNpc uses REF + 1d10 (min is ref+1)', () => {
     const sheet = { ref: 6 };
     for (let i = 0; i < 50; i++) {
       const { score } = cpr.rollNpc(sheet);
-      // REF(6) + roll 1–10 → score 7–16
-      expect(score).toBeGreaterThanOrEqual(7);
-      expect(score).toBeLessThanOrEqual(16);
+      expect(score).toBeGreaterThanOrEqual(7); // REF(6) + min 1
     }
   });
 
@@ -150,9 +148,7 @@ describe('cpr system', () => {
   it('rollNpc falls back to ref=5 when sheet is missing', () => {
     for (let i = 0; i < 50; i++) {
       const { score } = cpr.rollNpc();
-      // REF(5) + roll 1–10 → score 6–15
-      expect(score).toBeGreaterThanOrEqual(6);
-      expect(score).toBeLessThanOrEqual(15);
+      expect(score).toBeGreaterThanOrEqual(6); // REF(5) + min 1
     }
   });
 
@@ -160,9 +156,7 @@ describe('cpr system', () => {
     const sheet = { data: { ref: 8 } };
     for (let i = 0; i < 50; i++) {
       const { score } = cpr.rollPlayer(sheet);
-      // REF(8) + roll 1–10 → score 9–18
-      expect(score).toBeGreaterThanOrEqual(9);
-      expect(score).toBeLessThanOrEqual(18);
+      expect(score).toBeGreaterThanOrEqual(9); // REF(8) + min 1
     }
   });
 
@@ -170,5 +164,40 @@ describe('cpr system', () => {
     const { diceResults } = cpr.rollNpc();
     expect(diceResults).toHaveProperty('10');
     expect(Array.isArray(diceResults['10'])).toBe(true);
+  });
+
+  it('exploded is false when no 10 is rolled', () => {
+    // Force a non-10 by running many trials — statistically guaranteed within reasonable count
+    let sawNonExplod = false;
+    for (let i = 0; i < 200; i++) {
+      const { exploded, diceResults } = cpr.rollNpc();
+      if (!exploded) { sawNonExplod = true; expect(diceResults['10']).toHaveLength(1); break; }
+    }
+    expect(sawNonExplod).toBe(true);
+  });
+
+  it('exploded is true and multiple dice recorded when a 10 is rolled', () => {
+    // Mock Math.random to force 10, then 5
+    const original = Math.random;
+    let call = 0;
+    Math.random = () => call++ === 0 ? 0.9999 : 0.4; // first call → 10, second → 5
+    const { exploded, diceResults, breakdown } = cpr.rollNpc({ ref: 6 });
+    Math.random = original;
+
+    expect(exploded).toBe(true);
+    expect(diceResults['10']).toEqual([10, 5]);
+    expect(breakdown).toContain('[EXPLOD]');
+  });
+
+  it('keeps exploding while 10s keep coming', () => {
+    const original = Math.random;
+    let call = 0;
+    // Force 10, 10, 3
+    Math.random = () => [0.9999, 0.9999, 0.2][call++] ?? 0.5;
+    const { diceResults, exploded } = cpr.rollNpc({ ref: 5 });
+    Math.random = original;
+
+    expect(exploded).toBe(true);
+    expect(diceResults['10']).toEqual([10, 10, 3]);
   });
 });

@@ -177,9 +177,10 @@ function registerInitiativeHandlers(io, db) {
               broadcastScene(io, db, sceneKey);
 
               // Log to roll history so it appears in the dice tray
+              const explodSuffix = combatant.exploded ? ' 💥EXPLOD' : '';
               const historyString = combatant.breakdown
-                ? `${combatant.name} INITIATIVE: ${combatant.breakdown}`
-                : `${combatant.name} rolled INITIATIVE [${combatant.score}]`;
+                ? `${combatant.name} INITIATIVE: ${combatant.breakdown}${explodSuffix}`
+                : `${combatant.name} rolled INITIATIVE [${combatant.score}]${explodSuffix}`;
               const results = combatant.diceResults || { 20: [combatant.score] };
               const resultsJson = JSON.stringify(results);
               db.run(

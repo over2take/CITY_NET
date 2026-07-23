@@ -7,6 +7,8 @@ export interface RollResult {
   breakdown: string;
   /** Dice to display in the tray — key is sides (as string), value is array of individual rolls */
   diceResults: Record<string, number[]>;
+  /** True when a d10 rolled 10 and triggered at least one extra roll (CP:R exploding die) */
+  exploded?: boolean;
 }
 
 export interface InitiativeSystem {
