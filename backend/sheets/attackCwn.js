@@ -1,3 +1,5 @@
+const { cryptoRng } = require('../utils/random');
+
 // CWN attack + stabilization resolution - pure functions, no I/O.
 // Rules from the CWN Quick Reference Documents v2.2 (CC BY-NC 4.0, by 0frames).
 //
@@ -75,7 +77,7 @@ const getWeapon = (data, index) => {
 };
 
 // Roll the to-hit check: 1d20 + BHB + skill + attribute mod (+weapon atk).
-const rollToHit = (data, weapon, rng = Math.random) => {
+const rollToHit = (data, weapon, rng = cryptoRng) => {
   let formula = `1d20 + @base_hit_bonus + @${weapon.skill} + @${weapon.mod}`;
   if (weapon.atk !== 0) formula += weapon.atk > 0 ? ` + ${weapon.atk}` : ` - ${Math.abs(weapon.atk)}`;
   const resolved = rollEngine.resolveFormula(formula, data);
@@ -83,7 +85,7 @@ const rollToHit = (data, weapon, rng = Math.random) => {
 };
 
 // Roll weapon damage: dice (+flat from the dmg string) + attribute mod.
-const rollDamage = (data, weapon, rng = Math.random) => {
+const rollDamage = (data, weapon, rng = cryptoRng) => {
   const resolved = rollEngine.resolveFormula(`${weapon.dmg} + @${weapon.mod}`, data);
   return rollEngine.executeRoll(resolved, 'sum', rng);
 };
@@ -94,7 +96,7 @@ const rollDamage = (data, weapon, rng = Math.random) => {
 // Returns null when the weapon has no trauma or the rule is off; otherwise
 // { die, rating, roll, tt, traumatic }.
 const DEFAULT_TRAUMA_TARGET = 6;
-const rollTrauma = (weapon, traumaEnabled, targetTT = DEFAULT_TRAUMA_TARGET, rng = Math.random) => {
+const rollTrauma = (weapon, traumaEnabled, targetTT = DEFAULT_TRAUMA_TARGET, rng = cryptoRng) => {
   if (!traumaEnabled || !weapon.trauma) return null;
   const tt = num(targetTT) > 0 ? num(targetTT) : DEFAULT_TRAUMA_TARGET;
   const roll = Math.floor(rng() * weapon.trauma.die) + 1;
@@ -118,7 +120,7 @@ const shockDamage = (data, weapon, targetAc) => {
 // Stabilization check: 2d6 + Heal + INT mod vs 8 + rounds down (+2 no tools).
 // healSkill / intMod come back separately so the broadcast can show the
 // player exactly what the server read off their sheet.
-const rollStabilize = (data, roundsDown, noTools, rng = Math.random) => {
+const rollStabilize = (data, roundsDown, noTools, rng = cryptoRng) => {
   const dc = STABILIZE_BASE_DC + Math.max(0, num(roundsDown)) + (noTools ? NO_TOOLS_PENALTY : 0);
   const resolved = rollEngine.resolveFormula('2d6 + @heal + @int_mod', data);
   const outcome = rollEngine.executeRoll(resolved, 'sum', rng);

@@ -1,3 +1,5 @@
+const { cryptoRng } = require('../utils/random');
+
 // CP:R attack + death-save resolution - pure functions, no I/O.
 //
 // Attack flow (Cyberpunk RED):
@@ -71,7 +73,7 @@ const checkPenalties = (data, stat, hp) => {
 //         noFumble: nat-1 is not a critical failure (dedicated 1-LUCK burn,
 //                   or the house-rule that any LUCK spend negates fumbles),
 //         hp: attacker's current token HP (wound penalties) }
-const rollToHit = (data, weapon, aimed, rng = Math.random, opts = {}) => {
+const rollToHit = (data, weapon, aimed, rng = cryptoRng, opts = {}) => {
   const stat = (CPR_SKILLS[weapon.skill] || [null, 'ref'])[1];
   let formula = `1d10 + @${stat} + @${weapon.skill}`;
   if (aimed) formula += ` - ${AIMED_PENALTY}`;
@@ -93,7 +95,7 @@ const resolveLuckSpend = (pool, wantBonus, wantNegate) => {
 };
 
 // Roll weapon damage (plain sum, no explosion).
-const rollDamage = (weapon, rng = Math.random) => {
+const rollDamage = (weapon, rng = cryptoRng) => {
   const resolved = rollEngine.resolveFormula(weapon.dmg, {});
   return rollEngine.executeRoll(resolved, 'sum', rng);
 };
@@ -141,7 +143,7 @@ const staticMeleeDv = (data, takeTen = false) =>
   (takeTen ? 10 : 6) + num(data.dex) + num(data.evasion);
 
 // Death save: 1d10 + penalty vs BODY, natural 10 always fails.
-const rollDeathSave = (body, penalty, rng = Math.random) => {
+const rollDeathSave = (body, penalty, rng = cryptoRng) => {
   const die = Math.floor(rng() * 10) + 1;
   const total = die + Math.max(0, num(penalty));
   const success = die !== 10 && total <= num(body);

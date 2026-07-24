@@ -1,4 +1,5 @@
 import type { InitiativeSystem, RollOptions } from './index';
+import { cryptoRng } from './random';
 
 const stat = (sheet: any, key: string, fallback: number) =>
   Number(sheet?.[key] ?? sheet?.data?.[key] ?? fallback);
@@ -6,10 +7,10 @@ const stat = (sheet: any, key: string, fallback: number) =>
 function rollInit(sheet: any, explodingDie = false) {
   const ref = stat(sheet, 'ref', 5);
   const rolls: number[] = [];
-  let next = Math.floor(Math.random() * 10) + 1;
+  let next = Math.floor(cryptoRng() * 10) + 1;
   rolls.push(next);
   while (explodingDie && next === 10) {
-    next = Math.floor(Math.random() * 10) + 1;
+    next = Math.floor(cryptoRng() * 10) + 1;
     rolls.push(next);
   }
   const exploded = rolls.length > 1;

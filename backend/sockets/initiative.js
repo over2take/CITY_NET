@@ -1,3 +1,5 @@
+const { cryptoRng } = require('../utils/random');
+
 // Initiative Tracker — socket event handlers
 // All events namespaced under initiative:* to avoid collisions.
 // Register via registerInitiativeHandlers(io, db) from sockets/index.js.
@@ -208,7 +210,7 @@ function registerInitiativeHandlers(io, db) {
             if (combatant.isNpc && !combatant.isFriendly) {
               // Auto-create NPC side on first enemy NPC roll, with its own 1d8
               if (!sides.some((s) => s.id === 'npc')) {
-                const roll = Math.floor(Math.random() * 8) + 1;
+                const roll = Math.floor(cryptoRng() * 8) + 1;
                 sides = [...sides, { id: 'npc', name: 'NPC', score: roll, isPlayerSide: false }];
               }
             } else {

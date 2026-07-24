@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { getInitiativeSystem } from '../systems';
 import { generic } from '../systems/generic';
 import { sr6 } from '../systems/sr6';
 import { cpr } from '../systems/cpr';
 import { cwn } from '../systems/cwn';
+import * as random from '../systems/random';
 
 describe('getInitiativeSystem', () => {
   it('returns generic for unknown keys', () => {
@@ -182,11 +183,10 @@ describe('cpr system', () => {
   });
 
   it('explodes when explodingInitiative option is true and a 10 is rolled', () => {
-    const original = Math.random;
     let call = 0;
-    Math.random = () => call++ === 0 ? 0.9999 : 0.4;
+    const spy = vi.spyOn(random, 'cryptoRng').mockImplementation(() => call++ === 0 ? 0.9999 : 0.4);
     const { exploded, diceResults, breakdown } = cpr.rollNpc({ ref: 6 }, { explodingInitiative: true });
-    Math.random = original;
+    spy.mockRestore();
 
     expect(exploded).toBe(true);
     expect(diceResults['10']).toEqual([10, 5]);
@@ -194,11 +194,10 @@ describe('cpr system', () => {
   });
 
   it('keeps exploding on consecutive 10s when option is on', () => {
-    const original = Math.random;
     let call = 0;
-    Math.random = () => [0.9999, 0.9999, 0.2][call++] ?? 0.5;
+    const spy = vi.spyOn(random, 'cryptoRng').mockImplementation(() => [0.9999, 0.9999, 0.2][call++] ?? 0.5);
     const { diceResults } = cpr.rollNpc({ ref: 5 }, { explodingInitiative: true });
-    Math.random = original;
+    spy.mockRestore();
 
     expect(diceResults['10']).toEqual([10, 10, 3]);
   });
