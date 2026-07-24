@@ -580,8 +580,20 @@ header {
   pointer-events: none;
 }
 
+/* Rail sizing — scales with viewport height, min 75% of full size.
+   Full size at ~1000px vh; minimum (75%) kicks in around 750px. */
+:root {
+  --rail-width:       clamp(45px,  6vh,   60px);
+  --rail-btn-size:    clamp(34px,  4.5vh, 45px);
+  --rail-icon:        clamp(18px,  2.4vh, 24px);
+  --rail-icon-sm:     clamp(15px,  2vh,   20px);
+  --rail-system-icon: clamp(26px,  3.5vh, 35px);
+  --rail-gap:         clamp(4px,   2vh,   20px);
+  --rail-top-padding: clamp(6px,   1.5vh, 15px);
+}
+
 .icon-rail {
-  width: 60px;
+  width: var(--rail-width);
   height: 100%;
   background: var(--black);
   border-right: 1px solid var(--green);
@@ -592,7 +604,7 @@ header {
 }
 
 .rail-top {
-  padding: 15px 0;
+  padding: var(--rail-top-padding) 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -601,8 +613,8 @@ header {
 }
 
 .system-icon-svg {
-  width: 35px;
-  height: 35px;
+  width: var(--rail-system-icon);
+  height: var(--rail-system-icon);
   color: var(--green);
 }
 
@@ -611,8 +623,9 @@ header {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 20px;
+  gap: var(--rail-gap);
   align-items: center;
+  overflow: hidden;
 }
 
 .rail-btn {
@@ -620,8 +633,8 @@ header {
   border: 1px solid transparent;
   color: var(--green);
   cursor: pointer;
-  width: 45px;
-  height: 45px;
+  width: var(--rail-btn-size);
+  height: var(--rail-btn-size);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -630,8 +643,8 @@ header {
 }
 
 .rail-btn svg {
-  width: 24px;
-  height: 24px;
+  width: var(--rail-icon);
+  height: var(--rail-icon);
   stroke: currentColor;
 }
 
@@ -645,6 +658,10 @@ header {
   background: var(--green);
   color: var(--black);
   box-shadow: var(--glow);
+}
+
+.rail-btn.initiative-needs-roll {
+  animation: chat-alert 1s infinite;
 }
 
 .rail-bottom .rail-btn {
@@ -663,8 +680,8 @@ header {
 }
 
 .rail-bottom .rail-btn svg {
-  width: 20px;
-  height: 20px;
+  width: var(--rail-icon-sm);
+  height: var(--rail-icon-sm);
 }
 
 .unread-flash {
@@ -675,6 +692,18 @@ header {
   0% { background: var(--black); color: var(--green); }
   50% { background: var(--green); color: var(--black); }
   100% { background: var(--black); color: var(--green); }
+}
+
+@keyframes explod-flash {
+  0%   { background: var(--green); color: var(--black); box-shadow: var(--glow); }
+  15%  { background: #ffffff;      color: var(--black); box-shadow: 0 0 24px #fff; }
+  40%  { background: var(--green); color: var(--black); box-shadow: var(--glow); }
+  70%  { background: var(--black); color: var(--green); box-shadow: none; }
+  100% { background: transparent;  color: inherit;      box-shadow: none; }
+}
+
+.initiative-explod-row {
+  animation: explod-flash 1.4s ease-out forwards;
 }
 
 .system-trigger {

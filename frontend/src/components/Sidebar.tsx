@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import kofiLogo from '../assets/kofi.png';
 import { CityDataBaseMenu } from './CityDatabase';
+import { InitiativeWindow } from '../modules/initiative';
+import { InitiativeNavPanel } from '../modules/initiative/components/InitiativeNavPanel';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { CurrencyIcon } from './BankWindows';
 import { THEMES } from '../theme/themes';
@@ -921,11 +923,20 @@ interface SidebarProps {
   onToggleRadio?: () => void;
   musicPlaying?: boolean;
   currencyIcon?: string;
+  isInitiativeOpen?: boolean;
+  onToggleInitiative?: () => void;
+  initiativeActive?: boolean;
+  initiativeNeedsRoll?: boolean;
+  onRollEnemies?: () => void;
+  onRollFriendlies?: () => void;
+  activeCombats?: import('../modules/initiative/hooks/useInitiative').ActiveCombat[];
+  onListCombats?: () => void;
+  onJumpToScene?: (sceneKey: string) => void;
   currentTheme?: ThemeName;
   onThemeChange?: (theme: ThemeName) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -1056,6 +1067,24 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               }} />
             )}
           </button>
+          {(token || initiativeActive) && (
+            <button
+              className={`rail-btn ${activeMenu === 'initiative_tracker' || isInitiativeOpen ? 'active' : ''} ${initiativeNeedsRoll && !isInitiativeOpen && activeMenu !== 'initiative_tracker' ? 'initiative-needs-roll' : ''}`}
+              onClick={token
+                ? () => { setActiveMenu(activeMenu === 'initiative_tracker' ? 'none' : 'initiative_tracker'); if (activeMenu !== 'initiative_tracker') onListCombats?.(); }
+                : onToggleInitiative}
+              title="INITIATIVE_TRACKER"
+              style={{ position: 'relative' }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="13" r="8" />
+                <path d="M12 9v4l2 2" />
+                <path d="M9 2h6" />
+                <path d="M12 2v2" />
+                <path d="M19.07 4.93l-1.41 1.41" />
+              </svg>
+            </button>
+          )}
         </div>
         <div className="rail-bottom" style={{ paddingBottom: '20px', display: 'flex', justifyContent: 'center' }}>
           <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }} onMouseEnter={handleVolumeEnter} onMouseLeave={handleVolumeLeave}>
@@ -1116,6 +1145,18 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
           {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} />}
+          {activeMenu === 'initiative_tracker' && (
+            <InitiativeNavPanel
+              initiativeActive={!!initiativeActive}
+              activeCombats={activeCombats || []}
+              locations={locations}
+              onRollEnemies={onRollEnemies}
+              onRollFriendlies={onRollFriendlies}
+              onToggleTracker={onToggleInitiative}
+              onJumpToScene={onJumpToScene}
+              onClose={() => setActiveMenu('none')}
+            />
+          )}
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ let zCounter = 2000;
 
 interface DraggableWindowProps {
   title: string;
+  centerTitle?: React.ReactNode;
   children: React.ReactNode;
   pos: { x: number; y: number };
   setPos: (pos: { x: number; y: number }) => void;
@@ -18,7 +19,7 @@ interface DraggableWindowProps {
 }
 
 export function DraggableWindow({
-  title, children, pos, setPos, onClose,
+  title, centerTitle, children, pos, setPos, onClose,
   windowStyle = {}, contentStyle = {},
   notificationsEnabled, onToggleNotifications, titleControls,
 }: DraggableWindowProps) {
@@ -77,8 +78,13 @@ export function DraggableWindow({
 
   return (
     <div ref={windowRef} className="win95-window" style={{ left: `${pos.x}px`, top: `${pos.y}px`, zIndex, ...windowStyle }}>
-      <div className="win95-title-bar" onMouseDown={(e) => { bringToFront(); handleMouseDown(e); }}>
+      <div className="win95-title-bar" onMouseDown={(e) => { bringToFront(); handleMouseDown(e); }} style={{ position: 'relative' }}>
         <div className="win95-title-text" style={{ fontWeight: 'bold' }}>{title}</div>
+        {centerTitle && (
+          <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+            {centerTitle}
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           {titleControls}
           {onToggleNotifications && (

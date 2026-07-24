@@ -185,7 +185,7 @@ export function DiceScene({ latestRoll }: DiceSceneProps) {
           case 20: geometry = new THREE.IcosahedronGeometry(1); break;
           default: geometry = new THREE.SphereGeometry(1, Math.max(3, s / 2), Math.max(3, s / 2)); break;
         }
-        (rolls as number[]).forEach(val => {
+        (Array.isArray(rolls) ? rolls as number[] : [rolls as number]).forEach(val => {
           const mesh = new THREE.Mesh(geometry, material);
           mesh.position.set(xOffset + (Math.random() - 0.5), (Math.random() - 0.5), 2 + Math.random() * 2);
           mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
@@ -349,12 +349,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
 
     const handleHistory = (data: any[]) => {
       setHistory(data);
-      if (data.length > 0) {
-        const last = data[data.length - 1];
-        setLatestRoll({ total: last.total, results: last.results, color: last.color, timestamp: Date.now() });
-        setDisplayRoll({ total: last.total, results: last.results, color: last.color, timestamp: Date.now() });
-        setTimeout(() => { if (historyContainerRef.current) historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight; }, 50);
-      }
+      setTimeout(() => { if (historyContainerRef.current) historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight; }, 50);
     };
 
     const socket = socketRef.current;

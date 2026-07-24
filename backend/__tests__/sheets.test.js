@@ -368,6 +368,35 @@ describe('CP:R Humanity drives EMP', () => {
   });
 });
 
+describe('GET /api/sheets/own', () => {
+  it('returns the parsed sheet data for the authenticated player', async () => {
+    await setSystem(db, 'shadowrun_6e');
+    await insertSheet(db, { username: 'ghost', system: 'shadowrun_6e', data: JSON.stringify({ reaction: 5, intuition: 2 }) });
+    const res = await request(app).get('/api/sheets/own').set('Authorization', `Bearer ${PLAYER_TOKEN}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ reaction: 5, intuition: 2 });
+  });
+
+  it('returns 404 when the player has no sheet on the active system', async () => {
+    await setSystem(db, 'shadowrun_6e');
+    await insertSheet(db, { username: 'ghost', system: 'cyberpunk_red', data: '{}' });
+    const res = await request(app).get('/api/sheets/own').set('Authorization', `Bearer ${PLAYER_TOKEN}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 401 without a token', async () => {
+    const res = await request(app).get('/api/sheets/own');
+    expect(res.status).toBe(401);
+  });
+
+  it('does not return another player\'s sheet', async () => {
+    await setSystem(db, 'shadowrun_6e');
+    await insertSheet(db, { username: 'other_player', system: 'shadowrun_6e', data: JSON.stringify({ reaction: 9, intuition: 9 }) });
+    const res = await request(app).get('/api/sheets/own').set('Authorization', `Bearer ${PLAYER_TOKEN}`);
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('GET /api/sheets/stun/:location_id (SR6 stun track)', () => {
   it('returns the owner sheet stun for a player token; {} off-system', async () => {
     await setSystem(db, 'shadowrun_6e');

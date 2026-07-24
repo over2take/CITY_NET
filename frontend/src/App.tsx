@@ -58,6 +58,8 @@ import { Signs, type SignData } from './components/Signs';
 import { type RemoteFont } from './utils/fontLoader';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
+import { InitiativeWindow, useInitiative } from './modules/initiative';
+import { getInitiativeSystem } from './modules/initiative/systems';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
 import { AttackAnimations } from './components/AttackAnimations';
 import { RadioFeed } from './components/RadioFeed';
@@ -106,6 +108,7 @@ function App() {
   useEffect(() => {
       fetchGlobalSettings();
   }, []);
+
   const [currentLocBattleMaps, setCurrentLocBattleMaps] = useState<BattleMap[]>([]);
   const [cameraTarget, setCameraTarget] = useState<CameraTarget | null>(null);
   const [showZoomComplete, setShowZoomComplete] = useState(false);
@@ -190,6 +193,8 @@ function App() {
   const [musicVolume, setMusicVolume] = useState(() => parseFloat(localStorage.getItem('musicVolume') ?? '0.8'));
   const [isRadioFeedOpen, setIsRadioFeedOpen] = useState(false);
   const [isRadioPlayerOpen, setIsRadioPlayerOpen] = useState(false);
+  const [isInitiativeOpen, setIsInitiativeOpen] = useState(false);
+
   const [radioFeedPos, setRadioFeedPos] = useState(() => ({ x: window.innerWidth / 2 - 176, y: window.innerHeight / 2 - 220 }));
   const [radioPlayerPos, setRadioPlayerPos] = useState(() => ({ x: window.innerWidth / 2 - 176 + 340 + 8, y: window.innerHeight / 2 - 220 }));
   const [selectedTrackId, setSelectedTrackId] = useState<number | null>(null);
@@ -210,7 +215,8 @@ function App() {
   const [quickSheetPos, setQuickSheetPos] = useState(() => ({ x: window.innerWidth / 2 + 170, y: window.innerHeight / 2 - 100 }));
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
-  const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string } | null>(null);
+  const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string; locationId?: number } | null>(null);
+  const [manualInitScore, setManualInitScore] = useState<string>('');
   // NPC sheet linked to the currently selected token (admin) - drives
   // GENERATE_SHEET vs OPEN_SHEET on the token menu
   const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; system?: string; npc_label: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null; portrait_shadow_filter?: number | null } | null>(null);
@@ -839,6 +845,46 @@ function App() {
     },
   });
 
+  // Re-fetch global settings whenever the game system changes so initiativeSystem stays current
+  useEffect(() => {
+    if (!socketRef.current) return;
+    const s = socketRef.current;
+    s.on('gameSystemChanged', fetchGlobalSettings);
+    return () => { s.off('gameSystemChanged', fetchGlobalSettings); };
+  }, [socketRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Initiative Tracker ────────────────────────────────────────────────────────
+  const sharedBuildingInit = globalSettings['initiative_follows_building'] === '1';
+
+  const initiativeSceneKey = view === 'battle_map' && activeBattleMapData
+    ? (sharedBuildingInit
+        ? `building:${activeBattleMapData.locationId}`
+        : `${activeBattleMapData.locationId}:${activeBattleMapData.currentFloorIndex}`)
+    : 'city:0';
+
+  const initiativeSystem = globalSettings['game_system'] || 'generic';
+  const initiativeRollOptions = { explodingInitiative: globalSettings['cpr_exploding_initiative'] === '1' };
+  const initiativeMode = initiativeSystem === 'cities_without_number'
+    ? (globalSettings['cwn_individual_initiative'] === '1' ? 'individual' : 'side')
+    : 'individual';
+  const initiative = useInitiative(socketRef, initiativeSceneKey, initiativeSystem);
+
+  const initiativeSceneLabel = view === 'battle_map' && activeBattleMapData
+    ? (() => {
+        const loc = locations.find((l: any) => l.id === activeBattleMapData.locationId);
+        if (sharedBuildingInit) {
+          return loc ? loc.name.toUpperCase() : `BUILDING ${activeBattleMapData.locationId}`;
+        }
+        const floor = activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation ?? `LV ${activeBattleMapData.currentFloorIndex}`;
+        return loc ? `${loc.name.toUpperCase()} — ${floor}` : `SCENE ${activeBattleMapData.locationId}`;
+      })()
+    : 'CITY MAP';
+
+  // Auto-open initiative tracker for players when initiative becomes active in their scene
+  useEffect(() => {
+    if (initiative.state && !token) setIsInitiativeOpen(true);
+  }, [!!initiative.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Radio Feed: admin keeps a flat copy of the library so Next/Prev/auto-advance
   // can pick the sibling track. Players never need this — the server tells them
   // what to play.
@@ -1424,6 +1470,60 @@ function App() {
               currencyIcon={globalSettings?.currency_icon}
               currentTheme={currentTheme}
               onThemeChange={setCurrentTheme}
+              isInitiativeOpen={isInitiativeOpen}
+              onToggleInitiative={() => setIsInitiativeOpen((v) => !v)}
+              initiativeActive={!!initiative.state}
+              initiativeNeedsRoll={!!initiative.state && (
+                // SR6 new round — everyone must reroll
+                !!initiative.state.newRound ||
+                // Initiative just started — player hasn't rolled yet
+                (!token && !initiative.state.combatants.some((c: any) => c.id === `player:${userName}`))
+              )}
+              activeCombats={initiative.activeCombats}
+              onListCombats={initiative.listCombats}
+              onJumpToScene={(sceneKey: string) => {
+                if (sceneKey === 'city:0') {
+                  setActiveBattleMapData(null);
+                  setView('list');
+                } else {
+                  const isBuilding = sceneKey.startsWith('building:');
+                  const locId = isBuilding
+                    ? Number(sceneKey.split(':')[1])
+                    : Number(sceneKey.split(':')[0]);
+                  const floorIndex = isBuilding ? 0 : Number(sceneKey.split(':')[1]);
+                  fetch(`/api/locations/${locId}/battle_maps`)
+                    .then((r) => r.json())
+                    .then((maps) => {
+                      if (!Array.isArray(maps) || maps.length === 0) return;
+                      setActiveBattleMapData({ locationId: locId, maps, currentFloorIndex: floorIndex });
+                      setView('battle_map');
+                      setSelectedLocation(null);
+                      if (socketRef.current) socketRef.current.emit('battle_map_enter', { locationId: locId, floorIndex });
+                      if (token) updateDirector({ battleMap: { locationId: locId, floorIndex } });
+                    })
+                    .catch(() => {});
+                }
+              }}
+              onRollEnemies={() => {
+                const inScene = (l: any) => view === 'battle_map' && activeBattleMapData
+                  ? Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)
+                  : !l.battle_map_id;
+                locations.filter((l: any) => l.shape === 'enemy_rhombus' && inScene(l)).forEach((l: any) => {
+                  const sheet = l.sheet_data ? (typeof l.sheet_data === 'string' ? JSON.parse(l.sheet_data) : l.sheet_data) : undefined;
+                  const { score, breakdown, diceResults, exploded } = getInitiativeSystem(initiativeSystem).rollNpc(sheet, initiativeRollOptions);
+                  initiative.submitRoll({ id: `npc:${l.id}`, name: l.name || `ENEMY_${l.id}`, portraitUrl: (l as any).portrait_url ?? undefined, score, breakdown, diceResults, exploded, isNpc: true, floorIndex: activeBattleMapData?.currentFloorIndex });
+                });
+              }}
+              onRollFriendlies={() => {
+                const inScene = (l: any) => view === 'battle_map' && activeBattleMapData
+                  ? Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)
+                  : !l.battle_map_id;
+                locations.filter((l: any) => l.shape === 'friendly_rhombus' && inScene(l)).forEach((l: any) => {
+                  const sheet = l.sheet_data ? (typeof l.sheet_data === 'string' ? JSON.parse(l.sheet_data) : l.sheet_data) : undefined;
+                  const { score, breakdown, diceResults, exploded } = getInitiativeSystem(initiativeSystem).rollNpc(sheet, initiativeRollOptions);
+                  initiative.submitRoll({ id: `npc:${l.id}`, name: l.name || `FRIENDLY_${l.id}`, portraitUrl: (l as any).portrait_url ?? undefined, score, breakdown, diceResults, exploded, isNpc: true, isFriendly: true, floorIndex: activeBattleMapData?.currentFloorIndex });
+                });
+              }}
               />
             <header style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center'}}>
@@ -1737,6 +1837,68 @@ function App() {
               />
             )}
 
+            {/* ── Initiative Tracker — admin floating window ────────────────────── */}
+            {token && isInitiativeOpen && (
+              <InitiativeWindow
+                state={initiative.state}
+                activeCombats={initiative.activeCombats}
+                sceneKey={initiativeSceneKey}
+                sceneLabel={initiativeSceneLabel}
+                isAdmin={true}
+                onClose={() => setIsInitiativeOpen(false)}
+                onStart={(combatId) => { initiative.startInitiative(combatId, combatId ? undefined : initiativeMode); initiative.listCombats(); }}
+                onListCombats={initiative.listCombats}
+                onNext={initiative.nextTurn}
+                onEnd={initiative.endInitiative}
+                onRemove={initiative.removeCombatant}
+                onReorder={initiative.reorder}
+                currentFloorIndex={sharedBuildingInit ? activeBattleMapData?.currentFloorIndex : undefined}
+                system={initiativeSystem}
+              />
+            )}
+
+            {/* ── Initiative Tracker — player floating window ────────────────────── */}
+            {!token && isInitiativeOpen && initiative.state && (
+              <InitiativeWindow
+                state={initiative.state}
+                activeCombats={[]}
+                sceneKey={initiativeSceneKey}
+                sceneLabel={initiativeSceneLabel}
+                isAdmin={false}
+                onClose={() => setIsInitiativeOpen(false)}
+                onStart={() => {}}
+                onListCombats={() => {}}
+                onNext={() => {}}
+                onEnd={() => {}}
+                onRemove={() => {}}
+                onReorder={() => {}}
+                currentFloorIndex={sharedBuildingInit ? activeBattleMapData?.currentFloorIndex : undefined}
+                system={initiativeSystem}
+                playerCombatantId={`player:${userName}`}
+                onJoin={(_score, sys, extraDice = 0) => {
+                  const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
+                  const submit = (sheet?: Record<string, unknown>) => {
+                    const { score, breakdown, diceResults, exploded } = getInitiativeSystem(sys || initiativeSystem).rollPlayer(sheet, { ...initiativeRollOptions, extraDice });
+                    initiative.submitJoin({
+                      id: `player:${userName}`,
+                      name: userName,
+                      portraitUrl: (userRhombus as any)?.portrait_url ?? undefined,
+                      score,
+                      breakdown,
+                      diceResults,
+                      exploded,
+                      isNpc: false,
+                    });
+                  };
+                  const authToken = playerToken || token;
+                  fetch('/api/sheets/own', { headers: { Authorization: `Bearer ${authToken}` } })
+                    .then((r) => r.ok ? r.json() : null)
+                    .then((data) => submit(data ?? undefined))
+                    .catch(() => submit());
+                }}
+              />
+            )}
+
             {token && showDirectorPanel && (
               <StreamerDirectorPanel
                 pos={directorPanelPos}
@@ -1828,6 +1990,15 @@ function App() {
                 pos={npcSheetPos}
                 setPos={setNpcSheetPos}
                 onClose={() => setOpenNpcSheet(null)}
+                onRollInitiative={(() => {
+                  if (!initiative.state) return undefined;
+                  const id = openNpcSheet.locationId ? `npc:${openNpcSheet.locationId}` : `npc:sheet:${openNpcSheet.id}`;
+                  if (initiative.state.combatants.some(c => c.id === id)) return undefined;
+                  return (portraitUrl: string | undefined) => {
+                    const { score, breakdown, diceResults, exploded } = getInitiativeSystem(initiativeSystem).rollNpc(openNpcSheet, initiativeRollOptions);
+                    initiative.submitJoin({ id, name: openNpcSheet.npc_label, portraitUrl, score, breakdown, diceResults, exploded, isNpc: true, floorIndex: activeBattleMapData?.currentFloorIndex });
+                  };
+                })()}
               />
             )}
             {isDiceTrayOpen && (
@@ -1970,7 +2141,7 @@ function App() {
                     {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
                       tokenSheetLink?.location_id === selectedLocation.id && tokenSheetLink?.system === gameSystem ? (
                         <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
-                          setOpenNpcSheet({ id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label, token_shape: selectedLocation.shape });
+                          setOpenNpcSheet({ id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label, token_shape: selectedLocation.shape, locationId: selectedLocation.id });
                         }}>OPEN_SHEET</button>
                       ) : (() => {
                         const tiers = getTemplate(gameSystem).npcTiers;
@@ -1995,6 +2166,46 @@ function App() {
                           </div>
                         );
                       })()
+                    )}
+                    {/* Sheetless NPC manual initiative roll */}
+                    {isAdmin && initiative.state && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && !initiative.state.combatants.some((c: any) => c.id === `npc:${selectedLocation.id}`) && (
+                      <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '10px' }}>
+                        <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', letterSpacing: '1px', marginBottom: '6px' }}>INITIATIVE SCORE</div>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <input
+                            type="number"
+                            min="1"
+                            max="99"
+                            placeholder="SCORE"
+                            value={manualInitScore}
+                            onChange={e => setManualInitScore(e.target.value)}
+                            style={{ flex: 1, background: 'transparent', border: '1px solid var(--dark-green)', color: 'var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '4px 6px', width: '60px' }}
+                          />
+                          <button
+                            className="upload-btn"
+                            style={{ flex: 2 }}
+                            disabled={!manualInitScore || isNaN(Number(manualInitScore)) || Number(manualInitScore) < 1}
+                            onClick={() => {
+                              const score = Number(manualInitScore);
+                              const npcName = selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? `ENEMY_${selectedLocation.id}` : `FRIENDLY_${selectedLocation.id}`);
+                              initiative.submitRoll({
+                                id: `npc:${selectedLocation.id}`,
+                                name: npcName,
+                                portraitUrl: (selectedLocation as any).portrait_url ?? undefined,
+                                score,
+                                breakdown: `MANUAL(${score}) = ${score}`,
+                                diceResults: {},
+                                isNpc: true,
+                                isFriendly: selectedLocation.shape === 'friendly_rhombus',
+                                floorIndex: activeBattleMapData?.currentFloorIndex,
+                              });
+                              setManualInitScore('');
+                            }}
+                          >
+                            ADD TO INIT
+                          </button>
+                        </div>
+                      </div>
                     )}
                     {/* Player token sheet: owner opens their own; admin opens any player's */}
                     {selectedLocation.shape === 'rhombus' && selectedLocation.owner && (isOwner || isAdmin) && (

@@ -75,6 +75,22 @@ module.exports = (db, io) => {
     );
   });
 
+  // Player's own sheet — used by non-admin players to fetch stats (e.g. SR6 initiative roll).
+  router.get('/own', authenticate, (req, res) => {
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      db.get(
+        `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+        [req.user.username, system],
+        (err2, row) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+          if (!row) return res.status(404).json({ error: 'No sheet found' });
+          res.json(JSON.parse(row.data || '{}'));
+        }
+      );
+    });
+  });
+
   // Full sheet for one player on the active system (admin view/edit).
   // Linked fields (token HP, bank cash) are overlaid at read time, same as
   // the player's own socket fetch.

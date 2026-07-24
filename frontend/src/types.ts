@@ -161,7 +161,8 @@ export type SidebarMenu =
   | 'system_info'
   | 'geometry_protocols'
   | 'city_data_base'
-  | 'dice_menu';
+  | 'dice_menu'
+  | 'initiative_tracker';
 
 export interface CameraTarget {
   pos: [number, number, number];
