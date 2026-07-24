@@ -850,7 +850,7 @@ function App() {
     if (!socketRef.current) return;
     const s = socketRef.current;
     s.on('gameSystemChanged', fetchGlobalSettings);
-    return () => s.off('gameSystemChanged', fetchGlobalSettings);
+    return () => { s.off('gameSystemChanged', fetchGlobalSettings); };
   }, [socketRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initiative Tracker ────────────────────────────────────────────────────────
