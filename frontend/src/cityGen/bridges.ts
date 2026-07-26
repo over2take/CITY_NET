@@ -1,9 +1,8 @@
+import { chainRoadPolylines } from '../utils/roadHelpers';
 import type { RoadSegment, Rng } from './types';
 import {
   type WaterPolygon,
   submergedSpans,
-  pointAt,
-  segmentLength,
   pointInWater,
 } from './water';
 
@@ -19,15 +18,24 @@ const DENSITY_FRACTION: Record<OverpassDensity, number> = {
 };
 
 /**
- * Widest stretch of water a generated road will bridge. Anything broader reads
- * as a lake rather than a channel, and the road stops at the shore instead.
+ * Widest stretch of water each setting will bridge. Heavier settings reach
+ * further as well as more often, so the control reads as one dial: anything
+ * beyond the cap is a lake, and the road stops at the shore.
  */
-export const MAX_BRIDGE_SPAN = 120;
+const DENSITY_MAX_SPAN: Record<OverpassDensity, number> = {
+  off: 0,
+  sparse: 90,
+  normal: 160,
+  heavy: 260,
+};
+
+/** Widest crossing any setting will bridge. */
+export const MAX_BRIDGE_SPAN = DENSITY_MAX_SPAN.heavy;
 
 /** Roads at least this wide count as arterials and bridge more readily. */
 const ARTERIAL_WIDTH = 6;
 
-/** Horizontal run each ramp needs on dry land at either end of a span. */
+/** Horizontal run each ramp needs at either end of a span. */
 export const BRIDGE_RAMP_LENGTH = 20;
 
 /** Deck elevation of a generated bridge. */
@@ -52,48 +60,118 @@ export interface WaterRoadResult {
   overpasses: OverpassSpec[];
 }
 
+type Pt = { x: number; z: number };
+
+/** Cumulative arclength at each point of a polyline. */
+function cumulative(points: Pt[]): number[] {
+  const cum = [0];
+  for (let i = 1; i < points.length; i++) {
+    cum.push(cum[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].z - points[i - 1].z));
+  }
+  return cum;
+}
+
 /**
- * Build the bridge deck path for a crossing.
+ * Position at a given arclength along a polyline.
  *
- * The path has to include the ramp runs, because the geometry builder raises
- * the deck over the first and last `rampLength` of arclength. So it starts on
- * dry land short of the near shore and ends on dry land past the far one.
+ * Distances before the start or past the end extrapolate along the end
+ * direction, so a ramp can run onto the open ground beyond a road's last
+ * junction instead of being refused for want of pavement.
+ */
+function posAt(points: Pt[], cum: number[], s: number): Pt {
+  const total = cum[cum.length - 1];
+  if (s <= 0) {
+    const [a, b] = [points[0], points[1] ?? points[0]];
+    const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    return { x: a.x + ((a.x - b.x) / len) * -s, z: a.z + ((a.z - b.z) / len) * -s };
+  }
+  if (s >= total) {
+    const n = points.length;
+    const [a, b] = [points[n - 2] ?? points[n - 1], points[n - 1]];
+    const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    const over = s - total;
+    return { x: b.x + ((b.x - a.x) / len) * over, z: b.z + ((b.z - a.z) / len) * over };
+  }
+  let i = 1;
+  while (i < cum.length - 1 && cum[i] < s) i++;
+  const segLen = Math.max(cum[i] - cum[i - 1], 1e-9);
+  const t = (s - cum[i - 1]) / segLen;
+  return {
+    x: points[i - 1].x + (points[i].x - points[i - 1].x) * t,
+    z: points[i - 1].z + (points[i].z - points[i - 1].z) * t,
+  };
+}
+
+/** The stretch of a polyline between two arclengths, as its own point list. */
+function slice(points: Pt[], cum: number[], s0: number, s1: number): Pt[] {
+  const out: Pt[] = [posAt(points, cum, s0)];
+  for (let i = 0; i < points.length; i++) {
+    if (cum[i] > s0 && cum[i] < s1) out.push(points[i]);
+  }
+  out.push(posAt(points, cum, s1));
+  return out;
+}
+
+/** Consecutive points of a polyline as road segments. */
+function toSegments(points: Pt[], width: number): RoadSegment[] {
+  const segs: RoadSegment[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    if (Math.hypot(b.x - a.x, b.z - a.z) < 1e-6) continue;
+    segs.push({ x1: a.x, z1: a.z, x2: b.x, z2: b.z, width });
+  }
+  return segs;
+}
+
+/** Water gaps along a whole street, in arclength. */
+function waterGaps(points: Pt[], cum: number[], polygons: WaterPolygon[]) {
+  const gaps: { s0: number; s1: number }[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const segLen = cum[i + 1] - cum[i];
+    if (segLen < 1e-9) continue;
+    const seg = { x1: a.x, z1: a.z, x2: b.x, z2: b.z };
+    for (const span of submergedSpans(polygons, seg)) {
+      const s0 = cum[i] + span.t0 * segLen;
+      const s1 = cum[i] + span.t1 * segLen;
+      // Stitch onto the previous gap when this one continues it across a bend.
+      const last = gaps[gaps.length - 1];
+      if (last && s0 - last.s1 < 1e-6) last.s1 = s1;
+      else gaps.push({ s0, s1 });
+    }
+  }
+  return gaps;
+}
+
+/**
+ * Build the bridge deck for one water gap.
  *
- * Returns null when either ramp would touch down in water — a spit too narrow
- * to land on means this crossing can't carry a bridge.
+ * The path includes the ramp runs, because the geometry builder raises the
+ * deck over the first and last stretch of arclength. Returns null when either
+ * touchdown would land in water — a spit too narrow to come down on.
  */
 function buildBridge(
-  seg: RoadSegment,
-  t0: number,
-  t1: number,
+  points: Pt[],
+  cum: number[],
+  gap: { s0: number; s1: number },
+  width: number,
   polygons: WaterPolygon[]
 ): OverpassSpec | null {
-  const len = segmentLength(seg);
-  if (len < 1e-6) return null;
+  const start = posAt(points, cum, gap.s0 - BRIDGE_RAMP_LENGTH);
+  const end = posAt(points, cum, gap.s1 + BRIDGE_RAMP_LENGTH);
 
-  const dirX = (seg.x2 - seg.x1) / len;
-  const dirZ = (seg.z2 - seg.z1) / len;
-
-  const entry = pointAt(seg, t0);
-  const exit = pointAt(seg, t1);
-
-  const start = {
-    x: entry.x - dirX * BRIDGE_RAMP_LENGTH,
-    z: entry.z - dirZ * BRIDGE_RAMP_LENGTH,
-  };
-  const end = {
-    x: exit.x + dirX * BRIDGE_RAMP_LENGTH,
-    z: exit.z + dirZ * BRIDGE_RAMP_LENGTH,
-  };
-
-  // Both touchdown points must be on dry land.
   if (pointInWater(polygons, start.x, start.z)) return null;
   if (pointInWater(polygons, end.x, end.z)) return null;
 
+  // Follow the street's own shape across, so a bridge on a bend curves with it.
+  const deck = [start, ...slice(points, cum, gap.s0, gap.s1).slice(1, -1), end];
+
   return {
-    points: [start, end],
+    points: deck,
     height: BRIDGE_HEIGHT,
-    width: seg.width ?? ARTERIAL_WIDTH,
+    width,
     ramp_length: BRIDGE_RAMP_LENGTH,
     pillar_spacing: BRIDGE_PILLAR_SPACING,
   };
@@ -102,12 +180,15 @@ function buildBridge(
 /**
  * Take generated roads through water.
  *
- * Every submerged stretch is cut out of its road, leaving the dry approaches
- * as waterfront stubs. A stretch narrow enough to bridge may then get a span
- * laid over it, subject to the density setting — arterials are twice as likely
- * to be bridged as side streets, so sparse settings favour the main network.
+ * Segments are first chained into whole streets, because the BSP split leaves
+ * roads as ~35-unit pieces and a piece that crosses water usually begins in it
+ * — judged individually, no crossing would ever have dry road to ramp from.
  *
- * With no water bodies this is a pass-through.
+ * Each street then has its submerged stretches cut out, leaving waterfront
+ * stubs, and narrow enough gaps may be carried by a bridge. Arterials bridge at
+ * twice the rate of side streets, so sparse settings favour the main network.
+ *
+ * With no water bodies this is a pass-through that draws no randomness.
  */
 export function applyWaterToRoads(
   roads: RoadSegment[],
@@ -118,46 +199,47 @@ export function applyWaterToRoads(
   if (polygons.length === 0) return { roads, overpasses: [] };
 
   const fraction = DENSITY_FRACTION[density] ?? 0;
+  const maxSpan = DENSITY_MAX_SPAN[density] ?? 0;
   const outRoads: RoadSegment[] = [];
   const overpasses: OverpassSpec[] = [];
 
-  for (const seg of roads) {
-    const spans = submergedSpans(polygons, seg);
-    if (spans.length === 0) {
-      outRoads.push(seg);
+  for (const chain of chainRoadPolylines(roads)) {
+    const points = chain.points;
+    if (points.length < 2) continue;
+    const cum = cumulative(points);
+    const total = cum[cum.length - 1];
+    if (total < 1e-6) continue;
+
+    const gaps = waterGaps(points, cum, polygons);
+    if (gaps.length === 0) {
+      outRoads.push(...toSegments(points, chain.width));
       continue;
     }
 
-    const len = segmentLength(seg);
-
     // Keep the dry stretches between (and either side of) the water.
     let cursor = 0;
-    for (const span of spans) {
-      if (span.t0 - cursor > 1e-6) {
-        const a = pointAt(seg, cursor);
-        const b = pointAt(seg, span.t0);
-        outRoads.push({ ...seg, x1: a.x, z1: a.z, x2: b.x, z2: b.z });
+    for (const gap of gaps) {
+      if (gap.s0 - cursor > 1e-6) {
+        outRoads.push(...toSegments(slice(points, cum, cursor, gap.s0), chain.width));
       }
-      cursor = span.t1;
+      cursor = gap.s1;
     }
-    if (1 - cursor > 1e-6) {
-      const a = pointAt(seg, cursor);
-      outRoads.push({ ...seg, x1: a.x, z1: a.z, x2: seg.x2, z2: seg.z2 });
+    if (total - cursor > 1e-6) {
+      outRoads.push(...toSegments(slice(points, cum, cursor, total), chain.width));
     }
 
     // Consider each crossing for a bridge.
-    for (const span of spans) {
-      const spanLength = (span.t1 - span.t0) * len;
-      if (spanLength > MAX_BRIDGE_SPAN) continue;
+    for (const gap of gaps) {
+      if (gap.s1 - gap.s0 > maxSpan) continue;
 
       // One draw per eligible crossing, so density changes don't reorder the
       // rest of the sequence.
       const roll = rng();
-      const isArterial = (seg.width ?? 0) >= ARTERIAL_WIDTH;
+      const isArterial = chain.width >= ARTERIAL_WIDTH;
       const chance = isArterial ? fraction : fraction / 2;
       if (roll >= chance) continue;
 
-      const bridge = buildBridge(seg, span.t0, span.t1, polygons);
+      const bridge = buildBridge(points, cum, gap, chain.width, polygons);
       if (bridge) overpasses.push(bridge);
     }
   }

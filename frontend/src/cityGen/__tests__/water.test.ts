@@ -361,7 +361,8 @@ describe('generateCity with water', () => {
       { locations: [], roads: [], waterBodies }, mulberry32(2), { fillPlot: vi.fn() }
     );
     result.overpasses.forEach((o) => {
-      expect(o.points).toHaveLength(2);
+      // Two points for a straight crossing, more when the street bends.
+      expect(o.points.length).toBeGreaterThanOrEqual(2);
       expect(o.height).toBeGreaterThan(0);
       expect(o.width).toBeGreaterThan(0);
       expect(o.ramp_length).toBeGreaterThan(0);
