@@ -1,4 +1,5 @@
 import type { Block, Bounds, Rng, RoadSegment } from './types';
+import { clipSegmentToLand, type WaterPolygon } from './water';
 
 /** Widths used for the road laid down at each split. */
 const MAIN_ROAD_WIDTH = 6;
@@ -45,18 +46,28 @@ export function maxSplitDepthFor(width: number, depth: number): number {
  * halves. Splits are jittered and the seam is kinked at a random midpoint so
  * the result reads as a grown city rather than a grid.
  *
+ * Seams are clipped to land as they are laid, so no road is ever built across
+ * open water and the grid stops at the shore of its own accord. The random
+ * draws are unaffected by clipping, so a dry map splits exactly as before.
+ *
  * Returns leaf blocks plus every road segment produced along the way.
  */
 export function splitCity(
   bounds: Bounds,
   excludeRoads: boolean,
-  rng: Rng
+  rng: Rng,
+  water: WaterPolygon[] = []
 ): { blocks: Block[]; roads: RoadSegment[] } {
   const { minX, maxX, minZ, maxZ, width, depth } = normalizeBounds(bounds);
   const maxSplitDepth = maxSplitDepthFor(width, depth);
 
   const blocks: Block[] = [];
   const roads: RoadSegment[] = [];
+
+  /** Lay a seam, keeping only the stretches that fall on land. */
+  const layRoad = (seg: RoadSegment) => {
+    roads.push(...clipSegmentToLand(seg, water));
+  };
 
   const split = (x: number, z: number, w: number, d: number, iter: number) => {
     if (iter > maxSplitDepth || (w < MIN_BLOCK_SIZE && d < MIN_BLOCK_SIZE)) {
@@ -75,8 +86,8 @@ export function splitCity(
       const midZ = z + (rng() - 0.5) * d * 0.25;
       if (!excludeRoads) {
         const offset = (rng() - 0.5) * 4.5;
-        roads.push({ x1: rx, z1: z - d / 2, x2: rx + offset, z2: midZ, width: roadW });
-        roads.push({ x1: rx + offset, z1: midZ, x2: rx, z2: z + d / 2, width: roadW });
+        layRoad({ x1: rx, z1: z - d / 2, x2: rx + offset, z2: midZ, width: roadW });
+        layRoad({ x1: rx + offset, z1: midZ, x2: rx, z2: z + d / 2, width: roadW });
       }
       split(x - w / 2 + (lw + jitter) / 2, z, lw + jitter, d, iter + 1);
       split(x + w / 2 - (rw - jitter) / 2, z, rw - jitter, d, iter + 1);
@@ -88,8 +99,8 @@ export function splitCity(
       const midX = x + (rng() - 0.5) * w * 0.25;
       if (!excludeRoads) {
         const offset = (rng() - 0.5) * 4.5;
-        roads.push({ x1: x - w / 2, z1: rz, x2: midX + offset, z2: rz, width: roadW });
-        roads.push({ x1: midX + offset, z1: rz, x2: x + w / 2, z2: rz, width: roadW });
+        layRoad({ x1: x - w / 2, z1: rz, x2: midX + offset, z2: rz, width: roadW });
+        layRoad({ x1: midX + offset, z1: rz, x2: x + w / 2, z2: rz, width: roadW });
       }
       split(x, z - d / 2 + (td + jitter) / 2, w, td + jitter, iter + 1);
       split(x, z + d / 2 - (bd - jitter) / 2, w, bd - jitter, iter + 1);

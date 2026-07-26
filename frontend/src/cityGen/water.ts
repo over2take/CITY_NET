@@ -166,3 +166,34 @@ export function pointAt(seg: RoadSegment, t: number): { x: number; z: number } {
 export function segmentLength(seg: RoadSegment): number {
   return Math.hypot(seg.x2 - seg.x1, seg.z2 - seg.z1);
 }
+
+/**
+ * Cut a segment back to the parts of it that are on land.
+ *
+ * A segment clear of the water comes back untouched; one entirely submerged
+ * comes back as nothing; one that crosses comes back as the dry approaches.
+ */
+export function clipSegmentToLand(
+  seg: RoadSegment,
+  polygons: WaterPolygon[]
+): RoadSegment[] {
+  if (polygons.length === 0) return [seg];
+  const spans = submergedSpans(polygons, seg);
+  if (spans.length === 0) return [seg];
+
+  const out: RoadSegment[] = [];
+  let cursor = 0;
+  for (const span of spans) {
+    if (span.t0 - cursor > 1e-6) {
+      const a = pointAt(seg, cursor);
+      const b = pointAt(seg, span.t0);
+      out.push({ ...seg, x1: a.x, z1: a.z, x2: b.x, z2: b.z });
+    }
+    cursor = span.t1;
+  }
+  if (1 - cursor > 1e-6) {
+    const a = pointAt(seg, cursor);
+    out.push({ ...seg, x1: a.x, z1: a.z, x2: seg.x2, z2: seg.z2 });
+  }
+  return out;
+}

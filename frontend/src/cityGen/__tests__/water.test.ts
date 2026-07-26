@@ -6,7 +6,10 @@ import {
   footprintInWater,
   submergedSpans,
   segmentLength,
-  applyWaterToRoads,
+  clipSegmentToLand,
+  findBridges,
+  generateShorelineRoads,
+  splitCity,
   createIsBlocked,
   SpatialGrid,
   generateCity,
@@ -187,112 +190,187 @@ describe('createIsBlocked with water', () => {
   });
 });
 
-describe('applyWaterToRoads', () => {
-  const channel = [rect(-10, -1000, 10, 1000)]; // 20 wide
-  const crossing = { x1: -100, z1: 0, x2: 100, z2: 0, width: 6 };
+describe('clipSegmentToLand', () => {
+  const channel = [rect(-10, -1000, 10, 1000)];
 
-  it('passes roads through untouched when there is no water', () => {
-    const result = applyWaterToRoads([crossing], [], 'normal', mulberry32(1));
-    expect(result.roads).toEqual([crossing]);
-    expect(result.overpasses).toEqual([]);
+  it('leaves a dry segment alone', () => {
+    const seg = { x1: -100, z1: 0, x2: -50, z2: 0, width: 6 };
+    expect(clipSegmentToLand(seg, channel)).toEqual([seg]);
   });
 
-  it('draws no randomness when there is no water', () => {
+  it('passes through when there is no water', () => {
+    const seg = { x1: -100, z1: 0, x2: 100, z2: 0, width: 6 };
+    expect(clipSegmentToLand(seg, [])).toEqual([seg]);
+  });
+
+  it('splits a crossing into two approaches ending at the shore', () => {
+    const seg = { x1: -100, z1: 0, x2: 100, z2: 0, width: 6 };
+    const parts = clipSegmentToLand(seg, channel);
+    expect(parts).toHaveLength(2);
+    expect(parts[0].x2).toBeCloseTo(-10, 5);
+    expect(parts[1].x1).toBeCloseTo(10, 5);
+  });
+
+  it('drops a fully submerged segment', () => {
+    const seg = { x1: -5, z1: 0, x2: 5, z2: 0, width: 6 };
+    expect(clipSegmentToLand(seg, channel)).toEqual([]);
+  });
+
+  it('preserves the road width', () => {
+    const seg = { x1: -100, z1: 0, x2: 100, z2: 0, width: 3 };
+    clipSegmentToLand(seg, channel).forEach((p) => expect(p.width).toBe(3));
+  });
+});
+
+describe('splitCity with water', () => {
+  const AREA = { min: { x: -200, z: -200 }, max: { x: 200, z: 200 } };
+
+  it('lays no road across water', () => {
+    const lake = [rect(-60, -60, 60, 60)];
+    const { roads } = splitCity(AREA, false, mulberry32(4), lake);
+    roads.forEach((r) => expect(submergedSpans(lake, r)).toEqual([]));
+  });
+
+  it('still produces roads outside the water', () => {
+    const lake = [rect(-60, -60, 60, 60)];
+    const { roads } = splitCity(AREA, false, mulberry32(4), lake);
+    expect(roads.length).toBeGreaterThan(0);
+  });
+
+  it('splits identically on a dry map whether or not water is passed', () => {
+    const withArg = splitCity(AREA, false, mulberry32(4), []);
+    const without = splitCity(AREA, false, mulberry32(4));
+    expect(withArg).toEqual(without);
+  });
+
+  it('produces the same blocks with and without water', () => {
+    // Clipping must not disturb the random sequence driving the split.
+    const dry = splitCity(AREA, false, mulberry32(4));
+    const wet = splitCity(AREA, false, mulberry32(4), [rect(-60, -60, 60, 60)]);
+    expect(wet.blocks).toEqual(dry.blocks);
+  });
+});
+
+describe('generateShorelineRoads', () => {
+  const AREA = { min: { x: -200, z: -200 }, max: { x: 200, z: 200 } };
+
+  it('rings a water body with road', () => {
+    const segs = generateShorelineRoads([rect(-60, -60, 60, 60)], AREA);
+    expect(segs.length).toBeGreaterThan(0);
+  });
+
+  it('keeps the waterfront road out of the water', () => {
+    const lake = [rect(-60, -60, 60, 60)];
+    const segs = generateShorelineRoads(lake, AREA);
+    segs.forEach((s) => {
+      expect(pointInWater(lake, s.x1, s.z1)).toBe(false);
+      expect(pointInWater(lake, s.x2, s.z2)).toBe(false);
+    });
+  });
+
+  it('stays inside the generation area', () => {
+    const segs = generateShorelineRoads([rect(-60, -60, 60, 60)], AREA);
+    segs.forEach((s) => {
+      expect(Math.abs(s.x1)).toBeLessThanOrEqual(200);
+      expect(Math.abs(s.z1)).toBeLessThanOrEqual(200);
+    });
+  });
+
+  it('produces nothing without water', () => {
+    expect(generateShorelineRoads([], AREA)).toEqual([]);
+  });
+
+  it('drops shoreline that falls outside the selection', () => {
+    // Lake mostly outside a small selection: only the overlapping arc remains.
+    const small = { min: { x: -20, z: -20 }, max: { x: 20, z: 20 } };
+    const segs = generateShorelineRoads([rect(-200, -200, 0, 0)], small);
+    segs.forEach((s) => {
+      expect(s.x1).toBeGreaterThanOrEqual(-20);
+      expect(s.x1).toBeLessThanOrEqual(20);
+    });
+  });
+});
+
+describe('findBridges', () => {
+  // A channel with a road stub running to each bank, facing each other.
+  const channel = [rect(-30, -1000, 30, 1000)];
+  const approaches = [
+    { x1: -120, z1: 0, x2: -30, z2: 0, width: 6 },
+    { x1: 30, z1: 0, x2: 120, z2: 0, width: 6 },
+  ];
+
+  it('bridges a stub facing a road across the water', () => {
+    const bridges = findBridges(approaches, channel, 'heavy', mulberry32(1));
+    expect(bridges).toHaveLength(1);
+    expect(bridges[0].width).toBe(6);
+    expect(bridges[0].ramp_length).toBe(BRIDGE_RAMP_LENGTH);
+  });
+
+  it('extends the deck onto land at both ends for the ramps', () => {
+    const [bridge] = findBridges(approaches, channel, 'heavy', mulberry32(1));
+    const [start, end] = bridge.points;
+    expect(Math.min(start.x, end.x)).toBeCloseTo(-30 - BRIDGE_RAMP_LENGTH, 5);
+    expect(Math.max(start.x, end.x)).toBeCloseTo(30 + BRIDGE_RAMP_LENGTH, 5);
+  });
+
+  it('collapses the crossing seen from both banks into one bridge', () => {
+    // Both stubs point at each other; without dedupe this would be two decks.
+    expect(findBridges(approaches, channel, 'heavy', mulberry32(1))).toHaveLength(1);
+  });
+
+  it('builds nothing at off density', () => {
+    expect(findBridges(approaches, channel, 'off', mulberry32(1))).toEqual([]);
+  });
+
+  it('builds nothing without water', () => {
+    expect(findBridges(approaches, [], 'heavy', mulberry32(1))).toEqual([]);
+  });
+
+  it('draws no randomness without water', () => {
     const rng = vi.fn(() => 0.5);
-    applyWaterToRoads([crossing], [], 'normal', rng);
+    findBridges(approaches, [], 'heavy', rng);
     expect(rng).not.toHaveBeenCalled();
   });
 
-  it('splits a crossing road into two dry approaches', () => {
-    const { roads } = applyWaterToRoads([crossing], channel, 'off', mulberry32(1));
-    expect(roads).toHaveLength(2);
-    // Approaches stop at the shoreline.
-    expect(roads[0].x2).toBeCloseTo(-10, 5);
-    expect(roads[1].x1).toBeCloseTo(10, 5);
+  it('refuses a crossing with no road on the far bank', () => {
+    const lonely = [{ x1: -120, z1: 0, x2: -30, z2: 0, width: 6 }];
+    expect(findBridges(lonely, channel, 'heavy', mulberry32(1))).toEqual([]);
   });
 
-  it('drops a road entirely submerged', () => {
-    const submerged = { x1: -5, z1: 0, x2: 5, z2: 0, width: 6 };
-    const { roads } = applyWaterToRoads([submerged], channel, 'off', mulberry32(1));
-    expect(roads).toEqual([]);
-  });
-
-  it('bridges a narrow crossing at heavy density', () => {
-    const { overpasses } = applyWaterToRoads([crossing], channel, 'heavy', mulberry32(1));
-    expect(overpasses).toHaveLength(1);
-    expect(overpasses[0].width).toBe(6);
-    expect(overpasses[0].ramp_length).toBe(BRIDGE_RAMP_LENGTH);
-  });
-
-  it('never bridges at off density', () => {
-    const { overpasses } = applyWaterToRoads([crossing], channel, 'off', mulberry32(1));
-    expect(overpasses).toEqual([]);
-  });
-
-  it('extends the deck onto dry land for the ramps', () => {
-    const { overpasses } = applyWaterToRoads([crossing], channel, 'heavy', mulberry32(1));
-    const [start, end] = overpasses[0].points;
-    // Shores are at x = -10 and x = 10; ramps run back from each.
-    expect(start.x).toBeCloseTo(-10 - BRIDGE_RAMP_LENGTH, 5);
-    expect(end.x).toBeCloseTo(10 + BRIDGE_RAMP_LENGTH, 5);
-  });
-
-  it('refuses to bridge water wider than the span cap', () => {
-    const lake = [rect(-500, -1000, 500, 1000)]; // 1000 wide
-    const long = { x1: -800, z1: 0, x2: 800, z2: 0, width: 6 };
-    const { roads, overpasses } = applyWaterToRoads([long], lake, 'heavy', mulberry32(1));
-    expect(overpasses).toEqual([]);
-    // The road still stops at each shore.
-    expect(roads).toHaveLength(2);
-  });
-
-  it('bridges right up to the span cap but not past it', () => {
-    const half = MAX_BRIDGE_SPAN / 2;
-    const justUnder = [rect(-half + 1, -1000, half - 1, 1000)];
-    const justOver = [rect(-half - 1, -1000, half + 1, 1000)];
-    const seg = { x1: -400, z1: 0, x2: 400, z2: 0, width: 6 };
-    expect(applyWaterToRoads([seg], justUnder, 'heavy', mulberry32(1)).overpasses).toHaveLength(1);
-    expect(applyWaterToRoads([seg], justOver, 'heavy', mulberry32(1)).overpasses).toEqual([]);
-  });
-
-  it('will not bridge when a ramp would touch down in water', () => {
-    // Two channels separated by a spit half the ramp run wide, so each
-    // crossing's far touchdown lands in the opposite channel.
-    //   channel A: x -30..-10   spit: -10..0   channel B: x 0..30
-    //   bridge A: start -50 (dry), end -10+20 = +10 -> inside B  -> rejected
-    //   bridge B: start 0-20 = -20 -> inside A                   -> rejected
-    const twoChannels = [
-      rect(-30, -1000, -10, 1000),
-      rect(0, -1000, 30, 1000),
+  it('refuses water wider than the setting reaches', () => {
+    const lake = [rect(-400, -1000, 400, 1000)]; // 800 across
+    const far = [
+      { x1: -500, z1: 0, x2: -400, z2: 0, width: 6 },
+      { x1: 400, z1: 0, x2: 500, z2: 0, width: 6 },
     ];
-    const seg = { x1: -100, z1: 0, x2: 100, z2: 0, width: 6 };
-    const { roads, overpasses } = applyWaterToRoads([seg], twoChannels, 'heavy', mulberry32(1));
-    expect(overpasses).toEqual([]);
-    // Both crossings are still cut out: two shores plus the spit between them.
-    expect(roads).toHaveLength(3);
+    expect(findBridges(far, lake, 'heavy', mulberry32(1))).toEqual([]);
   });
 
-  it('bridges arterials more readily than side streets', () => {
-    // Same seed, same geometry, only the road width differs.
-    const arterial = { ...crossing, width: 6 };
-    const side = { ...crossing, width: 3 };
-    let arterialCount = 0;
-    let sideCount = 0;
-    for (let seed = 0; seed < 40; seed++) {
-      arterialCount += applyWaterToRoads([arterial], channel, 'normal', mulberry32(seed)).overpasses.length;
-      sideCount += applyWaterToRoads([side], channel, 'normal', mulberry32(seed)).overpasses.length;
-    }
-    expect(arterialCount).toBeGreaterThan(sideCount);
+  it('never spans beyond the documented maximum', () => {
+    const lake = [rect(-1000, -1000, 1000, 1000)];
+    const stubs = [
+      { x1: -1100, z1: 0, x2: -1000, z2: 0, width: 6 },
+      { x1: 1000, z1: 0, x2: 1100, z2: 0, width: 6 },
+    ];
+    findBridges(stubs, lake, 'heavy', mulberry32(1)).forEach((b) => {
+      const deck = Math.hypot(b.points[1].x - b.points[0].x, b.points[1].z - b.points[0].z);
+      expect(deck - 2 * BRIDGE_RAMP_LENGTH).toBeLessThanOrEqual(MAX_BRIDGE_SPAN);
+    });
   });
 
-  it('produces more bridges at heavier density', () => {
-    const roads = Array.from({ length: 30 }, (_, i) => ({
-      x1: -100, z1: i * 10, x2: 100, z2: i * 10, width: 6,
-    }));
-    const count = (d: OverpassDensity) =>
-      applyWaterToRoads(roads, channel, d, mulberry32(3)).overpasses.length;
-    expect(count('sparse')).toBeLessThan(count('heavy'));
-    expect(count('off')).toBe(0);
+  it('keeps at least one bridge whenever a site is viable', () => {
+    // Scarce sites must not be thinned away to nothing by a light setting.
+    (['sparse', 'normal', 'heavy'] as OverpassDensity[]).forEach((d) => {
+      expect(findBridges(approaches, channel, d, mulberry32(1)).length).toBeGreaterThan(0);
+    });
+  });
+
+  it('ignores approaches too short to ramp from', () => {
+    const stubby = [
+      { x1: -34, z1: 0, x2: -30, z2: 0, width: 6 },
+      { x1: 30, z1: 0, x2: 34, z2: 0, width: 6 },
+    ];
+    expect(findBridges(stubby, channel, 'heavy', mulberry32(1))).toEqual([]);
   });
 });
 

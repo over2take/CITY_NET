@@ -13,7 +13,8 @@ import {
 import { generatePark } from './parks';
 import { shouldPlaceLandmark, generateLandmark } from './landmarks';
 import { parseWaterBodies, pointInWater } from './water';
-import { applyWaterToRoads } from './bridges';
+import { findBridges } from './bridges';
+import { generateShorelineRoads } from './shoreline';
 import type {
   Bounds,
   GenerateCityContext,
@@ -30,7 +31,8 @@ export * from './zoning';
 export { generatePark } from './parks';
 export { shouldPlaceLandmark, generateLandmark } from './landmarks';
 export * from './water';
-export { applyWaterToRoads, MAX_BRIDGE_SPAN, BRIDGE_RAMP_LENGTH } from './bridges';
+export { findBridges, MAX_BRIDGE_SPAN, BRIDGE_RAMP_LENGTH } from './bridges';
+export { generateShorelineRoads } from './shoreline';
 
 /** Margin trimmed off every block so buildings don't butt against the road. */
 const PLOT_PADDING = 10;
@@ -76,20 +78,26 @@ export function generateCity(
   // stable regardless of how many blocks the split produces.
   const sectors = createSectorLayout(rng);
 
-  const { blocks, roads: newRoads } = splitCity(bounds, excludeRoads, rng);
-  const consolidated = excludeRoads
-    ? []
-    : consolidateRoads(newRoads, context.roads, ROAD_CONSOLIDATION_RADIUS);
+  // The split clips its own seams to land, so the grid stops at the shore
+  // instead of being laid across the water and cut back afterwards.
+  const { blocks, roads: newRoads } = splitCity(bounds, excludeRoads, rng, water);
 
-  // Cut the roads back at any shoreline and bridge the crossings that qualify.
-  // With no water this is a pass-through that draws no randomness, so dry maps
-  // generate exactly as they did before.
-  const { roads: finalRoads, overpasses } = applyWaterToRoads(
-    consolidated, water, overpassDensity, rng
-  );
+  // A road around each water body turns what would be dead ends at the shore
+  // into junctions, so the network routes around a lake.
+  const shoreRoads = excludeRoads ? [] : generateShorelineRoads(water, bounds);
+
+  const finalRoads = excludeRoads
+    ? []
+    : consolidateRoads([...newRoads, ...shoreRoads], context.roads, ROAD_CONSOLIDATION_RADIUS);
+
+  // Pick crossings worth bridging from the road ends left at the water's edge.
+  // Draws no randomness on a dry map, so those generate exactly as before.
+  const overpasses = excludeRoads
+    ? []
+    : findBridges(finalRoads, water, overpassDensity, rng);
 
   const grid = new SpatialGrid(context.locations);
-  const roadsToCheck = [...context.roads, ...newRoads];
+  const roadsToCheck = [...context.roads, ...newRoads, ...shoreRoads];
   const isBlocked = createIsBlocked(grid, roadsToCheck, !excludeRoads, water);
 
   const buildings: RawBuilding[] = [];

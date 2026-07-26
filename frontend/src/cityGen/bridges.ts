@@ -1,39 +1,41 @@
-import { chainRoadPolylines } from '../utils/roadHelpers';
 import type { RoadSegment, Rng } from './types';
 import {
   type WaterPolygon,
   submergedSpans,
   pointInWater,
+  segmentLength,
 } from './water';
 
 /** How freely generated roads bridge the water they meet. */
 export type OverpassDensity = 'off' | 'sparse' | 'normal' | 'heavy';
 
-/** Fraction of eligible crossings that actually get a span. */
+/**
+ * Share of viable sites that get a span. Applied as a proportion of the sites
+ * actually found rather than a per-site coin flip: crossings that clear every
+ * test are scarce — often only a handful on a whole lake — and independent
+ * rolls would routinely produce none at all.
+ */
 const DENSITY_FRACTION: Record<OverpassDensity, number> = {
   off: 0,
-  sparse: 0.3,
-  normal: 0.6,
+  sparse: 0.34,
+  normal: 0.7,
   heavy: 1.0,
 };
 
 /**
  * Widest stretch of water each setting will bridge. Heavier settings reach
  * further as well as more often, so the control reads as one dial: anything
- * beyond the cap is a lake, and the road stops at the shore.
+ * beyond the cap is a lake, and the road simply stops at the shore.
  */
 const DENSITY_MAX_SPAN: Record<OverpassDensity, number> = {
   off: 0,
-  sparse: 90,
-  normal: 160,
-  heavy: 260,
+  sparse: 120,
+  normal: 200,
+  heavy: 300,
 };
 
 /** Widest crossing any setting will bridge. */
 export const MAX_BRIDGE_SPAN = DENSITY_MAX_SPAN.heavy;
-
-/** Roads at least this wide count as arterials and bridge more readily. */
-const ARTERIAL_WIDTH = 6;
 
 /** Horizontal run each ramp needs at either end of a span. */
 export const BRIDGE_RAMP_LENGTH = 20;
@@ -44,6 +46,18 @@ const BRIDGE_HEIGHT = 8;
 /** Spacing of the pillars carrying the deck. */
 const BRIDGE_PILLAR_SPACING = 12;
 
+/** Roads at least this wide count as arterials and bridge more readily. */
+const ARTERIAL_WIDTH = 6;
+
+/** How close the far shore must have a road for a crossing to be worth making. */
+const LANDING_TOLERANCE = 18;
+
+/** Two candidate decks closer than this are the same crossing seen twice. */
+const DUPLICATE_RADIUS = 25;
+
+/** A stub must have at least this much dry road behind it to ramp from. */
+const MIN_APPROACH = 12;
+
 /** An overpass ready to POST to /api/overpasses. */
 export interface OverpassSpec {
   points: { x: number; z: number }[];
@@ -53,196 +67,179 @@ export interface OverpassSpec {
   pillar_spacing: number;
 }
 
-export interface WaterRoadResult {
-  /** Road segments with every submerged stretch removed. */
-  roads: RoadSegment[];
-  /** Bridges spanning the crossings that qualified. */
-  overpasses: OverpassSpec[];
-}
-
 type Pt = { x: number; z: number };
 
-/** Cumulative arclength at each point of a polyline. */
-function cumulative(points: Pt[]): number[] {
-  const cum = [0];
-  for (let i = 1; i < points.length; i++) {
-    cum.push(cum[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].z - points[i - 1].z));
-  }
-  return cum;
+/** A road end that stops at the water, pointing across it. */
+interface ShoreStub {
+  /** The road end itself, on land at the shoreline. */
+  at: Pt;
+  /** Unit vector pointing out over the water. */
+  dir: Pt;
+  /** Length of dry road leading up to this end. */
+  approach: number;
+  width: number;
 }
 
 /**
- * Position at a given arclength along a polyline.
+ * Find road ends that terminate at the water's edge.
  *
- * Distances before the start or past the end extrapolate along the end
- * direction, so a ramp can run onto the open ground beyond a road's last
- * junction instead of being refused for want of pavement.
+ * After the split clips its seams to land, a road that would have crossed
+ * water ends exactly at the shore — those ends are where a bridge can start.
+ * Ends that merely stop inland are ignored, as are stubs too short to ramp
+ * from.
  */
-function posAt(points: Pt[], cum: number[], s: number): Pt {
-  const total = cum[cum.length - 1];
-  if (s <= 0) {
-    const [a, b] = [points[0], points[1] ?? points[0]];
-    const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
-    return { x: a.x + ((a.x - b.x) / len) * -s, z: a.z + ((a.z - b.z) / len) * -s };
-  }
-  if (s >= total) {
-    const n = points.length;
-    const [a, b] = [points[n - 2] ?? points[n - 1], points[n - 1]];
-    const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
-    const over = s - total;
-    return { x: b.x + ((b.x - a.x) / len) * over, z: b.z + ((b.z - a.z) / len) * over };
-  }
-  let i = 1;
-  while (i < cum.length - 1 && cum[i] < s) i++;
-  const segLen = Math.max(cum[i] - cum[i - 1], 1e-9);
-  const t = (s - cum[i - 1]) / segLen;
-  return {
-    x: points[i - 1].x + (points[i].x - points[i - 1].x) * t,
-    z: points[i - 1].z + (points[i].z - points[i - 1].z) * t,
-  };
-}
+function findShoreStubs(roads: RoadSegment[], polygons: WaterPolygon[]): ShoreStub[] {
+  const stubs: ShoreStub[] = [];
+  const probe = 1.5; // step just past the end to see if water begins there
 
-/** The stretch of a polyline between two arclengths, as its own point list. */
-function slice(points: Pt[], cum: number[], s0: number, s1: number): Pt[] {
-  const out: Pt[] = [posAt(points, cum, s0)];
-  for (let i = 0; i < points.length; i++) {
-    if (cum[i] > s0 && cum[i] < s1) out.push(points[i]);
-  }
-  out.push(posAt(points, cum, s1));
-  return out;
-}
+  for (const seg of roads) {
+    const len = segmentLength(seg);
+    if (len < MIN_APPROACH) continue;
+    const dx = (seg.x2 - seg.x1) / len;
+    const dz = (seg.z2 - seg.z1) / len;
 
-/** Consecutive points of a polyline as road segments. */
-function toSegments(points: Pt[], width: number): RoadSegment[] {
-  const segs: RoadSegment[] = [];
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i];
-    const b = points[i + 1];
-    if (Math.hypot(b.x - a.x, b.z - a.z) < 1e-6) continue;
-    segs.push({ x1: a.x, z1: a.z, x2: b.x, z2: b.z, width });
-  }
-  return segs;
-}
-
-/** Water gaps along a whole street, in arclength. */
-function waterGaps(points: Pt[], cum: number[], polygons: WaterPolygon[]) {
-  const gaps: { s0: number; s1: number }[] = [];
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i];
-    const b = points[i + 1];
-    const segLen = cum[i + 1] - cum[i];
-    if (segLen < 1e-9) continue;
-    const seg = { x1: a.x, z1: a.z, x2: b.x, z2: b.z };
-    for (const span of submergedSpans(polygons, seg)) {
-      const s0 = cum[i] + span.t0 * segLen;
-      const s1 = cum[i] + span.t1 * segLen;
-      // Stitch onto the previous gap when this one continues it across a bend.
-      const last = gaps[gaps.length - 1];
-      if (last && s0 - last.s1 < 1e-6) last.s1 = s1;
-      else gaps.push({ s0, s1 });
+    // Forward end
+    if (pointInWater(polygons, seg.x2 + dx * probe, seg.z2 + dz * probe)) {
+      stubs.push({ at: { x: seg.x2, z: seg.z2 }, dir: { x: dx, z: dz }, approach: len, width: seg.width ?? ARTERIAL_WIDTH });
+    }
+    // Backward end
+    if (pointInWater(polygons, seg.x1 - dx * probe, seg.z1 - dz * probe)) {
+      stubs.push({ at: { x: seg.x1, z: seg.z1 }, dir: { x: -dx, z: -dz }, approach: len, width: seg.width ?? ARTERIAL_WIDTH });
     }
   }
-  return gaps;
+  return stubs;
 }
 
 /**
- * Build the bridge deck for one water gap.
+ * Follow a stub out across the water and report where it would come ashore.
  *
- * The path includes the ramp runs, because the geometry builder raises the
- * deck over the first and last stretch of arclength. Returns null when either
- * touchdown would land in water — a spit too narrow to come down on.
+ * Returns null when the far bank is beyond reach, when the ramp would touch
+ * down in water, or when the crossing never leaves the water at all.
  */
-function buildBridge(
-  points: Pt[],
-  cum: number[],
-  gap: { s0: number; s1: number },
-  width: number,
-  polygons: WaterPolygon[]
-): OverpassSpec | null {
-  const start = posAt(points, cum, gap.s0 - BRIDGE_RAMP_LENGTH);
-  const end = posAt(points, cum, gap.s1 + BRIDGE_RAMP_LENGTH);
-
-  if (pointInWater(polygons, start.x, start.z)) return null;
-  if (pointInWater(polygons, end.x, end.z)) return null;
-
-  // Follow the street's own shape across, so a bridge on a bend curves with it.
-  const deck = [start, ...slice(points, cum, gap.s0, gap.s1).slice(1, -1), end];
-
-  return {
-    points: deck,
-    height: BRIDGE_HEIGHT,
-    width,
-    ramp_length: BRIDGE_RAMP_LENGTH,
-    pillar_spacing: BRIDGE_PILLAR_SPACING,
+function probeCrossing(
+  stub: ShoreStub,
+  polygons: WaterPolygon[],
+  maxSpan: number
+): { landing: Pt; span: number } | null {
+  const reach = maxSpan + BRIDGE_RAMP_LENGTH * 2;
+  const ray: RoadSegment = {
+    x1: stub.at.x,
+    z1: stub.at.z,
+    x2: stub.at.x + stub.dir.x * reach,
+    z2: stub.at.z + stub.dir.z * reach,
+    width: 1,
   };
+
+  const spans = submergedSpans(polygons, ray);
+  if (spans.length === 0) return null;
+
+  // The crossing we care about is the one starting at the stub.
+  const first = spans[0];
+  if (first.t0 * reach > 2) return null; // water doesn't start here after all
+
+  const span = (first.t1 - first.t0) * reach;
+  if (span > maxSpan) return null;
+
+  const landing = {
+    x: stub.at.x + stub.dir.x * (first.t1 * reach),
+    z: stub.at.z + stub.dir.z * (first.t1 * reach),
+  };
+
+  // The far ramp has to come down on dry ground.
+  const touchdown = {
+    x: landing.x + stub.dir.x * BRIDGE_RAMP_LENGTH,
+    z: landing.z + stub.dir.z * BRIDGE_RAMP_LENGTH,
+  };
+  if (pointInWater(polygons, touchdown.x, touchdown.z)) return null;
+
+  return { landing, span };
+}
+
+/** True when some road end sits near the landing point. */
+function hasRoadNear(roads: RoadSegment[], p: Pt, tolerance: number): boolean {
+  const t2 = tolerance * tolerance;
+  for (const r of roads) {
+    const d1 = (r.x1 - p.x) ** 2 + (r.z1 - p.z) ** 2;
+    if (d1 <= t2) return true;
+    const d2 = (r.x2 - p.x) ** 2 + (r.z2 - p.z) ** 2;
+    if (d2 <= t2) return true;
+  }
+  return false;
 }
 
 /**
- * Take generated roads through water.
+ * Choose where to bridge the water.
  *
- * Segments are first chained into whole streets, because the BSP split leaves
- * roads as ~35-unit pieces and a piece that crosses water usually begins in it
- * — judged individually, no crossing would ever have dry road to ramp from.
+ * Works from road ends left at the shore by the split, probes each one across
+ * the water, and keeps the crossings that reach a far bank within range, come
+ * down on dry ground, and land near a road on the other side — so every bridge
+ * joins two pieces of the network instead of stranding traffic on a beach.
  *
- * Each street then has its submerged stretches cut out, leaving waterfront
- * stubs, and narrow enough gaps may be carried by a bridge. Arterials bridge at
- * twice the rate of side streets, so sparse settings favour the main network.
+ * Each crossing is found twice, once from each bank, so near-identical decks
+ * are collapsed. Wider approaches are considered first, letting sparse settings
+ * favour the arterials.
  *
- * With no water bodies this is a pass-through that draws no randomness.
+ * Draws no randomness when there is no water.
  */
-export function applyWaterToRoads(
+export function findBridges(
   roads: RoadSegment[],
   polygons: WaterPolygon[],
   density: OverpassDensity,
   rng: Rng
-): WaterRoadResult {
-  if (polygons.length === 0) return { roads, overpasses: [] };
-
+): OverpassSpec[] {
+  if (polygons.length === 0) return [];
   const fraction = DENSITY_FRACTION[density] ?? 0;
   const maxSpan = DENSITY_MAX_SPAN[density] ?? 0;
-  const outRoads: RoadSegment[] = [];
-  const overpasses: OverpassSpec[] = [];
+  if (fraction <= 0 || maxSpan <= 0) return [];
 
-  for (const chain of chainRoadPolylines(roads)) {
-    const points = chain.points;
-    if (points.length < 2) continue;
-    const cum = cumulative(points);
-    const total = cum[cum.length - 1];
-    if (total < 1e-6) continue;
+  // Gather every crossing worth making, collapsing the ones found twice.
+  const viable: OverpassSpec[] = [];
+  const arterial: OverpassSpec[] = [];
+  const midpoints: Pt[] = [];
 
-    const gaps = waterGaps(points, cum, polygons);
-    if (gaps.length === 0) {
-      outRoads.push(...toSegments(points, chain.width));
-      continue;
-    }
+  for (const stub of findShoreStubs(roads, polygons)) {
+    const crossing = probeCrossing(stub, polygons, maxSpan);
+    if (!crossing) continue;
+    if (!hasRoadNear(roads, crossing.landing, LANDING_TOLERANCE)) continue;
 
-    // Keep the dry stretches between (and either side of) the water.
-    let cursor = 0;
-    for (const gap of gaps) {
-      if (gap.s0 - cursor > 1e-6) {
-        outRoads.push(...toSegments(slice(points, cum, cursor, gap.s0), chain.width));
-      }
-      cursor = gap.s1;
-    }
-    if (total - cursor > 1e-6) {
-      outRoads.push(...toSegments(slice(points, cum, cursor, total), chain.width));
-    }
+    // Collapse the same crossing seen from the opposite bank.
+    const mid = {
+      x: (stub.at.x + crossing.landing.x) / 2,
+      z: (stub.at.z + crossing.landing.z) / 2,
+    };
+    if (midpoints.some((m) => Math.hypot(m.x - mid.x, m.z - mid.z) < DUPLICATE_RADIUS)) continue;
+    midpoints.push(mid);
 
-    // Consider each crossing for a bridge.
-    for (const gap of gaps) {
-      if (gap.s1 - gap.s0 > maxSpan) continue;
-
-      // One draw per eligible crossing, so density changes don't reorder the
-      // rest of the sequence.
-      const roll = rng();
-      const isArterial = chain.width >= ARTERIAL_WIDTH;
-      const chance = isArterial ? fraction : fraction / 2;
-      if (roll >= chance) continue;
-
-      const bridge = buildBridge(points, cum, gap, chain.width, polygons);
-      if (bridge) overpasses.push(bridge);
-    }
+    // The deck carries its own ramps: the geometry builder raises it over the
+    // first and last stretch of arclength, so the path starts back on land.
+    const spec: OverpassSpec = {
+      points: [
+        { x: stub.at.x - stub.dir.x * BRIDGE_RAMP_LENGTH, z: stub.at.z - stub.dir.z * BRIDGE_RAMP_LENGTH },
+        { x: crossing.landing.x + stub.dir.x * BRIDGE_RAMP_LENGTH, z: crossing.landing.z + stub.dir.z * BRIDGE_RAMP_LENGTH },
+      ],
+      height: BRIDGE_HEIGHT,
+      width: stub.width,
+      ramp_length: BRIDGE_RAMP_LENGTH,
+      pillar_spacing: BRIDGE_PILLAR_SPACING,
+    };
+    (stub.width >= ARTERIAL_WIDTH ? arterial : viable).push(spec);
   }
 
-  return { roads: outRoads, overpasses };
+  // Arterials first so thinning keeps the main crossings, shuffled within each
+  // tier so repeat runs of the same map vary.
+  const ranked = [...shuffle(arterial, rng), ...shuffle(viable, rng)];
+  if (ranked.length === 0) return [];
+
+  const keep = Math.max(1, Math.ceil(ranked.length * fraction));
+  return ranked.slice(0, keep);
+}
+
+/** Fisher-Yates, using the injected source so runs stay reproducible. */
+function shuffle<T>(items: T[], rng: Rng): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
