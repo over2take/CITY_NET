@@ -9,6 +9,7 @@ import {
   clipSegmentToLand,
   findBridges,
   generateShorelineRoads,
+  snapRoadEndsToShoreline,
   splitCity,
   createIsBlocked,
   SpatialGrid,
@@ -18,6 +19,8 @@ import {
   type WaterPolygon,
   type OverpassDensity,
   type SectionType,
+  type RawBuilding,
+  type GenerateCityDeps,
 } from '../index';
 
 /** Deterministic PRNG so bridge draws are reproducible. */
@@ -291,6 +294,49 @@ describe('generateShorelineRoads', () => {
   });
 });
 
+describe('snapRoadEndsToShoreline', () => {
+  // Waterfront road running along z at x = 0.
+  const shore = [{ x1: 0, z1: -100, x2: 0, z2: 100, width: 6 }];
+
+  it('pulls an overshooting end back onto the waterfront road', () => {
+    // Approach runs past x = 0 and stops at x = 7, where the water starts.
+    const approach = [{ x1: -60, z1: 0, x2: 7, z2: 0, width: 6 }];
+    const [snapped] = snapRoadEndsToShoreline(approach, shore);
+    expect(snapped.x2).toBeCloseTo(0, 5);
+    expect(snapped.z2).toBeCloseTo(0, 5);
+    expect(snapped.x1).toBeCloseTo(-60, 5); // inland end untouched
+  });
+
+  it('gives the two roads a shared point to be joined at', () => {
+    const approach = [{ x1: -60, z1: 25, x2: 7, z2: 25, width: 6 }];
+    const [snapped] = snapRoadEndsToShoreline(approach, shore);
+    // The snapped end lies exactly on the waterfront segment.
+    expect(snapped.x2).toBeCloseTo(0, 5);
+    expect(Math.abs(snapped.z2)).toBeLessThanOrEqual(100);
+  });
+
+  it('leaves ends nowhere near the waterfront alone', () => {
+    const inland = [{ x1: -200, z1: 0, x2: -120, z2: 0, width: 6 }];
+    expect(snapRoadEndsToShoreline(inland, shore)).toEqual(inland);
+  });
+
+  it('passes roads through when there is no waterfront road', () => {
+    const roads = [{ x1: -60, z1: 0, x2: 7, z2: 0, width: 6 }];
+    expect(snapRoadEndsToShoreline(roads, [])).toEqual(roads);
+  });
+
+  it('drops a segment that collapses onto the waterfront road', () => {
+    // Both ends within snapping distance of the same spot.
+    const stub = [{ x1: -2, z1: 0, x2: 3, z2: 0, width: 6 }];
+    expect(snapRoadEndsToShoreline(stub, shore)).toEqual([]);
+  });
+
+  it('preserves road width', () => {
+    const approach = [{ x1: -60, z1: 0, x2: 7, z2: 0, width: 3 }];
+    expect(snapRoadEndsToShoreline(approach, shore)[0].width).toBe(3);
+  });
+});
+
 describe('findBridges', () => {
   // A channel with a road stub running to each bank, facing each other.
   const channel = [rect(-30, -1000, 30, 1000)];
@@ -393,7 +439,9 @@ describe('generateCity with water', () => {
     expect(dry.overpasses).toEqual([]);
   });
 
-  it('puts no buildings in the water', () => {
+  it('puts no building footprint in the water', () => {
+    // Footprints, not just centres: the themed generators place most of a
+    // structure relative to a checked root without re-testing each piece.
     const waterBodies = [rectRow(-200, -200, 0, 200)]; // floods the left half
     const result = generateCity(
       AREA,
@@ -402,9 +450,33 @@ describe('generateCity with water', () => {
       mulberry32(8)
     );
     const polys = parseWaterBodies(waterBodies);
+    expect(result.buildings.length).toBeGreaterThan(0);
     result.buildings.forEach((b) => {
-      expect(pointInWater(polys, b.x as number, b.z as number)).toBe(false);
+      expect(footprintInWater(polys, b.x, b.z, b.width, b.depth)).toBe(false);
     });
+  });
+
+  it('rolls a plot back whole rather than leaving it half built', () => {
+    // fillPlot emits one piece on land and one out over the water; the plot
+    // must be discarded entirely, not trimmed to the dry piece.
+    const waterBodies = [rectRow(-200, -200, 0, 200)];
+    const result = generateCity(
+      AREA, baseOpts, { locations: [], roads: [], waterBodies }, mulberry32(3),
+      {
+        fillPlot: ((_x, _z, _w, _d, _zone, _blocked, _key, _grid, out) => {
+          const list = out as RawBuilding[];
+          const base = { name: '', y: 0, width: 4, depth: 4, height: 4, color: '', shape: 'box' };
+          list.push({ ...base, x: 50, z: 50 });    // dry side
+          list.push({ ...base, x: -50, z: -50 });  // in the water
+        }) as GenerateCityDeps['fillPlot'],
+      }
+    );
+    // Every plot emits one wet piece, so every plot rolls back — including the
+    // dry piece that would otherwise have survived on its own.
+    const atDry = result.buildings.filter((b) => b.x === 50 && b.z === 50);
+    const atWet = result.buildings.filter((b) => b.x === -50 && b.z === -50);
+    expect(atWet).toEqual([]);
+    expect(atDry).toEqual([]);
   });
 
   it('keeps no road running through water', () => {

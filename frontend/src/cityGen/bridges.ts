@@ -58,6 +58,13 @@ const DUPLICATE_RADIUS = 25;
 /** A stub must have at least this much dry road behind it to ramp from. */
 const MIN_APPROACH = 12;
 
+/**
+ * How far past a road end to look for water. Approaches stop on the waterfront
+ * road, which is set back from the edge, so the water begins a little beyond
+ * the end rather than immediately at it.
+ */
+const SHORE_REACH = 14;
+
 /** An overpass ready to POST to /api/overpasses. */
 export interface OverpassSpec {
   points: { x: number; z: number }[];
@@ -90,21 +97,27 @@ interface ShoreStub {
  */
 function findShoreStubs(roads: RoadSegment[], polygons: WaterPolygon[]): ShoreStub[] {
   const stubs: ShoreStub[] = [];
-  const probe = 1.5; // step just past the end to see if water begins there
+
+  /** True when water begins within reach of a point, looking along dir. */
+  const waterAhead = (x: number, z: number, dx: number, dz: number) => {
+    for (let step = 2; step <= SHORE_REACH; step += 3) {
+      if (pointInWater(polygons, x + dx * step, z + dz * step)) return true;
+    }
+    return false;
+  };
 
   for (const seg of roads) {
     const len = segmentLength(seg);
     if (len < MIN_APPROACH) continue;
     const dx = (seg.x2 - seg.x1) / len;
     const dz = (seg.z2 - seg.z1) / len;
+    const width = seg.width ?? ARTERIAL_WIDTH;
 
-    // Forward end
-    if (pointInWater(polygons, seg.x2 + dx * probe, seg.z2 + dz * probe)) {
-      stubs.push({ at: { x: seg.x2, z: seg.z2 }, dir: { x: dx, z: dz }, approach: len, width: seg.width ?? ARTERIAL_WIDTH });
+    if (waterAhead(seg.x2, seg.z2, dx, dz)) {
+      stubs.push({ at: { x: seg.x2, z: seg.z2 }, dir: { x: dx, z: dz }, approach: len, width });
     }
-    // Backward end
-    if (pointInWater(polygons, seg.x1 - dx * probe, seg.z1 - dz * probe)) {
-      stubs.push({ at: { x: seg.x1, z: seg.z1 }, dir: { x: -dx, z: -dz }, approach: len, width: seg.width ?? ARTERIAL_WIDTH });
+    if (waterAhead(seg.x1, seg.z1, -dx, -dz)) {
+      stubs.push({ at: { x: seg.x1, z: seg.z1 }, dir: { x: -dx, z: -dz }, approach: len, width });
     }
   }
   return stubs;
@@ -133,9 +146,10 @@ function probeCrossing(
   const spans = submergedSpans(polygons, ray);
   if (spans.length === 0) return null;
 
-  // The crossing we care about is the one starting at the stub.
+  // The crossing we care about is the one just ahead of the stub, allowing for
+  // the setback between the waterfront road and the water itself.
   const first = spans[0];
-  if (first.t0 * reach > 2) return null; // water doesn't start here after all
+  if (first.t0 * reach > SHORE_REACH) return null;
 
   const span = (first.t1 - first.t0) * reach;
   if (span > maxSpan) return null;

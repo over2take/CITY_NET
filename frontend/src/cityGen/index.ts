@@ -12,9 +12,9 @@ import {
 } from './zoning';
 import { generatePark } from './parks';
 import { shouldPlaceLandmark, generateLandmark } from './landmarks';
-import { parseWaterBodies, pointInWater } from './water';
+import { parseWaterBodies, pointInWater, footprintInWater } from './water';
 import { findBridges } from './bridges';
-import { generateShorelineRoads } from './shoreline';
+import { generateShorelineRoads, snapRoadEndsToShoreline } from './shoreline';
 import type {
   Bounds,
   GenerateCityContext,
@@ -32,7 +32,7 @@ export { generatePark } from './parks';
 export { shouldPlaceLandmark, generateLandmark } from './landmarks';
 export * from './water';
 export { findBridges, MAX_BRIDGE_SPAN, BRIDGE_RAMP_LENGTH } from './bridges';
-export { generateShorelineRoads } from './shoreline';
+export { generateShorelineRoads, snapRoadEndsToShoreline, SHORE_OFFSET } from './shoreline';
 
 /** Margin trimmed off every block so buildings don't butt against the road. */
 const PLOT_PADDING = 10;
@@ -86,9 +86,14 @@ export function generateCity(
   // into junctions, so the network routes around a lake.
   const shoreRoads = excludeRoads ? [] : generateShorelineRoads(water, bounds);
 
+  // Approaches stop at the water, which leaves them overshooting the waterfront
+  // road that sits back from it. Snapping their ends onto it removes the
+  // overshoot and gives the two roads a shared point to be joined at.
+  const snappedRoads = snapRoadEndsToShoreline(newRoads, shoreRoads);
+
   const finalRoads = excludeRoads
     ? []
-    : consolidateRoads([...newRoads, ...shoreRoads], context.roads, ROAD_CONSOLIDATION_RADIUS);
+    : consolidateRoads([...snappedRoads, ...shoreRoads], context.roads, ROAD_CONSOLIDATION_RADIUS);
 
   // Pick crossings worth bridging from the road ends left at the water's edge.
   // Draws no randomness on a dry map, so those generate exactly as before.
@@ -115,8 +120,25 @@ export function generateCity(
     // rejects the individual footprints that would sit in the water.
     if (water.length > 0 && pointInWater(water, block.x, block.z)) return;
 
-    /** Stamp the plot id and a fallback name onto everything just emitted. */
+    /**
+     * Stamp the plot id and a fallback name onto everything just emitted.
+     *
+     * If any piece ended up over water the whole plot is rolled back. The
+     * themed generators place most of a structure relative to a root without
+     * re-testing each piece, so a root cleared near the shore can still throw
+     * a wing or a rooftop tank out over the water. Dropping the plot whole
+     * keeps structures intact rather than leaving them half built.
+     */
     const tagPlot = (fallbackName: string) => {
+      if (water.length > 0) {
+        for (let i = startIndex; i < buildings.length; i++) {
+          const b = buildings[i];
+          if (footprintInWater(water, b.x, b.z, b.width, b.depth)) {
+            buildings.length = startIndex;
+            return;
+          }
+        }
+      }
       for (let i = startIndex; i < buildings.length; i++) {
         buildings[i].temp_block_id = plotId;
         if (!buildings[i].name) buildings[i].name = fallbackName;
