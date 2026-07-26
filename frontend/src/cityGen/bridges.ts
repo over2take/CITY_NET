@@ -40,8 +40,17 @@ export const MAX_BRIDGE_SPAN = DENSITY_MAX_SPAN.heavy;
 /** Horizontal run each ramp needs at either end of a span. */
 export const BRIDGE_RAMP_LENGTH = 20;
 
-/** Deck elevation of a generated bridge. */
-const BRIDGE_HEIGHT = 8;
+/**
+ * Deck elevations available to a generated bridge, lowest first.
+ *
+ * Bridges that cross in plan are given different levels so one passes over the
+ * other instead of intersecting it, and the choice among the remaining levels
+ * is random so a run of bridges is not all at one height.
+ */
+const BRIDGE_HEIGHTS = [8, 13, 18, 23];
+
+/** Fallback when a crossing has more neighbours than there are levels. */
+const BRIDGE_HEIGHT = BRIDGE_HEIGHTS[0];
 
 /** Spacing of the pillars carrying the deck. */
 const BRIDGE_PILLAR_SPACING = 12;
@@ -245,7 +254,55 @@ export function findBridges(
   if (ranked.length === 0) return [];
 
   const keep = Math.max(1, Math.ceil(ranked.length * fraction));
-  return ranked.slice(0, keep);
+  const chosen = ranked.slice(0, keep);
+
+  // Level the decks only once the final set is known, so thinning never leaves
+  // a gap in the sequence or two survivors sharing a crossing level.
+  assignHeights(chosen, rng);
+
+  return chosen;
+}
+
+/** Do two deck paths cross in plan? */
+function decksCross(a: OverpassSpec, b: OverpassSpec): boolean {
+  for (let i = 1; i < a.points.length; i++) {
+    for (let j = 1; j < b.points.length; j++) {
+      if (segmentsCross(a.points[i - 1], a.points[i], b.points[j - 1], b.points[j])) return true;
+    }
+  }
+  return false;
+}
+
+/** Proper segment intersection test on the XZ plane. */
+function segmentsCross(a1: Pt, a2: Pt, b1: Pt, b2: Pt): boolean {
+  const rx = a2.x - a1.x, rz = a2.z - a1.z;
+  const sx = b2.x - b1.x, sz = b2.z - b1.z;
+  const denom = rx * sz - rz * sx;
+  if (Math.abs(denom) < 1e-9) return false; // parallel
+  const t = ((b1.x - a1.x) * sz - (b1.z - a1.z) * sx) / denom;
+  const u = ((b1.x - a1.x) * rz - (b1.z - a1.z) * rx) / denom;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
+/**
+ * Give each deck a level, keeping crossing decks apart.
+ *
+ * Greedy graph colouring: every bridge takes a level none of the bridges it
+ * crosses already hold, picked at random from what is left so the skyline
+ * varies. With more crossings at a point than there are levels the lowest is
+ * reused — geometry that dense is not reachable from the siting rules.
+ */
+function assignHeights(bridges: OverpassSpec[], rng: Rng): void {
+  bridges.forEach((bridge, i) => {
+    const taken = new Set<number>();
+    for (let j = 0; j < i; j++) {
+      if (decksCross(bridge, bridges[j])) taken.add(bridges[j].height);
+    }
+    const free = BRIDGE_HEIGHTS.filter((h) => !taken.has(h));
+    bridge.height = free.length > 0
+      ? free[Math.floor(rng() * free.length)]
+      : BRIDGE_HEIGHT;
+  });
 }
 
 /** Fisher-Yates, using the injected source so runs stay reproducible. */

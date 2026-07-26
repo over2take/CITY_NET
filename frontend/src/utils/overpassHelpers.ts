@@ -179,7 +179,7 @@ export const buildOverpassGeometry = (
   points: OverpassPoint[],
   params: OverpassParams,
   existingRoads: Array<{ x1: number; z1: number; x2: number; z2: number; width?: number }> = [],
-  opts: { connectedStart?: boolean; connectedEnd?: boolean; tileLength?: number; otherOverpasses?: Array<{ points: OverpassPoint[]; width: number }> } = {}
+  opts: { connectedStart?: boolean; connectedEnd?: boolean; tileLength?: number; otherOverpasses?: Array<{ points: OverpassPoint[]; width: number; height?: number }> } = {}
 ): OverpassGeometry => {
   const { height, rampLength, rampLengthStart, rampLengthEnd, pillarSpacing } = params;
   const tileLength = opts.tileLength ?? 3;
@@ -257,6 +257,20 @@ export const buildOverpassGeometry = (
       pointToSegmentDist(p.x, p.z, r.x1, r.z1, r.x2, r.z2) < (r.width ?? 4) / 2 + PILLAR_RADIUS + PILLAR_CLEARANCE
     );
     if (collides) continue;
+
+    // A pillar is a solid column from the ground to its deck, so it would spear
+    // any lower deck crossing beneath it. Skip those. A deck passing overhead is
+    // fine — the pillar simply stands under it.
+    const piercesOther = otherOverpasses.some(o => {
+      if (o.height !== undefined && o.height > y) return false;
+      for (let i = 1; i < o.points.length; i++) {
+        const d = pointToSegmentDist(p.x, p.z, o.points[i - 1].x, o.points[i - 1].z, o.points[i].x, o.points[i].z);
+        if (d < (o.width ?? 4) / 2 + PILLAR_RADIUS + PILLAR_CLEARANCE) return true;
+      }
+      return false;
+    });
+    if (piercesOther) continue;
+
     pillars.push({ x: p.x, z: p.z, height: y });
   }
 

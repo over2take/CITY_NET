@@ -34,6 +34,20 @@ function mulberry32(seed: number) {
   };
 }
 
+/** Proper segment intersection on the XZ plane, for deck-crossing checks. */
+const segmentsIntersect = (
+  a1: { x: number; z: number }, a2: { x: number; z: number },
+  b1: { x: number; z: number }, b2: { x: number; z: number }
+) => {
+  const rx = a2.x - a1.x, rz = a2.z - a1.z;
+  const sx = b2.x - b1.x, sz = b2.z - b1.z;
+  const den = rx * sz - rz * sx;
+  if (Math.abs(den) < 1e-9) return false;
+  const t = ((b1.x - a1.x) * sz - (b1.z - a1.z) * sx) / den;
+  const u = ((b1.x - a1.x) * rz - (b1.z - a1.z) * rx) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+};
+
 /** Axis-aligned rectangular water body. */
 const rect = (minX: number, minZ: number, maxX: number, maxZ: number): WaterPolygon => ({
   points: [
@@ -411,6 +425,13 @@ describe('findBridges', () => {
     });
   });
 
+  it('only uses recognised deck levels', () => {
+    const bridges = findBridges(approaches, channel, 'heavy', mulberry32(1));
+    bridges.forEach((b) => {
+      expect([8, 13, 18, 23]).toContain(b.height);
+    });
+  });
+
   it('ignores approaches too short to ramp from', () => {
     const stubby = [
       { x1: -34, z1: 0, x2: -30, z2: 0, width: 6 },
@@ -518,6 +539,53 @@ describe('generateCity with water', () => {
       expect(o.ramp_length).toBeGreaterThan(0);
       expect(o.pillar_spacing).toBeGreaterThan(0);
     });
+  });
+
+  it('never leaves two crossing decks at the same level', () => {
+    // An irregular lake big enough to produce a dozen bridges, several of
+    // which cross — decks at a shared level would intersect each other.
+    const lake = [{
+      points_json: JSON.stringify([
+        { x: -380, z: 40 }, { x: -200, z: -40 }, { x: 40, z: -60 },
+        { x: 180, z: -140 }, { x: 260, z: -60 }, { x: 200, z: 60 },
+        { x: 320, z: 120 }, { x: 300, z: 260 }, { x: 60, z: 300 },
+        { x: -180, z: 260 }, { x: -380, z: 200 },
+      ]),
+    }];
+    const result = generateCity(
+      { min: { x: -400, z: -400 }, max: { x: 400, z: 400 } },
+      { ...baseOpts, sectionType: 'MIXED' as SectionType, overpassDensity: 'heavy' },
+      { locations: [], roads: [], waterBodies: lake },
+      mulberry32(7),
+      { fillPlot: vi.fn() }
+    );
+
+    let crossings = 0;
+    const decks = result.overpasses;
+    for (let i = 0; i < decks.length; i++) {
+      for (let j = i + 1; j < decks.length; j++) {
+        const a = decks[i], b = decks[j];
+        if (!segmentsIntersect(
+          a.points[0], a.points[a.points.length - 1],
+          b.points[0], b.points[b.points.length - 1]
+        )) continue;
+        crossings++;
+        expect(a.height).not.toBe(b.height);
+      }
+    }
+    // Guard against the assertion above passing vacuously.
+    expect(crossings).toBeGreaterThan(0);
+  });
+
+  it('spreads decks across more than one level', () => {
+    const lake = [rectRow(-15, -200, 15, 200)];
+    const result = generateCity(
+      AREA, { ...baseOpts, overpassDensity: 'heavy' },
+      { locations: [], roads: [], waterBodies: lake }, mulberry32(2), { fillPlot: vi.fn() }
+    );
+    const levels = new Set(result.overpasses.map((o) => o.height));
+    expect(result.overpasses.length).toBeGreaterThan(2);
+    expect(levels.size).toBeGreaterThan(1);
   });
 
   it('generates no bridges when roads are excluded', () => {
