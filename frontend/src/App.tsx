@@ -1610,8 +1610,9 @@ function App() {
                 fetchDistricts={fetchDistricts}
                 editingDistrict={editingDistrict}
                 setEditingDistrict={setEditingDistrict}
-                locations={locations} 
-                roads={roads} 
+                locations={locations}
+                roads={roads}
+                waterBodies={waterBodies}
                 editData={editData} 
                 setEditData={setEditData} 
                 editId={editId} 

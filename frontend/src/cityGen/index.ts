@@ -12,6 +12,8 @@ import {
 } from './zoning';
 import { generatePark } from './parks';
 import { shouldPlaceLandmark, generateLandmark } from './landmarks';
+import { parseWaterBodies, pointInWater } from './water';
+import { applyWaterToRoads } from './bridges';
 import type {
   Bounds,
   GenerateCityContext,
@@ -27,6 +29,8 @@ export { SpatialGrid, createIsBlocked } from './collision';
 export * from './zoning';
 export { generatePark } from './parks';
 export { shouldPlaceLandmark, generateLandmark } from './landmarks';
+export * from './water';
+export { applyWaterToRoads, MAX_BRIDGE_SPAN, BRIDGE_RAMP_LENGTH } from './bridges';
 
 /** Margin trimmed off every block so buildings don't butt against the road. */
 const PLOT_PADDING = 10;
@@ -63,22 +67,30 @@ export function generateCity(
   rng: Rng = Math.random,
   deps: GenerateCityDeps = DEFAULT_DEPS
 ): GenerateCityResult {
-  const { sectionType, excludeRoads } = options;
+  const { sectionType, excludeRoads, overpassDensity = 'normal' } = options;
   const { width, depth, centerX, centerZ } = normalizeBounds(bounds);
   const maxRadius = Math.max(1, Math.max(width, depth) / 2);
+  const water = parseWaterBodies(context.waterBodies ?? []);
 
   // Sector angles are drawn before anything else so the district layout is
   // stable regardless of how many blocks the split produces.
   const sectors = createSectorLayout(rng);
 
   const { blocks, roads: newRoads } = splitCity(bounds, excludeRoads, rng);
-  const finalRoads = excludeRoads
+  const consolidated = excludeRoads
     ? []
     : consolidateRoads(newRoads, context.roads, ROAD_CONSOLIDATION_RADIUS);
 
+  // Cut the roads back at any shoreline and bridge the crossings that qualify.
+  // With no water this is a pass-through that draws no randomness, so dry maps
+  // generate exactly as they did before.
+  const { roads: finalRoads, overpasses } = applyWaterToRoads(
+    consolidated, water, overpassDensity, rng
+  );
+
   const grid = new SpatialGrid(context.locations);
   const roadsToCheck = [...context.roads, ...newRoads];
-  const isBlocked = createIsBlocked(grid, roadsToCheck, !excludeRoads);
+  const isBlocked = createIsBlocked(grid, roadsToCheck, !excludeRoads, water);
 
   const buildings: RawBuilding[] = [];
 
@@ -89,6 +101,11 @@ export function generateCity(
     let bw = block.w - PLOT_PADDING;
     let bd = block.d - PLOT_PADDING;
     if (bw < MIN_PLOT_SIZE || bd < MIN_PLOT_SIZE) return;
+
+    // A plot centred in water is open water — skip it outright. Plots that
+    // merely touch a shoreline still build, on their dry side: isBlocked
+    // rejects the individual footprints that would sit in the water.
+    if (water.length > 0 && pointInWater(water, block.x, block.z)) return;
 
     /** Stamp the plot id and a fallback name onto everything just emitted. */
     const tagPlot = (fallbackName: string) => {
@@ -126,5 +143,5 @@ export function generateCity(
     tagPlot(zonePrefix);
   });
 
-  return { blocks, roads: finalRoads, buildings };
+  return { blocks, roads: finalRoads, buildings, overpasses };
 }

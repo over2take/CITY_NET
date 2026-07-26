@@ -26,6 +26,9 @@ export interface Block {
 import type { RoadSegment } from '../utils/roadHelpers';
 export type { RoadSegment };
 
+import type { OverpassDensity, OverpassSpec } from './bridges';
+export type { OverpassDensity, OverpassSpec };
+
 /** Zoning preset chosen in the admin panel. */
 export type SectionType = 'MIXED' | 'CORPO' | 'URBAN' | 'SLUMS' | 'INDUSTRIAL';
 
@@ -66,6 +69,8 @@ export interface GenerateCityOptions {
   sectionType: SectionType;
   /** When true, no roads are generated and road collision is skipped. */
   excludeRoads: boolean;
+  /** How freely roads bridge the water they cross. Defaults to 'normal'. */
+  overpassDensity?: OverpassDensity;
 }
 
 export interface GenerateCityContext {
@@ -73,11 +78,18 @@ export interface GenerateCityContext {
   locations: Obstacle[];
   /** Existing roads, merged with new ones for collision and consolidation. */
   roads: RoadSegment[];
+  /**
+   * Water body rows as served by the API (outline in `points_json`).
+   * Buildings avoid them and roads stop at the shore. Omit for dry land.
+   */
+  waterBodies?: unknown[];
 }
 
 export interface GenerateCityResult {
   blocks: Block[];
-  /** Consolidated roads ready to POST. Empty when excludeRoads is set. */
+  /** Roads ready to POST, trimmed at any shoreline. Empty when excludeRoads. */
   roads: RoadSegment[];
   buildings: RawBuilding[];
+  /** Bridges spanning water crossings that qualified. */
+  overpasses: OverpassSpec[];
 }

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
-import { generateCity, SpatialGrid, type SectionType } from '../cityGen';
+import { generateCity, SpatialGrid, type SectionType, type OverpassDensity } from '../cityGen';
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
 import type { SignData, SignLine } from './Signs';
@@ -525,7 +525,7 @@ export function AdminPanel({
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
   roadLayerMode, setRoadLayerMode, overpassHeight, setOverpassHeight, overpassRampLength, setOverpassRampLength,
   overpassSplitRamps, setOverpassSplitRamps, overpassRampLengthStart, setOverpassRampLengthStart, overpassRampLengthEnd, setOverpassRampLengthEnd,
-  refreshOverpasses, overpasses,
+  refreshOverpasses, overpasses, waterBodies,
   renderSidewalks, setRenderSidewalks,
   renderSignage, setRenderSignage,
   signageDensity, setSignageDensity,
@@ -557,6 +557,7 @@ export function AdminPanel({
   }
 
   const [density, setDensity] = useState(8);
+  const [overpassDensity, setOverpassDensity] = useState<OverpassDensity>('normal');
   const [allowedShapes, setAllowedShapes] = useState<string[]>(['box', 'cylinder', 'sphere']);
   const [activeUserEditing, setActiveUserEditing] = useState<any>(null);
   const [copyBuffer, setCopyBuffer] = useState<any>(null);
@@ -1479,21 +1480,46 @@ export function AdminPanel({
               ))}
             </div>
             <button className={`utility-btn ${genExcludeRoads ? 'active' : ''}`} style={{marginTop: '10px', width: '100%'}} onClick={() => setGenExcludeRoads(!genExcludeRoads)}>{genExcludeRoads ? 'EXCLUDE_ROADS: ON' : 'EXCLUDE_ROADS: OFF'}</button>
+
+            <label style={{fontSize: '0.7rem', marginTop: '10px', display: 'block'}}>OVERPASS_DENSITY</label>
+            <div className="button-group" style={{marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
+              {(['off', 'sparse', 'normal', 'heavy'] as OverpassDensity[]).map(d => (
+                <button
+                  key={d}
+                  className={overpassDensity === d ? 'active' : ''}
+                  style={{ flex: '1 1 60px', minWidth: '60px' }}
+                  onClick={() => setOverpassDensity(d)}
+                  disabled={genExcludeRoads}
+                  title="How often a road crossing water is carried over by a bridge. Wide crossings are never bridged."
+                >
+                  {d.toUpperCase()}
+                </button>
+              ))}
+            </div>
           </div>
           <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}>{roadSelectionBounds ? <p>AREA_SELECTED: {Math.round(Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x))}x{Math.round(Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z))} units</p> : <p style={{opacity: 0.7}}>DRAG ON MAP TO SELECT GENERATION AREA</p>}<p style={{opacity: 0.7, marginTop: '5px'}}>HIERARCHICAL BSP: ENABLED</p><p style={{opacity: 0.7}}>ZONING: {citySectionType}</p><p style={{opacity: 0.7}}>INFRASTRUCTURE: {genExcludeRoads ? 'BUILDINGS_ONLY' : 'ROADS_+_BUILDINGS'}</p></div>
           <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => {
               try {
                 if (!roadSelectionBounds) return setAdminAlert("SELECT AREA FIRST");
 
-                const { blocks, roads: finalRoads, buildings: rawBuildings } = generateCity(
+                const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses } = generateCity(
                   roadSelectionBounds,
-                  { sectionType: citySectionType as SectionType, excludeRoads: genExcludeRoads },
-                  { locations, roads }
+                  {
+                    sectionType: citySectionType as SectionType,
+                    excludeRoads: genExcludeRoads,
+                    overpassDensity,
+                  },
+                  { locations, roads, waterBodies }
                 );
 
                 if (finalRoads.length > 0) {
                   const rRes = await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalRoads) });
                   if (!rRes.ok) throw new Error(`Road creation failed: ${rRes.status}`);
+                }
+
+                for (const o of newOverpasses) {
+                  const oRes = await fetch('/api/overpasses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(o) });
+                  if (!oRes.ok) throw new Error(`Overpass creation failed: ${oRes.status}`);
                 }
                 
                 // Grouping logic for parent_id using SPATIAL GRID for O(N) speed
@@ -1532,7 +1558,11 @@ export function AdminPanel({
                   }
                 }
 
-                setAdminAlert(`CITY GENERATED: ${blocks.length} SECTORS`); refreshLocations(); setView('list'); setRoadSelectionBounds(null);
+                const bridgeNote = newOverpasses.length > 0 ? ` / ${newOverpasses.length} BRIDGE${newOverpasses.length > 1 ? 'S' : ''}` : '';
+                setAdminAlert(`CITY GENERATED: ${blocks.length} SECTORS${bridgeNote}`);
+                refreshLocations();
+                if (newOverpasses.length > 0) refreshOverpasses?.();
+                setView('list'); setRoadSelectionBounds(null);
             } catch (err: any) {
               console.error(err);
               setAdminAlert(`SYSTEM_ERROR: ${err.message}. Area might be too large or complex.`);

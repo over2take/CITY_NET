@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Obstacle, RoadSegment } from './types';
+import { footprintInWater, type WaterPolygon } from './water';
 
 /** Cell size of the uniform grid used to bucket obstacles. */
 const GRID_CELL = 20;
@@ -150,18 +151,22 @@ function overlapsRoad(
 
 /**
  * Build the placement test used throughout generation: a footprint is blocked
- * when it collides with an existing structure or lands on a road.
+ * when it collides with an existing structure, lands on a road, or sits in
+ * water.
  *
  * Road checks are skipped entirely when roads aren't part of this generation.
+ * Passing no water polygons skips that check at zero cost.
  */
 export function createIsBlocked(
   grid: SpatialGrid,
   roads: RoadSegment[],
-  checkRoads: boolean
+  checkRoads: boolean,
+  water: WaterPolygon[] = []
 ): IsBlocked {
   return (x, z, w, d, buffer = 2) => {
     if (overlapsObstacle(grid, x, z, w, d, buffer)) return true;
     if (checkRoads && overlapsRoad(roads, x, z, w, d)) return true;
+    if (water.length > 0 && footprintInWater(water, x, z, w, d)) return true;
     return false;
   };
 }
