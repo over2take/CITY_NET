@@ -1,3 +1,5 @@
+const { cryptoRng } = require('../utils/random');
+
 // Sheet roll engine - pure functions, no I/O.
 //
 // Grammar (deliberately tiny):
@@ -74,7 +76,7 @@ const rollDie = (sides, rng) => Math.floor(rng() * sides) + 1;
 //   critical: 'success' | 'failure' | null, breakdown: '(6+3) + 12' }
 // opts.noFumble: a natural 1 is NOT a critical failure (CP:R: spending any
 // LUCK on the check negates the fumble; the 1 still counts at face value).
-const executeRoll = (resolved, shape = 'sum', rng = Math.random, opts = {}) => {
+const executeRoll = (resolved, shape = 'sum', rng = cryptoRng, opts = {}) => {
   if (shape === 'pool') {
     // SR6 dice pool: modifier sum = pool size (min 1), roll d6s, count hits.
     // Any dice terms in the formula also contribute their COUNT to the pool

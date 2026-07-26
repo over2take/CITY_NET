@@ -1,6 +1,7 @@
 import type { InitiativeSystem, RollOptions } from './index';
+import { cryptoRng } from './random';
 
-const d6 = () => Math.floor(Math.random() * 6) + 1;
+const d6 = () => Math.floor(cryptoRng() * 6) + 1;
 const stat = (sheet: any, key: string) => Number(sheet?.[key] ?? sheet?.data?.[key] ?? 3);
 
 export const sr6: InitiativeSystem = {
