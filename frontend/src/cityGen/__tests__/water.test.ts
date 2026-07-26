@@ -368,9 +368,33 @@ describe('findBridges', () => {
 
   it('extends the deck onto land at both ends for the ramps', () => {
     const [bridge] = findBridges(approaches, channel, 'heavy', mulberry32(1));
-    const [start, end] = bridge.points;
+    const start = bridge.points[0];
+    const end = bridge.points[bridge.points.length - 1];
     expect(Math.min(start.x, end.x)).toBeCloseTo(-30 - BRIDGE_RAMP_LENGTH, 5);
     expect(Math.max(start.x, end.x)).toBeCloseTo(30 + BRIDGE_RAMP_LENGTH, 5);
+  });
+
+  it('runs each ramp back along its own approach road', () => {
+    // Ramp ends must sit on the pavement they join, not on open ground beside
+    // it, or the deck reads as ending in mid-air.
+    const [bridge] = findBridges(approaches, channel, 'heavy', mulberry32(1));
+    const start = bridge.points[0];
+    const end = bridge.points[bridge.points.length - 1];
+    // Both approaches run along z = 0, so a ramp on them shares that line.
+    expect(start.z).toBeCloseTo(0, 5);
+    expect(end.z).toBeCloseTo(0, 5);
+    // And both land within the extent of their road, not past its far end.
+    expect(Math.min(start.x, end.x)).toBeGreaterThanOrEqual(-120);
+    expect(Math.max(start.x, end.x)).toBeLessThanOrEqual(120);
+  });
+
+  it('touches down at both shores on the way across', () => {
+    const [bridge] = findBridges(approaches, channel, 'heavy', mulberry32(1));
+    // Ramp, near shore, far shore, ramp.
+    expect(bridge.points).toHaveLength(4);
+    const xs = bridge.points.map((p) => p.x).sort((a, b) => a - b);
+    expect(xs[1]).toBeCloseTo(-30, 5);
+    expect(xs[2]).toBeCloseTo(30, 5);
   });
 
   it('collapses the crossing seen from both banks into one bridge', () => {

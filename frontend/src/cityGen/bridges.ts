@@ -178,16 +178,38 @@ function probeCrossing(
   return { landing, span };
 }
 
-/** True when some road end sits near the landing point. */
-function hasRoadNear(roads: RoadSegment[], p: Pt, tolerance: number): boolean {
-  const t2 = tolerance * tolerance;
-  for (const r of roads) {
-    const d1 = (r.x1 - p.x) ** 2 + (r.z1 - p.z) ** 2;
-    if (d1 <= t2) return true;
-    const d2 = (r.x2 - p.x) ** 2 + (r.z2 - p.z) ** 2;
-    if (d2 <= t2) return true;
+/**
+ * How head-on two stubs must face for one to be the far end of the other's
+ * crossing. -1 is exactly opposed; this allows roughly 45 degrees of splay.
+ */
+const OPPOSING_DOT = -0.7;
+
+/**
+ * Find the road on the far bank that this crossing should join.
+ *
+ * Landing near *any* road is not enough to look connected — the deck has to
+ * come down along that road's line. So the far end is required to be a shore
+ * stub of its own, near the landing point and facing back across the water,
+ * and its direction is what the far ramp follows.
+ */
+function findOpposingStub(
+  stub: ShoreStub,
+  landing: Pt,
+  stubs: ShoreStub[]
+): ShoreStub | null {
+  let best: ShoreStub | null = null;
+  let bestDist = LANDING_TOLERANCE;
+  for (const other of stubs) {
+    if (other === stub) continue;
+    // Must face back the way we came, not run alongside.
+    if (stub.dir.x * other.dir.x + stub.dir.z * other.dir.z > OPPOSING_DOT) continue;
+    const d = Math.hypot(other.at.x - landing.x, other.at.z - landing.z);
+    if (d < bestDist) {
+      bestDist = d;
+      best = other;
+    }
   }
-  return false;
+  return best;
 }
 
 /**
@@ -220,32 +242,40 @@ export function findBridges(
   const arterial: OverpassSpec[] = [];
   const midpoints: Pt[] = [];
 
-  for (const stub of findShoreStubs(roads, polygons)) {
+  const stubs = findShoreStubs(roads, polygons);
+
+  for (const stub of stubs) {
     const crossing = probeCrossing(stub, polygons, maxSpan);
     if (!crossing) continue;
-    if (!hasRoadNear(roads, crossing.landing, LANDING_TOLERANCE)) continue;
+
+    const far = findOpposingStub(stub, crossing.landing, stubs);
+    if (!far) continue;
 
     // Collapse the same crossing seen from the opposite bank.
     const mid = {
-      x: (stub.at.x + crossing.landing.x) / 2,
-      z: (stub.at.z + crossing.landing.z) / 2,
+      x: (stub.at.x + far.at.x) / 2,
+      z: (stub.at.z + far.at.z) / 2,
     };
     if (midpoints.some((m) => Math.hypot(m.x - mid.x, m.z - mid.z) < DUPLICATE_RADIUS)) continue;
     midpoints.push(mid);
 
-    // The deck carries its own ramps: the geometry builder raises it over the
-    // first and last stretch of arclength, so the path starts back on land.
+    // Four points: up the near road, across the water, down the far road.
+    // Both ramps therefore run along real pavement rather than ending on open
+    // ground, and the geometry builder raises the deck over exactly the first
+    // and last stretch — which are the two ramp runs.
     const spec: OverpassSpec = {
       points: [
         { x: stub.at.x - stub.dir.x * BRIDGE_RAMP_LENGTH, z: stub.at.z - stub.dir.z * BRIDGE_RAMP_LENGTH },
-        { x: crossing.landing.x + stub.dir.x * BRIDGE_RAMP_LENGTH, z: crossing.landing.z + stub.dir.z * BRIDGE_RAMP_LENGTH },
+        { x: stub.at.x, z: stub.at.z },
+        { x: far.at.x, z: far.at.z },
+        { x: far.at.x - far.dir.x * BRIDGE_RAMP_LENGTH, z: far.at.z - far.dir.z * BRIDGE_RAMP_LENGTH },
       ],
       height: BRIDGE_HEIGHT,
-      width: stub.width,
+      width: Math.max(stub.width, far.width),
       ramp_length: BRIDGE_RAMP_LENGTH,
       pillar_spacing: BRIDGE_PILLAR_SPACING,
     };
-    (stub.width >= ARTERIAL_WIDTH ? arterial : viable).push(spec);
+    (spec.width >= ARTERIAL_WIDTH ? arterial : viable).push(spec);
   }
 
   // Arterials first so thinning keeps the main crossings, shuffled within each
