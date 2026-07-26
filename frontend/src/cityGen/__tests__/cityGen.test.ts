@@ -126,6 +126,32 @@ describe('SpatialGrid', () => {
     grid.add({ x: 0, z: 0, width: 2, depth: 2 });
     expect(grid.cells[grid.key(0, 0)]).toHaveLength(1);
   });
+
+  it('registers a wide obstacle in every cell its footprint covers', () => {
+    const grid = new SpatialGrid([{ x: 0, z: 0, width: 100, depth: 100 }]);
+    // 100 units across a 20-unit grid spans several cells on each axis.
+    expect(Object.keys(grid.cells).length).toBeGreaterThan(1);
+    // Including cells well away from the centre but still inside the footprint.
+    expect(grid.cells[grid.key(40, 40)]).toBeTruthy();
+  });
+
+  it('keeps a small obstacle in a single cell', () => {
+    const grid = new SpatialGrid([{ x: 5, z: 5, width: 4, depth: 4 }]);
+    expect(Object.keys(grid.cells)).toHaveLength(1);
+  });
+
+  it('diverts an enormous footprint to the oversized list', () => {
+    const grid = new SpatialGrid([{ x: 0, z: 0, width: 10000, depth: 10000 }]);
+    expect(grid.oversized).toHaveLength(1);
+    expect(Object.keys(grid.cells)).toHaveLength(0);
+  });
+
+  it('treats a missing width/depth as a point in one cell', () => {
+    const grid = new SpatialGrid();
+    grid.add({ x: 0, z: 0 } as never);
+    expect(Object.keys(grid.cells)).toHaveLength(1);
+    expect(grid.oversized).toHaveLength(0);
+  });
 });
 
 describe('createIsBlocked', () => {
@@ -147,6 +173,30 @@ describe('createIsBlocked', () => {
     // 12 units apart: clear with a small buffer, blocked with a large one.
     expect(isBlocked(12, 0, 2, 2, 0.5)).toBe(false);
     expect(isBlocked(12, 0, 2, 2, 8)).toBe(true);
+  });
+
+  it('blocks a point inside a large obstacle far from its centre', () => {
+    // Regression: the grid used to file an obstacle only under its centre cell,
+    // so anything more than ~1 cell away from the middle of a wide structure
+    // read as clear and buildings spawned inside it.
+    const grid = new SpatialGrid([{ x: 0, z: 0, width: 400, depth: 400 }]);
+    const isBlocked = createIsBlocked(grid, [], false);
+    expect(isBlocked(100, 0, 4, 4)).toBe(true);
+    expect(isBlocked(0, 180, 4, 4)).toBe(true);
+    expect(isBlocked(-150, -150, 4, 4)).toBe(true);
+  });
+
+  it('still allows placement outside a large obstacle', () => {
+    const grid = new SpatialGrid([{ x: 0, z: 0, width: 400, depth: 400 }]);
+    const isBlocked = createIsBlocked(grid, [], false);
+    expect(isBlocked(400, 400, 4, 4)).toBe(false);
+  });
+
+  it('blocks via the oversized list when a footprint is enormous', () => {
+    const grid = new SpatialGrid([{ x: 0, z: 0, width: 10000, depth: 10000 }]);
+    const isBlocked = createIsBlocked(grid, [], false);
+    expect(isBlocked(3000, 3000, 4, 4)).toBe(true);
+    expect(isBlocked(99999, 99999, 4, 4)).toBe(false);
   });
 
   it('blocks footprints sitting on a road', () => {
@@ -370,15 +420,9 @@ describe('generateCity', () => {
 
   it('places no landmarks or parks on fully built-up ground', () => {
     const fillPlot = vi.fn(); // stub emits nothing, so buildings == landmarks + parks
-    // Tile the whole selection with obstacles. The collision grid only inspects
-    // a 3x3 cell neighbourhood, so a single huge obstacle would NOT block
-    // distant plots — occupancy has to be spread across the cells to register.
-    const locations = [];
-    for (let x = -220; x <= 220; x += 15) {
-      for (let z = -220; z <= 220; z += 15) {
-        locations.push({ x, z, width: 30, depth: 30 });
-      }
-    }
+    // One structure covering the whole selection. This relies on footprint
+    // spanning: a centre-only grid would leave the outer plots looking clear.
+    const locations = [{ x: 0, z: 0, width: 500, depth: 500 }];
     const result = generateCity(
       AREA,
       opts({ sectionType: 'CORPO' }),
