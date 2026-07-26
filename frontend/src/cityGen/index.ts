@@ -1,7 +1,7 @@
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from '../components/Buildings';
 import { splitCity, normalizeBounds } from './bsp';
-import { SpatialGrid, createIsBlocked } from './collision';
+import { SpatialGrid, createIsBlocked, footprintOnRoad } from './collision';
 import {
   createSectorLayout,
   normalizedDistance,
@@ -26,7 +26,7 @@ import type {
 
 export * from './types';
 export { splitCity, normalizeBounds, maxSplitDepthFor } from './bsp';
-export { SpatialGrid, createIsBlocked } from './collision';
+export { SpatialGrid, createIsBlocked, footprintOnRoad } from './collision';
 export * from './zoning';
 export { generatePark } from './parks';
 export { shouldPlaceLandmark, generateLandmark } from './landmarks';
@@ -102,7 +102,11 @@ export function generateCity(
     : findBridges(finalRoads, water, overpassDensity, rng);
 
   const grid = new SpatialGrid(context.locations);
-  const roadsToCheck = [...context.roads, ...newRoads, ...shoreRoads];
+  // Test against the roads that will actually exist. Consolidation snaps
+  // endpoints onto existing roads and onto each other, so the pre-consolidation
+  // seams are not where the pavement ends up — checking those instead lets
+  // buildings land on roads that moved underneath them.
+  const roadsToCheck = [...context.roads, ...finalRoads];
   const isBlocked = createIsBlocked(grid, roadsToCheck, !excludeRoads, water);
 
   const buildings: RawBuilding[] = [];
@@ -121,22 +125,24 @@ export function generateCity(
     if (water.length > 0 && pointInWater(water, block.x, block.z)) return;
 
     /**
-     * Stamp the plot id and a fallback name onto everything just emitted.
+     * Stamp the plot id and a fallback name onto everything just emitted,
+     * unless the plot turned out to be badly sited.
      *
-     * If any piece ended up over water the whole plot is rolled back. The
-     * themed generators place most of a structure relative to a root without
-     * re-testing each piece, so a root cleared near the shore can still throw
-     * a wing or a rooftop tank out over the water. Dropping the plot whole
-     * keeps structures intact rather than leaving them half built.
+     * The themed generators place most of a structure relative to a cleared
+     * root without re-testing each piece, so a root sited legally can still
+     * throw a wing, a rooftop tank or a landmark buttress out over water or
+     * across a road. Every piece is therefore re-checked once the plot is
+     * finished, and the whole plot is rolled back if any of them landed badly
+     * — an empty lot reads as deliberate, half a building does not.
      */
     const tagPlot = (fallbackName: string) => {
-      if (water.length > 0) {
-        for (let i = startIndex; i < buildings.length; i++) {
-          const b = buildings[i];
-          if (footprintInWater(water, b.x, b.z, b.width, b.depth)) {
-            buildings.length = startIndex;
-            return;
-          }
+      for (let i = startIndex; i < buildings.length; i++) {
+        const b = buildings[i];
+        const wet = water.length > 0 && footprintInWater(water, b.x, b.z, b.width, b.depth);
+        const paved = !excludeRoads && footprintOnRoad(roadsToCheck, b.x, b.z, b.width, b.depth);
+        if (wet || paved) {
+          buildings.length = startIndex;
+          return;
         }
       }
       for (let i = startIndex; i < buildings.length; i++) {

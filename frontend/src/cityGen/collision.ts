@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import type { Obstacle, RoadSegment } from './types';
 import { footprintInWater, type WaterPolygon } from './water';
 
@@ -123,26 +122,71 @@ function overlapsObstacle(
   return false;
 }
 
-/** True when the footprint sits on or too near any road. */
-function overlapsRoad(
+/**
+ * Segment against axis-aligned box, by the slab method.
+ *
+ * Comparing a road's nearest point to a building's centre is not the same
+ * test: a road can clip a corner while its closest approach to the centre
+ * still reads as clear, which is how buildings ended up sitting on pavement.
+ * Clipping the segment against the box answers the question directly.
+ */
+function segmentHitsBox(
+  x1: number, z1: number, x2: number, z2: number,
+  minX: number, minZ: number, maxX: number, maxZ: number
+): boolean {
+  const dx = x2 - x1;
+  const dz = z2 - z1;
+  let t0 = 0;
+  let t1 = 1;
+
+  const edges: [number, number][] = [
+    [-dx, x1 - minX],
+    [dx, maxX - x1],
+    [-dz, z1 - minZ],
+    [dz, maxZ - z1],
+  ];
+
+  for (const [p, q] of edges) {
+    if (Math.abs(p) < 1e-12) {
+      if (q < 0) return false; // parallel to this slab and outside it
+      continue;
+    }
+    const r = q / p;
+    if (p < 0) {
+      if (r > t1) return false;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return false;
+      if (r < t1) t1 = r;
+    }
+  }
+  return true;
+}
+
+/**
+ * True when the footprint sits on or too near any road.
+ *
+ * Exported so a finished plot can be re-checked: the themed generators place
+ * most of a structure relative to a cleared root without testing each piece,
+ * so wings and annexes can still end up over pavement.
+ */
+export function footprintOnRoad(
   roads: RoadSegment[],
   x: number,
   z: number,
   w: number,
   d: number
 ): boolean {
-  const point = new THREE.Vector3(x, 0, z);
-  const closest = new THREE.Vector3();
   for (const r of roads) {
-    const line = new THREE.Line3(
-      new THREE.Vector3(r.x1, 0, r.z1),
-      new THREE.Vector3(r.x2, 0, r.z2)
-    );
-    line.closestPointToPoint(point, true, closest);
-    const roadW = r.width ?? 0;
-    const halfW = w / 2 + roadW / 2 + ROAD_MARGIN;
-    const halfD = d / 2 + roadW / 2 + ROAD_MARGIN;
-    if (Math.abs(closest.x - x) < halfW && Math.abs(closest.z - z) < halfD) {
+    // Grow the footprint by the road's half-width plus clearance, so the road
+    // can be treated as a bare centreline.
+    const pad = (r.width ?? 0) / 2 + ROAD_MARGIN;
+    const halfW = w / 2 + pad;
+    const halfD = d / 2 + pad;
+    if (segmentHitsBox(
+      r.x1, r.z1, r.x2, r.z2,
+      x - halfW, z - halfD, x + halfW, z + halfD
+    )) {
       return true;
     }
   }
@@ -165,7 +209,7 @@ export function createIsBlocked(
 ): IsBlocked {
   return (x, z, w, d, buffer = 2) => {
     if (overlapsObstacle(grid, x, z, w, d, buffer)) return true;
-    if (checkRoads && overlapsRoad(roads, x, z, w, d)) return true;
+    if (checkRoads && footprintOnRoad(roads, x, z, w, d)) return true;
     if (water.length > 0 && footprintInWater(water, x, z, w, d)) return true;
     return false;
   };

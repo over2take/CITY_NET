@@ -6,6 +6,7 @@ import {
   maxSplitDepthFor,
   SpatialGrid,
   createIsBlocked,
+  footprintOnRoad,
   createSectorLayout,
   normalizedDistance,
   parkProbability,
@@ -197,6 +198,24 @@ describe('createIsBlocked', () => {
     const isBlocked = createIsBlocked(grid, [], false);
     expect(isBlocked(3000, 3000, 4, 4)).toBe(true);
     expect(isBlocked(99999, 99999, 4, 4)).toBe(false);
+  });
+
+  it('blocks a road clipping a corner of the footprint', () => {
+    // Regression: comparing the road's nearest point to the building CENTRE
+    // read this as clear, because the closest approach to the centre is far
+    // even though the road cuts straight through a corner.
+    const grid = new SpatialGrid();
+    const diagonal = { x1: -100, z1: -100, x2: 100, z2: 100, width: 4 };
+    const isBlocked = createIsBlocked(grid, [diagonal], true);
+    // Box centred off the diagonal, but one corner reaches across it.
+    expect(isBlocked(14, 4, 20, 20)).toBe(true);
+  });
+
+  it('leaves a footprint clear of a diagonal road alone', () => {
+    const grid = new SpatialGrid();
+    const diagonal = { x1: -100, z1: -100, x2: 100, z2: 100, width: 4 };
+    const isBlocked = createIsBlocked(grid, [diagonal], true);
+    expect(isBlocked(80, -40, 10, 10)).toBe(false);
   });
 
   it('blocks footprints sitting on a road', () => {
@@ -409,6 +428,33 @@ describe('generateCity', () => {
       expect(b.temp_block_id).toMatch(/^gen_\d+$/);
       expect(b.name).not.toBe('');
     });
+  });
+
+  it('puts no building on a road', () => {
+    // Whole-plot re-check: the themed generators emit most pieces relative to
+    // a cleared root without testing them, so annexes used to land on paving.
+    const result = generateCity(AREA, opts(), ctx(), mulberry32(7));
+    expect(result.buildings.length).toBeGreaterThan(0);
+    result.buildings.forEach((b) => {
+      expect(footprintOnRoad(result.roads, b.x, b.z, b.width, b.depth)).toBe(false);
+    });
+  });
+
+  it('rolls a plot back whole when a piece lands on a road', () => {
+    const fillPlot: GenerateCityDeps['fillPlot'] = (
+      bx, bz, _w, _d, _zone, _blocked, _key, _grid, out
+    ) => {
+      const list = out as RawBuilding[];
+      const base = { name: '', y: 0, height: 4, color: '', shape: 'box' };
+      // A clear piece at the plot centre, plus one deliberately huge enough to
+      // reach the surrounding roads.
+      list.push({ ...base, x: bx, z: bz, width: 1, depth: 1 });
+      list.push({ ...base, x: bx, z: bz, width: 400, depth: 400 });
+    };
+    const result = generateCity(AREA, opts(), ctx(), mulberry32(7), { fillPlot });
+    // Every plot emits an oversized piece, so no fillPlot output survives.
+    expect(result.buildings.filter((b) => b.width === 1)).toEqual([]);
+    expect(result.buildings.filter((b) => b.width === 400)).toEqual([]);
   });
 
   it('skips plots too small to build on', () => {
