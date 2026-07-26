@@ -44,13 +44,28 @@ export const BRIDGE_RAMP_LENGTH = 20;
  * Deck elevations available to a generated bridge, lowest first.
  *
  * Bridges that cross in plan are given different levels so one passes over the
- * other instead of intersecting it, and the choice among the remaining levels
- * is random so a run of bridges is not all at one height.
+ * other instead of intersecting it. Kept low — a couple of storeys of clearance
+ * over the water reads as a road bridge; much more reads as a flyover.
  */
-const BRIDGE_HEIGHTS = [8, 13, 18, 23];
+export const BRIDGE_HEIGHTS = [6, 9, 12, 15];
 
 /** Fallback when a crossing has more neighbours than there are levels. */
 const BRIDGE_HEIGHT = BRIDGE_HEIGHTS[0];
+
+/**
+ * Horizontal run a ramp needs per unit of rise. Holding this constant keeps
+ * every bridge at the same grade, so a taller deck buys its height with a
+ * longer approach rather than a steeper climb.
+ */
+const RAMP_RUN_PER_RISE = 3;
+
+/**
+ * Bounds on how much of an approach road a ramp will occupy. The upper bound
+ * is generous so a ramp normally consumes its whole approach and touches down
+ * at the junction beyond it, rather than stopping part way along a block.
+ */
+export const MIN_RAMP_RUN = 12;
+export const MAX_RAMP_RUN = 120;
 
 /** Spacing of the pillars carrying the deck. */
 const BRIDGE_PILLAR_SPACING = 12;
@@ -80,7 +95,19 @@ export interface OverpassSpec {
   height: number;
   width: number;
   ramp_length: number;
+  /** Per-end ramp runs, since the two approach roads differ in length. */
+  ramp_length_start: number;
+  ramp_length_end: number;
   pillar_spacing: number;
+}
+
+/** A crossing, plus what is needed to re-derive its ramps if it must climb. */
+interface Candidate {
+  spec: OverpassSpec;
+  /** Highest deck the approaches can reach at the standard grade. */
+  maxRise: number;
+  near: { at: Pt; dir: Pt };
+  far: { at: Pt; dir: Pt };
 }
 
 type Pt = { x: number; z: number };
@@ -238,8 +265,8 @@ export function findBridges(
   if (fraction <= 0 || maxSpan <= 0) return [];
 
   // Gather every crossing worth making, collapsing the ones found twice.
-  const viable: OverpassSpec[] = [];
-  const arterial: OverpassSpec[] = [];
+  const viable: Candidate[] = [];
+  const arterial: Candidate[] = [];
   const midpoints: Pt[] = [];
 
   const stubs = findShoreStubs(roads, polygons);
@@ -259,23 +286,37 @@ export function findBridges(
     if (midpoints.some((m) => Math.hypot(m.x - mid.x, m.z - mid.z) < DUPLICATE_RADIUS)) continue;
     midpoints.push(mid);
 
-    // Four points: up the near road, across the water, down the far road.
-    // Both ramps therefore run along real pavement rather than ending on open
-    // ground, and the geometry builder raises the deck over exactly the first
-    // and last stretch — which are the two ramp runs.
+    // Each ramp runs the whole length of its approach road, so it touches down
+    // at that road's inland end — a junction — instead of part way along a
+    // block. The two approaches differ, hence a run per end.
+    const rampNear = clamp(stub.approach, MIN_RAMP_RUN, MAX_RAMP_RUN);
+    const rampFar = clamp(far.approach, MIN_RAMP_RUN, MAX_RAMP_RUN);
+
+    // Four points: up the near road, across the water, down the far road, so
+    // the geometry builder's ramp stretches coincide with real pavement.
     const spec: OverpassSpec = {
       points: [
-        { x: stub.at.x - stub.dir.x * BRIDGE_RAMP_LENGTH, z: stub.at.z - stub.dir.z * BRIDGE_RAMP_LENGTH },
+        { x: stub.at.x - stub.dir.x * rampNear, z: stub.at.z - stub.dir.z * rampNear },
         { x: stub.at.x, z: stub.at.z },
         { x: far.at.x, z: far.at.z },
-        { x: far.at.x - far.dir.x * BRIDGE_RAMP_LENGTH, z: far.at.z - far.dir.z * BRIDGE_RAMP_LENGTH },
+        { x: far.at.x - far.dir.x * rampFar, z: far.at.z - far.dir.z * rampFar },
       ],
       height: BRIDGE_HEIGHT,
       width: Math.max(stub.width, far.width),
-      ramp_length: BRIDGE_RAMP_LENGTH,
+      ramp_length: Math.min(rampNear, rampFar),
+      ramp_length_start: rampNear,
+      ramp_length_end: rampFar,
       pillar_spacing: BRIDGE_PILLAR_SPACING,
     };
-    (spec.width >= ARTERIAL_WIDTH ? arterial : viable).push(spec);
+    // The shorter ramp sets the ceiling: climbing higher would steepen it.
+    const maxRise = Math.min(rampNear, rampFar) / RAMP_RUN_PER_RISE;
+    const candidate: Candidate = {
+      spec,
+      maxRise,
+      near: { at: stub.at, dir: stub.dir },
+      far: { at: far.at, dir: far.dir },
+    };
+    (spec.width >= ARTERIAL_WIDTH ? arterial : viable).push(candidate);
   }
 
   // Arterials first so thinning keeps the main crossings, shuffled within each
@@ -288,9 +329,14 @@ export function findBridges(
 
   // Level the decks only once the final set is known, so thinning never leaves
   // a gap in the sequence or two survivors sharing a crossing level.
-  assignHeights(chosen, rng);
+  assignHeights(chosen);
 
-  return chosen;
+  return chosen.map((c) => c.spec);
+}
+
+/** Clamp a value into a range. */
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v));
 }
 
 /** Do two deck paths cross in plan? */
@@ -317,22 +363,59 @@ function segmentsCross(a1: Pt, a2: Pt, b1: Pt, b2: Pt): boolean {
 /**
  * Give each deck a level, keeping crossing decks apart.
  *
- * Greedy graph colouring: every bridge takes a level none of the bridges it
- * crosses already hold, picked at random from what is left so the skyline
- * varies. With more crossings at a point than there are levels the lowest is
- * reused — geometry that dense is not reachable from the siting rules.
+ * Greedy graph colouring: every bridge takes the LOWEST level none of the
+ * bridges it crosses already hold. Staying low is the default and height is
+ * only ever spent to get out of another deck's way — climbing for variety's
+ * sake just makes the crossing read as a flyover.
+ *
+ * Levels above what a bridge's approaches can climb at the standard grade are
+ * excluded first, so height is bought with ramp length rather than steepness.
  */
-function assignHeights(bridges: OverpassSpec[], rng: Rng): void {
-  bridges.forEach((bridge, i) => {
+function assignHeights(candidates: Candidate[]): void {
+  candidates.forEach((candidate, i) => {
     const taken = new Set<number>();
     for (let j = 0; j < i; j++) {
-      if (decksCross(bridge, bridges[j])) taken.add(bridges[j].height);
+      if (decksCross(candidate.spec, candidates[j].spec)) {
+        taken.add(candidates[j].spec.height);
+      }
     }
+    const affordable = BRIDGE_HEIGHTS.filter((h) => h <= candidate.maxRise);
+    const freeAffordable = affordable.filter((h) => !taken.has(h));
+
+    if (freeAffordable.length > 0) {
+      candidate.spec.height = freeAffordable[0];
+      return;
+    }
+
+    // Nothing both clears the neighbours and fits the grade. Two decks at one
+    // level would intersect, which is worse than a ramp reaching past its
+    // road, so take the lowest free level and lengthen the ramps to hold the
+    // grade. Only reachable where short approaches meet a crossing.
     const free = BRIDGE_HEIGHTS.filter((h) => !taken.has(h));
-    bridge.height = free.length > 0
-      ? free[Math.floor(rng() * free.length)]
-      : BRIDGE_HEIGHT;
+    candidate.spec.height = free.length > 0 ? free[0] : BRIDGE_HEIGHT;
+    stretchRamps(candidate);
   });
+}
+
+/** Grow a candidate's ramps to carry its deck at the standard grade. */
+function stretchRamps(candidate: Candidate): void {
+  const { spec, near, far } = candidate;
+  const needed = spec.height * RAMP_RUN_PER_RISE;
+  if (needed <= Math.min(spec.ramp_length_start, spec.ramp_length_end)) return;
+
+  spec.ramp_length_start = Math.max(spec.ramp_length_start, needed);
+  spec.ramp_length_end = Math.max(spec.ramp_length_end, needed);
+  spec.ramp_length = Math.min(spec.ramp_length_start, spec.ramp_length_end);
+
+  const last = spec.points.length - 1;
+  spec.points[0] = {
+    x: near.at.x - near.dir.x * spec.ramp_length_start,
+    z: near.at.z - near.dir.z * spec.ramp_length_start,
+  };
+  spec.points[last] = {
+    x: far.at.x - far.dir.x * spec.ramp_length_end,
+    z: far.at.z - far.dir.z * spec.ramp_length_end,
+  };
 }
 
 /** Fisher-Yates, using the injected source so runs stay reproducible. */

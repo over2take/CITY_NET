@@ -31,7 +31,10 @@ export * from './zoning';
 export { generatePark } from './parks';
 export { shouldPlaceLandmark, generateLandmark } from './landmarks';
 export * from './water';
-export { findBridges, MAX_BRIDGE_SPAN, BRIDGE_RAMP_LENGTH } from './bridges';
+export {
+  findBridges, MAX_BRIDGE_SPAN, BRIDGE_RAMP_LENGTH,
+  BRIDGE_HEIGHTS, MIN_RAMP_RUN, MAX_RAMP_RUN,
+} from './bridges';
 export { generateShorelineRoads, snapRoadEndsToShoreline, SHORE_OFFSET } from './shoreline';
 
 /** Margin trimmed off every block so buildings don't butt against the road. */

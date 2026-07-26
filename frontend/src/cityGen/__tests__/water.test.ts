@@ -16,6 +16,8 @@ import {
   generateCity,
   MAX_BRIDGE_SPAN,
   BRIDGE_RAMP_LENGTH,
+  BRIDGE_HEIGHTS,
+  MAX_RAMP_RUN,
   type WaterPolygon,
   type OverpassDensity,
   type SectionType,
@@ -363,15 +365,49 @@ describe('findBridges', () => {
     const bridges = findBridges(approaches, channel, 'heavy', mulberry32(1));
     expect(bridges).toHaveLength(1);
     expect(bridges[0].width).toBe(6);
-    expect(bridges[0].ramp_length).toBe(BRIDGE_RAMP_LENGTH);
+    // Approaches are 90 long and under the cap, so each ramp takes all of it.
+    expect(bridges[0].ramp_length_start).toBe(90);
+    expect(bridges[0].ramp_length_end).toBe(90);
+  });
+
+  it('runs each ramp the length of its approach road', () => {
+    // A short approach on one side and a long one on the other: the ramps
+    // differ so each still touches down at its own road's far end.
+    const lopsided = [
+      { x1: -60, z1: 0, x2: -30, z2: 0, width: 6 },   // 30 long
+      { x1: 30, z1: 0, x2: 130, z2: 0, width: 6 },    // 100 long, capped at 60
+    ];
+    const [bridge] = findBridges(lopsided, channel, 'heavy', mulberry32(1));
+    const runs = [bridge.ramp_length_start, bridge.ramp_length_end].sort((a, b) => a - b);
+    expect(runs).toEqual([30, 100]);
+  });
+
+  it('caps a ramp on an extremely long approach', () => {
+    const enormous = [
+      { x1: -500, z1: 0, x2: -30, z2: 0, width: 6 },
+      { x1: 30, z1: 0, x2: 500, z2: 0, width: 6 },
+    ];
+    const [bridge] = findBridges(enormous, channel, 'heavy', mulberry32(1));
+    expect(bridge.ramp_length_start).toBe(MAX_RAMP_RUN);
+    expect(bridge.ramp_length_end).toBe(MAX_RAMP_RUN);
   });
 
   it('extends the deck onto land at both ends for the ramps', () => {
     const [bridge] = findBridges(approaches, channel, 'heavy', mulberry32(1));
     const start = bridge.points[0];
     const end = bridge.points[bridge.points.length - 1];
-    expect(Math.min(start.x, end.x)).toBeCloseTo(-30 - BRIDGE_RAMP_LENGTH, 5);
-    expect(Math.max(start.x, end.x)).toBeCloseTo(30 + BRIDGE_RAMP_LENGTH, 5);
+    // Ramps run the full 90-unit approach, landing at its far junction.
+    expect(Math.min(start.x, end.x)).toBeCloseTo(-120, 5);
+    expect(Math.max(start.x, end.x)).toBeCloseTo(120, 5);
+  });
+
+  it('keeps every deck within grade of its approaches', () => {
+    // Height is bought with ramp length, never with steepness.
+    const bridges = findBridges(approaches, channel, 'heavy', mulberry32(1));
+    bridges.forEach((b) => {
+      const shortest = Math.min(b.ramp_length_start, b.ramp_length_end);
+      expect(b.height * 3).toBeLessThanOrEqual(shortest + 1e-6);
+    });
   });
 
   it('runs each ramp back along its own approach road', () => {
@@ -452,7 +488,7 @@ describe('findBridges', () => {
   it('only uses recognised deck levels', () => {
     const bridges = findBridges(approaches, channel, 'heavy', mulberry32(1));
     bridges.forEach((b) => {
-      expect([8, 13, 18, 23]).toContain(b.height);
+      expect(BRIDGE_HEIGHTS).toContain(b.height);
     });
   });
 
@@ -601,15 +637,24 @@ describe('generateCity with water', () => {
     expect(crossings).toBeGreaterThan(0);
   });
 
-  it('spreads decks across more than one level', () => {
+  it('keeps decks at the lowest level that clears their neighbours', () => {
+    // Height is spent only to get out of a crossing deck's way, never for
+    // variety — a bridge that climbs without needing to reads as a flyover.
     const lake = [rectRow(-15, -200, 15, 200)];
     const result = generateCity(
       AREA, { ...baseOpts, overpassDensity: 'heavy' },
       { locations: [], roads: [], waterBodies: lake }, mulberry32(2), { fillPlot: vi.fn() }
     );
-    const levels = new Set(result.overpasses.map((o) => o.height));
     expect(result.overpasses.length).toBeGreaterThan(2);
-    expect(levels.size).toBeGreaterThan(1);
+    // With no crossings among them, every deck sits at the lowest level.
+    const anyCrossing = result.overpasses.some((a, i) =>
+      result.overpasses.some((b, j) => j > i && segmentsIntersect(
+        a.points[0], a.points[a.points.length - 1],
+        b.points[0], b.points[b.points.length - 1]
+      )));
+    if (!anyCrossing) {
+      expect(new Set(result.overpasses.map((o) => o.height))).toEqual(new Set([BRIDGE_HEIGHTS[0]]));
+    }
   });
 
   it('generates no bridges when roads are excluded', () => {
