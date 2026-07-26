@@ -560,6 +560,41 @@ describe('generateCity with water', () => {
     expect(atDry).toEqual([]);
   });
 
+  it('leaves no road doubled up alongside another', () => {
+    // The waterfront road can run parallel to a nearby seam; two centrelines a
+    // few units apart render as one messy wide street rather than two roads.
+    const waterBodies = [rectRow(-40, -200, 40, 200)];
+    const result = generateCity(
+      { min: { x: -300, z: -300 }, max: { x: 300, z: 300 } },
+      baseOpts, { locations: [], roads: [], waterBodies }, mulberry32(7),
+      { fillPlot: vi.fn() }
+    );
+
+    const dir = (s: { x1: number; z1: number; x2: number; z2: number }) => {
+      const dx = s.x2 - s.x1, dz = s.z2 - s.z1;
+      const l = Math.hypot(dx, dz) || 1;
+      return { x: dx / l, z: dz / l };
+    };
+    const distToSeg = (px: number, pz: number, s: typeof result.roads[0]) => {
+      const dx = s.x2 - s.x1, dz = s.z2 - s.z1;
+      const lq = dx * dx + dz * dz;
+      const t = lq > 0 ? Math.max(0, Math.min(1, ((px - s.x1) * dx + (pz - s.z1) * dz) / lq)) : 0;
+      return Math.hypot(px - (s.x1 + t * dx), pz - (s.z1 + t * dz));
+    };
+
+    let doubled = 0;
+    result.roads.forEach((a, i) => {
+      const da = dir(a);
+      result.roads.forEach((b, j) => {
+        if (i === j) return;
+        const db = dir(b);
+        if (Math.abs(da.x * db.x + da.z * db.z) < 0.95) return;
+        if (distToSeg(a.x1, a.z1, b) <= 4 && distToSeg(a.x2, a.z2, b) <= 4) doubled++;
+      });
+    });
+    expect(doubled).toBe(0);
+  });
+
   it('keeps no road running through water', () => {
     const waterBodies = [rectRow(-40, -200, 40, 200)];
     const result = generateCity(

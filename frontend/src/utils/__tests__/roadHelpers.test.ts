@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry } from '../roadHelpers';
+import { consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry, dedupeOverlappingRoads } from '../roadHelpers';
 
 const seg = (x1: number, z1: number, x2: number, z2: number, width = 4) => ({ x1, z1, x2, z2, width });
 
@@ -223,5 +223,63 @@ describe('buildRoadRibbonGeometry', () => {
     const geo = buildRoadRibbonGeometry(chains);
     expect(geo.getAttribute('position').count).toBe(8);
     expect(geo.getIndex()!.count).toBe(12);
+  });
+});
+
+describe('dedupeOverlappingRoads', () => {
+  it('drops a short road running alongside a longer one', () => {
+    const long = seg(0, 0, 100, 0);
+    const beside = seg(20, 2, 60, 2); // 2 units off, same heading
+    const out = dedupeOverlappingRoads([long, beside]);
+    expect(out).toEqual([long]);
+  });
+
+  it('keeps the longer of an overlapping pair whichever order they arrive in', () => {
+    const long = seg(0, 0, 100, 0);
+    const beside = seg(20, 2, 60, 2);
+    expect(dedupeOverlappingRoads([beside, long])).toEqual([long]);
+  });
+
+  it('never drops both of two identical roads', () => {
+    const a = seg(0, 0, 50, 0);
+    const b = seg(0, 0, 50, 0);
+    expect(dedupeOverlappingRoads([a, b])).toHaveLength(1);
+  });
+
+  it('keeps roads that cross rather than run together', () => {
+    const roads = [seg(-50, 0, 50, 0), seg(0, -50, 0, 50)];
+    expect(dedupeOverlappingRoads(roads)).toHaveLength(2);
+  });
+
+  it('keeps parallel roads a block apart', () => {
+    const roads = [seg(0, 0, 100, 0), seg(0, 40, 100, 40)];
+    expect(dedupeOverlappingRoads(roads)).toHaveLength(2);
+  });
+
+  it('keeps a road that only touches the end of another', () => {
+    // Continues on from it rather than doubling it up.
+    const roads = [seg(0, 0, 50, 0), seg(50, 0, 100, 0)];
+    expect(dedupeOverlappingRoads(roads)).toHaveLength(2);
+  });
+
+  it('treats opposing directions of travel as the same road', () => {
+    const long = seg(0, 0, 100, 0);
+    const backwards = seg(60, 2, 20, 2);
+    expect(dedupeOverlappingRoads([long, backwards])).toEqual([long]);
+  });
+
+  it('respects the tolerance', () => {
+    const roads = [seg(0, 0, 100, 0), seg(20, 8, 60, 8)];
+    expect(dedupeOverlappingRoads(roads, 4)).toHaveLength(2);  // 8 apart, kept
+    expect(dedupeOverlappingRoads(roads, 10)).toHaveLength(1); // within 10, merged
+  });
+
+  it('drops zero-length segments', () => {
+    expect(dedupeOverlappingRoads([seg(5, 5, 5, 5)])).toEqual([]);
+  });
+
+  it('passes a clean network through untouched', () => {
+    const grid = [seg(0, 0, 100, 0), seg(0, 40, 100, 40), seg(0, 0, 0, 40)];
+    expect(dedupeOverlappingRoads(grid)).toEqual(grid);
   });
 });

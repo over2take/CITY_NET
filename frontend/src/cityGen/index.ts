@@ -1,4 +1,4 @@
-import { consolidateRoads } from '../utils/roadHelpers';
+import { consolidateRoads, dedupeOverlappingRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from '../components/Buildings';
 import { splitCity, normalizeBounds } from './bsp';
 import { SpatialGrid, createIsBlocked, footprintOnRoad } from './collision';
@@ -94,9 +94,14 @@ export function generateCity(
   // overshoot and gives the two roads a shared point to be joined at.
   const snappedRoads = snapRoadEndsToShoreline(newRoads, shoreRoads);
 
+  // Consolidation snaps endpoints together but leaves a seam that happens to
+  // run alongside the waterfront road as a second road a few units away, which
+  // renders as one messy wide street. Dropping the redundant one cleans that up.
   const finalRoads = excludeRoads
     ? []
-    : consolidateRoads([...snappedRoads, ...shoreRoads], context.roads, ROAD_CONSOLIDATION_RADIUS);
+    : dedupeOverlappingRoads(
+        consolidateRoads([...snappedRoads, ...shoreRoads], context.roads, ROAD_CONSOLIDATION_RADIUS)
+      );
 
   // Pick crossings worth bridging from the road ends left at the water's edge.
   // Draws no randomness on a dry map, so those generate exactly as before.

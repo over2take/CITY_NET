@@ -179,3 +179,78 @@ export const consolidateRoads = (newSegments: RoadSegment[], existingRoads: Road
     x2: points[i * 2 + 1].x, z2: points[i * 2 + 1].z,
   })).filter(s => new THREE.Vector3(s.x1, 0, s.z1).distanceTo(new THREE.Vector3(s.x2, 0, s.z2)) > 0.5);
 };
+
+/** Distance from a point to a segment, and how far along it the foot lies. */
+const pointToSegment = (
+  px: number, pz: number,
+  x1: number, z1: number, x2: number, z2: number
+): { dist: number; t: number } => {
+  const dx = x2 - x1, dz = z2 - z1;
+  const lenSq = dx * dx + dz * dz;
+  const t = lenSq > 0
+    ? Math.max(0, Math.min(1, ((px - x1) * dx + (pz - z1) * dz) / lenSq))
+    : 0;
+  const cx = x1 + t * dx, cz = z1 + t * dz;
+  return { dist: Math.hypot(px - cx, pz - cz), t };
+};
+
+/** Unit direction of a segment, or null when it has no length. */
+const unitDir = (s: RoadSegment): { x: number; z: number } | null => {
+  const dx = s.x2 - s.x1, dz = s.z2 - s.z1;
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-6) return null;
+  return { x: dx / len, z: dz / len };
+};
+
+/**
+ * Drop road segments that run along another one.
+ *
+ * Snapping endpoints leaves two centrelines a few units apart looking like a
+ * single messy wide road rather than two lanes, so a segment whose whole length
+ * lies within `tolerance` of a longer, near-parallel segment is redundant and
+ * removed. The survivor covers the same ground, so nothing is disconnected.
+ *
+ * `tolerance` should be about a road's width — closer than that and the two are
+ * visually one road.
+ */
+export const dedupeOverlappingRoads = (
+  segments: RoadSegment[],
+  tolerance = 4,
+  /** Cosine of the widest angle still counted as parallel (~18 degrees). */
+  parallelDot = 0.95
+): RoadSegment[] => {
+  const lengths = segments.map(s => Math.hypot(s.x2 - s.x1, s.z2 - s.z1));
+  const dirs = segments.map(unitDir);
+  const dropped = new Array<boolean>(segments.length).fill(false);
+
+  for (let i = 0; i < segments.length; i++) {
+    if (dropped[i]) continue;
+    const di = dirs[i];
+    if (!di) { dropped[i] = true; continue; }
+
+    for (let j = 0; j < segments.length; j++) {
+      if (i === j || dropped[j]) continue;
+      const dj = dirs[j];
+      if (!dj) continue;
+
+      // Keep the longer of the pair; ties break on index so both never go.
+      if (lengths[j] < lengths[i] || (lengths[j] === lengths[i] && j > i)) continue;
+
+      // Same line, either direction of travel.
+      if (Math.abs(di.x * dj.x + di.z * dj.z) < parallelDot) continue;
+
+      const a = segments[j];
+      const e1 = pointToSegment(segments[i].x1, segments[i].z1, a.x1, a.z1, a.x2, a.z2);
+      const e2 = pointToSegment(segments[i].x2, segments[i].z2, a.x1, a.z1, a.x2, a.z2);
+      if (e1.dist > tolerance || e2.dist > tolerance) continue;
+
+      // Both ends sit beside the same interior stretch, not off one end.
+      if (Math.abs(e1.t - e2.t) < 1e-6) continue;
+
+      dropped[i] = true;
+      break;
+    }
+  }
+
+  return segments.filter((_, i) => !dropped[i]);
+};
