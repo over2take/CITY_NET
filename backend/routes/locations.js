@@ -67,6 +67,20 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     );
   });
 
+  router.patch('/:id/toggle-hidden', authenticate, (req, res) => {
+    db.get('SELECT is_hidden, parent_id FROM locations WHERE id = ?', [req.params.id], (err, row) => {
+      if (err || !row) return res.status(404).json({ error: 'Not found' });
+      if (row.parent_id) return res.status(400).json({ error: 'Toggle hidden on root structures only' });
+      const next = row.is_hidden ? 0 : 1;
+      db.run('UPDATE locations SET is_hidden = ? WHERE id = ?', [next, req.params.id], (err2) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        emitUpdate();
+        recordAction(req.params.id, next ? 'hidden' : 'revealed');
+        res.json({ is_hidden: next });
+      });
+    });
+  });
+
   // Custom structure library — structures saved via JOIN → CUSTOM classification
   router.get('/custom-library', authenticate, (req, res) => {
     db.all(`SELECT * FROM custom_structure_library WHERE classification = 'CUSTOM' OR parent_id IS NOT NULL ORDER BY saved_at DESC`, (err, rows) => {
@@ -104,8 +118,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       }
     }
 
-    const sql = `INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp, map_scale_multiplier)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const sql = `INSERT INTO locations (name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp, map_scale_multiplier, has_signage)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
     db.serialize(() => {
       const results = [];
@@ -127,7 +141,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           loc.hp_current !== undefined ? loc.hp_current : null,
           loc.hp_max !== undefined ? loc.hp_max : null,
           loc.hp_temp !== undefined ? loc.hp_temp : null,
-          loc.map_scale_multiplier !== undefined ? loc.map_scale_multiplier : 5
+          loc.map_scale_multiplier !== undefined ? loc.map_scale_multiplier : 5,
+          loc.has_signage !== undefined ? loc.has_signage : 1
         ], function(err) {
           if (err) {
             console.error(`Database error during insert at index ${index}:`, err.message);

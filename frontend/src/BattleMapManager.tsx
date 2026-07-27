@@ -8,6 +8,7 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
   const [allImages, setAllImages] = useState<{ filename: string; url: string }[]>([]);
   const [designationType, setDesignationType] = useState('Level');
   const [levelNumber, setLevelNumber] = useState(1);
+  const [basementNumber, setBasementNumber] = useState(1);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedExistingUrl, setSelectedExistingUrl] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -34,7 +35,11 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
     } catch (err) { console.error(err); }
   };
 
-  const getDesignation = () => designationType === 'Level' ? `Level ${levelNumber}` : designationType;
+  const getDesignation = () => {
+    if (designationType === 'Level') return `Level ${levelNumber}`;
+    if (designationType === 'Basement') return `Basement ${basementNumber}`;
+    return designationType;
+  };
 
   const checkOverride = (designation: string, proceed: () => void) => {
     if (maps.some(m => m.designation === designation)) {
@@ -111,17 +116,21 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
 
   const designationControls = (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px', alignItems: 'center' }}>
-      {['Lobby', 'Level', 'Penthouse'].map(opt => (
+      {['Penthouse', 'Level', 'Lobby', 'Basement'].map(opt => (
         <button key={opt} type="button" onClick={() => setDesignationType(opt)} style={{
           margin: 0, padding: '4px 10px',
           fontFamily: 'monospace', fontSize: '0.75rem', letterSpacing: '1px', cursor: 'pointer',
           backgroundColor: designationType === opt ? 'var(--green)' : 'transparent',
           color: designationType === opt ? '#000' : 'var(--green)',
           border: `1px solid ${designationType === opt ? 'var(--green)' : '#555'}`,
-        }}>{opt.toUpperCase()}</button>
+        }}>{opt === 'Lobby' ? 'LBY' : opt === 'Penthouse' ? 'PH' : opt.toUpperCase()}</button>
       ))}
       {designationType === 'Level' && (
         <input type="number" min="1" value={levelNumber} onChange={(e) => setLevelNumber(parseInt(e.target.value) || 1)}
+          style={{ width: '50px', backgroundColor: '#000', border: '1px solid var(--green)', color: 'var(--green)', padding: '4px', fontFamily: 'monospace' }} />
+      )}
+      {designationType === 'Basement' && (
+        <input type="number" min="1" value={basementNumber} onChange={(e) => setBasementNumber(parseInt(e.target.value) || 1)}
           style={{ width: '50px', backgroundColor: '#000', border: '1px solid var(--green)', color: 'var(--green)', padding: '4px', fontFamily: 'monospace' }} />
       )}
     </div>

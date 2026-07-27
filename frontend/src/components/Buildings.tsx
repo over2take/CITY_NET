@@ -6,7 +6,7 @@ import { isUserDefinedName } from '../utils/locationHelpers';
 import { renderBaseGeometry } from '../utils/threeHelpers';
 import { ThemeContext } from '../theme/themes';
 
-export const Building = React.memo(({ location, children, onClick, isSelected, isBatchSelected, isOverlapped, setTargetObject, editMeshRef, token, userName, refreshLocations, setIsDragging, isDragging, socket, activeUsers }: any) => {
+export const Building = React.memo(({ location, children, onClick, isSelected, isBatchSelected, isOverlapped, isHidden, setTargetObject, editMeshRef, token, userName, refreshLocations, setIsDragging, isDragging, socket, activeUsers }: any) => {
   const theme = useContext(ThemeContext);
   const meshRef = useRef<THREE.Mesh>(null);
   
@@ -48,6 +48,13 @@ export const Building = React.memo(({ location, children, onClick, isSelected, i
         rotation={new THREE.Euler(location.rotation_x || 0, location.rotation || 0, location.rotation_z || 0, 'YXZ')}
         ref={(group) => { if (isSelected && group) { setTargetObject(group); if (editMeshRef) editMeshRef.current = group; } }} 
     >
+      {isHidden && (
+        <Html position={[0, maxY - minY + 1.5, 0]} center wrapperClass="hidden-indicator" style={{ pointerEvents: 'none' }}>
+          <div style={{ color: '#888', fontSize: '10px', fontFamily: 'monospace', letterSpacing: '1px', background: 'rgba(0,0,0,0.6)', padding: '1px 4px', border: '1px solid #555', whiteSpace: 'nowrap' }}>
+            [HIDDEN]
+          </div>
+        </Html>
+      )}
       {isBattleActive && (
           <Html position={[0, maxY - minY + 2, 0]} center wrapperClass="battle-indicator" style={{ pointerEvents: 'none' }}>
             <div style={{
@@ -96,22 +103,30 @@ export const Building = React.memo(({ location, children, onClick, isSelected, i
               {/* Wireframe */}
               <mesh raycast={() => null}>
                 {renderBaseGeometry(p.shape, p.polyCount || 5)}
-                <meshBasicMaterial 
-                  color={isBatchSelected ? theme.highlight : location.isDanger ? theme.danger : location.isFavorite ? theme.friendly : hasData ? "#8800ff" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : theme.primary)} 
-                  wireframe={true} 
+                <meshBasicMaterial
+                  color={isHidden ? '#555555' : isBatchSelected ? theme.highlight : location.isDanger ? theme.danger : location.isFavorite ? theme.friendly : hasData ? "#8800ff" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : theme.primary)}
+                  wireframe={true}
                 />
               </mesh>
-              
+
               {/* Solid Fill */}
               <mesh raycast={() => null}>
                 {renderBaseGeometry(p.shape, p.polyCount || 5)}
-                <meshBasicMaterial 
-                  color={location.isDanger ? theme.danger : location.isFavorite ? theme.friendly : hasData ? "#8800ff" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : theme.primary)} 
+                <meshBasicMaterial
+                  color={isHidden ? '#333333' : location.isDanger ? theme.danger : location.isFavorite ? theme.friendly : hasData ? "#8800ff" : ((p.color && p.color !== "#00ff00") ? p.color : location.district_color ? location.district_color : theme.primary)}
                   transparent={true}
-                  opacity={(isSelected || isBatchSelected) ? 0.3 : (isOverlapped ? 0.0 : 0.05)}
+                  opacity={isHidden ? 0.18 : (isSelected || isBatchSelected) ? 0.3 : (isOverlapped ? 0.0 : 0.05)}
                   depthTest={!isOverlapped}
                   />
                 </mesh>
+
+              {/* Diagonal hatch overlay for hidden structures */}
+              {isHidden && (
+                <mesh raycast={() => null}>
+                  {renderBaseGeometry(p.shape, p.polyCount || 5)}
+                  <meshBasicMaterial color="#666666" wireframe={true} transparent opacity={0.4} />
+                </mesh>
+              )}
               </group>
           );
         })}

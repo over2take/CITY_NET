@@ -34,6 +34,9 @@ export interface Location {
   melee_ac: number | null;
   ranged_ac: number | null;
   map_scale_multiplier: number;
+  has_signage: number;
+  has_sidewalk: number;
+  is_hidden: number;
 }
 
 export interface District {

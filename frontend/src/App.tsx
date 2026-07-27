@@ -1005,6 +1005,7 @@ function App() {
 
     roots.forEach((loc: any) => {
       if (loc.shape === 'rhombus' || loc.shape === 'enemy_rhombus' || loc.shape === 'friendly_rhombus') return;
+      if (loc.is_hidden && !isAdmin) return;
 
       const children = groupedLocations[loc.id] || [];
       const isSelected = !isBatchSelecting && view !== 'district' && view !== 'join' && selectedLocation?.id === loc.id;
@@ -1012,7 +1013,7 @@ function App() {
       const isOverlapped = overlapIds.includes(loc.id) || children.some((c: any) => overlapIds.includes(c.id));
       const isBattleActive = activeUsers && activeUsers.some((user: any) => user.currentBattleMapId && Number(user.currentBattleMapId) === Number(loc.id));
 
-      if (!isSelected && !isBatchSelected && !isOverlapped && !isBattleActive) {
+      if (!isSelected && !isBatchSelected && !isOverlapped && !isBattleActive && !loc.is_hidden) {
         const pushSimple = (p: any) => {
           simple.push({
             id: p.id, shape: p.shape, polyCount: p.polyCount,
@@ -1031,7 +1032,7 @@ function App() {
       }
     });
     return { simple, interactive };
-  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers]);
+  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers, isAdmin]);
 
   const startupPlayed = useRef(false);
 
@@ -1173,6 +1174,31 @@ function App() {
       }
   };
   const [targetObject, setTargetObject] = useState<any>(null);
+  const handleSetSnapToGrid = useCallback((enabled: boolean) => {
+    if (enabled && targetObject) {
+      targetObject.position.set(
+        Math.round(targetObject.position.x),
+        Math.round(targetObject.position.y),
+        Math.round(targetObject.position.z),
+      );
+    }
+    setSnapToGrid(enabled);
+  }, [targetObject]);
+  const handleToggleHidden = useCallback(async (rootId: number) => {
+    const nextHidden = !locations.find((l: any) => l.id === rootId)?.is_hidden;
+    // Update both selectedLocation and the locations array atomically so
+    // renderLists and the button label flip in the same render with no flash.
+    setSelectedLocation((prev: any) => prev ? { ...prev, is_hidden: nextHidden } : prev);
+    setLocations((prev: any[]) => prev.map((l: any) =>
+      l.id === rootId ? { ...l, is_hidden: nextHidden } : l
+    ));
+    await fetch(`/api/locations/${rootId}/toggle-hidden`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    // Socket emitUpdate will re-sync all clients; no manual refresh needed.
+  }, [locations, token]);
+
   const genGroupRef = useRef<any>(null);
   const editMeshRef = useRef<any>(null);
   useEffect(() => {
@@ -1392,23 +1418,35 @@ function App() {
           </div>
           {isAdmin && isPrimaryAdmin && (
             <div style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'auto' }}>
-              {activeBattleMapData.maps.map((m: any, idx: number) => {
-                let lbl = m.designation;
-                if (lbl === 'Lobby') lbl = 'Lby';
-                else if (lbl === 'Penthouse') lbl = 'PH';
-                else if (lbl.startsWith('Level ')) lbl = 'L' + lbl.split(' ')[1];
-                
-                return (
-                  <button key={m.id} 
-                    style={{ padding: '15px', backgroundColor: activeBattleMapData.currentFloorIndex === idx ? 'var(--green)' : '#222', color: activeBattleMapData.currentFloorIndex === idx ? '#000' : 'var(--green)', border: '1px solid var(--green)', cursor: 'pointer', fontWeight: 'bold' }}
-                    onClick={() => {
-                      setActiveBattleMapData((p: any) => ({ ...p, currentFloorIndex: idx }));
-                      if (socketRef.current) socketRef.current.emit('admin_force_floor_change', { locationId: activeBattleMapData.locationId, floorIndex: idx });
-                    }}>
-                    {lbl}
-                  </button>
-                );
-              })}
+              {(() => {
+                const floorOrder = (designation: string) => {
+                  if (designation === 'Penthouse') return 10000;
+                  if (designation.startsWith('Level ')) return parseInt(designation.split(' ')[1]) || 0;
+                  if (designation === 'Lobby') return -1;
+                  if (designation.startsWith('Basement ')) return -(parseInt(designation.split(' ')[1]) || 1) - 1;
+                  return 0;
+                };
+                const sorted = [...activeBattleMapData.maps]
+                  .map((m: any, idx: number) => ({ m, idx }))
+                  .sort((a: any, b: any) => floorOrder(b.m.designation) - floorOrder(a.m.designation));
+                return sorted.map(({ m, idx }: any) => {
+                  let lbl = m.designation;
+                  if (lbl === 'Lobby') lbl = 'LBY';
+                  else if (lbl === 'Penthouse') lbl = 'PH';
+                  else if (lbl.startsWith('Level ')) lbl = 'L' + lbl.split(' ')[1];
+                  else if (lbl.startsWith('Basement ')) lbl = 'B' + lbl.split(' ')[1];
+                  return (
+                    <button key={m.id}
+                      style={{ padding: '15px', backgroundColor: activeBattleMapData.currentFloorIndex === idx ? 'var(--green)' : '#222', color: activeBattleMapData.currentFloorIndex === idx ? '#000' : 'var(--green)', border: '1px solid var(--green)', cursor: 'pointer', fontWeight: 'bold' }}
+                      onClick={() => {
+                        setActiveBattleMapData((p: any) => ({ ...p, currentFloorIndex: idx }));
+                        if (socketRef.current) socketRef.current.emit('admin_force_floor_change', { locationId: activeBattleMapData.locationId, floorIndex: idx });
+                      }}>
+                      {lbl}
+                    </button>
+                  );
+                });
+              })()}
             </div>
           )}
         </div>
@@ -1605,6 +1643,7 @@ function App() {
                 setTempBattleMapScale={setTempBattleMapScale}
                 activeBattleMapData={activeBattleMapData}
                 refreshLocations={fetchLocations}
+                onToggleHidden={handleToggleHidden}
                 refreshRoads={fetchRoads}
                 districts={districts}
                 fetchDistricts={fetchDistricts}
@@ -1652,8 +1691,8 @@ function App() {
                 fetchWaterBodies={fetchWaterBodies}
                 roadDrawMode={roadDrawMode} 
                 setRoadDrawMode={setRoadDrawMode} 
-                snapToGrid={snapToGrid} 
-                  setSnapToGrid={setSnapToGrid}
+                snapToGrid={snapToGrid}
+                  setSnapToGrid={handleSetSnapToGrid}
                   snapRotation={snapRotation}
                   setSnapRotation={setSnapRotation}
                 drawingRoadWidth={drawingRoadWidth}
@@ -2495,7 +2534,7 @@ function App() {
             )}
 <InstancedBuildings buildings={renderLists.simple} onSelect={handleBuildingClick} isDragging={isDragging} />
             {renderLists.interactive.map(({ loc, children, isSelected, isBatchSelected, isOverlapped }: any) => (
-              <Building key={loc.id} location={loc} children={children} onClick={() => handleBuildingClick(loc)} isSelected={isSelected} isBatchSelected={isBatchSelected} isOverlapped={isOverlapped} setTargetObject={setTargetObject} editMeshRef={editMeshRef} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} isDragging={isDragging} socket={socketRef.current} activeUsers={activeUsers} />
+              <Building key={loc.id} location={loc} children={children} onClick={() => handleBuildingClick(loc)} isSelected={isSelected} isBatchSelected={isBatchSelected} isOverlapped={isOverlapped} isHidden={!!loc.is_hidden} setTargetObject={setTargetObject} editMeshRef={editMeshRef} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} isDragging={isDragging} socket={socketRef.current} activeUsers={activeUsers} />
             ))}
             </>
             )}

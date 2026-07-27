@@ -120,11 +120,13 @@ const placeSigns = (loc: SignageLocation, children: SignageLocation[], rand: () 
   const { cx, cz, w, d, maxH, baseY } = bounds;
   const hw = w / 2, hd = d / 2;
   // lateral axis for each face: [lx, lz] direction along the face width
+  // Push signs slightly off the wall surface to prevent z-fighting.
+  const WALL_PUSH = 0.04;
   const faces = [
-    { rotY: 0,            ox: 0,   oz: hd,  faceW: w, faceH: maxH, lx: 1, lz: 0 },
-    { rotY: Math.PI,      ox: 0,   oz: -hd, faceW: w, faceH: maxH, lx: 1, lz: 0 },
-    { rotY: Math.PI / 2,  ox: -hw, oz: 0,   faceW: d, faceH: maxH, lx: 0, lz: 1 },
-    { rotY: -Math.PI / 2, ox: hw,  oz: 0,   faceW: d, faceH: maxH, lx: 0, lz: 1 },
+    { rotY: 0,            ox: 0,        oz: hd + WALL_PUSH,  faceW: w, faceH: maxH, lx: 1, lz: 0 },
+    { rotY: Math.PI,      ox: 0,        oz: -hd - WALL_PUSH, faceW: w, faceH: maxH, lx: 1, lz: 0 },
+    { rotY: Math.PI / 2,  ox: -hw - WALL_PUSH, oz: 0,        faceW: d, faceH: maxH, lx: 0, lz: 1 },
+    { rotY: -Math.PI / 2, ox: hw + WALL_PUSH,  oz: 0,        faceW: d, faceH: maxH, lx: 0, lz: 1 },
   ];
   const count = Math.max(1, Math.round(density * (1.5 + rand() * 3.5)));
   const yaw = loc.rotation ?? 0;
@@ -185,6 +187,23 @@ const makeCanvas = () => {
   return c;
 };
 
+// ─── Two-faced plane helper ───────────────────────────────────────────────────
+// Renders a front plane and a back plane (rotated π). `mat` is called twice so
+// each mesh gets its own R3F material instance — both reference the same texture
+// object, so canvas animation updates propagate to both faces automatically.
+const TwoFacedSign = ({ def, mat }: { def: SignDef; mat: () => React.ReactNode }) => (
+  <group>
+    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
+      <planeGeometry args={[def.w, def.h]} />
+      {mat()}
+    </mesh>
+    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY + Math.PI, 0]} renderOrder={10} raycast={() => null}>
+      <planeGeometry args={[def.w, def.h]} />
+      {mat()}
+    </mesh>
+  </group>
+);
+
 // ─── Individual sign components ───────────────────────────────────────────────
 
 const ColorWashSign = ({ def }: { def: SignDef }) => {
@@ -208,12 +227,7 @@ const ColorWashSign = ({ def }: { def: SignDef }) => {
     tex.needsUpdate = true;
   });
 
-  return (
-    <mesh ref={meshRef} position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
-      <planeGeometry args={[def.w, def.h]} />
-      <meshBasicMaterial map={tex} transparent opacity={0.85} depthWrite={false} side={THREE.FrontSide} />
-    </mesh>
-  );
+  return <TwoFacedSign def={def} mat={() => <meshBasicMaterial map={tex} transparent opacity={0.85} depthWrite={false} side={THREE.FrontSide} />} />;
 };
 
 const GLITCH_INTERVAL = 0.12;
@@ -252,12 +266,7 @@ const GlitchWordSign = ({ def }: { def: SignDef }) => {
     tex.needsUpdate = true;
   });
 
-  return (
-    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
-      <planeGeometry args={[def.w, def.h]} />
-      <meshBasicMaterial map={tex} transparent opacity={0.9} depthWrite={false} side={THREE.FrontSide} blending={THREE.AdditiveBlending} />
-    </mesh>
-  );
+  return <TwoFacedSign def={def} mat={() => <meshBasicMaterial map={tex} transparent opacity={0.9} depthWrite={false} side={THREE.FrontSide} blending={THREE.AdditiveBlending} />} />;
 };
 
 const ScrollTextSign = ({ def }: { def: SignDef }) => {
@@ -280,12 +289,7 @@ const ScrollTextSign = ({ def }: { def: SignDef }) => {
     tex.needsUpdate = true;
   });
 
-  return (
-    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
-      <planeGeometry args={[def.w, def.h]} />
-      <meshBasicMaterial map={tex} transparent opacity={0.88} depthWrite={false} side={THREE.FrontSide} />
-    </mesh>
-  );
+  return <TwoFacedSign def={def} mat={() => <meshBasicMaterial map={tex} transparent opacity={0.88} depthWrite={false} side={THREE.FrontSide} />} />;
 };
 
 const StrobeSign = ({ def }: { def: SignDef }) => {
@@ -314,12 +318,7 @@ const StrobeSign = ({ def }: { def: SignDef }) => {
     tex.needsUpdate = true;
   });
 
-  return (
-    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
-      <planeGeometry args={[def.w, def.h]} />
-      <meshBasicMaterial map={tex} transparent opacity={0.8} depthWrite={false} side={THREE.FrontSide} blending={THREE.AdditiveBlending} />
-    </mesh>
-  );
+  return <TwoFacedSign def={def} mat={() => <meshBasicMaterial map={tex} transparent opacity={0.8} depthWrite={false} side={THREE.FrontSide} blending={THREE.AdditiveBlending} />} />;
 };
 
 // Shared texture cache for preset SVG signs — each file loads once per session
@@ -338,12 +337,7 @@ const PresetImageSign = ({ def }: { def: SignDef }) => {
   const rand = useMemo(() => seededRand(def.seed), [def.seed]);
   const url = useMemo(() => PRESET_SIGN_URLS[Math.floor(rand() * PRESET_SIGN_URLS.length)], [rand]);
   const tex = useMemo(() => getPresetTexture(url), [url]);
-  return (
-    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
-      <planeGeometry args={[def.w, def.h]} />
-      <meshBasicMaterial map={tex} transparent opacity={0.95} depthWrite={false} side={THREE.FrontSide} />
-    </mesh>
-  );
+  return <TwoFacedSign def={def} mat={() => <meshBasicMaterial map={tex} transparent opacity={0.95} depthWrite={false} side={THREE.FrontSide} />} />;
 };
 
 const VerticalTextSign = ({ def }: { def: SignDef }) => {
@@ -370,12 +364,7 @@ const VerticalTextSign = ({ def }: { def: SignDef }) => {
     });
     return new THREE.CanvasTexture(c);
   }, [rand]);
-  return (
-    <mesh position={[def.x, def.y, def.z]} rotation={[0, def.rotY, 0]} renderOrder={10} raycast={() => null}>
-      <planeGeometry args={[def.w, def.h]} />
-      <meshBasicMaterial map={tex} transparent opacity={0.92} depthWrite={false} side={THREE.FrontSide} />
-    </mesh>
-  );
+  return <TwoFacedSign def={def} mat={() => <meshBasicMaterial map={tex} transparent opacity={0.92} depthWrite={false} side={THREE.FrontSide} />} />;
 };
 
 // ─── Main export ──────────────────────────────────────────────────────────────
