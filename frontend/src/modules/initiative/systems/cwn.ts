@@ -1,11 +1,12 @@
 import type { InitiativeSystem } from './index';
+import { cryptoRng } from './random';
 
 const stat = (sheet: any, key: string, fallback: number) =>
   Number(sheet?.[key] ?? sheet?.data?.[key] ?? fallback);
 
 function rollInit(sheet: any) {
   const dexMod = stat(sheet, 'dex_mod', 0);
-  const roll = Math.floor(Math.random() * 8) + 1;
+  const roll = Math.floor(cryptoRng() * 8) + 1;
   const score = dexMod + roll;
   return {
     score,

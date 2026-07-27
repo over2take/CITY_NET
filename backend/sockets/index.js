@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { cryptoRng } = require('../utils/random');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
 const sheetRolls = require('../sheets/rolls');
@@ -563,7 +564,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           rollParts.push(`${c}d${s}`);
           results[s] = [];
           for (let i = 0; i < c; i++) {
-            const roll = Math.floor(Math.random() * s) + 1;
+            const roll = Math.floor(cryptoRng() * s) + 1;
             results[s].push(roll);
             allRolls.push(roll);
             diceTotal += roll;

@@ -45,7 +45,9 @@ export const Overpasses = React.memo(({ overpasses, roads }: { overpasses: Overp
   const geometry = useMemo(() => {
     const tiles: Array<DeckTile & { width: number }> = [];
     const pillars: OverpassPillar[] = [];
-    const allParsed = (overpasses || []).map(o => ({ points: parsePoints(o.points), width: o.width || 4 }));
+    // Height travels with each parsed path so pillar placement can tell a deck
+    // it would spear from one that merely passes overhead.
+    const allParsed = (overpasses || []).map(o => ({ points: parsePoints(o.points), width: o.width || 4, height: o.height }));
     (overpasses || []).forEach((o, idx) => {
       const pts = allParsed[idx].points;
       if (pts.length < 2) return;

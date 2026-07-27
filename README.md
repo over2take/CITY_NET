@@ -353,6 +353,8 @@ CITY_NET/
 │   │   └── initiative.js       # Initiative tracker socket events (start, roll, next, remove, reorder, end); individual and side-based modes; SR6 pass-decay on wrap; CWN side auto-create, PC-side score derivation, friendly-NPC routing; roll history broadcast
 │   ├── startup/
 │   │   └── sanity_checks.js    # In-memory DB checks on boot
+│   ├── utils/
+│   │   └── random.js           # cryptoRng — uniform [0,1) from OS entropy (crypto.randomInt); default rng for every roll that decides an outcome
 │   └── __tests__/
 │       ├── helpers/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
@@ -372,6 +374,7 @@ CITY_NET/
 │       ├── npc_tiers.test.js           # NPC tier packages (escalation, weapon validity)
 │       ├── sheet_import.test.js        # Import pipeline (PDF form extraction, alias mapping, preview route)
 │       ├── rollEngine.test.js          # Roll formula engine
+│       ├── random.test.js              # cryptoRng range/uniqueness; roll engine and attack modules exercised without an injected rng
 │       ├── cwn_templates.test.js       # CWN template metadata (derived fields, AC linking, unset-stat neutrality)
 │       ├── cwn_attack.test.js          # CWN attack module (roll-to-hit, damage, trauma vs TT, shock, stabilize)
 │       ├── cwn_sockets.test.js         # CWN socket integration: attack flow, dice-in-broadcast, system isolation
@@ -392,8 +395,22 @@ CITY_NET/
 │   ├── src/
 │   │   ├── App.tsx             # Root component — state, routing, socket wiring
 │   │   ├── App.css / index.css # Global styles and CSS variables
+│   │   ├── cityGen/            # Pure city generator — bounds + options + world state in, blocks/roads/buildings/overpasses out. No React, no network; AdminPanel persists the result
+│   │   │   ├── index.ts        # generateCity orchestrator; injected rng and fillPlot make it testable
+│   │   │   ├── types.ts        # Bounds, Block, RawBuilding, Obstacle, options/context/result shapes
+│   │   │   ├── bsp.ts          # Recursive split into blocks + road seams; seams clipped to land as they are laid
+│   │   │   ├── collision.ts    # SpatialGrid (footprint spans every cell it covers) + exact segment-vs-box road test
+│   │   │   ├── zoning.ts       # Sector layout, concentric-ring zone assignment, park probability, plot aspect clamp
+│   │   │   ├── parks.ts        # Holotree park plots
+│   │   │   ├── landmarks.ts    # The four hero-building styles and their siting rule
+│   │   │   ├── water.ts        # Water polygon parsing, point/footprint-in-water, submerged spans, segment clipping
+│   │   │   ├── shoreline.ts    # Waterfront roads offset onto land; snaps approach ends onto them
+│   │   │   ├── bridges.ts      # Shore-stub pairing, span/grade limits, deck levelling by graph colouring, OVERPASS_DENSITY
+│   │   │   └── __tests__/
+│   │   │       ├── cityGen.test.ts     # Split determinism, collision and buffer behaviour, zoning, landmarks, parks, end-to-end generation
+│   │   │       └── water.test.ts       # Polygon parsing, concave outlines, span detection, shoreline roads, bridge siting and levels
 │   │   ├── components/
-│   │   │   ├── AdminPanel.tsx          # GM dashboard; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R, CWN, and SR6; SR6 Edge replenishment (reset all / give 1 to player)
+│   │   │   ├── AdminPanel.tsx          # GM dashboard; CITY_GENERATOR delegates to cityGen/ and exposes OVERPASS_DENSITY; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R, CWN, and SR6; SR6 Edge replenishment (reset all / give 1 to player)
 │   │   │   ├── HitPoints.tsx           # HP tracking + injury panel + HealthReviewWindow; STIM_HEAL (CWN), STABILIZE button for allies on mortal wound
 │   │   │   ├── BankWindows.tsx         # Player bank UI
 │   │   │   ├── ChatWindow.tsx          # In-game chat
@@ -466,9 +483,11 @@ CITY_NET/
 │   │   │       │   ├── generic.ts              # 1d20 roll; TURN counter; no pass decay
 │   │   │       │   ├── sr6.ts                  # REA+INT+Xd6 roll; PASS counter; end-of-pass −10 decay; Wired Reflexes extra dice
 │   │   │       │   ├── cpr.ts                  # REF+1d10 roll; ROUND counter; order held for entire combat; exploding d10 via house rule
-│   │   │       │   └── cwn.ts                  # 1d8+DEX mod roll; ROUND counter; PCs win ties; defaultMode: 'side'
+│   │   │       │   ├── cwn.ts                  # 1d8+DEX mod roll; ROUND counter; PCs win ties; defaultMode: 'side'
+│   │   │       │   └── random.ts               # cryptoRng — uniform [0,1) from crypto.getRandomValues; shared by every system
 │   │   │       └── __tests__/
 │   │   │           ├── systems.test.ts          # Registry lookup, generic/SR6/CP:R/CWN formulas, extra dice, breakdown format, diceResults shape
+│   │   │           ├── random.test.ts           # Browser cryptoRng range/uniqueness; every system exercised on its default rng
 │   │   │           └── useInitiative.test.ts    # Hook state transitions, socket emit payloads
 │   │   ├── context/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
@@ -495,7 +514,7 @@ CITY_NET/
 │   │       ├── rhombusHelpers.ts   # Player token position math
 │   │       ├── threeHelpers.tsx    # Three.js scene utilities
 │   │       ├── roadHelpers.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry, getClosestPointOnRoads
-│   │       ├── overpassHelpers.ts  # Elevation profile, deck tile subdivision, pillar placement with road-avoidance
+│   │       ├── overpassHelpers.ts  # Elevation profile, deck tile subdivision, pillar placement avoiding roads and lower decks
 │   │       ├── fontLoader.ts       # FontFace loader for remote fonts (cached by URL); BUILTIN_FONTS list
 │   │       └── __tests__/
 │   │           ├── locationHelpers.test.ts  # Unit tests for isUserDefinedName and getStructLabel

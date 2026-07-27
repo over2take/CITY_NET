@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
+import { generateCity, SpatialGrid, type SectionType, type OverpassDensity } from '../cityGen';
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
 import type { SignData, SignLine } from './Signs';
@@ -524,7 +525,7 @@ export function AdminPanel({
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
   roadLayerMode, setRoadLayerMode, overpassHeight, setOverpassHeight, overpassRampLength, setOverpassRampLength,
   overpassSplitRamps, setOverpassSplitRamps, overpassRampLengthStart, setOverpassRampLengthStart, overpassRampLengthEnd, setOverpassRampLengthEnd,
-  refreshOverpasses, overpasses,
+  refreshOverpasses, overpasses, waterBodies,
   renderSidewalks, setRenderSidewalks,
   renderSignage, setRenderSignage,
   signageDensity, setSignageDensity,
@@ -556,6 +557,7 @@ export function AdminPanel({
   }
 
   const [density, setDensity] = useState(8);
+  const [overpassDensity, setOverpassDensity] = useState<OverpassDensity>('normal');
   const [allowedShapes, setAllowedShapes] = useState<string[]>(['box', 'cylinder', 'sphere']);
   const [activeUserEditing, setActiveUserEditing] = useState<any>(null);
   const [copyBuffer, setCopyBuffer] = useState<any>(null);
@@ -1478,377 +1480,46 @@ export function AdminPanel({
               ))}
             </div>
             <button className={`utility-btn ${genExcludeRoads ? 'active' : ''}`} style={{marginTop: '10px', width: '100%'}} onClick={() => setGenExcludeRoads(!genExcludeRoads)}>{genExcludeRoads ? 'EXCLUDE_ROADS: ON' : 'EXCLUDE_ROADS: OFF'}</button>
+
+            <label style={{fontSize: '0.7rem', marginTop: '10px', display: 'block'}}>OVERPASS_DENSITY</label>
+            <div className="button-group" style={{marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
+              {(['off', 'sparse', 'normal', 'heavy'] as OverpassDensity[]).map(d => (
+                <button
+                  key={d}
+                  className={overpassDensity === d ? 'active' : ''}
+                  style={{ flex: '1 1 60px', minWidth: '60px' }}
+                  onClick={() => setOverpassDensity(d)}
+                  disabled={genExcludeRoads}
+                  title="How often a road crossing water is carried over by a bridge. Wide crossings are never bridged."
+                >
+                  {d.toUpperCase()}
+                </button>
+              ))}
+            </div>
           </div>
           <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}>{roadSelectionBounds ? <p>AREA_SELECTED: {Math.round(Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x))}x{Math.round(Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z))} units</p> : <p style={{opacity: 0.7}}>DRAG ON MAP TO SELECT GENERATION AREA</p>}<p style={{opacity: 0.7, marginTop: '5px'}}>HIERARCHICAL BSP: ENABLED</p><p style={{opacity: 0.7}}>ZONING: {citySectionType}</p><p style={{opacity: 0.7}}>INFRASTRUCTURE: {genExcludeRoads ? 'BUILDINGS_ONLY' : 'ROADS_+_BUILDINGS'}</p></div>
           <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => {
               try {
                 if (!roadSelectionBounds) return setAdminAlert("SELECT AREA FIRST");
-                const minX = Math.min(roadSelectionBounds.min.x, roadSelectionBounds.max.x); const maxX = Math.max(roadSelectionBounds.min.x, roadSelectionBounds.max.x);
-                const minZ = Math.min(roadSelectionBounds.min.z, roadSelectionBounds.max.z); const maxZ = Math.max(roadSelectionBounds.min.z, roadSelectionBounds.max.z);
-                const cityW = maxX - minX; const cityD = maxZ - minZ;
-                const centerX = (minX + maxX) / 2;
-                const centerZ = (minZ + maxZ) / 2;
-                const maxRadius = Math.max(1, Math.max(cityW, cityD) / 2);
-                const slumAngle = Math.random() * Math.PI * 2;
-                // Industrial clusters in its own sector, offset from slums by ~120-180 degrees
-                const industrialAngle = slumAngle + Math.PI * (0.65 + Math.random() * 0.35);
 
-                const blocks: {x: number, z: number, w: number, d: number}[] = [];
-                const cityRoads: any[] = [];
-                const mainRoadW = 6; const sideRoadW = 3;
-
-                // Dynamic max depth: scale recursion with area size so larger selections produce more blocks, not bigger blocks
-                const minBlockSize = 35;
-                const maxDimension = Math.max(cityW, cityD);
-                const maxSplitDepth = Math.max(4, Math.ceil(Math.log2(maxDimension / minBlockSize)) + 2);
-
-                const split = (x: number, z: number, w: number, d: number, iter: number) => {
-                  if (iter > maxSplitDepth || (w < minBlockSize && d < minBlockSize)) { blocks.push({x, z, w, d}); return; }
-                  const splitV = w > d ? true : (w === d ? Math.random() > 0.5 : false);
-                  const roadW = iter < 2 ? mainRoadW : sideRoadW;
-                  const jitter = (Math.random() - 0.5) * (iter < 2 ? 10 : 5);
-                  if (splitV) {
-                    const ratio = 0.35 + Math.random() * 0.3; const lw = w * ratio; const rw = w - lw;
-                    const rx = x - w/2 + lw + jitter; 
-                    const midZ = z + (Math.random() - 0.5) * d * 0.25;
-                    if (!genExcludeRoads) {
-                      const offset = (Math.random() - 0.5) * 4.5;
-                      cityRoads.push({ x1: rx, z1: z - d/2, x2: rx + offset, z2: midZ, width: roadW });
-                      cityRoads.push({ x1: rx + offset, z1: midZ, x2: rx, z2: z + d/2, width: roadW });
-                    }
-                    split(x - w/2 + (lw + jitter)/2, z, lw + jitter, d, iter + 1); split(x + w/2 - (rw - jitter)/2, z, rw - jitter, d, iter + 1);
-                  } else {
-                    const ratio = 0.35 + Math.random() * 0.3; const td = d * ratio; const bd = d - td;
-                    const rz = z - d/2 + td + jitter;
-                    const midX = x + (Math.random() - 0.5) * w * 0.25;
-                    if (!genExcludeRoads) {
-                      const offset = (Math.random() - 0.5) * 4.5;
-                      cityRoads.push({ x1: x - w/2, z1: rz, x2: midX + offset, z2: rz, width: roadW });
-                      cityRoads.push({ x1: midX + offset, z1: rz, x2: x + w/2, z2: rz, width: roadW });
-                    }
-                    split(x, z - d/2 + (td + jitter)/2, w, td + jitter, iter + 1); split(x, z + d/2 - (bd - jitter)/2, w, bd - jitter, iter + 1);
-                  }
-                };
-
-                split((minX + maxX)/2, (minZ + maxZ)/2, cityW, cityD, 0);
-                const finalRoads = genExcludeRoads ? [] : consolidateRoads(cityRoads, roads, 3.0);
-                
-                const rawBuildings: any[] = [];
-                // SPATIAL GRID FOR COLLISION SPEED
-                const spatialGrid: any = {};
-                const gridCell = 20;
-                const getGridKey = (x: number, z: number) => `${Math.floor(x/gridCell)},${Math.floor(z/gridCell)}`;
-                
-                // Pre-populate grid with existing buildings
-                locations.forEach(l => {
-                    const key = getGridKey(l.x, l.z);
-                    if (!spatialGrid[key]) spatialGrid[key] = [];
-                    spatialGrid[key].push(l);
-                });
-
-                // Combine existing roads and new sector roads for collision checks
-                const allRoadsToCheck = [...roads, ...cityRoads];
-
-                const isBlocked = (x: number, z: number, w: number, d: number, buffer = 2) => {
-                    // 1. Check building-to-building collision
-                    const key = getGridKey(x, z);
-                    const neighbors = [key];
-                    for(let dx=-1; dx<=1; dx++) { for(let dz=-1; dz<=1; dz++) { if(dx===0 && dz===0) continue; neighbors.push(`${Math.floor(x/gridCell)+dx},${Math.floor(z/gridCell)+dz}`); }}
-                    
-                    for(const nKey of neighbors) {
-                        if(!spatialGrid[nKey]) continue;
-                        const blocked = spatialGrid[nKey].some((l: any) => {
-                            // AABB intersection check with custom safety buffer
-                            const xOverlap = Math.abs(l.x - x) < (l.width + w) / 2 + buffer;
-                            const zOverlap = Math.abs(l.z - z) < (l.depth + d) / 2 + buffer;
-                            return xOverlap && zOverlap;
-                        });
-                        if (blocked) return true;
-                    }
-
-                    // 2. Check building-to-road collision to prevent spawning on roads
-                    if (!genExcludeRoads) {
-                        for (const r of allRoadsToCheck) {
-                            const p1 = new THREE.Vector3(r.x1, 0, r.z1);
-                            const p2 = new THREE.Vector3(r.x2, 0, r.z2);
-                            const line = new THREE.Line3(p1, p2);
-                            const closest = new THREE.Vector3();
-                            line.closestPointToPoint(new THREE.Vector3(x, 0, z), true, closest);
-                            
-                            const rx = closest.x;
-                            const rz = closest.z;
-                            // Add safety padding from road margins
-                            const halfW = w / 2 + r.width / 2 + 1.2;
-                            const halfD = d / 2 + r.width / 2 + 1.2;
-                            
-                            if (Math.abs(rx - x) < halfW && Math.abs(rz - z) < halfD) {
-                                return true;
-                            }
-                        }
-                    }
-                    
-                    return false;
-                };
-
-                blocks.forEach((b, bIdx) => {
-                  const plotId = `gen_${bIdx}`;
-                  const startIndex = rawBuildings.length;
-                  const pad = 10; let bw = b.w - pad; let bd = b.d - pad;
-                  if (bw < 8 || bd < 8) return;
-                  
-                  let distToCenter = Math.sqrt((b.x - centerX)**2 + (b.z - centerZ)**2);
-                  let normDist = Math.min(1.0, distToCenter / maxRadius);
-
-                  // 1. NEGATIVE SPACE (Parks / Plazas with Holographic Plants)
-                  // Bias park probability to be higher near the center (max 20%), sliding to 0 at the slum boundary (0.8)
-                  const parkProb = normDist > 0.8 ? 0.0 : 0.20 * (1.0 - normDist / 0.8);
-                  if (Math.random() < parkProb) {
-                     // Generate a Park with simple low-poly holographic trees
-                     const numPlants = 6 + Math.floor(Math.random() * 7); // 6 to 12 trees
-                     for (let pIdx = 0; pIdx < numPlants; pIdx++) {
-                          const px = b.x + (Math.random() - 0.5) * bw * 0.8;
-                          const pz = b.z + (Math.random() - 0.5) * bd * 0.8;
-                          
-                          if (!isBlocked(px, pz, 0.4, 0.4, 0.5)) {
-                              const trunkH = 2.0 + Math.random() * 2.5;
-                              const trunkW = 0.4;
-                              const color = '#00ff66'; // Glowing Green
-                              const trunk = { name: '', description: '', x: px, y: 0, z: pz, width: trunkW, depth: trunkW, height: trunkH, color, shape: 'cylinder' };
-                              rawBuildings.push(trunk);
-                              
-                              const canopyW = 1.5 + Math.random() * 1.0;
-                              const canopyH = 2.0 + Math.random() * 1.5;
-                              const canopyShape = Math.random() > 0.5 ? 'pyramid' : 'box';
-                              rawBuildings.push({ name: 'HOLOTREE_CANOPY', x: px, y: trunkH, z: pz, width: canopyW, depth: canopyW, height: canopyH, color, shape: canopyShape, parent_name: 'ROOT' });
-                          }
-                     }
-                      for (let i = startIndex; i < rawBuildings.length; i++) {
-                        rawBuildings[i].temp_block_id = plotId;
-                        if (!rawBuildings[i].name) rawBuildings[i].name = 'PARK';
-                      }
-                      return; 
-                  }
-
-                  let blockAngle = Math.atan2(b.z - centerZ, b.x - centerX);
-                  let angleDiff = Math.abs(blockAngle - slumAngle);
-                  if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
-
-                  let zoneTypeVal = Math.random();
-
-                  if (citySectionType === 'MIXED') {
-                    // Concentric ring city layout:
-                    //   Core (0-0.3):   Corporate downtown
-                    //   Inner (0.3-0.55): Corporate → Urban transition
-                    //   Middle (0.55-0.75): Urban, slums creeping in from slum sector
-                    //   Outer (0.75-1.0): Slums + Industrial on the edges
-
-                    // Angular proximity to the industrial sector
-                    let indAngleDiff = Math.abs(blockAngle - industrialAngle);
-                    if (indAngleDiff > Math.PI) indAngleDiff = Math.PI * 2 - indAngleDiff;
-                    const isInIndustrialSector = indAngleDiff < Math.PI / 3; // ~120° wedge
-                    const isInSlumSector = angleDiff < Math.PI * 5 / 12;     // ~150° wedge
-
-                    if (normDist < 0.30) {
-                      // CORE: Corporate downtown — tall towers, clean
-                      zoneTypeVal = Math.random() < 0.88 ? 0.9 : 0.5;
-                    } else if (normDist < 0.55) {
-                      // INNER RING: Corporate fading into Urban
-                      // Linear transition: corpo chance drops from ~80% to ~20% across this band
-                      const t = (normDist - 0.30) / 0.25;
-                      const corpoChance = 0.80 - t * 0.60;
-                      zoneTypeVal = Math.random() < corpoChance ? 0.9 : 0.5;
-                    } else if (normDist < 0.75) {
-                      // MIDDLE RING: Primarily Urban, slums starting to bleed in from the slum sector
-                      const t = (normDist - 0.55) / 0.20;
-                      if (isInSlumSector && Math.random() < t * 0.45) {
-                        zoneTypeVal = 0.1; // slums growing outward
-                      } else if (isInIndustrialSector && Math.random() < t * 0.30) {
-                        zoneTypeVal = -0.1; // early industrial on the fringe
-                      } else {
-                        zoneTypeVal = 0.5; // urban
-                      }
-                    } else {
-                      // OUTER EDGE: Slums and Industrial dominate, clustered in their sectors
-                      if (isInIndustrialSector && Math.random() < 0.70) {
-                        zoneTypeVal = -0.1; // industrial zone
-                      } else if (isInSlumSector && Math.random() < 0.65) {
-                        zoneTypeVal = 0.1; // slum district
-                      } else if (Math.random() < 0.35) {
-                        // Spillover: some slums/industrial scatter outside their main sectors
-                        zoneTypeVal = Math.random() < 0.5 ? 0.1 : -0.1;
-                      } else {
-                        zoneTypeVal = 0.5; // remaining urban pockets on the outskirts
-                      }
-                    }
-                  } else if (citySectionType === 'CORPO') zoneTypeVal = 0.9;
-                  else if (citySectionType === 'URBAN') zoneTypeVal = 0.5;
-                  else if (citySectionType === 'SLUMS') zoneTypeVal = 0.1;
-                  else if (citySectionType === 'INDUSTRIAL') zoneTypeVal = -0.1;
-
-                  // Determine zone prefix for structure naming
-                  const zonePrefix = zoneTypeVal < 0 ? 'INDUSTRIAL' : zoneTypeVal <= 0.25 ? 'SLUMS' : zoneTypeVal > 0.7 ? 'CORPO' : 'URBAN';
-                  
-                  // Clamp aspect ratio to 1.3 for non-slums zones to eliminate long flat buildings
-                  const isSlum = zoneTypeVal <= 0.25 && zoneTypeVal >= 0;
-                  if (!isSlum) {
-                    const maxRatio = 1.3;
-                    if (bw > bd * maxRatio) bw = bd * maxRatio;
-                    else if (bd > bw * maxRatio) bd = bw * maxRatio;
-                  }
-
-                  // 2. LANDMARKS / HERO BUILDINGS
-                  // Occasionally create a unique, large building that acts as a visual anchor (with footprint check)
-                  const isLandmark = Math.random() < 0.20 && zoneTypeVal > 0.3 && (zoneTypeVal > 0.8 || (bw > 30 && bd > 30)) && !isBlocked(b.x, b.z, bw * 0.7, bd * 0.7, 2.0);
-
-                  if (isLandmark) {
-                    const landmarkStyle = Math.floor(Math.random() * 4);
-                    const color = ''; // Neutral color, default wireframe style
-                    
-                    if (landmarkStyle === 0) {
-                      // Style 0: Cyber-Citadel (Stepped buttresses + tall central spire)
-                      const centralSpireH = 150 + Math.random() * 70;
-                      const centralSpireW = bw * 0.45;
-                      const centralSpireD = bd * 0.45;
-                      const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: centralSpireW, depth: centralSpireD, height: centralSpireH, color, shape: 'box' };
-                      rawBuildings.push(root);
-                      const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-                      // Tiered corner buttresses
-                      const bW = bw * 0.15;
-                      const bD = bd * 0.15;
-                      const offsets = [
-                        { dx: -bw * 0.35, dz: -bd * 0.35 },
-                        { dx: bw * 0.35, dz: -bd * 0.35 },
-                        { dx: -bw * 0.35, dz: bd * 0.35 },
-                        { dx: bw * 0.35, dz: bd * 0.35 }
-                      ];
-                      offsets.forEach(offset => {
-                        const bx = b.x + offset.dx;
-                        const bz = b.z + offset.dz;
-                        // Tier 1 (Lower)
-                        rawBuildings.push({ name: '', x: bx, y: 0, z: bz, width: bW, depth: bD, height: centralSpireH * 0.4, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                        // Tier 2 (Middle, slightly narrower)
-                        rawBuildings.push({ name: '', x: bx - Math.sign(offset.dx)*bW*0.2, y: centralSpireH * 0.4, z: bz - Math.sign(offset.dz)*bD*0.2, width: bW * 0.7, depth: bD * 0.7, height: centralSpireH * 0.35, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                      });
-
-                      // Large top ring / horizontal slab near the top
-                      rawBuildings.push({ name: '', x: b.x, y: centralSpireH * 0.8, z: b.z, width: centralSpireW * 1.3, depth: centralSpireD * 1.3, height: 4.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                      // Top antenna
-                      rawBuildings.push({ name: '', x: b.x, y: centralSpireH, z: b.z, width: 0.3, depth: 0.3, height: centralSpireH * 0.18, color, shape: 'box', parent_name: 'CORP_ROOT' });
-
-                    } else if (landmarkStyle === 1) {
-                      // Style 1: Hyper-Pyramid Complex (Grand tiered pyramid monument)
-                      const base1W = bw * 0.75;
-                      const base1D = bd * 0.75;
-                      const base1H = 8.0;
-                      const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: base1W, depth: base1D, height: base1H, color, shape: 'box' };
-                      rawBuildings.push(root);
-                      const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-                      // Stepped Tier 2 Base
-                      const base2W = base1W * 0.75;
-                      const base2D = base1D * 0.75;
-                      const base2H = 12.0;
-                      rawBuildings.push({ name: '', x: b.x, y: base1H, z: b.z, width: base2W, depth: base2D, height: base2H, color, shape: 'box', parent_name: 'CORP_ROOT' });
-
-                      // Crown Pyramid
-                      const pyramidW = base2W * 0.75;
-                      const pyramidD = base2D * 0.75;
-                      const pyramidH = 120 + Math.random() * 50;
-                      rawBuildings.push({ name: '', x: b.x, y: base1H + base2H, z: b.z, width: pyramidW, depth: pyramidD, height: pyramidH, color, shape: 'pyramid', parent_name: 'CORP_ROOT' });
-
-                      // Satellite Obelisks (smaller pyramids at corners)
-                      const satOffsets = [
-                        { dx: -bw * 0.42, dz: -bd * 0.42 },
-                        { dx: bw * 0.42, dz: -bd * 0.42 },
-                        { dx: -bw * 0.42, dz: bd * 0.42 },
-                        { dx: bw * 0.42, dz: bd * 0.42 }
-                      ];
-                      satOffsets.forEach(offset => {
-                        const bx = b.x + offset.dx;
-                        const bz = b.z + offset.dz;
-                        rawBuildings.push({ name: '', x: bx, y: 0, z: bz, width: bw * 0.08, depth: bd * 0.08, height: 4.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                        rawBuildings.push({ name: '', x: bx, y: 4.0, z: bz, width: bw * 0.08, depth: bd * 0.08, height: 25.0, color, shape: 'pyramid', parent_name: 'CORP_ROOT' });
-                      });
-
-                    } else if (landmarkStyle === 2) {
-                      // Style 2: Megastructure Arch / Arcology (Twin massive pillars + top joining arch + suspended atrium)
-                      const pillarW = bw * 0.22;
-                      const pillarD = bd * 0.65;
-                      const pillarH = 140 + Math.random() * 50;
-                      const offsetDist = bw * 0.33;
-
-                      const root = { name: '', description: '', x: b.x - offsetDist, y: 0, z: b.z, width: pillarW, depth: pillarD, height: pillarH, color, shape: 'box' };
-                      rawBuildings.push(root);
-                      const key = getGridKey(b.x - offsetDist, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-                      // Right Pillar
-                      const rightPillar = { name: '', x: b.x + offsetDist, y: 0, z: b.z, width: pillarW, depth: pillarD, height: pillarH, color, shape: 'box', parent_name: 'CORP_ROOT' };
-                      rawBuildings.push(rightPillar);
-                      const key2 = getGridKey(b.x + offsetDist, b.z); if(!spatialGrid[key2]) spatialGrid[key2] = []; spatialGrid[key2].push(rightPillar);
-
-                      // Top Connecting Arch/Sky-bridge
-                      const archH = 12.0;
-                      const archW = offsetDist * 2 + pillarW;
-                      rawBuildings.push({ name: '', x: b.x, y: pillarH - archH, z: b.z, width: archW, depth: pillarD * 0.9, height: archH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-
-                      // Center Suspended Atrium (hanging block in the middle)
-                      const atriumW = offsetDist * 1.3;
-                      const atriumD = pillarD * 0.7;
-                      const atriumH = pillarH * 0.45;
-                      rawBuildings.push({ name: '', x: b.x, y: pillarH * 0.35, z: b.z, width: atriumW, depth: atriumD, height: atriumH, color, shape: 'box', parent_name: 'CORP_ROOT' });
-
-                      // Twin spires on top of the arch
-                      rawBuildings.push({ name: '', x: b.x - offsetDist, y: pillarH, z: b.z, width: 0.5, depth: 0.5, height: 15.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                      rawBuildings.push({ name: '', x: b.x + offsetDist, y: pillarH, z: b.z, width: 0.5, depth: 0.5, height: 15.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
-
-                    } else {
-                      // Style 3: Communications Array (Stepped tower + wide horizontal array discs + needles)
-                      const towerH = 130 + Math.random() * 60;
-                      const root = { name: '', description: '', x: b.x, y: 0, z: b.z, width: bw * 0.4, depth: bd * 0.4, height: towerH * 0.3, color, shape: 'box' };
-                      rawBuildings.push(root);
-                      const key = getGridKey(b.x, b.z); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
-
-                      // Mid and Upper Sections
-                      rawBuildings.push({ name: '', x: b.x, y: towerH * 0.3, z: b.z, width: bw * 0.3, depth: bd * 0.3, height: towerH * 0.4, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                      rawBuildings.push({ name: '', x: b.x, y: towerH * 0.7, z: b.z, width: bw * 0.2, depth: bd * 0.2, height: towerH * 0.3, color, shape: 'box', parent_name: 'CORP_ROOT' });
-
-                      // Horizontal Array Discs (wide flat boxes at different heights)
-                      const disc1W = bw * 0.65;
-                      const disc1D = bd * 0.65;
-                      rawBuildings.push({ name: '', x: b.x, y: towerH * 0.45, z: b.z, width: disc1W, depth: disc1D, height: 2.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
-
-                      const disc2W = bw * 0.5;
-                      const disc2D = bd * 0.5;
-                      rawBuildings.push({ name: '', x: b.x, y: towerH * 0.75, z: b.z, width: disc2W, depth: disc2D, height: 1.5, color, shape: 'box', parent_name: 'CORP_ROOT' });
-
-                      const disc3W = bw * 0.32;
-                      const disc3D = bd * 0.32;
-                      rawBuildings.push({ name: '', x: b.x, y: towerH * 0.92, z: b.z, width: disc3W, depth: disc3D, height: 1.0, color, shape: 'box', parent_name: 'CORP_ROOT' });
-
-                      // Central array needle
-                      rawBuildings.push({ name: '', x: b.x, y: towerH, z: b.z, width: 0.2, depth: 0.2, height: towerH * 0.2, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                      // Side needles
-                      rawBuildings.push({ name: '', x: b.x - bw * 0.1, y: towerH * 0.92, z: b.z - bd * 0.1, width: 0.1, depth: 0.1, height: towerH * 0.12, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                      rawBuildings.push({ name: '', x: b.x + bw * 0.1, y: towerH * 0.92, z: b.z + bd * 0.1, width: 0.1, depth: 0.1, height: towerH * 0.12, color, shape: 'box', parent_name: 'CORP_ROOT' });
-                    }
-                    for (let i = startIndex; i < rawBuildings.length; i++) {
-                      rawBuildings[i].temp_block_id = plotId;
-                      if (!rawBuildings[i].name) rawBuildings[i].name = zonePrefix;
-                    }
-                    return; // Done with this block
-                  }
-
-                  generateThemedBuildingsForPlot(b.x, b.z, bw, bd, zoneTypeVal, isBlocked, getGridKey, spatialGrid, rawBuildings, locations, plotId);
-                  for (let i = startIndex; i < rawBuildings.length; i++) {
-                    rawBuildings[i].temp_block_id = plotId;
-                    if (!rawBuildings[i].name) rawBuildings[i].name = zonePrefix;
-                  }
-                });
+                const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses } = generateCity(
+                  roadSelectionBounds,
+                  {
+                    sectionType: citySectionType as SectionType,
+                    excludeRoads: genExcludeRoads,
+                    overpassDensity,
+                  },
+                  { locations, roads, waterBodies }
+                );
 
                 if (finalRoads.length > 0) {
                   const rRes = await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalRoads) });
                   if (!rRes.ok) throw new Error(`Road creation failed: ${rRes.status}`);
+                }
+
+                for (const o of newOverpasses) {
+                  const oRes = await fetch('/api/overpasses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(o) });
+                  if (!oRes.ok) throw new Error(`Overpass creation failed: ${oRes.status}`);
                 }
                 
                 // Grouping logic for parent_id using SPATIAL GRID for O(N) speed
@@ -1858,31 +1529,25 @@ export function AdminPanel({
                 const rootData = await res.json();
                 if (rootData.data) {
                   const children: any[] = [];
-                  const rootGrid: any = {};
-                  rootData.data.forEach((r: any) => {
-                    const key = getGridKey(r.x, r.z);
-                    if (!rootGrid[key]) rootGrid[key] = [];
-                    rootGrid[key].push(r);
-                  });
+                  // Reuse the generator's spatial hash to match each child to a
+                  // nearby persisted root in O(1) instead of scanning all roots.
+                  const rootGrid = new SpatialGrid();
+                  rootData.data.forEach((r: any) => rootGrid.add(r));
 
                   rawBuildings.filter(b => b.parent_name === 'ROOT' || b.parent_name === 'CORP_ROOT').forEach(c => {
-                    const key = getGridKey(c.x, c.z);
-                    const neighbors = [key];
-                    for(let dx=-1; dx<=1; dx++) { for(let dz=-1; dz<=1; dz++) { if(dx===0 && dz===0) continue; neighbors.push(`${Math.floor(c.x/gridCell)+dx},${Math.floor(c.z/gridCell)+dz}`); }}
-                    
-                    let matched = false;
-                    for(const nKey of neighbors) {
-                      if(!rootGrid[nKey]) continue;
-                      const root = rootGrid[nKey].find((r: any) => {
+                    for (const nKey of rootGrid.neighborKeys(c.x, c.z)) {
+                      const cell = rootGrid.cells[nKey];
+                      if (!cell) continue;
+                      const root = cell.find((r: any) => {
                         if (c.temp_block_id && r.temp_block_id) {
                           return c.temp_block_id === r.temp_block_id;
                         }
                         const dist = Math.sqrt((r.x - c.x)**2 + (r.z - c.z)**2);
-                        return (c.parent_name === 'ROOT' && dist < 20) || (c.parent_name === 'CORP_ROOT' && dist < 20);
+                        return dist < 20;
                       });
                       if (root) {
-                        children.push({ ...c, parent_id: root.id });
-                        matched = true; break;
+                        children.push({ ...c, parent_id: (root as any).id });
+                        break;
                       }
                     }
                   });
@@ -1893,7 +1558,11 @@ export function AdminPanel({
                   }
                 }
 
-                setAdminAlert(`CITY GENERATED: ${blocks.length} SECTORS`); refreshLocations(); setView('list'); setRoadSelectionBounds(null);
+                const bridgeNote = newOverpasses.length > 0 ? ` / ${newOverpasses.length} BRIDGE${newOverpasses.length > 1 ? 'S' : ''}` : '';
+                setAdminAlert(`CITY GENERATED: ${blocks.length} SECTORS${bridgeNote}`);
+                refreshLocations();
+                if (newOverpasses.length > 0) refreshOverpasses?.();
+                setView('list'); setRoadSelectionBounds(null);
             } catch (err: any) {
               console.error(err);
               setAdminAlert(`SYSTEM_ERROR: ${err.message}. Area might be too large or complex.`);

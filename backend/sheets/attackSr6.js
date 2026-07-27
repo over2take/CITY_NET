@@ -1,3 +1,5 @@
+const { cryptoRng } = require('../utils/random');
+
 // SR6 attack resolution - pure functions, no I/O.
 //
 // Attack flow (Shadowrun 6E, slimmed):
@@ -53,7 +55,7 @@ const getWeapon = (data, index) => {
 };
 
 // Roll the attack pool: attribute + skill (+flat weapon dice).
-const rollAttack = (data, weapon, rng = Math.random) => {
+const rollAttack = (data, weapon, rng = cryptoRng) => {
   let formula = `pool:@${weapon.attr}+@${weapon.skill}`;
   if (weapon.atk !== 0) formula += weapon.atk > 0 ? `+${weapon.atk}` : `-${Math.abs(weapon.atk)}`;
   const resolved = rollEngine.resolveFormula(formula, data, { allowNoDice: true });
@@ -64,7 +66,7 @@ const rollAttack = (data, weapon, rng = Math.random) => {
 // defender has a sheet; tokens without one don't defend (0 hits).
 // Returns null when the sheet has neither attribute set - a bare NPC sheet
 // shouldn't roll a 1-die floor pool it was never given.
-const rollDefense = (data, rng = Math.random) => {
+const rollDefense = (data, rng = cryptoRng) => {
   const rea = Number(data.reaction);
   const int = Number(data.intuition);
   if (!Number.isFinite(rea) && !Number.isFinite(int)) return null;

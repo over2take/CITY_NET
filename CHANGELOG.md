@@ -9,6 +9,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.7.1] - 2026-07-26
+
+### Added
+
+- **Water-aware city generation** — the generator predated water bodies entirely and built straight through lakes.
+  - The BSP split clips each road seam to land as it lays it, so the grid stops at the shore rather than being drawn across the water and trimmed back.
+  - Buildings, parks and landmarks all avoid water through a single check in the placement test. Plots centred in water are skipped; plots that merely touch a shoreline still build on their dry side.
+  - **Shoreline roads** — each water body gets a road just inland of its edge, so approaches meet a waterfront junction instead of dead-ending at the water.
+- **Generated bridges** — roads that meet water can be carried across by an overpass, the first time generation has produced one.
+  - Crossings are sited deliberately: a road end at the shore is probed across the water and kept only when it reaches a far bank in range, comes down on dry ground, and lands on a road facing back — so every bridge joins two pieces of the network.
+  - Ramps run the full length of their approach road (capped at 120), touching down at that road's junction rather than part way along a block. The two approaches differ, so runs are set per end.
+  - Deck levels are 6/9/12/15, assigned by graph colouring over which decks cross. A bridge takes the lowest level none of its crossing neighbours hold, and levels beyond what its approaches can reach at a fixed 1:3 grade are excluded — height is bought with ramp length, never steepness.
+  - **House rule: OVERPASS_DENSITY** — new control in CITY_GENERATOR (off / sparse / normal / heavy) scaling both how many crossings are bridged and how far a span will reach (120 / 200 / 300 units).
+- **Crypto-backed dice** — every roll that decides an outcome now draws from OS entropy instead of `Math.random`. Backend rolls (roll engine, CP:R/CWN/SR6 attacks, dice tray, initiative) use `crypto.randomInt`; frontend initiative systems use `crypto.getRandomValues`. Visual and cosmetic randomness is unchanged.
+
+### Changed
+
+- **City generation extracted to `frontend/src/cityGen/`** — roughly 420 lines moved out of a JSX click handler in AdminPanel into a pure module that takes bounds, options and world state and returns blocks, roads, buildings and overpasses. Persistence and UI state stay in the component. The random source is an injected parameter, which is what makes the module testable; behaviour is unchanged on a dry map.
+
+### Fixed
+
+- **Buildings could sit inside existing structures** — the collision grid filed each obstacle under the single cell holding its centre while lookups scan a 3×3 neighbourhood, so anything wider than one 20-unit cell was only detected near its middle. Obstacles are now registered across every cell their footprint covers, with an always-checked list for degenerate sizes.
+- **Buildings could sit on roads** — two causes. The road test compared a road's nearest point to a building's *centre*, which reads as clear whenever a road clips a corner; it is now an exact segment-versus-box clip. And the themed generators emit most of a structure relative to a cleared root without testing each piece, so wings and annexes escaped the check entirely — finished plots are now re-checked and rolled back whole if any piece landed badly.
+- **Roads crossed under the waterfront road without joining it** — approaches overshot it and stopped just past it with no shared point, so consolidation could not link them. Road ends near the waterfront are now pulled onto it.
+- **Pillars speared overpasses passing beneath them** — pillar placement checked roads only. It now also skips a column that would pass through a lower deck, while leaving pillars that merely stand under a higher one. Applies to hand-drawn overpasses too.
+
+---
+
 ## [1.7.0] - 2026-07-23
 
 ### Added

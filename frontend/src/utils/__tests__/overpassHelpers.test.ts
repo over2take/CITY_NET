@@ -149,6 +149,37 @@ describe('buildOverpassGeometry — pillars', () => {
     });
   });
 
+  it('skips pillars that would spear a lower overpass crossing beneath', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    // A lower deck crossing underneath at x=50.
+    const lower = [{ points: [{ x: 50, z: -50 }, { x: 50, z: 50 }], width: 6, height: 4 }];
+    const withOther = buildOverpassGeometry(pts, params, [], { otherOverpasses: lower });
+    const without = buildOverpassGeometry(pts, params, []);
+    expect(withOther.pillars.length).toBeLessThan(without.pillars.length);
+    withOther.pillars.forEach(p => {
+      expect(pointToSegmentDist(p.x, p.z, 50, -50, 50, 50)).toBeGreaterThan(3);
+    });
+  });
+
+  it('keeps pillars under a deck that passes overhead', () => {
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    // Same crossing, but higher than this deck — nothing is speared.
+    const higher = [{ points: [{ x: 50, z: -50 }, { x: 50, z: 50 }], width: 6, height: 40 }];
+    const withOther = buildOverpassGeometry(pts, params, [], { otherOverpasses: higher });
+    const without = buildOverpassGeometry(pts, params, []);
+    expect(withOther.pillars.length).toBe(without.pillars.length);
+  });
+
+  it('skips pillars under a crossing deck of unknown height', () => {
+    // Without a height there is no way to tell, so the cautious choice is to
+    // leave the pillar out rather than risk it spearing the deck.
+    const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
+    const unknown = [{ points: [{ x: 50, z: -50 }, { x: 50, z: 50 }], width: 6 }];
+    const withOther = buildOverpassGeometry(pts, params, [], { otherOverpasses: unknown });
+    const without = buildOverpassGeometry(pts, params, []);
+    expect(withOther.pillars.length).toBeLessThan(without.pillars.length);
+  });
+
   it('does not place stubby pillars near ground level on ramps', () => {
     const pts = [{ x: 0, z: 0 }, { x: 100, z: 0 }];
     const { pillars } = buildOverpassGeometry(pts, { ...params, pillarSpacing: 2 }, []);
