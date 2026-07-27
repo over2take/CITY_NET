@@ -493,23 +493,30 @@ export const GhostTraffic = React.memo(({ roads, overpasses = [] }: { roads: any
   const tempObj = new THREE.Object3D();
   const tempColor = new THREE.Color();
 
+  // Keep weights/totalLength in a ref so useFrame and packet-looping always read
+  // the current values without triggering memo/packet regeneration.
+  const routeDataRef = useRef({ weights, totalLength });
+  routeDataRef.current = { weights, totalLength };
+
   const getRandomRouteIndex = () => {
-    const r = Math.random() * totalLength;
-    return weights.findIndex(w => w >= r);
+    const { weights: w, totalLength: tl } = routeDataRef.current;
+    const r = Math.random() * tl;
+    return w.findIndex(ww => ww >= r);
   };
 
   const packets = useMemo(() => {
     return Array.from({ length: packetCount }, () => ({
       routeIndex: getRandomRouteIndex(),
       progress: Math.random(),
-      speed: 0.12 + Math.random() * 0.15, // Slightly slower, more consistent speed
+      speed: 0.12 + Math.random() * 0.15,
       side: Math.random() > 0.5 ? 1 : -1,
-      // 3 discrete lane slots per side for better separation
       laneSlot: Math.floor(Math.random() * 3),
-      carLength: 0.55 + Math.random() * 0.35, // varied vehicle sizes
-      colorIndex: Math.floor(Math.random() * TRAFFIC_COLORS.length), // mixed on both sides
+      carLength: 0.55 + Math.random() * 0.35,
+      colorIndex: Math.floor(Math.random() * TRAFFIC_COLORS.length),
     }));
-  }, [routes.length, packetCount, weights]);
+  // Only regenerate packets when route count or car count changes, not when road
+  // geometry shifts slightly (which would teleport all cars at once).
+  }, [routes.length, packetCount]);
 
   useFrame((state, delta) => {
     if (!meshRef.current || routes.length === 0) return;

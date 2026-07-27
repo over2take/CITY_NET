@@ -538,7 +538,7 @@ export function AdminPanel({
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
-    activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary,
+    activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -850,6 +850,12 @@ export function AdminPanel({
     }
   };
 
+  const handleToggleHidden = () => {
+    if (!selectedLocation) return;
+    const rootId = selectedLocation.parent_id ? selectedLocation.parent_id : selectedLocation.id;
+    onToggleHidden(rootId);
+  };
+
   const handleCopy = () => {
     if (!selectedLocation) return;
     
@@ -985,6 +991,13 @@ export function AdminPanel({
                     <button className="upload-btn" onClick={handleCopy}>COPY</button>
                     <button className="upload-btn danger-btn" onClick={() => setDeleteTarget(selectedLocation)}>DEL</button>
                   </div>
+                  <button
+                    className="upload-btn"
+                    style={{ width: '100%', marginTop: '6px', backgroundColor: selectedLocation.is_hidden ? '#444' : 'transparent', borderColor: '#888', color: '#aaa' }}
+                    onClick={handleToggleHidden}
+                  >
+                    {selectedLocation.is_hidden ? 'REVEAL_STRUCTURE' : 'HIDE_STRUCTURE'}
+                  </button>
                   {currentLocBattleMaps?.length > 0 && (
                     <button
                       className="upload-btn"

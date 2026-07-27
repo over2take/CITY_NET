@@ -67,6 +67,20 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     );
   });
 
+  router.patch('/:id/toggle-hidden', authenticate, (req, res) => {
+    db.get('SELECT is_hidden, parent_id FROM locations WHERE id = ?', [req.params.id], (err, row) => {
+      if (err || !row) return res.status(404).json({ error: 'Not found' });
+      if (row.parent_id) return res.status(400).json({ error: 'Toggle hidden on root structures only' });
+      const next = row.is_hidden ? 0 : 1;
+      db.run('UPDATE locations SET is_hidden = ? WHERE id = ?', [next, req.params.id], (err2) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        emitUpdate();
+        recordAction(req.params.id, next ? 'hidden' : 'revealed');
+        res.json({ is_hidden: next });
+      });
+    });
+  });
+
   // Custom structure library — structures saved via JOIN → CUSTOM classification
   router.get('/custom-library', authenticate, (req, res) => {
     db.all(`SELECT * FROM custom_structure_library WHERE classification = 'CUSTOM' OR parent_id IS NOT NULL ORDER BY saved_at DESC`, (err, rows) => {
