@@ -1788,10 +1788,6 @@ export function AdminPanel({
                     {editData.shape !== 'enemy_rhombus' && editData.shape !== 'friendly_rhombus' && editData.shape !== 'rhombus' && editData.shape !== 'none' && (
                       <div style={{display: 'flex', gap: '16px', marginTop: '8px', marginBottom: '10px'}}>
                         <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
-                          <input type="checkbox" checked={editData.has_sidewalk ?? true} onChange={e => setEditData({...editData, has_sidewalk: e.target.checked})} />
-                          SIDEWALK
-                        </label>
-                        <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
                           <input type="checkbox" checked={editData.has_signage ?? true} onChange={e => setEditData({...editData, has_signage: e.target.checked})} />
                           SIGNAGE
                         </label>

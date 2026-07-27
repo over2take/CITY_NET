@@ -32,7 +32,7 @@ export function generatePark(
     out.push({
       name: '', description: '', x: px, y: 0, z: pz,
       width: trunkW, depth: trunkW, height: trunkH,
-      color: HOLO_GREEN, shape: 'cylinder',
+      color: HOLO_GREEN, shape: 'cylinder', has_signage: 0,
     });
 
     const canopyW = 1.5 + rng() * 1.0;
