@@ -2,10 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   drawWatermark,
   watermarkFontSize,
+  watermarkUrlFontSize,
   WATERMARK_TEXT,
+  WATERMARK_URL,
   WATERMARK_MARGIN,
   WATERMARK_OPACITY,
   WATERMARK_MIN_FONT,
+  WATERMARK_URL_MIN_FONT,
   triggerDownload,
 } from '../mapExportWatermark';
 
@@ -48,45 +51,75 @@ describe('watermarkFontSize', () => {
 });
 
 describe('drawWatermark', () => {
-  it('anchors to the bottom-right corner', () => {
+  /** Both lines, keyed by their text, with the position each was drawn at. */
+  const drawn = (w: number, h: number) => {
     const { ctx, calls } = fakeCtx();
-    drawWatermark(ctx, 2048, 1024);
+    drawWatermark(ctx, w, h);
+    const byText = (t: string) => {
+      const call = calls.fillText.find(([text]) => text === t);
+      return call ? { x: call[1] as number, y: call[2] as number } : null;
+    };
+    return { ctx, calls, mark: byText(WATERMARK_TEXT), url: byText(WATERMARK_URL) };
+  };
 
-    const [text, x, y] = calls.fillText[0];
-    expect(text).toBe(WATERMARK_TEXT);
-    expect(x).toBe(2048 - WATERMARK_MARGIN);
-    expect(y).toBe(1024 - WATERMARK_MARGIN);
+  it('draws the mark and the repo URL', () => {
+    const { mark, url } = drawn(2048, 1024);
+    expect(mark).not.toBeNull();
+    expect(url).not.toBeNull();
+  });
+
+  it('anchors the URL to the bottom-right corner', () => {
+    const { ctx, url } = drawn(2048, 1024);
+    expect(url!.x).toBe(2048 - WATERMARK_MARGIN);
+    expect(url!.y).toBe(1024 - WATERMARK_MARGIN);
     expect(ctx.textAlign).toBe('right');
     expect(ctx.textBaseline).toBe('bottom');
   });
 
-  it('strokes before filling so the mark stays legible on light and dark maps', () => {
-    const { ctx, calls } = fakeCtx();
-    drawWatermark(ctx, 800, 600);
-    expect(calls.strokeText).toHaveLength(1);
-    expect(calls.fillText).toHaveLength(1);
-    expect(calls.strokeText[0][0]).toBe(WATERMARK_TEXT);
+  it('stacks the mark above the URL, sharing the right edge', () => {
+    const { mark, url } = drawn(2048, 1024);
+    expect(mark!.y).toBeLessThan(url!.y);
+    expect(mark!.x).toBe(url!.x);
+  });
+
+  it('keeps the whole block inside the canvas', () => {
+    // The mark moved up to make room, so it must not be pushed off the top edge
+    // on a short canvas.
+    const { mark } = drawn(2048, 200);
+    expect(mark!.y).toBeGreaterThan(0);
+  });
+
+  it('sets the URL smaller than the mark', () => {
+    expect(watermarkUrlFontSize(2048)).toBeLessThan(watermarkFontSize(2048));
+  });
+
+  it('keeps the URL legible on small canvases rather than scaling to nothing', () => {
+    expect(watermarkUrlFontSize(100)).toBeGreaterThanOrEqual(WATERMARK_URL_MIN_FONT);
+  });
+
+  it('strokes and fills both lines so they stay legible on light and dark maps', () => {
+    const { calls } = drawn(800, 600);
+    expect(calls.strokeText).toHaveLength(2);
+    expect(calls.fillText).toHaveLength(2);
+    expect(calls.strokeText.map(([t]) => t)).toEqual([WATERMARK_TEXT, WATERMARK_URL]);
   });
 
   it('draws translucent', () => {
-    const { ctx } = fakeCtx();
-    drawWatermark(ctx, 800, 600);
+    const { ctx } = drawn(800, 600);
     expect(ctx.globalAlpha).toBe(WATERMARK_OPACITY);
   });
 
   it('saves and restores so it cannot leak state into later draws', () => {
-    const { ctx, calls } = fakeCtx();
-    drawWatermark(ctx, 800, 600);
+    const { calls } = drawn(800, 600);
     expect(calls.save).toHaveLength(1);
     expect(calls.restore).toHaveLength(1);
   });
 
   it('tracks the corner when the canvas is a different shape', () => {
-    const { ctx, calls } = fakeCtx();
-    drawWatermark(ctx, 400, 2000);
-    const [, x, y] = calls.fillText[0];
-    expect(x).toBe(400 - WATERMARK_MARGIN);
-    expect(y).toBe(2000 - WATERMARK_MARGIN);
+    const { mark, url } = drawn(400, 2000);
+    expect(url!.x).toBe(400 - WATERMARK_MARGIN);
+    expect(url!.y).toBe(2000 - WATERMARK_MARGIN);
+    expect(mark!.x).toBe(400 - WATERMARK_MARGIN);
   });
 });
 

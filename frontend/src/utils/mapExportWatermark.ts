@@ -8,15 +8,28 @@
  */
 
 export const WATERMARK_TEXT = 'CITY_NET';
+/** Shown beneath the mark. Protocol omitted — it reads cleaner and still resolves. */
+export const WATERMARK_URL = 'github.com/over2take/CITY_NET';
 export const WATERMARK_OPACITY = 0.35;
 /** Distance from the canvas edge, in pixels. */
 export const WATERMARK_MARGIN = 24;
 /** Font size as a fraction of output width, so a 2048px PNG and a 900px capture match. */
 export const WATERMARK_SCALE = 0.018;
 export const WATERMARK_MIN_FONT = 14;
+/** URL line, relative to the mark above it. */
+export const WATERMARK_URL_RATIO = 0.5;
+export const WATERMARK_URL_MIN_FONT = 9;
+/** Vertical gap between the two lines, as a fraction of the mark's size. */
+export const WATERMARK_LINE_GAP_RATIO = 0.25;
 
 export const watermarkFontSize = (canvasWidth: number): number =>
   Math.max(WATERMARK_MIN_FONT, Math.round(canvasWidth * WATERMARK_SCALE));
+
+export const watermarkUrlFontSize = (canvasWidth: number): number =>
+  Math.max(
+    WATERMARK_URL_MIN_FONT,
+    Math.round(watermarkFontSize(canvasWidth) * WATERMARK_URL_RATIO),
+  );
 
 /**
  * Draw the mark into the bottom-right corner of a 2D context.
@@ -31,19 +44,31 @@ export function drawWatermark(
   height: number,
 ): void {
   const fontSize = watermarkFontSize(width);
+  const urlFontSize = watermarkUrlFontSize(width);
+  const gap = Math.round(fontSize * WATERMARK_LINE_GAP_RATIO);
+
+  const right = width - WATERMARK_MARGIN;
+  // The URL takes the bottom anchor and the mark sits above it, so the block stays
+  // pinned to the corner rather than growing past the edge.
+  const urlBaseline = height - WATERMARK_MARGIN;
+  const markBaseline = urlBaseline - urlFontSize - gap;
 
   ctx.save();
-  ctx.font = `bold ${fontSize}px "Courier New", monospace`;
   ctx.textAlign = 'right';
   ctx.textBaseline = 'bottom';
   ctx.globalAlpha = WATERMARK_OPACITY;
-
-  ctx.lineWidth = Math.max(2, fontSize * 0.14);
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
-  ctx.strokeText(WATERMARK_TEXT, width - WATERMARK_MARGIN, height - WATERMARK_MARGIN);
-
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(WATERMARK_TEXT, width - WATERMARK_MARGIN, height - WATERMARK_MARGIN);
+
+  ctx.font = `bold ${fontSize}px "Courier New", monospace`;
+  ctx.lineWidth = Math.max(2, fontSize * 0.14);
+  ctx.strokeText(WATERMARK_TEXT, right, markBaseline);
+  ctx.fillText(WATERMARK_TEXT, right, markBaseline);
+
+  ctx.font = `${urlFontSize}px "Courier New", monospace`;
+  ctx.lineWidth = Math.max(1.5, urlFontSize * 0.14);
+  ctx.strokeText(WATERMARK_URL, right, urlBaseline);
+  ctx.fillText(WATERMARK_URL, right, urlBaseline);
   ctx.restore();
 }
 
