@@ -162,8 +162,21 @@ export function DotMatrixScoreboard({ value, timestamp, isRolling }: DotMatrixSc
 // ─── DiceScene ───────────────────────────────────────────────────────────────
 
 interface DiceSceneProps {
-  latestRoll: { total: number; results: any; color: string; timestamp: number } | null;
+  latestRoll: { total: number; results: any; diceSides?: Record<string, number>; color: string; timestamp: number } | null;
 }
+
+/**
+ * Side count for a results key. Standard rolls key by side count ('6'); custom
+ * dice key by name ('Fate') and carry their shape in `diceSides`. Falls back to
+ * a d6 so an unrecognised key still renders something rather than building
+ * geometry from NaN.
+ */
+export const sidesForKey = (key: string, diceSides?: Record<string, number>): number => {
+  const explicit = diceSides?.[key];
+  if (Number.isFinite(explicit) && (explicit as number) >= 2) return explicit as number;
+  const parsed = parseInt(key);
+  return Number.isFinite(parsed) && parsed >= 2 ? parsed : 6;
+};
 
 export function DiceScene({ latestRoll }: DiceSceneProps) {
   const { scene, camera } = useThree();
@@ -174,8 +187,8 @@ export function DiceScene({ latestRoll }: DiceSceneProps) {
     if (latestRoll && latestRoll.results) {
       const material = new THREE.MeshBasicMaterial({ color: latestRoll.color, wireframe: true });
       let xOffset = -2.5;
-      for (const [sides, rolls] of Object.entries(latestRoll.results)) {
-        const s = parseInt(sides);
+      for (const [key, rolls] of Object.entries(latestRoll.results)) {
+        const s = sidesForKey(key, latestRoll.diceSides);
         let geometry: THREE.BufferGeometry;
         switch (s) {
           case 4: geometry = new THREE.TetrahedronGeometry(1); break;
@@ -183,7 +196,13 @@ export function DiceScene({ latestRoll }: DiceSceneProps) {
           case 8: geometry = new THREE.OctahedronGeometry(1); break;
           case 12: geometry = new THREE.DodecahedronGeometry(1); break;
           case 20: geometry = new THREE.IcosahedronGeometry(1); break;
-          default: geometry = new THREE.SphereGeometry(1, Math.max(3, s / 2), Math.max(3, s / 2)); break;
+          // Segments are capped: a 999-sided die would otherwise build a
+          // ~500x500 sphere per die and stall the tab.
+          default: {
+            const seg = Math.min(32, Math.max(3, Math.round(s / 2)));
+            geometry = new THREE.SphereGeometry(1, seg, seg);
+            break;
+          }
         }
         (Array.isArray(rolls) ? rolls as number[] : [rolls as number]).forEach(val => {
           const mesh = new THREE.Mesh(geometry, material);
@@ -304,8 +323,8 @@ interface DiceTrayWindowProps {
 export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWindowProps) {
   const [history, setHistory] = useState<DiceRoll[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [latestRoll, setLatestRoll] = useState<{ total: number; results: any; color: string; timestamp: number } | null>(null);
-  const [displayRoll, setDisplayRoll] = useState<{ total: number; results: any; color: string; timestamp: number } | null>(null);
+  const [latestRoll, setLatestRoll] = useState<{ total: number; results: any; diceSides?: Record<string, number>; color: string; timestamp: number } | null>(null);
+  const [displayRoll, setDisplayRoll] = useState<{ total: number; results: any; diceSides?: Record<string, number>; color: string; timestamp: number } | null>(null);
   const [glitchState, setGlitchState] = useState<'none' | 'glitch' | 'critical'> ('none');
   const [isRolling, setIsRolling] = useState(false);
   const historyContainerRef = useRef<HTMLDivElement>(null);
@@ -324,13 +343,13 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
       const data = rollQueue.current.shift();
       if (!data) { rollTimer.current = null; return; }
       const hasDice = data.results && Object.keys(data.results).length > 0;
-      setLatestRoll({ total: data.total, results: data.results, color: data.color, timestamp: Date.now() });
+      setLatestRoll({ total: data.total, results: data.results, diceSides: data.diceSides, color: data.color, timestamp: Date.now() });
       setIsRolling(true);
       setDisplayRoll(null);
       setGlitchState('none');
       rollTimer.current = setTimeout(() => {
         setIsRolling(false);
-        setDisplayRoll({ total: data.total, results: data.results, color: data.color, timestamp: Date.now() });
+        setDisplayRoll({ total: data.total, results: data.results, diceSides: data.diceSides, color: data.color, timestamp: Date.now() });
         if (data.criticalGlitch) setGlitchState('critical');
         else if (data.glitch) setGlitchState('glitch');
         setHistory(prev => {

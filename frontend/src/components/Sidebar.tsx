@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import kofiLogo from '../assets/kofi.png';
 import { CityDataBaseMenu } from './CityDatabase';
+import type { CustomDie } from '../types';
 import { InitiativeWindow } from '../modules/initiative';
 import { InitiativeNavPanel } from '../modules/initiative/components/InitiativeNavPanel';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
@@ -627,6 +628,9 @@ function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState,
 interface DiceMenuProps {
   userName: string;
   token?: string;
+  customDice?: CustomDie[];
+  onOpenCustomDieBuilder?: (die?: CustomDie) => void;
+  onDeleteCustomDie?: (id: number | string) => void;
   socketRef: React.MutableRefObject<any>;
   rhombusState: any;
   setIsDiceTrayOpen: (v: any) => void;
@@ -636,16 +640,18 @@ interface DiceMenuProps {
   gameSystem?: string;
 }
 
-export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack, gameSystem }: DiceMenuProps) {
+export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack, gameSystem, customDice = [], onOpenCustomDieBuilder, onDeleteCustomDie }: DiceMenuProps) {
   const isAdmin = !!token;
   const defenseLabel = getTokenDefense(gameSystem).label;
   const diceTypes = [2, 4, 6, 8, 10, 12, 20, 100];
   const [diceCounts, setDiceCounts] = useState<Record<number, number>>({});
+  const [customCounts, setCustomCounts] = useState<Record<string, number>>({});
   const [workingMod, setWorkingMod] = useState<number>(0);
   const [modifiers, setModifiers] = useState<number[]>([]);
 
   const totalDice = Object.values(diceCounts).reduce((a, b) => a + b, 0);
-  const canRoll = totalDice > 0;
+  const totalCustomDice = Object.values(customCounts).reduce((a, b) => a + b, 0);
+  const canRoll = totalDice > 0 || totalCustomDice > 0;
 
   const handleAddDice = (sides: number) => {
     setDiceCounts(prev => ({ ...prev, [sides]: (prev[sides] || 0) + 1 }));
@@ -659,6 +665,18 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
     });
   };
 
+  const handleAddCustom = (id: number | string) => {
+    setCustomCounts(prev => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
+  };
+
+  const handleSubCustom = (id: number | string) => {
+    setCustomCounts(prev => {
+      const current = prev[id] || 0;
+      if (current <= 0) return prev;
+      return { ...prev, [id]: current - 1 };
+    });
+  };
+
   const handleRoll = () => {
     if (!canRoll) {
       setNotification("INVALID_ROLL: SELECT_DICE");
@@ -666,9 +684,21 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
     }
     const color = rhombusState?.color || '#00ff00';
     if (socketRef.current) {
-      socketRef.current.emit('requestDiceRoll', { userName, diceCounts, modifiers, color });
+      if (totalDice > 0) {
+        socketRef.current.emit('requestDiceRoll', { userName, diceCounts, modifiers, color });
+      }
+      for (const [id, count] of Object.entries(customCounts)) {
+        if (count <= 0) continue;
+        // Object keys are strings, so recover the die's real id (number for GM
+        // dice, `builtin:` string for system dice). The server resolves the
+        // definition itself; only the id travels.
+        const die = customDice.find(d => String(d.id) === id);
+        if (!die) continue;
+        socketRef.current.emit('requestCustomDiceRoll', { userName, dieId: die.id, count, color });
+      }
     }
     setDiceCounts({});
+    setCustomCounts({});
     setModifiers([]);
     setIsDiceTrayOpen(true);
   };
@@ -718,6 +748,48 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
             </div>
           </div>
         ))}
+
+        {/* Custom dice */}
+        {customDice.length > 0 && (
+          <div style={{ borderTop: '1px solid #1a3a1a', marginTop: '6px', paddingTop: '6px' }}>
+            {customDice.map(die => (
+              <div key={die.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,10,0,0.5)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid #1a4a2a' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <span style={{ fontWeight: 'bold', color: 'var(--cyan)', whiteSpace: 'nowrap' }}>{die.name}</span>
+                  {isAdmin && !die.locked && (
+                    <>
+                      <button
+                        onClick={() => onOpenCustomDieBuilder?.(die)}
+                        style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: '0 2px', fontSize: '0.8rem', lineHeight: 1, flexShrink: 0 }}
+                        title="Edit die"
+                      >⚙</button>
+                      <button
+                        onClick={() => onDeleteCustomDie?.(die.id)}
+                        style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: '0 2px', fontSize: '0.7rem', lineHeight: 1, flexShrink: 0 }}
+                        title="Delete die"
+                      >✕</button>
+                    </>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleSubCustom(die.id)}>-</button>
+                  <span style={{ width: '20px', textAlign: 'center' }}>{customCounts[die.id] || 0}</span>
+                  <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleAddCustom(die.id)}>+</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {isAdmin && (
+          <button
+            className="upload-btn"
+            style={{ width: '100%', marginTop: '6px', fontSize: '0.75rem', padding: '6px', borderStyle: 'dashed', color: 'var(--green)', background: 'transparent' }}
+            onClick={() => onOpenCustomDieBuilder?.()}
+          >
+            + CUSTOM_DIE.EXE
+          </button>
+        )}
       </div>
 
       <div style={{ borderTop: '2px solid var(--dark-green)', paddingTop: '10px', marginBottom: '10px', flexShrink: 0 }}>
@@ -934,9 +1006,12 @@ interface SidebarProps {
   onJumpToScene?: (sceneKey: string) => void;
   currentTheme?: ThemeName;
   onThemeChange?: (theme: ThemeName) => void;
+  customDice?: CustomDie[];
+  onOpenCustomDieBuilder?: (die?: CustomDie) => void;
+  onDeleteCustomDie?: (id: number | string) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -1144,7 +1219,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
-          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} />}
+          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} />}
           {activeMenu === 'initiative_tracker' && (
             <InitiativeNavPanel
               initiativeActive={!!initiativeActive}

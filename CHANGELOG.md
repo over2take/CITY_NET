@@ -33,6 +33,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.7.3] - 2026-07-27
+
+### Added
+
+- **Custom dice** — the GM can define dice with any number of sides and any face values, and every connected player can roll them.
+  - **CUSTOM_DIE.EXE** — draggable build window opened from the dice roller. Name is required and must not collide with a standard die or an existing custom die; the side count is typed and confirmed with SET, which generates one input per face (20 visible before the list scrolls).
+  - Faces accept anything — numbers, words, symbols. A roll is summed only when every face is numeric; otherwise the result lists the faces with no total. Signed values like `+1` count as numeric, so ladder-style dice still total correctly.
+  - Dice are stored server-side and shared with the table. `GET /api/custom_dice` is public so players see the GM's dice; create, edit and delete are admin-only. Each change broadcasts `customDiceUpdated` with the full list, so players already online pick up a new die without reloading.
+  - Only admins see the create button, the edit cog and the delete control.
+- **System dice** — `GET /api/system_dice/:system` serves read-only dice that ship with a game system, merged into the roller ahead of the GM's own. They are defined in code rather than seeded into the database, so an app update changes the definitions with no migration and there is no row for an admin to edit or delete — the route exposes no write verbs at all. Seeded with the Fate ladder die (`dF`), dormant until a Fate system is added.
+
+### Changed
+
+- **Roll definitions are resolved server-side.** `requestCustomDiceRoll` now takes only a die id and reads the definition from the database (or the built-in manifest); it previously accepted a die object from the client, which meant face values could be forged.
+
+### Fixed
+
+- **Custom dice rendered nothing in the tray.** `DiceScene` infers the die shape from the results key parsed as a number, but custom rolls key by die name — `parseInt('Fate')` is `NaN`, which built a sphere with `NaN` segments and drew no dice. Rolls now carry a `diceSides` map and a `sidesForKey` helper resolves the shape, so a 4-sided die renders a tetrahedron. The helper falls back to a d6 rather than `NaN` for any unrecognised key, and sphere segments are capped so a 999-sided die cannot stall the tab.
+- **Editing a die with the window already open left the form blank.** The builder seeds its fields from `useState` initializers, which only run on mount, so clicking the cog changed the prop without reloading the form. App now keys the component on the die being edited; the window position moved up to App so it no longer jumps back to centre on the remount.
+
+### Tests
+
+- 585 backend / 844 frontend — new suites: `custom_dice` (API validation, auth, duplicate-name conflicts), `system_dice` (manifest integrity, absence of write routes), `sockets.customdice` (built-in vs database resolution, summing rules, count clamping, forged-payload rejection), `CustomDieBuilder` (create/edit modes, name-clash rules, reload-on-target-switch), `useCustomDice` (merge order, locked flag, broadcast handling, mutation errors), plus `sidesForKey` coverage in the dice tray suite.
+- Fixed a latent hook bug in `useApi.test.ts`: `beforeEach(() => mockFetch.mockReset())` implicitly returns the mock, which Vitest then calls as a teardown function — invoking `fetch()` with no arguments.
+
+---
+
 ## [1.7.2] - 2026-07-27
 
 ### Added

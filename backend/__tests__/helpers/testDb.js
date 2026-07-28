@@ -126,6 +126,15 @@ function makeTestDb() {
         filter_intensity REAL DEFAULT 1.0
       )`);
 
+      db.run(`CREATE TABLE custom_dice (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        sides INTEGER NOT NULL,
+        faces TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      db.run(`CREATE UNIQUE INDEX idx_custom_dice_name ON custom_dice(name)`);
+
       db.run(`CREATE TABLE action_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         type TEXT NOT NULL,

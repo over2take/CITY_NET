@@ -14,6 +14,7 @@ import type {
   BattleMapSessionData, BattleMapPosition, AnimState,
   ViewMode, SidebarMenu, CameraTarget, ConfirmDialog,
   RhombusState, MeasurementData, GlobalSettings, PendingRequest,
+  CustomDie,
 } from './types';
 import rhombusIcon from './assets/rhombus.svg';
 import { useMapData } from './hooks/useMapData';
@@ -38,6 +39,8 @@ import { TvPortrait } from './components/TvPortrait';
 import { headshotsForShape } from './headshots';
 import { getTemplate } from './sheets';
 import { DiceTrayWindow, DotMatrixScoreboard, DiceScene } from './components/DiceTray';
+import { CustomDieBuilder } from './components/CustomDieBuilder';
+import { useCustomDice } from './hooks/useCustomDice';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
 import { UpdateModal } from './components/UpdateModal';
 import terminalIcon from './assets/terminal-thin.svg';
@@ -172,6 +175,11 @@ function App() {
   const [currentController, setCurrentController] = useState<string>('');
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<SidebarMenu>('none');
   const [isDiceTrayOpen, setIsDiceTrayOpen] = useState(false);
+  const [isCustomDieBuilderOpen, setIsCustomDieBuilderOpen] = useState(false);
+  const [editingCustomDie, setEditingCustomDie] = useState<CustomDie | null>(null);
+  const [customDieBuilderPos, setCustomDieBuilderPos] = useState(() => ({
+    x: Math.max(0, window.innerWidth / 2 - 160), y: 80,
+  }));
 
   // Attack state
   const [attackPending, setAttackPending] = useState<{ targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null>(null);
@@ -184,6 +192,22 @@ function App() {
       .then(d => { if (d?.system) setGameSystem(d.system); })
       .catch(() => {});
   }, []);
+
+  // Custom dice: GM-authored (DB) plus any built-ins the active system ships.
+  const { customDice, applyDice, addDie, updateDie, deleteDie, error: customDiceError, setError: setCustomDiceError } = useCustomDice(token, gameSystem);
+
+  const openCustomDieBuilder = useCallback((die?: CustomDie) => {
+    setCustomDiceError(null);
+    setEditingCustomDie(die ?? null);
+    setIsCustomDieBuilderOpen(true);
+  }, [setCustomDiceError]);
+
+  const closeCustomDieBuilder = useCallback(() => {
+    setCustomDiceError(null);
+    setIsCustomDieBuilderOpen(false);
+    setEditingCustomDie(null);
+  }, [setCustomDiceError]);
+
   const [lastAttackResult, setLastAttackResult] = useState<{ hit: boolean; roll: number; ac: number; targetName: string; damage?: number; through?: number; targetDown?: boolean; criticalInjury?: boolean; shieldAbsorbed?: number } | null>(null);
   const [attackAnimations, setAttackAnimations] = useState<{ id: string; hit: boolean; attackType: 'melee' | 'ranged'; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number }; targetId: number; isBattleMap: boolean }[]>([]);
 
@@ -749,6 +773,7 @@ function App() {
       setIsDiceTrayOpen(true);
     },
     onGameSystemChanged: (system) => setGameSystem(system),
+    onCustomDiceUpdated: (dice) => applyDice(dice),
     onNpcSheetGenerated: (data) => {
       setNotification(`NPC_SHEET_CREATED: ${data.npc_label.toUpperCase()}`);
       // Flip the token menu's GENERATE_SHEET to OPEN_SHEET immediately.
@@ -1540,6 +1565,9 @@ function App() {
               setIsHitPointsOpen={setIsHitPointsOpen}
               activeUsers={activeUsers}
               setIsDiceTrayOpen={setIsDiceTrayOpen}
+              customDice={customDice}
+              onOpenCustomDieBuilder={openCustomDieBuilder}
+              onDeleteCustomDie={deleteDie}
               setNotification={setNotification}
               measureMode={measureMode}
               setMeasureMode={setMeasureMode}
@@ -2094,6 +2122,22 @@ function App() {
                     initiative.submitJoin({ id, name: openNpcSheet.npc_label, portraitUrl, score, breakdown, diceResults, exploded, isNpc: true, floorIndex: activeBattleMapData?.currentFloorIndex });
                   };
                 })()}
+              />
+            )}
+            {isCustomDieBuilderOpen && (
+              <CustomDieBuilder
+                // Remount when the edit target changes so the form reloads;
+                // without this, clicking a cog while the window is already open
+                // leaves the previous (or blank) values in place.
+                key={editingCustomDie ? `edit-${editingCustomDie.id}` : 'new'}
+                pos={customDieBuilderPos}
+                setPos={setCustomDieBuilderPos}
+                onClose={closeCustomDieBuilder}
+                onCreate={addDie}
+                onUpdate={updateDie}
+                existingDice={customDice}
+                editingDie={editingCustomDie}
+                serverError={customDiceError}
               />
             )}
             {isDiceTrayOpen && (

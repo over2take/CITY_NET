@@ -37,6 +37,8 @@ interface UseSocketOptions {
   onSpectatorCount?: (count: number) => void;
   onAttackPending?: (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => void;
   onGameSystemChanged?: (system: string) => void;
+  /** GM created, edited or deleted a custom die — carries the full new list. */
+  onCustomDiceUpdated?: (dice: import('../types').CustomDie[]) => void;
   onNpcSheetGenerated?: (data: { location_id: number; sheet_id: number; npc_label: string; system?: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null }) => void;
   /** NPC sheet attached to / detached from a token (admin library ATTACH). */
   onNpcLinkChanged?: (data: { location_id: number; sheet_id: number | null }) => void;
@@ -61,7 +63,7 @@ export function useSocket({
   onRegistrationPending, onRegistrationUpdated,
   onPasswordResetRequested, onPasswordResetResolved,
   onDirectorUpdate, onSpectatorCount,
-  onAttackPending, onAttackResult, onGameSystemChanged, onNpcSheetGenerated, onNpcLinkChanged, onDiceRollBroadcast,
+  onAttackPending, onAttackResult, onGameSystemChanged, onCustomDiceUpdated, onNpcSheetGenerated, onNpcLinkChanged, onDiceRollBroadcast,
   onMusicState, onMusicLoad, onMusicPlay, onMusicPause, onMusicSeek,
   onMusicNext, onMusicPrev, onMusicShuffle, onMusicLoop,
 }: UseSocketOptions) {
@@ -202,6 +204,7 @@ export function useSocket({
 
     newSocket.on('attackPending', (data: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number }) => onAttackPending?.(data));
     newSocket.on('gameSystemChanged', (data: { system: string }) => onGameSystemChanged?.(data.system));
+    newSocket.on('customDiceUpdated', (dice: import('../types').CustomDie[]) => onCustomDiceUpdated?.(dice));
     newSocket.on('npcSheetGenerated', (data: { location_id: number; sheet_id: number; npc_label: string; system?: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null }) => onNpcSheetGenerated?.(data));
     newSocket.on('npcLinkChanged', (data: { location_id: number; sheet_id: number | null }) => onNpcLinkChanged?.(data));
     newSocket.on('diceRollBroadcast', (data: { userName: string; account?: string }) => onDiceRollBroadcast?.(data));

@@ -320,6 +320,19 @@ db.serialize(() => {
   db.run(`ALTER TABLE signs ADD COLUMN rotation_x REAL DEFAULT 0`, () => {});
   db.run(`ALTER TABLE signs ADD COLUMN rotation_z REAL DEFAULT 0`, () => {});
 
+  // GM-defined custom dice. Shared with every client; only admins may mutate.
+  // `faces` is a JSON array of { value } whose length always equals `sides`.
+  db.run(`CREATE TABLE IF NOT EXISTS custom_dice (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    sides INTEGER NOT NULL,
+    faces TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  // Uniqueness lives in a named index rather than an inline UNIQUE so it can be
+  // redefined later (e.g. UNIQUE(name, system)) without rebuilding the table.
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_dice_name ON custom_dice(name)`, () => {});
+
   // Character sheets: one sheet per player PER SYSTEM (switching game systems
   // never destroys sheets - the old system's rows stay dormant until switched back)
   db.run(`CREATE TABLE IF NOT EXISTS character_sheets (
