@@ -1166,7 +1166,7 @@ export function AdminPanel({
                   INCLUDE_TOKENS
                 </label>
               </div>
-              <label htmlFor="export-png-width" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginBottom: '4px'}}>PNG_RESOLUTION</label>
+              <label htmlFor="export-png-width" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginBottom: '4px'}}>PNG_RESOLUTION <span style={{opacity: 0.6}}>(PNG ONLY — VIDEO USES WINDOW SIZE)</span></label>
               <select
                 id="export-png-width"
                 value={exportWidth}
