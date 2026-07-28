@@ -411,3 +411,35 @@ describe('AdminPanel map export grid toggle', () => {
     expect(props.onStartRecording).toHaveBeenCalledWith(expect.objectContaining({ includeGrid: false }));
   });
 });
+
+describe('AdminPanel recording countdown', () => {
+  const openIt = async () => userEvent.click(screen.getByRole('button', { name: /MAP EXPORT/ }));
+
+  it('shows nothing while idle', async () => {
+    render(<AdminPanel {...exportProps({ isRecording: false })} />);
+    await openIt();
+    expect(screen.queryByText('● REC')).not.toBeInTheDocument();
+  });
+
+  it('shows a REC indicator and the seconds left while recording', async () => {
+    // Recording no longer moves the camera, so this is the only sign it is running.
+    render(<AdminPanel {...exportProps({ isRecording: true, recordSecondsLeft: 7 })} />);
+    await openIt();
+    expect(screen.getByText('● REC')).toBeInTheDocument();
+    expect(screen.getByText('7s REMAINING')).toBeInTheDocument();
+  });
+
+  it('counts down as the capture runs', async () => {
+    const { rerender } = render(<AdminPanel {...exportProps({ isRecording: true, recordSecondsLeft: 9 })} />);
+    await openIt();
+    expect(screen.getByText('9s REMAINING')).toBeInTheDocument();
+    rerender(<AdminPanel {...exportProps({ isRecording: true, recordSecondsLeft: 3 })} />);
+    expect(screen.getByText('3s REMAINING')).toBeInTheDocument();
+  });
+
+  it('reaches zero without going negative', async () => {
+    render(<AdminPanel {...exportProps({ isRecording: true, recordSecondsLeft: 0 })} />);
+    await openIt();
+    expect(screen.getByText('0s REMAINING')).toBeInTheDocument();
+  });
+});

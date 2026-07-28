@@ -193,11 +193,25 @@ export function useMapExport({
 
   const [isRecording, setIsRecording] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  // Recording no longer moves the camera, so the countdown is the only signal that a
+  // capture is running.
+  const [secondsLeft, setSecondsLeft] = useState(0);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const restoreRef = useRef<(() => void) | null>(null);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const endsAtRef = useRef(0);
   const offscreenRef = useRef<THREE.WebGLRenderer | null>(null);
+
+  const clearCountdown = useCallback(() => {
+    if (tickRef.current) {
+      clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
+    endsAtRef.current = 0;
+    setSecondsLeft(0);
+  }, []);
 
   /**
    * One off-screen renderer for the whole session, resized per export.
@@ -220,6 +234,8 @@ export function useMapExport({
   useEffect(() => () => {
     offscreenRef.current?.dispose();
     offscreenRef.current = null;
+    if (tickRef.current) clearInterval(tickRef.current);
+    if (autoStopRef.current) clearTimeout(autoStopRef.current);
   }, []);
 
   const bounds = useCallback(
@@ -285,8 +301,9 @@ export function useMapExport({
       clearTimeout(autoStopRef.current);
       autoStopRef.current = null;
     }
+    clearCountdown();
     recorderRef.current?.stop();
-  }, []);
+  }, [clearCountdown]);
 
   const startRecording = useCallback(
     async (opts: MapExportOptions = {}) => {
@@ -361,6 +378,7 @@ export function useMapExport({
         restoreRef.current?.();
         restoreRef.current = null;
         recorderRef.current = null;
+        clearCountdown();
         setIsRecording(false);
       };
       // A recorder error never fires onstop, so without this the scene would stay
@@ -371,6 +389,7 @@ export function useMapExport({
         restoreRef.current?.();
         restoreRef.current = null;
         recorderRef.current = null;
+        clearCountdown();
         setIsRecording(false);
       };
 
@@ -378,10 +397,22 @@ export function useMapExport({
       recorderRef.current = recorder;
       setIsRecording(true);
 
+      // Derived from a wall-clock deadline rather than decremented per tick.
+      // Rendering the scene a second time every frame starves timers, and a
+      // decrementing counter loses every dropped tick permanently — the display fell
+      // behind and then snapped from a few seconds straight to zero when auto-stop
+      // fired. Recomputing from the deadline self-corrects instead. Polling at 250ms
+      // keeps the shown value under a quarter-second stale.
+      endsAtRef.current = Date.now() + MAX_RECORD_SECONDS * 1000;
+      setSecondsLeft(MAX_RECORD_SECONDS);
+      tickRef.current = setInterval(() => {
+        const remaining = Math.max(0, endsAtRef.current - Date.now());
+        setSecondsLeft(Math.ceil(remaining / 1000));
+      }, 250);
       autoStopRef.current = setTimeout(stopRecording, MAX_RECORD_SECONDS * 1000);
     },
-    [scene, bounds, offscreenRenderer, stopRecording],
+    [scene, bounds, offscreenRenderer, stopRecording, clearCountdown],
   );
 
-  return { exportPng, startRecording, stopRecording, isRecording, isExporting };
+  return { exportPng, startRecording, stopRecording, isRecording, isExporting, secondsLeft };
 }

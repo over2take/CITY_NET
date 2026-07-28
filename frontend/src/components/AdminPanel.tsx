@@ -582,7 +582,7 @@ export function AdminPanel({
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
-    onExportPng, onStartRecording, onStopRecording, isRecording, isExporting,
+    onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -1179,6 +1179,12 @@ export function AdminPanel({
                   </option>
                 ))}
               </select>
+              {isRecording && (
+                <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginBottom: '8px'}}>
+                  <span style={{color: '#ff4444'}}>● REC</span>
+                  <span>{recordSecondsLeft}s REMAINING</span>
+                </div>
+              )}
               <div style={{display: 'flex', gap: '10px'}}>
                 <button className="utility-btn" style={{flex: 1}} disabled={isExporting || isRecording}
                   onClick={() => onExportPng({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens, includeGrid: exportIncludeGrid, width: exportWidth })}>

@@ -186,3 +186,48 @@ describe('VIDEO_MAX_WIDTH', () => {
     expect(VIDEO_MAX_WIDTH).toBeGreaterThanOrEqual(1920);
   });
 });
+
+// ─── countdown accuracy ───────────────────────────────────────────────────────
+
+/**
+ * The countdown derives from a wall-clock deadline rather than decrementing a
+ * counter. Rendering the scene a second time per frame starves timers, and a
+ * decrementing counter loses every dropped tick permanently — the display fell behind
+ * and then snapped from a few seconds straight to zero when auto-stop fired.
+ */
+const remainingFrom = (endsAt: number, now: number) =>
+  Math.ceil(Math.max(0, endsAt - now) / 1000);
+
+describe('countdown from a deadline', () => {
+  const START = 1_000_000;
+  const endsAt = START + 10_000;
+
+  it('reports the full duration at the start', () => {
+    expect(remainingFrom(endsAt, START)).toBe(10);
+  });
+
+  it('tracks elapsed wall-clock time', () => {
+    expect(remainingFrom(endsAt, START + 3_000)).toBe(7);
+    expect(remainingFrom(endsAt, START + 7_500)).toBe(3);
+  });
+
+  it('stays correct after a long stall, rather than lagging behind', () => {
+    // The bug: six ticks dropped while the GPU was busy would leave a decrementing
+    // counter reading 10, then jumping to 0. Deadline math self-corrects.
+    expect(remainingFrom(endsAt, START + 6_000)).toBe(4);
+  });
+
+  it('never goes negative once the deadline passes', () => {
+    expect(remainingFrom(endsAt, START + 10_000)).toBe(0);
+    expect(remainingFrom(endsAt, START + 25_000)).toBe(0);
+  });
+
+  it('decreases monotonically across a starved, irregular tick sequence', () => {
+    const stalls = [0, 250, 900, 4_100, 4_200, 8_800, 9_999, 10_400];
+    const seen = stalls.map((dt) => remainingFrom(endsAt, START + dt));
+    for (let i = 1; i < seen.length; i++) {
+      expect(seen[i]).toBeLessThanOrEqual(seen[i - 1]);
+    }
+    expect(seen[seen.length - 1]).toBe(0);
+  });
+});

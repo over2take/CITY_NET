@@ -13,6 +13,8 @@ export interface MapExportApi {
   stopRecording: () => void;
   isRecording: boolean;
   isExporting: boolean;
+  /** Seconds left before the capture auto-stops; 0 when idle. */
+  secondsLeft: number;
 }
 
 interface Props {
@@ -40,11 +42,11 @@ export default function MapExportController({
 }: Props) {
   const api = useMapExport({ locations, roads, waterBodies, overpasses });
 
-  const { exportPng, startRecording, stopRecording, isRecording, isExporting } = api;
+  const { exportPng, startRecording, stopRecording, isRecording, isExporting, secondsLeft } = api;
 
   useEffect(() => {
-    onReady({ exportPng, startRecording, stopRecording, isRecording, isExporting });
-  }, [onReady, exportPng, startRecording, stopRecording, isRecording, isExporting]);
+    onReady({ exportPng, startRecording, stopRecording, isRecording, isExporting, secondsLeft });
+  }, [onReady, exportPng, startRecording, stopRecording, isRecording, isExporting, secondsLeft]);
 
   return null;
 }

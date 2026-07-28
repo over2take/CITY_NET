@@ -1791,6 +1791,7 @@ function App() {
                 onStartRecording={handleStartRecording}
                 onStopRecording={() => mapExportApi?.stopRecording()}
                 isRecording={mapExportApi?.isRecording ?? false}
+                recordSecondsLeft={mapExportApi?.secondsLeft ?? 0}
                 isExporting={mapExportApi?.isExporting ?? false}
                 renderSidewalks={renderSidewalks}
                 setRenderSidewalks={(val: boolean) => { setRenderSidewalks(val); socketRef.current?.emit('updateViewSettings', { renderSignage, signageDensity, renderSidewalks: val }); }}
