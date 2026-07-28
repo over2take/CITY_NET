@@ -159,8 +159,21 @@ export const boundsDepth = (b: CityBounds): number => b.maxZ - b.minZ;
 /** Extra room left around the city so it does not sit flush against the frame edge. */
 export const FLY_HEIGHT_MARGIN = 1.05;
 
-/** Selectable PNG widths. Height follows the city's aspect ratio. */
-export const PNG_EXPORT_WIDTHS = [1024, 2048, 4096, 8192] as const;
+/**
+ * Selectable PNG widths, labelled by the familiar quality tiers.
+ *
+ * The names describe width, not the usual full frame — a map's height comes from the
+ * city's aspect ratio, so a "4K" export is 4096 wide and whatever tall the city needs.
+ * The pixel count is shown alongside each label so the mapping is never ambiguous.
+ */
+export const PNG_EXPORT_PRESETS = [
+  { label: '1080P', width: 1920 },
+  { label: '2K', width: 2048 },
+  { label: '4K', width: 4096 },
+  { label: '8K', width: 8192 },
+] as const;
+
+export const PNG_EXPORT_WIDTHS = PNG_EXPORT_PRESETS.map((p) => p.width);
 export const DEFAULT_PNG_EXPORT_WIDTH = 2048;
 
 export interface ExportSize {

@@ -12,7 +12,7 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 // ─── Custom Signs view ───────────────────────────────────────────────────────
 
-import { PNG_EXPORT_WIDTHS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExportBounds';
+import { PNG_EXPORT_PRESETS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExportBounds';
 
 const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_x: 0, rotation_y: 0, rotation_z: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, filter_intensity: 1.0, lines: null };
 
@@ -653,6 +653,10 @@ export function AdminPanel({
   const [exportIncludeHidden, setExportIncludeHidden] = useState(false);
   const [exportIncludeTokens, setExportIncludeTokens] = useState(false);
   const [exportWidth, setExportWidth] = useState<number>(DEFAULT_PNG_EXPORT_WIDTH);
+  // Grid defaults on — it reads as map paper under the city.
+  const [exportIncludeGrid, setExportIncludeGrid] = useState(true);
+  // Collapsed by default: the CITY tab is already dense, and export is occasional.
+  const [exportOpen, setExportOpen] = useState(false);
 
 
   const getCenterGroundTarget = () => {
@@ -1143,8 +1147,16 @@ export function AdminPanel({
 
           {onExportPng && (
             <div style={{marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--green)'}}>
-              <label style={{fontSize: '0.8rem', display: 'block', marginBottom: '5px'}}>MAP EXPORT</label>
-              <div style={{display: 'flex', gap: '16px', marginBottom: '10px'}}>
+              <button className="utility-btn" style={{width: '100%'}} onClick={() => setExportOpen(o => !o)}>
+                {exportOpen ? '▾' : '▸'} MAP EXPORT
+              </button>
+              {exportOpen && (
+              <div style={{marginTop: '8px'}}>
+              <div style={{display: 'flex', gap: '16px', marginBottom: '10px', flexWrap: 'wrap'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+                  <input type="checkbox" checked={exportIncludeGrid} onChange={e => setExportIncludeGrid(e.target.checked)} />
+                  INCLUDE_GRID
+                </label>
                 <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
                   <input type="checkbox" checked={exportIncludeHidden} onChange={e => setExportIncludeHidden(e.target.checked)} />
                   INCLUDE_HIDDEN
@@ -1154,31 +1166,35 @@ export function AdminPanel({
                   INCLUDE_TOKENS
                 </label>
               </div>
-              <label htmlFor="export-png-width" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginBottom: '4px'}}>PNG_WIDTH</label>
+              <label htmlFor="export-png-width" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginBottom: '4px'}}>PNG_RESOLUTION</label>
               <select
                 id="export-png-width"
                 value={exportWidth}
                 onChange={e => setExportWidth(parseInt(e.target.value))}
                 style={{width: '100%', marginBottom: '10px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem'}}
               >
-                {PNG_EXPORT_WIDTHS.map(w => (
-                  <option key={w} value={w}>{w} PX{w === DEFAULT_PNG_EXPORT_WIDTH ? ' (DEFAULT)' : ''}</option>
+                {PNG_EXPORT_PRESETS.map(p => (
+                  <option key={p.width} value={p.width}>
+                    {p.label} ({p.width} PX){p.width === DEFAULT_PNG_EXPORT_WIDTH ? ' — DEFAULT' : ''}
+                  </option>
                 ))}
               </select>
               <div style={{display: 'flex', gap: '10px'}}>
                 <button className="utility-btn" style={{flex: 1}} disabled={isExporting || isRecording}
-                  onClick={() => onExportPng({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens, width: exportWidth })}>
+                  onClick={() => onExportPng({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens, includeGrid: exportIncludeGrid, width: exportWidth })}>
                   {isExporting ? 'EXPORTING…' : 'EXPORT_PNG'}
                 </button>
                 {isRecording ? (
                   <button className="utility-btn enemy-btn" style={{flex: 1}} onClick={() => onStopRecording?.()}>STOP_RECORDING</button>
                 ) : (
                   <button className="utility-btn" style={{flex: 1}} disabled={isExporting}
-                    onClick={() => onStartRecording?.({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens })}>
+                    onClick={() => onStartRecording?.({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens, includeGrid: exportIncludeGrid })}>
                     RECORD_MAP
                   </button>
                 )}
               </div>
+              </div>
+              )}
             </div>
           )}
 

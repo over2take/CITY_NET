@@ -82,6 +82,8 @@ export function createRecorder(stream: MediaStream): MediaRecorder | null {
 export interface MapExportOptions {
   includeHidden?: boolean;
   includeTokens?: boolean;
+  /** Keep the ground grid in the shot. On by default — it reads as map paper. */
+  includeGrid?: boolean;
   /** PNG width in pixels. Ignored when recording, which uses the canvas size. */
   width?: number;
 }
@@ -120,9 +122,12 @@ interface UseMapExportArgs {
  */
 export function hideNonExportObjects(
   scene: THREE.Scene,
-  { includeTokens = false }: MapExportOptions = {},
+  { includeTokens = false, includeGrid = true }: MapExportOptions = {},
 ): () => void {
-  const targets: string[] = [GRID_NAME, REF_LINES_NAME];
+  // The admin reference lines are always dropped: they are 2000 units long and would
+  // streak across the whole image.
+  const targets: string[] = [REF_LINES_NAME];
+  if (!includeGrid) targets.push(GRID_NAME);
   if (!includeTokens) targets.push(TOKENS_NAME);
 
   const previous: Array<[THREE.Object3D, boolean]> = [];

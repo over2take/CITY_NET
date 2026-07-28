@@ -242,12 +242,30 @@ const exportProps = (over: any = {}) => ({
   ...over,
 });
 
+/** The section is collapsed by default; open it before touching its controls. */
+const openExport = async () => {
+  await userEvent.click(screen.getByRole('button', { name: /MAP EXPORT/ }));
+};
+
 describe('AdminPanel map export', () => {
-  it('shows the export controls on the city tab', () => {
+  it('starts collapsed so it does not crowd the city tab', () => {
     render(<AdminPanel {...exportProps()} />);
-    expect(screen.getByText('MAP EXPORT')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /MAP EXPORT/ })).toBeInTheDocument();
+    expect(screen.queryByText('EXPORT_PNG')).not.toBeInTheDocument();
+  });
+
+  it('reveals the controls once expanded', async () => {
+    render(<AdminPanel {...exportProps()} />);
+    await openExport();
     expect(screen.getByText('EXPORT_PNG')).toBeInTheDocument();
     expect(screen.getByText('RECORD_MAP')).toBeInTheDocument();
+  });
+
+  it('collapses again on a second click', async () => {
+    render(<AdminPanel {...exportProps()} />);
+    await openExport();
+    await openExport();
+    expect(screen.queryByText('EXPORT_PNG')).not.toBeInTheDocument();
   });
 
   it('hides the controls entirely when no export handler is wired', () => {
@@ -257,8 +275,9 @@ describe('AdminPanel map export', () => {
     expect(screen.queryByText('MAP EXPORT')).not.toBeInTheDocument();
   });
 
-  it('defaults both toggles off so exports never leak hidden geometry', () => {
+  it('defaults both toggles off so exports never leak hidden geometry', async () => {
     render(<AdminPanel {...exportProps()} />);
+    await openExport();
     expect(screen.getByLabelText('INCLUDE_HIDDEN')).not.toBeChecked();
     expect(screen.getByLabelText('INCLUDE_TOKENS')).not.toBeChecked();
   });
@@ -266,6 +285,7 @@ describe('AdminPanel map export', () => {
   it('exports with both toggles off by default', async () => {
     const props = exportProps();
     render(<AdminPanel {...props} />);
+    await openExport();
     await userEvent.click(screen.getByText('EXPORT_PNG'));
     expect(props.onExportPng).toHaveBeenCalledWith(
       expect.objectContaining({ includeHidden: false, includeTokens: false }),
@@ -275,20 +295,26 @@ describe('AdminPanel map export', () => {
   it('defaults the PNG width to 2048', async () => {
     const props = exportProps();
     render(<AdminPanel {...props} />);
+    await openExport();
     await userEvent.click(screen.getByText('EXPORT_PNG'));
     expect(props.onExportPng).toHaveBeenCalledWith(expect.objectContaining({ width: 2048 }));
   });
 
-  it('offers every selectable width', () => {
+  it('offers every selectable width', async () => {
     render(<AdminPanel {...exportProps()} />);
-    const select = screen.getByLabelText('PNG_WIDTH') as HTMLSelectElement;
-    expect([...select.options].map(o => Number(o.value))).toEqual([1024, 2048, 4096, 8192]);
+    await openExport();
+    const select = screen.getByLabelText('PNG_RESOLUTION') as HTMLSelectElement;
+    expect([...select.options].map(o => Number(o.value))).toEqual([1920, 2048, 4096, 8192]);
+    // Labelled by the familiar tier, with the pixel width spelled out beside it.
+    expect(select.options[0].textContent).toContain('1080P');
+    expect(select.options[2].textContent).toContain('4K');
   });
 
   it('passes the chosen width through to the export', async () => {
     const props = exportProps();
     render(<AdminPanel {...props} />);
-    await userEvent.selectOptions(screen.getByLabelText('PNG_WIDTH'), '4096');
+    await openExport();
+    await userEvent.selectOptions(screen.getByLabelText('PNG_RESOLUTION'), '4096');
     await userEvent.click(screen.getByText('EXPORT_PNG'));
     expect(props.onExportPng).toHaveBeenCalledWith(expect.objectContaining({ width: 4096 }));
   });
@@ -296,6 +322,7 @@ describe('AdminPanel map export', () => {
   it('passes INCLUDE_HIDDEN through once enabled', async () => {
     const props = exportProps();
     render(<AdminPanel {...props} />);
+    await openExport();
     await userEvent.click(screen.getByLabelText('INCLUDE_HIDDEN'));
     await userEvent.click(screen.getByText('EXPORT_PNG'));
     expect(props.onExportPng).toHaveBeenCalledWith(
@@ -306,6 +333,7 @@ describe('AdminPanel map export', () => {
   it('passes INCLUDE_TOKENS through once enabled', async () => {
     const props = exportProps();
     render(<AdminPanel {...props} />);
+    await openExport();
     await userEvent.click(screen.getByLabelText('INCLUDE_TOKENS'));
     await userEvent.click(screen.getByText('EXPORT_PNG'));
     expect(props.onExportPng).toHaveBeenCalledWith(
@@ -316,13 +344,17 @@ describe('AdminPanel map export', () => {
   it('passes the toggles to recording as well', async () => {
     const props = exportProps();
     render(<AdminPanel {...props} />);
+    await openExport();
     await userEvent.click(screen.getByLabelText('INCLUDE_TOKENS'));
     await userEvent.click(screen.getByText('RECORD_MAP'));
-    expect(props.onStartRecording).toHaveBeenCalledWith({ includeHidden: false, includeTokens: true });
+    expect(props.onStartRecording).toHaveBeenCalledWith(
+      expect.objectContaining({ includeHidden: false, includeTokens: true }),
+    );
   });
 
-  it('swaps RECORD_MAP for STOP_RECORDING while recording', () => {
+  it('swaps RECORD_MAP for STOP_RECORDING while recording', async () => {
     render(<AdminPanel {...exportProps({ isRecording: true })} />);
+    await openExport();
     expect(screen.getByText('STOP_RECORDING')).toBeInTheDocument();
     expect(screen.queryByText('RECORD_MAP')).not.toBeInTheDocument();
   });
@@ -330,18 +362,52 @@ describe('AdminPanel map export', () => {
   it('stops recording on STOP_RECORDING click', async () => {
     const props = exportProps({ isRecording: true });
     render(<AdminPanel {...props} />);
+    await openExport();
     await userEvent.click(screen.getByText('STOP_RECORDING'));
     expect(props.onStopRecording).toHaveBeenCalled();
   });
 
-  it('disables PNG export while recording, since both mutate scene visibility', () => {
+  it('disables PNG export while recording, since both mutate scene visibility', async () => {
     render(<AdminPanel {...exportProps({ isRecording: true })} />);
+    await openExport();
     expect(screen.getByText('EXPORT_PNG')).toBeDisabled();
   });
 
-  it('shows a busy label and blocks both actions while exporting', () => {
+  it('shows a busy label and blocks both actions while exporting', async () => {
     render(<AdminPanel {...exportProps({ isExporting: true })} />);
+    await openExport();
     expect(screen.getByText('EXPORTING…')).toBeDisabled();
     expect(screen.getByText('RECORD_MAP')).toBeDisabled();
+  });
+});
+
+describe('AdminPanel map export grid toggle', () => {
+  const openIt = async () => userEvent.click(screen.getByRole('button', { name: /MAP EXPORT/ }));
+
+  it('includes the grid by default', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    expect(screen.getByLabelText('INCLUDE_GRID')).toBeChecked();
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(expect.objectContaining({ includeGrid: true }));
+  });
+
+  it('drops the grid when unchecked', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByLabelText('INCLUDE_GRID'));
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(expect.objectContaining({ includeGrid: false }));
+  });
+
+  it('carries the grid choice into recording too', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByLabelText('INCLUDE_GRID'));
+    await userEvent.click(screen.getByText('RECORD_MAP'));
+    expect(props.onStartRecording).toHaveBeenCalledWith(expect.objectContaining({ includeGrid: false }));
   });
 });
