@@ -7,6 +7,8 @@ import {
   boundsWidth,
   boundsDepth,
   overheadFlyHeight,
+  resolveExportSize,
+  DEFAULT_PNG_EXPORT_WIDTH,
   type BoundsLocation,
   type BoundsRoad,
   type BoundsWaterBody,
@@ -21,8 +23,24 @@ import {
 /** Longest a recording may run before it auto-stops. */
 export const MAX_RECORD_SECONDS = 10;
 
-/** Width of the exported PNG; height follows the city's aspect ratio. */
-export const PNG_EXPORT_WIDTH = 2048;
+/**
+ * Largest render this GPU will accept, in pixels on either axis.
+ *
+ * Falls back to 4096 — the floor the WebGL2 spec guarantees — if the parameter cannot
+ * be read, so a missing value produces a smaller image rather than a failed one.
+ */
+export function maxRenderSize(renderer: THREE.WebGLRenderer): number {
+  try {
+    const gl = renderer.getContext();
+    const limits = [
+      gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),
+      gl.getParameter(gl.MAX_TEXTURE_SIZE),
+    ].filter((n) => Number.isFinite(n) && n > 0) as number[];
+    return limits.length ? Math.min(...limits) : 4096;
+  } catch {
+    return 4096;
+  }
+}
 
 /** Scene object names the export toggles. Set via `name` props in App.tsx. */
 export const GRID_NAME = 'city-grid';
@@ -64,6 +82,8 @@ export function createRecorder(stream: MediaStream): MediaRecorder | null {
 export interface MapExportOptions {
   includeHidden?: boolean;
   includeTokens?: boolean;
+  /** PNG width in pixels. Ignored when recording, which uses the canvas size. */
+  width?: number;
 }
 
 /**
@@ -181,10 +201,21 @@ export function useMapExport({
         const worldH = boundsDepth(b);
         const centre = boundsCenter(b);
 
-        const exportW = PNG_EXPORT_WIDTH;
-        const exportH = Math.max(1, Math.round(exportW * (worldH / worldW)));
-
-        const renderer = offscreenRenderer(exportW, exportH);
+        const renderer = offscreenRenderer(1, 1);
+        // Ask the GPU what it can actually render before sizing. Exceeding
+        // MAX_RENDERBUFFER_SIZE fails outright or yields a blank image, and the height
+        // implied by a tall city can breach the limit even when the chosen width does
+        // not.
+        const gpuMax = maxRenderSize(renderer);
+        const { width: exportW, height: exportH, clamped } = resolveExportSize(
+          worldW, worldH, opts.width ?? DEFAULT_PNG_EXPORT_WIDTH, gpuMax,
+        );
+        if (clamped) {
+          console.warn(
+            `[map export] ${opts.width ?? DEFAULT_PNG_EXPORT_WIDTH}px exceeds this GPU's ${gpuMax}px limit; exporting at ${exportW}x${exportH}`,
+          );
+        }
+        renderer.setSize(exportW, exportH, false);
 
         // Ortho frustum matches world bounds exactly, so nothing is distorted and the
         // whole city lands in one frame regardless of how far it sprawls.

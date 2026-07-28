@@ -267,7 +267,30 @@ describe('AdminPanel map export', () => {
     const props = exportProps();
     render(<AdminPanel {...props} />);
     await userEvent.click(screen.getByText('EXPORT_PNG'));
-    expect(props.onExportPng).toHaveBeenCalledWith({ includeHidden: false, includeTokens: false });
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ includeHidden: false, includeTokens: false }),
+    );
+  });
+
+  it('defaults the PNG width to 2048', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(expect.objectContaining({ width: 2048 }));
+  });
+
+  it('offers every selectable width', () => {
+    render(<AdminPanel {...exportProps()} />);
+    const select = screen.getByLabelText('PNG_WIDTH') as HTMLSelectElement;
+    expect([...select.options].map(o => Number(o.value))).toEqual([1024, 2048, 4096, 8192]);
+  });
+
+  it('passes the chosen width through to the export', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.selectOptions(screen.getByLabelText('PNG_WIDTH'), '4096');
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(expect.objectContaining({ width: 4096 }));
   });
 
   it('passes INCLUDE_HIDDEN through once enabled', async () => {
@@ -275,7 +298,9 @@ describe('AdminPanel map export', () => {
     render(<AdminPanel {...props} />);
     await userEvent.click(screen.getByLabelText('INCLUDE_HIDDEN'));
     await userEvent.click(screen.getByText('EXPORT_PNG'));
-    expect(props.onExportPng).toHaveBeenCalledWith({ includeHidden: true, includeTokens: false });
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ includeHidden: true, includeTokens: false }),
+    );
   });
 
   it('passes INCLUDE_TOKENS through once enabled', async () => {
@@ -283,7 +308,9 @@ describe('AdminPanel map export', () => {
     render(<AdminPanel {...props} />);
     await userEvent.click(screen.getByLabelText('INCLUDE_TOKENS'));
     await userEvent.click(screen.getByText('EXPORT_PNG'));
-    expect(props.onExportPng).toHaveBeenCalledWith({ includeHidden: false, includeTokens: true });
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ includeHidden: false, includeTokens: true }),
+    );
   });
 
   it('passes the toggles to recording as well', async () => {

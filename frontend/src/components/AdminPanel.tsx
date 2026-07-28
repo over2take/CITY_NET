@@ -12,6 +12,8 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 // ─── Custom Signs view ───────────────────────────────────────────────────────
 
+import { PNG_EXPORT_WIDTHS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExportBounds';
+
 const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_x: 0, rotation_y: 0, rotation_z: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, filter_intensity: 1.0, lines: null };
 
 /** Pitch that lays a sign flat, face up, with its text running north — a map label. */
@@ -650,6 +652,7 @@ export function AdminPanel({
   // preferences, so deliberately not persisted to global_settings.
   const [exportIncludeHidden, setExportIncludeHidden] = useState(false);
   const [exportIncludeTokens, setExportIncludeTokens] = useState(false);
+  const [exportWidth, setExportWidth] = useState<number>(DEFAULT_PNG_EXPORT_WIDTH);
 
 
   const getCenterGroundTarget = () => {
@@ -1151,9 +1154,20 @@ export function AdminPanel({
                   INCLUDE_TOKENS
                 </label>
               </div>
+              <label htmlFor="export-png-width" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginBottom: '4px'}}>PNG_WIDTH</label>
+              <select
+                id="export-png-width"
+                value={exportWidth}
+                onChange={e => setExportWidth(parseInt(e.target.value))}
+                style={{width: '100%', marginBottom: '10px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem'}}
+              >
+                {PNG_EXPORT_WIDTHS.map(w => (
+                  <option key={w} value={w}>{w} PX{w === DEFAULT_PNG_EXPORT_WIDTH ? ' (DEFAULT)' : ''}</option>
+                ))}
+              </select>
               <div style={{display: 'flex', gap: '10px'}}>
                 <button className="utility-btn" style={{flex: 1}} disabled={isExporting || isRecording}
-                  onClick={() => onExportPng({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens })}>
+                  onClick={() => onExportPng({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens, width: exportWidth })}>
                   {isExporting ? 'EXPORTING…' : 'EXPORT_PNG'}
                 </button>
                 {isRecording ? (

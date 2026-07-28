@@ -6,6 +6,9 @@ import {
   boundsDepth,
   isTokenShape,
   overheadFlyHeight,
+  resolveExportSize,
+  PNG_EXPORT_WIDTHS,
+  DEFAULT_PNG_EXPORT_WIDTH,
   BOUNDS_PAD,
   BOUNDS_FALLBACK,
   type BoundsLocation,
@@ -301,5 +304,79 @@ describe('overheadFlyHeight', () => {
       expect(Number.isFinite(h)).toBe(true);
       expect(h).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('resolveExportSize', () => {
+  const GPU = 16384; // typical desktop limit; well clear of the sizes below
+
+  it('uses the requested width when the GPU allows it', () => {
+    const { width, clamped } = resolveExportSize(1000, 500, 2048, GPU);
+    expect(width).toBe(2048);
+    expect(clamped).toBe(false);
+  });
+
+  it('derives height from the city aspect ratio', () => {
+    // Twice as wide as deep, so the image is half as tall as it is wide.
+    expect(resolveExportSize(1000, 500, 2048, GPU).height).toBe(1024);
+    expect(resolveExportSize(500, 1000, 2048, GPU).height).toBe(4096);
+  });
+
+  it('scales with the chosen width', () => {
+    const small = resolveExportSize(1000, 600, 1024, GPU);
+    const large = resolveExportSize(1000, 600, 4096, GPU);
+    expect(large.width / small.width).toBe(4);
+    // Height rounds to whole pixels, so the ratio lands near 4 rather than exactly on
+    // it (2458/614, not 2456/614).
+    expect(large.height / small.height).toBeGreaterThan(3.99);
+    expect(large.height / small.height).toBeLessThan(4.01);
+  });
+
+  it('clamps when the requested width exceeds the GPU limit', () => {
+    const { width, height, clamped } = resolveExportSize(1000, 1000, 8192, 4096);
+    expect(clamped).toBe(true);
+    expect(width).toBeLessThanOrEqual(4096);
+    expect(height).toBeLessThanOrEqual(4096);
+  });
+
+  it('clamps on height even when the width alone would fit', () => {
+    // A tall narrow city: 4096 wide implies 16384 tall, which breaches an 8192 limit
+    // on an axis the user never chose.
+    const { width, height, clamped } = resolveExportSize(500, 2000, 4096, 8192);
+    expect(clamped).toBe(true);
+    expect(height).toBeLessThanOrEqual(8192);
+    expect(width).toBeLessThan(4096);
+  });
+
+  it('preserves aspect ratio when clamping', () => {
+    const worldW = 500, worldD = 2000;
+    const { width, height } = resolveExportSize(worldW, worldD, 4096, 8192);
+    expect(height / width).toBeCloseTo(worldD / worldW, 1);
+  });
+
+  it.each(PNG_EXPORT_WIDTHS)('never exceeds the GPU limit at %ipx', (requested) => {
+    for (const [w, d] of [[1000, 100], [100, 1000], [800, 800], [3000, 40]]) {
+      const { width, height } = resolveExportSize(w, d, requested, 8192);
+      expect(width).toBeLessThanOrEqual(8192);
+      expect(height).toBeLessThanOrEqual(8192);
+    }
+  });
+
+  it('always returns at least one pixel on each axis', () => {
+    for (const size of [
+      resolveExportSize(0, 0, 2048, GPU),
+      resolveExportSize(10000, 1, 1024, 16),
+      resolveExportSize(1, 10000, 1024, 16),
+      resolveExportSize(-5, -5, 2048, GPU),
+    ]) {
+      expect(size.width).toBeGreaterThanOrEqual(1);
+      expect(size.height).toBeGreaterThanOrEqual(1);
+      expect(Number.isInteger(size.width)).toBe(true);
+      expect(Number.isInteger(size.height)).toBe(true);
+    }
+  });
+
+  it('offers the default among the selectable widths', () => {
+    expect(PNG_EXPORT_WIDTHS).toContain(DEFAULT_PNG_EXPORT_WIDTH);
   });
 });

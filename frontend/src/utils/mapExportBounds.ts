@@ -159,6 +159,49 @@ export const boundsDepth = (b: CityBounds): number => b.maxZ - b.minZ;
 /** Extra room left around the city so it does not sit flush against the frame edge. */
 export const FLY_HEIGHT_MARGIN = 1.05;
 
+/** Selectable PNG widths. Height follows the city's aspect ratio. */
+export const PNG_EXPORT_WIDTHS = [1024, 2048, 4096, 8192] as const;
+export const DEFAULT_PNG_EXPORT_WIDTH = 2048;
+
+export interface ExportSize {
+  width: number;
+  height: number;
+  /** True when the GPU limit forced a smaller image than was asked for. */
+  clamped: boolean;
+}
+
+/**
+ * Pixel dimensions for a PNG export, fitted to the city's aspect ratio and to what
+ * the GPU can actually render.
+ *
+ * Clamping has to consider both axes, not just the one the user picked. A tall narrow
+ * city at 4096 wide implies a height several times that, and exceeding
+ * MAX_RENDERBUFFER_SIZE fails the render outright or returns a blank image — so the
+ * whole thing is scaled down together, preserving aspect.
+ */
+export function resolveExportSize(
+  worldWidth: number,
+  worldDepth: number,
+  requestedWidth: number,
+  maxDimension: number,
+): ExportSize {
+  const safeWorldW = Math.max(worldWidth, 1);
+  const safeWorldD = Math.max(worldDepth, 1);
+  const safeMax = Math.max(1, Math.floor(maxDimension));
+
+  let width = Math.max(1, Math.floor(requestedWidth));
+  let height = Math.max(1, Math.round(width * (safeWorldD / safeWorldW)));
+
+  const overshoot = Math.max(width / safeMax, height / safeMax, 1);
+  const clamped = overshoot > 1;
+  if (clamped) {
+    width = Math.max(1, Math.floor(width / overshoot));
+    height = Math.max(1, Math.floor(height / overshoot));
+  }
+
+  return { width, height, clamped };
+}
+
 /**
  * Height a perspective camera must reach for the city to fill the frame from directly
  * overhead.
