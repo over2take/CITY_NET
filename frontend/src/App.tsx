@@ -58,6 +58,8 @@ import { Signs, type SignData } from './components/Signs';
 import { type RemoteFont } from './utils/fontLoader';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
+import MapExportController, { type MapExportApi } from './components/MapExportController';
+import type { MapExportOptions } from './hooks/useMapExport';
 import { InitiativeWindow, useInitiative } from './modules/initiative';
 import { getInitiativeSystem } from './modules/initiative/systems';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
@@ -331,6 +333,9 @@ function App() {
   const [renderSidewalks, setRenderSidewalks] = useState(true);
   const [renderSignage, setRenderSignage] = useState(true);
   const [signageDensity, setSignageDensity] = useState(1);
+  // Map export: drops is_hidden structures for the duration of a capture.
+  const [exportSuppressHidden, setExportSuppressHidden] = useState(false);
+  const [mapExportApi, setMapExportApi] = useState<MapExportApi | null>(null);
   const [isPlacingSign, setIsPlacingSign] = useState(false);
   const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
   const [selectedSignId, setSelectedSignId] = useState<number | null>(null);
@@ -1005,7 +1010,10 @@ function App() {
 
     roots.forEach((loc: any) => {
       if (loc.shape === 'rhombus' || loc.shape === 'enemy_rhombus' || loc.shape === 'friendly_rhombus') return;
-      if (loc.is_hidden && !isAdmin) return;
+      // exportSuppressHidden: hidden structures are baked into shared InstancedMesh
+      // draw calls, so a map export cannot switch them off by scene traversal — it
+      // flips this flag and waits for a re-render instead.
+      if (loc.is_hidden && (!isAdmin || exportSuppressHidden)) return;
 
       const children = groupedLocations[loc.id] || [];
       const isSelected = !isBatchSelecting && view !== 'district' && view !== 'join' && selectedLocation?.id === loc.id;
@@ -1032,7 +1040,47 @@ function App() {
       }
     });
     return { simple, interactive };
-  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers, isAdmin]);
+  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers, isAdmin, exportSuppressHidden]);
+
+  // ─── Map Export ─────────────────────────────────────────────────────────────
+  // Hidden structures live inside shared InstancedMesh draw calls, so they cannot be
+  // switched off by walking the scene graph. Suppressing them means a React re-render,
+  // and the capture has to wait for R3F to commit that frame before it renders.
+  const nextFrame = () =>
+    new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+
+  const handleExportPng = useCallback(async (opts: MapExportOptions) => {
+    if (!mapExportApi) return;
+    if (!opts.includeHidden) {
+      setExportSuppressHidden(true);
+      await nextFrame();
+    }
+    try {
+      mapExportApi.exportPng(opts);
+    } finally {
+      setExportSuppressHidden(false);
+    }
+  }, [mapExportApi]);
+
+  const handleStartRecording = useCallback(async (opts: MapExportOptions) => {
+    if (!mapExportApi) return;
+    if (!opts.includeHidden) {
+      setExportSuppressHidden(true);
+      await nextFrame();
+    }
+    await mapExportApi.startRecording(opts);
+  }, [mapExportApi]);
+
+  // Recording restores on stop rather than inline, so hidden structures stay
+  // suppressed for the whole capture.
+  const wasRecordingRef = useRef(false);
+  useEffect(() => {
+    const recording = mapExportApi?.isRecording ?? false;
+    if (wasRecordingRef.current && !recording) setExportSuppressHidden(false);
+    wasRecordingRef.current = recording;
+  }, [mapExportApi?.isRecording]);
 
   const startupPlayed = useRef(false);
 
@@ -1709,6 +1757,11 @@ function App() {
                 setOverpassRampLengthStart={setOverpassRampLengthStart}
                 overpassRampLengthEnd={overpassRampLengthEnd}
                 setOverpassRampLengthEnd={setOverpassRampLengthEnd}
+                onExportPng={handleExportPng}
+                onStartRecording={handleStartRecording}
+                onStopRecording={() => mapExportApi?.stopRecording()}
+                isRecording={mapExportApi?.isRecording ?? false}
+                isExporting={mapExportApi?.isExporting ?? false}
                 renderSidewalks={renderSidewalks}
                 setRenderSidewalks={(val: boolean) => { setRenderSidewalks(val); socketRef.current?.emit('updateViewSettings', { renderSignage, signageDensity, renderSidewalks: val }); }}
                 renderSignage={renderSignage}
@@ -2335,7 +2388,9 @@ function App() {
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
           </div>}
           <ThemeContext.Provider value={THEMES[currentTheme]}>
-            <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }} onPointerMissed={() => {}}>
+            {/* preserveDrawingBuffer: map recording reads this canvas from a compositing
+                loop outside its own draw call, which needs the buffer to survive. */}
+            <Canvas shadows frameloop="always" gl={{ preserveDrawingBuffer: true }} onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }} onPointerMissed={() => {}}>
               <StreamerVisibilityContext.Provider value={IS_SPECTATOR ? directorState.visibility : ALL_VISIBLE}>
             <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
             <MeasurementTool measureMode={measureMode} socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} mapScaleMultiplier={view === 'battle_map' ? (() => {
@@ -2469,9 +2524,9 @@ function App() {
                     <meshBasicMaterial visible={false} />
                 </mesh>
             )}
-            <Grid raycast={() => null} infiniteGrid fadeDistance={750} fadeStrength={1.5} cellSize={1} cellThickness={0.7} sectionSize={10} sectionThickness={1.2} sectionColor={THEMES[currentTheme].gridSection} cellColor={THEMES[currentTheme].gridCell} />
+            <Grid name="city-grid" raycast={() => null} infiniteGrid fadeDistance={750} fadeStrength={1.5} cellSize={1} cellThickness={0.7} sectionSize={10} sectionThickness={1.2} sectionColor={THEMES[currentTheme].gridSection} cellColor={THEMES[currentTheme].gridCell} />
             {token !== '' && (
-              <group position={[0, 0.01, 0]}>
+              <group name="city-ref-lines" position={[0, 0.01, 0]}>
                 {/* Center Lines (Blue) */}
                 <mesh position={[0, 0, 0]} raycast={() => null}>
                   <boxGeometry args={[0.2, 0.01, 2000]} />
@@ -2525,6 +2580,15 @@ function App() {
               />
             )}
             <WaterBodies waterBodies={waterBodies} />
+            {isAdmin && (
+              <MapExportController
+                locations={locations as any}
+                roads={roads as any}
+                waterBodies={waterBodies as any}
+                overpasses={overpasses as any}
+                onReady={setMapExportApi}
+              />
+            )}
             <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} roadLayerMode={roadLayerMode} />
             {roadSelectionBounds && view === 'city_gen' && (
               <mesh position={[(roadSelectionBounds.min.x + roadSelectionBounds.max.x) / 2, 0.02, (roadSelectionBounds.min.z + roadSelectionBounds.max.z) / 2]}>
@@ -2550,6 +2614,10 @@ function App() {
                 <PingEffect key={ping.id} position={[ping.x, ping.y !== undefined ? ping.y : 0.5, ping.z]} color={ping.color} size={ping.size ?? 1} />
             ))}
             
+            {/* Grouped so a map export can hide every token as a unit — hiding the
+                group also drops their point-lights, which keeps the export evenly lit
+                instead of carrying a coloured hotspot wherever a token stood. */}
+            <group name="city-tokens">
             {/* Dedicated Player Rhombus Rendering */}
             {locations.filter(l => l.shape === 'rhombus' && (
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
@@ -2571,6 +2639,7 @@ function App() {
             )).map(loc => (
               <FriendlyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
             ))}
+            </group>
             {token && view === 'editor' && !editId && (
               <group ref={(group) => { if (group && targetObject !== group) { setTargetObject(group); editMeshRef.current = group; } }} position={[editData.x, editData.y, editData.z]}>
                 {editorGenParts.length > 0 ? (

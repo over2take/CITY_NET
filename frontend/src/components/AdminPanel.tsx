@@ -539,6 +539,7 @@ export function AdminPanel({
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
+    onExportPng, onStartRecording, onStopRecording, isRecording, isExporting,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -602,6 +603,12 @@ export function AdminPanel({
   const setRoadEraseMode = (m: 'segment' | 'path') => { setRoadEraseModeLocal(m); onRoadEraseModeChange?.(m); };
   const [roadPurgeConfirming, setRoadPurgeConfirming] = useState(false);
   const [overpassPurgeConfirming, setOverpassPurgeConfirming] = useState(false);
+  // Map export toggles. Both default off: hidden structures stay out so a shared
+  // export never leaks GM-only geometry, and tokens stay out so the result is a clean
+  // city map rather than a snapshot of where everyone was standing. Per-export
+  // preferences, so deliberately not persisted to global_settings.
+  const [exportIncludeHidden, setExportIncludeHidden] = useState(false);
+  const [exportIncludeTokens, setExportIncludeTokens] = useState(false);
 
 
   const getCenterGroundTarget = () => {
@@ -1087,6 +1094,36 @@ export function AdminPanel({
             <div style={{marginTop: '6px'}}>
               <label style={{fontSize: '0.7rem', opacity: 0.8}}>SIGN_DENSITY: {(signageDensity ?? 1).toFixed(1)}</label>
               <input type="range" min="0.5" max="5" step="0.5" value={signageDensity ?? 1} onChange={e => setSignageDensity(parseFloat(e.target.value))} style={{width: '100%'}} />
+            </div>
+          )}
+
+          {onExportPng && (
+            <div style={{marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--green)'}}>
+              <label style={{fontSize: '0.8rem', display: 'block', marginBottom: '5px'}}>MAP EXPORT</label>
+              <div style={{display: 'flex', gap: '16px', marginBottom: '10px'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+                  <input type="checkbox" checked={exportIncludeHidden} onChange={e => setExportIncludeHidden(e.target.checked)} />
+                  INCLUDE_HIDDEN
+                </label>
+                <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+                  <input type="checkbox" checked={exportIncludeTokens} onChange={e => setExportIncludeTokens(e.target.checked)} />
+                  INCLUDE_TOKENS
+                </label>
+              </div>
+              <div style={{display: 'flex', gap: '10px'}}>
+                <button className="utility-btn" style={{flex: 1}} disabled={isExporting || isRecording}
+                  onClick={() => onExportPng({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens })}>
+                  {isExporting ? 'EXPORTING…' : 'EXPORT_PNG'}
+                </button>
+                {isRecording ? (
+                  <button className="utility-btn enemy-btn" style={{flex: 1}} onClick={() => onStopRecording?.()}>STOP_RECORDING</button>
+                ) : (
+                  <button className="utility-btn" style={{flex: 1}} disabled={isExporting}
+                    onClick={() => onStartRecording?.({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens })}>
+                    RECORD_MAP
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

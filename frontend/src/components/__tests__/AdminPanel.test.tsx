@@ -228,3 +228,93 @@ describe('AdminPanel pending requests', () => {
     expect(props.socketRef.current.emit).toHaveBeenCalledWith('denyEditing', expect.objectContaining({ userId: 'user-99' }));
   });
 });
+
+// ─── map export ───────────────────────────────────────────────────────────────
+
+const exportProps = (over: any = {}) => ({
+  ...baseProps(),
+  view: 'list',
+  onExportPng: vi.fn(),
+  onStartRecording: vi.fn(),
+  onStopRecording: vi.fn(),
+  isRecording: false,
+  isExporting: false,
+  ...over,
+});
+
+describe('AdminPanel map export', () => {
+  it('shows the export controls on the city tab', () => {
+    render(<AdminPanel {...exportProps()} />);
+    expect(screen.getByText('MAP EXPORT')).toBeInTheDocument();
+    expect(screen.getByText('EXPORT_PNG')).toBeInTheDocument();
+    expect(screen.getByText('RECORD_MAP')).toBeInTheDocument();
+  });
+
+  it('hides the controls entirely when no export handler is wired', () => {
+    const props = baseProps();
+    props.view = 'list';
+    render(<AdminPanel {...props} />);
+    expect(screen.queryByText('MAP EXPORT')).not.toBeInTheDocument();
+  });
+
+  it('defaults both toggles off so exports never leak hidden geometry', () => {
+    render(<AdminPanel {...exportProps()} />);
+    expect(screen.getByLabelText('INCLUDE_HIDDEN')).not.toBeChecked();
+    expect(screen.getByLabelText('INCLUDE_TOKENS')).not.toBeChecked();
+  });
+
+  it('exports with both toggles off by default', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith({ includeHidden: false, includeTokens: false });
+  });
+
+  it('passes INCLUDE_HIDDEN through once enabled', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByLabelText('INCLUDE_HIDDEN'));
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith({ includeHidden: true, includeTokens: false });
+  });
+
+  it('passes INCLUDE_TOKENS through once enabled', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByLabelText('INCLUDE_TOKENS'));
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith({ includeHidden: false, includeTokens: true });
+  });
+
+  it('passes the toggles to recording as well', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByLabelText('INCLUDE_TOKENS'));
+    await userEvent.click(screen.getByText('RECORD_MAP'));
+    expect(props.onStartRecording).toHaveBeenCalledWith({ includeHidden: false, includeTokens: true });
+  });
+
+  it('swaps RECORD_MAP for STOP_RECORDING while recording', () => {
+    render(<AdminPanel {...exportProps({ isRecording: true })} />);
+    expect(screen.getByText('STOP_RECORDING')).toBeInTheDocument();
+    expect(screen.queryByText('RECORD_MAP')).not.toBeInTheDocument();
+  });
+
+  it('stops recording on STOP_RECORDING click', async () => {
+    const props = exportProps({ isRecording: true });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('STOP_RECORDING'));
+    expect(props.onStopRecording).toHaveBeenCalled();
+  });
+
+  it('disables PNG export while recording, since both mutate scene visibility', () => {
+    render(<AdminPanel {...exportProps({ isRecording: true })} />);
+    expect(screen.getByText('EXPORT_PNG')).toBeDisabled();
+  });
+
+  it('shows a busy label and blocks both actions while exporting', () => {
+    render(<AdminPanel {...exportProps({ isExporting: true })} />);
+    expect(screen.getByText('EXPORTING…')).toBeDisabled();
+    expect(screen.getByText('RECORD_MAP')).toBeDisabled();
+  });
+});
