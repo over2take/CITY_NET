@@ -10,7 +10,9 @@ const ok = (body: unknown) =>
 const fail = (status: number) =>
   Promise.resolve({ ok: false, status, json: () => Promise.resolve({}) } as Response);
 
-beforeEach(() => mockFetch.mockReset());
+// Block body: an implicit return hands Vitest the mock itself, which it then
+// calls as a teardown hook — invoking fetch() with no arguments.
+beforeEach(() => { mockFetch.mockReset(); });
 
 describe('useApi', () => {
   describe('authHeaders', () => {

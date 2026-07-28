@@ -10,6 +10,7 @@ const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
+const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
 
@@ -620,6 +621,60 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             });
           }
         });
+    });
+
+    socket.on('requestCustomDiceRoll', (data) => {
+      const { userName, dieId, count, color } = data;
+      const c = Math.max(1, Math.min(parseInt(count) || 1, 20));
+
+      /** Roll a resolved { name, faces } and broadcast the result. */
+      const rollAndBroadcast = ({ name, faces }) => {
+        if (!Array.isArray(faces) || faces.length === 0) return;
+
+        const rolledFaces = [];
+        for (let i = 0; i < c; i++) {
+          const idx = Math.floor(cryptoRng() * faces.length);
+          rolledFaces.push(faces[idx].value);
+        }
+
+        // Only sum when every rolled face is a number; mixed or symbolic dice
+        // report their faces verbatim with no total.
+        const allNumeric = rolledFaces.every(v => v !== '' && !isNaN(Number(v)));
+        const total = allNumeric ? rolledFaces.reduce((sum, v) => sum + Number(v), 0) : 0;
+        const historyString = allNumeric
+          ? `${identity.displayName(userName)} rolled ${c}×${name} [(${rolledFaces.join('+')}) = ${total}]`
+          : `${identity.displayName(userName)} rolled ${c}×${name} [${rolledFaces.join(', ')}]`;
+
+        // `results` is keyed by die name, not by side count as standard rolls
+        // are, so the tray is told the shape to render via `diceSides`.
+        const results = { [name]: rolledFaces };
+        const diceSides = { [name]: faces.length };
+        const broadcastData = { userName: identity.displayName(userName), account: userName, results, diceSides, modifiers: [], color, total, historyString };
+
+        db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
+          [userName, total, JSON.stringify(results), color, historyString], (err2) => {
+            if (err2) console.error('Error saving custom dice roll:', err2);
+            io.emit('diceRollBroadcast', broadcastData);
+          });
+      };
+
+      // Built-ins resolve from code; GM dice from the DB. Either way the
+      // definition comes from the server, never from the client, so a player
+      // cannot roll a die that does not exist or forge its face values.
+      if (systemDice.isBuiltinId(dieId)) {
+        const die = systemDice.byId(dieId);
+        if (die) rollAndBroadcast(die);
+        return;
+      }
+
+      db.get('SELECT * FROM custom_dice WHERE id = ?', [dieId], (err, row) => {
+        if (err || !row) return;
+        try {
+          rollAndBroadcast({ name: row.name, faces: JSON.parse(row.faces) });
+        } catch {
+          /* malformed faces JSON — drop the roll rather than crash the socket */
+        }
+      });
     });
 
     socket.on('purgeDiceHistory', (data) => {

@@ -22,7 +22,7 @@ vi.mock('@react-three/fiber', () => ({
 vi.mock('../../assets/lets-icons--paper-fill.svg', () => ({ default: 'paper-fill.svg' }));
 vi.mock('../../assets/lets-icons--paper-light.svg', () => ({ default: 'paper-light.svg' }));
 
-import { DiceTrayWindow, DotMatrixScoreboard } from '../DiceTray';
+import { DiceTrayWindow, DotMatrixScoreboard, sidesForKey } from '../DiceTray';
 
 const makeSocketRef = () => ({ current: { emit: vi.fn(), on: vi.fn(), off: vi.fn() } });
 
@@ -148,5 +148,46 @@ describe('DiceTrayWindow', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ─── sidesForKey ──────────────────────────────────────────────────────────────
+
+describe('sidesForKey', () => {
+  it('parses standard rolls, which key results by side count', () => {
+    expect(sidesForKey('6')).toBe(6);
+    expect(sidesForKey('20')).toBe(20);
+    expect(sidesForKey('100')).toBe(100);
+  });
+
+  it('reads custom dice sides from diceSides, since their key is a name', () => {
+    expect(sidesForKey('punk', { punk: 4 })).toBe(4);
+    expect(sidesForKey('Fate', { Fate: 6 })).toBe(6);
+  });
+
+  it('falls back to d6 for a name with no diceSides entry rather than NaN', () => {
+    // Regression: parseInt('Fate') is NaN, which built SphereGeometry with NaN
+    // segments and rendered no dice at all.
+    expect(sidesForKey('Fate')).toBe(6);
+    expect(sidesForKey('punk', {})).toBe(6);
+    expect(sidesForKey('punk', { other: 4 })).toBe(6);
+  });
+
+  it('never returns a non-finite value', () => {
+    for (const key of ['Fate', '', 'NaN', 'undefined', '???']) {
+      const s = sidesForKey(key);
+      expect(Number.isFinite(s)).toBe(true);
+      expect(s).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('ignores a diceSides entry that is not a usable side count', () => {
+    expect(sidesForKey('6', { 6: NaN as any })).toBe(6);
+    expect(sidesForKey('8', { 8: 1 })).toBe(8);
+    expect(sidesForKey('punk', { punk: 0 })).toBe(6);
+  });
+
+  it('prefers diceSides over the key when both are numeric', () => {
+    expect(sidesForKey('6', { 6: 20 })).toBe(20);
   });
 });

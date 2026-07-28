@@ -123,6 +123,8 @@ export interface DiceRoll {
   userName: string;
   total: number;
   results: Record<number, number[]>;
+  /** Side count per results key — set for custom dice, whose keys are names. */
+  diceSides?: Record<string, number>;
   color: string;
   historyString: string;
   timestamp?: number;
@@ -139,6 +141,22 @@ export interface BattleMapSessionData {
 export interface BattleMapPosition {
   x: number;
   z: number;
+}
+
+// ─── Custom Dice ──────────────────────────────────────────────────────────────
+
+export interface CustomDieFace {
+  value: string;
+}
+
+export interface CustomDie {
+  /** Number for GM-authored dice; a `builtin:` string for system dice. */
+  id: number | string;
+  name: string;
+  sides: number;
+  faces: CustomDieFace[];
+  /** True for system dice, which ship in code and cannot be edited or deleted. */
+  locked?: boolean;
 }
 
 // ─── UI State ─────────────────────────────────────────────────────────────────
