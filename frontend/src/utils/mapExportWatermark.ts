@@ -133,6 +133,51 @@ export function startCompositeLoop(
   return { canvas, stop: () => cancelAnimationFrame(frame) };
 }
 
+/**
+ * Composite loop driven by a render callback rather than a source canvas.
+ *
+ * Recording renders the scene itself each frame at a chosen resolution, instead of
+ * mirroring the live canvas — which would pin the video to the window size. The
+ * callback draws a frame and hands back the canvas holding it.
+ *
+ * Renders are throttled to `fps`: requestAnimationFrame fires at the display's rate
+ * (commonly 60), but the recorder only samples at `fps`, so anything above that is
+ * GPU work thrown away — and this loop is already a second render on top of the live
+ * one.
+ */
+export function startRenderedCompositeLoop(
+  width: number,
+  height: number,
+  renderFrame: () => HTMLCanvasElement,
+  fps = 30,
+  overlay: (ctx: CanvasRenderingContext2D, w: number, h: number) => void = drawWatermark,
+): CompositeLoop {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  const minInterval = 1000 / fps;
+  let last = 0;
+  let frame = 0;
+
+  const tick = (now: number) => {
+    frame = requestAnimationFrame(tick);
+    if (!ctx || now - last < minInterval) return;
+    last = now;
+    try {
+      ctx.drawImage(renderFrame(), 0, 0, canvas.width, canvas.height);
+      overlay(ctx, canvas.width, canvas.height);
+    } catch {
+      // An exception inside a rAF callback stops it rescheduling, freezing the
+      // capture. Skip the bad frame and keep going.
+    }
+  };
+  frame = requestAnimationFrame(tick);
+
+  return { canvas, stop: () => cancelAnimationFrame(frame) };
+}
+
 /** Download a data or object URL under the given filename. */
 export function triggerDownload(url: string, filename: string): void {
   const a = document.createElement('a');

@@ -303,7 +303,7 @@ describe('AdminPanel map export', () => {
   it('offers every selectable width', async () => {
     render(<AdminPanel {...exportProps()} />);
     await openExport();
-    const select = screen.getByLabelText(/PNG_RESOLUTION/) as HTMLSelectElement;
+    const select = screen.getByLabelText(/RESOLUTION/) as HTMLSelectElement;
     expect([...select.options].map(o => Number(o.value))).toEqual([1920, 2048, 4096, 8192]);
     // Labelled by the familiar tier, with the pixel width spelled out beside it.
     expect(select.options[0].textContent).toContain('1080P');
@@ -314,7 +314,7 @@ describe('AdminPanel map export', () => {
     const props = exportProps();
     render(<AdminPanel {...props} />);
     await openExport();
-    await userEvent.selectOptions(screen.getByLabelText(/PNG_RESOLUTION/), '4096');
+    await userEvent.selectOptions(screen.getByLabelText(/RESOLUTION/), '4096');
     await userEvent.click(screen.getByText('EXPORT_PNG'));
     expect(props.onExportPng).toHaveBeenCalledWith(expect.objectContaining({ width: 4096 }));
   });

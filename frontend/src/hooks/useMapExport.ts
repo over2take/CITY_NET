@@ -3,12 +3,11 @@ import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import {
   computeCityBounds,
-  boundsCenter,
   boundsWidth,
   boundsDepth,
-  overheadFlyHeight,
   resolveExportSize,
   DEFAULT_PNG_EXPORT_WIDTH,
+  type CityBounds,
   type BoundsLocation,
   type BoundsRoad,
   type BoundsWaterBody,
@@ -16,7 +15,7 @@ import {
 } from '../utils/mapExportBounds';
 import {
   compositeWatermark,
-  startCompositeLoop,
+  startRenderedCompositeLoop,
   triggerDownload,
 } from '../utils/mapExportWatermark';
 
@@ -24,26 +23,50 @@ import {
 export const MAX_RECORD_SECONDS = 10;
 
 /**
- * FOV used while recording, in degrees.
+ * Ceiling on recorded video width.
  *
- * The PNG renders through an orthographic camera, so it is perfectly square-on.
- * Recording drives the live perspective camera, and at its usual 50 degrees buildings
- * away from centre visibly lean outward and show their sides — an aerial photo rather
- * than a map. A perspective projection converges on an orthographic one as the FOV
- * narrows and the camera retreats, so squeezing the FOV buys most of the way there
- * without swapping camera types underneath CameraControls mid-flight.
- *
- * 12 degrees leaves lean barely perceptible while keeping the camera at a distance
- * that depth precision can still resolve.
+ * Recording renders the scene a second time every frame, on top of what the live
+ * canvas is already drawing. 4K is four times the pixels of 1080p, which on a large
+ * city drops frames and yields choppier playback than a lower-resolution capture
+ * would. The PNG has no such ceiling — it renders exactly once.
  */
-export const RECORDING_FOV = 12;
+export const VIDEO_MAX_WIDTH = 2048;
+
+/** Frames per second the capture targets. */
+export const RECORDING_FPS = 30;
+
+/**
+ * Overhead orthographic camera framed exactly to the city bounds.
+ *
+ * Shared by both exports so the video reads identically to the PNG: no perspective
+ * convergence, no walls, no lean at the edges — just a flat top-down map.
+ */
+export function makeExportCamera(
+  bounds: CityBounds,
+  worldWidth: number,
+  worldDepth: number,
+): THREE.OrthographicCamera {
+  const cam = new THREE.OrthographicCamera(
+    -worldWidth / 2, worldWidth / 2,
+    worldDepth / 2, -worldDepth / 2,
+    0.1, bounds.maxY + 1000,
+  );
+  const cx = (bounds.minX + bounds.maxX) / 2;
+  const cz = (bounds.minZ + bounds.maxZ) / 2;
+  // Centred on the city centroid, not the origin — an off-centre city would
+  // otherwise be cropped.
+  cam.position.set(cx, bounds.maxY + 500, cz);
+  cam.up.set(0, 0, -1); // north = negative Z = up in the image
+  cam.lookAt(cx, 0, cz);
+  return cam;
+}
 
 /**
  * Widen the ground grid's fade radius for the duration of an export.
  *
  * `<Grid fadeDistance={750}>` is tuned for the interactive camera. Both export paths
- * pull much further back than that — recording especially, once the FOV narrows — so
- * the grid would fade to nothing exactly when INCLUDE_GRID says to show it.
+ * frame the whole city from far above it, so the grid would fade to nothing exactly
+ * when INCLUDE_GRID says to show it.
  */
 export function boostGridFade(scene: THREE.Scene, distance: number): () => void {
   const grid = scene.getObjectByName(GRID_NAME) as THREE.Mesh | undefined;
@@ -117,24 +140,8 @@ export interface MapExportOptions {
   includeTokens?: boolean;
   /** Keep the ground grid in the shot. On by default — it reads as map paper. */
   includeGrid?: boolean;
-  /** PNG width in pixels. Ignored when recording, which uses the canvas size. */
+  /** Target width in pixels. Video is capped at VIDEO_MAX_WIDTH; the PNG is not. */
   width?: number;
-}
-
-/**
- * The slice of drei's CameraControls this hook drives. Typed structurally rather than
- * imported so a drei API change surfaces here as a type error instead of silently
- * no-opping the fly-to at runtime.
- */
-interface ExportCameraControls {
-  enabled: boolean;
-  getPosition?: (out: THREE.Vector3) => THREE.Vector3;
-  getTarget?: (out: THREE.Vector3) => THREE.Vector3;
-  setLookAt?: (
-    px: number, py: number, pz: number,
-    tx: number, ty: number, tz: number,
-    enableTransition?: boolean,
-  ) => Promise<void>;
 }
 
 interface UseMapExportArgs {
@@ -183,9 +190,6 @@ export function useMapExport({
   overpasses,
 }: UseMapExportArgs) {
   const scene = useThree((s) => s.scene);
-  const gl = useThree((s) => s.gl);
-  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
-  const controls = useThree((s) => s.controls) as ExportCameraControls | null;
 
   const [isRecording, setIsRecording] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -237,7 +241,6 @@ export function useMapExport({
         const b = bounds(opts);
         const worldW = boundsWidth(b);
         const worldH = boundsDepth(b);
-        const centre = boundsCenter(b);
 
         const renderer = offscreenRenderer(1, 1);
         // Ask the GPU what it can actually render before sizing. Exceeding
@@ -255,21 +258,7 @@ export function useMapExport({
         }
         renderer.setSize(exportW, exportH, false);
 
-        // Ortho frustum matches world bounds exactly, so nothing is distorted and the
-        // whole city lands in one frame regardless of how far it sprawls.
-        const cam = new THREE.OrthographicCamera(
-          -worldW / 2,
-          worldW / 2,
-          worldH / 2,
-          -worldH / 2,
-          0.1,
-          b.maxY + 1000,
-        );
-        // Centred on the city centroid, not the origin — an off-centre city would
-        // otherwise be cropped.
-        cam.position.set(centre.x, b.maxY + 500, centre.z);
-        cam.up.set(0, 0, -1); // north = negative Z = up in the image
-        cam.lookAt(centre.x, 0, centre.z);
+        const cam = makeExportCamera(b, worldW, worldH);
 
         const restoreScene = hideNonExportObjects(scene, opts);
         // The ortho camera sits well past the grid's usual fade radius too, so the
@@ -300,11 +289,6 @@ export function useMapExport({
   }, []);
 
   const startRecording = useCallback(
-    // react-hooks/immutability flags the camera and controls mutations below. In R3F
-    // those are the intended API — useThree returns live scene objects from a zustand
-    // store, and moving the camera means assigning to it. There is no immutable
-    // alternative; both are read back and restored when the recording stops.
-    // eslint-disable-next-line react-hooks/immutability
     async (opts: MapExportOptions = {}) => {
       // A recorder that already finished (or died) must not block every later attempt.
       // Without this, one failed capture leaves the button stuck on STOP_RECORDING for
@@ -318,80 +302,40 @@ export function useMapExport({
       }
 
       const b = bounds(opts);
-      const centre = boundsCenter(b);
       const worldW = boundsWidth(b);
       const worldD = boundsDepth(b);
-      // Width and depth are fitted to their own screen axes; collapsing them into one
-      // span zooms out by the city's aspect ratio and wastes most of the frame.
-      // Height follows the narrowed FOV, so the camera retreats far enough that the
-      // projection reads as near-orthographic, matching the PNG.
-      const flyHeight = overheadFlyHeight(
-        worldW, worldD, RECORDING_FOV, camera.aspect, b.maxY,
+
+      const renderer = offscreenRenderer(1, 1);
+      const gpuMax = maxRenderSize(renderer);
+      // Capped below the PNG tiers: this renders the scene a second time every frame,
+      // and 4K would drop frames on a large city.
+      const requested = Math.min(opts.width ?? DEFAULT_PNG_EXPORT_WIDTH, VIDEO_MAX_WIDTH);
+      const { width: videoW, height: videoH } = resolveExportSize(
+        worldW, worldD, requested, gpuMax,
       );
+      renderer.setSize(videoW, videoH, false);
 
-      const savedFov = camera.fov;
-      const savedNear = camera.near;
-      const savedFar = camera.far;
-
-      // The frustum is clamped tightly around the city rather than left at the
-      // default 0.1 near plane. Retreating this far with a near plane that close
-      // collapses depth precision and sets coplanar geometry — roads, sidewalks, the
-      // grid — z-fighting through the whole capture.
-      const halfDiagonal = Math.hypot(worldW, worldD) / 2;
-      /* eslint-disable react-hooks/immutability -- R3F cameras are mutated by design; all restored on stop */
-      camera.fov = RECORDING_FOV;
-      camera.near = Math.max(0.1, (flyHeight - b.maxY) * 0.9);
-      camera.far = Math.hypot(flyHeight, halfDiagonal) * 1.2;
-      /* eslint-enable react-hooks/immutability */
-      camera.updateProjectionMatrix();
-
-      const savedPosition = new THREE.Vector3();
-      const savedTarget = new THREE.Vector3();
-      const savedEnabled = controls?.enabled ?? true;
-      if (controls?.getPosition) controls.getPosition(savedPosition);
-      if (controls?.getTarget) controls.getTarget(savedTarget);
+      // Same orthographic camera as the PNG, so the video is square-on rather than a
+      // perspective view of the city. Rendering through our own camera also means the
+      // live view is never hijacked — the user keeps their position and their controls.
+      const cam = makeExportCamera(b, worldW, worldD);
 
       const restoreScene = hideNonExportObjects(scene, opts);
-      // The camera now sits far past the grid's usual fade radius, so widen it or
-      // INCLUDE_GRID produces no grid at all.
-      const restoreGrid = boostGridFade(scene, Math.hypot(flyHeight, halfDiagonal) * 1.5);
-
-      if (controls?.setLookAt) {
-        await controls.setLookAt(
-          centre.x, flyHeight, centre.z,
-          centre.x, 0, centre.z,
-          false,
-        );
-        // eslint-disable-next-line react-hooks/immutability -- locking input during capture; restored on stop
-        controls.enabled = false;
-      }
-
-      const restoreAll = () => {
-        restoreScene();
-        restoreGrid();
-        camera.fov = savedFov;
-        camera.near = savedNear;
-        camera.far = savedFar;
-        camera.updateProjectionMatrix();
-        if (controls?.setLookAt) {
-          controls.setLookAt(
-            savedPosition.x, savedPosition.y, savedPosition.z,
-            savedTarget.x, savedTarget.y, savedTarget.z,
-            false,
-          );
-          controls.enabled = savedEnabled;
-        }
-      };
+      const restoreGrid = boostGridFade(scene, Math.hypot(worldW, worldD) * 1.5);
+      const restoreAll = () => { restoreGrid(); restoreScene(); };
       restoreRef.current = restoreAll;
 
-      // captureStream() on the WebGL canvas gives nothing to draw over, so the
-      // watermark requires compositing through an intermediate 2D canvas.
-      const loop = startCompositeLoop(gl.domElement);
+      // Traffic still animates: the live render loop keeps advancing the scene, and
+      // each captured frame samples whatever state it is in.
+      const loop = startRenderedCompositeLoop(videoW, videoH, () => {
+        renderer.render(scene, cam);
+        return renderer.domElement;
+      }, RECORDING_FPS);
 
-      const recorder = createRecorder(loop.canvas.captureStream(30));
+      const recorder = createRecorder(loop.canvas.captureStream(RECORDING_FPS));
       if (!recorder) {
         // Nothing this browser offers can encode the stream. Bail loudly rather than
-        // leaving the camera parked overhead with no recording running.
+        // leaving the scene mutated with no recording running.
         console.warn('[map export] no supported video codec; recording unavailable');
         loop.stop();
         restoreAll();
@@ -419,8 +363,8 @@ export function useMapExport({
         recorderRef.current = null;
         setIsRecording(false);
       };
-      // A recorder error never fires onstop, so without this the camera would stay
-      // parked overhead with the controls locked and no way back.
+      // A recorder error never fires onstop, so without this the scene would stay
+      // mutated with no way back.
       recorder.onerror = () => {
         console.warn('[map export] recording failed');
         loop.stop();
@@ -436,7 +380,7 @@ export function useMapExport({
 
       autoStopRef.current = setTimeout(stopRecording, MAX_RECORD_SECONDS * 1000);
     },
-    [scene, gl, camera, controls, bounds, stopRecording],
+    [scene, bounds, offscreenRenderer, stopRecording],
   );
 
   return { exportPng, startRecording, stopRecording, isRecording, isExporting };

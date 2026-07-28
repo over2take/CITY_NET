@@ -99,7 +99,7 @@ describe('createRecorder', () => {
 
 // ─── grid fade ────────────────────────────────────────────────────────────────
 
-import { boostGridFade, RECORDING_FOV, GRID_NAME } from '../useMapExport';
+import { boostGridFade, makeExportCamera, VIDEO_MAX_WIDTH, GRID_NAME } from '../useMapExport';
 
 /** Minimal stand-in for the drei <Grid> mesh and its shader uniform. */
 const sceneWithGrid = (fadeDistance = 750) => {
@@ -137,21 +137,52 @@ describe('boostGridFade', () => {
   });
 });
 
-describe('RECORDING_FOV', () => {
-  it('is much narrower than the live camera, to approximate an orthographic view', () => {
-    // The live world camera runs at Three's default 50 degrees.
-    expect(RECORDING_FOV).toBeLessThan(50);
+describe('makeExportCamera', () => {
+  const bounds = (over: Partial<Record<string, number>> = {}) => ({
+    minX: 0, maxX: 400, minZ: 0, maxZ: 200, maxY: 60, ...over,
+  }) as any;
+
+  it('is orthographic, so both exports read square-on with no perspective lean', () => {
+    const cam = makeExportCamera(bounds(), 400, 200);
+    expect(cam.isOrthographicCamera).toBe(true);
   });
 
-  it('stays wide enough to avoid an absurd camera distance', () => {
-    // Height scales as 1/tan(fov/2), so a very small FOV pushes the camera so far out
-    // that depth precision suffers even with a tight frustum.
-    expect(RECORDING_FOV).toBeGreaterThanOrEqual(8);
+  it('frames the frustum to the city dimensions', () => {
+    const cam = makeExportCamera(bounds(), 400, 200);
+    expect(cam.right - cam.left).toBeCloseTo(400);
+    expect(cam.top - cam.bottom).toBeCloseTo(200);
   });
 
-  it('cuts perspective lean to a small fraction of the default', () => {
-    // Lean at the frame edge scales with tan(fov/2).
-    const lean = (fov: number) => Math.tan((fov * Math.PI) / 180 / 2);
-    expect(lean(RECORDING_FOV) / lean(50)).toBeLessThan(0.25);
+  it('centres on the city centroid rather than the origin', () => {
+    // A city sitting far from the origin must not be cropped.
+    const cam = makeExportCamera(bounds({ minX: 1000, maxX: 1400, minZ: -800, maxZ: -600 }), 400, 200);
+    expect(cam.position.x).toBeCloseTo(1200);
+    expect(cam.position.z).toBeCloseTo(-700);
+  });
+
+  it('sits above the tallest structure', () => {
+    const cam = makeExportCamera(bounds({ maxY: 250 }), 400, 200);
+    expect(cam.position.y).toBeGreaterThan(250);
+  });
+
+  it('points north up the image', () => {
+    const cam = makeExportCamera(bounds(), 400, 200);
+    expect(cam.up.z).toBe(-1);
+  });
+
+  it('reaches past the ground plane', () => {
+    const cam = makeExportCamera(bounds({ maxY: 60 }), 400, 200);
+    expect(cam.far).toBeGreaterThan(cam.position.y);
+  });
+});
+
+describe('VIDEO_MAX_WIDTH', () => {
+  it('caps video below the largest PNG tiers', () => {
+    // Recording renders the scene a second time per frame; 4K drops frames.
+    expect(VIDEO_MAX_WIDTH).toBeLessThan(4096);
+  });
+
+  it('still allows a full 1080p-class capture', () => {
+    expect(VIDEO_MAX_WIDTH).toBeGreaterThanOrEqual(1920);
   });
 });
