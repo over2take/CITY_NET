@@ -96,3 +96,62 @@ describe('createRecorder', () => {
     expect(createRecorder(stream)).toBeNull();
   });
 });
+
+// ─── grid fade ────────────────────────────────────────────────────────────────
+
+import { boostGridFade, RECORDING_FOV, GRID_NAME } from '../useMapExport';
+
+/** Minimal stand-in for the drei <Grid> mesh and its shader uniform. */
+const sceneWithGrid = (fadeDistance = 750) => {
+  const uniform = { value: fadeDistance };
+  const grid = { name: GRID_NAME, material: { uniforms: { fadeDistance: uniform } } };
+  return {
+    uniform,
+    scene: { getObjectByName: (n: string) => (n === GRID_NAME ? grid : undefined) } as any,
+  };
+};
+
+describe('boostGridFade', () => {
+  it('widens the fade radius so the grid survives a distant camera', () => {
+    const { scene, uniform } = sceneWithGrid(750);
+    boostGridFade(scene, 6000);
+    expect(uniform.value).toBe(6000);
+  });
+
+  it('restores the original radius', () => {
+    const { scene, uniform } = sceneWithGrid(750);
+    const restore = boostGridFade(scene, 6000);
+    restore();
+    expect(uniform.value).toBe(750);
+  });
+
+  it('is a no-op when the grid is absent, rather than throwing mid-export', () => {
+    const scene = { getObjectByName: () => undefined } as any;
+    expect(() => boostGridFade(scene, 6000)()).not.toThrow();
+  });
+
+  it('survives a grid whose material carries no fadeDistance uniform', () => {
+    const grid = { name: GRID_NAME, material: {} };
+    const scene = { getObjectByName: () => grid } as any;
+    expect(() => boostGridFade(scene, 6000)()).not.toThrow();
+  });
+});
+
+describe('RECORDING_FOV', () => {
+  it('is much narrower than the live camera, to approximate an orthographic view', () => {
+    // The live world camera runs at Three's default 50 degrees.
+    expect(RECORDING_FOV).toBeLessThan(50);
+  });
+
+  it('stays wide enough to avoid an absurd camera distance', () => {
+    // Height scales as 1/tan(fov/2), so a very small FOV pushes the camera so far out
+    // that depth precision suffers even with a tight frustum.
+    expect(RECORDING_FOV).toBeGreaterThanOrEqual(8);
+  });
+
+  it('cuts perspective lean to a small fraction of the default', () => {
+    // Lean at the frame edge scales with tan(fov/2).
+    const lean = (fov: number) => Math.tan((fov * Math.PI) / 180 / 2);
+    expect(lean(RECORDING_FOV) / lean(50)).toBeLessThan(0.25);
+  });
+});

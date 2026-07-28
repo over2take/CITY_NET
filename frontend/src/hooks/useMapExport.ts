@@ -24,6 +24,39 @@ import {
 export const MAX_RECORD_SECONDS = 10;
 
 /**
+ * FOV used while recording, in degrees.
+ *
+ * The PNG renders through an orthographic camera, so it is perfectly square-on.
+ * Recording drives the live perspective camera, and at its usual 50 degrees buildings
+ * away from centre visibly lean outward and show their sides — an aerial photo rather
+ * than a map. A perspective projection converges on an orthographic one as the FOV
+ * narrows and the camera retreats, so squeezing the FOV buys most of the way there
+ * without swapping camera types underneath CameraControls mid-flight.
+ *
+ * 12 degrees leaves lean barely perceptible while keeping the camera at a distance
+ * that depth precision can still resolve.
+ */
+export const RECORDING_FOV = 12;
+
+/**
+ * Widen the ground grid's fade radius for the duration of an export.
+ *
+ * `<Grid fadeDistance={750}>` is tuned for the interactive camera. Both export paths
+ * pull much further back than that — recording especially, once the FOV narrows — so
+ * the grid would fade to nothing exactly when INCLUDE_GRID says to show it.
+ */
+export function boostGridFade(scene: THREE.Scene, distance: number): () => void {
+  const grid = scene.getObjectByName(GRID_NAME) as THREE.Mesh | undefined;
+  const uniforms = (grid?.material as THREE.ShaderMaterial | undefined)?.uniforms;
+  const fade = uniforms?.fadeDistance;
+  if (!fade) return () => {};
+
+  const previous = fade.value;
+  fade.value = distance;
+  return () => { fade.value = previous; };
+}
+
+/**
  * Largest render this GPU will accept, in pixels on either axis.
  *
  * Falls back to 4096 — the floor the WebGL2 spec guarantees — if the parameter cannot
@@ -238,7 +271,11 @@ export function useMapExport({
         cam.up.set(0, 0, -1); // north = negative Z = up in the image
         cam.lookAt(centre.x, 0, centre.z);
 
-        restore = hideNonExportObjects(scene, opts);
+        const restoreScene = hideNonExportObjects(scene, opts);
+        // The ortho camera sits well past the grid's usual fade radius too, so the
+        // grid would wash out toward the edges of a large city.
+        const restoreGrid = boostGridFade(scene, Math.hypot(worldW, worldH) * 1.5);
+        restore = () => { restoreGrid(); restoreScene(); };
         renderer.render(scene, cam);
 
         const dataUrl = compositeWatermark(renderer.domElement);
@@ -284,19 +321,28 @@ export function useMapExport({
       const centre = boundsCenter(b);
       const worldW = boundsWidth(b);
       const worldD = boundsDepth(b);
-      const span = Math.max(worldW, worldD);
       // Width and depth are fitted to their own screen axes; collapsing them into one
       // span zooms out by the city's aspect ratio and wastes most of the frame.
+      // Height follows the narrowed FOV, so the camera retreats far enough that the
+      // projection reads as near-orthographic, matching the PNG.
       const flyHeight = overheadFlyHeight(
-        worldW, worldD, camera.fov, camera.aspect, b.maxY,
+        worldW, worldD, RECORDING_FOV, camera.aspect, b.maxY,
       );
 
-      // The world camera declares no `far`, so it inherits Three's default of 2000.
-      // Pulling up to frame a large city puts the far corners past that plane and they
-      // clip out mid-recording — raise it for the duration and restore on stop.
+      const savedFov = camera.fov;
+      const savedNear = camera.near;
       const savedFar = camera.far;
-      // eslint-disable-next-line react-hooks/immutability -- R3F cameras are mutated by design; restored on stop
-      camera.far = flyHeight + span * 2;
+
+      // The frustum is clamped tightly around the city rather than left at the
+      // default 0.1 near plane. Retreating this far with a near plane that close
+      // collapses depth precision and sets coplanar geometry — roads, sidewalks, the
+      // grid — z-fighting through the whole capture.
+      const halfDiagonal = Math.hypot(worldW, worldD) / 2;
+      /* eslint-disable react-hooks/immutability -- R3F cameras are mutated by design; all restored on stop */
+      camera.fov = RECORDING_FOV;
+      camera.near = Math.max(0.1, (flyHeight - b.maxY) * 0.9);
+      camera.far = Math.hypot(flyHeight, halfDiagonal) * 1.2;
+      /* eslint-enable react-hooks/immutability */
       camera.updateProjectionMatrix();
 
       const savedPosition = new THREE.Vector3();
@@ -306,6 +352,9 @@ export function useMapExport({
       if (controls?.getTarget) controls.getTarget(savedTarget);
 
       const restoreScene = hideNonExportObjects(scene, opts);
+      // The camera now sits far past the grid's usual fade radius, so widen it or
+      // INCLUDE_GRID produces no grid at all.
+      const restoreGrid = boostGridFade(scene, Math.hypot(flyHeight, halfDiagonal) * 1.5);
 
       if (controls?.setLookAt) {
         await controls.setLookAt(
@@ -319,6 +368,9 @@ export function useMapExport({
 
       const restoreAll = () => {
         restoreScene();
+        restoreGrid();
+        camera.fov = savedFov;
+        camera.near = savedNear;
         camera.far = savedFar;
         camera.updateProjectionMatrix();
         if (controls?.setLookAt) {
