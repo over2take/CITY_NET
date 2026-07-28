@@ -333,7 +333,7 @@ CITY_NET/
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload
 │   │   ├── roads.js            # Road CRUD; DELETE /:id removes a single segment
 │   │   ├── overpasses.js       # Overpass CRUD (GET all / POST one / DELETE :id)
-│   │   ├── signs.js            # Custom sign CRUD (GET all / POST / PATCH :id / DELETE :id); text optional when image_url set
+│   │   ├── signs.js            # Custom sign CRUD (GET all / POST / PATCH :id / DELETE :id); text optional when image_url set; rotation_x/y/z persisted, non-finite angles rejected
 │   │   ├── fonts.js            # Font file upload/list/delete (.ttf .otf .woff .woff2); served as static under /uploads/fonts/
 │   │   ├── player.js           # Player auth (register, login, forgot, reset, registration status poll)
 │   │   └── sheets.js           # Character sheets — admin sheet access, NPC library, portraits, LUCK/Edge reset & grant, import preview
@@ -418,7 +418,8 @@ CITY_NET/
 │   │   │   ├── Buildings.tsx           # 3D building meshes
 │   │   │   ├── Sidewalks.tsx           # Road-flanking pavement strips (mitered quad ribbons, no geometry under roads) + neon curb line overlays
 │   │   │   ├── AutoSignage.tsx         # Procedural signs on building faces (seeded RNG, weighted type pool: text, preset SVG images, vertical neon; overlap check)
-│   │   │   ├── Signs.tsx               # Custom sign meshes — canvas-texture renderer (text, image, multi-line), TV/CRT shader filter, free-transform gizmo
+│   │   │   ├── Signs.tsx               # Custom sign meshes — canvas-texture renderer (text, image, multi-line), TV/CRT shader filter, free-transform gizmo; rotation on all three axes so signs can lie flat as ground labels
+│   │   │   ├── MapExportController.tsx # R3F bridge — renders null, lifts the export API out of the Canvas so AdminPanel buttons can drive it
 │   │   │   ├── Rhombuses.tsx           # Player token meshes
 │   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
@@ -460,6 +461,7 @@ CITY_NET/
 │   │   │       ├── HitPoints.test.tsx
 │   │   │       ├── MapElements.test.tsx
 │   │   │       ├── MeasurementTool.test.tsx
+│   │   │       ├── SignRotation.test.tsx   # LAY_FLAT / STAND_UP presets, per-axis sliders, all three axes reaching the PATCH body
 │   │   │       ├── RadioFeed.test.tsx
 │   │   │       ├── RadioPlayer.test.tsx
 │   │   │       ├── Rhombuses.test.tsx
@@ -494,10 +496,12 @@ CITY_NET/
 │   │   ├── hooks/
 │   │   │   ├── useSocket.ts        # Socket.IO connection and all event listeners
 │   │   │   ├── useApi.ts           # Fetch helpers
+│   │   │   ├── useMapExport.ts     # PNG/WebM city export — cached off-screen renderer, scene hide/restore, MediaRecorder with codec fallback
 │   │   │   ├── useMapData.ts       # Location/district/road/overpass/water body/sign data fetching
 │   │   │   ├── usePlayerSheet.ts   # Shared sheet state, debounced saves, house-rule flags, action emitters (roll/deathSave/stabilize/castSpell); used by CharacterSheetWindow and SheetPage
 │   │   │   └── __tests__/
 │   │   │       ├── useApi.test.ts                        # Fetch helper unit tests
+│   │   │       ├── useMapExport.test.ts                  # Recorder codec fallback (vp9 → vp8 → webm → default) across browser quirks
 │   │   │       └── useSocket.pendingRequests.test.ts     # Pending edit-request state; regression for stale requests on newly-promoted temp admins
 │   │   ├── sheets/
 │   │   │   ├── types.ts            # Sheet template type system (fields, sections, header, death saves, NPC tiers)
@@ -516,9 +520,13 @@ CITY_NET/
 │   │       ├── roadHelpers.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry, getClosestPointOnRoads
 │   │       ├── overpassHelpers.ts  # Elevation profile, deck tile subdivision, pillar placement avoiding roads and lower decks
 │   │       ├── fontLoader.ts       # FontFace loader for remote fonts (cached by URL); BUILTIN_FONTS list
+│   │       ├── mapExportBounds.ts  # City framing math — rotation-safe circumradius, road width, water, overpasses; tokens excluded; overheadFlyHeight from FOV and aspect
+│   │       ├── mapExportWatermark.ts # CITY_NET watermark drawn in 2D canvas space; composite loop for video; triggerDownload
 │   │       └── __tests__/
 │   │           ├── locationHelpers.test.ts  # Unit tests for isUserDefinedName and getStructLabel
 │   │           ├── roadHelpers.test.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry
+│   │           ├── mapExportBounds.test.ts  # Bounds coverage and fly-height; asserts frame fill fraction across window aspects
+│   │           ├── mapExportWatermark.test.ts # Watermark anchor, scaling floor, download link cleanup
 │   │           └── overpassHelpers.test.ts  # Elevation, geometry, and path-sampling tests
 │   └── public/
 │       ├── signs/              # Preset neon SVG sign images (motel, bar, cyber-clinic, etc.)

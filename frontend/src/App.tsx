@@ -1137,11 +1137,13 @@ function App() {
     const x = signMesh.position.x;
     const y = signMesh.position.y - halfH;
     const z = signMesh.position.z;
-    const rotY = signMesh.rotation.y;
+    // All three axes: a sign pitched flat to act as a ground label used to lose that
+    // rotation on save and spring back upright on reload.
+    const { x: rotX, y: rotY, z: rotZ } = signMesh.rotation;
     fetch(`/api/signs/${selectedSignId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ x, y, z, rotation_y: rotY }),
+      body: JSON.stringify({ x, y, z, rotation_x: rotX, rotation_y: rotY, rotation_z: rotZ }),
     }).then(r => { if (!r.ok) console.error('Sign save failed:', r.status); fetchSigns(); });
     setSignTransformActive(false);
     setSelectedSignId(null);

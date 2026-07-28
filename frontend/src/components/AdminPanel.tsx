@@ -12,7 +12,10 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 // ─── Custom Signs view ───────────────────────────────────────────────────────
 
-const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_y: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, filter_intensity: 1.0, lines: null };
+const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_x: 0, rotation_y: 0, rotation_z: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, filter_intensity: 1.0, lines: null };
+
+/** Pitch that lays a sign flat, face up, with its text running north — a map label. */
+const LAY_FLAT_PITCH = -Math.PI / 2;
 const BLANK_LINE = { text: '', font_size: 1.0 };
 
 const SIGN_PRESETS = [
@@ -80,7 +83,9 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
     if (selectedSignId == null) return;
     const s = signs.find(s => s.id === selectedSignId);
     if (!s) return;
-    setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter, font_family: s.font_family ?? 'monospace', filter_intensity: s.filter_intensity ?? 1.0 });
+    // rotation_x/rotation_z coalesce because signs created before they existed come
+    // back as null, and a null would leave the slider uncontrolled.
+    setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter, font_family: s.font_family ?? 'monospace', filter_intensity: s.filter_intensity ?? 1.0, rotation_x: s.rotation_x ?? 0, rotation_z: s.rotation_z ?? 0 });
     setIsNew(false);
     if (s.lines) {
       try {
@@ -128,7 +133,9 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       x: parseFloat(form.x) || 0,
       y: parseFloat(form.y) || 0,
       z: parseFloat(form.z) || 0,
+      rotation_x: parseFloat(form.rotation_x) || 0,
       rotation_y: parseFloat(form.rotation_y) || 0,
+      rotation_z: parseFloat(form.rotation_z) || 0,
       font_size: primarySize,
       font_family: form.font_family || 'monospace',
       image_url: form.image_url || null,
@@ -147,6 +154,8 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
   const placeSign = async () => {
     if (!hasContent()) return;
     const { tx, tz } = getCenterGroundTarget();
+    // Placement resets yaw so a new sign faces the camera, but keeps any pitch/roll
+    // already dialled in — placing a label flat should not stand it back up.
     const body = { ...buildBody(), x: tx, z: tz, rotation_y: 0 };
     const res = await fetch('/api/signs', {
       method: 'POST',
@@ -171,7 +180,9 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       body.x = signMesh.position.x;
       body.y = signMesh.position.y - halfH;
       body.z = signMesh.position.z;
+      body.rotation_x = signMesh.rotation.x;
       body.rotation_y = signMesh.rotation.y;
+      body.rotation_z = signMesh.rotation.z;
     }
     await fetch(`/api/signs/${selectedSignId}`, {
       method: 'PATCH',
@@ -358,6 +369,36 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
           <label style={{fontSize: '0.7rem', opacity: 0.8}}>FONT_SIZE: {parseFloat(form.font_size || 1).toFixed(1)}</label>
           <input type="range" min="0.5" max="4" step="0.5" value={form.font_size || 1} onChange={e => setForm((f: any) => ({...f, font_size: parseFloat(e.target.value)}))} style={{width: '100%'}} />
         </div>}
+      </div>
+
+      <div style={{display: 'flex', gap: '8px', marginBottom: '6px'}}>
+        <div style={{flex: 1}}>
+          <label style={{fontSize: '0.7rem', opacity: 0.8}}>ROTATION_X: {parseFloat(form.rotation_x || 0).toFixed(2)}</label>
+          <input type="range" min={-Math.PI} max={Math.PI} step="0.05" value={form.rotation_x || 0} onChange={e => {
+            const val = parseFloat(e.target.value);
+            setForm((f: any) => ({...f, rotation_x: val}));
+            if (signMesh) signMesh.rotation.x = val;
+          }} style={{width: '100%'}} />
+        </div>
+        <div style={{flex: 1}}>
+          <label style={{fontSize: '0.7rem', opacity: 0.8}}>ROTATION_Z: {parseFloat(form.rotation_z || 0).toFixed(2)}</label>
+          <input type="range" min={-Math.PI} max={Math.PI} step="0.05" value={form.rotation_z || 0} onChange={e => {
+            const val = parseFloat(e.target.value);
+            setForm((f: any) => ({...f, rotation_z: val}));
+            if (signMesh) signMesh.rotation.z = val;
+          }} style={{width: '100%'}} />
+        </div>
+      </div>
+
+      <div style={{display: 'flex', gap: '8px', marginBottom: '6px'}}>
+        <button className="utility-btn" style={{flex: 1, fontSize: '0.65rem'}} onClick={() => {
+          setForm((f: any) => ({...f, rotation_x: LAY_FLAT_PITCH, rotation_z: 0}));
+          if (signMesh) { signMesh.rotation.x = LAY_FLAT_PITCH; signMesh.rotation.z = 0; }
+        }}>LAY_FLAT</button>
+        <button className="utility-btn" style={{flex: 1, fontSize: '0.65rem'}} onClick={() => {
+          setForm((f: any) => ({...f, rotation_x: 0, rotation_z: 0}));
+          if (signMesh) { signMesh.rotation.x = 0; signMesh.rotation.z = 0; }
+        }}>STAND_UP</button>
       </div>
       {field('IMAGE_URL (optional)', 'image_url')}
       <div style={{marginBottom: '8px'}}>

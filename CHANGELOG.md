@@ -9,6 +9,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.7.4] - 2026-07-27
+
+### Added
+
+- **Map export** — the admin CITY tab gains `EXPORT_PNG` and `RECORD_MAP`. PNG writes a 2048px-wide top-down image of the whole city; RECORD_MAP captures up to 10 seconds of WebM with traffic in motion, downloading when recording stops. Both carry a translucent `CITY_NET` watermark in the bottom-right.
+- **Export framing from real city bounds** — the frame is derived from actual content so the entire map lands in one shot however far it sprawls. Bounds account for building rotation (via circumradius, correct for all three rotation axes), road width rather than just centrelines, water bodies, and overpasses. The camera centres on the city centroid, so a city generated off-origin is no longer cropped.
+- **`INCLUDE_HIDDEN` / `INCLUDE_TOKENS` toggles** — both default off. Hidden structures stay out so a shared export cannot leak GM-only geometry, and tokens stay out so the result is a clean city map rather than a snapshot of where everyone was standing. Tokens never affect framing in either state, since they are mobile and can sit far outside the city.
+- **Sign rotation on all three axes** — signs gain `rotation_x` and `rotation_z` alongside the existing yaw, with sliders and `LAY_FLAT` / `STAND_UP` presets. `LAY_FLAT` pitches a sign face-up with its text running north, so signs can be used as ground labels read from a top-down view.
+
+### Fixed
+
+- **Signs no longer lose their rotation on save** — a sign pitched flat sprang back upright on reload. Nothing in the stack handled pitch: the save path read only `rotation.y`, the schema stored only `rotation_y`, and the renderer hardcoded the other two axes to zero. All three now persist end to end. Existing signs are unaffected — the migration defaults to 0 and the renderer coalesces nulls.
+
+### Technical
+
+- Recording raises the world camera's `far` plane for the duration of a capture. It declares no `far`, so it inherits Three's default of 2000 and a large city clipped at the corners mid-recording.
+- Overhead fly height derives from FOV and window aspect, fitting width and depth to their own screen axes. Collapsing them into a single span zoomed out by the city's aspect ratio and left most of the frame empty.
+- One off-screen `WebGLRenderer` is reused for the session. Building one per export exhausted the browser's WebGL context budget, at which point it evicted the live city canvas and the scene went black.
+- Video recording composites through an intermediate 2D canvas, since `captureStream()` on the WebGL canvas offers nothing to draw the watermark over. This is also why `preserveDrawingBuffer` is required.
+- Recorder codec falls back vp9 → vp8 → webm → browser default, with `onerror` handling so a failed capture cannot strand the camera overhead or wedge the button on `STOP_RECORDING`.
+- Hidden structures are baked into shared `InstancedMesh` draw calls and cannot be switched off by scene traversal, so the export suppresses them through `renderLists` and waits for the commit before capturing.
+
+---
+
 ## [1.7.2] - 2026-07-27
 
 ### Added

@@ -315,6 +315,10 @@ db.serialize(() => {
   db.run(`ALTER TABLE signs ADD COLUMN font_family TEXT DEFAULT 'monospace'`, () => {});
   db.run(`ALTER TABLE signs ADD COLUMN lines TEXT`, () => {});
   db.run(`ALTER TABLE signs ADD COLUMN filter_intensity REAL DEFAULT 1.0`, () => {});
+  // Pitch and roll, so a sign can be laid flat and used as a ground label rather
+  // than only standing upright. Default 0 keeps every existing sign as it was.
+  db.run(`ALTER TABLE signs ADD COLUMN rotation_x REAL DEFAULT 0`, () => {});
+  db.run(`ALTER TABLE signs ADD COLUMN rotation_z REAL DEFAULT 0`, () => {});
 
   // Character sheets: one sheet per player PER SYSTEM (switching game systems
   // never destroys sheets - the old system's rows stay dormant until switched back)
