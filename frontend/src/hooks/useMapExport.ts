@@ -66,6 +66,22 @@ export interface MapExportOptions {
   includeTokens?: boolean;
 }
 
+/**
+ * The slice of drei's CameraControls this hook drives. Typed structurally rather than
+ * imported so a drei API change surfaces here as a type error instead of silently
+ * no-opping the fly-to at runtime.
+ */
+interface ExportCameraControls {
+  enabled: boolean;
+  getPosition?: (out: THREE.Vector3) => THREE.Vector3;
+  getTarget?: (out: THREE.Vector3) => THREE.Vector3;
+  setLookAt?: (
+    px: number, py: number, pz: number,
+    tx: number, ty: number, tz: number,
+    enableTransition?: boolean,
+  ) => Promise<void>;
+}
+
 interface UseMapExportArgs {
   locations: BoundsLocation[];
   roads: BoundsRoad[];
@@ -111,7 +127,7 @@ export function useMapExport({
   const scene = useThree((s) => s.scene);
   const gl = useThree((s) => s.gl);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
-  const controls = useThree((s) => s.controls) as any;
+  const controls = useThree((s) => s.controls) as ExportCameraControls | null;
 
   const [isRecording, setIsRecording] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -211,6 +227,11 @@ export function useMapExport({
   }, []);
 
   const startRecording = useCallback(
+    // react-hooks/immutability flags the camera and controls mutations below. In R3F
+    // those are the intended API — useThree returns live scene objects from a zustand
+    // store, and moving the camera means assigning to it. There is no immutable
+    // alternative; both are read back and restored when the recording stops.
+    // eslint-disable-next-line react-hooks/immutability
     async (opts: MapExportOptions = {}) => {
       // A recorder that already finished (or died) must not block every later attempt.
       // Without this, one failed capture leaves the button stuck on STOP_RECORDING for
@@ -238,6 +259,7 @@ export function useMapExport({
       // Pulling up to frame a large city puts the far corners past that plane and they
       // clip out mid-recording — raise it for the duration and restore on stop.
       const savedFar = camera.far;
+      // eslint-disable-next-line react-hooks/immutability -- R3F cameras are mutated by design; restored on stop
       camera.far = flyHeight + span * 2;
       camera.updateProjectionMatrix();
 
@@ -255,6 +277,7 @@ export function useMapExport({
           centre.x, 0, centre.z,
           false,
         );
+        // eslint-disable-next-line react-hooks/immutability -- locking input during capture; restored on stop
         controls.enabled = false;
       }
 
