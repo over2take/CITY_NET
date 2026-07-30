@@ -10,6 +10,7 @@ import {
   WATERMARK_MIN_FONT,
   WATERMARK_URL_MIN_FONT,
   triggerDownload,
+  exportFilename,
 } from '../mapExportWatermark';
 
 /** jsdom has no 2D context, so record the calls the watermark makes. */
@@ -139,5 +140,48 @@ describe('triggerDownload', () => {
     expect(click).toHaveBeenCalled();
     expect(document.body.contains(anchor)).toBe(false);
     spy.mockRestore();
+  });
+});
+
+// ─── filenames ────────────────────────────────────────────────────────────────
+
+describe('exportFilename', () => {
+  const DAY = new Date(2026, 6, 28); // 28 July 2026
+
+  it('names the file after the live map', () => {
+    expect(exportFilename('png', 'Night City', DAY)).toBe('night-city-2026-07-28.png');
+  });
+
+  it('falls back when no map is loaded', () => {
+    // A freshly generated city that has never been saved has no name to use.
+    expect(exportFilename('png', null, DAY)).toBe('city-map-2026-07-28.png');
+    expect(exportFilename('png', undefined, DAY)).toBe('city-map-2026-07-28.png');
+    expect(exportFilename('png', '', DAY)).toBe('city-map-2026-07-28.png');
+  });
+
+  it('uses the right extension per format', () => {
+    expect(exportFilename('webm', 'Watson', DAY)).toBe('watson-2026-07-28.webm');
+  });
+
+  it('strips characters a filesystem might object to', () => {
+    expect(exportFilename('png', 'A/B:C*D?"E<F>G|H', DAY)).toBe('a-b-c-d-e-f-g-h-2026-07-28.png');
+  });
+
+  it('collapses runs of separators and trims the edges', () => {
+    expect(exportFilename('png', '  __Night   City!!  ', DAY)).toBe('night-city-2026-07-28.png');
+  });
+
+  it('falls back when a name slugs down to nothing', () => {
+    expect(exportFilename('png', '!!!', DAY)).toBe('city-map-2026-07-28.png');
+  });
+
+  it('caps a very long name', () => {
+    const out = exportFilename('png', 'x'.repeat(200), DAY);
+    expect(out.length).toBeLessThan(90);
+    expect(out.endsWith('-2026-07-28.png')).toBe(true);
+  });
+
+  it('zero-pads month and day so names sort chronologically', () => {
+    expect(exportFilename('png', 'M', new Date(2026, 0, 5))).toBe('m-2026-01-05.png');
   });
 });

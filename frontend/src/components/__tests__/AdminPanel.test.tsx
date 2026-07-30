@@ -242,37 +242,36 @@ const exportProps = (over: any = {}) => ({
   ...over,
 });
 
-/** The section is collapsed by default; open it before touching its controls. */
+/** Export lives on its own admin tab now; select it before touching its controls. */
 const openExport = async () => {
-  await userEvent.click(screen.getByRole('button', { name: /MAP EXPORT/ }));
+  await userEvent.click(screen.getByText('EXPORT'));
 };
 
 describe('AdminPanel map export', () => {
-  it('starts collapsed so it does not crowd the city tab', () => {
+  it('offers an EXPORT tab', () => {
     render(<AdminPanel {...exportProps()} />);
-    expect(screen.getByRole('button', { name: /MAP EXPORT/ })).toBeInTheDocument();
+    expect(screen.getByText('EXPORT')).toBeInTheDocument();
+  });
+
+  it('keeps the controls off the city tab', () => {
+    // They used to sit at the bottom of CITY; the tab exists so they no longer do.
+    render(<AdminPanel {...exportProps()} />);
     expect(screen.queryByText('EXPORT_PNG')).not.toBeInTheDocument();
   });
 
-  it('reveals the controls once expanded', async () => {
+  it('shows the controls on the export tab', async () => {
     render(<AdminPanel {...exportProps()} />);
     await openExport();
     expect(screen.getByText('EXPORT_PNG')).toBeInTheDocument();
     expect(screen.getByText('RECORD_MAP')).toBeInTheDocument();
   });
 
-  it('collapses again on a second click', async () => {
-    render(<AdminPanel {...exportProps()} />);
-    await openExport();
-    await openExport();
-    expect(screen.queryByText('EXPORT_PNG')).not.toBeInTheDocument();
-  });
-
-  it('hides the controls entirely when no export handler is wired', () => {
+  it('shows nothing on the export tab when no handler is wired', async () => {
     const props = baseProps();
     props.view = 'list';
     render(<AdminPanel {...props} />);
-    expect(screen.queryByText('MAP EXPORT')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText('EXPORT'));
+    expect(screen.queryByText('EXPORT_PNG')).not.toBeInTheDocument();
   });
 
   it('defaults both toggles off so exports never leak hidden geometry', async () => {
@@ -382,7 +381,7 @@ describe('AdminPanel map export', () => {
 });
 
 describe('AdminPanel map export grid toggle', () => {
-  const openIt = async () => userEvent.click(screen.getByRole('button', { name: /MAP EXPORT/ }));
+  const openIt = async () => userEvent.click(screen.getByText('EXPORT'));
 
   it('includes the grid by default', async () => {
     const props = exportProps();
@@ -413,7 +412,7 @@ describe('AdminPanel map export grid toggle', () => {
 });
 
 describe('AdminPanel recording countdown', () => {
-  const openIt = async () => userEvent.click(screen.getByRole('button', { name: /MAP EXPORT/ }));
+  const openIt = async () => userEvent.click(screen.getByText('EXPORT'));
 
   it('shows nothing while idle', async () => {
     render(<AdminPanel {...exportProps({ isRecording: false })} />);
@@ -441,5 +440,143 @@ describe('AdminPanel recording countdown', () => {
     render(<AdminPanel {...exportProps({ isRecording: true, recordSecondsLeft: 0 })} />);
     await openIt();
     expect(screen.getByText('0s REMAINING')).toBeInTheDocument();
+  });
+});
+
+// ─── draw_water undo ──────────────────────────────────────────────────────────
+
+describe('AdminPanel draw_water undo', () => {
+  const waterProps = (): any => ({
+    ...baseProps(),
+    view: 'draw_water',
+    waterTrail: [],
+    setWaterTrail: vi.fn(),
+    fetchWaterBodies: vi.fn(),
+  });
+
+  it('offers UNDO alongside the drawing controls', () => {
+    render(<AdminPanel {...waterProps()} />);
+    expect(screen.getByText('⟲ UNDO')).toBeInTheDocument();
+  });
+
+  it('keeps CLEAR_DRAWING as a separate control', () => {
+    // CLEAR_DRAWING discards the untraced trail; UNDO reverts the last saved change.
+    render(<AdminPanel {...waterProps()} />);
+    expect(screen.getByText('CLEAR_DRAWING')).toBeInTheDocument();
+    expect(screen.getByText('⟲ UNDO')).toBeInTheDocument();
+  });
+
+  it('posts to the same undo endpoint as the main admin header', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ type: 'water_create' }) } as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const props = waterProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('⟲ UNDO'));
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/undo', expect.objectContaining({ method: 'POST' }));
+    vi.unstubAllGlobals();
+  });
+
+  it('refreshes water when the undone action created one', async () => {
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ type: 'water_create' }) } as Response),
+    ));
+
+    const props = waterProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('⟲ UNDO'));
+
+    expect(props.fetchWaterBodies).toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('AdminPanel export options', () => {
+  const openIt = async () => userEvent.click(screen.getByText('EXPORT'));
+
+  it('offers the record-length choices', async () => {
+    render(<AdminPanel {...exportProps()} />);
+    await openIt();
+    const select = screen.getByLabelText(/RECORD_LENGTH/) as HTMLSelectElement;
+    expect([...select.options].map(o => Number(o.value))).toEqual([5, 10, 30]);
+  });
+
+  it('defaults the record length to 10s', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByText('RECORD_MAP'));
+    expect(props.onStartRecording).toHaveBeenCalledWith(
+      expect.objectContaining({ durationSeconds: 10 }),
+    );
+  });
+
+  it('passes the chosen record length through', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.selectOptions(screen.getByLabelText(/RECORD_LENGTH/), '30');
+    await userEvent.click(screen.getByText('RECORD_MAP'));
+    expect(props.onStartRecording).toHaveBeenCalledWith(
+      expect.objectContaining({ durationSeconds: 30 }),
+    );
+  });
+
+  it('locks the record length while a capture runs', async () => {
+    render(<AdminPanel {...exportProps({ isRecording: true })} />);
+    await openIt();
+    expect(screen.getByLabelText(/RECORD_LENGTH/)).toBeDisabled();
+  });
+
+  it('defaults transparency off, so exports keep the themed background', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    expect(screen.getByLabelText('TRANSPARENT_BG')).not.toBeChecked();
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ transparent: false }),
+    );
+  });
+
+  it('passes transparency through when enabled', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByLabelText('TRANSPARENT_BG'));
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ transparent: true }),
+    );
+  });
+
+  it('does not offer transparency to the video path, which has no usable alpha', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByLabelText('TRANSPARENT_BG'));
+    await userEvent.click(screen.getByText('RECORD_MAP'));
+    expect(props.onStartRecording.mock.calls[0][0]).not.toHaveProperty('transparent');
+  });
+
+  it('passes the live map name so the file is named after it', async () => {
+    const props = exportProps();
+    props.globalSettings = { active_map_name: 'NIGHT_CITY' };
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ mapName: 'NIGHT_CITY' }),
+    );
+  });
+
+  it('refreshes settings on entry, since a map may have been loaded mid-session', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    expect(props.fetchGlobalSettings).toHaveBeenCalled();
   });
 });

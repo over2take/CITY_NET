@@ -13,6 +13,7 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 // ─── Custom Signs view ───────────────────────────────────────────────────────
 
 import { PNG_EXPORT_PRESETS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExportBounds';
+import { RECORD_DURATIONS, MAX_RECORD_SECONDS } from '../hooks/useMapExport';
 
 const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_x: 0, rotation_y: 0, rotation_z: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, filter_intensity: 1.0, lines: null };
 
@@ -638,7 +639,7 @@ export function AdminPanel({
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [purgeConfirm, setPurgeConfirm] = useState<{ label: string; onConfirm: () => void } | null>(null);
   const [adminAlert, setAdminAlert] = useState<string | null>(null);
-  const [adminTab, setAdminTab] = useState<'city' | 'game' | 'players'>('city');
+  const [adminTab, setAdminTab] = useState<'city' | 'export' | 'game' | 'players'>('city');
   const [showOfflinePlayers, setShowOfflinePlayers] = useState(false);
   const [customLibrary, setCustomLibrary] = useState<any[]>([]);
   const [customLibraryLoading, setCustomLibraryLoading] = useState(false);
@@ -655,8 +656,15 @@ export function AdminPanel({
   const [exportWidth, setExportWidth] = useState<number>(DEFAULT_PNG_EXPORT_WIDTH);
   // Grid defaults on — it reads as map paper under the city.
   const [exportIncludeGrid, setExportIncludeGrid] = useState(true);
-  // Collapsed by default: the CITY tab is already dense, and export is occasional.
-  const [exportOpen, setExportOpen] = useState(false);
+  // Off by default — the themed background is what most exports want.
+  const [exportTransparent, setExportTransparent] = useState(false);
+  const [exportDuration, setExportDuration] = useState<number>(MAX_RECORD_SECONDS);
+
+  // active_map_name changes when a map is loaded mid-session, but global settings are
+  // only fetched on mount — refresh on entry so the filename is not stale.
+  React.useEffect(() => {
+    if (adminTab === 'export') fetchGlobalSettings?.();
+  }, [adminTab, fetchGlobalSettings]);
 
 
   const getCenterGroundTarget = () => {
@@ -1010,7 +1018,7 @@ export function AdminPanel({
 
           {/* Tab bar */}
           <div style={{display: 'flex', borderBottom: '1px solid var(--green)', marginTop: '8px', marginBottom: '12px'}}>
-            {(['city', 'game', 'players'] as const).map(tab => (
+            {(['city', 'export', 'game', 'players'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setAdminTab(tab)}
@@ -1145,65 +1153,6 @@ export function AdminPanel({
             </div>
           )}
 
-          {onExportPng && (
-            <div style={{marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--green)'}}>
-              <button className="utility-btn" style={{width: '100%'}} onClick={() => setExportOpen(o => !o)}>
-                {exportOpen ? '▾' : '▸'} MAP EXPORT
-              </button>
-              {exportOpen && (
-              <div style={{marginTop: '8px'}}>
-              <div style={{display: 'flex', gap: '16px', marginBottom: '10px', flexWrap: 'wrap'}}>
-                <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
-                  <input type="checkbox" checked={exportIncludeGrid} onChange={e => setExportIncludeGrid(e.target.checked)} />
-                  INCLUDE_GRID
-                </label>
-                <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
-                  <input type="checkbox" checked={exportIncludeHidden} onChange={e => setExportIncludeHidden(e.target.checked)} />
-                  INCLUDE_HIDDEN
-                </label>
-                <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
-                  <input type="checkbox" checked={exportIncludeTokens} onChange={e => setExportIncludeTokens(e.target.checked)} />
-                  INCLUDE_TOKENS
-                </label>
-              </div>
-              <label htmlFor="export-png-width" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginBottom: '4px'}}>RESOLUTION <span style={{opacity: 0.6}}>(VIDEO CAPS AT 2K)</span></label>
-              <select
-                id="export-png-width"
-                value={exportWidth}
-                onChange={e => setExportWidth(parseInt(e.target.value))}
-                style={{width: '100%', marginBottom: '10px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem'}}
-              >
-                {PNG_EXPORT_PRESETS.map(p => (
-                  <option key={p.width} value={p.width}>
-                    {p.label} ({p.width} PX){p.width === DEFAULT_PNG_EXPORT_WIDTH ? ' — DEFAULT' : ''}
-                  </option>
-                ))}
-              </select>
-              {isRecording && (
-                <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginBottom: '8px'}}>
-                  <span style={{color: '#ff4444'}}>● REC</span>
-                  <span>{recordSecondsLeft}s REMAINING</span>
-                </div>
-              )}
-              <div style={{display: 'flex', gap: '10px'}}>
-                <button className="utility-btn" style={{flex: 1}} disabled={isExporting || isRecording}
-                  onClick={() => onExportPng({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens, includeGrid: exportIncludeGrid, width: exportWidth })}>
-                  {isExporting ? 'EXPORTING…' : 'EXPORT_PNG'}
-                </button>
-                {isRecording ? (
-                  <button className="utility-btn enemy-btn" style={{flex: 1}} onClick={() => onStopRecording?.()}>STOP_RECORDING</button>
-                ) : (
-                  <button className="utility-btn" style={{flex: 1}} disabled={isExporting}
-                    onClick={() => onStartRecording?.({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens, includeGrid: exportIncludeGrid })}>
-                    RECORD_MAP
-                  </button>
-                )}
-              </div>
-              </div>
-              )}
-            </div>
-          )}
-
           <button className={`utility-btn ${isBatchSelecting ? 'active' : ''}`} style={{marginTop: '10px', width: '100%'}} onClick={() => { if (isBatchSelecting) setSelectedIds([]); setIsBatchSelecting(!isBatchSelecting); }}>{isBatchSelecting ? 'CANCEL_SELECTION' : 'BATCH_SELECT_DELETE'}</button>
           {isBatchSelecting && <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={batchDelete}>DELETE_SELECTED ({selectedIds.length})</button>}
           <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
@@ -1214,6 +1163,77 @@ export function AdminPanel({
           </> /* end CITY tab */}
 
           {/* ── GAME TAB ── */}
+          {adminTab === 'export' && (<>
+          {onExportPng && (
+            <div>
+            <div style={{display: 'flex', gap: '16px', marginBottom: '10px', flexWrap: 'wrap'}}>
+              <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+                <input type="checkbox" checked={exportIncludeGrid} onChange={e => setExportIncludeGrid(e.target.checked)} />
+                INCLUDE_GRID
+              </label>
+              <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+                <input type="checkbox" checked={exportIncludeHidden} onChange={e => setExportIncludeHidden(e.target.checked)} />
+                INCLUDE_HIDDEN
+              </label>
+              <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+                <input type="checkbox" checked={exportIncludeTokens} onChange={e => setExportIncludeTokens(e.target.checked)} />
+                INCLUDE_TOKENS
+              </label>
+              <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}} title="PNG only — WebM has no dependable alpha channel">
+                <input type="checkbox" checked={exportTransparent} onChange={e => setExportTransparent(e.target.checked)} />
+                TRANSPARENT_BG
+              </label>
+            </div>
+            <label htmlFor="export-png-width" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginBottom: '4px'}}>RESOLUTION <span style={{opacity: 0.6}}>(VIDEO CAPS AT 2K)</span></label>
+            <select
+              id="export-png-width"
+              value={exportWidth}
+              onChange={e => setExportWidth(parseInt(e.target.value))}
+              style={{width: '100%', marginBottom: '10px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem'}}
+            >
+              {PNG_EXPORT_PRESETS.map(p => (
+                <option key={p.width} value={p.width}>
+                  {p.label} ({p.width} PX){p.width === DEFAULT_PNG_EXPORT_WIDTH ? ' — DEFAULT' : ''}
+                </option>
+              ))}
+            </select>
+            <label htmlFor="export-duration" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginBottom: '4px'}}>RECORD_LENGTH <span style={{opacity: 0.6}}>(VIDEO ONLY)</span></label>
+            <select
+              id="export-duration"
+              value={exportDuration}
+              onChange={e => setExportDuration(parseInt(e.target.value))}
+              disabled={isRecording}
+              style={{width: '100%', marginBottom: '10px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem'}}
+            >
+              {RECORD_DURATIONS.map(d => (
+                <option key={d} value={d}>{d} SECONDS{d === MAX_RECORD_SECONDS ? ' — DEFAULT' : ''}</option>
+              ))}
+            </select>
+            {isRecording && (
+              <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginBottom: '8px'}}>
+                <span style={{color: '#ff4444'}}>● REC</span>
+                <span>{recordSecondsLeft}s REMAINING</span>
+              </div>
+            )}
+            <div style={{display: 'flex', gap: '10px'}}>
+              <button className="utility-btn" style={{flex: 1}} disabled={isExporting || isRecording}
+                onClick={() => onExportPng({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens, includeGrid: exportIncludeGrid, transparent: exportTransparent, width: exportWidth, mapName: globalSettings?.active_map_name })}>
+                {isExporting ? 'EXPORTING…' : 'EXPORT_PNG'}
+              </button>
+              {isRecording ? (
+                <button className="utility-btn enemy-btn" style={{flex: 1}} onClick={() => onStopRecording?.()}>STOP_RECORDING</button>
+              ) : (
+                <button className="utility-btn" style={{flex: 1}} disabled={isExporting}
+                  onClick={() => onStartRecording?.({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens, includeGrid: exportIncludeGrid, durationSeconds: exportDuration, mapName: globalSettings?.active_map_name })}>
+                  RECORD_MAP
+                </button>
+              )}
+            </div>
+            </div>
+          )}
+
+          </>)}
+
           {adminTab === 'game' && (
             <>
               <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
@@ -1533,6 +1553,9 @@ export function AdminPanel({
                 await fetch('/api/water', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ points }) });
                 setAdminAlert(`WATER BODY SAVED`); fetchWaterBodies(); setView('list'); setWaterTrail([]);
             }}>SAVE_WATER_BODY</button>
+          {/* Same server-side undo as the main admin header. Distinct from
+              CLEAR_DRAWING above, which only discards the untraced trail. */}
+          <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={handleUndo} title="UNDO LAST SAVED CHANGE">⟲ UNDO</button>
         </>
       )}
 

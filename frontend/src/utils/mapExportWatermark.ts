@@ -178,6 +178,36 @@ export function startRenderedCompositeLoop(
   return { canvas, stop: () => cancelAnimationFrame(frame) };
 }
 
+/**
+ * Filename for an export, named after the live map where one is loaded.
+ *
+ * `nightcity-2026-07-28.png` beats `city-map-1753718400000.png` when a GM has a folder
+ * of these. Falls back to `city-map` when no map is loaded — a freshly generated city
+ * that has never been saved has no name to use.
+ *
+ * The date rather than a full timestamp: exports are dated artefacts, and a second-level
+ * timestamp is noise. A counter suffix disambiguates repeats within a day.
+ */
+export function exportFilename(
+  extension: 'png' | 'webm',
+  mapName?: string | null,
+  now: Date = new Date(),
+): string {
+  const slug = (mapName ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')   // strip anything a filesystem might object to
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+
+  const date = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+
+  return `${slug || 'city-map'}-${date}.${extension}`;
+}
+
 /** Download a data or object URL under the given filename. */
 export function triggerDownload(url: string, filename: string): void {
   const a = document.createElement('a');

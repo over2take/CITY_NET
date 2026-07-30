@@ -15,11 +15,15 @@ import {
 } from '../utils/mapExportBounds';
 import {
   compositeWatermark,
+  exportFilename,
   startRenderedCompositeLoop,
   triggerDownload,
 } from '../utils/mapExportWatermark';
 
-/** Longest a recording may run before it auto-stops. */
+/** Selectable capture lengths, in seconds. */
+export const RECORD_DURATIONS = [5, 10, 30] as const;
+
+/** Default capture length, and the cap when no choice is supplied. */
 export const MAX_RECORD_SECONDS = 10;
 
 /**
@@ -140,6 +144,16 @@ export interface MapExportOptions {
   includeTokens?: boolean;
   /** Keep the ground grid in the shot. On by default — it reads as map paper. */
   includeGrid?: boolean;
+  /**
+   * Render the PNG on a transparent background instead of the theme colour, so the
+   * city can be composited over paper texture in an image editor. PNG only — WebM has
+   * no alpha channel worth relying on.
+   */
+  transparent?: boolean;
+  /** Capture length in seconds. Recording only. */
+  durationSeconds?: number;
+  /** Live map name, used to build the filename. */
+  mapName?: string | null;
   /** Target width in pixels. Video is capped at VIDEO_MAX_WIDTH; the PNG is not. */
   width?: number;
 }
@@ -225,7 +239,9 @@ export function useMapExport({
     if (!offscreenRef.current) {
       // No shadowMap: the scene has no shadow-casting lights (ambient plus token
       // point-lights only), so enabling it would allocate a map nothing writes to.
-      offscreenRef.current = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      // alpha is fixed at construction and this renderer is reused all session, so it
+      // is always alpha-capable. Opacity is chosen per export via setClearAlpha.
+      offscreenRef.current = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     }
     offscreenRef.current.setSize(width, height, false);
     return offscreenRef.current;
@@ -276,15 +292,25 @@ export function useMapExport({
 
         const cam = makeExportCamera(b, worldW, worldH);
 
+        // scene.background is set by <color attach="background"> and takes precedence
+        // over the clear colour, so transparency means removing it for the render.
+        const savedBackground = scene.background;
+        if (opts.transparent) scene.background = null;
+        renderer.setClearAlpha(opts.transparent ? 0 : 1);
+
         const restoreScene = hideNonExportObjects(scene, opts);
         // The ortho camera sits well past the grid's usual fade radius too, so the
         // grid would wash out toward the edges of a large city.
         const restoreGrid = boostGridFade(scene, Math.hypot(worldW, worldH) * 1.5);
-        restore = () => { restoreGrid(); restoreScene(); };
+        restore = () => {
+          restoreGrid();
+          restoreScene();
+          scene.background = savedBackground;
+        };
         renderer.render(scene, cam);
 
         const dataUrl = compositeWatermark(renderer.domElement);
-        triggerDownload(dataUrl, `city-map-${Date.now()}.png`);
+        triggerDownload(dataUrl, exportFilename('png', opts.mapName));
       } finally {
         // The renderer is deliberately kept alive for the session — see
         // offscreenRenderer. Disposing or force-losing it here is what cost the live
@@ -331,6 +357,8 @@ export function useMapExport({
         worldW, worldD, requested, gpuMax,
       );
       renderer.setSize(videoW, videoH, false);
+      // Always opaque — WebM alpha is not dependably supported by players.
+      renderer.setClearAlpha(1);
 
       // Same orthographic camera as the PNG, so the video is square-on rather than a
       // perspective view of the city. Rendering through our own camera also means the
@@ -370,7 +398,7 @@ export function useMapExport({
         loop.stop();
         const blob = new Blob(chunks, { type: 'video/webm' });
         const url = URL.createObjectURL(blob);
-        triggerDownload(url, `city-map-${Date.now()}.webm`);
+        triggerDownload(url, exportFilename('webm', opts.mapName));
         // The blob stays alive until its URL is revoked; a few 10s captures would
         // otherwise pin tens of MB for the rest of the session. Deferred because
         // revoking in the same tick can cancel the download in some browsers.
@@ -403,13 +431,16 @@ export function useMapExport({
       // behind and then snapped from a few seconds straight to zero when auto-stop
       // fired. Recomputing from the deadline self-corrects instead. Polling at 250ms
       // keeps the shown value under a quarter-second stale.
-      endsAtRef.current = Date.now() + MAX_RECORD_SECONDS * 1000;
-      setSecondsLeft(MAX_RECORD_SECONDS);
+      const duration = RECORD_DURATIONS.includes(opts.durationSeconds as never)
+        ? (opts.durationSeconds as number)
+        : MAX_RECORD_SECONDS;
+      endsAtRef.current = Date.now() + duration * 1000;
+      setSecondsLeft(duration);
       tickRef.current = setInterval(() => {
         const remaining = Math.max(0, endsAtRef.current - Date.now());
         setSecondsLeft(Math.ceil(remaining / 1000));
       }, 250);
-      autoStopRef.current = setTimeout(stopRecording, MAX_RECORD_SECONDS * 1000);
+      autoStopRef.current = setTimeout(stopRecording, duration * 1000);
     },
     [scene, bounds, offscreenRenderer, stopRecording, clearCountdown],
   );

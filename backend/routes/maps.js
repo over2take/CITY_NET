@@ -1,6 +1,26 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 
+/**
+ * Remember which saved map is live, so exports can name their files after it.
+ *
+ * Nothing tracked this before: loading a map replaced the world and forgot where it
+ * came from. Kept in global_settings rather than client state so every admin agrees
+ * and it survives a restart.
+ */
+const setActiveMapName = (db, name) => {
+  if (name) {
+    db.run(
+      `INSERT INTO global_settings (key, value) VALUES ('active_map_name', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [String(name).slice(0, 120)],
+      () => {},
+    );
+  } else {
+    db.run(`DELETE FROM global_settings WHERE key = 'active_map_name'`, () => {});
+  }
+};
+
 module.exports = (db, io, { emitUpdate, recordAction }) => {
   const router = express.Router();
 
@@ -15,6 +35,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   router.post('/save', authenticate, (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Map name required' });
+    // Saving under a name makes that the live map.
+    setActiveMapName(db, name);
 
     db.serialize(() => {
       db.all("SELECT * FROM locations WHERE shape != 'rhombus' OR shape IS NULL", (err1, locations) => {
@@ -57,6 +79,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     db.get('SELECT * FROM saved_maps WHERE name = ?', [req.params.name], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'Map not found' });
+      setActiveMapName(db, req.params.name);
 
       const locations = JSON.parse(row.locations_data || '[]');
       const districts = JSON.parse(row.districts_data || '[]');
@@ -129,6 +152,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   router.post('/clear', authenticate, (req, res) => {
+    // Wiping the world leaves no map loaded.
+    setActiveMapName(db, null);
     db.serialize(() => {
       // Preserve only live player rhombuses; enemy/friendly tokens are map content
       db.run(`DELETE FROM locations WHERE shape IS NULL OR shape != 'rhombus'`);
