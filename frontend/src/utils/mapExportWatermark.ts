@@ -93,47 +93,6 @@ export interface CompositeLoop {
 }
 
 /**
- * Mirror a WebGL canvas into a 2D canvas each frame, stamping the watermark on top.
- *
- * `captureStream()` on the WebGL canvas alone gives no opportunity to draw over the
- * frames, so recording has to capture from this intermediate canvas instead. This is
- * also the real reason `preserveDrawingBuffer` is required — the loop reads the WebGL
- * canvas outside its own draw call.
- */
-export function startCompositeLoop(
-  source: HTMLCanvasElement,
-  overlay: (ctx: CanvasRenderingContext2D, w: number, h: number) => void = drawWatermark,
-): CompositeLoop {
-  const canvas = document.createElement('canvas');
-  canvas.width = source.width;
-  canvas.height = source.height;
-  const ctx = canvas.getContext('2d');
-
-  let frame = 0;
-  const tick = () => {
-    if (ctx) {
-      try {
-        // The user can resize mid-recording; track the source so frames stay aligned.
-        if (canvas.width !== source.width || canvas.height !== source.height) {
-          canvas.width = source.width;
-          canvas.height = source.height;
-        }
-        ctx.drawImage(source, 0, 0);
-        overlay(ctx, canvas.width, canvas.height);
-      } catch {
-        // An exception thrown inside a rAF callback stops it rescheduling, which
-        // would silently freeze the capture. Skip the bad frame and keep going —
-        // drawImage can throw transiently if the source canvas loses its context.
-      }
-    }
-    frame = requestAnimationFrame(tick);
-  };
-  frame = requestAnimationFrame(tick);
-
-  return { canvas, stop: () => cancelAnimationFrame(frame) };
-}
-
-/**
  * Composite loop driven by a render callback rather than a source canvas.
  *
  * Recording renders the scene itself each frame at a chosen resolution, instead of
@@ -144,6 +103,9 @@ export function startCompositeLoop(
  * (commonly 60), but the recorder only samples at `fps`, so anything above that is
  * GPU work thrown away — and this loop is already a second render on top of the live
  * one.
+ *
+ * Because it renders rather than reading the live canvas, `preserveDrawingBuffer` is
+ * not required on the main Canvas.
  */
 export function startRenderedCompositeLoop(
   width: number,

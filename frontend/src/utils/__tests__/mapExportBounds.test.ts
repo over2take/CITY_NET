@@ -5,7 +5,6 @@ import {
   boundsWidth,
   boundsDepth,
   isTokenShape,
-  overheadFlyHeight,
   resolveExportSize,
   PNG_EXPORT_WIDTHS,
   DEFAULT_PNG_EXPORT_WIDTH,
@@ -207,103 +206,6 @@ describe('bounds helpers', () => {
     const c = boundsCenter(b);
     expect(c.x).toBeCloseTo(800);
     expect(c.z).toBeCloseTo(-600);
-  });
-});
-
-describe('overheadFlyHeight', () => {
-  const FOV = 50;
-
-  /** What a perspective camera actually covers on the ground at a given height. */
-  const visibleExtent = (h: number, fov: number, aspect: number) => {
-    const vertical = 2 * h * Math.tan((fov * Math.PI) / 180 / 2);
-    return { vertical, horizontal: vertical * aspect };
-  };
-
-  /** Fraction of each screen axis the city occupies — 1.0 is a perfect fit. */
-  const fill = (w: number, d: number, aspect: number) => {
-    const h = overheadFlyHeight(w, d, FOV, aspect, 0);
-    const seen = visibleExtent(h, FOV, aspect);
-    return { across: w / seen.horizontal, down: d / seen.vertical };
-  };
-
-  it('fits a square city in a landscape window', () => {
-    const { across, down } = fill(800, 800, 16 / 9);
-    expect(across).toBeLessThanOrEqual(1);
-    expect(down).toBeLessThanOrEqual(1);
-    // The taller axis is the binding one and should be close to filling it.
-    expect(Math.max(across, down)).toBeGreaterThan(0.9);
-  });
-
-  it('fills the frame for a wide city instead of zooming out to its longest side', () => {
-    // Regression: fitting max(width, depth) into both axes left a 800x400 city
-    // occupying roughly half the frame vertically.
-    const { across, down } = fill(800, 400, 16 / 9);
-    expect(Math.max(across, down)).toBeGreaterThan(0.9);
-    expect(across).toBeLessThanOrEqual(1);
-    expect(down).toBeLessThanOrEqual(1);
-  });
-
-  it('fills the frame for a deep city', () => {
-    const { across, down } = fill(300, 900, 16 / 9);
-    expect(Math.max(across, down)).toBeGreaterThan(0.9);
-    expect(across).toBeLessThanOrEqual(1);
-    expect(down).toBeLessThanOrEqual(1);
-  });
-
-  it('flies lower than the old single-span fit for a non-square city', () => {
-    const wideCity = overheadFlyHeight(800, 400, FOV, 16 / 9, 0);
-    const asIfSquare = overheadFlyHeight(800, 800, FOV, 16 / 9, 0);
-    expect(wideCity).toBeLessThan(asIfSquare);
-  });
-
-  it.each([
-    ['ultrawide', 21 / 9],
-    ['landscape', 16 / 9],
-    ['square', 1],
-    ['portrait', 0.6],
-  ])('never crops the city in a %s window', (_label, aspect) => {
-    for (const [w, d] of [[800, 400], [400, 800], [600, 600], [1500, 200]]) {
-      const { across, down } = fill(w, d, aspect);
-      expect(across).toBeLessThanOrEqual(1.0001);
-      expect(down).toBeLessThanOrEqual(1.0001);
-    }
-  });
-
-  it('climbs higher for a narrower window', () => {
-    expect(overheadFlyHeight(500, 500, FOV, 0.5, 0)).toBeGreaterThan(
-      overheadFlyHeight(500, 500, FOV, 2.0, 0),
-    );
-  });
-
-  it('needs less height as FOV widens', () => {
-    expect(overheadFlyHeight(500, 500, 80, 1.6, 0)).toBeLessThan(
-      overheadFlyHeight(500, 500, 30, 1.6, 0),
-    );
-  });
-
-  it('scales linearly with city size', () => {
-    const small = overheadFlyHeight(400, 300, FOV, 1.6, 0);
-    const large = overheadFlyHeight(800, 600, FOV, 1.6, 0);
-    expect(large / small).toBeCloseTo(2, 5);
-  });
-
-  it('clears the tallest structure', () => {
-    const flat = overheadFlyHeight(500, 500, FOV, 1.6, 0);
-    const tall = overheadFlyHeight(500, 500, FOV, 1.6, 120);
-    expect(tall - flat).toBeCloseTo(120, 5);
-  });
-
-  it('survives degenerate camera and city values', () => {
-    for (const h of [
-      overheadFlyHeight(0, 0, FOV, 1.6, 0),
-      overheadFlyHeight(-100, -100, FOV, 1.6, 0),
-      overheadFlyHeight(500, 500, FOV, 0, 0),
-      overheadFlyHeight(500, 500, FOV, NaN, 0),
-      overheadFlyHeight(500, 500, 0, 1.6, 0),
-    ]) {
-      expect(Number.isFinite(h)).toBe(true);
-      expect(h).toBeGreaterThan(0);
-    }
   });
 });
 

@@ -156,9 +156,6 @@ export const boundsCenter = (b: CityBounds): BoundsPoint => ({
 export const boundsWidth = (b: CityBounds): number => b.maxX - b.minX;
 export const boundsDepth = (b: CityBounds): number => b.maxZ - b.minZ;
 
-/** Extra room left around the city so it does not sit flush against the frame edge. */
-export const FLY_HEIGHT_MARGIN = 1.05;
-
 /**
  * Selectable PNG widths, labelled by the familiar quality tiers.
  *
@@ -213,42 +210,4 @@ export function resolveExportSize(
   }
 
   return { width, height, clamped };
-}
-
-/**
- * Height a perspective camera must reach for the city to fill the frame from directly
- * overhead.
- *
- * The PNG export sets an orthographic frustum to the bounds directly, so its fit is
- * exact. Recording reuses the live perspective camera, where what you can see depends
- * on FOV and window aspect.
- *
- * Width and depth are fitted against their own screen axes rather than collapsed into
- * a single span. Looking straight down, world X runs across the screen and world Z
- * runs up it — so a city twice as wide as it is deep must fit its width horizontally
- * and its depth vertically. Fitting one span into both axes zooms out by the city's
- * aspect ratio and leaves most of the frame empty.
- */
-export function overheadFlyHeight(
-  worldWidth: number,
-  worldDepth: number,
-  fovDegrees: number,
-  aspect: number,
-  maxY = 0,
-  margin = FLY_HEIGHT_MARGIN,
-): number {
-  const safeWidth = Math.max(worldWidth, 1);
-  const safeDepth = Math.max(worldDepth, 1);
-  const safeFov = Math.min(Math.max(fovDegrees, 1), 179);
-  const safeAspect = aspect > 0 && Number.isFinite(aspect) ? aspect : 1;
-
-  const halfFov = (safeFov * Math.PI) / 180 / 2;
-  const t = Math.tan(halfFov);
-
-  // Visible vertical extent at height h is 2*h*tan(fov/2); horizontal is that times
-  // the aspect ratio. Invert each for the height that just contains the city.
-  const fitDepth = safeDepth / (2 * t);
-  const fitWidth = safeWidth / (2 * t * safeAspect);
-
-  return Math.max(fitDepth, fitWidth) * margin + maxY;
 }
