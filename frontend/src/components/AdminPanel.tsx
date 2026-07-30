@@ -12,7 +12,13 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 // ─── Custom Signs view ───────────────────────────────────────────────────────
 
-const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_y: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, filter_intensity: 1.0, lines: null };
+import { PNG_EXPORT_PRESETS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExportBounds';
+import { RECORD_DURATIONS, MAX_RECORD_SECONDS } from '../hooks/useMapExport';
+
+const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_x: 0, rotation_y: 0, rotation_z: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, filter_intensity: 1.0, lines: null };
+
+/** Pitch that lays a sign flat, face up, with its text running north — a map label. */
+const LAY_FLAT_PITCH = -Math.PI / 2;
 const BLANK_LINE = { text: '', font_size: 1.0 };
 
 const SIGN_PRESETS = [
@@ -80,7 +86,9 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
     if (selectedSignId == null) return;
     const s = signs.find(s => s.id === selectedSignId);
     if (!s) return;
-    setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter, font_family: s.font_family ?? 'monospace', filter_intensity: s.filter_intensity ?? 1.0 });
+    // rotation_x/rotation_z coalesce because signs created before they existed come
+    // back as null, and a null would leave the slider uncontrolled.
+    setForm({ ...s, image_url: s.image_url ?? '', use_tv_filter: !!s.use_tv_filter, font_family: s.font_family ?? 'monospace', filter_intensity: s.filter_intensity ?? 1.0, rotation_x: s.rotation_x ?? 0, rotation_z: s.rotation_z ?? 0 });
     setIsNew(false);
     if (s.lines) {
       try {
@@ -128,7 +136,9 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       x: parseFloat(form.x) || 0,
       y: parseFloat(form.y) || 0,
       z: parseFloat(form.z) || 0,
+      rotation_x: parseFloat(form.rotation_x) || 0,
       rotation_y: parseFloat(form.rotation_y) || 0,
+      rotation_z: parseFloat(form.rotation_z) || 0,
       font_size: primarySize,
       font_family: form.font_family || 'monospace',
       image_url: form.image_url || null,
@@ -147,6 +157,8 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
   const placeSign = async () => {
     if (!hasContent()) return;
     const { tx, tz } = getCenterGroundTarget();
+    // Placement resets yaw so a new sign faces the camera, but keeps any pitch/roll
+    // already dialled in — placing a label flat should not stand it back up.
     const body = { ...buildBody(), x: tx, z: tz, rotation_y: 0 };
     const res = await fetch('/api/signs', {
       method: 'POST',
@@ -171,7 +183,9 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
       body.x = signMesh.position.x;
       body.y = signMesh.position.y - halfH;
       body.z = signMesh.position.z;
+      body.rotation_x = signMesh.rotation.x;
       body.rotation_y = signMesh.rotation.y;
+      body.rotation_z = signMesh.rotation.z;
     }
     await fetch(`/api/signs/${selectedSignId}`, {
       method: 'PATCH',
@@ -359,6 +373,36 @@ function SignsView({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, 
           <input type="range" min="0.5" max="4" step="0.5" value={form.font_size || 1} onChange={e => setForm((f: any) => ({...f, font_size: parseFloat(e.target.value)}))} style={{width: '100%'}} />
         </div>}
       </div>
+
+      <div style={{display: 'flex', gap: '8px', marginBottom: '6px'}}>
+        <div style={{flex: 1}}>
+          <label style={{fontSize: '0.7rem', opacity: 0.8}}>ROTATION_X: {parseFloat(form.rotation_x || 0).toFixed(2)}</label>
+          <input type="range" min={-Math.PI} max={Math.PI} step="0.05" value={form.rotation_x || 0} onChange={e => {
+            const val = parseFloat(e.target.value);
+            setForm((f: any) => ({...f, rotation_x: val}));
+            if (signMesh) signMesh.rotation.x = val;
+          }} style={{width: '100%'}} />
+        </div>
+        <div style={{flex: 1}}>
+          <label style={{fontSize: '0.7rem', opacity: 0.8}}>ROTATION_Z: {parseFloat(form.rotation_z || 0).toFixed(2)}</label>
+          <input type="range" min={-Math.PI} max={Math.PI} step="0.05" value={form.rotation_z || 0} onChange={e => {
+            const val = parseFloat(e.target.value);
+            setForm((f: any) => ({...f, rotation_z: val}));
+            if (signMesh) signMesh.rotation.z = val;
+          }} style={{width: '100%'}} />
+        </div>
+      </div>
+
+      <div style={{display: 'flex', gap: '8px', marginBottom: '6px'}}>
+        <button className="utility-btn" style={{flex: 1, fontSize: '0.65rem'}} onClick={() => {
+          setForm((f: any) => ({...f, rotation_x: LAY_FLAT_PITCH, rotation_z: 0}));
+          if (signMesh) { signMesh.rotation.x = LAY_FLAT_PITCH; signMesh.rotation.z = 0; }
+        }}>LAY_FLAT</button>
+        <button className="utility-btn" style={{flex: 1, fontSize: '0.65rem'}} onClick={() => {
+          setForm((f: any) => ({...f, rotation_x: 0, rotation_z: 0}));
+          if (signMesh) { signMesh.rotation.x = 0; signMesh.rotation.z = 0; }
+        }}>STAND_UP</button>
+      </div>
       {field('IMAGE_URL (optional)', 'image_url')}
       <div style={{marginBottom: '8px'}}>
         <label style={{fontSize: '0.65rem', opacity: 0.7}}>PRESET SIGNS</label>
@@ -539,6 +583,7 @@ export function AdminPanel({
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
+    onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -594,7 +639,7 @@ export function AdminPanel({
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [purgeConfirm, setPurgeConfirm] = useState<{ label: string; onConfirm: () => void } | null>(null);
   const [adminAlert, setAdminAlert] = useState<string | null>(null);
-  const [adminTab, setAdminTab] = useState<'city' | 'game' | 'players'>('city');
+  const [adminTab, setAdminTab] = useState<'city' | 'export' | 'game' | 'players'>('city');
   const [showOfflinePlayers, setShowOfflinePlayers] = useState(false);
   const [customLibrary, setCustomLibrary] = useState<any[]>([]);
   const [customLibraryLoading, setCustomLibraryLoading] = useState(false);
@@ -602,6 +647,24 @@ export function AdminPanel({
   const setRoadEraseMode = (m: 'segment' | 'path') => { setRoadEraseModeLocal(m); onRoadEraseModeChange?.(m); };
   const [roadPurgeConfirming, setRoadPurgeConfirming] = useState(false);
   const [overpassPurgeConfirming, setOverpassPurgeConfirming] = useState(false);
+  // Map export toggles. Both default off: hidden structures stay out so a shared
+  // export never leaks GM-only geometry, and tokens stay out so the result is a clean
+  // city map rather than a snapshot of where everyone was standing. Per-export
+  // preferences, so deliberately not persisted to global_settings.
+  const [exportIncludeHidden, setExportIncludeHidden] = useState(false);
+  const [exportIncludeTokens, setExportIncludeTokens] = useState(false);
+  const [exportWidth, setExportWidth] = useState<number>(DEFAULT_PNG_EXPORT_WIDTH);
+  // Grid defaults on — it reads as map paper under the city.
+  const [exportIncludeGrid, setExportIncludeGrid] = useState(true);
+  // Off by default — the themed background is what most exports want.
+  const [exportTransparent, setExportTransparent] = useState(false);
+  const [exportDuration, setExportDuration] = useState<number>(MAX_RECORD_SECONDS);
+
+  // active_map_name changes when a map is loaded mid-session, but global settings are
+  // only fetched on mount — refresh on entry so the filename is not stale.
+  React.useEffect(() => {
+    if (adminTab === 'export') fetchGlobalSettings?.();
+  }, [adminTab, fetchGlobalSettings]);
 
 
   const getCenterGroundTarget = () => {
@@ -955,7 +1018,7 @@ export function AdminPanel({
 
           {/* Tab bar */}
           <div style={{display: 'flex', borderBottom: '1px solid var(--green)', marginTop: '8px', marginBottom: '12px'}}>
-            {(['city', 'game', 'players'] as const).map(tab => (
+            {(['city', 'export', 'game', 'players'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setAdminTab(tab)}
@@ -1100,6 +1163,83 @@ export function AdminPanel({
           </> /* end CITY tab */}
 
           {/* ── GAME TAB ── */}
+          {adminTab === 'export' && (<>
+          {/* Names CITY_DATA_BASE explicitly: "export" most plausibly reads as
+              exporting map data, which is that panel's job, not this one's. */}
+          <div style={{fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px', marginBottom: '12px', opacity: 0.85}}>
+            <p>Renders the city as a top-down image or video for sharing and printing.</p>
+            <p style={{marginTop: '6px', opacity: 0.75}}>This does not save or back up your map — use CITY_DATA_BASE for that.</p>
+          </div>
+          {onExportPng && (
+            <div>
+            <div style={{display: 'flex', gap: '16px', marginBottom: '10px', flexWrap: 'wrap'}}>
+              <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+                <input type="checkbox" checked={exportIncludeGrid} onChange={e => setExportIncludeGrid(e.target.checked)} />
+                INCLUDE_GRID
+              </label>
+              <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+                <input type="checkbox" checked={exportIncludeHidden} onChange={e => setExportIncludeHidden(e.target.checked)} />
+                INCLUDE_HIDDEN
+              </label>
+              <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}}>
+                <input type="checkbox" checked={exportIncludeTokens} onChange={e => setExportIncludeTokens(e.target.checked)} />
+                INCLUDE_TOKENS
+              </label>
+              <label style={{display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.7rem'}} title="PNG only — WebM has no dependable alpha channel">
+                <input type="checkbox" checked={exportTransparent} onChange={e => setExportTransparent(e.target.checked)} />
+                TRANSPARENT_BG
+              </label>
+            </div>
+            <label htmlFor="export-png-width" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginBottom: '4px'}}>RESOLUTION <span style={{opacity: 0.6}}>(VIDEO CAPS AT 2K)</span></label>
+            <select
+              id="export-png-width"
+              value={exportWidth}
+              onChange={e => setExportWidth(parseInt(e.target.value))}
+              style={{width: '100%', marginBottom: '10px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem'}}
+            >
+              {PNG_EXPORT_PRESETS.map(p => (
+                <option key={p.width} value={p.width}>
+                  {p.label} ({p.width} PX){p.width === DEFAULT_PNG_EXPORT_WIDTH ? ' — DEFAULT' : ''}
+                </option>
+              ))}
+            </select>
+            <label htmlFor="export-duration" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginBottom: '4px'}}>RECORD_LENGTH <span style={{opacity: 0.6}}>(VIDEO ONLY)</span></label>
+            <select
+              id="export-duration"
+              value={exportDuration}
+              onChange={e => setExportDuration(parseInt(e.target.value))}
+              disabled={isRecording}
+              style={{width: '100%', marginBottom: '10px', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem'}}
+            >
+              {RECORD_DURATIONS.map(d => (
+                <option key={d} value={d}>{d} SECONDS{d === MAX_RECORD_SECONDS ? ' — DEFAULT' : ''}</option>
+              ))}
+            </select>
+            {isRecording && (
+              <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginBottom: '8px'}}>
+                <span style={{color: '#ff4444'}}>● REC</span>
+                <span>{recordSecondsLeft}s REMAINING</span>
+              </div>
+            )}
+            <div style={{display: 'flex', gap: '10px'}}>
+              <button className="utility-btn" style={{flex: 1}} disabled={isExporting || isRecording}
+                onClick={() => onExportPng({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens, includeGrid: exportIncludeGrid, transparent: exportTransparent, width: exportWidth, mapName: globalSettings?.active_map_name })}>
+                {isExporting ? 'EXPORTING…' : 'EXPORT_PNG'}
+              </button>
+              {isRecording ? (
+                <button className="utility-btn enemy-btn" style={{flex: 1}} onClick={() => onStopRecording?.()}>STOP_RECORDING</button>
+              ) : (
+                <button className="utility-btn" style={{flex: 1}} disabled={isExporting}
+                  onClick={() => onStartRecording?.({ includeHidden: exportIncludeHidden, includeTokens: exportIncludeTokens, includeGrid: exportIncludeGrid, durationSeconds: exportDuration, mapName: globalSettings?.active_map_name })}>
+                  RECORD_MAP
+                </button>
+              )}
+            </div>
+            </div>
+          )}
+
+          </>)}
+
           {adminTab === 'game' && (
             <>
               <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
@@ -1419,6 +1559,9 @@ export function AdminPanel({
                 await fetch('/api/water', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ points }) });
                 setAdminAlert(`WATER BODY SAVED`); fetchWaterBodies(); setView('list'); setWaterTrail([]);
             }}>SAVE_WATER_BODY</button>
+          {/* Same server-side undo as the main admin header. Distinct from
+              CLEAR_DRAWING above, which only discards the untraced trail. */}
+          <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={handleUndo} title="UNDO LAST SAVED CHANGE">⟲ UNDO</button>
         </>
       )}
 

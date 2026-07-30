@@ -389,3 +389,61 @@ describe('DELETE /api/maps/:id', () => {
     expect(res.status).toBe(200);
   });
 });
+
+// ─── active map name ──────────────────────────────────────────────────────────
+
+// Nothing tracked which saved map was live before: loading replaced the world and
+// forgot where it came from. Exports name their files after it.
+
+const activeMapName = (db) =>
+  get(db, `SELECT value FROM global_settings WHERE key = 'active_map_name'`);
+
+describe('active map name', () => {
+  it('is unset before any map is saved or loaded', async () => {
+    expect(await activeMapName(db)).toBeUndefined();
+  });
+
+  it('is recorded when a map is saved', async () => {
+    await insertLocation(db);
+    await request(app)
+      .post('/api/maps/save')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ name: 'NIGHT_CITY' });
+
+    expect((await activeMapName(db))?.value).toBe('NIGHT_CITY');
+  });
+
+  it('is recorded when a map is loaded', async () => {
+    await seedSavedMap(db, 'WATSON');
+    await request(app)
+      .post('/api/maps/load/WATSON')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect((await activeMapName(db))?.value).toBe('WATSON');
+  });
+
+  it('follows the most recent load', async () => {
+    await seedSavedMap(db, 'WATSON');
+    await seedSavedMap(db, 'PACIFICA');
+    await request(app).post('/api/maps/load/WATSON').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    await request(app).post('/api/maps/load/PACIFICA').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect((await activeMapName(db))?.value).toBe('PACIFICA');
+  });
+
+  it('is cleared when the world is wiped', async () => {
+    await seedSavedMap(db, 'WATSON');
+    await request(app).post('/api/maps/load/WATSON').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    await request(app).post('/api/maps/clear').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(await activeMapName(db)).toBeUndefined();
+  });
+
+  it('is not set by a load that 404s', async () => {
+    await request(app)
+      .post('/api/maps/load/NO_SUCH_MAP')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(await activeMapName(db)).toBeUndefined();
+  });
+});

@@ -16,6 +16,9 @@ export interface SignData {
   y: number;
   z: number;
   rotation_y: number;
+  /** Pitch. -PI/2 lays the sign flat, face up, for use as a ground label. */
+  rotation_x?: number | null;
+  rotation_z?: number | null;
   font_size: number;
   font_family?: string | null;
   lines?: string | null; // JSON-encoded SignLine[]
@@ -285,7 +288,7 @@ const SignMesh = React.memo(({
     <mesh
       ref={meshRef}
       position={[sign.x, sign.y + h / 2, sign.z]}
-      rotation={[0, sign.rotation_y, 0]}
+      rotation={[sign.rotation_x ?? 0, sign.rotation_y, sign.rotation_z ?? 0]}
       renderOrder={10}
       onClick={onSelect ? (e) => { e.stopPropagation(); onSelect(sign.id); } : undefined}
     >

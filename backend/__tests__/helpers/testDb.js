@@ -116,6 +116,8 @@ function makeTestDb() {
         y REAL NOT NULL,
         z REAL NOT NULL,
         rotation_y REAL DEFAULT 0,
+        rotation_x REAL DEFAULT 0,
+        rotation_z REAL DEFAULT 0,
         font_size REAL DEFAULT 1.0,
         font_family TEXT DEFAULT 'monospace',
         image_url TEXT,

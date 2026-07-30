@@ -15,8 +15,6 @@ process.env.DICE_ANIM_MS = '0';
 
 const socketsFactory = (await import('../sockets/index.js')).default;
 
-const flush = (ms = 30) => new Promise((r) => setTimeout(r, ms));
-
 function boot(db) {
   const emitted = [];
   let connectionCb;
@@ -66,6 +64,34 @@ const insertDie = async (name, sides, faces) => {
 
 const rolls = (emitted) => emitted.filter(e => e.event === 'diceRollBroadcast');
 
+/**
+ * Poll until `predicate` returns something truthy, rather than sleeping a fixed span.
+ *
+ * The handler chains a DB lookup, the roll, an insert and the broadcast. A fixed sleep
+ * is a guess at how long that takes: 30ms passed locally every time and failed
+ * intermittently on CI, where the runner is slower and more contended.
+ */
+const waitFor = async (predicate, timeoutMs = 3000) => {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await predicate();
+    if (value) return value;
+    if (Date.now() >= deadline) return value;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+};
+
+/** Wait for at least `n` roll broadcasts to land. */
+const waitForRolls = (emitted, n = 1) =>
+  waitFor(() => (rolls(emitted).length >= n ? rolls(emitted) : null));
+
+/**
+ * Absence cannot be polled for, so these keep a real wait — generous enough that a
+ * slow runner does not turn "did not roll" into a false pass.
+ */
+const settle = (ms = 200) => new Promise((r) => setTimeout(r, ms));
+
+
 // ─── GM dice (database) ───────────────────────────────────────────────────────
 
 describe('requestCustomDiceRoll — GM dice', () => {
@@ -73,7 +99,7 @@ describe('requestCustomDiceRoll — GM dice', () => {
     const id = await insertDie('punk', 4, NUMERIC_FACES);
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 1, color: '#0f0' });
-    await flush();
+    await waitForRolls(emitted);
 
     expect(rolls(emitted)).toHaveLength(1);
     expect(rolls(emitted)[0].data.results).toHaveProperty('punk');
@@ -85,7 +111,7 @@ describe('requestCustomDiceRoll — GM dice', () => {
     const id = await insertDie('punk', 4, NUMERIC_FACES);
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 1, color: '#0f0' });
-    await flush();
+    await waitForRolls(emitted);
 
     expect(rolls(emitted)[0].data.diceSides).toEqual({ punk: 4 });
   });
@@ -94,7 +120,7 @@ describe('requestCustomDiceRoll — GM dice', () => {
     const id = await insertDie('punk', 4, WORD_FACES);
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 20, color: '#0f0' });
-    await flush();
+    await waitForRolls(emitted);
 
     const allowed = WORD_FACES.map(f => f.value);
     for (const v of rolls(emitted)[0].data.results.punk) {
@@ -106,7 +132,7 @@ describe('requestCustomDiceRoll — GM dice', () => {
     const id = await insertDie('nums', 4, NUMERIC_FACES);
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 3, color: '#0f0' });
-    await flush();
+    await waitForRolls(emitted);
 
     const { total, results } = rolls(emitted)[0].data;
     const expected = results.nums.reduce((a, v) => a + Number(v), 0);
@@ -117,7 +143,7 @@ describe('requestCustomDiceRoll — GM dice', () => {
     const id = await insertDie('dF', 6, SIGNED_FACES);
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 4, color: '#0f0' });
-    await flush();
+    await waitForRolls(emitted);
 
     const { total, results } = rolls(emitted)[0].data;
     expect(total).toBe(results.dF.reduce((a, v) => a + Number(v), 0));
@@ -129,7 +155,7 @@ describe('requestCustomDiceRoll — GM dice', () => {
     const id = await insertDie('punk', 4, WORD_FACES);
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 2, color: '#0f0' });
-    await flush();
+    await waitForRolls(emitted);
 
     const { total, historyString } = rolls(emitted)[0].data;
     expect(total).toBe(0);
@@ -142,7 +168,7 @@ describe('requestCustomDiceRoll — GM dice', () => {
     const id = await insertDie('nums', 4, NUMERIC_FACES);
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 5, color: '#0f0' });
-    await flush();
+    await waitForRolls(emitted);
 
     expect(rolls(emitted)[0].data.results.nums).toHaveLength(5);
   });
@@ -151,7 +177,7 @@ describe('requestCustomDiceRoll — GM dice', () => {
     const id = await insertDie('nums', 4, NUMERIC_FACES);
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 5000, color: '#0f0' });
-    await flush();
+    await waitForRolls(emitted);
 
     expect(rolls(emitted)[0].data.results.nums).toHaveLength(20);
   });
@@ -161,7 +187,7 @@ describe('requestCustomDiceRoll — GM dice', () => {
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, color: '#0f0' });
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 'lots', color: '#0f0' });
-    await flush();
+    await waitForRolls(emitted, 2);
 
     for (const r of rolls(emitted)) expect(r.data.results.nums).toHaveLength(1);
   });
@@ -170,7 +196,7 @@ describe('requestCustomDiceRoll — GM dice', () => {
     const id = await insertDie('nums', 4, NUMERIC_FACES);
     const { handlers } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 1, color: '#0f0' });
-    await flush();
+    await waitFor(() => get(db, 'SELECT * FROM dice_rolls ORDER BY id DESC LIMIT 1'));
 
     const row = await get(db, 'SELECT * FROM dice_rolls ORDER BY id DESC LIMIT 1');
     expect(row.username).toBe('GHOST');
@@ -184,7 +210,7 @@ describe('requestCustomDiceRoll — built-in dice', () => {
   it('resolves a builtin id from code without touching the database', async () => {
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: 'builtin:fate_df', count: 4, color: '#0f0' });
-    await flush();
+    await settle();
 
     expect(rolls(emitted)).toHaveLength(1);
     expect(rolls(emitted)[0].data.results.dF).toHaveLength(4);
@@ -194,7 +220,7 @@ describe('requestCustomDiceRoll — built-in dice', () => {
   it('sums 4dF to the Fate ladder', async () => {
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: 'builtin:fate_df', count: 4, color: '#0f0' });
-    await flush();
+    await waitForRolls(emitted);
 
     const { total } = rolls(emitted)[0].data;
     expect(total).toBeGreaterThanOrEqual(-4);
@@ -204,7 +230,7 @@ describe('requestCustomDiceRoll — built-in dice', () => {
   it('reports 6 sides for dF', async () => {
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: 'builtin:fate_df', count: 1, color: '#0f0' });
-    await flush();
+    await waitForRolls(emitted);
 
     expect(rolls(emitted)[0].data.diceSides).toEqual({ dF: 6 });
   });
@@ -212,7 +238,7 @@ describe('requestCustomDiceRoll — built-in dice', () => {
   it('ignores an unknown builtin id', async () => {
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: 'builtin:nope', count: 1, color: '#0f0' });
-    await flush();
+    await settle();
 
     expect(rolls(emitted)).toHaveLength(0);
   });
@@ -223,7 +249,7 @@ describe('requestCustomDiceRoll — built-in dice', () => {
     await insertDie('decoy', 4, NUMERIC_FACES);
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: 'builtin:decoy', count: 1, color: '#0f0' });
-    await flush();
+    await settle();
 
     expect(rolls(emitted)).toHaveLength(0);
   });
@@ -235,7 +261,7 @@ describe('requestCustomDiceRoll — bad input', () => {
   it('ignores a die id that does not exist', async () => {
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: 9999, count: 1, color: '#0f0' });
-    await flush();
+    await settle();
 
     expect(rolls(emitted)).toHaveLength(0);
   });
@@ -243,7 +269,7 @@ describe('requestCustomDiceRoll — bad input', () => {
   it('ignores a missing die id', async () => {
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', count: 1, color: '#0f0' });
-    await flush();
+    await settle();
 
     expect(rolls(emitted)).toHaveLength(0);
   });
@@ -256,7 +282,7 @@ describe('requestCustomDiceRoll — bad input', () => {
       userName: 'GHOST', dieId: id, count: 1, color: '#0f0',
       die: { name: 'forged', sides: 1, faces: [{ value: '9999' }] },
     });
-    await flush();
+    await waitForRolls(emitted);
 
     const { results } = rolls(emitted)[0].data;
     expect(results).not.toHaveProperty('forged');
@@ -268,7 +294,7 @@ describe('requestCustomDiceRoll — bad input', () => {
     const row = await get(db, `SELECT id FROM custom_dice WHERE name = 'broken'`);
     const { handlers, emitted } = boot(db);
     expect(() => handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: row.id, count: 1, color: '#0f0' })).not.toThrow();
-    await flush();
+    await settle();
 
     expect(rolls(emitted)).toHaveLength(0);
   });
@@ -277,7 +303,7 @@ describe('requestCustomDiceRoll — bad input', () => {
     const id = await insertDie('empty', 4, []);
     const { handlers, emitted } = boot(db);
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 1, color: '#0f0' });
-    await flush();
+    await settle();
 
     expect(rolls(emitted)).toHaveLength(0);
   });

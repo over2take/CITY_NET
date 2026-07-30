@@ -9,6 +9,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.7.4] - 2026-07-28
+
+### Added
+
+- **Map export** — a new **EXPORT** tab in the admin panel writes the city out as a top-down PNG or a WebM video. Both frame the whole map from actual content bounds, so everything lands in one shot however far the city sprawls, and both carry a translucent `CITY_NET` watermark with the repo URL beneath it.
+  - **Resolution** — `1080P` / `2K` / `4K` / `8K`. The names describe width; height follows the city's aspect ratio, and the pixel count is shown beside each label so the mapping is unambiguous. Video is capped at 2K.
+  - **Record length** — 5 / 10 / 30 seconds, with a `● REC` indicator and seconds-remaining readout while capturing.
+  - **`INCLUDE_GRID`** (on) puts the ground grid in the shot, where it reads as map paper. **`INCLUDE_HIDDEN`** and **`INCLUDE_TOKENS`** (both off) keep GM-only structures and player tokens out, so a shared export cannot leak secrets and is a clean map rather than a snapshot of where everyone stood. Tokens never affect framing in either state, being mobile.
+  - **`TRANSPARENT_BG`** renders the PNG without the theme background, for compositing over paper texture in an image editor. PNG only — WebM has no dependable alpha channel.
+  - Files are named after the live map: `nightcity-2026-07-28.png` rather than `city-map-1753718400000.png`.
+- **Export framing from real city bounds** — bounds account for building rotation (via circumradius, correct for all three rotation axes), road width rather than just centrelines, water bodies, and overpasses. The camera centres on the city centroid, so a city generated off-origin is no longer cropped.
+- **Sign rotation on all three axes** — signs gain `rotation_x` and `rotation_z` alongside the existing yaw, with sliders and `LAY_FLAT` / `STAND_UP` presets. `LAY_FLAT` pitches a sign face-up with its text running north, so signs work as ground labels read from a top-down view.
+- **`UNDO` in the DRAW_WATER panel** — the same server-side undo as the admin header, so a mistraced body can be reverted without leaving the panel.
+- **The live map is remembered** — `active_map_name` is recorded in `global_settings` when a map is saved or loaded and cleared when the world is wiped. Nothing tracked this before: loading a map replaced the world and forgot where it came from.
+
+### Fixed
+
+- **Signs no longer lose their rotation on save** — a sign pitched flat sprang back upright on reload. Nothing in the stack handled pitch: the save path read only `rotation.y`, the schema stored only `rotation_y`, and the renderer hardcoded the other two axes to zero. All three now persist end to end. Existing signs are unaffected — the migration defaults to 0 and the renderer coalesces nulls.
+
+### Technical
+
+- **Recording renders off-screen rather than mirroring the live canvas.** Mirroring pinned the video to the window size and meant the resolution choice could not reach it. Rendering through its own camera also means recording never touches the live view — no camera fly-to, no locked controls — and it can reuse the PNG's orthographic camera, so the video is square-on rather than a perspective view leaning at the edges. `makeExportCamera` is shared by both paths so they cannot drift apart.
+- **One off-screen `WebGLRenderer` is reused for the session.** Building one per export exhausted the browser's WebGL context budget, at which point it evicted the live city canvas and the scene went black. `forceContextLoss()` was the cause of the loss it was meant to prevent.
+- **PNG size is clamped to what the GPU can render**, read from `MAX_RENDERBUFFER_SIZE` and `MAX_TEXTURE_SIZE`. The clamp considers both axes: a tall narrow city at 4096 wide implies a height several times that, and breaching the limit fails the render outright or returns a blank image. Aspect ratio is preserved when scaling down, and the reduction is logged rather than silent.
+- **The recording countdown derives from a wall-clock deadline** rather than decrementing per tick. Rendering the scene twice per frame starves timers, and a decrementing counter loses every dropped tick permanently — the display fell behind and then snapped from a few seconds straight to zero when auto-stop fired.
+- **Frames are throttled to 30fps.** `requestAnimationFrame` fires at the display rate, and anything above what the recorder samples is GPU work thrown away.
+- Recorder codec falls back vp9 → vp8 → webm → browser default, with `onerror` handling so a failed capture cannot wedge the button on `STOP_RECORDING`.
+- The grid's fade radius is widened for the duration of an export. `fadeDistance` is tuned for the interactive camera, and both paths frame the city from far above it, so the grid faded to nothing exactly when `INCLUDE_GRID` asked for it.
+- Hidden structures are baked into shared `InstancedMesh` draw calls and cannot be switched off by scene traversal, so the export suppresses them through `renderLists` and waits for the commit before capturing.
+- **`preserveDrawingBuffer` removed from the main `<Canvas>`.** It was required while recording read the live canvas; now that recording renders its own frames, it was a permanent cost to every player for nothing. `overheadFlyHeight` and the canvas-mirroring composite loop went with it.
+
+---
+
 ## [1.7.3] - 2026-07-27
 
 ### Added

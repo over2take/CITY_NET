@@ -228,3 +228,381 @@ describe('AdminPanel pending requests', () => {
     expect(props.socketRef.current.emit).toHaveBeenCalledWith('denyEditing', expect.objectContaining({ userId: 'user-99' }));
   });
 });
+
+// ─── map export ───────────────────────────────────────────────────────────────
+
+const exportProps = (over: any = {}) => ({
+  ...baseProps(),
+  view: 'list',
+  onExportPng: vi.fn(),
+  onStartRecording: vi.fn(),
+  onStopRecording: vi.fn(),
+  isRecording: false,
+  isExporting: false,
+  ...over,
+});
+
+/** Export lives on its own admin tab now; select it before touching its controls. */
+const openExport = async () => {
+  await userEvent.click(screen.getByText('EXPORT'));
+};
+
+describe('AdminPanel map export', () => {
+  it('offers an EXPORT tab', () => {
+    render(<AdminPanel {...exportProps()} />);
+    expect(screen.getByText('EXPORT')).toBeInTheDocument();
+  });
+
+  it('keeps the controls off the city tab', () => {
+    // They used to sit at the bottom of CITY; the tab exists so they no longer do.
+    render(<AdminPanel {...exportProps()} />);
+    expect(screen.queryByText('EXPORT_PNG')).not.toBeInTheDocument();
+  });
+
+  it('shows the controls on the export tab', async () => {
+    render(<AdminPanel {...exportProps()} />);
+    await openExport();
+    expect(screen.getByText('EXPORT_PNG')).toBeInTheDocument();
+    expect(screen.getByText('RECORD_MAP')).toBeInTheDocument();
+  });
+
+  it('shows nothing on the export tab when no handler is wired', async () => {
+    const props = baseProps();
+    props.view = 'list';
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('EXPORT'));
+    expect(screen.queryByText('EXPORT_PNG')).not.toBeInTheDocument();
+  });
+
+  it('defaults both toggles off so exports never leak hidden geometry', async () => {
+    render(<AdminPanel {...exportProps()} />);
+    await openExport();
+    expect(screen.getByLabelText('INCLUDE_HIDDEN')).not.toBeChecked();
+    expect(screen.getByLabelText('INCLUDE_TOKENS')).not.toBeChecked();
+  });
+
+  it('exports with both toggles off by default', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openExport();
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ includeHidden: false, includeTokens: false }),
+    );
+  });
+
+  it('defaults the PNG width to 2048', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openExport();
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(expect.objectContaining({ width: 2048 }));
+  });
+
+  it('offers every selectable width', async () => {
+    render(<AdminPanel {...exportProps()} />);
+    await openExport();
+    const select = screen.getByLabelText(/RESOLUTION/) as HTMLSelectElement;
+    expect([...select.options].map(o => Number(o.value))).toEqual([1920, 2048, 4096, 8192]);
+    // Labelled by the familiar tier, with the pixel width spelled out beside it.
+    expect(select.options[0].textContent).toContain('1080P');
+    expect(select.options[2].textContent).toContain('4K');
+  });
+
+  it('passes the chosen width through to the export', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openExport();
+    await userEvent.selectOptions(screen.getByLabelText(/RESOLUTION/), '4096');
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(expect.objectContaining({ width: 4096 }));
+  });
+
+  it('passes INCLUDE_HIDDEN through once enabled', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openExport();
+    await userEvent.click(screen.getByLabelText('INCLUDE_HIDDEN'));
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ includeHidden: true, includeTokens: false }),
+    );
+  });
+
+  it('passes INCLUDE_TOKENS through once enabled', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openExport();
+    await userEvent.click(screen.getByLabelText('INCLUDE_TOKENS'));
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ includeHidden: false, includeTokens: true }),
+    );
+  });
+
+  it('passes the toggles to recording as well', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openExport();
+    await userEvent.click(screen.getByLabelText('INCLUDE_TOKENS'));
+    await userEvent.click(screen.getByText('RECORD_MAP'));
+    expect(props.onStartRecording).toHaveBeenCalledWith(
+      expect.objectContaining({ includeHidden: false, includeTokens: true }),
+    );
+  });
+
+  it('swaps RECORD_MAP for STOP_RECORDING while recording', async () => {
+    render(<AdminPanel {...exportProps({ isRecording: true })} />);
+    await openExport();
+    expect(screen.getByText('STOP_RECORDING')).toBeInTheDocument();
+    expect(screen.queryByText('RECORD_MAP')).not.toBeInTheDocument();
+  });
+
+  it('stops recording on STOP_RECORDING click', async () => {
+    const props = exportProps({ isRecording: true });
+    render(<AdminPanel {...props} />);
+    await openExport();
+    await userEvent.click(screen.getByText('STOP_RECORDING'));
+    expect(props.onStopRecording).toHaveBeenCalled();
+  });
+
+  it('disables PNG export while recording, since both mutate scene visibility', async () => {
+    render(<AdminPanel {...exportProps({ isRecording: true })} />);
+    await openExport();
+    expect(screen.getByText('EXPORT_PNG')).toBeDisabled();
+  });
+
+  it('shows a busy label and blocks both actions while exporting', async () => {
+    render(<AdminPanel {...exportProps({ isExporting: true })} />);
+    await openExport();
+    expect(screen.getByText('EXPORTING…')).toBeDisabled();
+    expect(screen.getByText('RECORD_MAP')).toBeDisabled();
+  });
+});
+
+describe('AdminPanel map export grid toggle', () => {
+  const openIt = async () => userEvent.click(screen.getByText('EXPORT'));
+
+  it('includes the grid by default', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    expect(screen.getByLabelText('INCLUDE_GRID')).toBeChecked();
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(expect.objectContaining({ includeGrid: true }));
+  });
+
+  it('drops the grid when unchecked', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByLabelText('INCLUDE_GRID'));
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(expect.objectContaining({ includeGrid: false }));
+  });
+
+  it('carries the grid choice into recording too', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByLabelText('INCLUDE_GRID'));
+    await userEvent.click(screen.getByText('RECORD_MAP'));
+    expect(props.onStartRecording).toHaveBeenCalledWith(expect.objectContaining({ includeGrid: false }));
+  });
+});
+
+describe('AdminPanel recording countdown', () => {
+  const openIt = async () => userEvent.click(screen.getByText('EXPORT'));
+
+  it('shows nothing while idle', async () => {
+    render(<AdminPanel {...exportProps({ isRecording: false })} />);
+    await openIt();
+    expect(screen.queryByText('● REC')).not.toBeInTheDocument();
+  });
+
+  it('shows a REC indicator and the seconds left while recording', async () => {
+    // Recording no longer moves the camera, so this is the only sign it is running.
+    render(<AdminPanel {...exportProps({ isRecording: true, recordSecondsLeft: 7 })} />);
+    await openIt();
+    expect(screen.getByText('● REC')).toBeInTheDocument();
+    expect(screen.getByText('7s REMAINING')).toBeInTheDocument();
+  });
+
+  it('counts down as the capture runs', async () => {
+    const { rerender } = render(<AdminPanel {...exportProps({ isRecording: true, recordSecondsLeft: 9 })} />);
+    await openIt();
+    expect(screen.getByText('9s REMAINING')).toBeInTheDocument();
+    rerender(<AdminPanel {...exportProps({ isRecording: true, recordSecondsLeft: 3 })} />);
+    expect(screen.getByText('3s REMAINING')).toBeInTheDocument();
+  });
+
+  it('reaches zero without going negative', async () => {
+    render(<AdminPanel {...exportProps({ isRecording: true, recordSecondsLeft: 0 })} />);
+    await openIt();
+    expect(screen.getByText('0s REMAINING')).toBeInTheDocument();
+  });
+});
+
+// ─── draw_water undo ──────────────────────────────────────────────────────────
+
+describe('AdminPanel draw_water undo', () => {
+  const waterProps = (): any => ({
+    ...baseProps(),
+    view: 'draw_water',
+    waterTrail: [],
+    setWaterTrail: vi.fn(),
+    fetchWaterBodies: vi.fn(),
+  });
+
+  it('offers UNDO alongside the drawing controls', () => {
+    render(<AdminPanel {...waterProps()} />);
+    expect(screen.getByText('⟲ UNDO')).toBeInTheDocument();
+  });
+
+  it('keeps CLEAR_DRAWING as a separate control', () => {
+    // CLEAR_DRAWING discards the untraced trail; UNDO reverts the last saved change.
+    render(<AdminPanel {...waterProps()} />);
+    expect(screen.getByText('CLEAR_DRAWING')).toBeInTheDocument();
+    expect(screen.getByText('⟲ UNDO')).toBeInTheDocument();
+  });
+
+  it('posts to the same undo endpoint as the main admin header', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ type: 'water_create' }) } as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const props = waterProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('⟲ UNDO'));
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/undo', expect.objectContaining({ method: 'POST' }));
+    vi.unstubAllGlobals();
+  });
+
+  it('refreshes water when the undone action created one', async () => {
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ type: 'water_create' }) } as Response),
+    ));
+
+    const props = waterProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('⟲ UNDO'));
+
+    expect(props.fetchWaterBodies).toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('AdminPanel export options', () => {
+  const openIt = async () => userEvent.click(screen.getByText('EXPORT'));
+
+  it('offers the record-length choices', async () => {
+    render(<AdminPanel {...exportProps()} />);
+    await openIt();
+    const select = screen.getByLabelText(/RECORD_LENGTH/) as HTMLSelectElement;
+    expect([...select.options].map(o => Number(o.value))).toEqual([5, 10, 30]);
+  });
+
+  it('defaults the record length to 10s', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByText('RECORD_MAP'));
+    expect(props.onStartRecording).toHaveBeenCalledWith(
+      expect.objectContaining({ durationSeconds: 10 }),
+    );
+  });
+
+  it('passes the chosen record length through', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.selectOptions(screen.getByLabelText(/RECORD_LENGTH/), '30');
+    await userEvent.click(screen.getByText('RECORD_MAP'));
+    expect(props.onStartRecording).toHaveBeenCalledWith(
+      expect.objectContaining({ durationSeconds: 30 }),
+    );
+  });
+
+  it('locks the record length while a capture runs', async () => {
+    render(<AdminPanel {...exportProps({ isRecording: true })} />);
+    await openIt();
+    expect(screen.getByLabelText(/RECORD_LENGTH/)).toBeDisabled();
+  });
+
+  it('defaults transparency off, so exports keep the themed background', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    expect(screen.getByLabelText('TRANSPARENT_BG')).not.toBeChecked();
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ transparent: false }),
+    );
+  });
+
+  it('passes transparency through when enabled', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByLabelText('TRANSPARENT_BG'));
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ transparent: true }),
+    );
+  });
+
+  it('does not offer transparency to the video path, which has no usable alpha', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByLabelText('TRANSPARENT_BG'));
+    await userEvent.click(screen.getByText('RECORD_MAP'));
+    expect(props.onStartRecording.mock.calls[0][0]).not.toHaveProperty('transparent');
+  });
+
+  it('passes the live map name so the file is named after it', async () => {
+    const props = exportProps();
+    props.globalSettings = { active_map_name: 'NIGHT_CITY' };
+    render(<AdminPanel {...props} />);
+    await openIt();
+    await userEvent.click(screen.getByText('EXPORT_PNG'));
+    expect(props.onExportPng).toHaveBeenCalledWith(
+      expect.objectContaining({ mapName: 'NIGHT_CITY' }),
+    );
+  });
+
+  it('refreshes settings on entry, since a map may have been loaded mid-session', async () => {
+    const props = exportProps();
+    render(<AdminPanel {...props} />);
+    await openIt();
+    expect(props.fetchGlobalSettings).toHaveBeenCalled();
+  });
+});
+
+describe('AdminPanel export tab help text', () => {
+  const openIt = async () => userEvent.click(screen.getByText('EXPORT'));
+
+  it('explains what the tab does', async () => {
+    render(<AdminPanel {...exportProps()} />);
+    await openIt();
+    expect(screen.getByText(/Renders the city as a top-down image or video/)).toBeInTheDocument();
+  });
+
+  it('disambiguates from CITY_DATA_BASE, which is what "export" most reads as', async () => {
+    render(<AdminPanel {...exportProps()} />);
+    await openIt();
+    expect(screen.getByText(/does not save or back up your map/)).toBeInTheDocument();
+    expect(screen.getByText(/CITY_DATA_BASE/)).toBeInTheDocument();
+  });
+
+  it('shows the guidance even when no export handler is wired', async () => {
+    // The tab should never look empty and unexplained.
+    const props = baseProps();
+    props.view = 'list';
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('EXPORT'));
+    expect(screen.getByText(/Renders the city as a top-down image or video/)).toBeInTheDocument();
+  });
+});

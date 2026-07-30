@@ -329,13 +329,13 @@ CITY_NET/
 │   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs
 │   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only); GET / includes sheet_data for NPC initiative rolls
 │   │   ├── battle_maps.js      # Battle map image upload/management
-│   │   ├── maps.js             # Saved map snapshots (locations, districts, roads, overpasses, water bodies); preserves only rhombus tokens on load/clear
+│   │   ├── maps.js             # Saved map snapshots (locations, districts, roads, overpasses, water bodies); preserves only rhombus tokens on load/clear; records active_map_name in global_settings so exports can name their files
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload
 │   │   ├── roads.js            # Road CRUD; DELETE /:id removes a single segment
 │   │   ├── custom_dice.js      # GM-authored dice CRUD; GET is public so players see them, writes are admin-only; broadcasts customDiceUpdated after each change
 │   │   ├── system_dice.js      # Read-only dice that ship with a game system; no write routes exist by design
 │   │   ├── overpasses.js       # Overpass CRUD (GET all / POST one / DELETE :id)
-│   │   ├── signs.js            # Custom sign CRUD (GET all / POST / PATCH :id / DELETE :id); text optional when image_url set
+│   │   ├── signs.js            # Custom sign CRUD (GET all / POST / PATCH :id / DELETE :id); text optional when image_url set; rotation_x/y/z persisted, non-finite angles rejected
 │   │   ├── fonts.js            # Font file upload/list/delete (.ttf .otf .woff .woff2); served as static under /uploads/fonts/
 │   │   ├── player.js           # Player auth (register, login, forgot, reset, registration status poll)
 │   │   └── sheets.js           # Character sheets — admin sheet access, NPC library, portraits, LUCK/Edge reset & grant, import preview
@@ -417,7 +417,7 @@ CITY_NET/
 │   │   │       ├── cityGen.test.ts     # Split determinism, collision and buffer behaviour, zoning, landmarks, parks, end-to-end generation
 │   │   │       └── water.test.ts       # Polygon parsing, concave outlines, span detection, shoreline roads, bridge siting and levels
 │   │   ├── components/
-│   │   │   ├── AdminPanel.tsx          # GM dashboard; CITY_GENERATOR delegates to cityGen/ and exposes OVERPASS_DENSITY; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R, CWN, and SR6; SR6 Edge replenishment (reset all / give 1 to player)
+│   │   │   ├── AdminPanel.tsx          # GM dashboard — CITY / EXPORT / GAME / PLAYERS tabs; CITY_GENERATOR delegates to cityGen/ and exposes OVERPASS_DENSITY; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R, CWN, and SR6; SR6 Edge replenishment (reset all / give 1 to player)
 │   │   │   ├── HitPoints.tsx           # HP tracking + injury panel + HealthReviewWindow; STIM_HEAL (CWN), STABILIZE button for allies on mortal wound
 │   │   │   ├── BankWindows.tsx         # Player bank UI
 │   │   │   ├── ChatWindow.tsx          # In-game chat
@@ -426,7 +426,8 @@ CITY_NET/
 │   │   │   ├── Buildings.tsx           # 3D building meshes
 │   │   │   ├── Sidewalks.tsx           # Road-flanking pavement strips (mitered quad ribbons, no geometry under roads) + neon curb line overlays
 │   │   │   ├── AutoSignage.tsx         # Procedural signs on building faces (seeded RNG, weighted type pool: text, preset SVG images, vertical neon; overlap check)
-│   │   │   ├── Signs.tsx               # Custom sign meshes — canvas-texture renderer (text, image, multi-line), TV/CRT shader filter, free-transform gizmo
+│   │   │   ├── Signs.tsx               # Custom sign meshes — canvas-texture renderer (text, image, multi-line), TV/CRT shader filter, free-transform gizmo; rotation on all three axes so signs can lie flat as ground labels
+│   │   │   ├── MapExportController.tsx # R3F bridge — renders null, lifts the export API out of the Canvas so AdminPanel buttons can drive it
 │   │   │   ├── Rhombuses.tsx           # Player token meshes
 │   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
@@ -469,6 +470,7 @@ CITY_NET/
 │   │   │       ├── HitPoints.test.tsx
 │   │   │       ├── MapElements.test.tsx
 │   │   │       ├── MeasurementTool.test.tsx
+│   │   │       ├── SignRotation.test.tsx   # LAY_FLAT / STAND_UP presets, per-axis sliders, all three axes reaching the PATCH body
 │   │   │       ├── RadioFeed.test.tsx
 │   │   │       ├── RadioPlayer.test.tsx
 │   │   │       ├── Rhombuses.test.tsx
@@ -503,11 +505,13 @@ CITY_NET/
 │   │   ├── hooks/
 │   │   │   ├── useSocket.ts        # Socket.IO connection and all event listeners
 │   │   │   ├── useApi.ts           # Fetch helpers
+│   │   │   ├── useMapExport.ts     # PNG/WebM city export — one cached off-screen renderer for the session, shared ortho camera, GPU size clamp, per-frame render loop for video, MediaRecorder with codec fallback; never touches the live camera
 │   │   │   ├── useMapData.ts       # Location/district/road/overpass/water body/sign data fetching
 │   │   │   ├── useCustomDice.ts    # Custom dice state — fetches GM dice and the active system's built-ins, merges them (built-ins first, flagged `locked`), and applies `customDiceUpdated` broadcasts
 │   │   │   ├── usePlayerSheet.ts   # Shared sheet state, debounced saves, house-rule flags, action emitters (roll/deathSave/stabilize/castSpell); used by CharacterSheetWindow and SheetPage
 │   │   │   └── __tests__/
 │   │   │       ├── useApi.test.ts                        # Fetch helper unit tests
+│   │   │       ├── useMapExport.test.ts                  # Recorder codec fallback (vp9 → vp8 → webm → default), export camera framing, grid fade restore, countdown drift under starved timers
 │   │   │       ├── useCustomDice.test.ts                 # Loading, system/GM merge order, locked flag, broadcast handling, mutation auth and errors
 │   │   │       └── useSocket.pendingRequests.test.ts     # Pending edit-request state; regression for stale requests on newly-promoted temp admins
 │   │   ├── sheets/
@@ -527,9 +531,13 @@ CITY_NET/
 │   │       ├── roadHelpers.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry, getClosestPointOnRoads
 │   │       ├── overpassHelpers.ts  # Elevation profile, deck tile subdivision, pillar placement avoiding roads and lower decks
 │   │       ├── fontLoader.ts       # FontFace loader for remote fonts (cached by URL); BUILTIN_FONTS list
+│   │       ├── mapExportBounds.ts  # City framing math — rotation-safe circumradius, road width, water, overpasses; tokens excluded; resolution presets and GPU-aware size resolution
+│   │       ├── mapExportWatermark.ts # CITY_NET watermark plus repo URL drawn in 2D canvas space; per-frame composite loop for video; exportFilename from the live map name
 │   │       └── __tests__/
 │   │           ├── locationHelpers.test.ts  # Unit tests for isUserDefinedName and getStructLabel
 │   │           ├── roadHelpers.test.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry
+│   │           ├── mapExportBounds.test.ts  # Bounds coverage; GPU clamping on both axes, aspect preserved when scaling down
+│   │           ├── mapExportWatermark.test.ts # Watermark anchor and stacking, scaling floor, filename slugging, download link cleanup
 │   │           └── overpassHelpers.test.ts  # Elevation, geometry, and path-sampling tests
 │   └── public/
 │       ├── signs/              # Preset neon SVG sign images (motel, bar, cyber-clinic, etc.)

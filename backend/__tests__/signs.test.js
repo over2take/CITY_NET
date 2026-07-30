@@ -196,3 +196,122 @@ describe('DELETE /api/signs/:id', () => {
     expect(res.status).toBe(401);
   });
 });
+
+// ─── rotation on all three axes ───────────────────────────────────────────────
+
+// Signs originally stored yaw only, so a sign pitched flat to act as a ground label
+// silently reverted to upright on reload. rotation_x and rotation_z fix that.
+
+const LAY_FLAT = -Math.PI / 2;
+
+describe('sign rotation persistence', () => {
+  it('defaults all three axes to 0 when none are supplied', async () => {
+    const res = await request(app)
+      .post('/api/signs')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ text: 'PLAZA', x: 0, y: 0, z: 0 });
+    expect(res.status).toBe(200);
+    expect(res.body.rotation_x).toBe(0);
+    expect(res.body.rotation_y).toBe(0);
+    expect(res.body.rotation_z).toBe(0);
+  });
+
+  it('stores a lay-flat pitch on create', async () => {
+    const res = await request(app)
+      .post('/api/signs')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ text: 'DOCKS', x: 1, y: 0, z: 2, rotation_x: LAY_FLAT });
+    expect(res.status).toBe(200);
+    expect(res.body.rotation_x).toBeCloseTo(LAY_FLAT);
+  });
+
+  it('round-trips all three axes through create and read', async () => {
+    await request(app)
+      .post('/api/signs')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ text: 'TILTED', x: 0, y: 0, z: 0, rotation_x: 0.5, rotation_y: 1.25, rotation_z: -0.75 });
+
+    const res = await request(app).get('/api/signs');
+    expect(res.body[0].rotation_x).toBeCloseTo(0.5);
+    expect(res.body[0].rotation_y).toBeCloseTo(1.25);
+    expect(res.body[0].rotation_z).toBeCloseTo(-0.75);
+  });
+
+  it('persists a pitch applied via PATCH — the reported bug', async () => {
+    await run(db, `INSERT INTO signs (text, x, y, z) VALUES ('LABEL', 0, 0, 0)`);
+    const [sign] = await all(db, 'SELECT * FROM signs');
+
+    const patch = await request(app)
+      .patch(`/api/signs/${sign.id}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ rotation_x: LAY_FLAT });
+    expect(patch.status).toBe(200);
+
+    const rows = await all(db, 'SELECT * FROM signs');
+    expect(rows[0].rotation_x).toBeCloseTo(LAY_FLAT);
+  });
+
+  it('keeps existing rotation on a PATCH that does not mention it', async () => {
+    await run(
+      db,
+      `INSERT INTO signs (text, x, y, z, rotation_x, rotation_y, rotation_z) VALUES ('KEEP', 0, 0, 0, ?, ?, ?)`,
+      [LAY_FLAT, 1.1, 0.25],
+    );
+    const [sign] = await all(db, 'SELECT * FROM signs');
+
+    await request(app)
+      .patch(`/api/signs/${sign.id}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ text: 'RENAMED' });
+
+    const rows = await all(db, 'SELECT * FROM signs');
+    expect(rows[0].text).toBe('RENAMED');
+    expect(rows[0].rotation_x).toBeCloseTo(LAY_FLAT);
+    expect(rows[0].rotation_y).toBeCloseTo(1.1);
+    expect(rows[0].rotation_z).toBeCloseTo(0.25);
+  });
+
+  it('allows rotation to be reset to 0, rather than treating it as absent', async () => {
+    await run(
+      db,
+      `INSERT INTO signs (text, x, y, z, rotation_x) VALUES ('FLAT', 0, 0, 0, ?)`,
+      [LAY_FLAT],
+    );
+    const [sign] = await all(db, 'SELECT * FROM signs');
+
+    await request(app)
+      .patch(`/api/signs/${sign.id}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ rotation_x: 0 });
+
+    const rows = await all(db, 'SELECT * FROM signs');
+    expect(rows[0].rotation_x).toBe(0);
+  });
+
+  it('rejects non-finite angles rather than letting them blank the sign', async () => {
+    const res = await request(app)
+      .post('/api/signs')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ text: 'NAN', x: 0, y: 0, z: 0, rotation_x: 'not-a-number', rotation_z: null });
+    expect(res.status).toBe(200);
+    expect(res.body.rotation_x).toBe(0);
+    expect(res.body.rotation_z).toBe(0);
+  });
+
+  it('falls back to the stored angle when a PATCH sends a non-finite value', async () => {
+    await run(
+      db,
+      `INSERT INTO signs (text, x, y, z, rotation_x) VALUES ('KEEP', 0, 0, 0, ?)`,
+      [LAY_FLAT],
+    );
+    const [sign] = await all(db, 'SELECT * FROM signs');
+
+    await request(app)
+      .patch(`/api/signs/${sign.id}`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send({ rotation_x: 'garbage' });
+
+    const rows = await all(db, 'SELECT * FROM signs');
+    expect(rows[0].rotation_x).toBeCloseTo(LAY_FLAT);
+  });
+});
