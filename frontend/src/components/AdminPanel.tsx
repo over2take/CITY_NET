@@ -1164,6 +1164,12 @@ export function AdminPanel({
 
           {/* ── GAME TAB ── */}
           {adminTab === 'export' && (<>
+          {/* Names CITY_DATA_BASE explicitly: "export" most plausibly reads as
+              exporting map data, which is that panel's job, not this one's. */}
+          <div style={{fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px', marginBottom: '12px', opacity: 0.85}}>
+            <p>Renders the city as a top-down image or video for sharing and printing.</p>
+            <p style={{marginTop: '6px', opacity: 0.75}}>This does not save or back up your map — use CITY_DATA_BASE for that.</p>
+          </div>
           {onExportPng && (
             <div>
             <div style={{display: 'flex', gap: '16px', marginBottom: '10px', flexWrap: 'wrap'}}>

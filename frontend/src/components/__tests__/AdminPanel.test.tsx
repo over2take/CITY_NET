@@ -580,3 +580,29 @@ describe('AdminPanel export options', () => {
     expect(props.fetchGlobalSettings).toHaveBeenCalled();
   });
 });
+
+describe('AdminPanel export tab help text', () => {
+  const openIt = async () => userEvent.click(screen.getByText('EXPORT'));
+
+  it('explains what the tab does', async () => {
+    render(<AdminPanel {...exportProps()} />);
+    await openIt();
+    expect(screen.getByText(/Renders the city as a top-down image or video/)).toBeInTheDocument();
+  });
+
+  it('disambiguates from CITY_DATA_BASE, which is what "export" most reads as', async () => {
+    render(<AdminPanel {...exportProps()} />);
+    await openIt();
+    expect(screen.getByText(/does not save or back up your map/)).toBeInTheDocument();
+    expect(screen.getByText(/CITY_DATA_BASE/)).toBeInTheDocument();
+  });
+
+  it('shows the guidance even when no export handler is wired', async () => {
+    // The tab should never look empty and unexplained.
+    const props = baseProps();
+    props.view = 'list';
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('EXPORT'));
+    expect(screen.getByText(/Renders the city as a top-down image or video/)).toBeInTheDocument();
+  });
+});
