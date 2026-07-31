@@ -146,29 +146,21 @@ function arcPoints(cx: number, cz: number, r: number, a0: number, a1: number) {
   return pts;
 }
 
-/** Bounding box of a polygon, for handing to a sub-layout. */
-function polyBounds(points: { x: number; z: number }[]): Bounds {
-  const xs = points.map((p) => p.x);
-  const zs = points.map((p) => p.z);
-  return {
-    min: { x: Math.min(...xs), z: Math.min(...zs) },
-    max: { x: Math.max(...xs), z: Math.max(...zs) },
-  };
-}
-
 /**
  * Beltway city — concentric ring roads with radial spokes converging on the centre.
  * San Antonio, with its 410 and 1604 loops, is the reference.
  *
- * The important observation is that a beltway city is not made of annular *blocks*.
- * Between the loops sit perfectly ordinary streets; only the arterial network is
- * radial. So this lays the rings and spokes, then runs an existing layout inside each
- * region between them, passing that region as a boundary.
+ * The observation that makes this work is that a beltway city is not built from
+ * annular blocks, and its local streets are not divided up by the loops. Between the
+ * arterials sits one continuous fabric of ordinary streets; the beltway simply cuts
+ * across it. So this fills the whole disc with a single sub-layout and lays the rings
+ * and spokes over the top — buildings then keep clear of the arterials through the
+ * usual road check, which is what gives them their verges.
  *
- * That means it is almost entirely composition: `LayoutFn` calling `LayoutFn`, using
- * the same boundary confinement drawn bounds introduced. It needs no polygonal blocks,
- * because the sub-layout keeps producing rectangles and the boundary clips them
- * against the curve.
+ * An earlier version partitioned the disc into annular sectors and ran a sub-layout in
+ * each. That produced a sparse, fragmented city: a sector's bounding box is far larger
+ * than the sector, so most of what each run generated fell outside its own region and
+ * was discarded.
  *
  * The corners of a rectangular selection are left empty on purpose — a ring city is
  * round, and filling the corners would defeat the shape.
@@ -177,7 +169,6 @@ export const ringLayout: LayoutFn = (bounds, excludeRoads, rng, water = [], boun
   const { centerX, centerZ, width, depth } = normalizeBounds(bounds);
   const maxR = Math.min(width, depth) / 2;
 
-  const blocks: Block[] = [];
   const roads: RoadSegment[] = [];
 
   const layRoad = (seg: RoadSegment) => {
@@ -193,70 +184,32 @@ export const ringLayout: LayoutFn = (bounds, excludeRoads, rng, water = [], boun
     }
   };
 
+  // The city is the disc, so that circle is the boundary the street fabric is laid
+  // inside. Combined with any outer drawn boundary, both must hold.
+  const disc: Polygon = { points: arcPoints(centerX, centerZ, maxR, 0, Math.PI * 2) };
+  const fill = bspLayout(bounds, excludeRoads, rng, water, disc);
+
+  const blocks = fill.blocks.filter((b) => !boundary || pointInPolygon(boundary, b.x, b.z));
+  for (const r of fill.roads) roads.push(...clipSegmentToBoundary(r, boundary));
+
   // Radii grow faster than linearly, so downtown is ringed tightly and the outer loop
   // sweeps wide.
-  const radii: number[] = [];
   for (let i = 0; i < RING_COUNT; i++) {
-    radii.push(maxR * Math.pow((i + 1) / RING_COUNT, RING_FALLOFF));
-  }
-
-  for (const r of radii) {
+    const r = maxR * Math.pow((i + 1) / RING_COUNT, RING_FALLOFF);
     layPolyline(arcPoints(centerX, centerZ, r, 0, Math.PI * 2), RING_ROAD_WIDTH);
   }
 
   // Spokes are jittered off the even division so the network does not read as a
   // wheel diagram.
-  const spokeAngles: number[] = [];
   const sector = (Math.PI * 2) / SPOKE_COUNT;
   for (let i = 0; i < SPOKE_COUNT; i++) {
-    spokeAngles.push(i * sector + (rng() - 0.5) * sector * 0.2);
-  }
-  spokeAngles.sort((a, b) => a - b);
-
-  for (const a of spokeAngles) {
+    const a = i * sector + (rng() - 0.5) * sector * 0.2;
     layRoad({
       x1: centerX, z1: centerZ,
       x2: centerX + Math.cos(a) * maxR,
       z2: centerZ + Math.sin(a) * maxR,
       width: SPOKE_ROAD_WIDTH,
     });
-  }
-
-  /** Run a sub-layout inside one region and fold its output in. */
-  const fillRegion = (poly: { x: number; z: number }[], sub: LayoutFn) => {
-    if (poly.length < 3) return;
-    const region: Polygon = { points: poly };
-    const result = sub(polyBounds(poly), excludeRoads, rng, water, region);
-    // The sub-layout was confined to its region, which says nothing about any outer
-    // drawn boundary — so both blocks and roads are filtered against that too, or RING
-    // would spill outside a traced area.
-    for (const b of result.blocks) {
-      if (boundary && !pointInPolygon(boundary, b.x, b.z)) continue;
-      blocks.push(b);
-    }
-    for (const r of result.roads) roads.push(...clipSegmentToBoundary(r, boundary));
-  };
-
-  // Downtown, inside the innermost loop: a grid, as most beltway cities have.
-  fillRegion(arcPoints(centerX, centerZ, radii[0], 0, Math.PI * 2), gridLayout);
-
-  // Everything outside it: annular sectors between consecutive rings and spokes,
-  // filled organically. The outermost band runs from the last ring to maxR.
-  const bandEdges = [...radii, maxR];
-  for (let b = 0; b < bandEdges.length - 1; b++) {
-    const rInner = bandEdges[b];
-    const rOuter = bandEdges[b + 1];
-    if (rOuter - rInner < 1) continue;
-
-    for (let i = 0; i < spokeAngles.length; i++) {
-      const a0 = spokeAngles[i];
-      const a1 = i === spokeAngles.length - 1 ? spokeAngles[0] + Math.PI * 2 : spokeAngles[i + 1];
-      const poly = [
-        ...arcPoints(centerX, centerZ, rInner, a0, a1),
-        ...arcPoints(centerX, centerZ, rOuter, a1, a0),
-      ];
-      fillRegion(poly, bspLayout);
-    }
   }
 
   return { blocks, roads };

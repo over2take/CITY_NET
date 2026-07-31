@@ -8,6 +8,7 @@ import {
   RING_COUNT,
   SPOKE_COUNT,
   RING_ROAD_WIDTH,
+  SPOKE_ROAD_WIDTH,
   generateCity,
   SUPERBLOCK_MIN_SIZE,
   GRID_AVENUE_WIDTH,
@@ -228,6 +229,28 @@ describe('ringLayout', () => {
     const { blocks } = ringLayout(bounds(R), false, seededRng());
     const core = blocks.filter((b) => radiusOf(b) < R * 0.25);
     expect(core.length).toBeGreaterThan(0);
+  });
+
+  it('fills the disc as densely as the BSP fills a rectangle', () => {
+    // The regression this layout shipped with: partitioning the disc into annular
+    // sectors and sub-laying each one discarded most of what it generated, because a
+    // sector's bounding box is far larger than the sector. The city came out sparse
+    // and fragmented. A disc is pi/4 of its square, so the ratio should land near that.
+    const ring = ringLayout(bounds(R), false, seededRng()).blocks.length;
+    const bsp = bspLayout(bounds(R), false, seededRng()).blocks.length;
+    expect(ring / bsp).toBeGreaterThan(0.6);
+  });
+
+  it('lays one continuous street fabric rather than one per sector', () => {
+    // Local streets are continuous and the beltway cuts across them; they are not
+    // divided up by it. Sector-local networks showed up as far more short segments.
+    const { roads } = ringLayout(bounds(R), false, seededRng());
+    const arterials = roads.filter(
+      (r) => r.width === RING_ROAD_WIDTH || r.width === SPOKE_ROAD_WIDTH,
+    );
+    const local = roads.length - arterials.length;
+    expect(local).toBeGreaterThan(0);
+    expect(arterials.length).toBeGreaterThan(0);
   });
 
   it('lays no roads when infrastructure is excluded, but still blocks out the city', () => {
