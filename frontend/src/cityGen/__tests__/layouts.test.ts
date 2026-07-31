@@ -4,6 +4,10 @@ import {
   gridLayout,
   superblockLayout,
   bspLayout,
+  ringLayout,
+  RING_COUNT,
+  SPOKE_COUNT,
+  RING_ROAD_WIDTH,
   generateCity,
   SUPERBLOCK_MIN_SIZE,
   GRID_AVENUE_WIDTH,
@@ -39,7 +43,7 @@ const freshContext = () => ({ locations: [], roads: [], waterBodies: [] });
 
 describe('layout registry', () => {
   it('offers every layout type', () => {
-    expect(Object.keys(LAYOUTS).sort()).toEqual(['BSP', 'GRID', 'SUPERBLOCK']);
+    expect(Object.keys(LAYOUTS).sort()).toEqual(['BSP', 'GRID', 'RING', 'SUPERBLOCK']);
   });
 
   it('every layout produces blocks for the same area', () => {
@@ -170,6 +174,69 @@ describe('superblockLayout', () => {
   });
 });
 
+// ─── ring ────────────────────────────────────────────────────────────────────
+
+describe('ringLayout', () => {
+  const R = 300;
+  const radiusOf = (p: { x: number; z: number }) => Math.hypot(p.x, p.z);
+
+  it('keeps the city round, leaving the corners of a square selection empty', () => {
+    // A beltway city is circular; filling the corners would defeat the shape.
+    const { blocks } = ringLayout(bounds(R), false, seededRng());
+    for (const b of blocks) expect(radiusOf(b)).toBeLessThanOrEqual(R + 1);
+    const corner = blocks.filter((b) => Math.abs(b.x) > R * 0.85 && Math.abs(b.z) > R * 0.85);
+    expect(corner).toHaveLength(0);
+  });
+
+  it('lays closed loops at more than one radius', () => {
+    // The rings themselves: road points cluster at each loop radius.
+    const { roads } = ringLayout(bounds(R), false, seededRng());
+    const ringRoads = roads.filter((r) => r.width === RING_ROAD_WIDTH);
+    expect(ringRoads.length).toBeGreaterThan(RING_COUNT * 10);
+
+    const radii = new Set(ringRoads.map((r) => Math.round(radiusOf({ x: r.x1, z: r.z1 }) / 10)));
+    expect(radii.size).toBeGreaterThanOrEqual(RING_COUNT);
+  });
+
+  it('runs spokes out from the centre', () => {
+    const { roads } = ringLayout(bounds(R), false, seededRng());
+    const fromCentre = roads.filter((r) => radiusOf({ x: r.x1, z: r.z1 }) < 1);
+    expect(fromCentre.length).toBe(SPOKE_COUNT);
+  });
+
+  it('spaces the inner loop tighter than the outer one', () => {
+    // Beltways are not evenly spaced; downtown is ringed close.
+    const { roads } = ringLayout(bounds(R), false, seededRng());
+    const ringRadii = [...new Set(
+      roads.filter((r) => r.width === RING_ROAD_WIDTH)
+        .map((r) => Math.round(radiusOf({ x: r.x1, z: r.z1 }))),
+    )].sort((a, b) => a - b);
+    const inner = ringRadii[0];
+    const outer = ringRadii[ringRadii.length - 1];
+    expect(inner).toBeLessThan(outer / 2);
+  });
+
+  it('fills the space between the arterials with ordinary blocks', () => {
+    // The point of the layout: only the arterial network is radial. Between the
+    // loops sit normal streets, so there should be plenty of blocks out there.
+    const { blocks } = ringLayout(bounds(R), false, seededRng());
+    const outerBand = blocks.filter((b) => radiusOf(b) > R * 0.5);
+    expect(outerBand.length).toBeGreaterThan(10);
+  });
+
+  it('builds downtown inside the innermost loop', () => {
+    const { blocks } = ringLayout(bounds(R), false, seededRng());
+    const core = blocks.filter((b) => radiusOf(b) < R * 0.25);
+    expect(core.length).toBeGreaterThan(0);
+  });
+
+  it('lays no roads when infrastructure is excluded, but still blocks out the city', () => {
+    const { blocks, roads } = ringLayout(bounds(R), true, seededRng());
+    expect(roads).toHaveLength(0);
+    expect(blocks.length).toBeGreaterThan(0);
+  });
+});
+
 // ─── selection ────────────────────────────────────────────────────────────────
 
 describe('generateCity layout selection', () => {
@@ -186,7 +253,7 @@ describe('generateCity layout selection', () => {
 
   it('produces a different city for each layout', () => {
     const opts = { sectionType: 'MIXED' as const };
-    const counts = (['BSP', 'GRID', 'SUPERBLOCK'] as const).map(
+    const counts = (['BSP', 'GRID', 'SUPERBLOCK', 'RING'] as const).map(
       (layout) =>
         generateCity(bounds(300), { ...opts, layout }, freshContext(), seededRng(), deps)
           .blocks.length,
@@ -202,7 +269,7 @@ describe('generateCity layout selection', () => {
   });
 
   it('honours a drawn boundary whichever layout is chosen', () => {
-    for (const layout of ['BSP', 'GRID', 'SUPERBLOCK'] as const) {
+    for (const layout of ['BSP', 'GRID', 'SUPERBLOCK', 'RING'] as const) {
       const result = generateCity(
         bounds(300),
         { sectionType: 'MIXED', layout, boundary: square(80) },

@@ -11,6 +11,7 @@ const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
   { value: 'BSP', label: 'ORGANIC — IRREGULAR BLOCKS (DEFAULT)' },
   { value: 'GRID', label: 'GRID — PLANNED, SQUARE BLOCKS' },
   { value: 'SUPERBLOCK', label: 'SUPERBLOCK — TOWER IN PARK' },
+  { value: 'RING', label: 'RING — BELTWAYS AND SPOKES' },
 ];
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
