@@ -392,8 +392,8 @@ describe('clampBuildingsUnderDecks', () => {
     ...over,
   });
 
-  const building = (over: Partial<{ x: number; z: number; width: number; depth: number; height: number }> = {}) => ({
-    x: 100, z: 0, width: 6, depth: 6, height: 50, ...over,
+  const building = (over: Partial<{ x: number; z: number; y: number; width: number; depth: number; height: number }> = {}) => ({
+    x: 100, z: 0, y: 0, width: 6, depth: 6, height: 50, ...over,
   });
 
   it('leaves buildings clear of any deck alone', () => {
@@ -430,6 +430,26 @@ describe('clampBuildingsUnderDecks', () => {
     const high = deck({ height: 24, points: [{ x: 100, z: -100 }, { x: 100, z: 100 }] });
     const [out] = clampBuildingsUnderDecks([building({ height: 60 })], [high, low]);
     expect(out.height).toBeLessThan(10);
+  });
+
+  it('brings a stacked part down with the base it sits on', () => {
+    // y is the bottom of a mesh, and a part sitting on another has its y set to that
+    // one's height. Capping heights alone left upper storeys hanging in mid-air —
+    // the floating skyscrapers.
+    const base = building({ height: 40, y: 0 });
+    const upper = building({ height: 20, y: 40 });
+    const [outBase, outUpper] = clampBuildingsUnderDecks([base, upper], [deck()]);
+
+    expect(outBase.height).toBeLessThan(40);
+    // The upper part must have come down in proportion, not stayed at 40.
+    expect(outUpper.y).toBeLessThan(40);
+    expect(outUpper.y / outUpper.height).toBeCloseTo(upper.y / upper.height, 5);
+  });
+
+  it('leaves y alone for a building it does not cap', () => {
+    const b = building({ height: 4, y: 3 });
+    const [out] = clampBuildingsUnderDecks([b], [deck()]);
+    expect(out.y).toBe(3);
   });
 
   it('accounts for footprint width, not just the centre point', () => {
@@ -589,5 +609,42 @@ describe('setbacks end to end', () => {
       return areas.reduce((a, v) => a + v, 0) / areas.length;
     };
     expect(capture('SLUMS')).toBeGreaterThan(capture('CORPO'));
+  });
+});
+
+describe('skyline taper keeps stacked parts together', () => {
+  it('scales y with height, so upper storeys do not float', () => {
+    // The floating skyscrapers: y is the bottom of a mesh, and a part sitting on
+    // another has its y set to that one's height. Scaling heights alone left every
+    // upper storey hanging above a shortened base.
+    const out = generateCity(
+      bounds(400),
+      { sectionType: 'MIXED' },
+      freshContext(),
+      seededRng(),
+      {
+        // A two-part building: a base, and a storey resting exactly on top of it.
+        fillPlot: (x: number, z: number, _bw: number, _bd: number, _zone: number,
+                   _blocked: unknown, _key: unknown, _cells: unknown,
+                   sink: Record<string, unknown>[]) => {
+          sink.push({ x, z, y: 0, width: 4, depth: 4, height: 30, name: 'STACK_BASE', description: '', color: '#fff', shape: 'box' });
+          sink.push({ x, z, y: 30, width: 3, depth: 3, height: 10, name: 'STACK_TOP', description: '', color: '#fff', shape: 'box' });
+        },
+      } as never,
+    ).buildings;
+
+    // Landmarks and parks also emit parts, and landmark parts sit at arbitrary
+    // heights rather than strictly stacked — pair only the synthetic ones.
+    const bases = out.filter((b) => b.name === 'STACK_BASE');
+    expect(bases.length).toBeGreaterThan(0);
+
+    for (const base of bases) {
+      const upper = out.find(
+        (b) => b.name === 'STACK_TOP' && b.x === base.x && b.z === base.z,
+      );
+      expect(upper).toBeDefined();
+      // The storey rests on the base: its bottom is the base's top.
+      expect(upper!.y).toBeCloseTo(base.height, 5);
+    }
   });
 });

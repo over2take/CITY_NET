@@ -280,8 +280,11 @@ function arcLengthToNearest(points: { x: number; z: number }[], px: number, pz: 
  *
  * Where the deck is too low to build under at all — near its ramps, where it meets the
  * ground — the building is dropped instead of being squashed to nothing.
+ *
+ * Capping scales `y` by the same factor as `height`, because `y` is the bottom of a
+ * mesh and stacked parts sit at the height of the one below.
  */
-export function clampBuildingsUnderDecks<T extends { x: number; z: number; width: number; depth: number; height: number }>(
+export function clampBuildingsUnderDecks<T extends { x: number; z: number; y: number; width: number; depth: number; height: number }>(
   buildings: T[],
   decks: DeckLike[]
 ): T[] {
@@ -307,7 +310,13 @@ export function clampBuildingsUnderDecks<T extends { x: number; z: number; width
 
     if (cap === Infinity) { out.push(b); continue; }
     if (cap < MIN_UNDER_DECK_HEIGHT) continue;
-    out.push(b.height > cap ? { ...b, height: cap } : b);
+    if (b.height <= cap) { out.push(b); continue; }
+
+    // `y` scales with `height`. A plot is often several stacked parts, and a part
+    // sitting on another has its `y` set to that one's height — capping heights alone
+    // left upper storeys hanging above a shortened base.
+    const k = cap / b.height;
+    out.push({ ...b, height: cap, y: b.y * k });
   }
 
   return out;

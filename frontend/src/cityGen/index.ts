@@ -203,9 +203,14 @@ export function generateCity(
     // Zone already steps down with distance, but only in bands — the skyline came out
     // as flat plateaus with hard seams. Scaling within the zone softens those into a
     // continuous taper. Landmarks are left alone; a hero building is sized on purpose.
+    //
+    // `y` scales with `height`. A plot is often several stacked parts, and a part
+    // sitting on another has its `y` set to that one's height — scaling heights alone
+    // left every upper storey hanging in the air above a shortened base.
     const heightScale = heightScaleFor(normDist);
     for (let i = beforeFill; i < buildings.length; i++) {
       buildings[i].height *= heightScale;
+      buildings[i].y *= heightScale;
     }
     tagPlot(zonePrefix);
   });
