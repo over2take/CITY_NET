@@ -9,6 +9,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.8.0] - 2026-07-28
+
+### Added
+
+- **Drawn generation bounds** — the city generator gains a `DRAG_RECT` / `DRAW_AREA` toggle. `DRAW_AREA` traces a boundary the way water is drawn, and generation is confined to that shape: blocks centred outside it are dropped, road seams are clipped to it, and a footprint straddling its edge is rejected. A concave shape generates nothing in its notch, so an L or a crescent works as drawn. The traced outline stays on screen until GENERATE, unlike water, which saves immediately.
+- **Street layouts** — a `LAYOUT` selector offering four distinct city types. Everything downstream of the block list is layout-agnostic, so a layout only has to produce blocks and the roads between them.
+  - **`GRID`** — two perpendicular families of streets with avenues every fourth line. Reads as Manhattan or Chicago, and is genuinely distinct from the default, which always produces *irregular* rectangles however it is tuned. That road hierarchy is most of what makes a grid look designed rather than generated.
+  - **`SUPERBLOCK`** — the same recursive split with a much larger floor: fewer roads, larger plots, open ground between them. Soviet microdistrict or corporate arcology.
+  - **`RING`** — a beltway city, San Antonio being the reference: concentric loop roads with elevated arterials running out from downtown. The corners of a square selection are left empty on purpose, because a ring city is round.
+  - **`BSP`** stays the default and an unrecognised layout falls back to it, so existing generation is untouched and a stale saved option cannot produce an empty city.
+
+### Fixed
+
+- **Elevated arterials no longer run through buildings.** Placement deliberately ignores overpasses so the ground beneath a deck stays buildable — that is what stops an arterial sterilising every block it crosses — but nothing then stopped a tower rising through one. Anything under a deck is now capped just below it, and where the deck is too low to build under at all, near its ramps, the building is dropped rather than squashed to nothing. This applies to water bridges too, which pierced buildings for the same reason.
+
+### Technical
+
+- **A drawn boundary is a water polygon with the sign flipped** — water keeps what falls outside, a boundary keeps what falls inside. `clipSegmentToLand` was generalised into `clipSegmentToPolygons(seg, polys, keepInside)` so the two share one implementation and cannot drift; there is a test asserting they are exact inverses. `footprintOutsidePolygon` mirrors `footprintInWater` but is stricter: water asks whether a footprint touches water at all, a boundary asks whether all of it is inside.
+- A boundary of fewer than three points cannot enclose an area and is treated as absent, falling back to the plain bounds rather than generating nothing and looking like a broken button.
+- Skipping a block draws no randomness, so generation without a boundary splits byte-identically to before. Tests pin that at both the split and the whole-city level.
+- **`RING` fills the disc with a single sub-layout and lays its arterials over the top.** A first version partitioned the disc into annular sectors and sub-laid each one, which produced a sparse, fragmented city — a sector's bounding box is far larger than the sector, so most of what each run generated fell outside its own region and was discarded. Density is now on par with the default over the same area.
+- **`RING` elevates its spokes but leaves its loops on the ground.** A closed loop has no ends to ramp down at, so an elevated ring either never meets the street network or does so at one arbitrary point. Spoke ramps are sized as a fraction of the spoke rather than a fixed length, so both ends reach the ground however large the city is — a fixed ramp longer than half the deck leaves it ending in mid-air.
+- Spokes run from the innermost loop outward rather than converging on a point, which removes a starburst of dead ground at the centre and is closer to how highways meet a downtown loop.
+- `LayoutFn` may return overpasses alongside blocks and roads, and `generateCity` merges them with whatever bridges the water needed. `splitCity` gained an optional minimum block size rather than `SUPERBLOCK` being a parallel implementation.
+
+---
+
 ## [1.7.4] - 2026-07-28
 
 ### Added
