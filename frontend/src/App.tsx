@@ -359,6 +359,9 @@ function App() {
   const [signageDensity, setSignageDensity] = useState(1);
   // Map export: drops is_hidden structures for the duration of a capture.
   const [exportSuppressHidden, setExportSuppressHidden] = useState(false);
+  // City generator: drag a rectangle, or trace a boundary polygon to generate inside.
+  const [cityGenDrawMode, setCityGenDrawMode] = useState<'rect' | 'draw'>('rect');
+  const [genBoundaryTrail, setGenBoundaryTrail] = useState<any[]>([]);
   const [mapExportApi, setMapExportApi] = useState<MapExportApi | null>(null);
   const [isPlacingSign, setIsPlacingSign] = useState(false);
   const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
@@ -1793,6 +1796,10 @@ function App() {
                 isRecording={mapExportApi?.isRecording ?? false}
                 recordSecondsLeft={mapExportApi?.secondsLeft ?? 0}
                 isExporting={mapExportApi?.isExporting ?? false}
+                cityGenDrawMode={cityGenDrawMode}
+                setCityGenDrawMode={setCityGenDrawMode}
+                genBoundaryTrail={genBoundaryTrail}
+                setGenBoundaryTrail={setGenBoundaryTrail}
                 renderSidewalks={renderSidewalks}
                 setRenderSidewalks={(val: boolean) => { setRenderSidewalks(val); socketRef.current?.emit('updateViewSettings', { renderSignage, signageDensity, renderSidewalks: val }); }}
                 renderSignage={renderSignage}
@@ -2634,7 +2641,7 @@ function App() {
                 onReady={setMapExportApi}
               />
             )}
-            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} roadLayerMode={roadLayerMode} />
+            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} roadLayerMode={roadLayerMode} cityGenDrawMode={cityGenDrawMode} genBoundaryTrail={genBoundaryTrail} setGenBoundaryTrail={setGenBoundaryTrail} onBoundaryDrawEnd={(pts: any[]) => setGenBoundaryTrail(pts)} />
             {roadSelectionBounds && view === 'city_gen' && (
               <mesh position={[(roadSelectionBounds.min.x + roadSelectionBounds.max.x) / 2, 0.02, (roadSelectionBounds.min.z + roadSelectionBounds.max.z) / 2]}>
                 <boxGeometry args={[Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x), 0.05, Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z)]} />

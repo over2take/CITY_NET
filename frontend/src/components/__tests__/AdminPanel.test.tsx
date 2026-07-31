@@ -606,3 +606,68 @@ describe('AdminPanel export tab help text', () => {
     expect(screen.getByText(/Renders the city as a top-down image or video/)).toBeInTheDocument();
   });
 });
+
+// ─── city generator bounds mode ───────────────────────────────────────────────
+
+describe('AdminPanel city generator bounds mode', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    waterBodies: [],
+    ...over,
+  });
+
+  it('offers both bounds modes', () => {
+    render(<AdminPanel {...genProps()} />);
+    expect(screen.getByText('DRAG_RECT')).toBeInTheDocument();
+    expect(screen.getByText('DRAW_AREA')).toBeInTheDocument();
+  });
+
+  it('prompts to drag while in rectangle mode', () => {
+    render(<AdminPanel {...genProps()} />);
+    expect(screen.getByText(/DRAG ON MAP TO SELECT/)).toBeInTheDocument();
+  });
+
+  it('prompts to trace while in draw mode', () => {
+    render(<AdminPanel {...genProps({ cityGenDrawMode: 'draw' })} />);
+    expect(screen.getByText(/HOLD LEFT-CLICK TO TRACE/)).toBeInTheDocument();
+  });
+
+  it('reports the traced point count once a boundary exists', () => {
+    const trail = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 10 }, { x: 0, z: 10 }];
+    render(<AdminPanel {...genProps({ cityGenDrawMode: 'draw', genBoundaryTrail: trail })} />);
+    expect(screen.getByText(/BOUNDARY_TRACED: 4 POINTS/)).toBeInTheDocument();
+  });
+
+  it('clears the rectangle when switching to draw, so the two cannot both apply', async () => {
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('DRAW_AREA'));
+    expect(props.setCityGenDrawMode).toHaveBeenCalledWith('draw');
+    expect(props.setRoadSelectionBounds).toHaveBeenCalledWith(null);
+  });
+
+  it('clears the traced boundary when switching back to rectangle', async () => {
+    const props = genProps({ cityGenDrawMode: 'draw' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('DRAG_RECT'));
+    expect(props.setCityGenDrawMode).toHaveBeenCalledWith('rect');
+    expect(props.setGenBoundaryTrail).toHaveBeenCalledWith([]);
+  });
+
+  it('offers to clear a traced boundary', async () => {
+    const trail = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 10 }];
+    const props = genProps({ cityGenDrawMode: 'draw', genBoundaryTrail: trail });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('CLEAR_BOUNDARY'));
+    expect(props.setGenBoundaryTrail).toHaveBeenCalledWith([]);
+  });
+});

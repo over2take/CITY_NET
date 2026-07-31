@@ -584,6 +584,7 @@ export function AdminPanel({
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
     onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
+    cityGenDrawMode, setCityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -1653,17 +1654,41 @@ export function AdminPanel({
               ))}
             </div>
           </div>
-          <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}>{roadSelectionBounds ? <p>AREA_SELECTED: {Math.round(Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x))}x{Math.round(Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z))} units</p> : <p style={{opacity: 0.7}}>DRAG ON MAP TO SELECT GENERATION AREA</p>}<p style={{opacity: 0.7, marginTop: '5px'}}>HIERARCHICAL BSP: ENABLED</p><p style={{opacity: 0.7}}>ZONING: {citySectionType}</p><p style={{opacity: 0.7}}>INFRASTRUCTURE: {genExcludeRoads ? 'BUILDINGS_ONLY' : 'ROADS_+_BUILDINGS'}</p></div>
+          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+            <button className={`utility-btn ${cityGenDrawMode !== 'draw' ? 'active' : ''}`} style={{flex: 1}}
+              onClick={() => { setCityGenDrawMode?.('rect'); setGenBoundaryTrail?.([]); }}>DRAG_RECT</button>
+            <button className={`utility-btn ${cityGenDrawMode === 'draw' ? 'active' : ''}`} style={{flex: 1}}
+              onClick={() => { setCityGenDrawMode?.('draw'); setRoadSelectionBounds(null); }}>DRAW_AREA</button>
+          </div>
+          <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}>{cityGenDrawMode === 'draw'
+            ? (genBoundaryTrail?.length > 2
+                ? <><p>BOUNDARY_TRACED: {genBoundaryTrail.length} POINTS</p><button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setGenBoundaryTrail?.([])}>CLEAR_BOUNDARY</button></>
+                : <p style={{opacity: 0.7}}>HOLD LEFT-CLICK TO TRACE GENERATION AREA</p>)
+            : (roadSelectionBounds ? <p>AREA_SELECTED: {Math.round(Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x))}x{Math.round(Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z))} units</p> : <p style={{opacity: 0.7}}>DRAG ON MAP TO SELECT GENERATION AREA</p>)}<p style={{opacity: 0.7, marginTop: '5px'}}>HIERARCHICAL BSP: ENABLED</p><p style={{opacity: 0.7}}>ZONING: {citySectionType}</p><p style={{opacity: 0.7}}>INFRASTRUCTURE: {genExcludeRoads ? 'BUILDINGS_ONLY' : 'ROADS_+_BUILDINGS'}</p></div>
           <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => {
               try {
-                if (!roadSelectionBounds) return setAdminAlert("SELECT AREA FIRST");
+                const drawing = cityGenDrawMode === 'draw';
+                const tracedPoints = (genBoundaryTrail ?? []).map((p: any) => ({ x: p.x, z: p.z }));
+                // Under three points cannot enclose an area; generateCity ignores such a
+                // boundary, so refuse here rather than silently generating over the bbox.
+                if (drawing && tracedPoints.length < 3) return setAdminAlert("TRACE AN AREA FIRST");
+                if (!drawing && !roadSelectionBounds) return setAdminAlert("SELECT AREA FIRST");
+
+                // A traced shape still needs a rectangle for the split to recurse on,
+                // so its bounding box frames the work and the polygon confines it.
+                const xs = tracedPoints.map((p: any) => p.x);
+                const zs = tracedPoints.map((p: any) => p.z);
+                const genBounds = drawing
+                  ? { min: { x: Math.min(...xs), z: Math.min(...zs) }, max: { x: Math.max(...xs), z: Math.max(...zs) } }
+                  : roadSelectionBounds;
 
                 const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses } = generateCity(
-                  roadSelectionBounds,
+                  genBounds,
                   {
                     sectionType: citySectionType as SectionType,
                     excludeRoads: genExcludeRoads,
                     overpassDensity,
+                    boundary: drawing ? { points: tracedPoints } : undefined,
                   },
                   { locations, roads, waterBodies }
                 );
