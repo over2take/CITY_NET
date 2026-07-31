@@ -275,25 +275,28 @@ function arcLengthToNearest(points: { x: number; z: number }[], px: number, pz: 
  * Placement deliberately ignores overpasses, so the ground under a beltway stays
  * buildable — that is what stops an arterial sterilising every block it crosses. The
  * cost is that nothing stops a tower rising through the deck. Rather than blocking the
- * ground again, anything beneath a deck is capped just under it, which is what actually
- * happens around an elevated freeway.
+ * ground again, anything beneath a deck is scaled down to fit under it, which is what
+ * actually happens around an elevated freeway.
+ *
+ * Scaling is applied **per plot, not per part**. A plot is often several stacked
+ * pieces sharing a `temp_block_id`, and `y` is the bottom of a mesh — so a part
+ * resting on another has its `y` set to that one's height. Capping parts individually
+ * shrank the base while leaving a short upper storey exactly where the old roofline
+ * was, hanging in the air. The whole plot scales by one factor instead, taken from its
+ * tallest point, which keeps it assembled.
  *
  * Where the deck is too low to build under at all — near its ramps, where it meets the
- * ground — the building is dropped instead of being squashed to nothing.
- *
- * Capping scales `y` by the same factor as `height`, because `y` is the bottom of a
- * mesh and stacked parts sit at the height of the one below.
+ * ground — the plot is dropped instead of being squashed to nothing.
  */
-export function clampBuildingsUnderDecks<T extends { x: number; z: number; y: number; width: number; depth: number; height: number }>(
+export function clampBuildingsUnderDecks<T extends { x: number; z: number; y: number; width: number; depth: number; height: number; temp_block_id?: string }>(
   buildings: T[],
   decks: DeckLike[]
 ): T[] {
   if (decks.length === 0) return buildings;
 
-  const out: T[] = [];
-  for (const b of buildings) {
+  /** Lowest deck overhead for a footprint, or Infinity when it is in the open. */
+  const capFor = (b: T): number => {
     let cap = Infinity;
-
     for (const deck of decks) {
       if (deck.points.length < 2) continue;
       const reach = deck.width / 2 + Math.max(b.width, b.depth) / 2;
@@ -307,16 +310,32 @@ export function clampBuildingsUnderDecks<T extends { x: number; z: number; y: nu
       );
       cap = Math.min(cap, deckY - DECK_CLEARANCE);
     }
+    return cap;
+  };
 
-    if (cap === Infinity) { out.push(b); continue; }
+  // Parts of one plot must scale together, so they are handled as a unit. Anything
+  // without a plot id stands alone.
+  const groups = new Map<string, T[]>();
+  buildings.forEach((b, i) => {
+    const key = b.temp_block_id ?? `__solo_${i}`;
+    const group = groups.get(key);
+    if (group) group.push(b);
+    else groups.set(key, [b]);
+  });
+
+  const out: T[] = [];
+  for (const group of groups.values()) {
+    let cap = Infinity;
+    for (const b of group) cap = Math.min(cap, capFor(b));
+
+    if (cap === Infinity) { out.push(...group); continue; }
     if (cap < MIN_UNDER_DECK_HEIGHT) continue;
-    if (b.height <= cap) { out.push(b); continue; }
 
-    // `y` scales with `height`. A plot is often several stacked parts, and a part
-    // sitting on another has its `y` set to that one's height — capping heights alone
-    // left upper storeys hanging above a shortened base.
-    const k = cap / b.height;
-    out.push({ ...b, height: cap, y: b.y * k });
+    const tallest = Math.max(...group.map((b) => b.y + b.height));
+    if (tallest <= cap) { out.push(...group); continue; }
+
+    const k = cap / tallest;
+    for (const b of group) out.push({ ...b, height: b.height * k, y: b.y * k });
   }
 
   return out;

@@ -392,7 +392,7 @@ describe('clampBuildingsUnderDecks', () => {
     ...over,
   });
 
-  const building = (over: Partial<{ x: number; z: number; y: number; width: number; depth: number; height: number }> = {}) => ({
+  const building = (over: Partial<{ x: number; z: number; y: number; width: number; depth: number; height: number; temp_block_id: string }> = {}) => ({
     x: 100, z: 0, y: 0, width: 6, depth: 6, height: 50, ...over,
   });
 
@@ -432,18 +432,37 @@ describe('clampBuildingsUnderDecks', () => {
     expect(out.height).toBeLessThan(10);
   });
 
-  it('brings a stacked part down with the base it sits on', () => {
-    // y is the bottom of a mesh, and a part sitting on another has its y set to that
-    // one's height. Capping heights alone left upper storeys hanging in mid-air —
-    // the floating skyscrapers.
-    const base = building({ height: 40, y: 0 });
-    const upper = building({ height: 20, y: 40 });
+  it('scales a whole plot together so a stack stays assembled', () => {
+    // The floating buildings: parts of one plot share a temp_block_id, and y is the
+    // bottom of a mesh, so a part resting on another has its y set to that one's
+    // height. Capping parts individually shrank the base while leaving the storey
+    // above exactly where the old roofline was.
+    const base = building({ height: 40, y: 0, temp_block_id: 'plot_1' });
+    const upper = building({ height: 20, y: 40, temp_block_id: 'plot_1' });
     const [outBase, outUpper] = clampBuildingsUnderDecks([base, upper], [deck()]);
 
     expect(outBase.height).toBeLessThan(40);
-    // The upper part must have come down in proportion, not stayed at 40.
-    expect(outUpper.y).toBeLessThan(40);
-    expect(outUpper.y / outUpper.height).toBeCloseTo(upper.y / upper.height, 5);
+    // The storey still rests on the base rather than hanging above it.
+    expect(outUpper.y).toBeCloseTo(outBase.height, 5);
+  });
+
+  it('scales by the plot’s tallest point, not each part in isolation', () => {
+    // A short upper storey that already fits under the deck must still come down with
+    // the base beneath it, or it is left floating.
+    const base = building({ height: 40, y: 0, temp_block_id: 'plot_2' });
+    const small = building({ height: 3, y: 40, temp_block_id: 'plot_2' });
+    const [outBase, outSmall] = clampBuildingsUnderDecks([base, small], [deck()]);
+
+    expect(outSmall.height).toBeLessThan(3);
+    expect(outSmall.y).toBeCloseTo(outBase.height, 5);
+  });
+
+  it('drops a whole plot when the deck is too low for any of it', () => {
+    const parts = [
+      building({ x: 3, height: 20, y: 0, temp_block_id: 'plot_3' }),
+      building({ x: 3, height: 8, y: 20, temp_block_id: 'plot_3' }),
+    ];
+    expect(clampBuildingsUnderDecks(parts, [deck()])).toHaveLength(0);
   });
 
   it('leaves y alone for a building it does not cap', () => {
