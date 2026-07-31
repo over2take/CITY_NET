@@ -1764,7 +1764,10 @@ export function AdminPanel({
                 setAdminAlert(`CITY GENERATED: ${blocks.length} SECTORS${bridgeNote}`);
                 refreshLocations();
                 if (newOverpasses.length > 0) refreshOverpasses?.();
-                setView('list'); setRoadSelectionBounds(null);
+                // Stay on the panel with the area still selected, so layout and
+                // density can be adjusted and regenerated without re-selecting.
+                // Generating again infills rather than overlapping: placement tests
+                // against existing locations, and roads consolidate onto existing ones.
             } catch (err: any) {
               console.error(err);
               setAdminAlert(`SYSTEM_ERROR: ${err.message}. Area might be too large or complex.`);

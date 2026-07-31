@@ -716,3 +716,50 @@ describe('AdminPanel layout selector', () => {
     expect(props.setCityLayout).toHaveBeenCalledWith('GRID');
   });
 });
+
+describe('AdminPanel stays on the generator after generating', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    cityLayout: 'BSP',
+    setCityLayout: vi.fn(),
+    roadSelectionBounds: { min: { x: -50, z: -50 }, max: { x: 50, z: 50 } },
+    waterBodies: [],
+    locations: [],
+    roads: [],
+    refreshOverpasses: vi.fn(),
+    ...over,
+  });
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    ));
+  });
+
+  it('does not send the admin back to the main panel', async () => {
+    // Iterating on layout and density means regenerating repeatedly; being kicked
+    // back to the list every time made that tedious.
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    expect(props.setView).not.toHaveBeenCalledWith('list');
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the selected area, so it can be regenerated without re-selecting', async () => {
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    expect(props.setRoadSelectionBounds).not.toHaveBeenCalledWith(null);
+    vi.unstubAllGlobals();
+  });
+});
