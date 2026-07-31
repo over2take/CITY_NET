@@ -1,9 +1,25 @@
 import type { Block, Bounds, Rng, RoadSegment } from './types';
 import { clipSegmentToLand, clipSegmentToBoundary, pointInPolygon, type Polygon, type WaterPolygon } from './water';
 
-/** Widths used for the road laid down at each split. */
-const MAIN_ROAD_WIDTH = 6;
-const SIDE_ROAD_WIDTH = 3;
+/**
+ * Road width by split depth, widest first.
+ *
+ * The earliest splits carve the largest areas, so they are the arterials; each level
+ * down is a smaller street. This used to be a straight either/or — arterial for the
+ * first two splits, side street for everything after — which left the network reading
+ * as two kinds of road rather than a hierarchy. Real networks step down through
+ * arterial, collector and local, and that gradient is one of the strongest cues that a
+ * street plan was laid out rather than scattered.
+ *
+ * Depths past the end of the table all use the last entry.
+ */
+const ROAD_WIDTH_BY_DEPTH = [7, 5.5, 4, 3, 2.5];
+
+/** Width of a seam laid at the given recursion depth. */
+export function roadWidthForDepth(depth: number): number {
+  const i = Math.max(0, Math.min(ROAD_WIDTH_BY_DEPTH.length - 1, depth));
+  return ROAD_WIDTH_BY_DEPTH[i];
+}
 
 /** A block stops subdividing once both dimensions fall under this. */
 const MIN_BLOCK_SIZE = 35;
@@ -85,7 +101,8 @@ export function splitCity(
       return;
     }
     const splitV = w > d ? true : (w === d ? rng() > 0.5 : false);
-    const roadW = iter < 2 ? MAIN_ROAD_WIDTH : SIDE_ROAD_WIDTH;
+    const roadW = roadWidthForDepth(iter);
+    // Bigger splits wander more, in step with the road they carry.
     const jitter = (rng() - 0.5) * (iter < 2 ? 10 : 5);
 
     if (splitV) {

@@ -6,6 +6,8 @@ import { SpatialGrid, createIsBlocked, footprintOnRoad, clampBuildingsUnderDecks
 import {
   createSectorLayout,
   normalizedDistance,
+  heightScaleFor,
+  lotCoverageFor,
   parkProbability,
   assignZoneType,
   zonePrefixFor,
@@ -26,7 +28,7 @@ import type {
 } from './types';
 
 export * from './types';
-export { splitCity, normalizeBounds, maxSplitDepthFor } from './bsp';
+export { splitCity, normalizeBounds, maxSplitDepthFor, roadWidthForDepth } from './bsp';
 export { SpatialGrid, createIsBlocked, footprintOnRoad, clampBuildingsUnderDecks, DECK_CLEARANCE, MIN_UNDER_DECK_HEIGHT } from './collision';
 export * from './zoning';
 export { generatePark } from './parks';
@@ -181,6 +183,11 @@ export function generateCity(
     );
     const zonePrefix = zonePrefixFor(zoneTypeVal);
     ({ bw, bd } = clampPlotAspect(bw, bd, zoneTypeVal));
+    // Setback: corporate plots leave forecourts, slums and markets build to the lot
+    // line. Applied after the aspect clamp so it shrinks the plot actually used.
+    const coverage = lotCoverageFor(zoneTypeVal);
+    bw *= coverage;
+    bd *= coverage;
 
     if (shouldPlaceLandmark(block, bw, bd, zoneTypeVal, isBlocked, rng)) {
       generateLandmark(block, bw, bd, buildings, grid, rng);
@@ -188,10 +195,18 @@ export function generateCity(
       return;
     }
 
+    const beforeFill = buildings.length;
     deps.fillPlot(
       block.x, block.z, bw, bd, zoneTypeVal,
       isBlocked, grid.key, grid.cells, buildings, context.locations, plotId
     );
+    // Zone already steps down with distance, but only in bands — the skyline came out
+    // as flat plateaus with hard seams. Scaling within the zone softens those into a
+    // continuous taper. Landmarks are left alone; a hero building is sized on purpose.
+    const heightScale = heightScaleFor(normDist);
+    for (let i = beforeFill; i < buildings.length; i++) {
+      buildings[i].height *= heightScale;
+    }
     tagPlot(zonePrefix);
   });
 

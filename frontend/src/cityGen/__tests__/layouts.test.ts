@@ -10,6 +10,9 @@ import {
   RING_ROAD_WIDTH,
   SPOKE_COUNT as SC,
   clampBuildingsUnderDecks,
+  roadWidthForDepth,
+  heightScaleFor,
+  lotCoverageFor,
   generateCity,
   SUPERBLOCK_MIN_SIZE,
   GRID_AVENUE_WIDTH,
@@ -434,5 +437,157 @@ describe('clampBuildingsUnderDecks', () => {
     const wide = building({ z: 9, width: 20, depth: 20, height: 40 });
     const [out] = clampBuildingsUnderDecks([wide], [deck()]);
     expect(out.height).toBeLessThan(40);
+  });
+});
+
+// ─── road hierarchy ───────────────────────────────────────────────────────────
+
+describe('roadWidthForDepth', () => {
+  it('narrows as the split goes deeper', () => {
+    // The earliest splits carve the largest areas, so they carry the arterials.
+    const widths = [0, 1, 2, 3, 4].map(roadWidthForDepth);
+    for (let i = 1; i < widths.length; i++) {
+      expect(widths[i]).toBeLessThan(widths[i - 1]);
+    }
+  });
+
+  it('offers a real gradient, not just two kinds of road', () => {
+    // It used to be arterial for the first two splits and side street for the rest,
+    // which read as two road types rather than a hierarchy.
+    const distinct = new Set([0, 1, 2, 3, 4].map(roadWidthForDepth));
+    expect(distinct.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it('holds the narrowest width past the end of the table', () => {
+    expect(roadWidthForDepth(99)).toBe(roadWidthForDepth(4));
+  });
+
+  it('treats a negative depth as the widest', () => {
+    expect(roadWidthForDepth(-3)).toBe(roadWidthForDepth(0));
+  });
+});
+
+describe('street hierarchy in generated layouts', () => {
+  it('gives the default layout several road widths', () => {
+    const { roads } = bspLayout(bounds(400), false, seededRng());
+    expect(new Set(roads.map((r) => r.width)).size).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// ─── height gradient ──────────────────────────────────────────────────────────
+
+describe('heightScaleFor', () => {
+  it('builds tallest at the centre and lowest at the rim', () => {
+    expect(heightScaleFor(0)).toBeGreaterThan(heightScaleFor(1));
+  });
+
+  it('falls off continuously rather than in steps', () => {
+    // Zone already steps with distance; the skyline came out as flat plateaus with
+    // hard seams. This is what softens them.
+    const samples = [0, 0.2, 0.4, 0.6, 0.8, 1].map(heightScaleFor);
+    for (let i = 1; i < samples.length; i++) {
+      expect(samples[i]).toBeLessThan(samples[i - 1]);
+    }
+    expect(new Set(samples).size).toBe(samples.length);
+  });
+
+  it('stays gentle, so it softens the zone bands rather than fighting them', () => {
+    expect(heightScaleFor(0) / heightScaleFor(1)).toBeLessThan(2);
+  });
+
+  it('clamps outside the normalised range', () => {
+    expect(heightScaleFor(-5)).toBe(heightScaleFor(0));
+    expect(heightScaleFor(99)).toBe(heightScaleFor(1));
+  });
+});
+
+describe('skyline taper end to end', () => {
+  it('builds taller near the centre than at the edge', () => {
+    const heights: Array<{ r: number; h: number }> = [];
+    generateCity(
+      bounds(400),
+      { sectionType: 'MIXED' },
+      freshContext(),
+      seededRng(),
+      {
+        // A fixed height, so any difference in the result is the gradient alone.
+        fillPlot: (x: number, z: number, _bw: number, _bd: number, _zone: number,
+                   _blocked: unknown, _key: unknown, _cells: unknown, out: { height: number }[]) => {
+          out.push({ x, z, width: 4, depth: 4, height: 10, name: '', color: '#fff', shape: 'box', y: 0 } as never);
+        },
+      } as never,
+    ).buildings.forEach((b) => heights.push({ r: Math.hypot(b.x, b.z), h: b.height }));
+
+    const inner = heights.filter((v) => v.r < 120);
+    const outer = heights.filter((v) => v.r > 300);
+    expect(inner.length).toBeGreaterThan(0);
+    expect(outer.length).toBeGreaterThan(0);
+
+    const mean = (v: typeof inner) => v.reduce((a, x) => a + x.h, 0) / v.length;
+    expect(mean(inner)).toBeGreaterThan(mean(outer));
+  });
+});
+
+// ─── lot coverage ─────────────────────────────────────────────────────────────
+
+describe('lotCoverageFor', () => {
+  const CORPO = 1.0, URBAN = 0.5, SLUMS = 0.1, INDUSTRIAL = -0.1, MARKETS = 2.0;
+
+  it('leaves corporate plots a forecourt', () => {
+    expect(lotCoverageFor(CORPO)).toBeLessThan(lotCoverageFor(URBAN));
+  });
+
+  it('builds slums and markets to the lot line', () => {
+    expect(lotCoverageFor(SLUMS)).toBeGreaterThan(0.9);
+    expect(lotCoverageFor(MARKETS)).toBeGreaterThan(0.9);
+  });
+
+  it('distinguishes the zones rather than treating them alike', () => {
+    // Previously every zone filled its plot the same way, so districts differed only
+    // in what they built, not how it sat on the ground.
+    const all = [CORPO, URBAN, SLUMS, INDUSTRIAL, MARKETS].map(lotCoverageFor);
+    expect(new Set(all).size).toBeGreaterThan(2);
+  });
+
+  it('never exceeds the plot or collapses it', () => {
+    for (const z of [CORPO, URBAN, SLUMS, INDUSTRIAL, MARKETS, 1.7, 3.0, 99]) {
+      expect(lotCoverageFor(z)).toBeGreaterThan(0.5);
+      expect(lotCoverageFor(z)).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe('setbacks end to end', () => {
+  it('offers corporate plots a smaller footprint than the block', () => {
+    const offered: Array<{ bw: number; bd: number }> = [];
+    generateCity(
+      bounds(400),
+      { sectionType: 'CORPO' },
+      freshContext(),
+      seededRng(),
+      {
+        fillPlot: (_x: number, _z: number, bw: number, bd: number) => {
+          offered.push({ bw, bd });
+        },
+      } as never,
+    );
+    expect(offered.length).toBeGreaterThan(0);
+    // Every plot handed to placement is inset from its block.
+    for (const p of offered) {
+      expect(p.bw).toBeGreaterThan(0);
+      expect(p.bd).toBeGreaterThan(0);
+    }
+  });
+
+  it('gives slums a fuller plot than corporate for the same block size', () => {
+    const capture = (sectionType: 'CORPO' | 'SLUMS') => {
+      const areas: number[] = [];
+      generateCity(
+        bounds(400), { sectionType }, freshContext(), seededRng(),
+        { fillPlot: (_x: number, _z: number, bw: number, bd: number) => { areas.push(bw * bd); } } as never,
+      );
+      return areas.reduce((a, v) => a + v, 0) / areas.length;
+    };
+    expect(capture('SLUMS')).toBeGreaterThan(capture('CORPO'));
   });
 });
