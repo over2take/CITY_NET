@@ -2,7 +2,7 @@ import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from '../components/Buildings';
 import { LAYOUTS } from './layouts';
 import { normalizeBounds } from './bsp';
-import { SpatialGrid, createIsBlocked, footprintOnRoad } from './collision';
+import { SpatialGrid, createIsBlocked, footprintOnRoad, clampBuildingsUnderDecks } from './collision';
 import {
   createSectorLayout,
   normalizedDistance,
@@ -27,7 +27,7 @@ import type {
 
 export * from './types';
 export { splitCity, normalizeBounds, maxSplitDepthFor } from './bsp';
-export { SpatialGrid, createIsBlocked, footprintOnRoad } from './collision';
+export { SpatialGrid, createIsBlocked, footprintOnRoad, clampBuildingsUnderDecks, DECK_CLEARANCE, MIN_UNDER_DECK_HEIGHT } from './collision';
 export * from './zoning';
 export { generatePark } from './parks';
 export { shouldPlaceLandmark, generateLandmark } from './landmarks';
@@ -195,5 +195,13 @@ export function generateCity(
     tagPlot(zonePrefix);
   });
 
-  return { blocks, roads: finalRoads, buildings, overpasses };
+  // Placement ignores overpasses so the ground beneath stays buildable; nothing there
+  // stops a tower rising through a deck, so anything under one is capped just below it.
+  // Applies to water bridges too, which pierce buildings for the same reason.
+  return {
+    blocks,
+    roads: finalRoads,
+    buildings: clampBuildingsUnderDecks(buildings, overpasses),
+    overpasses,
+  };
 }

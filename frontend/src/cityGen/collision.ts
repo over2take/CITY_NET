@@ -1,5 +1,6 @@
 import type { Obstacle, RoadSegment } from './types';
 import { footprintInWater, footprintOutsidePolygon, type WaterPolygon } from './water';
+import { elevationAt } from '../utils/overpassHelpers';
 
 /** Cell size of the uniform grid used to bucket obstacles. */
 const GRID_CELL = 20;
@@ -217,4 +218,97 @@ export function createIsBlocked(
     if (boundary && footprintOutsidePolygon(boundary, x, z, w, d)) return true;
     return false;
   };
+}
+
+/** Clearance kept between the top of a building and the underside of a deck. */
+export const DECK_CLEARANCE = 3;
+
+/** Below this there is no room to build under a deck at all. */
+export const MIN_UNDER_DECK_HEIGHT = 2.5;
+
+interface DeckLike {
+  points: { x: number; z: number }[];
+  width: number;
+  height: number;
+  ramp_length: number;
+  ramp_length_start?: number;
+  ramp_length_end?: number;
+}
+
+/** Distance along a polyline to the point nearest (px,pz), and the total length. */
+function arcLengthToNearest(points: { x: number; z: number }[], px: number, pz: number) {
+  let best = Infinity;
+  let bestS = 0;
+  let total = 0;
+  const lengths: number[] = [];
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const len = Math.hypot(points[i + 1].x - points[i].x, points[i + 1].z - points[i].z);
+    lengths.push(len);
+    total += len;
+  }
+
+  let run = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const lenSq = dx * dx + dz * dz;
+    const t = lenSq < 1e-9 ? 0 : Math.max(0, Math.min(1, ((px - a.x) * dx + (pz - a.z) * dz) / lenSq));
+    const cx = a.x + dx * t;
+    const cz = a.z + dz * t;
+    const dist = Math.hypot(px - cx, pz - cz);
+    if (dist < best) {
+      best = dist;
+      bestS = run + lengths[i] * t;
+    }
+    run += lengths[i];
+  }
+
+  return { distance: best, s: bestS, total };
+}
+
+/**
+ * Keep buildings from being run through by an elevated deck.
+ *
+ * Placement deliberately ignores overpasses, so the ground under a beltway stays
+ * buildable — that is what stops an arterial sterilising every block it crosses. The
+ * cost is that nothing stops a tower rising through the deck. Rather than blocking the
+ * ground again, anything beneath a deck is capped just under it, which is what actually
+ * happens around an elevated freeway.
+ *
+ * Where the deck is too low to build under at all — near its ramps, where it meets the
+ * ground — the building is dropped instead of being squashed to nothing.
+ */
+export function clampBuildingsUnderDecks<T extends { x: number; z: number; width: number; depth: number; height: number }>(
+  buildings: T[],
+  decks: DeckLike[]
+): T[] {
+  if (decks.length === 0) return buildings;
+
+  const out: T[] = [];
+  for (const b of buildings) {
+    let cap = Infinity;
+
+    for (const deck of decks) {
+      if (deck.points.length < 2) continue;
+      const reach = deck.width / 2 + Math.max(b.width, b.depth) / 2;
+      const { distance, s, total } = arcLengthToNearest(deck.points, b.x, b.z);
+      if (distance > reach) continue;
+
+      const deckY = elevationAt(
+        s, total, deck.height, deck.ramp_length,
+        false, false,
+        deck.ramp_length_start, deck.ramp_length_end
+      );
+      cap = Math.min(cap, deckY - DECK_CLEARANCE);
+    }
+
+    if (cap === Infinity) { out.push(b); continue; }
+    if (cap < MIN_UNDER_DECK_HEIGHT) continue;
+    out.push(b.height > cap ? { ...b, height: cap } : b);
+  }
+
+  return out;
 }
