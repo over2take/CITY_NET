@@ -1,5 +1,5 @@
 import type { Obstacle, RoadSegment } from './types';
-import { footprintInWater, type WaterPolygon } from './water';
+import { footprintInWater, footprintOutsidePolygon, type WaterPolygon } from './water';
 
 /** Cell size of the uniform grid used to bucket obstacles. */
 const GRID_CELL = 20;
@@ -205,12 +205,16 @@ export function createIsBlocked(
   grid: SpatialGrid,
   roads: RoadSegment[],
   checkRoads: boolean,
-  water: WaterPolygon[] = []
+  water: WaterPolygon[] = [],
+  boundary?: WaterPolygon
 ): IsBlocked {
   return (x, z, w, d, buffer = 2) => {
     if (overlapsObstacle(grid, x, z, w, d, buffer)) return true;
     if (checkRoads && footprintOnRoad(roads, x, z, w, d)) return true;
     if (water.length > 0 && footprintInWater(water, x, z, w, d)) return true;
+    // A drawn boundary is water with the sign flipped: reject what falls outside it.
+    // This is what lets a block straddling the edge build only on its inside.
+    if (boundary && footprintOutsidePolygon(boundary, x, z, w, d)) return true;
     return false;
   };
 }

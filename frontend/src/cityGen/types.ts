@@ -27,6 +27,7 @@ import type { RoadSegment } from '../utils/roadHelpers';
 export type { RoadSegment };
 
 import type { OverpassDensity, OverpassSpec } from './bridges';
+import type { Polygon } from './water';
 export type { OverpassDensity, OverpassSpec };
 
 /** Zoning preset chosen in the admin panel. */
@@ -67,6 +68,11 @@ export interface Obstacle {
 
 export interface GenerateCityOptions {
   sectionType: SectionType;
+  /**
+   * Generate only inside this polygon. `bounds` still frames the work — the split
+   * recurses on the bounding box and blocks outside the shape are dropped.
+   */
+  boundary?: Polygon;
   /** When true, no roads are generated and road collision is skipped. */
   excludeRoads: boolean;
   /** How freely roads bridge the water they cross. Defaults to 'normal'. */

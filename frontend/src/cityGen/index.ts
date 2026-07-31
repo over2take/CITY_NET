@@ -12,7 +12,7 @@ import {
 } from './zoning';
 import { generatePark } from './parks';
 import { shouldPlaceLandmark, generateLandmark } from './landmarks';
-import { parseWaterBodies, pointInWater, footprintInWater } from './water';
+import { parseWaterBodies, pointInWater, footprintInWater, clipSegmentToBoundary } from './water';
 import { findBridges } from './bridges';
 import { generateShorelineRoads, snapRoadEndsToShoreline } from './shoreline';
 import type {
@@ -73,6 +73,11 @@ export function generateCity(
   deps: GenerateCityDeps = DEFAULT_DEPS
 ): GenerateCityResult {
   const { sectionType, excludeRoads, overpassDensity = 'normal' } = options;
+  // Fewer than three points cannot enclose an area. Treating a degenerate boundary as
+  // absent falls back to the plain bounds, rather than generating nothing at all and
+  // looking like a broken button.
+  const boundary =
+    options.boundary && options.boundary.points.length >= 3 ? options.boundary : undefined;
   const { width, depth, centerX, centerZ } = normalizeBounds(bounds);
   const maxRadius = Math.max(1, Math.max(width, depth) / 2);
   const water = parseWaterBodies(context.waterBodies ?? []);
@@ -83,11 +88,14 @@ export function generateCity(
 
   // The split clips its own seams to land, so the grid stops at the shore
   // instead of being laid across the water and cut back afterwards.
-  const { blocks, roads: newRoads } = splitCity(bounds, excludeRoads, rng, water);
+  const { blocks, roads: newRoads } = splitCity(bounds, excludeRoads, rng, water, boundary);
 
   // A road around each water body turns what would be dead ends at the shore
   // into junctions, so the network routes around a lake.
-  const shoreRoads = excludeRoads ? [] : generateShorelineRoads(water, bounds);
+  const shoreRoads = excludeRoads
+    ? []
+    : generateShorelineRoads(water, bounds).flatMap((seg) =>
+        clipSegmentToBoundary(seg, boundary));
 
   // Approaches stop at the water, which leaves them overshooting the waterfront
   // road that sits back from it. Snapping their ends onto it removes the
@@ -110,7 +118,7 @@ export function generateCity(
   // seams are not where the pavement ends up — checking those instead lets
   // buildings land on roads that moved underneath them.
   const roadsToCheck = [...context.roads, ...finalRoads];
-  const isBlocked = createIsBlocked(grid, roadsToCheck, !excludeRoads, water);
+  const isBlocked = createIsBlocked(grid, roadsToCheck, !excludeRoads, water, boundary);
 
   const buildings: RawBuilding[] = [];
 

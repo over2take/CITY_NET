@@ -1,5 +1,5 @@
 import type { Block, Bounds, Rng, RoadSegment } from './types';
-import { clipSegmentToLand, type WaterPolygon } from './water';
+import { clipSegmentToLand, clipSegmentToBoundary, pointInPolygon, type Polygon, type WaterPolygon } from './water';
 
 /** Widths used for the road laid down at each split. */
 const MAIN_ROAD_WIDTH = 6;
@@ -56,7 +56,8 @@ export function splitCity(
   bounds: Bounds,
   excludeRoads: boolean,
   rng: Rng,
-  water: WaterPolygon[] = []
+  water: WaterPolygon[] = [],
+  boundary?: Polygon
 ): { blocks: Block[]; roads: RoadSegment[] } {
   const { minX, maxX, minZ, maxZ, width, depth } = normalizeBounds(bounds);
   const maxSplitDepth = maxSplitDepthFor(width, depth);
@@ -64,14 +65,18 @@ export function splitCity(
   const blocks: Block[] = [];
   const roads: RoadSegment[] = [];
 
-  /** Lay a seam, keeping only the stretches that fall on land. */
+  /** Lay a seam, keeping only the stretches on land and inside any boundary. */
   const layRoad = (seg: RoadSegment) => {
-    roads.push(...clipSegmentToLand(seg, water));
+    for (const dry of clipSegmentToLand(seg, water)) {
+      roads.push(...clipSegmentToBoundary(dry, boundary));
+    }
   };
 
   const split = (x: number, z: number, w: number, d: number, iter: number) => {
     if (iter > maxSplitDepth || (w < MIN_BLOCK_SIZE && d < MIN_BLOCK_SIZE)) {
-      blocks.push({ x, z, w, d });
+      // Blocks centred outside a drawn boundary are dropped. Skipping the push draws
+      // no randomness, so the split itself is identical either way.
+      if (!boundary || pointInPolygon(boundary, x, z)) blocks.push({ x, z, w, d });
       return;
     }
     const splitV = w > d ? true : (w === d ? rng() > 0.5 : false);
