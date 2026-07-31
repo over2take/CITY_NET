@@ -33,9 +33,13 @@ export function normalizeBounds(bounds: Bounds) {
  * Recursion depth scales with the selection size, so a larger area yields
  * MORE blocks rather than bigger ones.
  */
-export function maxSplitDepthFor(width: number, depth: number): number {
+export function maxSplitDepthFor(
+  width: number,
+  depth: number,
+  minBlockSize: number = MIN_BLOCK_SIZE
+): number {
   const maxDimension = Math.max(width, depth);
-  return Math.max(4, Math.ceil(Math.log2(maxDimension / MIN_BLOCK_SIZE)) + 2);
+  return Math.max(4, Math.ceil(Math.log2(maxDimension / minBlockSize)) + 2);
 }
 
 /**
@@ -57,10 +61,11 @@ export function splitCity(
   excludeRoads: boolean,
   rng: Rng,
   water: WaterPolygon[] = [],
-  boundary?: Polygon
+  boundary?: Polygon,
+  minBlockSize: number = MIN_BLOCK_SIZE
 ): { blocks: Block[]; roads: RoadSegment[] } {
   const { minX, maxX, minZ, maxZ, width, depth } = normalizeBounds(bounds);
-  const maxSplitDepth = maxSplitDepthFor(width, depth);
+  const maxSplitDepth = maxSplitDepthFor(width, depth, minBlockSize);
 
   const blocks: Block[] = [];
   const roads: RoadSegment[] = [];
@@ -73,7 +78,7 @@ export function splitCity(
   };
 
   const split = (x: number, z: number, w: number, d: number, iter: number) => {
-    if (iter > maxSplitDepth || (w < MIN_BLOCK_SIZE && d < MIN_BLOCK_SIZE)) {
+    if (iter > maxSplitDepth || (w < minBlockSize && d < minBlockSize)) {
       // Blocks centred outside a drawn boundary are dropped. Skipping the push draws
       // no randomness, so the split itself is identical either way.
       if (!boundary || pointInPolygon(boundary, x, z)) blocks.push({ x, z, w, d });

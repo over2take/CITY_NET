@@ -28,6 +28,7 @@ export type { RoadSegment };
 
 import type { OverpassDensity, OverpassSpec } from './bridges';
 import type { Polygon } from './water';
+import type { LayoutType } from './layouts';
 export type { OverpassDensity, OverpassSpec };
 
 /** Zoning preset chosen in the admin panel. */
@@ -73,6 +74,8 @@ export interface GenerateCityOptions {
    * recurses on the bounding box and blocks outside the shape are dropped.
    */
   boundary?: Polygon;
+  /** Street layout. Defaults to BSP, which is what generation has always produced. */
+  layout?: LayoutType;
   /** When true, no roads are generated and road collision is skipped. */
   excludeRoads: boolean;
   /** How freely roads bridge the water they cross. Defaults to 'normal'. */

@@ -4,7 +4,14 @@ import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
-import { generateCity, SpatialGrid, type SectionType, type OverpassDensity } from '../cityGen';
+import { generateCity, SpatialGrid, type SectionType, type OverpassDensity, type LayoutType } from '../cityGen';
+
+/** Street layouts offered in the generator, with what each one reads as. */
+const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
+  { value: 'BSP', label: 'ORGANIC — IRREGULAR BLOCKS (DEFAULT)' },
+  { value: 'GRID', label: 'GRID — PLANNED, SQUARE BLOCKS' },
+  { value: 'SUPERBLOCK', label: 'SUPERBLOCK — TOWER IN PARK' },
+];
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
 import type { SignData, SignLine } from './Signs';
@@ -585,6 +592,7 @@ export function AdminPanel({
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
     onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
     cityGenDrawMode, setCityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail,
+    cityLayout, setCityLayout,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -1654,6 +1662,17 @@ export function AdminPanel({
               ))}
             </div>
           </div>
+          <label htmlFor="city-layout" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>LAYOUT</label>
+          <select
+            id="city-layout"
+            value={cityLayout ?? 'BSP'}
+            onChange={e => setCityLayout?.(e.target.value)}
+            style={{width: '100%', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem'}}
+          >
+            {LAYOUT_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
             <button className={`utility-btn ${cityGenDrawMode !== 'draw' ? 'active' : ''}`} style={{flex: 1}}
               onClick={() => { setCityGenDrawMode?.('rect'); setGenBoundaryTrail?.([]); }}>DRAG_RECT</button>
@@ -1688,6 +1707,7 @@ export function AdminPanel({
                     sectionType: citySectionType as SectionType,
                     excludeRoads: genExcludeRoads,
                     overpassDensity,
+                    layout: cityLayout ?? 'BSP',
                     boundary: drawing ? { points: tracedPoints } : undefined,
                   },
                   { locations, roads, waterBodies }

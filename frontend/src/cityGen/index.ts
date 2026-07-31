@@ -1,6 +1,7 @@
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from '../components/Buildings';
-import { splitCity, normalizeBounds } from './bsp';
+import { LAYOUTS } from './layouts';
+import { normalizeBounds } from './bsp';
 import { SpatialGrid, createIsBlocked, footprintOnRoad } from './collision';
 import {
   createSectorLayout,
@@ -31,6 +32,7 @@ export * from './zoning';
 export { generatePark } from './parks';
 export { shouldPlaceLandmark, generateLandmark } from './landmarks';
 export * from './water';
+export * from './layouts';
 export {
   findBridges, MAX_BRIDGE_SPAN, BRIDGE_RAMP_LENGTH,
   BRIDGE_HEIGHTS, MIN_RAMP_RUN, MAX_RAMP_RUN,
@@ -72,7 +74,7 @@ export function generateCity(
   rng: Rng = Math.random,
   deps: GenerateCityDeps = DEFAULT_DEPS
 ): GenerateCityResult {
-  const { sectionType, excludeRoads, overpassDensity = 'normal' } = options;
+  const { sectionType, excludeRoads, overpassDensity = 'normal', layout = 'BSP' } = options;
   // Fewer than three points cannot enclose an area. Treating a degenerate boundary as
   // absent falls back to the plain bounds, rather than generating nothing at all and
   // looking like a broken button.
@@ -88,7 +90,9 @@ export function generateCity(
 
   // The split clips its own seams to land, so the grid stops at the shore
   // instead of being laid across the water and cut back afterwards.
-  const { blocks, roads: newRoads } = splitCity(bounds, excludeRoads, rng, water, boundary);
+  const { blocks, roads: newRoads } = (LAYOUTS[layout] ?? LAYOUTS.BSP)(
+    bounds, excludeRoads, rng, water, boundary
+  );
 
   // A road around each water body turns what would be dead ends at the shore
   // into junctions, so the network routes around a lake.

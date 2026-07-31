@@ -59,6 +59,7 @@ import { Sidewalks } from './components/Sidewalks';
 import { AutoSignage } from './components/AutoSignage';
 import { Signs, type SignData } from './components/Signs';
 import { type RemoteFont } from './utils/fontLoader';
+import type { LayoutType } from './cityGen';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import MapExportController, { type MapExportApi } from './components/MapExportController';
@@ -362,6 +363,8 @@ function App() {
   // City generator: drag a rectangle, or trace a boundary polygon to generate inside.
   const [cityGenDrawMode, setCityGenDrawMode] = useState<'rect' | 'draw'>('rect');
   const [genBoundaryTrail, setGenBoundaryTrail] = useState<any[]>([]);
+  // BSP is what generation has always produced, so it stays the default.
+  const [cityLayout, setCityLayout] = useState<LayoutType>('BSP');
   const [mapExportApi, setMapExportApi] = useState<MapExportApi | null>(null);
   const [isPlacingSign, setIsPlacingSign] = useState(false);
   const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
@@ -1796,6 +1799,8 @@ function App() {
                 isRecording={mapExportApi?.isRecording ?? false}
                 recordSecondsLeft={mapExportApi?.secondsLeft ?? 0}
                 isExporting={mapExportApi?.isExporting ?? false}
+                cityLayout={cityLayout}
+                setCityLayout={setCityLayout}
                 cityGenDrawMode={cityGenDrawMode}
                 setCityGenDrawMode={setCityGenDrawMode}
                 genBoundaryTrail={genBoundaryTrail}

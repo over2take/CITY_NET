@@ -671,3 +671,47 @@ describe('AdminPanel city generator bounds mode', () => {
     expect(props.setGenBoundaryTrail).toHaveBeenCalledWith([]);
   });
 });
+
+describe('AdminPanel layout selector', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    cityLayout: 'BSP',
+    setCityLayout: vi.fn(),
+    waterBodies: [],
+    ...over,
+  });
+
+  it('offers every layout', () => {
+    render(<AdminPanel {...genProps()} />);
+    const select = screen.getByLabelText('LAYOUT') as HTMLSelectElement;
+    expect([...select.options].map(o => o.value)).toEqual(['BSP', 'GRID', 'SUPERBLOCK']);
+  });
+
+  it('defaults to the organic layout, so generation is unchanged out of the box', () => {
+    render(<AdminPanel {...genProps()} />);
+    expect((screen.getByLabelText('LAYOUT') as HTMLSelectElement).value).toBe('BSP');
+  });
+
+  it('describes what each layout produces rather than naming the algorithm', () => {
+    render(<AdminPanel {...genProps()} />);
+    const select = screen.getByLabelText('LAYOUT') as HTMLSelectElement;
+    expect(select.options[1].textContent).toMatch(/SQUARE BLOCKS/);
+    expect(select.options[2].textContent).toMatch(/TOWER IN PARK/);
+  });
+
+  it('reports a layout change', async () => {
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.selectOptions(screen.getByLabelText('LAYOUT'), 'GRID');
+    expect(props.setCityLayout).toHaveBeenCalledWith('GRID');
+  });
+});
