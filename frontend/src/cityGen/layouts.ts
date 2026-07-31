@@ -1,4 +1,5 @@
 import type { Block, Bounds, Rng, RoadSegment } from './types';
+import type { OverpassSpec } from './bridges';
 import { normalizeBounds, splitCity } from './bsp';
 import { clipSegmentToLand, clipSegmentToBoundary, pointInPolygon, type Polygon, type WaterPolygon } from './water';
 
@@ -15,7 +16,7 @@ export type LayoutFn = (
   rng: Rng,
   water?: WaterPolygon[],
   boundary?: Polygon
-) => { blocks: Block[]; roads: RoadSegment[] };
+) => { blocks: Block[]; roads: RoadSegment[]; overpasses?: OverpassSpec[] };
 
 export type LayoutType = 'BSP' | 'GRID' | 'SUPERBLOCK' | 'RING';
 
@@ -48,6 +49,22 @@ const RING_FALLOFF = 1.35;
 
 const RING_ROAD_WIDTH = 8;
 const SPOKE_ROAD_WIDTH = 7;
+
+/**
+ * Arterials are elevated rather than laid on the ground.
+ *
+ * A ground-level beltway sterilises every block it crosses: `createIsBlocked` rejects
+ * any footprint touching a road, so a 7-unit arterial leaves a dead strip its whole
+ * length, and six spokes converging leave a dead zone at the centre. Elevated, they
+ * consume no ground at all — placement never checks overpasses — so the street fabric
+ * runs unbroken underneath and small buildings fill in below the deck.
+ *
+ * Spokes sit above rings so they pass over cleanly at the crossings.
+ */
+const RING_DECK_HEIGHT = 9;
+const SPOKE_DECK_HEIGHT = 14;
+const DECK_RAMP_LENGTH = 30;
+const DECK_PILLAR_SPACING = 14;
 
 /** Degrees between sampled points on a ring. Smaller reads rounder, at more segments. */
 const ARC_STEP_DEG = 9;
@@ -171,19 +188,6 @@ export const ringLayout: LayoutFn = (bounds, excludeRoads, rng, water = [], boun
 
   const roads: RoadSegment[] = [];
 
-  const layRoad = (seg: RoadSegment) => {
-    if (excludeRoads) return;
-    for (const dry of clipSegmentToLand(seg, water)) {
-      roads.push(...clipSegmentToBoundary(dry, boundary));
-    }
-  };
-
-  const layPolyline = (pts: { x: number; z: number }[], w: number) => {
-    for (let i = 0; i < pts.length - 1; i++) {
-      layRoad({ x1: pts[i].x, z1: pts[i].z, x2: pts[i + 1].x, z2: pts[i + 1].z, width: w });
-    }
-  };
-
   // The city is the disc, so that circle is the boundary the street fabric is laid
   // inside. Combined with any outer drawn boundary, both must hold.
   const disc: Polygon = { points: arcPoints(centerX, centerZ, maxR, 0, Math.PI * 2) };
@@ -192,27 +196,48 @@ export const ringLayout: LayoutFn = (bounds, excludeRoads, rng, water = [], boun
   const blocks = fill.blocks.filter((b) => !boundary || pointInPolygon(boundary, b.x, b.z));
   for (const r of fill.roads) roads.push(...clipSegmentToBoundary(r, boundary));
 
+  const overpasses: OverpassSpec[] = [];
+  const deck = (points: { x: number; z: number }[], width: number, height: number) => {
+    if (excludeRoads || points.length < 2) return;
+    overpasses.push({
+      points,
+      height,
+      width,
+      ramp_length: DECK_RAMP_LENGTH,
+      ramp_length_start: DECK_RAMP_LENGTH,
+      ramp_length_end: DECK_RAMP_LENGTH,
+      pillar_spacing: DECK_PILLAR_SPACING,
+    });
+  };
+
   // Radii grow faster than linearly, so downtown is ringed tightly and the outer loop
   // sweeps wide.
+  const radii: number[] = [];
   for (let i = 0; i < RING_COUNT; i++) {
-    const r = maxR * Math.pow((i + 1) / RING_COUNT, RING_FALLOFF);
-    layPolyline(arcPoints(centerX, centerZ, r, 0, Math.PI * 2), RING_ROAD_WIDTH);
+    radii.push(maxR * Math.pow((i + 1) / RING_COUNT, RING_FALLOFF));
+  }
+  for (const r of radii) {
+    deck(arcPoints(centerX, centerZ, r, 0, Math.PI * 2), RING_ROAD_WIDTH, RING_DECK_HEIGHT);
   }
 
-  // Spokes are jittered off the even division so the network does not read as a
-  // wheel diagram.
+  // Spokes run from the innermost loop outward rather than converging on a point.
+  // Six arterials meeting at the centre left a starburst of dead ground there, and
+  // real highways meet a downtown loop rather than piling into the middle.
+  const innerR = radii[0];
   const sector = (Math.PI * 2) / SPOKE_COUNT;
   for (let i = 0; i < SPOKE_COUNT; i++) {
     const a = i * sector + (rng() - 0.5) * sector * 0.2;
-    layRoad({
-      x1: centerX, z1: centerZ,
-      x2: centerX + Math.cos(a) * maxR,
-      z2: centerZ + Math.sin(a) * maxR,
-      width: SPOKE_ROAD_WIDTH,
-    });
+    deck(
+      [
+        { x: centerX + Math.cos(a) * innerR, z: centerZ + Math.sin(a) * innerR },
+        { x: centerX + Math.cos(a) * maxR, z: centerZ + Math.sin(a) * maxR },
+      ],
+      SPOKE_ROAD_WIDTH,
+      SPOKE_DECK_HEIGHT,
+    );
   }
 
-  return { blocks, roads };
+  return { blocks, roads, overpasses };
 };
 
 export const LAYOUTS: Record<LayoutType, LayoutFn> = {
@@ -222,4 +247,4 @@ export const LAYOUTS: Record<LayoutType, LayoutFn> = {
   RING: ringLayout,
 };
 
-export { GRID_CELL, SUPERBLOCK_MIN_SIZE, AVENUE_EVERY, GRID_AVENUE_WIDTH, GRID_STREET_WIDTH, RING_COUNT, SPOKE_COUNT, RING_ROAD_WIDTH, SPOKE_ROAD_WIDTH };
+export { GRID_CELL, SUPERBLOCK_MIN_SIZE, AVENUE_EVERY, GRID_AVENUE_WIDTH, GRID_STREET_WIDTH, RING_COUNT, SPOKE_COUNT, RING_ROAD_WIDTH, SPOKE_ROAD_WIDTH, RING_DECK_HEIGHT, SPOKE_DECK_HEIGHT };

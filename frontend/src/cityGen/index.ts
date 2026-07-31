@@ -90,9 +90,8 @@ export function generateCity(
 
   // The split clips its own seams to land, so the grid stops at the shore
   // instead of being laid across the water and cut back afterwards.
-  const { blocks, roads: newRoads } = (LAYOUTS[layout] ?? LAYOUTS.BSP)(
-    bounds, excludeRoads, rng, water, boundary
-  );
+  const { blocks, roads: newRoads, overpasses: layoutOverpasses = [] } =
+    (LAYOUTS[layout] ?? LAYOUTS.BSP)(bounds, excludeRoads, rng, water, boundary);
 
   // A road around each water body turns what would be dead ends at the shore
   // into junctions, so the network routes around a lake.
@@ -112,9 +111,11 @@ export function generateCity(
 
   // Pick crossings worth bridging from the road ends left at the water's edge.
   // Draws no randomness on a dry map, so those generate exactly as before.
+  // A layout may raise its own arterials — RING elevates its beltways so they do not
+  // sterilise the ground beneath. Those join whatever bridges the water needs.
   const overpasses = excludeRoads
     ? []
-    : findBridges(finalRoads, water, overpassDensity, rng);
+    : [...layoutOverpasses, ...findBridges(finalRoads, water, overpassDensity, rng)];
 
   const grid = new SpatialGrid(context.locations);
   // Test against the roads that will actually exist. Consolidation snaps

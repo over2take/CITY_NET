@@ -9,6 +9,10 @@ import {
   SPOKE_COUNT,
   RING_ROAD_WIDTH,
   SPOKE_ROAD_WIDTH,
+  RING_DECK_HEIGHT,
+  SPOKE_DECK_HEIGHT,
+  RING_COUNT as RC,
+  SPOKE_COUNT as SC,
   generateCity,
   SUPERBLOCK_MIN_SIZE,
   GRID_AVENUE_WIDTH,
@@ -189,32 +193,51 @@ describe('ringLayout', () => {
     expect(corner).toHaveLength(0);
   });
 
-  it('lays closed loops at more than one radius', () => {
-    // The rings themselves: road points cluster at each loop radius.
-    const { roads } = ringLayout(bounds(R), false, seededRng());
-    const ringRoads = roads.filter((r) => r.width === RING_ROAD_WIDTH);
-    expect(ringRoads.length).toBeGreaterThan(RING_COUNT * 10);
-
-    const radii = new Set(ringRoads.map((r) => Math.round(radiusOf({ x: r.x1, z: r.z1 }) / 10)));
-    expect(radii.size).toBeGreaterThanOrEqual(RING_COUNT);
+  it('raises its arterials rather than laying them on the ground', () => {
+    // A ground-level beltway sterilises every block it crosses: placement rejects any
+    // footprint touching a road. Elevated, it consumes no ground — placement never
+    // checks overpasses — so the fabric runs unbroken underneath.
+    const { overpasses } = ringLayout(bounds(R), false, seededRng());
+    expect(overpasses?.length).toBe(RING_COUNT + SPOKE_COUNT);
+    for (const o of overpasses ?? []) expect(o.height).toBeGreaterThan(0);
   });
 
-  it('runs spokes out from the centre', () => {
-    const { roads } = ringLayout(bounds(R), false, seededRng());
-    const fromCentre = roads.filter((r) => radiusOf({ x: r.x1, z: r.z1 }) < 1);
-    expect(fromCentre.length).toBe(SPOKE_COUNT);
+  it('lays closed loops at more than one radius', () => {
+    const { overpasses } = ringLayout(bounds(R), false, seededRng());
+    const rings = (overpasses ?? []).filter((o) => o.height === RING_DECK_HEIGHT);
+    expect(rings).toHaveLength(RING_COUNT);
+
+    const radii = rings.map((o) => Math.round(radiusOf(o.points[0])));
+    expect(new Set(radii).size).toBe(RING_COUNT);
+  });
+
+  it('runs spokes outward from the innermost loop, not from the centre', () => {
+    // Six arterials converging on a point left a starburst of dead ground there, and
+    // real highways meet a downtown loop rather than piling into the middle.
+    const { overpasses } = ringLayout(bounds(R), false, seededRng());
+    const spokes = (overpasses ?? []).filter((o) => o.height === SPOKE_DECK_HEIGHT);
+    expect(spokes).toHaveLength(SPOKE_COUNT);
+
+    for (const s of spokes) {
+      const inner = Math.min(...s.points.map(radiusOf));
+      const outer = Math.max(...s.points.map(radiusOf));
+      expect(inner).toBeGreaterThan(1);
+      expect(outer).toBeGreaterThan(inner);
+    }
+  });
+
+  it('carries spokes above rings so they cross cleanly', () => {
+    expect(SPOKE_DECK_HEIGHT).toBeGreaterThan(RING_DECK_HEIGHT);
   });
 
   it('spaces the inner loop tighter than the outer one', () => {
     // Beltways are not evenly spaced; downtown is ringed close.
-    const { roads } = ringLayout(bounds(R), false, seededRng());
-    const ringRadii = [...new Set(
-      roads.filter((r) => r.width === RING_ROAD_WIDTH)
-        .map((r) => Math.round(radiusOf({ x: r.x1, z: r.z1 }))),
-    )].sort((a, b) => a - b);
-    const inner = ringRadii[0];
-    const outer = ringRadii[ringRadii.length - 1];
-    expect(inner).toBeLessThan(outer / 2);
+    const { overpasses } = ringLayout(bounds(R), false, seededRng());
+    const radii = (overpasses ?? [])
+      .filter((o) => o.height === RING_DECK_HEIGHT)
+      .map((o) => Math.round(radiusOf(o.points[0])))
+      .sort((a, b) => a - b);
+    expect(radii[0]).toBeLessThan(radii[radii.length - 1] / 2);
   });
 
   it('fills the space between the arterials with ordinary blocks', () => {
@@ -242,15 +265,20 @@ describe('ringLayout', () => {
   });
 
   it('lays one continuous street fabric rather than one per sector', () => {
-    // Local streets are continuous and the beltway cuts across them; they are not
+    // Local streets are continuous and the beltway crosses above them; they are not
     // divided up by it. Sector-local networks showed up as far more short segments.
     const { roads } = ringLayout(bounds(R), false, seededRng());
-    const arterials = roads.filter(
-      (r) => r.width === RING_ROAD_WIDTH || r.width === SPOKE_ROAD_WIDTH,
-    );
-    const local = roads.length - arterials.length;
-    expect(local).toBeGreaterThan(0);
-    expect(arterials.length).toBeGreaterThan(0);
+    expect(roads.length).toBeGreaterThan(0);
+    // Every ground road is local now — the arterials are decks.
+    for (const r of roads) {
+      expect(r.width).not.toBe(RING_ROAD_WIDTH);
+      expect(r.width).not.toBe(SPOKE_ROAD_WIDTH);
+    }
+  });
+
+  it('raises nothing when infrastructure is excluded', () => {
+    const { overpasses } = ringLayout(bounds(R), true, seededRng());
+    expect(overpasses ?? []).toHaveLength(0);
   });
 
   it('lays no roads when infrastructure is excluded, but still blocks out the city', () => {
@@ -282,6 +310,40 @@ describe('generateCity layout selection', () => {
           .blocks.length,
     );
     expect(new Set(counts).size).toBeGreaterThan(1);
+  });
+
+  it('carries arterials raised by the layout through to the result', () => {
+    // RING raises its beltways, and those have to reach the caller alongside whatever
+    // bridges the water needed.
+    const result = generateCity(
+      bounds(300), { sectionType: 'MIXED', layout: 'RING' }, freshContext(), seededRng(), deps,
+    );
+    expect(result.overpasses.length).toBeGreaterThanOrEqual(RC + SC);
+  });
+
+  it('leaves the ground under an elevated arterial buildable', () => {
+    // The whole reason for raising them: a ground-level beltway sterilises every block
+    // it crosses, because placement rejects footprints touching a road. Placement never
+    // checks overpasses, so the fabric survives underneath.
+    const offered: Array<{ x: number; z: number }> = [];
+    const result = generateCity(
+      bounds(300),
+      { sectionType: 'MIXED', layout: 'RING' },
+      freshContext(),
+      seededRng(),
+      { fillPlot: (x: number, z: number) => { offered.push({ x, z }); } },
+    );
+
+    const ring = result.overpasses.find((o) => o.height === RING_DECK_HEIGHT);
+    expect(ring).toBeDefined();
+    const ringRadius = Math.hypot(ring!.points[0].x, ring!.points[0].z);
+
+    // Somewhere close enough to the loop to have been inside its footprint had it been
+    // a road.
+    const beneath = offered.filter(
+      (p) => Math.abs(Math.hypot(p.x, p.z) - ringRadius) < ring!.width,
+    );
+    expect(beneath.length).toBeGreaterThan(0);
   });
 
   it('falls back to BSP for an unrecognised layout', () => {
