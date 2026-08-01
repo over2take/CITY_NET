@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
-import { generateCity, SpatialGrid, seededRng, seedFrom, pointInPolygon, type SectionType, type OverpassDensity, type LayoutType } from '../cityGen';
+import { generateCity, SpatialGrid, seededRng, seedFrom, countGeneratedInRegion, type SectionType, type OverpassDensity, type LayoutType } from '../cityGen';
 
 /** Street layouts offered in the generator, with what each one reads as. */
 const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
@@ -22,42 +22,6 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 import { PNG_EXPORT_PRESETS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExportBounds';
 import { RECORD_DURATIONS, MAX_RECORD_SECONDS } from '../hooks/useMapExport';
-
-/** Tokens are never map generation output, matching the purge endpoint. */
-const TOKEN_SHAPES = new Set(['rhombus', 'enemy_rhombus', 'friendly_rhombus']);
-
-/**
- * How much of the world a regenerate would clear, for the confirm.
- *
- * Advisory only — the server decides what actually goes — but it has to apply the same
- * rules, or the count shown is a different number from the one that happens.
- */
-function countGenerated(
-  locations: any[],
-  polygon: { x: number; z: number }[] | null,
-  bounds: { min: { x: number; z: number }; max: { x: number; z: number } },
-): { removed: number; kept: number } {
-  const minX = Math.min(bounds.min.x, bounds.max.x);
-  const maxX = Math.max(bounds.min.x, bounds.max.x);
-  const minZ = Math.min(bounds.min.z, bounds.max.z);
-  const maxZ = Math.max(bounds.min.z, bounds.max.z);
-
-  const inside = (x: number, z: number) =>
-    polygon && polygon.length >= 3
-      ? pointInPolygon({ points: polygon }, x, z)
-      : x >= minX && x <= maxX && z >= minZ && z <= maxZ;
-
-  let removed = 0;
-  let kept = 0;
-  for (const l of locations ?? []) {
-    if (l.battle_map_id != null) continue;
-    if (TOKEN_SHAPES.has(l.shape)) continue;
-    if (!inside(l.x, l.z)) continue;
-    if (isUserDefinedName(l.name)) kept++;
-    else removed++;
-  }
-  return { removed, kept };
-}
 
 const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_x: 0, rotation_y: 0, rotation_z: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, filter_intensity: 1.0, lines: null };
 
@@ -989,7 +953,7 @@ export function AdminPanel({
                 let worldLocations = locations;
                 let worldRoads = roads;
                 if (purgeFirst) {
-                  const doomed = countGenerated(locations, drawing ? tracedPoints : null, genBounds);
+                  const doomed = countGeneratedInRegion(locations, genBounds, drawing ? tracedPoints : null);
                   if (doomed.removed > 0) {
                     const kept = doomed.kept > 0
                       ? ` ${doomed.kept} named structure${doomed.kept > 1 ? 's' : ''} will be kept.`

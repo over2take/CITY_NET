@@ -36,6 +36,7 @@ export { shouldPlaceLandmark, generateLandmark } from './landmarks';
 export * from './water';
 export * from './layouts';
 export * from './rng';
+export * from './region';
 export {
   findBridges, MAX_BRIDGE_SPAN, BRIDGE_RAMP_LENGTH,
   BRIDGE_HEIGHTS, MIN_RAMP_RUN, MAX_RAMP_RUN,
