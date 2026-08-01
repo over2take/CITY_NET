@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
-import { generateCity, SpatialGrid, seededRng, seedFrom, type SectionType, type OverpassDensity, type LayoutType } from '../cityGen';
+import { generateCity, SpatialGrid, seededRng, seedFrom, pointInPolygon, type SectionType, type OverpassDensity, type LayoutType } from '../cityGen';
 
 /** Street layouts offered in the generator, with what each one reads as. */
 const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
@@ -22,6 +22,42 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 import { PNG_EXPORT_PRESETS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExportBounds';
 import { RECORD_DURATIONS, MAX_RECORD_SECONDS } from '../hooks/useMapExport';
+
+/** Tokens are never map generation output, matching the purge endpoint. */
+const TOKEN_SHAPES = new Set(['rhombus', 'enemy_rhombus', 'friendly_rhombus']);
+
+/**
+ * How much of the world a regenerate would clear, for the confirm.
+ *
+ * Advisory only — the server decides what actually goes — but it has to apply the same
+ * rules, or the count shown is a different number from the one that happens.
+ */
+function countGenerated(
+  locations: any[],
+  polygon: { x: number; z: number }[] | null,
+  bounds: { min: { x: number; z: number }; max: { x: number; z: number } },
+): { removed: number; kept: number } {
+  const minX = Math.min(bounds.min.x, bounds.max.x);
+  const maxX = Math.max(bounds.min.x, bounds.max.x);
+  const minZ = Math.min(bounds.min.z, bounds.max.z);
+  const maxZ = Math.max(bounds.min.z, bounds.max.z);
+
+  const inside = (x: number, z: number) =>
+    polygon && polygon.length >= 3
+      ? pointInPolygon({ points: polygon }, x, z)
+      : x >= minX && x <= maxX && z >= minZ && z <= maxZ;
+
+  let removed = 0;
+  let kept = 0;
+  for (const l of locations ?? []) {
+    if (l.battle_map_id != null) continue;
+    if (TOKEN_SHAPES.has(l.shape)) continue;
+    if (!inside(l.x, l.z)) continue;
+    if (isUserDefinedName(l.name)) kept++;
+    else removed++;
+  }
+  return { removed, kept };
+}
 
 const BLANK_SIGN = { text: '', x: 0, y: 3, z: 0, rotation_x: 0, rotation_y: 0, rotation_z: 0, font_size: 1.0, font_family: 'monospace', image_url: '', use_tv_filter: false, filter_intensity: 1.0, lines: null };
 
@@ -923,6 +959,140 @@ export function AdminPanel({
     }
   };
 
+  /**
+   * Generate a city into the selected area.
+   *
+   * `purgeFirst` clears whatever was generated there before, which is what
+   * regenerating means. Without it, generating again infills around what is
+   * already standing — useful in its own right, but not a fresh city.
+   */
+  const runGeneration = async (purgeFirst: boolean) => {
+              try {
+                const drawing = cityGenDrawMode === 'draw';
+                const tracedPoints = (genBoundaryTrail ?? []).map((p: any) => ({ x: p.x, z: p.z }));
+                // Under three points cannot enclose an area; generateCity ignores such a
+                // boundary, so refuse here rather than silently generating over the bbox.
+                if (drawing && tracedPoints.length < 3) return setAdminAlert("TRACE AN AREA FIRST");
+                if (!drawing && !roadSelectionBounds) return setAdminAlert("SELECT AREA FIRST");
+
+                // A traced shape still needs a rectangle for the split to recurse on,
+                // so its bounding box frames the work and the polygon confines it.
+                const xs = tracedPoints.map((p: any) => p.x);
+                const zs = tracedPoints.map((p: any) => p.z);
+                const genBounds = drawing
+                  ? { min: { x: Math.min(...xs), z: Math.min(...zs) }, max: { x: Math.max(...xs), z: Math.max(...zs) } }
+                  : roadSelectionBounds;
+
+                // Clear the previous generation before building, and use the world as
+                // it is *after* that — placement tests against existing locations, so
+                // stale ones would leave the new city avoiding buildings that are gone.
+                let worldLocations = locations;
+                let worldRoads = roads;
+                if (purgeFirst) {
+                  const doomed = countGenerated(locations, drawing ? tracedPoints : null, genBounds);
+                  if (doomed.removed > 0) {
+                    const kept = doomed.kept > 0
+                      ? ` ${doomed.kept} named structure${doomed.kept > 1 ? 's' : ''} will be kept.`
+                      : '';
+                    // Leads with the count: "regenerate?" invites a reflexive yes.
+                    if (!confirm(`This removes ${doomed.removed} generated structures.${kept}`)) return;
+                  }
+
+                  const purgeRes = await fetch('/api/locations/purge-region', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(drawing ? { polygon: tracedPoints } : { bounds: genBounds }),
+                  });
+                  if (!purgeRes.ok) throw new Error(`Purge failed: ${purgeRes.status}`);
+
+                  const [freshLocs, freshRoads] = await Promise.all([
+                    fetch('/api/locations').then(r => r.json()).catch(() => locations),
+                    fetch('/api/roads').then(r => r.json()).catch(() => roads),
+                  ]);
+                  if (Array.isArray(freshLocs)) worldLocations = freshLocs;
+                  if (Array.isArray(freshRoads)) worldRoads = freshRoads;
+                }
+
+                // A typed seed is used as typed and never rewritten — normalising it
+                // looked like the field being cleared and replaced. Only a blank field
+                // gets filled in, so the seed just rolled can be written down.
+                const typedSeed = (citySeed ?? '').trim();
+                const seed = seedFrom(typedSeed);
+                if (typedSeed === '') setCitySeed?.(String(seed));
+
+                const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses } = generateCity(
+                  genBounds,
+                  {
+                    sectionType: citySectionType as SectionType,
+                    excludeRoads: genExcludeRoads,
+                    overpassDensity,
+                    layout: cityLayout ?? 'BSP',
+                    boundary: drawing ? { points: tracedPoints } : undefined,
+                  },
+                  { locations: worldLocations, roads: worldRoads, waterBodies },
+                  seededRng(seed)
+                );
+
+                if (finalRoads.length > 0) {
+                  const rRes = await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalRoads) });
+                  if (!rRes.ok) throw new Error(`Road creation failed: ${rRes.status}`);
+                }
+
+                for (const o of newOverpasses) {
+                  const oRes = await fetch('/api/overpasses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(o) });
+                  if (!oRes.ok) throw new Error(`Overpass creation failed: ${oRes.status}`);
+                }
+                
+                // Grouping logic for parent_id using SPATIAL GRID for O(N) speed
+                const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(rawBuildings.filter(b => !b.parent_name)) });
+                if (!res.ok) throw new Error(`Building creation failed: ${res.status}`);
+                
+                const rootData = await res.json();
+                if (rootData.data) {
+                  const children: any[] = [];
+                  // Reuse the generator's spatial hash to match each child to a
+                  // nearby persisted root in O(1) instead of scanning all roots.
+                  const rootGrid = new SpatialGrid();
+                  rootData.data.forEach((r: any) => rootGrid.add(r));
+
+                  rawBuildings.filter(b => b.parent_name === 'ROOT' || b.parent_name === 'CORP_ROOT').forEach(c => {
+                    for (const nKey of rootGrid.neighborKeys(c.x, c.z)) {
+                      const cell = rootGrid.cells[nKey];
+                      if (!cell) continue;
+                      const root = cell.find((r: any) => {
+                        if (c.temp_block_id && r.temp_block_id) {
+                          return c.temp_block_id === r.temp_block_id;
+                        }
+                        const dist = Math.sqrt((r.x - c.x)**2 + (r.z - c.z)**2);
+                        return dist < 20;
+                      });
+                      if (root) {
+                        children.push({ ...c, parent_id: (root as any).id });
+                        break;
+                      }
+                    }
+                  });
+
+                  if (children.length > 0) {
+                    const cRes = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(children) });
+                    if (!cRes.ok) throw new Error(`Child building creation failed: ${cRes.status}`);
+                  }
+                }
+
+                const bridgeNote = newOverpasses.length > 0 ? ` / ${newOverpasses.length} BRIDGE${newOverpasses.length > 1 ? 'S' : ''}` : '';
+                setAdminAlert(`CITY GENERATED: ${blocks.length} SECTORS${bridgeNote}`);
+                refreshLocations();
+                if (newOverpasses.length > 0) refreshOverpasses?.();
+                // Stay on the panel with the area still selected, so layout and
+                // density can be adjusted and regenerated without re-selecting.
+                // Generating again infills rather than overlapping: placement tests
+                // against existing locations, and roads consolidate onto existing ones.
+            } catch (err: any) {
+              console.error(err);
+              setAdminAlert(`SYSTEM_ERROR: ${err.message}. Area might be too large or complex.`);
+            }
+  };
+
   const handleToggleHidden = () => {
     if (!selectedLocation) return;
     const rootId = selectedLocation.parent_id ? selectedLocation.parent_id : selectedLocation.id;
@@ -1698,102 +1868,13 @@ export function AdminPanel({
                 ? <><p>BOUNDARY_TRACED: {genBoundaryTrail.length} POINTS</p><button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setGenBoundaryTrail?.([])}>CLEAR_BOUNDARY</button></>
                 : <p style={{opacity: 0.7}}>HOLD LEFT-CLICK TO TRACE GENERATION AREA</p>)
             : (roadSelectionBounds ? <p>AREA_SELECTED: {Math.round(Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x))}x{Math.round(Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z))} units</p> : <p style={{opacity: 0.7}}>DRAG ON MAP TO SELECT GENERATION AREA</p>)}<p style={{opacity: 0.7, marginTop: '5px'}}>HIERARCHICAL BSP: ENABLED</p><p style={{opacity: 0.7}}>ZONING: {citySectionType}</p><p style={{opacity: 0.7}}>INFRASTRUCTURE: {genExcludeRoads ? 'BUILDINGS_ONLY' : 'ROADS_+_BUILDINGS'}</p></div>
-          <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => {
-              try {
-                const drawing = cityGenDrawMode === 'draw';
-                const tracedPoints = (genBoundaryTrail ?? []).map((p: any) => ({ x: p.x, z: p.z }));
-                // Under three points cannot enclose an area; generateCity ignores such a
-                // boundary, so refuse here rather than silently generating over the bbox.
-                if (drawing && tracedPoints.length < 3) return setAdminAlert("TRACE AN AREA FIRST");
-                if (!drawing && !roadSelectionBounds) return setAdminAlert("SELECT AREA FIRST");
-
-                // A traced shape still needs a rectangle for the split to recurse on,
-                // so its bounding box frames the work and the polygon confines it.
-                const xs = tracedPoints.map((p: any) => p.x);
-                const zs = tracedPoints.map((p: any) => p.z);
-                const genBounds = drawing
-                  ? { min: { x: Math.min(...xs), z: Math.min(...zs) }, max: { x: Math.max(...xs), z: Math.max(...zs) } }
-                  : roadSelectionBounds;
-
-                // A typed seed is used as typed and never rewritten — normalising it
-                // looked like the field being cleared and replaced. Only a blank field
-                // gets filled in, so the seed just rolled can be written down.
-                const typedSeed = (citySeed ?? '').trim();
-                const seed = seedFrom(typedSeed);
-                if (typedSeed === '') setCitySeed?.(String(seed));
-
-                const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses } = generateCity(
-                  genBounds,
-                  {
-                    sectionType: citySectionType as SectionType,
-                    excludeRoads: genExcludeRoads,
-                    overpassDensity,
-                    layout: cityLayout ?? 'BSP',
-                    boundary: drawing ? { points: tracedPoints } : undefined,
-                  },
-                  { locations, roads, waterBodies },
-                  seededRng(seed)
-                );
-
-                if (finalRoads.length > 0) {
-                  const rRes = await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalRoads) });
-                  if (!rRes.ok) throw new Error(`Road creation failed: ${rRes.status}`);
-                }
-
-                for (const o of newOverpasses) {
-                  const oRes = await fetch('/api/overpasses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(o) });
-                  if (!oRes.ok) throw new Error(`Overpass creation failed: ${oRes.status}`);
-                }
-                
-                // Grouping logic for parent_id using SPATIAL GRID for O(N) speed
-                const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(rawBuildings.filter(b => !b.parent_name)) });
-                if (!res.ok) throw new Error(`Building creation failed: ${res.status}`);
-                
-                const rootData = await res.json();
-                if (rootData.data) {
-                  const children: any[] = [];
-                  // Reuse the generator's spatial hash to match each child to a
-                  // nearby persisted root in O(1) instead of scanning all roots.
-                  const rootGrid = new SpatialGrid();
-                  rootData.data.forEach((r: any) => rootGrid.add(r));
-
-                  rawBuildings.filter(b => b.parent_name === 'ROOT' || b.parent_name === 'CORP_ROOT').forEach(c => {
-                    for (const nKey of rootGrid.neighborKeys(c.x, c.z)) {
-                      const cell = rootGrid.cells[nKey];
-                      if (!cell) continue;
-                      const root = cell.find((r: any) => {
-                        if (c.temp_block_id && r.temp_block_id) {
-                          return c.temp_block_id === r.temp_block_id;
-                        }
-                        const dist = Math.sqrt((r.x - c.x)**2 + (r.z - c.z)**2);
-                        return dist < 20;
-                      });
-                      if (root) {
-                        children.push({ ...c, parent_id: (root as any).id });
-                        break;
-                      }
-                    }
-                  });
-
-                  if (children.length > 0) {
-                    const cRes = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(children) });
-                    if (!cRes.ok) throw new Error(`Child building creation failed: ${cRes.status}`);
-                  }
-                }
-
-                const bridgeNote = newOverpasses.length > 0 ? ` / ${newOverpasses.length} BRIDGE${newOverpasses.length > 1 ? 'S' : ''}` : '';
-                setAdminAlert(`CITY GENERATED: ${blocks.length} SECTORS${bridgeNote}`);
-                refreshLocations();
-                if (newOverpasses.length > 0) refreshOverpasses?.();
-                // Stay on the panel with the area still selected, so layout and
-                // density can be adjusted and regenerated without re-selecting.
-                // Generating again infills rather than overlapping: placement tests
-                // against existing locations, and roads consolidate onto existing ones.
-            } catch (err: any) {
-              console.error(err);
-              setAdminAlert(`SYSTEM_ERROR: ${err.message}. Area might be too large or complex.`);
-            }
-            }}>GENERATE_CITY_GRID</button>
+          <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
+            <button className="upload-btn" style={{flex: 1, marginTop: 0}}
+              onClick={() => runGeneration(false)}>GENERATE_CITY_GRID</button>
+            <button className="upload-btn danger-btn" style={{flex: 1, marginTop: 0}}
+              title="CLEAR THE PREVIOUS GENERATION HERE, THEN BUILD AFRESH"
+              onClick={() => runGeneration(true)}>REGENERATE</button>
+          </div>
           {/* Same server-side undo as the admin header. Generating leaves the panel
               open, so reverting a bad result belongs here rather than three clicks away. */}
           <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={handleUndo} title="UNDO LAST SAVED CHANGE">⟲ UNDO</button>

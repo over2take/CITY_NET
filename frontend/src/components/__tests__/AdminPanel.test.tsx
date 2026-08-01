@@ -868,3 +868,135 @@ describe('AdminPanel city seed', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('AdminPanel regenerate', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    cityLayout: 'BSP',
+    setCityLayout: vi.fn(),
+    citySeed: '42',
+    setCitySeed: vi.fn(),
+    roadSelectionBounds: { min: { x: -50, z: -50 }, max: { x: 50, z: 50 } },
+    waterBodies: [],
+    locations: [],
+    roads: [],
+    refreshOverpasses: vi.fn(),
+    ...over,
+  });
+
+  // An unnamed structure reads as generated under both the real isUserDefinedName and
+  // the mock this file installs, so the fixture is valid either way.
+  const generated = (x: number, z: number) =>
+    ({ id: Math.random(), name: '', x, z, y: 0, shape: 'box', battle_map_id: null });
+  const named = (x: number, z: number) =>
+    ({ id: Math.random(), name: 'AFTERLIFE', x, z, y: 0, shape: 'box', battle_map_id: null });
+
+  const stubFetch = () => {
+    const mock = vi.fn((url: string) =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    );
+    vi.stubGlobal('fetch', mock);
+    return mock;
+  };
+
+  it('offers both generate and regenerate', () => {
+    render(<AdminPanel {...genProps()} />);
+    expect(screen.getByText('GENERATE_CITY_GRID')).toBeInTheDocument();
+    expect(screen.getByText('REGENERATE')).toBeInTheDocument();
+  });
+
+  it('does not purge on a plain generate', async () => {
+    // Infilling is a legitimate use; only REGENERATE clears.
+    const mock = stubFetch();
+    render(<AdminPanel {...genProps({ locations: [generated(0, 0)] })} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    const purges = mock.mock.calls.filter(([u]) => String(u).includes('purge-region'));
+    expect(purges).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('purges the region before regenerating', async () => {
+    const mock = stubFetch();
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    render(<AdminPanel {...genProps({ locations: [generated(0, 0)] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+
+    const purges = mock.mock.calls.filter(([u]) => String(u).includes('purge-region'));
+    expect(purges).toHaveLength(1);
+    expect(purges[0][1]).toMatchObject({ method: 'POST' });
+    vi.unstubAllGlobals();
+  });
+
+  it('leads the confirm with how much goes and what survives', async () => {
+    // "Regenerate?" invites a reflexive yes; a count does not.
+    const mock = stubFetch();
+    const confirmSpy = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirmSpy);
+    render(<AdminPanel {...genProps({
+      locations: [generated(0, 0), generated(5, 5), named(6, 6)],
+    })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    const message = String(confirmSpy.mock.calls[0][0]);
+    expect(message).toContain('removes 2');
+    expect(message).toContain('1 named structure');
+    void mock;
+    vi.unstubAllGlobals();
+  });
+
+  it('does nothing when the confirm is declined', async () => {
+    const mock = stubFetch();
+    vi.stubGlobal('confirm', vi.fn(() => false));
+    render(<AdminPanel {...genProps({ locations: [generated(0, 0)] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+    expect(mock.mock.calls.filter(([u]) => String(u).includes('purge-region'))).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('does not ask when the region is empty', async () => {
+    // The common first-generation case; making it feel dangerous discourages use.
+    stubFetch();
+    const confirmSpy = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirmSpy);
+    render(<AdminPanel {...genProps({ locations: [] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('ignores structures outside the region when counting', async () => {
+    stubFetch();
+    const confirmSpy = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirmSpy);
+    render(<AdminPanel {...genProps({ locations: [generated(9999, 9999)] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('re-reads the world after purging, so it does not build around what is gone', async () => {
+    // Placement tests against existing locations; stale ones would leave the new city
+    // avoiding buildings that no longer exist.
+    const mock = stubFetch();
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    render(<AdminPanel {...genProps({ locations: [generated(0, 0)] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+
+    const urls = mock.mock.calls.map(([u]) => String(u));
+    const purgeAt = urls.findIndex((u) => u.includes('purge-region'));
+    const refetchAt = urls.findIndex((u, i) => i > purgeAt && u === '/api/locations');
+    expect(purgeAt).toBeGreaterThanOrEqual(0);
+    expect(refetchAt).toBeGreaterThan(purgeAt);
+    vi.unstubAllGlobals();
+  });
+});

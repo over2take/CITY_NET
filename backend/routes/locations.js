@@ -8,6 +8,39 @@ const { DEFAULT_SYSTEM } = require('../sheets/templates');
 const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY', 'LANDMARK', 'MARKETS', 'CUSTOM']);
 const isUserDefinedName = (name) => !!name && name.trim() !== '' && !ZONE_TYPE_NAMES.has(name.trim());
 
+/** Player, enemy and friendly tokens. Map content is everything that is not one. */
+const TOKEN_SHAPES = new Set(['rhombus', 'enemy_rhombus', 'friendly_rhombus']);
+
+/** Ray casting on the XZ plane. Mirrors the generator's own test. */
+const pointInPolygon = (points, x, z) => {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const a = points[i];
+    const b = points[j];
+    const straddles = (a.z > z) !== (b.z > z);
+    if (straddles && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+  }
+  return inside;
+};
+
+/**
+ * Is (x, z) inside the region the caller asked about?
+ *
+ * A polygon takes precedence when given, so a drawn boundary clears exactly the shape
+ * that was drawn rather than its bounding box.
+ */
+const makeRegionTest = ({ bounds, polygon }) => {
+  if (Array.isArray(polygon) && polygon.length >= 3) {
+    return (x, z) => pointInPolygon(polygon, x, z);
+  }
+  if (!bounds || !bounds.min || !bounds.max) return null;
+  const minX = Math.min(bounds.min.x, bounds.max.x);
+  const maxX = Math.max(bounds.min.x, bounds.max.x);
+  const minZ = Math.min(bounds.min.z, bounds.max.z);
+  const maxZ = Math.max(bounds.min.z, bounds.max.z);
+  return (x, z) => x >= minX && x <= maxX && z >= minZ && z <= maxZ;
+};
+
 const upsertLibrary = (db, loc) => {
   db.run(`INSERT INTO custom_structure_library
     (id, name, description, npcs, x, y, z, width, height, depth, shape, color,
@@ -92,6 +125,101 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         parts: children.filter(c => c.parent_id === root.id),
       }));
       res.json(result);
+    });
+  });
+
+  /**
+   * Clear a previously generated city from a region, so it can be generated afresh.
+   *
+   * Generating over an occupied area otherwise infills around what is already there,
+   * which is useful in its own right but not what regenerating means.
+   *
+   * What survives is the point. Anything a GM named or renamed is kept and becomes an
+   * obstacle the new city builds around — losing hand-placed work is the one outcome
+   * that cannot be undone by generating again. Tokens, water and signs are never map
+   * generation output and are never touched.
+   *
+   * Done in one transaction with a single broadcast: a client deleting hundreds of
+   * rows one at a time is slow, leaves the map half-cleared if it fails part way, and
+   * floods every connected player with updates.
+   */
+  router.post('/purge-region', authenticate, (req, res) => {
+    const inRegion = makeRegionTest(req.body || {});
+    if (!inRegion) return res.status(400).json({ error: 'bounds or polygon required' });
+
+    db.all('SELECT * FROM locations', [], (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      const doomed = [];
+      let keptNamed = 0;
+
+      for (const row of rows) {
+        if (row.battle_map_id != null) continue;          // battle map content, not the world
+        if (TOKEN_SHAPES.has(row.shape)) continue;         // tokens are never map content
+        if (!inRegion(row.x, row.z)) continue;
+        if (isUserDefinedName(row.name)) { keptNamed++; continue; }
+        doomed.push(row);
+      }
+
+      // A root's parts sit at their own coordinates, so a child can fall outside the
+      // region while its root is inside. Taking the children too avoids orphaning them.
+      const doomedIds = new Set(doomed.map(r => r.id));
+      for (const row of rows) {
+        if (doomedIds.has(row.id)) continue;
+        if (row.parent_id != null && doomedIds.has(row.parent_id)) {
+          doomed.push(row);
+          doomedIds.add(row.id);
+        }
+      }
+
+      db.all('SELECT * FROM roads', [], (err2, roadRows) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        // A road counts as inside when its midpoint is: an approach running out of the
+        // region should go with the city it served.
+        const roads = roadRows.filter(r => inRegion((r.x1 + r.x2) / 2, (r.z1 + r.z2) / 2));
+
+        db.all('SELECT * FROM overpasses', [], (err3, overpassRows) => {
+          if (err3) return res.status(500).json({ error: err3.message });
+          const overpasses = (overpassRows || []).filter(o => {
+            let points;
+            try { points = JSON.parse(o.points); } catch { return false; }
+            if (!Array.isArray(points) || points.length === 0) return false;
+            const mid = points[Math.floor(points.length / 2)];
+            return mid && inRegion(mid.x, mid.z);
+          });
+
+          const ids = doomed.map(r => r.id);
+          const roadIds = roads.map(r => r.id);
+          const overpassIds = overpasses.map(o => o.id);
+
+          const del = (table, list) => {
+            if (list.length === 0) return;
+            db.run(`DELETE FROM ${table} WHERE id IN (${list.map(() => '?').join(',')})`, list);
+          };
+
+          db.serialize(() => {
+            db.run('BEGIN TRANSACTION');
+            del('locations', ids);
+            del('roads', roadIds);
+            del('overpasses', overpassIds);
+            db.run('COMMIT', (err4) => {
+              if (err4) return res.status(500).json({ error: err4.message });
+              recordAction('region_purge', {
+                locations: doomed,
+                roads,
+                overpasses,
+              });
+              emitUpdate();
+              res.json({
+                locations: ids.length,
+                roads: roadIds.length,
+                overpasses: overpassIds.length,
+                keptNamed,
+              });
+            });
+          });
+        });
+      });
     });
   });
 
