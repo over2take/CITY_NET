@@ -816,7 +816,7 @@ describe('AdminPanel city seed', () => {
     expect(props.setCitySeed).toHaveBeenCalledWith('');
   });
 
-  it('writes back the seed it generated with, so a good city can be kept', async () => {
+  it('fills a blank field with the seed it rolled, so a good city can be kept', async () => {
     vi.stubGlobal('fetch', vi.fn(() =>
       Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
     ));
@@ -825,19 +825,46 @@ describe('AdminPanel city seed', () => {
     await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
 
     const written = props.setCitySeed.mock.calls.map((c: unknown[]) => c[0]);
-    const numeric = written.filter((v: string) => v !== '' && Number.isFinite(Number(v)));
-    expect(numeric.length).toBeGreaterThan(0);
+    expect(written.some((v: string) => v !== '' && Number.isFinite(Number(v)))).toBe(true);
     vi.unstubAllGlobals();
   });
 
-  it('generates with the seed the admin typed', async () => {
+  it('never rewrites a seed the admin typed', async () => {
+    // Normalising it looked like the field being cleared and replaced.
     vi.stubGlobal('fetch', vi.fn(() =>
       Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
     ));
-    const props = genProps({ citySeed: '4242' });
+    const props = genProps({ citySeed: '464654654' });
     render(<AdminPanel {...props} />);
     await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
-    expect(props.setCitySeed).toHaveBeenCalledWith('4242');
+    expect(props.setCitySeed).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('leaves a worded seed alone too', async () => {
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    ));
+    const props = genProps({ citySeed: 'NIGHTCITY' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    expect(props.setCitySeed).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('offers UNDO on the generator panel', () => {
+    render(<AdminPanel {...genProps()} />);
+    expect(screen.getByText('⟲ UNDO')).toBeInTheDocument();
+  });
+
+  it('posts to the undo endpoint from the generator', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ type: 'location_create' }) } as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AdminPanel {...genProps()} />);
+    await userEvent.click(screen.getByText('⟲ UNDO'));
+    expect(fetchMock).toHaveBeenCalledWith('/api/undo', expect.objectContaining({ method: 'POST' }));
     vi.unstubAllGlobals();
   });
 });

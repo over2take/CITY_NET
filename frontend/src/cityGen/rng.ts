@@ -25,15 +25,35 @@ export function randomSeed(): number {
   return Math.floor(Math.random() * 4294967296) >>> 0;
 }
 
+/** FNV-1a, so any text at all can be a seed. */
+function hashString(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
 /**
- * Read a seed the admin typed. Anything unparseable becomes a fresh one rather than
- * silently generating from NaN.
+ * Turn what the admin typed into a seed.
+ *
+ * Anything goes — a number, or a word like NIGHTCITY. Text is hashed rather than
+ * rejected, which means the field never has to be corrected and whatever is typed can
+ * stay exactly as typed.
+ *
+ * An earlier version coerced the input to a 32-bit number, so a long number silently
+ * wrapped to a different one. Writing that back looked like the field being cleared
+ * and replaced.
  */
-export function parseSeed(input: string | number | null | undefined): number {
-  if (typeof input === 'number' && Number.isFinite(input)) return input >>> 0;
-  if (typeof input !== 'string') return randomSeed();
+export function seedFrom(input: string | number): number {
+  if (typeof input === 'number') {
+    return Number.isFinite(input) ? Math.abs(Math.trunc(input)) >>> 0 : randomSeed();
+  }
   const trimmed = input.trim();
   if (trimmed === '') return randomSeed();
+  // Short whole numbers are used directly, so a written-down seed reads back as itself.
   const n = Number(trimmed);
-  return Number.isFinite(n) ? n >>> 0 : randomSeed();
+  if (Number.isSafeInteger(n) && n >= 0 && n < 4294967296) return n >>> 0;
+  return hashString(trimmed);
 }

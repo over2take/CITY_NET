@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { seededRng, randomSeed, parseSeed, generateCity } from '../index';
+import { seededRng, randomSeed, seedFrom, generateCity } from '../index';
 
 /**
  * Seeded generation.
@@ -52,39 +52,44 @@ describe('seededRng', () => {
   });
 });
 
-describe('parseSeed', () => {
-  it('takes a number as given', () => {
-    expect(parseSeed(482196037)).toBe(482196037);
+describe('seedFrom', () => {
+  it('uses a plain number as given', () => {
+    expect(seedFrom('464654654')).toBe(464654654);
+    expect(seedFrom(12345)).toBe(12345);
   });
 
-  it('wraps a seed beyond 32 bits rather than rejecting it', () => {
-    // Seeds are 32-bit, so anything larger folds into range. Still deterministic,
-    // which is all that matters.
-    const big = parseSeed(4821960374);
-    expect(Number.isInteger(big)).toBe(true);
-    expect(big).toBeLessThan(4294967296);
-    expect(parseSeed(4821960374)).toBe(big);
+  it('round-trips a seed the admin wrote down', () => {
+    // A displayed seed must read back as itself, or copying one out and typing it in
+    // builds a different city.
+    const s = randomSeed();
+    expect(seedFrom(String(s))).toBe(s);
   });
 
-  it('reads a typed seed', () => {
-    expect(parseSeed('  12345 ')).toBe(12345);
+  it('accepts a word as a seed rather than rejecting it', () => {
+    // Anything goes, so the field never has to be corrected.
+    expect(Number.isInteger(seedFrom('NIGHTCITY'))).toBe(true);
+    expect(seedFrom('NIGHTCITY')).toBe(seedFrom('NIGHTCITY'));
   });
 
-  it('rolls a fresh seed for blank input', () => {
-    // Blank means "surprise me", which is the default.
-    expect(Number.isFinite(parseSeed(''))).toBe(true);
-    expect(Number.isFinite(parseSeed('   '))).toBe(true);
+  it('gives different words different seeds', () => {
+    expect(seedFrom('NIGHTCITY')).not.toBe(seedFrom('WATSON'));
   });
 
-  it('rolls a fresh seed rather than generating from NaN', () => {
-    const seed = parseSeed('not a number');
-    expect(Number.isFinite(seed)).toBe(true);
-    expect(Number.isNaN(seed)).toBe(false);
+  it('hashes an out-of-range number instead of silently wrapping it', () => {
+    // Coercing to 32 bits turned a long number into a different one, and writing that
+    // back read as the field being cleared and replaced.
+    const big = '48219603749999';
+    expect(seedFrom(big)).toBe(seedFrom(big));
+    expect(Number.isInteger(seedFrom(big))).toBe(true);
   });
 
-  it('handles null and undefined', () => {
-    expect(Number.isFinite(parseSeed(null))).toBe(true);
-    expect(Number.isFinite(parseSeed(undefined))).toBe(true);
+  it('rolls a fresh seed for a blank field', () => {
+    expect(Number.isFinite(seedFrom(''))).toBe(true);
+    expect(Number.isFinite(seedFrom('   '))).toBe(true);
+  });
+
+  it('ignores surrounding whitespace', () => {
+    expect(seedFrom('  777  ')).toBe(seedFrom('777'));
   });
 });
 

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
-import { generateCity, SpatialGrid, seededRng, parseSeed, type SectionType, type OverpassDensity, type LayoutType } from '../cityGen';
+import { generateCity, SpatialGrid, seededRng, seedFrom, type SectionType, type OverpassDensity, type LayoutType } from '../cityGen';
 
 /** Street layouts offered in the generator, with what each one reads as. */
 const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
@@ -1715,10 +1715,12 @@ export function AdminPanel({
                   ? { min: { x: Math.min(...xs), z: Math.min(...zs) }, max: { x: Math.max(...xs), z: Math.max(...zs) } }
                   : roadSelectionBounds;
 
-                // Blank rolls a fresh seed; whatever is used goes back into the field
-                // so a city worth keeping can be written down or shared.
-                const seed = parseSeed(citySeed);
-                setCitySeed?.(String(seed));
+                // A typed seed is used as typed and never rewritten — normalising it
+                // looked like the field being cleared and replaced. Only a blank field
+                // gets filled in, so the seed just rolled can be written down.
+                const typedSeed = (citySeed ?? '').trim();
+                const seed = seedFrom(typedSeed);
+                if (typedSeed === '') setCitySeed?.(String(seed));
 
                 const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses } = generateCity(
                   genBounds,
@@ -1792,6 +1794,9 @@ export function AdminPanel({
               setAdminAlert(`SYSTEM_ERROR: ${err.message}. Area might be too large or complex.`);
             }
             }}>GENERATE_CITY_GRID</button>
+          {/* Same server-side undo as the admin header. Generating leaves the panel
+              open, so reverting a bad result belongs here rather than three clicks away. */}
+          <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={handleUndo} title="UNDO LAST SAVED CHANGE">⟲ UNDO</button>
         </>
       )}
 
