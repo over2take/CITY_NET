@@ -365,6 +365,9 @@ function App() {
   const [genBoundaryTrail, setGenBoundaryTrail] = useState<any[]>([]);
   // BSP is what generation has always produced, so it stays the default.
   const [cityLayout, setCityLayout] = useState<LayoutType>('BSP');
+  // Blank means roll a fresh one; after generating it holds the seed that was used,
+  // so a city worth keeping can be written down.
+  const [citySeed, setCitySeed] = useState<string>('');
   const [mapExportApi, setMapExportApi] = useState<MapExportApi | null>(null);
   const [isPlacingSign, setIsPlacingSign] = useState(false);
   const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
@@ -1799,6 +1802,8 @@ function App() {
                 isRecording={mapExportApi?.isRecording ?? false}
                 recordSecondsLeft={mapExportApi?.secondsLeft ?? 0}
                 isExporting={mapExportApi?.isExporting ?? false}
+                citySeed={citySeed}
+                setCitySeed={setCitySeed}
                 cityLayout={cityLayout}
                 setCityLayout={setCityLayout}
                 cityGenDrawMode={cityGenDrawMode}

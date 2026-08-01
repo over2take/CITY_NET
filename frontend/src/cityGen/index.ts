@@ -35,6 +35,7 @@ export { generatePark } from './parks';
 export { shouldPlaceLandmark, generateLandmark } from './landmarks';
 export * from './water';
 export * from './layouts';
+export * from './rng';
 export {
   findBridges, MAX_BRIDGE_SPAN, BRIDGE_RAMP_LENGTH,
   BRIDGE_HEIGHTS, MIN_RAMP_RUN, MAX_RAMP_RUN,
@@ -196,9 +197,13 @@ export function generateCity(
     }
 
     const beforeFill = buildings.length;
+    // The two undefineds are overrideH and styleOverride, which only the editor
+    // preview uses. rng is what makes a seed reproduce the buildings and not merely
+    // the street layout.
     deps.fillPlot(
       block.x, block.z, bw, bd, zoneTypeVal,
-      isBlocked, grid.key, grid.cells, buildings, context.locations, plotId
+      isBlocked, grid.key, grid.cells, buildings, context.locations, plotId,
+      undefined, undefined, rng
     );
     // Zone already steps down with distance, but only in bands — the skyline came out
     // as flat plateaus with hard seams. Scaling within the zone softens those into a

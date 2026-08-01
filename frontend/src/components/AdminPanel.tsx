@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
-import { generateCity, SpatialGrid, type SectionType, type OverpassDensity, type LayoutType } from '../cityGen';
+import { generateCity, SpatialGrid, seededRng, parseSeed, type SectionType, type OverpassDensity, type LayoutType } from '../cityGen';
 
 /** Street layouts offered in the generator, with what each one reads as. */
 const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
@@ -593,7 +593,7 @@ export function AdminPanel({
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
     onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
     cityGenDrawMode, setCityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail,
-    cityLayout, setCityLayout,
+    cityLayout, setCityLayout, citySeed, setCitySeed,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -1663,6 +1663,19 @@ export function AdminPanel({
               ))}
             </div>
           </div>
+          <label htmlFor="city-seed" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>SEED <span style={{opacity: 0.6}}>(BLANK = RANDOM)</span></label>
+          <div style={{display: 'flex', gap: '6px'}}>
+            <input
+              id="city-seed"
+              value={citySeed ?? ''}
+              placeholder="RANDOM"
+              onChange={e => setCitySeed?.(e.target.value)}
+              style={{flex: 1, backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem', fontFamily: 'monospace'}}
+            />
+            <button className="utility-btn" title="ROLL A NEW SEED" style={{padding: '2px 10px'}}
+              onClick={() => setCitySeed?.('')}>⟲</button>
+          </div>
+          <p style={{fontSize: '0.65rem', opacity: 0.55, marginTop: '4px'}}>SAME SEED + SAME AREA + SAME OPTIONS = SAME CITY</p>
           <label htmlFor="city-layout" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>LAYOUT</label>
           <select
             id="city-layout"
@@ -1702,6 +1715,11 @@ export function AdminPanel({
                   ? { min: { x: Math.min(...xs), z: Math.min(...zs) }, max: { x: Math.max(...xs), z: Math.max(...zs) } }
                   : roadSelectionBounds;
 
+                // Blank rolls a fresh seed; whatever is used goes back into the field
+                // so a city worth keeping can be written down or shared.
+                const seed = parseSeed(citySeed);
+                setCitySeed?.(String(seed));
+
                 const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses } = generateCity(
                   genBounds,
                   {
@@ -1711,7 +1729,8 @@ export function AdminPanel({
                     layout: cityLayout ?? 'BSP',
                     boundary: drawing ? { points: tracedPoints } : undefined,
                   },
-                  { locations, roads, waterBodies }
+                  { locations, roads, waterBodies },
+                  seededRng(seed)
                 );
 
                 if (finalRoads.length > 0) {

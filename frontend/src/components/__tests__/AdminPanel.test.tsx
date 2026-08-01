@@ -763,3 +763,81 @@ describe('AdminPanel stays on the generator after generating', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('AdminPanel city seed', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    cityLayout: 'BSP',
+    setCityLayout: vi.fn(),
+    citySeed: '',
+    setCitySeed: vi.fn(),
+    roadSelectionBounds: { min: { x: -50, z: -50 }, max: { x: 50, z: 50 } },
+    waterBodies: [],
+    locations: [],
+    roads: [],
+    refreshOverpasses: vi.fn(),
+    ...over,
+  });
+
+  it('offers a seed field that defaults to random', () => {
+    render(<AdminPanel {...genProps()} />);
+    const field = screen.getByLabelText(/SEED/) as HTMLInputElement;
+    expect(field.value).toBe('');
+    expect(field.placeholder).toBe('RANDOM');
+  });
+
+  it('says what a seed actually reproduces', () => {
+    // A seed is not a city on its own; without saying so it reads as a bug when the
+    // same seed over a different area builds something else.
+    render(<AdminPanel {...genProps()} />);
+    expect(screen.getByText(/SAME SEED \+ SAME AREA \+ SAME OPTIONS/)).toBeInTheDocument();
+  });
+
+  it('reports a typed seed', async () => {
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.type(screen.getByLabelText(/SEED/), '7');
+    expect(props.setCitySeed).toHaveBeenCalledWith('7');
+  });
+
+  it('clears the field to roll a fresh seed', async () => {
+    const props = genProps({ citySeed: '12345' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByTitle('ROLL A NEW SEED'));
+    expect(props.setCitySeed).toHaveBeenCalledWith('');
+  });
+
+  it('writes back the seed it generated with, so a good city can be kept', async () => {
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    ));
+    const props = genProps({ citySeed: '' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+
+    const written = props.setCitySeed.mock.calls.map((c: unknown[]) => c[0]);
+    const numeric = written.filter((v: string) => v !== '' && Number.isFinite(Number(v)));
+    expect(numeric.length).toBeGreaterThan(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('generates with the seed the admin typed', async () => {
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    ));
+    const props = genProps({ citySeed: '4242' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    expect(props.setCitySeed).toHaveBeenCalledWith('4242');
+    vi.unstubAllGlobals();
+  });
+});

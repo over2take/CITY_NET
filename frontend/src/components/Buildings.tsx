@@ -288,8 +288,15 @@ export const generateThemedBuildingsForPlot = (
   sourceLocations: any[],
   blockId?: string,
   overrideH?: number,
-  styleOverride?: number
+  styleOverride?: number,
+  /**
+   * Randomness source. Defaults to Math.random so existing callers are unaffected;
+   * the city generator passes its seeded rng so a seed reproduces the buildings, not
+   * just the street layout.
+   */
+  rng?: () => number
 ) => {
+  const rand = rng ?? Math.random;
   const startIndex = rawBuildings.length;
   const color = ''; // default neutral color
 
@@ -383,12 +390,12 @@ export const generateThemedBuildingsForPlot = (
       const radiusX = bw / 2;
       const radiusZ = bd / 2;
       for (let i = 0; i < shackCount; i++) {
-        const shW = 2.0 + Math.random() * 2.0; const shD = 2.0 + Math.random() * 2.0;
-        const angle = Math.random() * Math.PI * 2;
-        const r = Math.sqrt(Math.random()) * 0.9;
+        const shW = 2.0 + rand() * 2.0; const shD = 2.0 + rand() * 2.0;
+        const angle = rand() * Math.PI * 2;
+        const r = Math.sqrt(rand()) * 0.9;
         const shX = bx + Math.cos(angle) * radiusX * r;
         const shZ = bz + Math.sin(angle) * radiusZ * r;
-        const shH = 2.5 + Math.random() * 4.0; const shackColor = '#00ff00';
+        const shH = 2.5 + rand() * 4.0; const shackColor = '#00ff00';
 
         if (!isBlocked(shX, shZ, shW, shD, 0.5)) {
           if (!rootShack) {
@@ -400,29 +407,29 @@ export const generateThemedBuildingsForPlot = (
             rawBuildings.push(shack);
             const key = getGridKey(shX, shZ); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(shack);
           }
-          if (Math.random() < 0.3) {
-            rawBuildings.push({ name: '', x: shX, y: shH, z: shZ, width: shW * 0.9, depth: shD * 0.9, height: 1.0 + Math.random() * 1.5, color: '#00ff00', shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
+          if (rand() < 0.3) {
+            rawBuildings.push({ name: '', x: shX, y: shH, z: shZ, width: shW * 0.9, depth: shD * 0.9, height: 1.0 + rand() * 1.5, color: '#00ff00', shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
           }
         }
       }
     } else {
-      const shH = 2.5 + Math.random() * 4.0; const shackColor = '#00ff00';
+      const shH = 2.5 + rand() * 4.0; const shackColor = '#00ff00';
       rootShack = { name: '', description: '', x: bx, y: 0, z: bz, width: bw * 0.7, depth: bd * 0.7, height: shH, color: shackColor, shape: 'box', polyCount: 5 };
       rawBuildings.push(rootShack);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(rootShack);
-      if (Math.random() < 0.3) {
-        rawBuildings.push({ name: '', x: bx, y: shH, z: bz, width: bw * 0.6, depth: bd * 0.6, height: 1.0 + Math.random() * 1.5, color: '#00ff00', shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
+      if (rand() < 0.3) {
+        rawBuildings.push({ name: '', x: bx, y: shH, z: bz, width: bw * 0.6, depth: bd * 0.6, height: 1.0 + rand() * 1.5, color: '#00ff00', shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
       }
     }
 
     // Fallback: if no shack was spawned (e.g. all blocked or small size failed), force-spawn one at the center to ensure block is populated
     if (!rootShack) {
-      const shH = 2.5 + Math.random() * 4.0; const shackColor = Math.random() > 0.5 ? '#8d5b4c' : '#4d4f53';
+      const shH = 2.5 + rand() * 4.0; const shackColor = rand() > 0.5 ? '#8d5b4c' : '#4d4f53';
       rootShack = { name: '', description: '', x: bx, y: 0, z: bz, width: Math.max(3.0, bw * 0.8), depth: Math.max(3.0, bd * 0.8), height: shH, color: shackColor, shape: 'box', polyCount: 5 };
       rawBuildings.push(rootShack);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(rootShack);
-      if (Math.random() < 0.3) {
-        rawBuildings.push({ name: '', x: bx, y: shH, z: bz, width: rootShack.width * 0.8, depth: rootShack.depth * 0.8, height: 1.0 + Math.random() * 1.5, color: '#3f2b24', shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
+      if (rand() < 0.3) {
+        rawBuildings.push({ name: '', x: bx, y: shH, z: bz, width: rootShack.width * 0.8, depth: rootShack.depth * 0.8, height: 1.0 + rand() * 1.5, color: '#3f2b24', shape: 'pyramid', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     return;
@@ -440,7 +447,7 @@ export const generateThemedBuildingsForPlot = (
 
   // 2. INDUSTRIAL
   if (zoneTypeVal < 0) {
-    const industrialStyle = styleOverride !== undefined ? styleOverride % INDUSTRIAL_STYLE_COUNT : Math.floor(Math.random() * INDUSTRIAL_STYLE_COUNT);
+    const industrialStyle = styleOverride !== undefined ? styleOverride % INDUSTRIAL_STYLE_COUNT : Math.floor(rand() * INDUSTRIAL_STYLE_COUNT);
     
     // Create the base concrete pad platform
     const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 1.2, color, shape: 'box', polyCount: 5, rotation: 0 };
@@ -449,10 +456,10 @@ export const generateThemedBuildingsForPlot = (
 
     if (industrialStyle === 0) {
       // Style 0: Refinery Terminal (Medium building, 2 liquid tanks, shipping containers)
-      const wareW = bw * 0.42; const wareD = bd * 0.55; const wareH = 6.0 + Math.random() * 3;
+      const wareW = bw * 0.42; const wareD = bd * 0.55; const wareH = 6.0 + rand() * 3;
       rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2, z: bz, width: wareW, depth: wareD, height: wareH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
-      const tankR = Math.min(bw, bd) * 0.16; const tankH = 5.0 + Math.random() * 2;
+      const tankR = Math.min(bw, bd) * 0.16; const tankH = 5.0 + rand() * 2;
       rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz - bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz + bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
 
@@ -461,13 +468,13 @@ export const generateThemedBuildingsForPlot = (
     } 
     else if (industrialStyle === 1) {
       // Style 1: Manufacturing Station (Medium building, tall smokestack, liquid tank, containers)
-      const genW = bw * 0.45; const genD = bd * 0.5; const genH = 5.0 + Math.random() * 3;
+      const genW = bw * 0.45; const genD = bd * 0.5; const genH = 5.0 + rand() * 3;
       rawBuildings.push({ name: '', x: bx - bw * 0.1, y: 1.2, z: bz - bd * 0.1, width: genW, depth: genD, height: genH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
-      const stackW = 1.0; const stackH = 15.0 + Math.random() * 5;
+      const stackW = 1.0; const stackH = 15.0 + rand() * 5;
       rawBuildings.push({ name: '', x: bx + bw * 0.3, y: 1.2, z: bz - bd * 0.22, width: stackW, depth: stackW, height: stackH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
 
-      const tankR = Math.min(bw, bd) * 0.18; const tankH = 6.0 + Math.random() * 2;
+      const tankR = Math.min(bw, bd) * 0.18; const tankH = 6.0 + rand() * 2;
       rawBuildings.push({ name: '', x: bx + bw * 0.3, y: 1.2, z: bz + bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
 
       const containerW = bw * 0.2; const containerD = bd * 0.3; const containerH = 2.0;
@@ -476,10 +483,10 @@ export const generateThemedBuildingsForPlot = (
     }
     else if (industrialStyle === 2) {
       // Style 2: Fuel Storage Depot (Medium building, 3 grouped cylinders, containers)
-      const officeW = bw * 0.35; const officeD = bd * 0.38; const officeH = 4.0 + Math.random() * 2;
+      const officeW = bw * 0.35; const officeD = bd * 0.38; const officeH = 4.0 + rand() * 2;
       rawBuildings.push({ name: '', x: bx - bw * 0.24, y: 1.2, z: bz - bd * 0.2, width: officeW, depth: officeD, height: officeH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
-      const tankR = Math.min(bw, bd) * 0.15; const tankH = 6.0 + Math.random() * 3;
+      const tankR = Math.min(bw, bd) * 0.15; const tankH = 6.0 + rand() * 3;
       rawBuildings.push({ name: '', x: bx + bw * 0.22, y: 1.2, z: bz - bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       rawBuildings.push({ name: '', x: bx + bw * 0.22, y: 1.2, z: bz + bd * 0.22, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       rawBuildings.push({ name: '', x: bx + bw * 0.38, y: 1.2, z: bz, width: tankR * 2.2, depth: tankR * 2.2, height: tankH * 1.2, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
@@ -490,10 +497,10 @@ export const generateThemedBuildingsForPlot = (
     }
     else if (industrialStyle === 3) {
       // Style 3: Power & Distribution Plant (Medium building, cooling tower, containers)
-      const wareW = bw * 0.48; const wareD = bd * 0.55; const wareH = 6.0 + Math.random() * 2;
+      const wareW = bw * 0.48; const wareD = bd * 0.55; const wareH = 6.0 + rand() * 2;
       rawBuildings.push({ name: '', x: bx - bw * 0.15, y: 1.2, z: bz, width: wareW, depth: wareD, height: wareH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
 
-      const tankR = Math.min(bw, bd) * 0.18; const tankH = 9.0 + Math.random() * 3;
+      const tankR = Math.min(bw, bd) * 0.18; const tankH = 9.0 + rand() * 3;
       rawBuildings.push({ name: '', x: bx + bw * 0.28, y: 1.2, z: bz + bd * 0.18, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
 
       const containerW = bw * 0.24; const containerD = bd * 0.28; const containerH = 2.0;
@@ -503,7 +510,7 @@ export const generateThemedBuildingsForPlot = (
     else if (industrialStyle === 4) {
       // Style 4: Industrial Standard A
       // Instructions: lowpoly cylinder for liquids, small retangles for storage crates, and a medum sized buiding for opterations.
-      const opW = bw * 0.4; const opD = bd * 0.4; const opH = 5.0 + Math.random() * 2;
+      const opW = bw * 0.4; const opD = bd * 0.4; const opH = 5.0 + rand() * 2;
       rawBuildings.push({ name: '', x: bx - bw * 0.2, y: 1.2, z: bz - bd * 0.2, width: opW, depth: opD, height: opH, color, shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       const tankR = Math.min(bw, bd) * 0.15; const tankH = 6.0;
       rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz - bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
@@ -573,10 +580,10 @@ export const generateThemedBuildingsForPlot = (
 
   // 3. LANDMARK (STATUES, MONUMENTS, TOWERS)
   if (zoneTypeVal >= 1.5 && zoneTypeVal < 2.0) {
-    const h = overrideH !== undefined ? overrideH : (20 + Math.random() * 60);
+    const h = overrideH !== undefined ? overrideH : (20 + rand() * 60);
     const baseW = bw * 0.9;
     const baseD = bd * 0.9;
-    const landmarkStyle = styleOverride !== undefined ? styleOverride % LANDMARK_STYLE_COUNT : Math.floor(Math.random() * LANDMARK_STYLE_COUNT);
+    const landmarkStyle = styleOverride !== undefined ? styleOverride % LANDMARK_STYLE_COUNT : Math.floor(rand() * LANDMARK_STYLE_COUNT);
 
     if (landmarkStyle === 0) {
       // Style 1: Grand Obelisk
@@ -924,7 +931,7 @@ export const generateThemedBuildingsForPlot = (
 
   // 4. CORPO (HIGH-RISE)
   if (zoneTypeVal > 0.8 && zoneTypeVal < 1.5) {
-    const h = overrideH !== undefined ? overrideH : (100 + Math.random() * 90) * (0.85 + Math.random() * 0.3); // Proportional height randomization
+    const h = overrideH !== undefined ? overrideH : (100 + rand() * 90) * (0.85 + rand() * 0.3); // Proportional height randomization
     let baseW = bw * 0.95;
     let baseD = bd * 0.95;
 
@@ -944,7 +951,7 @@ export const generateThemedBuildingsForPlot = (
       baseD = Math.max(4.0, bd * 0.3);
     }
 
-    const corpoStyle = styleOverride !== undefined ? styleOverride % CORPO_STYLE_COUNT : Math.floor(Math.random() * CORPO_STYLE_COUNT); // 11 styles
+    const corpoStyle = styleOverride !== undefined ? styleOverride % CORPO_STYLE_COUNT : Math.floor(rand() * CORPO_STYLE_COUNT); // 11 styles
 
     if (corpoStyle === 0) {
       // Style 0: Asymmetrical Nexus (main tower + data-centre annex + skybridges)
@@ -1133,8 +1140,8 @@ export const generateThemedBuildingsForPlot = (
 
   // 4. URBAN (APARTMENT COMPLEXES)
   if (zoneTypeVal > 0.3 && zoneTypeVal < 0.8) {
-    const h = overrideH !== undefined ? overrideH : (10 + Math.random() * 20) * (0.8 + Math.random() * 0.4);
-    const urbanStyle = styleOverride !== undefined ? styleOverride % URBAN_STYLE_COUNT : Math.floor(Math.random() * URBAN_STYLE_COUNT);
+    const h = overrideH !== undefined ? overrideH : (10 + rand() * 20) * (0.8 + rand() * 0.4);
+    const urbanStyle = styleOverride !== undefined ? styleOverride % URBAN_STYLE_COUNT : Math.floor(rand() * URBAN_STYLE_COUNT);
 
     if (urbanStyle === 0) {
       // Style 0: Courtyard Apartment (Hollow O-block)
@@ -1377,12 +1384,12 @@ export const generateThemedBuildingsForPlot = (
   
   // 5. MARKETS
   if (zoneTypeVal >= 2.0 && zoneTypeVal < 3.0) {
-    const h = overrideH !== undefined ? overrideH : (10 + Math.random() * 20);
-    const marketStyle = styleOverride !== undefined ? styleOverride % MARKETS_STYLE_COUNT : Math.floor(Math.random() * MARKETS_STYLE_COUNT);
+    const h = overrideH !== undefined ? overrideH : (10 + rand() * 20);
+    const marketStyle = styleOverride !== undefined ? styleOverride % MARKETS_STYLE_COUNT : Math.floor(rand() * MARKETS_STYLE_COUNT);
 
     if (marketStyle === 0 || marketStyle === 1) {
       // Stall Markets: 5-8 market stalls (small rectangles with overhangs and tables)
-      const numStalls = 5 + Math.floor(Math.random() * 4); // 5 to 8
+      const numStalls = 5 + Math.floor(rand() * 4); // 5 to 8
       const stallW = bw * 0.15; const stallD = bd * 0.15; const stallH = 2.5;
       
       const root = { name: '', description: '', x: bx, y: 0, z: bz, width: bw, depth: bd, height: 0.1, color: '#333', shape: 'box', polyCount: 5 };
@@ -1391,13 +1398,13 @@ export const generateThemedBuildingsForPlot = (
 
       for (let i = 0; i < numStalls; i++) {
         // Random placement within bounds
-        const sx = bx - bw/2 + stallW/2 + Math.random() * (bw - stallW);
-        const sz = bz - bd/2 + stallD/2 + Math.random() * (bd - stallD);
+        const sx = bx - bw/2 + stallW/2 + rand() * (bw - stallW);
+        const sz = bz - bd/2 + stallD/2 + rand() * (bd - stallD);
         
         // Main stall box
         rawBuildings.push({ name: '', x: sx, y: 0.1, z: sz, width: stallW, depth: stallD, height: stallH, color: '#666', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
         // Overhang awning
-        rawBuildings.push({ name: '', x: sx, y: 0.1 + stallH, z: sz + stallD*0.3, width: stallW*1.1, depth: stallD*1.2, height: 0.1, color: ['#cc3333','#3355cc','#33cc55','#ddaa22'][Math.floor(Math.random()*4)], shape: 'box', polyCount: 5, rotation: 0.1, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: sx, y: 0.1 + stallH, z: sz + stallD*0.3, width: stallW*1.1, depth: stallD*1.2, height: 0.1, color: ['#cc3333','#3355cc','#33cc55','#ddaa22'][Math.floor(rand()*4)], shape: 'box', polyCount: 5, rotation: 0.1, parent_name: 'ROOT' });
         // Table in front
         rawBuildings.push({ name: '', x: sx, y: 0.1, z: sz + stallD*0.6, width: stallW*0.8, depth: stallD*0.4, height: 0.8, color: '#8b5a2b', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
@@ -1407,7 +1414,7 @@ export const generateThemedBuildingsForPlot = (
       rawBuildings.push(root);
       const key = getGridKey(bx, bz); if(!spatialGrid[key]) spatialGrid[key] = []; spatialGrid[key].push(root);
       
-      const levels = 2 + Math.floor(Math.random() * 2); // 2 to 3 levels
+      const levels = 2 + Math.floor(rand() * 2); // 2 to 3 levels
       const levelH = 4.0;
       const wingW = bw * 0.3; const wingD = bd * 0.3;
       
