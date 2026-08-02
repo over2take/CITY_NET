@@ -29,16 +29,19 @@ const CLOCK_HEIGHT = 1.5;
 export const MONUMENT_STYLE_COUNT = 6;
 
 /**
- * Muted green, so a monument sits back into the city rather than glowing out of it.
+ * The app-wide "inherit the theme" sentinel, which is what every other structure uses.
  *
- * The renderer resolves a part's colour as `(p.color && p.color !== '#00ff00') ? p.color
- * : district_color ?? theme.primary`. Leaving it empty — as the landmark styles do —
- * lands on `theme.primary`, full brightness. That is survivable on a single large mass
- * but not here: a monument packs six to fourteen parts into a few units, and the
- * coincident wireframe edges stack into a bright blob beside neighbours built from one
- * or two. An explicit colour is used verbatim, which is the only way to opt out.
+ * `#00ff00` is not a colour here. The renderer resolves a part as
+ * `(p.color && p.color !== '#00ff00') ? p.color : district_color ?? theme.primary`, so
+ * this exact value is the way a structure says "no opinion, use the theme" — which is
+ * why the generated city stores it on some two thousand buildings.
+ *
+ * An earlier attempt to calm monuments down set an explicit muted green instead. That
+ * opted them out of the theme system altogether: they stopped matching their
+ * neighbours and would have ignored a theme switch entirely. Density, not colour, is
+ * what made them stand out, so that is what was reduced instead.
  */
-const MONUMENT_COLOR = '#00aa33';
+const MONUMENT_COLOR = '#00ff00';
 
 /** Segments for a shape meant to read as round rather than faceted. */
 const SMOOTH = 16;
@@ -109,7 +112,7 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
     y += span * 0.06;
     part({ y, width: span * 0.17, height: span * 0.22, shape: 'rhombus' });
 
-    around(8, span * 0.42, (px, pz) =>
+    around(4, span * 0.42, (px, pz) =>
       part({ x: px, z: pz, y: 0, width: span * 0.05, height: span * 0.09, shape: 'cylinder', polyCount: FACETED }));
     return;
   }
@@ -158,7 +161,7 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
     part({ y: basinH, width: basinW * 0.92, height: span * 0.02, shape: 'cylinder', polyCount: SMOOTH });
 
     let y = basinH + span * 0.02;
-    const tiers = [0.36, 0.22];
+    const tiers = [0.3];
     for (const w of tiers) {
       part({ y, width: span * 0.08, height: span * 0.12, shape: 'cylinder', polyCount: FACETED });
       y += span * 0.12;
@@ -170,7 +173,7 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
     y += span * 0.22;
     part({ y, width: span * 0.1, height: span * 0.1, shape: 'sphere', polyCount: SMOOTH });
 
-    around(6, basinW * 0.36, (px, pz) =>
+    around(4, basinW * 0.36, (px, pz) =>
       part({ x: px, z: pz, y: basinH, width: span * 0.05, height: span * 0.1, shape: 'cylinder', polyCount: FACETED }));
     return;
   }
@@ -250,6 +253,7 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
 
   around(4, span * 0.34, (px, pz) =>
     part({ x: px, z: pz, y: 0, width: span * 0.06, height: span * 0.14, shape: 'rhombus' }));
+
 }
 
 export { COLUMN_HEIGHT, STATUE_HEIGHT, FOUNTAIN_HEIGHT, CLOCK_HEIGHT, SMOOTH, FACETED, MONUMENT_COLOR };

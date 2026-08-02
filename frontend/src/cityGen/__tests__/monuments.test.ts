@@ -143,18 +143,22 @@ describe('generateMonument', () => {
     expect(new Set(shapes).size).toBeGreaterThan(1);
   });
 
-  it('carries an explicit colour so it does not glow at theme brightness', () => {
-    // The renderer only honours a part's colour when it is set and is not the '#00ff00'
-    // sentinel; anything else falls through to theme.primary at full brightness. On a
-    // single large mass that is fine, but a monument packs a dozen parts into a few
-    // units and the stacked wireframe edges read as a bright blob beside its
-    // neighbours.
+  it('uses the same colour convention as every other structure', () => {
+    // '#00ff00' is not a colour here, it is the sentinel meaning "inherit the theme" —
+    // the renderer resolves anything else verbatim. The generated city stores it on
+    // some two thousand buildings. Setting a real colour instead opted monuments out of
+    // the theme system, so they matched nothing and would ignore a theme switch.
     for (const parts of allStyles()) {
-      for (const p of parts) {
-        expect(p.color).toBe(MONUMENT_COLOR);
-        expect(p.color).not.toBe('');
-        expect(p.color).not.toBe('#00ff00');
-      }
+      for (const p of parts) expect(p.color).toBe(MONUMENT_COLOR);
+    }
+    expect(MONUMENT_COLOR).toBe('#00ff00');
+  });
+
+  it('keeps its part count modest', () => {
+    // Coincident wireframe edges are what made these glow beside neighbours built from
+    // one or two masses. Detail has to come from silhouette, not from part count.
+    for (const parts of allStyles()) {
+      expect(parts.length).toBeLessThanOrEqual(11);
     }
   });
 
