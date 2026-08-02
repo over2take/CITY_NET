@@ -326,8 +326,8 @@ CITY_NET/
 │   ├── middleware/
 │   │   └── auth.js             # JWT verify middleware (admin + elevated users)
 │   ├── routes/
-│   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs
-│   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only); GET / includes sheet_data for NPC initiative rolls
+│   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs; POST /water marks generated water so a regenerate can clear its own river without touching a lake the GM drew
+│   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only); GET / includes sheet_data for NPC initiative rolls; POST /purge-region clears one region's generated content in a single transaction, keeping GM-named structures, tokens, battle-map content and hand-drawn water
 │   │   ├── battle_maps.js      # Battle map image upload/management
 │   │   ├── maps.js             # Saved map snapshots (locations, districts, roads, overpasses, water bodies); preserves only rhombus tokens on load/clear; records active_map_name in global_settings so exports can name their files
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload
@@ -409,18 +409,25 @@ CITY_NET/
 │   │   │   ├── layouts.ts      # LayoutFn registry — BSP (default), GRID (avenues every 4th line), SUPERBLOCK (large floor), RING (beltways with elevated spokes filling a disc)
 │   │   │   ├── collision.ts    # SpatialGrid (footprint spans every cell it covers), exact segment-vs-box road test, boundary rejection, and clampBuildingsUnderDecks so overpasses do not pierce towers
 │   │   │   ├── zoning.ts       # Sector layout, concentric-ring zone assignment, park probability, plot aspect clamp
-│   │   │   ├── parks.ts        # Holotree park plots
+│   │   │   ├── parks.ts        # Holotree park plots and their optional ponds; a pond is elliptical so it fills a long thin plot, and is returned rather than pushed as a building
 │   │   │   ├── landmarks.ts    # The four hero-building styles and their siting rule
 │   │   │   ├── water.ts        # Water polygon parsing, point/footprint tests, submerged spans, and one clipper shared by water and drawn bounds (keepInside flips which side survives)
+│   │   │   ├── waterGen.ts     # Generated rivers, coastlines and lakes; runs before the split so the grid stops at the banks and bridges get sited. NONE is both the default and the off switch
 │   │   │   ├── shoreline.ts    # Waterfront roads offset onto land; snaps approach ends onto them
 │   │   │   ├── bridges.ts      # Shore-stub pairing, span/grade limits, deck levelling by graph colouring, OVERPASS_DENSITY
+│   │   │   ├── rng.ts          # seededRng (mulberry32), randomSeed, and seedFrom — hashes any typed seed into range instead of truncating it
+│   │   │   ├── region.ts       # Region membership test and generated-content count, shared by the panel and REGENERATE
 │   │   │   └── __tests__/
 │   │   │       ├── cityGen.test.ts     # Split determinism, collision and buffer behaviour, zoning, landmarks, parks, end-to-end generation
 │   │   │       ├── boundary.test.ts    # Drawn bounds — inside/outside/straddling, concave notch, clip inverse of water, unchanged output without a boundary
 │   │   │       ├── layouts.test.ts     # Per-layout contracts, grid regularity vs BSP, ring density and deck ramps, height capping under decks
-│   │   │       └── water.test.ts       # Polygon parsing, concave outlines, span detection, shoreline roads, bridge siting and levels
+│   │   │       ├── water.test.ts       # Polygon parsing, concave outlines, span detection, shoreline roads, bridge siting and levels
+│   │   │       ├── waterGen.test.ts    # River/coast/lake shape and seeding; water reaching the city before the split rather than after
+│   │   │       ├── parkPonds.test.ts   # Pond shape and size, containment in the plot, trees standing back from the water, and identical roads with ponds on or off
+│   │   │       ├── seeds.test.ts       # Same seed rebuilds the same city; typed seeds survive intact; a new seed gives a different one
+│   │   │       └── region.test.ts      # Region membership and counting for REGENERATE
 │   │   ├── components/
-│   │   │   ├── AdminPanel.tsx          # GM dashboard — CITY / EXPORT / GAME / PLAYERS tabs; CITY_GENERATOR delegates to cityGen/ and exposes LAYOUT, DRAG_RECT/DRAW_AREA bounds and OVERPASS_DENSITY; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R, CWN, and SR6; SR6 Edge replenishment (reset all / give 1 to player)
+│   │   │   ├── AdminPanel.tsx          # GM dashboard — CITY / EXPORT / GAME / PLAYERS tabs; CITY_GENERATOR delegates to cityGen/ and exposes LAYOUT, DRAG_RECT/DRAW_AREA bounds, OVERPASS_DENSITY, WATER, PARK_PONDS, an optional SEED and REGENERATE; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R, CWN, and SR6; SR6 Edge replenishment (reset all / give 1 to player)
 │   │   │   ├── HitPoints.tsx           # HP tracking + injury panel + HealthReviewWindow; STIM_HEAL (CWN), STABILIZE button for allies on mortal wound
 │   │   │   ├── BankWindows.tsx         # Player bank UI
 │   │   │   ├── ChatWindow.tsx          # In-game chat

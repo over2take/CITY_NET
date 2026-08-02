@@ -9,7 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [1.8.0] - 2026-07-28
+## [1.8.0] - 2026-08-01
 
 ### Added
 
@@ -19,10 +19,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - **`SUPERBLOCK`** — the same recursive split with a much larger floor: fewer roads, larger plots, open ground between them. Soviet microdistrict or corporate arcology.
   - **`RING`** — a beltway city, San Antonio being the reference: concentric loop roads with elevated arterials running out from downtown. The corners of a square selection are left empty on purpose, because a ring city is round.
   - **`BSP`** stays the default and an unrecognised layout falls back to it, so existing generation is untouched and a stale saved option cannot produce an empty city.
+- **Generated water** — a `WATER` selector offering a `RIVER` across the region, a `COAST` cutting one edge off, or a `LAKE` inside it. Rivers and coastlines are most of why real cities look like themselves: they force asymmetry, cut districts apart, and give bridges a reason to exist, which until now only happened if a GM had drawn water first. `NONE` is the default and doubles as the off switch, so generation produces water only when asked and a GM who wants to draw their own is never overruled.
+- **Park ponds** — a `PARK_PONDS` toggle gives some parks water as well as trees, with the trees standing back from the edge. Separate from `WATER` because they are different scales of decision — a river reshapes the whole city, a pond is scenery in one plot — and either is wanted without the other. Off by default.
+- **Seeded generation** — an optional `SEED` field. The same seed over the same area with the same options rebuilds the same city, so a map can be recreated or shared as a short string. Leaving it blank rolls a fresh seed, and the seed actually used is reported back beneath the field rather than written into it.
+- **`REGENERATE`** — clears the previous generation in the selected area and builds afresh, for iterating on a district without hand-deleting it first. It keeps anything the GM authored: named structures, tokens, battle-map content and hand-drawn water all survive. Plain `GENERATE` still adds to what is there.
+- **`UNDO` on the generator panel** — the same server-side undo as the admin header, reachable without leaving the panel.
+- The panel now stays open after generating, instead of dropping back to the main admin list — generation is something you do repeatedly while tuning.
+
+### Changed
+
+- **Road hierarchy, skyline taper and per-zone setbacks.** Road width is graded by split depth, so arterials read as arterials and side streets as side streets. Building height now blends continuously with distance from the centre instead of stepping in bands, which turned the skyline from flat plateaus with hard seams into a taper. Corporate plots leave forecourts and slums and markets build to the lot line, via a per-zone lot coverage applied after the aspect clamp.
 
 ### Fixed
 
+- **Park ponds were puddles.** Measured on real output, ponds came out around 4 units across in plots of 50 and 65 — 6 to 9% of what you actually see. A pond was a circle sized off `Math.min(bw, bd)`, and blocks out of the split are frequently long thin rectangles, so the circle could only ever be as wide as the short side. Ponds are ellipses now, one radius per axis, spanning 35–55% of each.
+- **A typed seed is used as typed.** Parsing forced the value through `>>> 0`, which wrapped anything above 2³², so a long numeric seed silently became a different one. Seeds are hashed into range instead.
+- **`REGENERATE` rolls a new seed** unless one is asked for. The seed field was doing double duty as both the request and the readout, so writing the used seed back into it meant every later regenerate rebuilt the identical city — which reads as the purge having failed.
 - **Elevated arterials no longer run through buildings.** Placement deliberately ignores overpasses so the ground beneath a deck stays buildable — that is what stops an arterial sterilising every block it crosses — but nothing then stopped a tower rising through one. Anything under a deck is now capped just below it, and where the deck is too low to build under at all, near its ramps, the building is dropped rather than squashed to nothing. This applies to water bridges too, which pierced buildings for the same reason.
+- **Skyscrapers floated above the ground near an overpass.** Capping a building under a deck scaled its `height` but not its `y`. A plot is usually several stacked parts, and a part sitting on another has its `y` set to that one's height, so shortening the bases left every upper storey hanging in mid-air.
+- **Buildings still floated after that fix**, because the cap was applied per part rather than per plot: shortening one part of a stack and not its neighbours pulls the stack apart just as surely. A whole plot is now scaled by one factor, grouped by the `temp_block_id` the generator already stamps on every piece it emits.
 
 ### Technical
 
@@ -33,6 +48,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **`RING` elevates its spokes but leaves its loops on the ground.** A closed loop has no ends to ramp down at, so an elevated ring either never meets the street network or does so at one arbitrary point. Spoke ramps are sized as a fraction of the spoke rather than a fixed length, so both ends reach the ground however large the city is — a fixed ramp longer than half the deck leaves it ending in mid-air.
 - Spokes run from the innermost loop outward rather than converging on a point, which removes a starburst of dead ground at the centre and is closer to how highways meet a downtown loop.
 - `LayoutFn` may return overpasses alongside blocks and roads, and `generateCity` merges them with whatever bridges the water needed. `splitCity` gained an optional minimum block size rather than `SUPERBLOCK` being a parallel implementation.
+- **Water is generated before the split; ponds after it.** The split is already water-aware, so generating a river first means the road grid stops at the banks of its own accord and bridges are sited from the stubs left there — generating it afterwards would mean cutting finished roads, which is a different and worse problem. A park pond is the opposite case: the park only exists once the split has produced the block it sits in. That is safe because a pond is contained by its plot and never reaches a road, and ponds are kept out of the water array the split, the shoreline roads and the bridge siting were built from. A test pins it: a ponded and an unponded run of one seed give identical roads and overpasses.
+- **`water_bodies` gains a `generated` column**, so a regenerate can clear its own river without destroying a lake the GM drew. Existing rows default to `0`, so everything already on a map counts as hand-drawn. The migration runs on startup — a server on older code will accept generated water but store it as hand-drawn.
+- **Seeding reached the buildings, not just the layout.** `cityGen/` had a single `Math.random` (the injected default), but `generateThemedBuildingsForPlot` had forty of its own, so a seed reproduced the street layout while the buildings on it changed every run. The rng is threaded through to the plot filler. It is deliberately not crypto-backed: 1.7.1 moved outcome-deciding rolls to OS entropy, and city layout is cosmetic.
+- **`POST /purge-region`** clears a region's generated content in one transaction and emits a single update, rather than the panel issuing a delete per object. It distinguishes generated content from authored content by `isUserDefinedName`, token classification, battle-map membership and the new water flag.
+- Region membership and counting moved out of `AdminPanel` into `cityGen/region.ts`, and seeding into `cityGen/rng.ts`, so both are testable without rendering the panel.
 
 ---
 
