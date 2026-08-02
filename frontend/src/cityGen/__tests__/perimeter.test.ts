@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  perimeterLots, perimeterLayout, LAYOUTS, LOT_DEPTH,
+  perimeterLots, perimeterLayout, LAYOUTS,
   generateCity, splitCity,
 } from '../index';
 import type { Block } from '../types';
@@ -68,12 +68,20 @@ describe('perimeterLots', () => {
     }
   });
 
-  it('leaves the middle of the block open', () => {
-    // Back lots are half of what makes a perimeter block read as one.
-    const lots = perimeterLots(bigBlock, seededRng());
-    const inMiddle = lots.filter(l =>
-      Math.abs(l.x) < bigBlock.w / 2 - LOT_DEPTH && Math.abs(l.z) < bigBlock.d / 2 - LOT_DEPTH);
-    expect(inMiddle).toHaveLength(0);
+  it('leaves a yard in the middle but does not leave the block hollow', () => {
+    // Two failure modes, one on each side. One ring around a 226 by 114 block leaves
+    // 186 by 74 of nothing, which is most of the block; filling everything took it to
+    // 97% built, a solid slab with no back lot at all. So: the exact centre stays open,
+    // and the block is still substantially built out.
+    const big: Block = { x: 0, z: 0, w: 226, d: 114 };
+    const lots = perimeterLots(big, seededRng());
+    const coversCentre = lots.some(l =>
+      Math.abs(l.x) < l.w / 2 && Math.abs(l.z) < l.d / 2);
+    expect(coversCentre).toBe(false);
+
+    const built = lots.reduce((a, l) => a + l.w * l.d, 0) / (big.w * big.d);
+    expect(built).toBeGreaterThan(0.5);
+    expect(built).toBeLessThan(0.92);
   });
 
   it('puts neighbours close enough to read as a terrace', () => {
@@ -101,14 +109,14 @@ describe('perimeterLots', () => {
     expect(widths.size).toBeGreaterThan(3);
   });
 
-  it('builds a small block solid rather than cutting a hole in it', () => {
-    // A block with no room for a rim and a middle would otherwise become four slivers
-    // around a courtyard.
-    const small: Block = { x: 0, z: 0, w: 30, d: 26 };
+  it('builds a small block as a terrace, not one monolith', () => {
+    // A block with no room for a rim and a middle used to come back as a single lot the
+    // length of the block, which is a monolith where a row of buildings belongs.
+    const small: Block = { x: 0, z: 0, w: 60, d: 26 };
     const lots = perimeterLots(small, seededRng());
-    expect(lots).toHaveLength(1);
-    expect(lots[0].w).toBe(30);
-    expect(lots[0].d).toBe(26);
+    expect(lots.length).toBeGreaterThan(1);
+    for (const l of lots) expect(l.d).toBeCloseTo(26, 1);
+    expect(lots.reduce((a, l) => a + l.w, 0)).toBeLessThanOrEqual(60);
   });
 
   it('reproduces from a seed', () => {
