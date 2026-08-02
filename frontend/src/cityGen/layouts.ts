@@ -2,6 +2,7 @@ import type { Block, Bounds, Rng, RoadSegment } from './types';
 import type { OverpassSpec } from './bridges';
 import { normalizeBounds, splitCity } from './bsp';
 import { clipSegmentToLand, clipSegmentToBoundary, pointInPolygon, type Polygon, type WaterPolygon } from './water';
+import { seedPoints, voronoiCells, cellEdges, inscribedRect, VORONOI_SPACING } from './voronoi';
 
 /**
  * Street layouts.
@@ -18,7 +19,7 @@ export type LayoutFn = (
   boundary?: Polygon
 ) => { blocks: Block[]; roads: RoadSegment[]; overpasses?: OverpassSpec[] };
 
-export type LayoutType = 'BSP' | 'GRID' | 'SUPERBLOCK' | 'RING';
+export type LayoutType = 'BSP' | 'GRID' | 'SUPERBLOCK' | 'RING' | 'VORONOI';
 
 /** Target block size for the regular grid, before jitter. */
 const GRID_CELL = 55;
@@ -70,6 +71,12 @@ const DECK_PILLAR_SPACING = 14;
 
 /** Degrees between sampled points on a ring. Smaller reads rounder, at more segments. */
 const ARC_STEP_DEG = 9;
+
+/** A Voronoi edge longer than this many spacings is an avenue rather than a street. */
+const VORONOI_AVENUE_RATIO = 1.15;
+
+const VORONOI_AVENUE_WIDTH = 7;
+const VORONOI_STREET_WIDTH = 4;
 
 /**
  * Evenly spaced cut positions across a span, jittered so the result reads as a surveyed
@@ -253,11 +260,63 @@ export const ringLayout: LayoutFn = (bounds, excludeRoads, rng, water = [], boun
   return { blocks, roads, overpasses };
 };
 
+/**
+ * Organic cell city — a Voronoi diagram, streets along the cell boundaries.
+ *
+ * The only layout that produces no right angles. Streets meet at odd angles and blocks
+ * are wedges and pentagons, which reads as a town that grew around footpaths rather
+ * than one a surveyor set out.
+ *
+ * The plot inside each cell is the largest rectangle that fits it. That keeps the
+ * existing plot filler — which lays buildings out along a rectangle's axes and has no
+ * axes to work with in a pentagon — entirely unchanged, while still delivering the
+ * irregular *street pattern*, which is where nearly all of the look comes from. A cell
+ * is rarely filled by its rectangle, so setbacks vary from plot to plot for free.
+ *
+ * Long edges become avenues. Cell boundaries vary a lot in length, so this gives the
+ * network a hierarchy without inventing one: the long runs across the diagram are
+ * exactly the ones that would carry traffic.
+ */
+export const voronoiLayout: LayoutFn = (bounds, excludeRoads, rng, water = [], boundary) => {
+  const seeds = seedPoints(bounds, rng);
+  const cells = voronoiCells(bounds, seeds);
+
+  const roads: RoadSegment[] = [];
+  if (!excludeRoads) {
+    for (const { a, b } of cellEdges(cells)) {
+      const long = Math.hypot(b.x - a.x, b.z - a.z) > VORONOI_SPACING * VORONOI_AVENUE_RATIO;
+      const seg: RoadSegment = {
+        x1: a.x, z1: a.z, x2: b.x, z2: b.z,
+        width: long ? VORONOI_AVENUE_WIDTH : VORONOI_STREET_WIDTH,
+      };
+      for (const dry of clipSegmentToLand(seg, water)) {
+        roads.push(...clipSegmentToBoundary(dry, boundary));
+      }
+    }
+  }
+
+  const blocks: Block[] = [];
+  for (const { poly } of cells) {
+    const rect = inscribedRect(poly);
+    // Blocks centred outside a drawn boundary are dropped, matching every other layout.
+    if (boundary && !pointInPolygon(boundary, rect.x, rect.z)) continue;
+    // The streets run along the cell edges, so the plot has to stand back from them.
+    const w = rect.w - VORONOI_AVENUE_WIDTH;
+    const d = rect.d - VORONOI_AVENUE_WIDTH;
+    if (w < 1 || d < 1) continue;
+    blocks.push({ x: rect.x, z: rect.z, w, d });
+  }
+
+  return { blocks, roads };
+};
+
 export const LAYOUTS: Record<LayoutType, LayoutFn> = {
   BSP: bspLayout,
   GRID: gridLayout,
   SUPERBLOCK: superblockLayout,
   RING: ringLayout,
+  VORONOI: voronoiLayout,
 };
 
-export { GRID_CELL, SUPERBLOCK_MIN_SIZE, AVENUE_EVERY, GRID_AVENUE_WIDTH, GRID_STREET_WIDTH, RING_COUNT, SPOKE_COUNT, RING_ROAD_WIDTH, SPOKE_ROAD_WIDTH, SPOKE_DECK_HEIGHT };
+export * from './voronoi';
+export { VORONOI_AVENUE_WIDTH, VORONOI_STREET_WIDTH, VORONOI_AVENUE_RATIO, GRID_CELL, SUPERBLOCK_MIN_SIZE, AVENUE_EVERY, GRID_AVENUE_WIDTH, GRID_STREET_WIDTH, RING_COUNT, SPOKE_COUNT, RING_ROAD_WIDTH, SPOKE_ROAD_WIDTH, SPOKE_DECK_HEIGHT };

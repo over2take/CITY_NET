@@ -12,6 +12,7 @@ const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
   { value: 'GRID', label: 'GRID — PLANNED, SQUARE BLOCKS' },
   { value: 'SUPERBLOCK', label: 'SUPERBLOCK — TOWER IN PARK' },
   { value: 'RING', label: 'RING — BELTWAYS AND SPOKES' },
+  { value: 'VORONOI', label: 'ORGANIC_CELLS — GREW, NOT PLANNED' },
 ];
 
 /**

@@ -693,7 +693,7 @@ describe('AdminPanel layout selector', () => {
   it('offers every layout', () => {
     render(<AdminPanel {...genProps()} />);
     const select = screen.getByLabelText('LAYOUT') as HTMLSelectElement;
-    expect([...select.options].map(o => o.value)).toEqual(['BSP', 'GRID', 'SUPERBLOCK', 'RING']);
+    expect([...select.options].map(o => o.value)).toEqual(['BSP', 'GRID', 'SUPERBLOCK', 'RING', 'VORONOI']);
   });
 
   it('defaults to the organic layout, so generation is unchanged out of the box', () => {
