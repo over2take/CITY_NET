@@ -5,6 +5,7 @@ import {
   MIN_ARTERIAL_WIDTH, RING_WIDTH, SPACING_RADII,
 } from '../index';
 import type { RoadSegment } from '../types';
+import { isUserDefinedName } from '../../utils/locationHelpers';
 
 /**
  * Roundabouts.
@@ -261,6 +262,20 @@ describe('generateCity with roundabouts', () => {
       bounds(400), opts({ roundabouts: 'normal' }), freshContext(), seededRng(21), deps
     );
     expect(on.buildings.some(b => b.temp_block_id?.startsWith('gen_circus_'))).toBe(true);
+  });
+
+  it('names islands from the generated vocabulary, not something new', () => {
+    // Anything outside ZONE_TYPE_NAMES counts as authored by the GM: it renders in the
+    // purple reserved for structures with data, and a region purge keeps it — so every
+    // regenerate would leave its old islands behind and stack new ones on them.
+    const on = generateCity(
+      bounds(400), opts({ roundabouts: 'normal' }), freshContext(), seededRng(21), deps
+    );
+    const islands = on.buildings.filter(b => b.temp_block_id?.startsWith('gen_circus_'));
+    expect(islands.length).toBeGreaterThan(0);
+    for (const b of islands) {
+      expect(isUserDefinedName(b.name), b.name).toBe(false);
+    }
   });
 
   it('reproduces from a seed', () => {

@@ -274,15 +274,21 @@ export function generateCity(
 
     // Drawn unconditionally so the sequence does not depend on how large the island is.
     const wantsMonument = rng() < ISLAND_MONUMENT_CHANCE;
-    if (wantsMonument && span >= MIN_MONUMENT_SPAN) {
+    const monument = wantsMonument && span >= MIN_MONUMENT_SPAN;
+    if (monument) {
       generateLandmark(island, span, span, buildings, grid, rng);
     } else {
       generatePark(island, span, span, buildings, isBlocked, rng, false);
     }
 
+    // Named as what they are, from the vocabulary that already exists. A new name would
+    // have to be added to ZONE_TYPE_NAMES in two files — the frontend and the backend
+    // keep separate copies — and anything missing from that set is treated as authored
+    // by the GM: rendered in the "has data" purple, and *kept by a region purge*, so
+    // every regenerate would leave its old islands behind and stack new ones on them.
     for (let k = startIndex; k < buildings.length; k++) {
       buildings[k].temp_block_id = plotId;
-      if (!buildings[k].name) buildings[k].name = 'CIRCUS';
+      if (!buildings[k].name) buildings[k].name = monument ? 'LANDMARK' : 'PARK';
     }
   });
 
