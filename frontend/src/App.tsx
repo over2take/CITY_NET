@@ -367,7 +367,11 @@ function App() {
   const [cityLayout, setCityLayout] = useState<LayoutType>('BSP');
   // Blank means roll a fresh one; after generating it holds the seed that was used,
   // so a city worth keeping can be written down.
+  // The input is a *request*: blank means roll a fresh seed, so repeated generates
+  // keep producing different cities. lastCitySeed is the readout of what was actually
+  // used, kept separate so showing it never silently pins the next generation.
   const [citySeed, setCitySeed] = useState<string>('');
+  const [lastCitySeed, setLastCitySeed] = useState<string>('');
   const [mapExportApi, setMapExportApi] = useState<MapExportApi | null>(null);
   const [isPlacingSign, setIsPlacingSign] = useState(false);
   const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
@@ -1804,6 +1808,8 @@ function App() {
                 isExporting={mapExportApi?.isExporting ?? false}
                 citySeed={citySeed}
                 setCitySeed={setCitySeed}
+                lastCitySeed={lastCitySeed}
+                setLastCitySeed={setLastCitySeed}
                 cityLayout={cityLayout}
                 setCityLayout={setCityLayout}
                 cityGenDrawMode={cityGenDrawMode}

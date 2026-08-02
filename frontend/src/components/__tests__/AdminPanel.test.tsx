@@ -780,6 +780,8 @@ describe('AdminPanel city seed', () => {
     setCityLayout: vi.fn(),
     citySeed: '',
     setCitySeed: vi.fn(),
+    lastCitySeed: '',
+    setLastCitySeed: vi.fn(),
     roadSelectionBounds: { min: { x: -50, z: -50 }, max: { x: 50, z: 50 } },
     waterBodies: [],
     locations: [],
@@ -816,7 +818,8 @@ describe('AdminPanel city seed', () => {
     expect(props.setCitySeed).toHaveBeenCalledWith('');
   });
 
-  it('fills a blank field with the seed it rolled, so a good city can be kept', async () => {
+  it('reports the seed it rolled without filling the field', async () => {
+    // Filling the input meant every later regenerate silently rebuilt the same city.
     vi.stubGlobal('fetch', vi.fn(() =>
       Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
     ));
@@ -824,9 +827,36 @@ describe('AdminPanel city seed', () => {
     render(<AdminPanel {...props} />);
     await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
 
-    const written = props.setCitySeed.mock.calls.map((c: unknown[]) => c[0]);
-    expect(written.some((v: string) => v !== '' && Number.isFinite(Number(v)))).toBe(true);
+    const reported = props.setLastCitySeed.mock.calls.map((c: unknown[]) => c[0]);
+    expect(reported.some((v: string) => v !== '' && Number.isFinite(Number(v)))).toBe(true);
+    expect(props.setCitySeed).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+
+  it('rolls a different seed each time the field is left blank', async () => {
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    ));
+    const props = genProps({ citySeed: '' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+
+    const reported = props.setLastCitySeed.mock.calls.map((c: unknown[]) => c[0]);
+    expect(new Set(reported).size).toBeGreaterThan(1);
+    vi.unstubAllGlobals();
+  });
+
+  it('shows the last seed used, and reuses it when clicked', async () => {
+    const props = genProps({ citySeed: '', lastCitySeed: '4821960374' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByTitle('REUSE THIS SEED'));
+    expect(props.setCitySeed).toHaveBeenCalledWith('4821960374');
+  });
+
+  it('shows no readout before anything has been generated', () => {
+    render(<AdminPanel {...genProps({ citySeed: '', lastCitySeed: '' })} />);
+    expect(screen.queryByTitle('REUSE THIS SEED')).not.toBeInTheDocument();
   });
 
   it('never rewrites a seed the admin typed', async () => {
@@ -885,6 +915,8 @@ describe('AdminPanel regenerate', () => {
     setCityLayout: vi.fn(),
     citySeed: '42',
     setCitySeed: vi.fn(),
+    lastCitySeed: '',
+    setLastCitySeed: vi.fn(),
     roadSelectionBounds: { min: { x: -50, z: -50 }, max: { x: 50, z: 50 } },
     waterBodies: [],
     locations: [],

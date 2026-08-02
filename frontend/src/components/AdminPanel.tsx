@@ -593,7 +593,7 @@ export function AdminPanel({
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
     onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
     cityGenDrawMode, setCityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail,
-    cityLayout, setCityLayout, citySeed, setCitySeed,
+    cityLayout, setCityLayout, citySeed, setCitySeed, lastCitySeed, setLastCitySeed,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -982,7 +982,10 @@ export function AdminPanel({
                 // gets filled in, so the seed just rolled can be written down.
                 const typedSeed = (citySeed ?? '').trim();
                 const seed = seedFrom(typedSeed);
-                if (typedSeed === '') setCitySeed?.(String(seed));
+                // Reported, never written back into the field. Filling the input meant
+                // every later regenerate silently rebuilt the same city, which reads as
+                // the purge having failed.
+                setLastCitySeed?.(String(seed));
 
                 const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses } = generateCity(
                   genBounds,
@@ -1809,6 +1812,15 @@ export function AdminPanel({
             <button className="utility-btn" title="ROLL A NEW SEED" style={{padding: '2px 10px'}}
               onClick={() => setCitySeed?.('')}>⟲</button>
           </div>
+          {lastCitySeed
+            ? <p style={{fontSize: '0.65rem', opacity: 0.75, marginTop: '4px'}}>
+                LAST: <button
+                  onClick={() => setCitySeed?.(String(lastCitySeed))}
+                  title="REUSE THIS SEED"
+                  style={{background: 'none', border: 'none', color: 'var(--green)', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontFamily: 'monospace', fontSize: '0.65rem'}}
+                >{lastCitySeed}</button>
+              </p>
+            : null}
           <p style={{fontSize: '0.65rem', opacity: 0.55, marginTop: '4px'}}>SAME SEED + SAME AREA + SAME OPTIONS = SAME CITY</p>
           <label htmlFor="city-layout" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>LAYOUT</label>
           <select
