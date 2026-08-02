@@ -30,6 +30,15 @@ function seededRng(seed = 4242) {
 const freshContext = () => ({ locations: [], roads: [], waterBodies: [] });
 const deps = { fillPlot: () => {} };
 
+/**
+ * A seed whose first roll clears the `normal` density share.
+ *
+ * Siting rolls before it tests anything else, so a seed that fails the roll skips the
+ * junction outright — and every exclusion test below would pass without exercising the
+ * rule it names. The default seed rolls 0.88, above the 0.6 share, and did exactly that.
+ */
+const PASSES_ROLL = 1;
+
 /** A crossroads of two wide roads, sharing no endpoint — the grid's case. */
 const cross = (x = 0, z = 0, width = 8): RoadSegment[] => [
   { x1: x - 100, z1: z, x2: x + 100, z2: z, width },
@@ -130,14 +139,42 @@ describe('siteRoundabouts', () => {
     const lake = { points: [
       { x: -50, z: -50 }, { x: 50, z: -50 }, { x: 50, z: 50 }, { x: -50, z: 50 },
     ] };
-    expect(siteRoundabouts(cross(), 'normal', seededRng(), [lake])).toHaveLength(0);
+    expect(siteRoundabouts(cross(), 'normal', seededRng(PASSES_ROLL), [lake])).toHaveLength(0);
+  });
+
+  it('keeps the whole ring out of the water, not just its centre', () => {
+    // A junction on a shoreline has its centre on dry ground while half the ring hangs
+    // over the water. Testing the centre alone let that through.
+    const shore = { points: [
+      { x: 5, z: -200 }, { x: 400, z: -200 }, { x: 400, z: 200 }, { x: 5, z: 200 },
+    ] };
+    // The junction is at the origin and the shore starts at x = 5, so the centre is
+    // dry and the ring is not. Asserting it is rejected outright, rather than looping
+    // over what got placed — an empty list would pass that vacuously.
+    expect(siteRoundabouts(cross(), 'normal', seededRng(PASSES_ROLL), [shore])).toHaveLength(0);
   });
 
   it('keeps them inside a drawn boundary', () => {
     const boundary = { points: [
       { x: 200, z: 200 }, { x: 300, z: 200 }, { x: 300, z: 300 }, { x: 200, z: 300 },
     ] };
-    expect(siteRoundabouts(cross(), 'normal', seededRng(), [], boundary)).toHaveLength(0);
+    expect(siteRoundabouts(cross(), 'normal', seededRng(PASSES_ROLL), [], boundary)).toHaveLength(0);
+  });
+
+  it('keeps the whole ring inside a drawn boundary', () => {
+    // Same defect as the shoreline, and the same fix: a junction just inside an edge
+    // would otherwise put half its ring outside the area the GM drew.
+    const boundary = { points: [
+      { x: -400, z: -400 }, { x: 5, z: -400 }, { x: 5, z: 400 }, { x: -400, z: 400 },
+    ] };
+    // The junction sits inside the boundary, which ends at x = 5; the ring does not.
+    expect(siteRoundabouts(cross(), 'normal', seededRng(PASSES_ROLL), [], boundary)).toHaveLength(0);
+  });
+
+  it('places one on clear ground with that seed', () => {
+    // The control for every exclusion test above: if this were empty they would all
+    // pass without exercising anything.
+    expect(siteRoundabouts(cross(), 'normal', seededRng(PASSES_ROLL))).toHaveLength(1);
   });
 
   it('reproduces from a seed', () => {

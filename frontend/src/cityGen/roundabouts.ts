@@ -81,6 +81,25 @@ export function findJunctions(roads: RoadSegment[]): { x: number; z: number; wid
 }
 
 /**
+ * True when the whole ring sits on land and inside any drawn boundary.
+ *
+ * Testing the centre alone is not enough, and looked fine until a lake was generated: a
+ * junction on a shoreline has its centre on dry ground while half its ring hangs over
+ * the water. The ring points are the same ones that become road, so this asks the
+ * question about the geometry that will actually exist rather than a proxy for it.
+ */
+function ringOnLand(r: Roundabout, water: WaterPolygon[], boundary?: Polygon): boolean {
+  if (water.length > 0 && pointInWater(water, r.x, r.z)) return false;
+  if (boundary && !pointInPolygon(boundary, r.x, r.z)) return false;
+
+  for (const p of ringPolygon(r).points) {
+    if (water.length > 0 && pointInWater(water, p.x, p.z)) return false;
+    if (boundary && !pointInPolygon(boundary, p.x, p.z)) return false;
+  }
+  return true;
+}
+
+/**
  * Choose which junctions become roundabouts.
  *
  * Sited away from water, spaced apart, and thinned by density. The spacing test uses
@@ -105,10 +124,10 @@ export function siteRoundabouts(
     // junctions happen to be eligible — the same rule the landmark roll follows.
     const roll = rng();
     if (roll >= share) continue;
-    if (water.length > 0 && pointInWater(water, j.x, j.z)) continue;
-    if (boundary && !pointInPolygon(boundary, j.x, j.z)) continue;
 
     const radius = Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, j.width * RADIUS_FROM_ROAD));
+    if (!ringOnLand({ x: j.x, z: j.z, radius }, water, boundary)) continue;
+
     const tooClose = placed.some(
       (p) => Math.hypot(p.x - j.x, p.z - j.z) < Math.max(p.radius, radius) * SPACING_RADII
     );
