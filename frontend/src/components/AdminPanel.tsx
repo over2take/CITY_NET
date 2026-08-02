@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
-import { generateCity, SpatialGrid, seededRng, seedFrom, countGeneratedInRegion, type SectionType, type OverpassDensity, type LayoutType, type WaterType } from '../cityGen';
+import { generateCity, SpatialGrid, seededRng, seedFrom, countGeneratedInRegion, type SectionType, type OverpassDensity, type LayoutType, type WaterType, type RoundaboutDensity } from '../cityGen';
 
 /** Street layouts offered in the generator, with what each one reads as. */
 const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
@@ -605,7 +605,7 @@ export function AdminPanel({
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
     onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
     cityGenDrawMode, setCityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail,
-    cityLayout, setCityLayout, citySeed, setCitySeed, lastCitySeed, setLastCitySeed, cityWater, setCityWater, cityParkPonds, setCityParkPonds,
+    cityLayout, setCityLayout, citySeed, setCitySeed, lastCitySeed, setLastCitySeed, cityWater, setCityWater, cityParkPonds, setCityParkPonds, cityRoundabouts, setCityRoundabouts,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -1008,6 +1008,7 @@ export function AdminPanel({
                     layout: cityLayout ?? 'BSP',
                     water: cityWater ?? 'NONE',
                     parkPonds: !!cityParkPonds,
+                    roundabouts: cityRoundabouts ?? 'off',
                     boundary: drawing ? { points: tracedPoints } : undefined,
                   },
                   { locations: worldLocations, roads: worldRoads, waterBodies },
@@ -1844,6 +1845,21 @@ export function AdminPanel({
             title="Give some parks a pond. Independent of WATER — a pond sits inside its own plot and does not reshape the street grid."
             onClick={() => setCityParkPonds?.(!cityParkPonds)}
           >{cityParkPonds ? 'PARK_PONDS: ON' : 'PARK_PONDS: OFF'}</button>
+          <label style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>ROUNDABOUTS</label>
+          <div className="button-group" style={{display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
+            {(['off', 'sparse', 'normal'] as RoundaboutDensity[]).map(d => (
+              <button
+                key={d}
+                className={(cityRoundabouts ?? 'off') === d ? 'active' : ''}
+                style={{ flex: '1 1 60px', minWidth: '60px' }}
+                onClick={() => setCityRoundabouts?.(d)}
+                disabled={genExcludeRoads}
+                title="Put roundabouts where major roads meet. Applies to whichever layout is chosen; the island gets a monument or trees."
+              >
+                {d.toUpperCase()}
+              </button>
+            ))}
+          </div>
           <label htmlFor="city-seed" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>SEED <span style={{opacity: 0.6}}>(BLANK = RANDOM)</span></label>
           <div style={{display: 'flex', gap: '6px'}}>
             <input

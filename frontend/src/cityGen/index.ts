@@ -19,8 +19,10 @@ import { shouldPlaceLandmark, generateLandmark } from './landmarks';
 import { parseWaterBodies, pointInWater, footprintInWater, clipSegmentToBoundary } from './water';
 import type { Polygon } from './water';
 import { findBridges } from './bridges';
+import { siteRoundabouts, applyRoundabouts, RING_WIDTH } from './roundabouts';
 import { generateShorelineRoads, snapRoadEndsToShoreline } from './shoreline';
 import type {
+  Block,
   Bounds,
   GenerateCityContext,
   GenerateCityOptions,
@@ -45,12 +47,25 @@ export {
   BRIDGE_HEIGHTS, MIN_RAMP_RUN, MAX_RAMP_RUN,
 } from './bridges';
 export { generateShorelineRoads, snapRoadEndsToShoreline, SHORE_OFFSET } from './shoreline';
+export * from './roundabouts';
 
 /** Margin trimmed off every block so buildings don't butt against the road. */
 const PLOT_PADDING = 10;
 
 /** Plots smaller than this after padding are left empty. */
 const MIN_PLOT_SIZE = 8;
+
+/** Fraction of a roundabout's inner disc actually built on, leaving a verge. */
+const ISLAND_COVERAGE = 0.8;
+
+/** Islands smaller than this are left as bare pavement; nothing reads at that size. */
+const MIN_ISLAND_SPAN = 4;
+
+/** A monument needs room to look deliberate; below this the island gets trees. */
+const MIN_MONUMENT_SPAN = 12;
+
+/** How often an island large enough for one gets a monument rather than trees. */
+const ISLAND_MONUMENT_CHANCE = 0.45;
 
 /** How aggressively new roads snap onto existing ones. */
 const ROAD_CONSOLIDATION_RADIUS = 3.0;
@@ -81,7 +96,7 @@ export function generateCity(
   rng: Rng = Math.random,
   deps: GenerateCityDeps = DEFAULT_DEPS
 ): GenerateCityResult {
-  const { sectionType, excludeRoads, overpassDensity = 'normal', layout = 'BSP', water: waterType = 'NONE', parkPonds = false } = options;
+  const { sectionType, excludeRoads, overpassDensity = 'normal', layout = 'BSP', water: waterType = 'NONE', parkPonds = false, roundabouts: roundaboutDensity = 'off' } = options;
   // Fewer than three points cannot enclose an area. Treating a degenerate boundary as
   // absent falls back to the plain bounds, rather than generating nothing at all and
   // looking like a broken button.
@@ -128,12 +143,21 @@ export function generateCity(
     ? []
     : [...layoutOverpasses, ...findBridges(finalRoads, water, overpassDensity, rng)];
 
+  // Roundabouts come after consolidation, which snaps nearby endpoints together — a
+  // ring is many short segments with close endpoints, and running it first would snap
+  // the circle into a blob. After bridge siting too, so the shore stubs bridges are
+  // paired from are the ones the layout actually left at the water.
+  const roundabouts = excludeRoads
+    ? []
+    : siteRoundabouts(finalRoads, roundaboutDensity, rng, water, boundary);
+  const roadsWithRoundabouts = applyRoundabouts(finalRoads, roundabouts, boundary);
+
   const grid = new SpatialGrid(context.locations);
   // Test against the roads that will actually exist. Consolidation snaps
   // endpoints onto existing roads and onto each other, so the pre-consolidation
   // seams are not where the pavement ends up — checking those instead lets
   // buildings land on roads that moved underneath them.
-  const roadsToCheck = [...context.roads, ...finalRoads];
+  const roadsToCheck = [...context.roads, ...roadsWithRoundabouts];
   const isBlocked = createIsBlocked(grid, roadsToCheck, !excludeRoads, water, boundary);
 
   const buildings: RawBuilding[] = [];
@@ -237,12 +261,37 @@ export function generateCity(
     tagPlot(zonePrefix);
   });
 
+  // Dress each island. An empty disc reads as a hole in the road network rather than a
+  // roundabout, so every one gets something: a monument where there is room for one,
+  // trees otherwise. Done after the blocks so the islands are laid over a finished city
+  // — they sit where roads were cut away, which no block ever claimed.
+  roundabouts.forEach((r, i) => {
+    const span = Math.max(0, (r.radius - RING_WIDTH) * 2 * ISLAND_COVERAGE);
+    if (span < MIN_ISLAND_SPAN) return;
+    const island: Block = { x: r.x, z: r.z, w: span, d: span };
+    const plotId = `gen_circus_${i}`;
+    const startIndex = buildings.length;
+
+    // Drawn unconditionally so the sequence does not depend on how large the island is.
+    const wantsMonument = rng() < ISLAND_MONUMENT_CHANCE;
+    if (wantsMonument && span >= MIN_MONUMENT_SPAN) {
+      generateLandmark(island, span, span, buildings, grid, rng);
+    } else {
+      generatePark(island, span, span, buildings, isBlocked, rng, false);
+    }
+
+    for (let k = startIndex; k < buildings.length; k++) {
+      buildings[k].temp_block_id = plotId;
+      if (!buildings[k].name) buildings[k].name = 'CIRCUS';
+    }
+  });
+
   // Placement ignores overpasses so the ground beneath stays buildable; nothing there
   // stops a tower rising through a deck, so anything under one is capped just below it.
   // Applies to water bridges too, which pierce buildings for the same reason.
   return {
     blocks,
-    roads: finalRoads,
+    roads: roadsWithRoundabouts,
     buildings: clampBuildingsUnderDecks(buildings, overpasses),
     overpasses,
     waterBodies: [...generatedWater, ...pondPolys],

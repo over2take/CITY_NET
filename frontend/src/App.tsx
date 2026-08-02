@@ -59,7 +59,7 @@ import { Sidewalks } from './components/Sidewalks';
 import { AutoSignage } from './components/AutoSignage';
 import { Signs, type SignData } from './components/Signs';
 import { type RemoteFont } from './utils/fontLoader';
-import type { LayoutType, WaterType } from './cityGen';
+import type { LayoutType, WaterType, RoundaboutDensity } from './cityGen';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import MapExportController, { type MapExportApi } from './components/MapExportController';
@@ -376,6 +376,7 @@ function App() {
   // a river through the city of everyone already using the button.
   const [cityWater, setCityWater] = useState<WaterType>('NONE');
   const [cityParkPonds, setCityParkPonds] = useState(false);
+  const [cityRoundabouts, setCityRoundabouts] = useState<RoundaboutDensity>('off');
   const [mapExportApi, setMapExportApi] = useState<MapExportApi | null>(null);
   const [isPlacingSign, setIsPlacingSign] = useState(false);
   const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
@@ -1816,6 +1817,8 @@ function App() {
                 setCityWater={setCityWater}
                 cityParkPonds={cityParkPonds}
                 setCityParkPonds={setCityParkPonds}
+                cityRoundabouts={cityRoundabouts}
+                setCityRoundabouts={setCityRoundabouts}
                 lastCitySeed={lastCitySeed}
                 setLastCitySeed={setLastCitySeed}
                 cityLayout={cityLayout}

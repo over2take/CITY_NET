@@ -140,6 +140,21 @@ function crossingParam(
 }
 
 /**
+ * Where two segments cross, or null if they do not.
+ *
+ * Layouts differ in how their roads meet: a BSP or Voronoi network joins at shared
+ * endpoints, but `gridLayout` lays each street as one full-length span, so its
+ * crossings share no endpoint and exist only as intersections. Anything siting features
+ * at junctions needs both, which is why this is exposed rather than kept private to the
+ * water clipper.
+ */
+export function segmentCrossing(a: RoadSegment, b: RoadSegment): { x: number; z: number } | null {
+  const t = crossingParam(a.x1, a.z1, a.x2, a.z2, b.x1, b.z1, b.x2, b.z2);
+  if (t === null) return null;
+  return pointAt(a, t);
+}
+
+/**
  * Find the stretches of a road segment that run through water.
  *
  * Collects every shoreline crossing along the segment, then classifies each

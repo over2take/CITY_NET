@@ -30,6 +30,7 @@ import type { OverpassDensity, OverpassSpec } from './bridges';
 import type { Polygon } from './water';
 import type { LayoutType } from './layouts';
 import type { WaterType } from './waterGen';
+import type { RoundaboutDensity } from './roundabouts';
 export type { OverpassDensity, OverpassSpec };
 
 /** Zoning preset chosen in the admin panel. */
@@ -89,6 +90,11 @@ export interface GenerateCityOptions {
    * GM may well want one without the other. Off by default, on the same reasoning.
    */
   parkPonds?: boolean;
+  /**
+   * Put roundabouts at junctions of major roads. An overlay on the finished network
+   * rather than a layout, so it applies whichever layout is chosen. Defaults to 'off'.
+   */
+  roundabouts?: RoundaboutDensity;
   /** When true, no roads are generated and road collision is skipped. */
   excludeRoads: boolean;
   /** How freely roads bridge the water they cross. Defaults to 'normal'. */
