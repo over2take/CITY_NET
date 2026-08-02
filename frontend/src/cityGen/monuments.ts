@@ -13,8 +13,8 @@ import type { Block, RawBuilding, Rng } from './types';
  * go wrong when the road widths are next retuned.
  *
  * **On detail.** A first version was two stacked boxes and read as exactly that. The
- * renderer supports more than a box — `cylinder`, `sphere`, `rhombus` (an octahedron),
- * `pyramid` (a cone) and all three rotation axes. Silhouette is what carries a monument
+ * renderer supports more than a box — `cylinder`, `sphere`, `pyramid` (a cone) and all
+ * three rotation axes. Note which shape is *not* in that list: see `SHAPES` below. Silhouette is what carries a monument
  * at this size, so these use the lot: stepped plinths turned 45° against each other,
  * rings of bollards, tapered shafts, finials. The segment count stays at the app's
  * `POLY_COUNT` — raising it is what made these look foreign.
@@ -42,6 +42,24 @@ export const MONUMENT_STYLE_COUNT = 6;
  * what made them stand out, so that is what was reduced instead.
  */
 const MONUMENT_COLOR = '#00ff00';
+
+/**
+ * Shapes a monument may use.
+ *
+ * `rhombus` is deliberately absent, and this is not a style preference. In this app a
+ * rhombus *is* a player or NPC token: `TOKEN_SHAPES` on the server treats it as one, a
+ * region purge spares it as player content, and `OverlapChecker` registers it in
+ * `activeRhombuses` so that structures containing it can be made transparent — which is
+ * how you see a token standing behind a wall.
+ *
+ * Using it as an octahedral finial therefore made each monument publish a fake token
+ * inside itself. The overlap check found it, concluded a token was standing in the
+ * structure, and dropped the fill to zero opacity — a monument that turned itself
+ * invisible. It also survived every regenerate as "player content", orphaning itself
+ * from the deleted root. The statue and the fountain, the two styles with no finial,
+ * were the only ones that ever looked right.
+ */
+const SHAPES = ['box', 'cylinder', 'sphere', 'pyramid'] as const;
 
 /**
  * The app's segment count, used by every structure on the map.
@@ -116,7 +134,7 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
 
     part({ y, width: span * 0.2, height: span * 0.06, shape: 'cylinder' });
     y += span * 0.06;
-    part({ y, width: span * 0.17, height: span * 0.22, shape: 'rhombus' });
+    part({ y, width: span * 0.17, height: span * 0.22, shape: 'pyramid' });
 
     around(4, span * 0.42, (px, pz) =>
       part({ x: px, z: pz, y: 0, width: span * 0.05, height: span * 0.09, shape: 'cylinder' }));
@@ -213,7 +231,7 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
     y += span * 0.1;
     part({ y, width: span * 0.32, height: span * 0.26, shape: 'pyramid', polyCount: POLY_COUNT, rotation: EIGHTH });
     y += span * 0.26;
-    part({ y, width: span * 0.07, height: span * 0.12, shape: 'rhombus' });
+    part({ y, width: span * 0.07, height: span * 0.12, shape: 'pyramid' });
     return;
   }
 
@@ -234,7 +252,7 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
     const spanW = gap * 2 + pierW;
     part({ y: pierH, width: spanW, depth: pierW, height: span * 0.13, rotation: facing });
     part({ y: pierH + span * 0.13, width: spanW * 0.82, depth: pierW * 0.9, height: span * 0.16, rotation: facing });
-    part({ y: pierH + span * 0.29, width: span * 0.13, height: span * 0.18, shape: 'rhombus' });
+    part({ y: pierH + span * 0.29, width: span * 0.13, height: span * 0.18, shape: 'pyramid' });
 
     around(4, span * 0.4, (px, pz) =>
       part({ x: px, z: pz, y: 0, width: span * 0.05, height: span * 0.1, shape: 'cylinder' }));
@@ -258,8 +276,8 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
   part({ y, width: span * 0.1, height: span * 0.16, shape: 'pyramid', polyCount: POLY_COUNT });
 
   around(4, span * 0.34, (px, pz) =>
-    part({ x: px, z: pz, y: 0, width: span * 0.06, height: span * 0.14, shape: 'rhombus' }));
+    part({ x: px, z: pz, y: 0, width: span * 0.06, height: span * 0.14, shape: 'cylinder' }));
 
 }
 
-export { COLUMN_HEIGHT, STATUE_HEIGHT, FOUNTAIN_HEIGHT, CLOCK_HEIGHT, POLY_COUNT, MONUMENT_COLOR };
+export { COLUMN_HEIGHT, STATUE_HEIGHT, FOUNTAIN_HEIGHT, CLOCK_HEIGHT, POLY_COUNT, MONUMENT_COLOR, SHAPES };

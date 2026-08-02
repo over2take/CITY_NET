@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateMonument, generateLandmark, MONUMENT_STYLE_COUNT, MONUMENT_COLOR, POLY_COUNT, SpatialGrid } from '../index';
+import { generateMonument, generateLandmark, MONUMENT_STYLE_COUNT, MONUMENT_COLOR, POLY_COUNT, SHAPES, SpatialGrid } from '../index';
 import type { Block, RawBuilding } from '../types';
 
 /**
@@ -163,6 +163,25 @@ describe('generateMonument', () => {
       for (const p of parts) expect(p.polyCount, p.shape).toBe(POLY_COUNT);
     }
     expect(POLY_COUNT).toBe(5);
+  });
+
+  it('never uses the rhombus shape, which the app reserves for tokens', () => {
+    // A rhombus *is* a player or NPC token here: the server's TOKEN_SHAPES treats it as
+    // one, a region purge spares it as player content, and OverlapChecker registers it
+    // in activeRhombuses so structures containing a token can be made transparent.
+    //
+    // Used as an octahedral finial it made each monument publish a fake token inside
+    // itself, so the overlap check dropped the structure's fill to zero opacity and the
+    // monument turned itself invisible — and the finial then survived every regenerate
+    // as "player content", orphaning itself from its deleted root. The statue and the
+    // fountain, the only two styles without a finial, were the only ones that looked
+    // right.
+    for (const parts of allStyles()) {
+      for (const p of parts) {
+        expect(p.shape, `style using ${p.shape}`).not.toBe('rhombus');
+        expect(SHAPES).toContain(p.shape);
+      }
+    }
   });
 
   it('keeps its part count modest', () => {
