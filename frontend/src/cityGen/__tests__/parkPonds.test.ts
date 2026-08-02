@@ -79,6 +79,34 @@ describe('generatePark ponds', () => {
     expect(area).toBeGreaterThan(1);
   });
 
+  it('is big enough to read as a pond', () => {
+    // Sizing a circular pond off the narrower plot axis produced 4-unit ponds in
+    // 50-unit plots. Anything under a quarter of the plot is a puddle.
+    const pond = firstPond();
+    const xs = pond.points.map(p => p.x);
+    const width = Math.max(...xs) - Math.min(...xs);
+    expect(width).toBeGreaterThan(50 * 0.25);
+  });
+
+  it('fills a long thin plot along its length', () => {
+    // The failure the ellipse fixes: a circle in an elongated plot can only ever be
+    // as wide as the short side, so it vanishes against the length.
+    const rng = seededRng(2);
+    const long: Block = { x: 0, z: 0, w: 90, d: 30 };
+    for (let i = 0; i < 200; i++) {
+      const [pond] = generatePark(long, 80, 20, [], clear, rng, true);
+      if (!pond) continue;
+      const xs = pond.points.map(p => p.x);
+      const zs = pond.points.map(p => p.z);
+      const width = Math.max(...xs) - Math.min(...xs);
+      const depth = Math.max(...zs) - Math.min(...zs);
+      expect(width).toBeGreaterThan(depth * 2);
+      expect(width).toBeGreaterThan(80 * 0.25);
+      return;
+    }
+    throw new Error('no pond in 200 attempts');
+  });
+
   it('stays inside its own plot', () => {
     // The whole point of siting a pond after the split: it must not reach the road.
     const pond = firstPond();

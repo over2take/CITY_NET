@@ -5,10 +5,18 @@ import { type Polygon, pointInPolygon } from './water';
 /** Holographic foliage colour shared by trunk and canopy. */
 const HOLO_GREEN = '#00ff66';
 
-/** How often a park gets a pond, and how much of the plot it takes. */
+/**
+ * How often a park gets a pond, and how much of each plot axis it spans.
+ *
+ * Measured against real output: sizing a circular pond off the *narrower* axis put
+ * 4-unit ponds in 50-unit plots — 6–9% of what you actually see, a puddle. Blocks out
+ * of the split are frequently long thin rectangles, so a circle can only ever be as
+ * wide as the short side. The pond is an ellipse instead, one radius per axis, which
+ * lets it fill an elongated plot without leaving it.
+ */
 const POND_CHANCE = 0.4;
-const POND_MIN = 0.18;
-const POND_MAX = 0.32;
+const POND_MIN = 0.35;
+const POND_MAX = 0.55;
 
 /** Points around a pond's edge, and how far each strays from a circle. */
 const POND_LOBES = 12;
@@ -25,25 +33,29 @@ const POND_JITTER = 0.25;
 function generatePond(block: Block, bw: number, bd: number, isBlocked: IsBlocked, rng: Rng): Polygon | null {
   if (rng() >= POND_CHANCE) return null;
 
-  const span = Math.min(bw, bd);
-  const radius = (span * (POND_MIN + rng() * (POND_MAX - POND_MIN))) / 2;
+  // One fraction, applied to each axis, so the pond takes up as much of a long plot
+  // as it does of a square one and still reads as a single deliberate shape.
+  const fraction = POND_MIN + rng() * (POND_MAX - POND_MIN);
+  const rx = (bw * fraction) / 2;
+  const rz = (bd * fraction) / 2;
 
-  // Offset from the plot centre so ponds do not all sit dead centre, but not so far
-  // that the outline reaches the plot edge.
-  const slack = Math.max(0, span / 2 - radius * 1.5);
-  const cx = block.x + (rng() - 0.5) * slack;
-  const cz = block.z + (rng() - 0.5) * slack;
+  // Offset from the plot centre so ponds do not all sit dead centre, without letting
+  // the jittered outline reach the plot edge. Per axis, since the radii differ.
+  const slackX = Math.max(0, bw / 2 - rx * (1 + POND_JITTER));
+  const slackZ = Math.max(0, bd / 2 - rz * (1 + POND_JITTER));
+  const cx = block.x + (rng() - 0.5) * slackX;
+  const cz = block.z + (rng() - 0.5) * slackZ;
 
   // A pond on a road or over an existing structure reads as a mistake. isBlocked
   // already composes every reason a footprint is unusable, so ask it rather than
   // re-deriving the checks here.
-  if (isBlocked(cx, cz, radius * 2, radius * 2, 0.5)) return null;
+  if (isBlocked(cx, cz, rx * 2, rz * 2, 0.5)) return null;
 
   const points: { x: number; z: number }[] = [];
   for (let i = 0; i < POND_LOBES; i++) {
     const a = (i / POND_LOBES) * Math.PI * 2;
-    const r = radius * (1 + (rng() - 0.5) * POND_JITTER);
-    points.push({ x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r });
+    const wobble = 1 + (rng() - 0.5) * POND_JITTER;
+    points.push({ x: cx + Math.cos(a) * rx * wobble, z: cz + Math.sin(a) * rz * wobble });
   }
   return { points };
 }
