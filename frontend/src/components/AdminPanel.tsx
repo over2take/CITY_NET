@@ -604,7 +604,7 @@ export function AdminPanel({
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
     onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
     cityGenDrawMode, setCityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail,
-    cityLayout, setCityLayout, citySeed, setCitySeed, lastCitySeed, setLastCitySeed, cityWater, setCityWater,
+    cityLayout, setCityLayout, citySeed, setCitySeed, lastCitySeed, setLastCitySeed, cityWater, setCityWater, cityParkPonds, setCityParkPonds,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -1006,6 +1006,7 @@ export function AdminPanel({
                     overpassDensity,
                     layout: cityLayout ?? 'BSP',
                     water: cityWater ?? 'NONE',
+                    parkPonds: !!cityParkPonds,
                     boundary: drawing ? { points: tracedPoints } : undefined,
                   },
                   { locations: worldLocations, roads: worldRoads, waterBodies },
@@ -1836,6 +1837,12 @@ export function AdminPanel({
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
+          <button
+            className={`utility-btn ${cityParkPonds ? 'active' : ''}`}
+            style={{marginTop: '8px', width: '100%'}}
+            title="Give some parks a pond. Independent of WATER — a pond sits inside its own plot and does not reshape the street grid."
+            onClick={() => setCityParkPonds?.(!cityParkPonds)}
+          >{cityParkPonds ? 'PARK_PONDS: ON' : 'PARK_PONDS: OFF'}</button>
           <label htmlFor="city-seed" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>SEED <span style={{opacity: 0.6}}>(BLANK = RANDOM)</span></label>
           <div style={{display: 'flex', gap: '6px'}}>
             <input

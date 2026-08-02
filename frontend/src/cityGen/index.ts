@@ -17,6 +17,7 @@ import {
 import { generatePark } from './parks';
 import { shouldPlaceLandmark, generateLandmark } from './landmarks';
 import { parseWaterBodies, pointInWater, footprintInWater, clipSegmentToBoundary } from './water';
+import type { Polygon } from './water';
 import { findBridges } from './bridges';
 import { generateShorelineRoads, snapRoadEndsToShoreline } from './shoreline';
 import type {
@@ -80,7 +81,7 @@ export function generateCity(
   rng: Rng = Math.random,
   deps: GenerateCityDeps = DEFAULT_DEPS
 ): GenerateCityResult {
-  const { sectionType, excludeRoads, overpassDensity = 'normal', layout = 'BSP', water: waterType = 'NONE' } = options;
+  const { sectionType, excludeRoads, overpassDensity = 'normal', layout = 'BSP', water: waterType = 'NONE', parkPonds = false } = options;
   // Fewer than three points cannot enclose an area. Treating a degenerate boundary as
   // absent falls back to the plain bounds, rather than generating nothing at all and
   // looking like a broken button.
@@ -136,6 +137,11 @@ export function generateCity(
   const isBlocked = createIsBlocked(grid, roadsToCheck, !excludeRoads, water, boundary);
 
   const buildings: RawBuilding[] = [];
+  // Ponds are collected separately from `water`: that array is what the split, the
+  // shoreline roads and bridge siting were built from, and all of those have already
+  // run by the time a park exists. Adding to it here would be a lie about what shaped
+  // the city. They join the generated water only in the result, to be persisted.
+  const pondPolys: Polygon[] = [];
 
   blocks.forEach((block, index) => {
     const plotId = `gen_${index}`;
@@ -160,29 +166,33 @@ export function generateCity(
      * across a road. Every piece is therefore re-checked once the plot is
      * finished, and the whole plot is rolled back if any of them landed badly
      * — an empty lot reads as deliberate, half a building does not.
+     *
+     * Returns whether the plot was kept, so a caller that produced something other
+     * than buildings — a park pond — can discard that too when the plot is rolled back.
      */
-    const tagPlot = (fallbackName: string) => {
+    const tagPlot = (fallbackName: string): boolean => {
       for (let i = startIndex; i < buildings.length; i++) {
         const b = buildings[i];
         const wet = water.length > 0 && footprintInWater(water, b.x, b.z, b.width, b.depth);
         const paved = !excludeRoads && footprintOnRoad(roadsToCheck, b.x, b.z, b.width, b.depth);
         if (wet || paved) {
           buildings.length = startIndex;
-          return;
+          return false;
         }
       }
       for (let i = startIndex; i < buildings.length; i++) {
         buildings[i].temp_block_id = plotId;
         if (!buildings[i].name) buildings[i].name = fallbackName;
       }
+      return true;
     };
 
     const normDist = normalizedDistance(block.x, block.z, centerX, centerZ, maxRadius);
 
     // Parks claim the plot outright — no buildings share it.
     if (rng() < parkProbability(normDist)) {
-      generatePark(block, bw, bd, buildings, isBlocked, rng);
-      tagPlot('PARK');
+      const ponds = generatePark(block, bw, bd, buildings, isBlocked, rng, parkPonds);
+      if (tagPlot('PARK')) pondPolys.push(...ponds);
       return;
     }
 
@@ -235,6 +245,6 @@ export function generateCity(
     roads: finalRoads,
     buildings: clampBuildingsUnderDecks(buildings, overpasses),
     overpasses,
-    waterBodies: generatedWater,
+    waterBodies: [...generatedWater, ...pondPolys],
   };
 }

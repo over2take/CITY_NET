@@ -375,6 +375,7 @@ function App() {
   // NONE by default: generation has never produced water, so anything else would put
   // a river through the city of everyone already using the button.
   const [cityWater, setCityWater] = useState<WaterType>('NONE');
+  const [cityParkPonds, setCityParkPonds] = useState(false);
   const [mapExportApi, setMapExportApi] = useState<MapExportApi | null>(null);
   const [isPlacingSign, setIsPlacingSign] = useState(false);
   const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
@@ -1813,6 +1814,8 @@ function App() {
                 setCitySeed={setCitySeed}
                 cityWater={cityWater}
                 setCityWater={setCityWater}
+                cityParkPonds={cityParkPonds}
+                setCityParkPonds={setCityParkPonds}
                 lastCitySeed={lastCitySeed}
                 setLastCitySeed={setLastCitySeed}
                 cityLayout={cityLayout}

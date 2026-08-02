@@ -83,6 +83,12 @@ export interface GenerateCityOptions {
    * of everyone already using the button.
    */
   water?: WaterType;
+  /**
+   * Give parks ponds. Separate from `water` because it is a different scale of
+   * decision — a river reshapes the whole city, a pond is scenery in one plot — and a
+   * GM may well want one without the other. Off by default, on the same reasoning.
+   */
+  parkPonds?: boolean;
   /** When true, no roads are generated and road collision is skipped. */
   excludeRoads: boolean;
   /** How freely roads bridge the water they cross. Defaults to 'normal'. */
