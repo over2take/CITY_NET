@@ -964,6 +964,7 @@ export function AdminPanel({
                 // stale ones would leave the new city avoiding buildings that are gone.
                 let worldLocations = locations;
                 let worldRoads = roads;
+                let worldWater = waterBodies;
                 if (purgeFirst) {
                   const doomed = countGeneratedInRegion(locations, genBounds, drawing ? tracedPoints : null);
                   if (doomed.removed > 0) {
@@ -981,12 +982,18 @@ export function AdminPanel({
                   });
                   if (!purgeRes.ok) throw new Error(`Purge failed: ${purgeRes.status}`);
 
-                  const [freshLocs, freshRoads] = await Promise.all([
+                  // Water is refetched for the same reason as locations and roads: the
+                  // purge deleted the last river, and generating against the stale list
+                  // means the new city avoids water that is no longer there — a dead
+                  // band of empty ground tracing where the old river used to run.
+                  const [freshLocs, freshRoads, freshWater] = await Promise.all([
                     fetch('/api/locations').then(r => r.json()).catch(() => locations),
                     fetch('/api/roads').then(r => r.json()).catch(() => roads),
+                    fetch('/api/water').then(r => r.json()).catch(() => waterBodies),
                   ]);
                   if (Array.isArray(freshLocs)) worldLocations = freshLocs;
                   if (Array.isArray(freshRoads)) worldRoads = freshRoads;
+                  if (Array.isArray(freshWater)) worldWater = freshWater;
                 }
 
                 // A typed seed is used as typed and never rewritten — normalising it
@@ -1011,7 +1018,7 @@ export function AdminPanel({
                     roundabouts: cityRoundabouts ?? 'off',
                     boundary: drawing ? { points: tracedPoints } : undefined,
                   },
-                  { locations: worldLocations, roads: worldRoads, waterBodies },
+                  { locations: worldLocations, roads: worldRoads, waterBodies: worldWater },
                   seededRng(seed)
                 );
 

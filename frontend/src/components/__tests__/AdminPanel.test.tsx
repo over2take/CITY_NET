@@ -1031,6 +1031,22 @@ describe('AdminPanel regenerate', () => {
     expect(refetchAt).toBeGreaterThan(purgeAt);
     vi.unstubAllGlobals();
   });
+
+  it('re-reads the water too, not just the locations and roads', async () => {
+    // The purge deletes the last generated river. Generating against the stale water
+    // list made the new city avoid a river that was no longer there, leaving a dead
+    // band of empty ground tracing where the old one ran.
+    const mock = stubFetch();
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    render(<AdminPanel {...genProps({ locations: [generated(0, 0)] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+
+    const urls = mock.mock.calls.map(([u]) => String(u));
+    const purgeAt = urls.findIndex((u) => u.includes('purge-region'));
+    const waterRefetchAt = urls.findIndex((u, i) => i > purgeAt && u === '/api/water');
+    expect(waterRefetchAt).toBeGreaterThan(purgeAt);
+    vi.unstubAllGlobals();
+  });
 });
 
 describe('AdminPanel water selector', () => {
