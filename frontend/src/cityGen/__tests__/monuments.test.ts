@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateMonument, generateLandmark, MONUMENT_STYLE_COUNT, MONUMENT_COLOR, SpatialGrid } from '../index';
+import { generateMonument, generateLandmark, MONUMENT_STYLE_COUNT, MONUMENT_COLOR, POLY_COUNT, SpatialGrid } from '../index';
 import type { Block, RawBuilding } from '../types';
 
 /**
@@ -152,6 +152,17 @@ describe('generateMonument', () => {
       for (const p of parts) expect(p.color).toBe(MONUMENT_COLOR);
     }
     expect(MONUMENT_COLOR).toBe('#00ff00');
+  });
+
+  it('uses the same segment count as every other structure', () => {
+    // Everything is drawn as a wireframe, so polyCount is not a quality setting, it is
+    // the look. At 5 a cylinder is a pentagonal prism — what the whole city is built
+    // from. At 16 it is a dense cage of lines that reads as a bright striped mass, and
+    // a column at 16 stood out beside a statue made of boxes at 5.
+    for (const parts of allStyles()) {
+      for (const p of parts) expect(p.polyCount, p.shape).toBe(POLY_COUNT);
+    }
+    expect(POLY_COUNT).toBe(5);
   });
 
   it('keeps its part count modest', () => {

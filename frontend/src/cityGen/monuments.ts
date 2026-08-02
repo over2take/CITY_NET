@@ -14,10 +14,10 @@ import type { Block, RawBuilding, Rng } from './types';
  *
  * **On detail.** A first version was two stacked boxes and read as exactly that. The
  * renderer supports more than a box — `cylinder`, `sphere`, `rhombus` (an octahedron),
- * `pyramid` (a cone), a `polyCount` that turns a cylinder into a hexagonal prism at 6
- * or a smooth column at 16, and all three rotation axes. Silhouette is what carries a
- * monument at this size, so these use the lot: stepped plinths turned 45° against each
- * other, rings of bollards, tapered shafts, finials.
+ * `pyramid` (a cone) and all three rotation axes. Silhouette is what carries a monument
+ * at this size, so these use the lot: stepped plinths turned 45° against each other,
+ * rings of bollards, tapered shafts, finials. The segment count stays at the app's
+ * `POLY_COUNT` — raising it is what made these look foreign.
  */
 
 /** Monument height as a multiple of the island span, per style. */
@@ -43,11 +43,16 @@ export const MONUMENT_STYLE_COUNT = 6;
  */
 const MONUMENT_COLOR = '#00ff00';
 
-/** Segments for a shape meant to read as round rather than faceted. */
-const SMOOTH = 16;
-
-/** Segments for a shape meant to read as cut stone. */
-const FACETED = 6;
+/**
+ * The app's segment count, used by every structure on the map.
+ *
+ * Everything is drawn as a wireframe, so `polyCount` is not a quality setting — it is
+ * the look. At 5 a cylinder is a pentagonal prism with five vertical edges, which is
+ * what the whole city is built from. At 16 it is a dense cage of lines that reads as a
+ * bright striped mass beside its neighbours, which is exactly how monuments ended up
+ * looking like they belonged to a different app.
+ */
+const POLY_COUNT = 5;
 
 /** Right angle, for turning a flat cylinder into a disc facing sideways. */
 const QUARTER = Math.PI / 2;
@@ -60,8 +65,9 @@ const EIGHTH = Math.PI / 4;
  *
  * Parts follow the same convention as the landmark styles: a single unparented root
  * first, then `ROOT` children the caller groups under it once the root has an id.
- * Every part carries an explicit colour rather than deferring to the theme; see
- * `MONUMENT_COLOR` for why.
+ * Colour and segment count both stay on the app-wide values — see `MONUMENT_COLOR` and
+ * `POLY_COUNT`. Both were overridden at some point and both times the result was a
+ * structure that did not look like it belonged to the same city.
  */
 export function generateMonument(block: Block, span: number, out: RawBuilding[], rng: Rng): void {
   const style = Math.floor(rng() * MONUMENT_STYLE_COUNT);
@@ -72,7 +78,7 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
   /** Emit a part, making the first one the unparented root. */
   const part = (p: Partial<RawBuilding> & { y: number; width: number; height: number }) => {
     const base: RawBuilding = {
-      name: '', x, z, depth: p.width, color, shape: 'box', polyCount: 5,
+      name: '', x, z, depth: p.width, color, shape: 'box', polyCount: POLY_COUNT,
       ...(p as object),
     } as RawBuilding;
     if (!rooted) {
@@ -105,15 +111,15 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
 
     const shaftW = span * 0.13;
     const shaftH = span * COLUMN_HEIGHT * 0.42;
-    part({ y, width: shaftW, height: shaftH, shape: 'cylinder', polyCount: SMOOTH });
+    part({ y, width: shaftW, height: shaftH, shape: 'cylinder' });
     y += shaftH;
 
-    part({ y, width: span * 0.2, height: span * 0.06, shape: 'cylinder', polyCount: SMOOTH });
+    part({ y, width: span * 0.2, height: span * 0.06, shape: 'cylinder' });
     y += span * 0.06;
     part({ y, width: span * 0.17, height: span * 0.22, shape: 'rhombus' });
 
     around(4, span * 0.42, (px, pz) =>
-      part({ x: px, z: pz, y: 0, width: span * 0.05, height: span * 0.09, shape: 'cylinder', polyCount: FACETED }));
+      part({ x: px, z: pz, y: 0, width: span * 0.05, height: span * 0.09, shape: 'cylinder' }));
     return;
   }
 
@@ -133,7 +139,7 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
     part({ y: deckY, width: torsoW, depth: torsoW * 0.62, height: torsoH, rotation: facing });
 
     const headY = deckY + torsoH;
-    part({ y: headY, width: span * 0.09, height: span * 0.09, shape: 'sphere', polyCount: SMOOTH });
+    part({ y: headY, width: span * 0.09, height: span * 0.09, shape: 'sphere' });
 
     // One arm raised, one at rest — the asymmetry is most of the silhouette.
     part({
@@ -157,24 +163,24 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
     // keeps a run of roundabouts from all reading the same.
     const basinW = span * 0.78;
     const basinH = span * FOUNTAIN_HEIGHT * 0.4;
-    part({ y: 0, width: basinW, height: basinH, shape: 'cylinder', polyCount: SMOOTH });
-    part({ y: basinH, width: basinW * 0.92, height: span * 0.02, shape: 'cylinder', polyCount: SMOOTH });
+    part({ y: 0, width: basinW, height: basinH, shape: 'cylinder' });
+    part({ y: basinH, width: basinW * 0.92, height: span * 0.02, shape: 'cylinder' });
 
     let y = basinH + span * 0.02;
     const tiers = [0.3];
     for (const w of tiers) {
-      part({ y, width: span * 0.08, height: span * 0.12, shape: 'cylinder', polyCount: FACETED });
+      part({ y, width: span * 0.08, height: span * 0.12, shape: 'cylinder' });
       y += span * 0.12;
-      part({ y, width: span * w, height: span * 0.05, shape: 'cylinder', polyCount: SMOOTH });
+      part({ y, width: span * w, height: span * 0.05, shape: 'cylinder' });
       y += span * 0.05;
     }
 
-    part({ y, width: span * 0.05, height: span * 0.22, shape: 'cylinder', polyCount: SMOOTH });
+    part({ y, width: span * 0.05, height: span * 0.22, shape: 'cylinder' });
     y += span * 0.22;
-    part({ y, width: span * 0.1, height: span * 0.1, shape: 'sphere', polyCount: SMOOTH });
+    part({ y, width: span * 0.1, height: span * 0.1, shape: 'sphere' });
 
     around(4, basinW * 0.36, (px, pz) =>
-      part({ x: px, z: pz, y: basinH, width: span * 0.05, height: span * 0.1, shape: 'cylinder', polyCount: FACETED }));
+      part({ x: px, z: pz, y: basinH, width: span * 0.05, height: span * 0.1, shape: 'cylinder' }));
     return;
   }
 
@@ -197,15 +203,15 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
     const faceW = span * 0.15;
     // Two on the X faces, two on the Z faces; a cylinder's axis is Y, so each is
     // tipped a quarter turn about the axis that leaves it facing outward.
-    part({ x: x + faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', polyCount: SMOOTH, rotation_z: QUARTER });
-    part({ x: x - faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', polyCount: SMOOTH, rotation_z: QUARTER });
-    part({ z: z + faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', polyCount: SMOOTH, rotation_x: QUARTER });
-    part({ z: z - faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', polyCount: SMOOTH, rotation_x: QUARTER });
+    part({ x: x + faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', rotation_z: QUARTER });
+    part({ x: x - faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', rotation_z: QUARTER });
+    part({ z: z + faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', rotation_x: QUARTER });
+    part({ z: z - faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', rotation_x: QUARTER });
 
     y += shaftH;
     part({ y, width: span * 0.3, height: span * 0.1 });
     y += span * 0.1;
-    part({ y, width: span * 0.32, height: span * 0.26, shape: 'pyramid', polyCount: 4, rotation: EIGHTH });
+    part({ y, width: span * 0.32, height: span * 0.26, shape: 'pyramid', polyCount: POLY_COUNT, rotation: EIGHTH });
     y += span * 0.26;
     part({ y, width: span * 0.07, height: span * 0.12, shape: 'rhombus' });
     return;
@@ -231,7 +237,7 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
     part({ y: pierH + span * 0.29, width: span * 0.13, height: span * 0.18, shape: 'rhombus' });
 
     around(4, span * 0.4, (px, pz) =>
-      part({ x: px, z: pz, y: 0, width: span * 0.05, height: span * 0.1, shape: 'cylinder', polyCount: FACETED }));
+      part({ x: px, z: pz, y: 0, width: span * 0.05, height: span * 0.1, shape: 'cylinder' }));
     return;
   }
 
@@ -249,11 +255,11 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
     part({ y, width: span * stages[i], height: h, rotation: i % 2 ? EIGHTH : 0 });
     y += h;
   }
-  part({ y, width: span * 0.1, height: span * 0.16, shape: 'pyramid', polyCount: 4 });
+  part({ y, width: span * 0.1, height: span * 0.16, shape: 'pyramid', polyCount: POLY_COUNT });
 
   around(4, span * 0.34, (px, pz) =>
     part({ x: px, z: pz, y: 0, width: span * 0.06, height: span * 0.14, shape: 'rhombus' }));
 
 }
 
-export { COLUMN_HEIGHT, STATUE_HEIGHT, FOUNTAIN_HEIGHT, CLOCK_HEIGHT, SMOOTH, FACETED, MONUMENT_COLOR };
+export { COLUMN_HEIGHT, STATUE_HEIGHT, FOUNTAIN_HEIGHT, CLOCK_HEIGHT, POLY_COUNT, MONUMENT_COLOR };
