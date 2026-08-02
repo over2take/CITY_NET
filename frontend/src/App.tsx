@@ -59,6 +59,7 @@ import { Sidewalks } from './components/Sidewalks';
 import { AutoSignage } from './components/AutoSignage';
 import { Signs, type SignData } from './components/Signs';
 import { type RemoteFont } from './utils/fontLoader';
+import type { LayoutType, WaterType, RoundaboutDensity } from './cityGen';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import MapExportController, { type MapExportApi } from './components/MapExportController';
@@ -359,6 +360,23 @@ function App() {
   const [signageDensity, setSignageDensity] = useState(1);
   // Map export: drops is_hidden structures for the duration of a capture.
   const [exportSuppressHidden, setExportSuppressHidden] = useState(false);
+  // City generator: drag a rectangle, or trace a boundary polygon to generate inside.
+  const [cityGenDrawMode, setCityGenDrawMode] = useState<'rect' | 'draw'>('rect');
+  const [genBoundaryTrail, setGenBoundaryTrail] = useState<any[]>([]);
+  // BSP is what generation has always produced, so it stays the default.
+  const [cityLayout, setCityLayout] = useState<LayoutType>('BSP');
+  // Blank means roll a fresh one; after generating it holds the seed that was used,
+  // so a city worth keeping can be written down.
+  // The input is a *request*: blank means roll a fresh seed, so repeated generates
+  // keep producing different cities. lastCitySeed is the readout of what was actually
+  // used, kept separate so showing it never silently pins the next generation.
+  const [citySeed, setCitySeed] = useState<string>('');
+  const [lastCitySeed, setLastCitySeed] = useState<string>('');
+  // NONE by default: generation has never produced water, so anything else would put
+  // a river through the city of everyone already using the button.
+  const [cityWater, setCityWater] = useState<WaterType>('NONE');
+  const [cityParkPonds, setCityParkPonds] = useState(false);
+  const [cityRoundabouts, setCityRoundabouts] = useState<RoundaboutDensity>('off');
   const [mapExportApi, setMapExportApi] = useState<MapExportApi | null>(null);
   const [isPlacingSign, setIsPlacingSign] = useState(false);
   const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
@@ -1793,6 +1811,22 @@ function App() {
                 isRecording={mapExportApi?.isRecording ?? false}
                 recordSecondsLeft={mapExportApi?.secondsLeft ?? 0}
                 isExporting={mapExportApi?.isExporting ?? false}
+                citySeed={citySeed}
+                setCitySeed={setCitySeed}
+                cityWater={cityWater}
+                setCityWater={setCityWater}
+                cityParkPonds={cityParkPonds}
+                setCityParkPonds={setCityParkPonds}
+                cityRoundabouts={cityRoundabouts}
+                setCityRoundabouts={setCityRoundabouts}
+                lastCitySeed={lastCitySeed}
+                setLastCitySeed={setLastCitySeed}
+                cityLayout={cityLayout}
+                setCityLayout={setCityLayout}
+                cityGenDrawMode={cityGenDrawMode}
+                setCityGenDrawMode={setCityGenDrawMode}
+                genBoundaryTrail={genBoundaryTrail}
+                setGenBoundaryTrail={setGenBoundaryTrail}
                 renderSidewalks={renderSidewalks}
                 setRenderSidewalks={(val: boolean) => { setRenderSidewalks(val); socketRef.current?.emit('updateViewSettings', { renderSignage, signageDensity, renderSidewalks: val }); }}
                 renderSignage={renderSignage}
@@ -2634,7 +2668,7 @@ function App() {
                 onReady={setMapExportApi}
               />
             )}
-            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} roadLayerMode={roadLayerMode} />
+            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} roadLayerMode={roadLayerMode} cityGenDrawMode={cityGenDrawMode} genBoundaryTrail={genBoundaryTrail} setGenBoundaryTrail={setGenBoundaryTrail} onBoundaryDrawEnd={(pts: any[]) => setGenBoundaryTrail(pts)} />
             {roadSelectionBounds && view === 'city_gen' && (
               <mesh position={[(roadSelectionBounds.min.x + roadSelectionBounds.max.x) / 2, 0.02, (roadSelectionBounds.min.z + roadSelectionBounds.max.z) / 2]}>
                 <boxGeometry args={[Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x), 0.05, Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z)]} />

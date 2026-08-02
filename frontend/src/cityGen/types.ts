@@ -19,6 +19,17 @@ export interface Block {
   z: number;
   w: number;
   d: number;
+  /**
+   * This is a finished building lot, not a city block — take `w`/`d` as the footprint.
+   *
+   * The generator normally trims road padding off a block, clamps its aspect toward
+   * square and applies a per-zone setback. All three exist to turn a whole city block
+   * into one sensible plot. A layout that has already subdivided a block into lots has
+   * made those decisions itself, and leaving them on would pad neighbouring lots apart,
+   * square up the narrow frontages and pull the row back off the street — undoing the
+   * street wall that was the point of subdividing.
+   */
+  lot?: boolean;
 }
 
 // Roads reuse the canonical shape from roadHelpers so consolidateRoads and
@@ -27,6 +38,10 @@ import type { RoadSegment } from '../utils/roadHelpers';
 export type { RoadSegment };
 
 import type { OverpassDensity, OverpassSpec } from './bridges';
+import type { Polygon } from './water';
+import type { LayoutType } from './layouts';
+import type { WaterType } from './waterGen';
+import type { RoundaboutDensity } from './roundabouts';
 export type { OverpassDensity, OverpassSpec };
 
 /** Zoning preset chosen in the admin panel. */
@@ -67,6 +82,30 @@ export interface Obstacle {
 
 export interface GenerateCityOptions {
   sectionType: SectionType;
+  /**
+   * Generate only inside this polygon. `bounds` still frames the work — the split
+   * recurses on the bounding box and blocks outside the shape are dropped.
+   */
+  boundary?: Polygon;
+  /** Street layout. Defaults to BSP, which is what generation has always produced. */
+  layout?: LayoutType;
+  /**
+   * Water to generate before laying the city out. Defaults to NONE — generation has
+   * never produced water, and defaulting otherwise would put a river through the city
+   * of everyone already using the button.
+   */
+  water?: WaterType;
+  /**
+   * Give parks ponds. Separate from `water` because it is a different scale of
+   * decision — a river reshapes the whole city, a pond is scenery in one plot — and a
+   * GM may well want one without the other. Off by default, on the same reasoning.
+   */
+  parkPonds?: boolean;
+  /**
+   * Put roundabouts at junctions of major roads. An overlay on the finished network
+   * rather than a layout, so it applies whichever layout is chosen. Defaults to 'off'.
+   */
+  roundabouts?: RoundaboutDensity;
   /** When true, no roads are generated and road collision is skipped. */
   excludeRoads: boolean;
   /** How freely roads bridge the water they cross. Defaults to 'normal'. */
@@ -92,4 +131,6 @@ export interface GenerateCityResult {
   buildings: RawBuilding[];
   /** Bridges spanning water crossings that qualified. */
   overpasses: OverpassSpec[];
+  /** Water the run generated, for the caller to persist. Empty unless asked for. */
+  waterBodies: Polygon[];
 }

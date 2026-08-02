@@ -5,6 +5,12 @@ export interface WaterPolygon {
   points: { x: number; z: number }[];
 }
 
+/**
+ * A drawn generation boundary. Structurally a WaterPolygon — the two are the same
+ * shape and share every helper, differing only in whether inside or outside is kept.
+ */
+export type Polygon = WaterPolygon;
+
 /** A stretch of a segment that runs through water, as parameters along it. */
 export interface SubmergedSpan {
   /** Entry point along the segment, 0–1. */
@@ -90,6 +96,32 @@ export function footprintInWater(
 }
 
 /**
+ * True when a footprint is not wholly inside `poly`.
+ *
+ * The counterpart of `footprintInWater`, and deliberately stricter: water asks
+ * "does this touch water at all", a boundary asks "is all of this inside". Same
+ * five-point sample, so a footprint straddling a boundary is rejected the same way one
+ * dipping into water is.
+ */
+export function footprintOutsidePolygon(
+  poly: WaterPolygon,
+  x: number,
+  z: number,
+  w: number,
+  d: number
+): boolean {
+  const hw = w / 2;
+  const hd = d / 2;
+  return !(
+    pointInPolygon(poly, x, z) &&
+    pointInPolygon(poly, x - hw, z - hd) &&
+    pointInPolygon(poly, x + hw, z - hd) &&
+    pointInPolygon(poly, x - hw, z + hd) &&
+    pointInPolygon(poly, x + hw, z + hd)
+  );
+}
+
+/**
  * Parameter along segment AB where it crosses segment CD, or null.
  * Returns t in 0–1 measured from A.
  */
@@ -105,6 +137,21 @@ function crossingParam(
   const u = ((cx - ax) * rz - (cz - az) * rx) / denom;
   if (t < 0 || t > 1 || u < 0 || u > 1) return null;
   return t;
+}
+
+/**
+ * Where two segments cross, or null if they do not.
+ *
+ * Layouts differ in how their roads meet: a BSP or Voronoi network joins at shared
+ * endpoints, but `gridLayout` lays each street as one full-length span, so its
+ * crossings share no endpoint and exist only as intersections. Anything siting features
+ * at junctions needs both, which is why this is exposed rather than kept private to the
+ * water clipper.
+ */
+export function segmentCrossing(a: RoadSegment, b: RoadSegment): { x: number; z: number } | null {
+  const t = crossingParam(a.x1, a.z1, a.x2, a.z2, b.x1, b.z1, b.x2, b.z2);
+  if (t === null) return null;
+  return pointAt(a, t);
 }
 
 /**
@@ -168,17 +215,28 @@ export function segmentLength(seg: RoadSegment): number {
 }
 
 /**
- * Cut a segment back to the parts of it that are on land.
+ * Cut a segment back to the parts of it inside — or outside — a set of polygons.
  *
- * A segment clear of the water comes back untouched; one entirely submerged
- * comes back as nothing; one that crosses comes back as the dry approaches.
+ * Water and drawn boundaries are the same operation with the sign flipped: water keeps
+ * what falls outside, a boundary keeps what falls inside. Sharing one implementation
+ * means the two cannot drift apart.
  */
-export function clipSegmentToLand(
+export function clipSegmentToPolygons(
   seg: RoadSegment,
-  polygons: WaterPolygon[]
+  polygons: WaterPolygon[],
+  keepInside: boolean
 ): RoadSegment[] {
-  if (polygons.length === 0) return [seg];
+  if (polygons.length === 0) return keepInside ? [] : [seg];
   const spans = submergedSpans(polygons, seg);
+
+  if (keepInside) {
+    return spans.map((span) => {
+      const a = pointAt(seg, span.t0);
+      const b = pointAt(seg, span.t1);
+      return { ...seg, x1: a.x, z1: a.z, x2: b.x, z2: b.z };
+    });
+  }
+
   if (spans.length === 0) return [seg];
 
   const out: RoadSegment[] = [];
@@ -196,4 +254,26 @@ export function clipSegmentToLand(
     out.push({ ...seg, x1: a.x, z1: a.z, x2: seg.x2, z2: seg.z2 });
   }
   return out;
+}
+
+/**
+ * Cut a segment back to the parts of it that are on land.
+ *
+ * A segment clear of the water comes back untouched; one entirely submerged
+ * comes back as nothing; one that crosses comes back as the dry approaches.
+ */
+export function clipSegmentToLand(
+  seg: RoadSegment,
+  polygons: WaterPolygon[]
+): RoadSegment[] {
+  return clipSegmentToPolygons(seg, polygons, false);
+}
+
+/** Cut a segment back to the parts of it inside a drawn boundary. */
+export function clipSegmentToBoundary(
+  seg: RoadSegment,
+  boundary: WaterPolygon | undefined
+): RoadSegment[] {
+  if (!boundary) return [seg];
+  return clipSegmentToPolygons(seg, [boundary], true);
 }

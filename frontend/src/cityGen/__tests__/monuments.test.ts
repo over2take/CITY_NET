@@ -1,0 +1,202 @@
+import { describe, it, expect } from 'vitest';
+import { generateMonument, generateLandmark, MONUMENT_STYLE_COUNT, MONUMENT_COLOR, POLY_COUNT, SHAPES, SpatialGrid } from '../index';
+import type { Block, RawBuilding } from '../types';
+
+/**
+ * Island monuments.
+ *
+ * These exist because landmarks were used first and came out as 150-unit towers rising
+ * from a traffic island. So the tests that matter are about *scale*, not shape.
+ */
+
+function seededRng(seed = 4242) {
+  let a = seed;
+  return () => {
+    a = (a * 1664525 + 1013904223) % 4294967296;
+    return a / 4294967296;
+  };
+}
+
+const island: Block = { x: 0, z: 0, w: 20, d: 20 };
+const SPAN = 20;
+
+/** Every style, so a per-style regression cannot hide behind an average. */
+function allStyles(span = SPAN): RawBuilding[][] {
+  const out: RawBuilding[][] = [];
+  for (let style = 0; style < MONUMENT_STYLE_COUNT; style++) {
+    // Feed a first draw that lands squarely in this style's bucket.
+    const pick = (style + 0.5) / MONUMENT_STYLE_COUNT;
+    let first = true;
+    const rng = () => {
+      if (first) { first = false; return pick; }
+      return 0.5;
+    };
+    const parts: RawBuilding[] = [];
+    generateMonument({ x: 0, z: 0, w: span, d: span }, span, parts, rng);
+    out.push(parts);
+  }
+  return out;
+}
+
+const topOf = (parts: RawBuilding[]) => Math.max(...parts.map(p => p.y + p.height));
+const widestOf = (parts: RawBuilding[]) =>
+  Math.max(...parts.map(p => Math.max(p.width, p.depth)));
+
+describe('generateMonument', () => {
+  it('produces something for every style', () => {
+    for (const parts of allStyles()) expect(parts.length).toBeGreaterThan(0);
+  });
+
+  it('stays at civic scale, not skyline scale', () => {
+    // The bug this module exists for: a landmark on a traffic island was a tower.
+    for (const parts of allStyles()) {
+      // A monument on a 20-unit island should not be a 15-storey tower. First cut at
+      // this passed a /3-of-a-landmark check at 54 units and still read as a building.
+      expect(topOf(parts)).toBeLessThan(SPAN * 2);
+    }
+  });
+
+  it('is dramatically shorter than a landmark on the same plot', () => {
+    // Pins the relationship rather than a number, so it survives retuning either side.
+    const landmark: RawBuilding[] = [];
+    generateLandmark(island, SPAN, SPAN, landmark, new SpatialGrid(), seededRng());
+    const tallestMonument = Math.max(...allStyles().map(topOf));
+    expect(tallestMonument).toBeLessThan(topOf(landmark) / 3);
+  });
+
+  it('fits within the island', () => {
+    // A monument wider than the disc would overhang the ring road.
+    for (const parts of allStyles()) {
+      expect(widestOf(parts)).toBeLessThanOrEqual(SPAN);
+    }
+  });
+
+  it('scales with the island rather than using fixed heights', () => {
+    // Absolute heights would go wrong the moment road widths are retuned.
+    const small = Math.max(...allStyles(10).map(topOf));
+    const large = Math.max(...allStyles(40).map(topOf));
+    expect(large).toBeGreaterThan(small * 3);
+  });
+
+  it('sits on the ground', () => {
+    for (const parts of allStyles()) {
+      expect(Math.min(...parts.map(p => p.y))).toBe(0);
+    }
+  });
+
+  it('leaves nothing floating', () => {
+    // y is the bottom of a mesh, so a part resting on another has its y set to that
+    // one's height. Getting this wrong is what left skyscrapers hanging in mid-air.
+    // A part is anchored if it stands on the ground or if its base falls within the
+    // vertical extent of another part — the second case covers what is attached to a
+    // side rather than stacked on top, such as a clock face or a raised arm.
+    for (const parts of allStyles()) {
+      for (const p of parts) {
+        if (p.y === 0) continue;
+        const anchored = parts.some(q => q !== p && p.y >= q.y - 1e-6 && p.y <= q.y + q.height + 1e-6);
+        expect(anchored, `part at y=${p.y}`).toBe(true);
+      }
+    }
+  });
+
+  it('emits one unparented root, with the rest grouped under it', () => {
+    // The caller groups children by parent_name once the root has a database id.
+    for (const parts of allStyles()) {
+      expect(parts.filter(p => !p.parent_name)).toHaveLength(1);
+      expect(parts[0].parent_name).toBeUndefined();
+      for (const p of parts.slice(1)) expect(p.parent_name).toBe('ROOT');
+    }
+  });
+
+  it('keeps every part within the island', () => {
+    // Parts are no longer all on the centreline — bollards, spouts and arch piers sit
+    // out from it — so what matters is that the whole thing stays off the ring road.
+    for (const parts of allStyles()) {
+      for (const p of parts) {
+        const reach = Math.max(Math.abs(p.x), Math.abs(p.z)) + Math.max(p.width, p.depth) / 2;
+        expect(reach, p.shape).toBeLessThanOrEqual(SPAN / 2);
+      }
+    }
+  });
+
+  it('is built from more than stacked boxes', () => {
+    // The complaint that prompted this: two boxes on top of each other read as two
+    // boxes on top of each other. Silhouette is what carries an object this small.
+    for (const parts of allStyles()) {
+      const shapes = new Set(parts.map(p => p.shape));
+      expect(shapes.size, [...shapes].join(',')).toBeGreaterThan(1);
+      expect(parts.length).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it('varies its silhouette between styles', () => {
+    // If every style used the same shapes in the same proportions there would be no
+    // point having six of them.
+    const signatures = allStyles().map(parts =>
+      [...parts.map(p => p.shape)].sort().join('|') + ':' + parts.length);
+    expect(new Set(signatures).size).toBe(MONUMENT_STYLE_COUNT);
+  });
+
+  it('offers visibly different styles', () => {
+    // A run of roundabouts all carrying the same column would read worse than none.
+    const shapes = allStyles().map(parts => topOf(parts).toFixed(2));
+    expect(new Set(shapes).size).toBeGreaterThan(1);
+  });
+
+  it('uses the same colour convention as every other structure', () => {
+    // '#00ff00' is not a colour here, it is the sentinel meaning "inherit the theme" —
+    // the renderer resolves anything else verbatim. The generated city stores it on
+    // some two thousand buildings. Setting a real colour instead opted monuments out of
+    // the theme system, so they matched nothing and would ignore a theme switch.
+    for (const parts of allStyles()) {
+      for (const p of parts) expect(p.color).toBe(MONUMENT_COLOR);
+    }
+    expect(MONUMENT_COLOR).toBe('#00ff00');
+  });
+
+  it('uses the same segment count as every other structure', () => {
+    // Everything is drawn as a wireframe, so polyCount is not a quality setting, it is
+    // the look. At 5 a cylinder is a pentagonal prism — what the whole city is built
+    // from. At 16 it is a dense cage of lines that reads as a bright striped mass, and
+    // a column at 16 stood out beside a statue made of boxes at 5.
+    for (const parts of allStyles()) {
+      for (const p of parts) expect(p.polyCount, p.shape).toBe(POLY_COUNT);
+    }
+    expect(POLY_COUNT).toBe(5);
+  });
+
+  it('never uses the rhombus shape, which the app reserves for tokens', () => {
+    // A rhombus *is* a player or NPC token here: the server's TOKEN_SHAPES treats it as
+    // one, a region purge spares it as player content, and OverlapChecker registers it
+    // in activeRhombuses so structures containing a token can be made transparent.
+    //
+    // Used as an octahedral finial it made each monument publish a fake token inside
+    // itself, so the overlap check dropped the structure's fill to zero opacity and the
+    // monument turned itself invisible — and the finial then survived every regenerate
+    // as "player content", orphaning itself from its deleted root. The statue and the
+    // fountain, the only two styles without a finial, were the only ones that looked
+    // right.
+    for (const parts of allStyles()) {
+      for (const p of parts) {
+        expect(p.shape, `style using ${p.shape}`).not.toBe('rhombus');
+        expect(SHAPES).toContain(p.shape);
+      }
+    }
+  });
+
+  it('keeps its part count modest', () => {
+    // Coincident wireframe edges are what made these glow beside neighbours built from
+    // one or two masses. Detail has to come from silhouette, not from part count.
+    for (const parts of allStyles()) {
+      expect(parts.length).toBeLessThanOrEqual(11);
+    }
+  });
+
+  it('reproduces from a seed', () => {
+    const a: RawBuilding[] = [];
+    const b: RawBuilding[] = [];
+    generateMonument(island, SPAN, a, seededRng(12));
+    generateMonument(island, SPAN, b, seededRng(12));
+    expect(a).toEqual(b);
+  });
+});

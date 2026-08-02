@@ -198,9 +198,11 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   router.post('/water', authenticate, (req, res) => {
-    const { points } = req.body;
+    const { points, generated } = req.body;
     if (!points || !Array.isArray(points)) return res.status(400).json({ error: 'Invalid points array' });
-    db.run('INSERT INTO water_bodies (points_json) VALUES (?)', [JSON.stringify(points)], function(err) {
+    // Generated water is cleared by a regenerate; hand-drawn water never is.
+    db.run('INSERT INTO water_bodies (points_json, generated) VALUES (?, ?)',
+      [JSON.stringify(points), generated ? 1 : 0], function(err) {
       if (err) return res.status(500).json({ error: err.message });
       const newId = this.lastID;
       db.run('INSERT INTO action_history (type, payload) VALUES (?, ?)', ['water_create', JSON.stringify({ ids: [newId] })], () => {});

@@ -1,9 +1,25 @@
 import type { Block, Bounds, Rng, RoadSegment } from './types';
-import { clipSegmentToLand, type WaterPolygon } from './water';
+import { clipSegmentToLand, clipSegmentToBoundary, pointInPolygon, type Polygon, type WaterPolygon } from './water';
 
-/** Widths used for the road laid down at each split. */
-const MAIN_ROAD_WIDTH = 6;
-const SIDE_ROAD_WIDTH = 3;
+/**
+ * Road width by split depth, widest first.
+ *
+ * The earliest splits carve the largest areas, so they are the arterials; each level
+ * down is a smaller street. This used to be a straight either/or — arterial for the
+ * first two splits, side street for everything after — which left the network reading
+ * as two kinds of road rather than a hierarchy. Real networks step down through
+ * arterial, collector and local, and that gradient is one of the strongest cues that a
+ * street plan was laid out rather than scattered.
+ *
+ * Depths past the end of the table all use the last entry.
+ */
+const ROAD_WIDTH_BY_DEPTH = [7, 5.5, 4, 3, 2.5];
+
+/** Width of a seam laid at the given recursion depth. */
+export function roadWidthForDepth(depth: number): number {
+  const i = Math.max(0, Math.min(ROAD_WIDTH_BY_DEPTH.length - 1, depth));
+  return ROAD_WIDTH_BY_DEPTH[i];
+}
 
 /** A block stops subdividing once both dimensions fall under this. */
 const MIN_BLOCK_SIZE = 35;
@@ -33,9 +49,13 @@ export function normalizeBounds(bounds: Bounds) {
  * Recursion depth scales with the selection size, so a larger area yields
  * MORE blocks rather than bigger ones.
  */
-export function maxSplitDepthFor(width: number, depth: number): number {
+export function maxSplitDepthFor(
+  width: number,
+  depth: number,
+  minBlockSize: number = MIN_BLOCK_SIZE
+): number {
   const maxDimension = Math.max(width, depth);
-  return Math.max(4, Math.ceil(Math.log2(maxDimension / MIN_BLOCK_SIZE)) + 2);
+  return Math.max(4, Math.ceil(Math.log2(maxDimension / minBlockSize)) + 2);
 }
 
 /**
@@ -56,26 +76,33 @@ export function splitCity(
   bounds: Bounds,
   excludeRoads: boolean,
   rng: Rng,
-  water: WaterPolygon[] = []
+  water: WaterPolygon[] = [],
+  boundary?: Polygon,
+  minBlockSize: number = MIN_BLOCK_SIZE
 ): { blocks: Block[]; roads: RoadSegment[] } {
   const { minX, maxX, minZ, maxZ, width, depth } = normalizeBounds(bounds);
-  const maxSplitDepth = maxSplitDepthFor(width, depth);
+  const maxSplitDepth = maxSplitDepthFor(width, depth, minBlockSize);
 
   const blocks: Block[] = [];
   const roads: RoadSegment[] = [];
 
-  /** Lay a seam, keeping only the stretches that fall on land. */
+  /** Lay a seam, keeping only the stretches on land and inside any boundary. */
   const layRoad = (seg: RoadSegment) => {
-    roads.push(...clipSegmentToLand(seg, water));
+    for (const dry of clipSegmentToLand(seg, water)) {
+      roads.push(...clipSegmentToBoundary(dry, boundary));
+    }
   };
 
   const split = (x: number, z: number, w: number, d: number, iter: number) => {
-    if (iter > maxSplitDepth || (w < MIN_BLOCK_SIZE && d < MIN_BLOCK_SIZE)) {
-      blocks.push({ x, z, w, d });
+    if (iter > maxSplitDepth || (w < minBlockSize && d < minBlockSize)) {
+      // Blocks centred outside a drawn boundary are dropped. Skipping the push draws
+      // no randomness, so the split itself is identical either way.
+      if (!boundary || pointInPolygon(boundary, x, z)) blocks.push({ x, z, w, d });
       return;
     }
     const splitV = w > d ? true : (w === d ? rng() > 0.5 : false);
-    const roadW = iter < 2 ? MAIN_ROAD_WIDTH : SIDE_ROAD_WIDTH;
+    const roadW = roadWidthForDepth(iter);
+    // Bigger splits wander more, in step with the road they carry.
     const jitter = (rng() - 0.5) * (iter < 2 ? 10 : 5);
 
     if (splitV) {

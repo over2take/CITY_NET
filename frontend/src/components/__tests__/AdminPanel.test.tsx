@@ -606,3 +606,537 @@ describe('AdminPanel export tab help text', () => {
     expect(screen.getByText(/Renders the city as a top-down image or video/)).toBeInTheDocument();
   });
 });
+
+// ─── city generator bounds mode ───────────────────────────────────────────────
+
+describe('AdminPanel city generator bounds mode', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    waterBodies: [],
+    ...over,
+  });
+
+  it('offers both bounds modes', () => {
+    render(<AdminPanel {...genProps()} />);
+    expect(screen.getByText('DRAG_RECT')).toBeInTheDocument();
+    expect(screen.getByText('DRAW_AREA')).toBeInTheDocument();
+  });
+
+  it('prompts to drag while in rectangle mode', () => {
+    render(<AdminPanel {...genProps()} />);
+    expect(screen.getByText(/DRAG ON MAP TO SELECT/)).toBeInTheDocument();
+  });
+
+  it('prompts to trace while in draw mode', () => {
+    render(<AdminPanel {...genProps({ cityGenDrawMode: 'draw' })} />);
+    expect(screen.getByText(/HOLD LEFT-CLICK TO TRACE/)).toBeInTheDocument();
+  });
+
+  it('reports the traced point count once a boundary exists', () => {
+    const trail = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 10 }, { x: 0, z: 10 }];
+    render(<AdminPanel {...genProps({ cityGenDrawMode: 'draw', genBoundaryTrail: trail })} />);
+    expect(screen.getByText(/BOUNDARY_TRACED: 4 POINTS/)).toBeInTheDocument();
+  });
+
+  it('clears the rectangle when switching to draw, so the two cannot both apply', async () => {
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('DRAW_AREA'));
+    expect(props.setCityGenDrawMode).toHaveBeenCalledWith('draw');
+    expect(props.setRoadSelectionBounds).toHaveBeenCalledWith(null);
+  });
+
+  it('clears the traced boundary when switching back to rectangle', async () => {
+    const props = genProps({ cityGenDrawMode: 'draw' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('DRAG_RECT'));
+    expect(props.setCityGenDrawMode).toHaveBeenCalledWith('rect');
+    expect(props.setGenBoundaryTrail).toHaveBeenCalledWith([]);
+  });
+
+  it('offers to clear a traced boundary', async () => {
+    const trail = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 10 }];
+    const props = genProps({ cityGenDrawMode: 'draw', genBoundaryTrail: trail });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('CLEAR_BOUNDARY'));
+    expect(props.setGenBoundaryTrail).toHaveBeenCalledWith([]);
+  });
+});
+
+describe('AdminPanel layout selector', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    cityLayout: 'BSP',
+    setCityLayout: vi.fn(),
+    waterBodies: [],
+    ...over,
+  });
+
+  it('offers every layout', () => {
+    render(<AdminPanel {...genProps()} />);
+    const select = screen.getByLabelText('LAYOUT') as HTMLSelectElement;
+    expect([...select.options].map(o => o.value)).toEqual(['BSP', 'GRID', 'SUPERBLOCK', 'RING', 'VORONOI', 'PERIMETER']);
+  });
+
+  it('defaults to the organic layout, so generation is unchanged out of the box', () => {
+    render(<AdminPanel {...genProps()} />);
+    expect((screen.getByLabelText('LAYOUT') as HTMLSelectElement).value).toBe('BSP');
+  });
+
+  it('describes what each layout produces rather than naming the algorithm', () => {
+    render(<AdminPanel {...genProps()} />);
+    const select = screen.getByLabelText('LAYOUT') as HTMLSelectElement;
+    expect(select.options[1].textContent).toMatch(/SQUARE BLOCKS/);
+    expect(select.options[2].textContent).toMatch(/TOWER IN PARK/);
+    expect(select.options[3].textContent).toMatch(/BELTWAYS AND SPOKES/);
+  });
+
+  it('reports a layout change', async () => {
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.selectOptions(screen.getByLabelText('LAYOUT'), 'GRID');
+    expect(props.setCityLayout).toHaveBeenCalledWith('GRID');
+  });
+});
+
+describe('AdminPanel stays on the generator after generating', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    cityLayout: 'BSP',
+    setCityLayout: vi.fn(),
+    roadSelectionBounds: { min: { x: -50, z: -50 }, max: { x: 50, z: 50 } },
+    waterBodies: [],
+    locations: [],
+    roads: [],
+    refreshOverpasses: vi.fn(),
+    ...over,
+  });
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    ));
+  });
+
+  it('does not send the admin back to the main panel', async () => {
+    // Iterating on layout and density means regenerating repeatedly; being kicked
+    // back to the list every time made that tedious.
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    expect(props.setView).not.toHaveBeenCalledWith('list');
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the selected area, so it can be regenerated without re-selecting', async () => {
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    expect(props.setRoadSelectionBounds).not.toHaveBeenCalledWith(null);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('AdminPanel city seed', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    cityLayout: 'BSP',
+    setCityLayout: vi.fn(),
+    citySeed: '',
+    setCitySeed: vi.fn(),
+    lastCitySeed: '',
+    setLastCitySeed: vi.fn(),
+    roadSelectionBounds: { min: { x: -50, z: -50 }, max: { x: 50, z: 50 } },
+    waterBodies: [],
+    locations: [],
+    roads: [],
+    refreshOverpasses: vi.fn(),
+    ...over,
+  });
+
+  it('offers a seed field that defaults to random', () => {
+    render(<AdminPanel {...genProps()} />);
+    const field = screen.getByLabelText(/SEED/) as HTMLInputElement;
+    expect(field.value).toBe('');
+    expect(field.placeholder).toBe('RANDOM');
+  });
+
+  it('says what a seed actually reproduces', () => {
+    // A seed is not a city on its own; without saying so it reads as a bug when the
+    // same seed over a different area builds something else.
+    render(<AdminPanel {...genProps()} />);
+    expect(screen.getByText(/SAME SEED \+ SAME AREA \+ SAME OPTIONS/)).toBeInTheDocument();
+  });
+
+  it('reports a typed seed', async () => {
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.type(screen.getByLabelText(/SEED/), '7');
+    expect(props.setCitySeed).toHaveBeenCalledWith('7');
+  });
+
+  it('clears the field, which is how a fresh seed is rolled', async () => {
+    const props = genProps({ citySeed: '12345' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByTitle('CLEAR SEED'));
+    expect(props.setCitySeed).toHaveBeenCalledWith('');
+  });
+
+  it('reports the seed it rolled without filling the field', async () => {
+    // Filling the input meant every later regenerate silently rebuilt the same city.
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    ));
+    const props = genProps({ citySeed: '' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+
+    const reported = props.setLastCitySeed.mock.calls.map((c: unknown[]) => c[0]);
+    expect(reported.some((v: string) => v !== '' && Number.isFinite(Number(v)))).toBe(true);
+    expect(props.setCitySeed).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('rolls a different seed each time the field is left blank', async () => {
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    ));
+    const props = genProps({ citySeed: '' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+
+    const reported = props.setLastCitySeed.mock.calls.map((c: unknown[]) => c[0]);
+    expect(new Set(reported).size).toBeGreaterThan(1);
+    vi.unstubAllGlobals();
+  });
+
+  it('shows the last seed used, and reuses it when clicked', async () => {
+    const props = genProps({ citySeed: '', lastCitySeed: '4821960374' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByTitle('REUSE THIS SEED'));
+    expect(props.setCitySeed).toHaveBeenCalledWith('4821960374');
+  });
+
+  it('shows no readout before anything has been generated', () => {
+    render(<AdminPanel {...genProps({ citySeed: '', lastCitySeed: '' })} />);
+    expect(screen.queryByTitle('REUSE THIS SEED')).not.toBeInTheDocument();
+  });
+
+  it('never rewrites a seed the admin typed', async () => {
+    // Normalising it looked like the field being cleared and replaced.
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    ));
+    const props = genProps({ citySeed: '464654654' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    expect(props.setCitySeed).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('leaves a worded seed alone too', async () => {
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    ));
+    const props = genProps({ citySeed: 'NIGHTCITY' });
+    render(<AdminPanel {...props} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    expect(props.setCitySeed).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('offers UNDO on the generator panel', () => {
+    render(<AdminPanel {...genProps()} />);
+    expect(screen.getByText('⟲ UNDO')).toBeInTheDocument();
+  });
+
+  it('posts to the undo endpoint from the generator', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ type: 'location_create' }) } as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AdminPanel {...genProps()} />);
+    await userEvent.click(screen.getByText('⟲ UNDO'));
+    expect(fetchMock).toHaveBeenCalledWith('/api/undo', expect.objectContaining({ method: 'POST' }));
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('AdminPanel regenerate', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    cityLayout: 'BSP',
+    setCityLayout: vi.fn(),
+    citySeed: '42',
+    setCitySeed: vi.fn(),
+    lastCitySeed: '',
+    setLastCitySeed: vi.fn(),
+    roadSelectionBounds: { min: { x: -50, z: -50 }, max: { x: 50, z: 50 } },
+    waterBodies: [],
+    locations: [],
+    roads: [],
+    refreshOverpasses: vi.fn(),
+    ...over,
+  });
+
+  // An unnamed structure reads as generated under both the real isUserDefinedName and
+  // the mock this file installs, so the fixture is valid either way.
+  const generated = (x: number, z: number) =>
+    ({ id: Math.random(), name: '', x, z, y: 0, shape: 'box', battle_map_id: null });
+  const named = (x: number, z: number) =>
+    ({ id: Math.random(), name: 'AFTERLIFE', x, z, y: 0, shape: 'box', battle_map_id: null });
+
+  const stubFetch = () => {
+    const mock = vi.fn((url: string) =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    );
+    vi.stubGlobal('fetch', mock);
+    return mock;
+  };
+
+  it('offers both generate and regenerate', () => {
+    render(<AdminPanel {...genProps()} />);
+    expect(screen.getByText('GENERATE_CITY_GRID')).toBeInTheDocument();
+    expect(screen.getByText('REGENERATE')).toBeInTheDocument();
+  });
+
+  it('does not purge on a plain generate', async () => {
+    // Infilling is a legitimate use; only REGENERATE clears.
+    const mock = stubFetch();
+    render(<AdminPanel {...genProps({ locations: [generated(0, 0)] })} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    const purges = mock.mock.calls.filter(([u]) => String(u).includes('purge-region'));
+    expect(purges).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('purges the region before regenerating', async () => {
+    const mock = stubFetch();
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    render(<AdminPanel {...genProps({ locations: [generated(0, 0)] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+
+    const purges = mock.mock.calls.filter(([u]) => String(u).includes('purge-region'));
+    expect(purges).toHaveLength(1);
+    expect(purges[0][1]).toMatchObject({ method: 'POST' });
+    vi.unstubAllGlobals();
+  });
+
+  it('leads the confirm with how much goes and what survives', async () => {
+    // "Regenerate?" invites a reflexive yes; a count does not.
+    const mock = stubFetch();
+    const confirmSpy = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirmSpy);
+    render(<AdminPanel {...genProps({
+      locations: [generated(0, 0), generated(5, 5), named(6, 6)],
+    })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    const message = String(confirmSpy.mock.calls[0][0]);
+    expect(message).toContain('removes 2');
+    expect(message).toContain('1 named structure');
+    void mock;
+    vi.unstubAllGlobals();
+  });
+
+  it('does nothing when the confirm is declined', async () => {
+    const mock = stubFetch();
+    vi.stubGlobal('confirm', vi.fn(() => false));
+    render(<AdminPanel {...genProps({ locations: [generated(0, 0)] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+    expect(mock.mock.calls.filter(([u]) => String(u).includes('purge-region'))).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('does not ask when the region is empty', async () => {
+    // The common first-generation case; making it feel dangerous discourages use.
+    stubFetch();
+    const confirmSpy = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirmSpy);
+    render(<AdminPanel {...genProps({ locations: [] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('ignores structures outside the region when counting', async () => {
+    stubFetch();
+    const confirmSpy = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirmSpy);
+    render(<AdminPanel {...genProps({ locations: [generated(9999, 9999)] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('re-reads the world after purging, so it does not build around what is gone', async () => {
+    // Placement tests against existing locations; stale ones would leave the new city
+    // avoiding buildings that no longer exist.
+    const mock = stubFetch();
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    render(<AdminPanel {...genProps({ locations: [generated(0, 0)] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+
+    const urls = mock.mock.calls.map(([u]) => String(u));
+    const purgeAt = urls.findIndex((u) => u.includes('purge-region'));
+    const refetchAt = urls.findIndex((u, i) => i > purgeAt && u === '/api/locations');
+    expect(purgeAt).toBeGreaterThanOrEqual(0);
+    expect(refetchAt).toBeGreaterThan(purgeAt);
+    vi.unstubAllGlobals();
+  });
+
+  it('re-reads the water too, not just the locations and roads', async () => {
+    // The purge deletes the last generated river. Generating against the stale water
+    // list made the new city avoid a river that was no longer there, leaving a dead
+    // band of empty ground tracing where the old one ran.
+    const mock = stubFetch();
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    render(<AdminPanel {...genProps({ locations: [generated(0, 0)] })} />);
+    await userEvent.click(screen.getByText('REGENERATE'));
+
+    const urls = mock.mock.calls.map(([u]) => String(u));
+    const purgeAt = urls.findIndex((u) => u.includes('purge-region'));
+    const waterRefetchAt = urls.findIndex((u, i) => i > purgeAt && u === '/api/water');
+    expect(waterRefetchAt).toBeGreaterThan(purgeAt);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('AdminPanel water selector', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    cityLayout: 'BSP',
+    setCityLayout: vi.fn(),
+    citySeed: '42',
+    setCitySeed: vi.fn(),
+    lastCitySeed: '',
+    setLastCitySeed: vi.fn(),
+    cityWater: 'NONE',
+    setCityWater: vi.fn(),
+    roadSelectionBounds: { min: { x: -300, z: -300 }, max: { x: 300, z: 300 } },
+    waterBodies: [],
+    locations: [],
+    roads: [],
+    refreshOverpasses: vi.fn(),
+    fetchWaterBodies: vi.fn(),
+    ...over,
+  });
+
+  const stubFetch = () => {
+    const mock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    );
+    vi.stubGlobal('fetch', mock);
+    return mock;
+  };
+
+  it('offers every water type', () => {
+    render(<AdminPanel {...genProps()} />);
+    const select = screen.getByLabelText('WATER') as HTMLSelectElement;
+    expect([...select.options].map(o => o.value)).toEqual(['NONE', 'RIVER', 'COAST', 'LAKE']);
+  });
+
+  it('defaults to none, so existing generation is unchanged', () => {
+    // NONE doubles as the off switch, rather than a checkbox that could disagree
+    // with the selector.
+    render(<AdminPanel {...genProps()} />);
+    expect((screen.getByLabelText('WATER') as HTMLSelectElement).value).toBe('NONE');
+  });
+
+  it('reports a water choice', async () => {
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.selectOptions(screen.getByLabelText('WATER'), 'RIVER');
+    expect(props.setCityWater).toHaveBeenCalledWith('RIVER');
+  });
+
+  it('persists no water when set to none', async () => {
+    const mock = stubFetch();
+    render(<AdminPanel {...genProps({ cityWater: 'NONE' })} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    expect(mock.mock.calls.filter(([u]) => String(u) === '/api/water')).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('persists a generated river, marked so a regenerate can clear it', async () => {
+    const mock = stubFetch();
+    render(<AdminPanel {...genProps({ cityWater: 'RIVER' })} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+
+    const posts = mock.mock.calls.filter(([u]) => String(u) === '/api/water');
+    expect(posts).toHaveLength(1);
+    const body = JSON.parse(String((posts[0][1] as RequestInit).body));
+    expect(body.generated).toBe(true);
+    expect(body.points.length).toBeGreaterThan(2);
+    vi.unstubAllGlobals();
+  });
+
+  it('saves the water before the roads it shaped', async () => {
+    const mock = stubFetch();
+    render(<AdminPanel {...genProps({ cityWater: 'RIVER' })} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+
+    const urls = mock.mock.calls.map(([u]) => String(u));
+    const waterAt = urls.indexOf('/api/water');
+    const roadsAt = urls.indexOf('/api/roads');
+    expect(waterAt).toBeGreaterThanOrEqual(0);
+    if (roadsAt >= 0) expect(waterAt).toBeLessThan(roadsAt);
+    vi.unstubAllGlobals();
+  });
+});

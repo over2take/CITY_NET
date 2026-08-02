@@ -7,7 +7,7 @@ import { parseOverpassPoints, sampleOverpassPath, buildOverpassGeometry } from '
 import { chainRoadPolylines, buildRoadRibbonGeometry } from '../utils/roadHelpers';
 import { ThemeContext } from '../theme/themes';
 
-export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token, roadLayerMode }: any) => {
+export const DistrictInteractions = React.memo(({ view, locations, onSelectionChange, roadTrail, setRoadTrail, waterTrail, setWaterTrail, onWaterDrawEnd, roadDrawMode, snapToGrid, drawingRoadWidth, isBatchSelecting, setSelectedIds, rhombusState, setRhombusState, userName, refreshLocations, token, roadLayerMode, cityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail, onBoundaryDrawEnd }: any) => {
   const theme = useContext(ThemeContext);
   const { camera, gl, controls } = useThree();
   const [dragStart, setDragStart] = useState<THREE.Vector3 | null>(null);
@@ -16,6 +16,13 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
   const raycaster = useRef(new THREE.Raycaster());
   const mouseScreenPos = useRef<{ x: number, y: number } | null>(null);
   const waterTrailRef = useRef<THREE.Vector3[]>([]);
+
+  // city_gen can either drag a rectangle or trace a boundary. Tracing reuses the water
+  // path exactly — same pointer handling, same feel — writing to a different trail.
+  const tracingBoundary = view === 'city_gen' && cityGenDrawMode === 'draw';
+  const isTracing = view === 'draw_water' || tracingBoundary;
+  const setTrail = tracingBoundary ? setGenBoundaryTrail : setWaterTrail;
+  const activeTrail = tracingBoundary ? genBoundaryTrail : waterTrail;
 
   useFrame((state, delta) => {
     if (view === 'draw_roads' && isPainting && mouseScreenPos.current && controls) {
@@ -160,11 +167,11 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
             if (controls) (controls as any).enabled = false;
             setIsPainting(true); 
             setRoadTrail((prev: any) => [...prev, [pos.clone(), pos.clone()]]);
-        } else if (view === 'draw_water' && setWaterTrail) {
+        } else if (isTracing && setTrail) {
             if (controls) (controls as any).enabled = false;
             setIsPainting(true);
             const initialPath = [pos.clone()];
-            setWaterTrail(initialPath);
+            setTrail(initialPath);
             waterTrailRef.current = initialPath;
         } else if (view === 'district' || view === 'city_gen' || isBatchSelecting) {
             if (controls) (controls as any).enabled = false;
@@ -188,12 +195,12 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
                 newPaths[newPaths.length - 1] = currentPath;
                 return newPaths;
             });
-        } else if (view === 'draw_water' && isPainting && setWaterTrail) {
+        } else if (isTracing && isPainting && setTrail) {
             const pos = getMouseWorldPos(e);
             const lastPos = waterTrailRef.current[waterTrailRef.current.length - 1];
             if (!lastPos || pos.distanceTo(lastPos) > 0.8) {
                 waterTrailRef.current.push(pos.clone());
-                setWaterTrail([...waterTrailRef.current]);
+                setTrail([...waterTrailRef.current]);
             }
         } else if (dragStart) {
             const pos = getMouseWorldPos(e); setDragEnd(pos.clone());
@@ -204,11 +211,17 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
         mouseScreenPos.current = null;
         if (controls) (controls as any).enabled = true;
         if (view === 'draw_roads') { setIsPainting(false); return; }
-        if (view === 'draw_water') {
+        if (isTracing) {
             setIsPainting(false);
-            if (onWaterDrawEnd && waterTrailRef.current.length > 2) {
-                onWaterDrawEnd([...waterTrailRef.current]);
+            const traced = [...waterTrailRef.current];
+            if (tracingBoundary) {
+                // The boundary stays on screen until GENERATE, so the GM can see the
+                // area they drew. Water clears instead, because it saves immediately.
+                if (onBoundaryDrawEnd && traced.length > 2) onBoundaryDrawEnd(traced);
+                waterTrailRef.current = [];
+                return;
             }
+            if (onWaterDrawEnd && traced.length > 2) onWaterDrawEnd(traced);
             if (setWaterTrail) setWaterTrail([]);
             waterTrailRef.current = [];
             return;
@@ -269,11 +282,11 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
               ))}
           </group>
       )}
-      {view === 'draw_water' && waterTrail && waterTrail.length > 0 && (
+      {isTracing && activeTrail && activeTrail.length > 0 && (
           <group>
-              {waterTrail.map((p: any, i: number) => {
-                  if (i === waterTrail.length - 1) return null;
-                  const pNext = waterTrail[i+1];
+              {activeTrail.map((p: any, i: number) => {
+                  if (i === activeTrail.length - 1) return null;
+                  const pNext = activeTrail[i+1];
                   const dist = p.distanceTo(pNext);
                   if (dist < 0.1) return null;
                   const linePos = p.clone().lerp(pNext, 0.5);
@@ -287,11 +300,11 @@ export const DistrictInteractions = React.memo(({ view, locations, onSelectionCh
                       </group>
                   );
               })}
-              {waterTrail.length > 2 && (
+              {activeTrail.length > 2 && (
                   // Draw closing line preview
-                  <group position={waterTrail[waterTrail.length - 1].clone().lerp(waterTrail[0], 0.5)} onUpdate={(self) => self.lookAt(waterTrail[0])}>
+                  <group position={activeTrail[activeTrail.length - 1].clone().lerp(activeTrail[0], 0.5)} onUpdate={(self) => self.lookAt(activeTrail[0])}>
                       <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]}>
-                          <planeGeometry args={[waterTrail[waterTrail.length - 1].distanceTo(waterTrail[0]), 0.5]} />
+                          <planeGeometry args={[activeTrail[activeTrail.length - 1].distanceTo(activeTrail[0]), 0.5]} />
                           <meshBasicMaterial color={theme.friendly} transparent opacity={0.3} side={THREE.DoubleSide} />
                       </mesh>
                   </group>

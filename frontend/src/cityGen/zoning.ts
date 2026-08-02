@@ -155,3 +155,54 @@ export function clampPlotAspect(
   if (bd > bw * maxRatio) return { bw, bd: bw * maxRatio };
   return { bw, bd };
 }
+
+/** How much taller the very centre builds than the outskirts. */
+export const HEIGHT_GRADIENT_PEAK = 1.25;
+export const HEIGHT_GRADIENT_EDGE = 0.75;
+
+/**
+ * Height multiplier for a plot at normalised distance `normDist` from the centre.
+ *
+ * Zone already varies with distance, so there is a coarse taper: CORPO towers near the
+ * middle, slums at the rim. But zone changes in steps, so the skyline came out as three
+ * or four flat plateaus with hard seams between them. This blends *within* a zone, so
+ * height falls off smoothly and a downtown reads as a peak rather than a mesa.
+ *
+ * Deliberately gentle. The zone bands are doing the heavy lifting; this only softens
+ * their edges, and a strong multiplier would fight them.
+ */
+export function heightScaleFor(normDist: number): number {
+  const t = Math.min(1, Math.max(0, normDist));
+  return HEIGHT_GRADIENT_PEAK + (HEIGHT_GRADIENT_EDGE - HEIGHT_GRADIENT_PEAK) * t;
+}
+
+/**
+ * Fraction of its plot a zone builds on, the rest left as setback.
+ *
+ * Dense coverage reads as an old city that grew to its lot lines; generous setbacks
+ * read as modern and corporate, with plazas and forecourts. Every zone previously
+ * filled its plot the same way, which is part of why districts differed only in what
+ * they built rather than how they sat on the ground.
+ *
+ * Keyed off the same `zoneTypeVal` bands `fillPlot` uses, so the two agree about what
+ * a plot is.
+ */
+export const LOT_COVERAGE = {
+  MARKETS: 0.95,
+  LANDMARK: 0.70,
+  CORPO: 0.72,
+  URBAN: 0.85,
+  SLUMS: 0.95,
+  INDUSTRIAL: 0.80,
+  DEFAULT: 0.85,
+} as const;
+
+export function lotCoverageFor(zoneTypeVal: number): number {
+  if (zoneTypeVal === 2.0) return LOT_COVERAGE.MARKETS;
+  if (zoneTypeVal >= 1.5 && zoneTypeVal < 2.0) return LOT_COVERAGE.LANDMARK;
+  if (zoneTypeVal > 0.8 && zoneTypeVal < 1.5) return LOT_COVERAGE.CORPO;
+  if (zoneTypeVal > 0.3 && zoneTypeVal < 0.8) return LOT_COVERAGE.URBAN;
+  if (zoneTypeVal <= 0.25 && zoneTypeVal >= 0) return LOT_COVERAGE.SLUMS;
+  if (zoneTypeVal < 0) return LOT_COVERAGE.INDUSTRIAL;
+  return LOT_COVERAGE.DEFAULT;
+}

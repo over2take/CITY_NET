@@ -4,7 +4,28 @@ import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
-import { generateCity, SpatialGrid, type SectionType, type OverpassDensity } from '../cityGen';
+import { generateCity, SpatialGrid, seededRng, seedFrom, countGeneratedInRegion, type SectionType, type OverpassDensity, type LayoutType, type WaterType, type RoundaboutDensity } from '../cityGen';
+
+/** Street layouts offered in the generator, with what each one reads as. */
+const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
+  { value: 'BSP', label: 'ORGANIC — IRREGULAR BLOCKS (DEFAULT)' },
+  { value: 'GRID', label: 'GRID — PLANNED, SQUARE BLOCKS' },
+  { value: 'SUPERBLOCK', label: 'SUPERBLOCK — TOWER IN PARK' },
+  { value: 'RING', label: 'RING — BELTWAYS AND SPOKES' },
+  { value: 'VORONOI', label: 'ORGANIC_CELLS — GREW, NOT PLANNED' },
+  { value: 'PERIMETER', label: 'DOWNTOWN — DENSE BLOCKS, STREET WALL' },
+];
+
+/**
+ * Water to generate. NONE is the default and the off switch — the selector doubles as
+ * the disable, rather than a checkbox that could disagree with it.
+ */
+const WATER_OPTIONS: { value: WaterType; label: string }[] = [
+  { value: 'NONE', label: 'NONE — DRAW YOUR OWN (DEFAULT)' },
+  { value: 'RIVER', label: 'RIVER — DIVIDES THE CITY, BRIDGES IT' },
+  { value: 'COAST', label: 'COAST — WATERFRONT ON ONE EDGE' },
+  { value: 'LAKE', label: 'LAKE — AN OBSTACLE INSIDE IT' },
+];
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
 import type { SignData, SignLine } from './Signs';
@@ -584,6 +605,8 @@ export function AdminPanel({
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
     onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
+    cityGenDrawMode, setCityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail,
+    cityLayout, setCityLayout, citySeed, setCitySeed, lastCitySeed, setLastCitySeed, cityWater, setCityWater, cityParkPonds, setCityParkPonds, cityRoundabouts, setCityRoundabouts,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -911,6 +934,166 @@ export function AdminPanel({
         const err = await res.json();
         setAdminAlert(err.error || "UNDO_FAILED");
     }
+  };
+
+  /**
+   * Generate a city into the selected area.
+   *
+   * `purgeFirst` clears whatever was generated there before, which is what
+   * regenerating means. Without it, generating again infills around what is
+   * already standing — useful in its own right, but not a fresh city.
+   */
+  const runGeneration = async (purgeFirst: boolean) => {
+              try {
+                const drawing = cityGenDrawMode === 'draw';
+                const tracedPoints = (genBoundaryTrail ?? []).map((p: any) => ({ x: p.x, z: p.z }));
+                // Under three points cannot enclose an area; generateCity ignores such a
+                // boundary, so refuse here rather than silently generating over the bbox.
+                if (drawing && tracedPoints.length < 3) return setAdminAlert("TRACE AN AREA FIRST");
+                if (!drawing && !roadSelectionBounds) return setAdminAlert("SELECT AREA FIRST");
+
+                // A traced shape still needs a rectangle for the split to recurse on,
+                // so its bounding box frames the work and the polygon confines it.
+                const xs = tracedPoints.map((p: any) => p.x);
+                const zs = tracedPoints.map((p: any) => p.z);
+                const genBounds = drawing
+                  ? { min: { x: Math.min(...xs), z: Math.min(...zs) }, max: { x: Math.max(...xs), z: Math.max(...zs) } }
+                  : roadSelectionBounds;
+
+                // Clear the previous generation before building, and use the world as
+                // it is *after* that — placement tests against existing locations, so
+                // stale ones would leave the new city avoiding buildings that are gone.
+                let worldLocations = locations;
+                let worldRoads = roads;
+                let worldWater = waterBodies;
+                if (purgeFirst) {
+                  const doomed = countGeneratedInRegion(locations, genBounds, drawing ? tracedPoints : null);
+                  if (doomed.removed > 0) {
+                    const kept = doomed.kept > 0
+                      ? ` ${doomed.kept} named structure${doomed.kept > 1 ? 's' : ''} will be kept.`
+                      : '';
+                    // Leads with the count: "regenerate?" invites a reflexive yes.
+                    if (!confirm(`This removes ${doomed.removed} generated structures.${kept}`)) return;
+                  }
+
+                  const purgeRes = await fetch('/api/locations/purge-region', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(drawing ? { polygon: tracedPoints } : { bounds: genBounds }),
+                  });
+                  if (!purgeRes.ok) throw new Error(`Purge failed: ${purgeRes.status}`);
+
+                  // Water is refetched for the same reason as locations and roads: the
+                  // purge deleted the last river, and generating against the stale list
+                  // means the new city avoids water that is no longer there — a dead
+                  // band of empty ground tracing where the old river used to run.
+                  const [freshLocs, freshRoads, freshWater] = await Promise.all([
+                    fetch('/api/locations').then(r => r.json()).catch(() => locations),
+                    fetch('/api/roads').then(r => r.json()).catch(() => roads),
+                    fetch('/api/water').then(r => r.json()).catch(() => waterBodies),
+                  ]);
+                  if (Array.isArray(freshLocs)) worldLocations = freshLocs;
+                  if (Array.isArray(freshRoads)) worldRoads = freshRoads;
+                  if (Array.isArray(freshWater)) worldWater = freshWater;
+                }
+
+                // A typed seed is used as typed and never rewritten — normalising it
+                // looked like the field being cleared and replaced. Only a blank field
+                // gets filled in, so the seed just rolled can be written down.
+                const typedSeed = (citySeed ?? '').trim();
+                const seed = seedFrom(typedSeed);
+                // Reported, never written back into the field. Filling the input meant
+                // every later regenerate silently rebuilt the same city, which reads as
+                // the purge having failed.
+                setLastCitySeed?.(String(seed));
+
+                const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses, waterBodies: newWater } = generateCity(
+                  genBounds,
+                  {
+                    sectionType: citySectionType as SectionType,
+                    excludeRoads: genExcludeRoads,
+                    overpassDensity,
+                    layout: cityLayout ?? 'BSP',
+                    water: cityWater ?? 'NONE',
+                    parkPonds: !!cityParkPonds,
+                    roundabouts: cityRoundabouts ?? 'off',
+                    boundary: drawing ? { points: tracedPoints } : undefined,
+                  },
+                  { locations: worldLocations, roads: worldRoads, waterBodies: worldWater },
+                  seededRng(seed)
+                );
+
+                // Water first: it shapes where the roads went, so it should exist
+                // before they are persisted. Marked generated so a later regenerate
+                // clears it without touching anything the GM drew.
+                for (const w of newWater) {
+                  const wRes = await fetch('/api/water', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ points: w.points, generated: true }),
+                  });
+                  if (!wRes.ok) throw new Error(`Water creation failed: ${wRes.status}`);
+                }
+                if (newWater.length > 0) fetchWaterBodies?.();
+
+                if (finalRoads.length > 0) {
+                  const rRes = await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalRoads) });
+                  if (!rRes.ok) throw new Error(`Road creation failed: ${rRes.status}`);
+                }
+
+                for (const o of newOverpasses) {
+                  const oRes = await fetch('/api/overpasses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(o) });
+                  if (!oRes.ok) throw new Error(`Overpass creation failed: ${oRes.status}`);
+                }
+                
+                // Grouping logic for parent_id using SPATIAL GRID for O(N) speed
+                const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(rawBuildings.filter(b => !b.parent_name)) });
+                if (!res.ok) throw new Error(`Building creation failed: ${res.status}`);
+                
+                const rootData = await res.json();
+                if (rootData.data) {
+                  const children: any[] = [];
+                  // Reuse the generator's spatial hash to match each child to a
+                  // nearby persisted root in O(1) instead of scanning all roots.
+                  const rootGrid = new SpatialGrid();
+                  rootData.data.forEach((r: any) => rootGrid.add(r));
+
+                  rawBuildings.filter(b => b.parent_name === 'ROOT' || b.parent_name === 'CORP_ROOT').forEach(c => {
+                    for (const nKey of rootGrid.neighborKeys(c.x, c.z)) {
+                      const cell = rootGrid.cells[nKey];
+                      if (!cell) continue;
+                      const root = cell.find((r: any) => {
+                        if (c.temp_block_id && r.temp_block_id) {
+                          return c.temp_block_id === r.temp_block_id;
+                        }
+                        const dist = Math.sqrt((r.x - c.x)**2 + (r.z - c.z)**2);
+                        return dist < 20;
+                      });
+                      if (root) {
+                        children.push({ ...c, parent_id: (root as any).id });
+                        break;
+                      }
+                    }
+                  });
+
+                  if (children.length > 0) {
+                    const cRes = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(children) });
+                    if (!cRes.ok) throw new Error(`Child building creation failed: ${cRes.status}`);
+                  }
+                }
+
+                const bridgeNote = newOverpasses.length > 0 ? ` / ${newOverpasses.length} BRIDGE${newOverpasses.length > 1 ? 'S' : ''}` : '';
+                setAdminAlert(`CITY GENERATED: ${blocks.length} SECTORS${bridgeNote}`);
+                refreshLocations();
+                if (newOverpasses.length > 0) refreshOverpasses?.();
+                // Stay on the panel with the area still selected, so layout and
+                // density can be adjusted and regenerated without re-selecting.
+                // Generating again infills rather than overlapping: placement tests
+                // against existing locations, and roads consolidate onto existing ones.
+            } catch (err: any) {
+              console.error(err);
+              setAdminAlert(`SYSTEM_ERROR: ${err.message}. Area might be too large or complex.`);
+            }
   };
 
   const handleToggleHidden = () => {
@@ -1653,77 +1836,92 @@ export function AdminPanel({
               ))}
             </div>
           </div>
-          <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}>{roadSelectionBounds ? <p>AREA_SELECTED: {Math.round(Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x))}x{Math.round(Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z))} units</p> : <p style={{opacity: 0.7}}>DRAG ON MAP TO SELECT GENERATION AREA</p>}<p style={{opacity: 0.7, marginTop: '5px'}}>HIERARCHICAL BSP: ENABLED</p><p style={{opacity: 0.7}}>ZONING: {citySectionType}</p><p style={{opacity: 0.7}}>INFRASTRUCTURE: {genExcludeRoads ? 'BUILDINGS_ONLY' : 'ROADS_+_BUILDINGS'}</p></div>
-          <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => {
-              try {
-                if (!roadSelectionBounds) return setAdminAlert("SELECT AREA FIRST");
-
-                const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses } = generateCity(
-                  roadSelectionBounds,
-                  {
-                    sectionType: citySectionType as SectionType,
-                    excludeRoads: genExcludeRoads,
-                    overpassDensity,
-                  },
-                  { locations, roads, waterBodies }
-                );
-
-                if (finalRoads.length > 0) {
-                  const rRes = await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalRoads) });
-                  if (!rRes.ok) throw new Error(`Road creation failed: ${rRes.status}`);
-                }
-
-                for (const o of newOverpasses) {
-                  const oRes = await fetch('/api/overpasses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(o) });
-                  if (!oRes.ok) throw new Error(`Overpass creation failed: ${oRes.status}`);
-                }
-                
-                // Grouping logic for parent_id using SPATIAL GRID for O(N) speed
-                const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(rawBuildings.filter(b => !b.parent_name)) });
-                if (!res.ok) throw new Error(`Building creation failed: ${res.status}`);
-                
-                const rootData = await res.json();
-                if (rootData.data) {
-                  const children: any[] = [];
-                  // Reuse the generator's spatial hash to match each child to a
-                  // nearby persisted root in O(1) instead of scanning all roots.
-                  const rootGrid = new SpatialGrid();
-                  rootData.data.forEach((r: any) => rootGrid.add(r));
-
-                  rawBuildings.filter(b => b.parent_name === 'ROOT' || b.parent_name === 'CORP_ROOT').forEach(c => {
-                    for (const nKey of rootGrid.neighborKeys(c.x, c.z)) {
-                      const cell = rootGrid.cells[nKey];
-                      if (!cell) continue;
-                      const root = cell.find((r: any) => {
-                        if (c.temp_block_id && r.temp_block_id) {
-                          return c.temp_block_id === r.temp_block_id;
-                        }
-                        const dist = Math.sqrt((r.x - c.x)**2 + (r.z - c.z)**2);
-                        return dist < 20;
-                      });
-                      if (root) {
-                        children.push({ ...c, parent_id: (root as any).id });
-                        break;
-                      }
-                    }
-                  });
-
-                  if (children.length > 0) {
-                    const cRes = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(children) });
-                    if (!cRes.ok) throw new Error(`Child building creation failed: ${cRes.status}`);
-                  }
-                }
-
-                const bridgeNote = newOverpasses.length > 0 ? ` / ${newOverpasses.length} BRIDGE${newOverpasses.length > 1 ? 'S' : ''}` : '';
-                setAdminAlert(`CITY GENERATED: ${blocks.length} SECTORS${bridgeNote}`);
-                refreshLocations();
-                if (newOverpasses.length > 0) refreshOverpasses?.();
-                setView('list'); setRoadSelectionBounds(null);
-            } catch (err: any) {
-              console.error(err);
-              setAdminAlert(`SYSTEM_ERROR: ${err.message}. Area might be too large or complex.`);
-            }
-            }}>GENERATE_CITY_GRID</button>
+          <label htmlFor="city-water" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>WATER</label>
+          <select
+            id="city-water"
+            value={cityWater ?? 'NONE'}
+            onChange={e => setCityWater?.(e.target.value)}
+            style={{width: '100%', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem'}}
+          >
+            {WATER_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <button
+            className={`utility-btn ${cityParkPonds ? 'active' : ''}`}
+            style={{marginTop: '8px', width: '100%'}}
+            title="Give some parks a pond. Independent of WATER — a pond sits inside its own plot and does not reshape the street grid."
+            onClick={() => setCityParkPonds?.(!cityParkPonds)}
+          >{cityParkPonds ? 'PARK_PONDS: ON' : 'PARK_PONDS: OFF'}</button>
+          <label style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>ROUNDABOUTS</label>
+          <div className="button-group" style={{display: 'flex', flexWrap: 'wrap', gap: '4px'}}>
+            {(['off', 'sparse', 'normal'] as RoundaboutDensity[]).map(d => (
+              <button
+                key={d}
+                className={(cityRoundabouts ?? 'off') === d ? 'active' : ''}
+                style={{ flex: '1 1 60px', minWidth: '60px' }}
+                onClick={() => setCityRoundabouts?.(d)}
+                disabled={genExcludeRoads}
+                title="Put roundabouts where major roads meet. Applies to whichever layout is chosen; the island gets a monument or trees."
+              >
+                {d.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <label htmlFor="city-seed" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>SEED <span style={{opacity: 0.6}}>(BLANK = RANDOM)</span></label>
+          <div style={{display: 'flex', gap: '6px'}}>
+            <input
+              id="city-seed"
+              value={citySeed ?? ''}
+              placeholder="RANDOM"
+              onChange={e => setCitySeed?.(e.target.value)}
+              style={{flex: 1, backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem', fontFamily: 'monospace'}}
+            />
+            <button className="utility-btn" title="CLEAR SEED" style={{padding: '2px 10px'}}
+              onClick={() => setCitySeed?.('')}>🗑</button>
+          </div>
+          {lastCitySeed
+            ? <p style={{fontSize: '0.65rem', opacity: 0.75, marginTop: '4px'}}>
+                LAST: <button
+                  onClick={() => setCitySeed?.(String(lastCitySeed))}
+                  title="REUSE THIS SEED"
+                  style={{background: 'none', border: 'none', color: 'var(--green)', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontFamily: 'monospace', fontSize: '0.65rem'}}
+                >{lastCitySeed}</button>
+              </p>
+            : null}
+          <p style={{fontSize: '0.65rem', opacity: 0.55, marginTop: '4px'}}>SAME SEED + SAME AREA + SAME OPTIONS = SAME CITY</p>
+          <label htmlFor="city-layout" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>LAYOUT</label>
+          <select
+            id="city-layout"
+            value={cityLayout ?? 'BSP'}
+            onChange={e => setCityLayout?.(e.target.value)}
+            style={{width: '100%', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem'}}
+          >
+            {LAYOUT_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+            <button className={`utility-btn ${cityGenDrawMode !== 'draw' ? 'active' : ''}`} style={{flex: 1}}
+              onClick={() => { setCityGenDrawMode?.('rect'); setGenBoundaryTrail?.([]); }}>DRAG_RECT</button>
+            <button className={`utility-btn ${cityGenDrawMode === 'draw' ? 'active' : ''}`} style={{flex: 1}}
+              onClick={() => { setCityGenDrawMode?.('draw'); setRoadSelectionBounds(null); }}>DRAW_AREA</button>
+          </div>
+          <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}>{cityGenDrawMode === 'draw'
+            ? (genBoundaryTrail?.length > 2
+                ? <><p>BOUNDARY_TRACED: {genBoundaryTrail.length} POINTS</p><button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setGenBoundaryTrail?.([])}>CLEAR_BOUNDARY</button></>
+                : <p style={{opacity: 0.7}}>HOLD LEFT-CLICK TO TRACE GENERATION AREA</p>)
+            : (roadSelectionBounds ? <p>AREA_SELECTED: {Math.round(Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x))}x{Math.round(Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z))} units</p> : <p style={{opacity: 0.7}}>DRAG ON MAP TO SELECT GENERATION AREA</p>)}<p style={{opacity: 0.7, marginTop: '5px'}}>HIERARCHICAL BSP: ENABLED</p><p style={{opacity: 0.7}}>ZONING: {citySectionType}</p><p style={{opacity: 0.7}}>INFRASTRUCTURE: {genExcludeRoads ? 'BUILDINGS_ONLY' : 'ROADS_+_BUILDINGS'}</p></div>
+          <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
+            <button className="upload-btn" style={{flex: 1, marginTop: 0}}
+              onClick={() => runGeneration(false)}>GENERATE_CITY_GRID</button>
+            <button className="upload-btn danger-btn" style={{flex: 1, marginTop: 0}}
+              title="CLEAR THE PREVIOUS GENERATION HERE, THEN BUILD AFRESH"
+              onClick={() => runGeneration(true)}>REGENERATE</button>
+          </div>
+          {/* Same server-side undo as the admin header. Generating leaves the panel
+              open, so reverting a bad result belongs here rather than three clicks away. */}
+          <button className="utility-btn" style={{marginTop: '10px', width: '100%'}} onClick={handleUndo} title="UNDO LAST SAVED CHANGE">⟲ UNDO</button>
         </>
       )}
 
