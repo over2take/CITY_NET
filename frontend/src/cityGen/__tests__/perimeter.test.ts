@@ -78,12 +78,18 @@ describe('perimeterLots', () => {
 
   it('puts neighbours close enough to read as a terrace', () => {
     // The whole point. A gap of more than a metre or two and it is detached houses.
-    const lots = perimeterLots(bigBlock, seededRng())
-      .filter(l => Math.abs(l.z - (bigBlock.z - bigBlock.d / 2 + LOT_DEPTH / 2)) < 0.01)
-      .sort((a, b) => a.x - b.x);
-    expect(lots.length).toBeGreaterThan(2);
-    for (let i = 1; i < lots.length; i++) {
-      const gap = (lots[i].x - lots[i].w / 2) - (lots[i - 1].x + lots[i - 1].w / 2);
+    // The row is found by grouping on the z the lots actually landed at, rather than a
+    // computed one — rim depth varies per block, so there is no constant to predict it.
+    const lots = perimeterLots(bigBlock, seededRng());
+    const rows = new Map<string, typeof lots>();
+    for (const l of lots) {
+      const key = l.z.toFixed(3);
+      rows.set(key, [...(rows.get(key) ?? []), l]);
+    }
+    const row = [...rows.values()].sort((a, b) => b.length - a.length)[0].sort((a, b) => a.x - b.x);
+    expect(row.length).toBeGreaterThan(2);
+    for (let i = 1; i < row.length; i++) {
+      const gap = (row[i].x - row[i].w / 2) - (row[i - 1].x + row[i - 1].w / 2);
       expect(gap).toBeLessThan(2);
       expect(gap).toBeGreaterThanOrEqual(0);
     }
@@ -138,6 +144,36 @@ describe('perimeterLayout', () => {
     expect(ratio).toBeGreaterThan(1.5);
   });
 
+  it('varies its block sizes rather than repeating one cell', () => {
+    // The first version divided the span evenly and wobbled the seams, which made every
+    // block the same size by construction. A real downtown has short blocks, long ones
+    // and the occasional enormous one where a street was never cut through.
+    const { roads } = perimeterLayout(bounds(600), false, seededRng());
+    const gapsAlong = (vals: number[]) => {
+      const uniq = [...new Set(vals.map(v => Math.round(v)))].sort((a, b) => a - b);
+      return uniq.slice(1).map((v, i) => v - uniq[i]).filter(g => g > 5);
+    };
+    const gaps = gapsAlong(roads.filter(r => Math.abs(r.z1 - r.z2) < 0.5).map(r => r.z1));
+    expect(gaps.length).toBeGreaterThan(4);
+    const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    const spread = Math.sqrt(gaps.reduce((a, g) => a + (g - mean) ** 2, 0) / gaps.length) / mean;
+    expect(spread).toBeGreaterThan(0.15);
+    // And the largest block is a different animal from the smallest, not a wobble.
+    expect(Math.max(...gaps)).toBeGreaterThan(Math.min(...gaps) * 1.8);
+  });
+
+  it('varies the rim depth between blocks', () => {
+    // A constant depth makes every terrace the same thickness, which reads as a machine
+    // even when the frontages differ.
+    const depths = new Set<string>();
+    const rng = seededRng(21);
+    for (let i = 0; i < 20; i++) {
+      const lots = perimeterLots({ x: 0, z: 0, w: 140, d: 90 }, rng);
+      depths.add(Math.min(...lots.map(l => Math.min(l.w, l.d))).toFixed(2));
+    }
+    expect(depths.size).toBeGreaterThan(5);
+  });
+
   it('still lays roads', () => {
     expect(perimeterLayout(bounds(300), false, seededRng()).roads.length).toBeGreaterThan(0);
   });
@@ -158,14 +194,19 @@ describe('perimeterLayout', () => {
     }
   });
 
-  it('drops lots outside a drawn boundary', () => {
+  it('keeps lots inside a drawn boundary, not whole blocks', () => {
+    // Every other layout drops a block whose centre falls outside the shape, which
+    // works when a block is the unit of output. A downtown block is large and holds a
+    // dozen lots, so dropping it whole discards lots well inside the boundary — and a
+    // small drawn area lost every block it touched and generated nothing at all.
     const boundary = { points: [
-      { x: -100, z: -100 }, { x: 100, z: -100 }, { x: 100, z: 100 }, { x: -100, z: 100 },
+      { x: -60, z: -60 }, { x: 60, z: -60 }, { x: 60, z: 60 }, { x: -60, z: 60 },
     ] };
     const { blocks } = perimeterLayout(bounds(300), true, seededRng(), [], boundary);
+    expect(blocks.length).toBeGreaterThan(0);
     for (const b of blocks) {
-      expect(Math.abs(b.x)).toBeLessThan(200);
-      expect(Math.abs(b.z)).toBeLessThan(200);
+      expect(Math.abs(b.x)).toBeLessThanOrEqual(60);
+      expect(Math.abs(b.z)).toBeLessThanOrEqual(60);
     }
   });
 

@@ -18,6 +18,9 @@ import type { Block, Rng } from './types';
 /** How deep a building lot is, from the street into the block. */
 export const LOT_DEPTH = 20;
 
+/** How much that depth varies between blocks, as a fraction of it. */
+export const LOT_DEPTH_VARIANCE = 0.3;
+
 /** Street frontage per lot, before jitter. Narrow frontages are the look. */
 const LOT_FRONTAGE_MIN = 11;
 const LOT_FRONTAGE_MAX = 24;
@@ -61,7 +64,10 @@ function frontages(length: number, rng: Rng): number[] {
  * courtyard out of it would leave four slivers around a hole.
  */
 export function perimeterLots(block: Block, rng: Rng): Block[] {
-  const depth = Math.min(LOT_DEPTH, Math.min(block.w, block.d) / 2);
+  // Rim depth varies block to block. A constant depth makes every terrace the same
+  // thickness, which reads as a machine even when the frontages differ.
+  const wanted = LOT_DEPTH * (1 - LOT_DEPTH_VARIANCE + rng() * LOT_DEPTH_VARIANCE * 2);
+  const depth = Math.min(wanted, Math.min(block.w, block.d) / 2);
   const innerW = block.w - depth * 2;
   const innerD = block.d - depth * 2;
 

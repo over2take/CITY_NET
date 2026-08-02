@@ -83,6 +83,21 @@ const ARC_STEP_DEG = 9;
 const DOWNTOWN_CELL_SHORT = 70;
 const DOWNTOWN_CELL_LONG = 150;
 
+/**
+ * How much a downtown block may differ from the target size, and how often a street is
+ * simply left out.
+ *
+ * `gridLines` divides a span into equal cells and wobbles the seams, which is right for
+ * a planned grid and wrong here: it makes every block the same size by construction.
+ * A real downtown has short blocks, long blocks and the occasional enormous one where a
+ * street was never cut through — Washington Square being the obvious example. So the
+ * cuts are walked across the span at varying intervals instead, with a chance of
+ * skipping one entirely.
+ */
+const DOWNTOWN_CELL_VARIANCE = 0.42;
+const DOWNTOWN_MERGE_CHANCE = 0.16;
+const DOWNTOWN_MERGE_FACTOR = 1.7;
+
 /** A Voronoi edge longer than this many spacings is an avenue rather than a street. */
 const VORONOI_AVENUE_RATIO = 1.15;
 
@@ -103,6 +118,33 @@ function gridLines(min: number, span: number, rng: Rng, cellSize = GRID_CELL): n
     const edge = i === 0 || i === count;
     lines.push(edge ? base : base + (rng() - 0.5) * cell * GRID_JITTER * 2);
   }
+  return lines;
+}
+
+/**
+ * Cut positions walked across a span at varying intervals.
+ *
+ * Unlike `gridLines`, which divides evenly, this accumulates steps of differing size, so
+ * block sizes genuinely vary rather than all landing within a wobble of one another. A
+ * step is occasionally stretched, which reads as a street that was never cut through.
+ *
+ * A short remainder is absorbed into the last block rather than left as a sliver.
+ */
+function variedLines(min: number, span: number, rng: Rng, target: number): number[] {
+  const lines = [min];
+  const end = min + span;
+  let cursor = min;
+
+  while (true) {
+    const spread = 1 - DOWNTOWN_CELL_VARIANCE + rng() * DOWNTOWN_CELL_VARIANCE * 2;
+    const merged = rng() < DOWNTOWN_MERGE_CHANCE ? DOWNTOWN_MERGE_FACTOR : 1;
+    const next = cursor + target * spread * merged;
+    if (end - next < target * 0.5) break;
+    lines.push(next);
+    cursor = next;
+  }
+
+  lines.push(end);
   return lines;
 }
 
@@ -342,8 +384,8 @@ export const perimeterLayout: LayoutFn = (bounds, excludeRoads, rng, water = [],
   // The long axis of a block runs across the shorter axis of the region, so the streets
   // that carry it read as the avenues.
   const horizontal = width >= depth;
-  const xs = gridLines(minX, width, rng, horizontal ? DOWNTOWN_CELL_LONG : DOWNTOWN_CELL_SHORT);
-  const zs = gridLines(minZ, depth, rng, horizontal ? DOWNTOWN_CELL_SHORT : DOWNTOWN_CELL_LONG);
+  const xs = variedLines(minX, width, rng, horizontal ? DOWNTOWN_CELL_LONG : DOWNTOWN_CELL_SHORT);
+  const zs = variedLines(minZ, depth, rng, horizontal ? DOWNTOWN_CELL_SHORT : DOWNTOWN_CELL_LONG);
 
   const blocks: Block[] = [];
   const roads: RoadSegment[] = [];
@@ -369,7 +411,6 @@ export const perimeterLayout: LayoutFn = (bounds, excludeRoads, rng, water = [],
     for (let j = 0; j < zs.length - 1; j++) {
       const cx = (xs[i] + xs[i + 1]) / 2;
       const cz = (zs[j] + zs[j + 1]) / 2;
-      if (boundary && !pointInPolygon(boundary, cx, cz)) continue;
       // The road margin is taken off the block once, here, rather than off every lot
       // inside it — otherwise neighbours would be padded apart and there is no terrace.
       const block: Block = {
@@ -377,7 +418,15 @@ export const perimeterLayout: LayoutFn = (bounds, excludeRoads, rng, water = [],
         w: Math.max(1, xs[i + 1] - xs[i] - GRID_AVENUE_WIDTH),
         d: Math.max(1, zs[j + 1] - zs[j] - GRID_AVENUE_WIDTH),
       };
-      blocks.push(...perimeterLots(block, rng));
+      // A drawn boundary is tested against the lots, not the block they came from.
+      // Every other layout drops a block whose centre falls outside, which works when a
+      // block *is* the unit of output. Here a block is large and holds a dozen lots, so
+      // dropping it whole discards lots that sit well inside the shape — a small drawn
+      // area could lose every block it touched and generate nothing at all.
+      for (const lot of perimeterLots(block, rng)) {
+        if (boundary && !pointInPolygon(boundary, lot.x, lot.z)) continue;
+        blocks.push(lot);
+      }
     }
   }
 
@@ -395,4 +444,4 @@ export const LAYOUTS: Record<LayoutType, LayoutFn> = {
 
 export * from './voronoi';
 export * from './lots';
-export { DOWNTOWN_CELL_SHORT, DOWNTOWN_CELL_LONG, VORONOI_AVENUE_WIDTH, VORONOI_STREET_WIDTH, VORONOI_AVENUE_RATIO, GRID_CELL, SUPERBLOCK_MIN_SIZE, AVENUE_EVERY, GRID_AVENUE_WIDTH, GRID_STREET_WIDTH, RING_COUNT, SPOKE_COUNT, RING_ROAD_WIDTH, SPOKE_ROAD_WIDTH, SPOKE_DECK_HEIGHT };
+export { DOWNTOWN_CELL_SHORT, DOWNTOWN_CELL_LONG, DOWNTOWN_CELL_VARIANCE, DOWNTOWN_MERGE_CHANCE, VORONOI_AVENUE_WIDTH, VORONOI_STREET_WIDTH, VORONOI_AVENUE_RATIO, GRID_CELL, SUPERBLOCK_MIN_SIZE, AVENUE_EVERY, GRID_AVENUE_WIDTH, GRID_STREET_WIDTH, RING_COUNT, SPOKE_COUNT, RING_ROAD_WIDTH, SPOKE_ROAD_WIDTH, SPOKE_DECK_HEIGHT };
