@@ -61,7 +61,7 @@ function distanceToSegment(
 
 describe('layout registry', () => {
   it('offers every layout type', () => {
-    expect(Object.keys(LAYOUTS).sort()).toEqual(['BSP', 'GRID', 'RING', 'SUPERBLOCK', 'VORONOI']);
+    expect(Object.keys(LAYOUTS).sort()).toEqual(['BSP', 'GRID', 'PERIMETER', 'RING', 'SUPERBLOCK', 'VORONOI']);
   });
 
   it('every layout produces blocks for the same area', () => {

@@ -173,8 +173,10 @@ export function generateCity(
     const plotId = `gen_${index}`;
     const startIndex = buildings.length;
 
-    let bw = block.w - PLOT_PADDING;
-    let bd = block.d - PLOT_PADDING;
+    // A lot arrives with its footprint already decided by the layout; a block gets the
+    // road margin trimmed off it here. See `Block.lot`.
+    let bw = block.lot ? block.w : block.w - PLOT_PADDING;
+    let bd = block.lot ? block.d : block.d - PLOT_PADDING;
     if (bw < MIN_PLOT_SIZE || bd < MIN_PLOT_SIZE) return;
 
     // A plot centred in water is open water — skip it outright. Plots that
@@ -226,12 +228,17 @@ export function generateCity(
       block.x, block.z, centerX, centerZ, normDist, sectionType, sectors, rng
     );
     const zonePrefix = zonePrefixFor(zoneTypeVal);
-    ({ bw, bd } = clampPlotAspect(bw, bd, zoneTypeVal));
-    // Setback: corporate plots leave forecourts, slums and markets build to the lot
-    // line. Applied after the aspect clamp so it shrinks the plot actually used.
-    const coverage = lotCoverageFor(zoneTypeVal);
-    bw *= coverage;
-    bd *= coverage;
+    // A lot skips both: its narrow frontage is deliberate, and squaring it up or
+    // setting it back would pull a terrace apart into detached sheds. Both rules are
+    // about fitting one structure sensibly onto a whole city block.
+    if (!block.lot) {
+      ({ bw, bd } = clampPlotAspect(bw, bd, zoneTypeVal));
+      // Setback: corporate plots leave forecourts, slums and markets build to the lot
+      // line. Applied after the aspect clamp so it shrinks the plot actually used.
+      const coverage = lotCoverageFor(zoneTypeVal);
+      bw *= coverage;
+      bd *= coverage;
+    }
 
     if (shouldPlaceLandmark(block, bw, bd, zoneTypeVal, isBlocked, rng)) {
       generateLandmark(block, bw, bd, buildings, grid, rng);

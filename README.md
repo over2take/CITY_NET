@@ -406,7 +406,8 @@ CITY_NET/
 │   │   │   ├── index.ts        # generateCity orchestrator; selects a layout, caps buildings under decks; injected rng and fillPlot make it testable
 │   │   │   ├── types.ts        # Bounds, Block, RawBuilding, Obstacle, options/context/result shapes
 │   │   │   ├── bsp.ts          # Recursive split into blocks + road seams; seams clipped to land and to any drawn boundary as they are laid; optional minimum block size
-│   │   │   ├── layouts.ts      # LayoutFn registry — BSP (default), GRID (avenues every 4th line), SUPERBLOCK (large floor), RING (beltways with elevated spokes filling a disc), VORONOI (organic cells, streets on the cell boundaries)
+│   │   │   ├── layouts.ts      # LayoutFn registry — BSP (default), GRID (avenues every 4th line), SUPERBLOCK (large floor), RING (beltways with elevated spokes filling a disc), VORONOI (organic cells, streets on the cell boundaries), PERIMETER (elongated blocks cut into street-facing lots)
+│   │   │   ├── lots.ts         # Cuts a block into building lots around its rim, back lots left open in the middle; each lot is flagged Block.lot so the generator takes the footprint as given instead of padding, squaring and setting it back
 │   │   │   ├── voronoi.ts      # Voronoi cells by half-plane clipping, shared-edge dedup, and the inscribed rectangle that lets an irregular cell feed a rectangle-only plot filler
 │   │   │   ├── collision.ts    # SpatialGrid (footprint spans every cell it covers), exact segment-vs-box road test, boundary rejection, and clampBuildingsUnderDecks so overpasses do not pierce towers
 │   │   │   ├── zoning.ts       # Sector layout, concentric-ring zone assignment, park probability, plot aspect clamp
@@ -424,6 +425,7 @@ CITY_NET/
 │   │   │       ├── cityGen.test.ts     # Split determinism, collision and buffer behaviour, zoning, landmarks, parks, end-to-end generation
 │   │   │       ├── boundary.test.ts    # Drawn bounds — inside/outside/straddling, concave notch, clip inverse of water, unchanged output without a boundary
 │   │   │       ├── layouts.test.ts     # Per-layout contracts, grid regularity vs BSP, ring density and deck ramps, height capping under decks
+│   │   │       ├── perimeter.test.ts   # Lots that tile a block without overlapping, terrace gaps under two units, varied frontages, open back lots, an elongated street grid, and every other layout left unflagged
 │   │   │       ├── voronoi.test.ts     # Cells closer to their own seed than any other, tiling without gaps, convexity, edge dedup, inscribed rectangle, and a road network that is not axis-aligned
 │   │   │       ├── monuments.test.ts  # Scale against the island and against a landmark, nothing floating, one root per monument, and the three app-wide conventions a generator must not override — the `#00ff00` theme sentinel, `polyCount` 5, and never the token-reserved `rhombus`
 │   │   │       ├── roundabouts.test.ts # Crossings with no shared endpoint, arterial-only siting, spacing, water and boundary exclusion, approaches cut back to the ring but still reaching it, closed ring, and every layout

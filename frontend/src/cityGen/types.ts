@@ -19,6 +19,17 @@ export interface Block {
   z: number;
   w: number;
   d: number;
+  /**
+   * This is a finished building lot, not a city block — take `w`/`d` as the footprint.
+   *
+   * The generator normally trims road padding off a block, clamps its aspect toward
+   * square and applies a per-zone setback. All three exist to turn a whole city block
+   * into one sensible plot. A layout that has already subdivided a block into lots has
+   * made those decisions itself, and leaving them on would pad neighbouring lots apart,
+   * square up the narrow frontages and pull the row back off the street — undoing the
+   * street wall that was the point of subdividing.
+   */
+  lot?: boolean;
 }
 
 // Roads reuse the canonical shape from roadHelpers so consolidateRoads and

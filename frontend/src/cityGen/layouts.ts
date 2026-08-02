@@ -3,6 +3,7 @@ import type { OverpassSpec } from './bridges';
 import { normalizeBounds, splitCity } from './bsp';
 import { clipSegmentToLand, clipSegmentToBoundary, pointInPolygon, type Polygon, type WaterPolygon } from './water';
 import { seedPoints, voronoiCells, cellEdges, inscribedRect, VORONOI_SPACING } from './voronoi';
+import { perimeterLots } from './lots';
 
 /**
  * Street layouts.
@@ -19,7 +20,7 @@ export type LayoutFn = (
   boundary?: Polygon
 ) => { blocks: Block[]; roads: RoadSegment[]; overpasses?: OverpassSpec[] };
 
-export type LayoutType = 'BSP' | 'GRID' | 'SUPERBLOCK' | 'RING' | 'VORONOI';
+export type LayoutType = 'BSP' | 'GRID' | 'SUPERBLOCK' | 'RING' | 'VORONOI' | 'PERIMETER';
 
 /** Target block size for the regular grid, before jitter. */
 const GRID_CELL = 55;
@@ -72,6 +73,16 @@ const DECK_PILLAR_SPACING = 14;
 /** Degrees between sampled points on a ring. Smaller reads rounder, at more segments. */
 const ARC_STEP_DEG = 9;
 
+/**
+ * Downtown block size, short axis by long axis.
+ *
+ * Deliberately not square. A Manhattan block is roughly three times longer than it is
+ * deep, which is why the avenues carry the towers and the side streets carry terraces —
+ * the shape of the block is most of why the city reads as it does.
+ */
+const DOWNTOWN_CELL_SHORT = 70;
+const DOWNTOWN_CELL_LONG = 150;
+
 /** A Voronoi edge longer than this many spacings is an avenue rather than a street. */
 const VORONOI_AVENUE_RATIO = 1.15;
 
@@ -83,8 +94,8 @@ const VORONOI_STREET_WIDTH = 4;
  * grid rather than a machine one. The outer edges stay put, since they are the boundary
  * of the generated area and should not wobble.
  */
-function gridLines(min: number, span: number, rng: Rng): number[] {
-  const count = Math.max(1, Math.round(span / GRID_CELL));
+function gridLines(min: number, span: number, rng: Rng, cellSize = GRID_CELL): number[] {
+  const count = Math.max(1, Math.round(span / cellSize));
   const cell = span / count;
   const lines: number[] = [];
   for (let i = 0; i <= count; i++) {
@@ -310,13 +321,78 @@ export const voronoiLayout: LayoutFn = (bounds, excludeRoads, rng, water = [], b
   return { blocks, roads };
 };
 
+/**
+ * Downtown — a street grid whose blocks are cut into building lots.
+ *
+ * Every other layout hands the generator one block per city block, so a block gets one
+ * structure. That is right for a tower in a park and wrong for a downtown: what makes a
+ * dense city look dense is many narrow buildings shouldering together along the street
+ * with back lots behind them, not one object per block.
+ *
+ * So the blocks come out subdivided — lots around the rim facing the street, the middle
+ * left open. Blocks are elongated rather than square because that is the shape that
+ * produces avenue frontages and side-street terraces.
+ *
+ * Distinct from `SUPERBLOCK`, which is the opposite idea and stays that way: few roads,
+ * large plots, open ground between isolated towers.
+ */
+export const perimeterLayout: LayoutFn = (bounds, excludeRoads, rng, water = [], boundary) => {
+  const { minX, minZ, width, depth } = normalizeBounds(bounds);
+
+  // The long axis of a block runs across the shorter axis of the region, so the streets
+  // that carry it read as the avenues.
+  const horizontal = width >= depth;
+  const xs = gridLines(minX, width, rng, horizontal ? DOWNTOWN_CELL_LONG : DOWNTOWN_CELL_SHORT);
+  const zs = gridLines(minZ, depth, rng, horizontal ? DOWNTOWN_CELL_SHORT : DOWNTOWN_CELL_LONG);
+
+  const blocks: Block[] = [];
+  const roads: RoadSegment[] = [];
+
+  const layRoad = (seg: RoadSegment) => {
+    if (excludeRoads) return;
+    for (const dry of clipSegmentToLand(seg, water)) {
+      roads.push(...clipSegmentToBoundary(dry, boundary));
+    }
+  };
+
+  const widthAt = (i: number, count: number) =>
+    i === 0 || i === count || i % AVENUE_EVERY === 0 ? GRID_AVENUE_WIDTH : GRID_STREET_WIDTH;
+
+  for (let i = 0; i < xs.length; i++) {
+    layRoad({ x1: xs[i], z1: zs[0], x2: xs[i], z2: zs[zs.length - 1], width: widthAt(i, xs.length - 1) });
+  }
+  for (let j = 0; j < zs.length; j++) {
+    layRoad({ x1: xs[0], z1: zs[j], x2: xs[xs.length - 1], z2: zs[j], width: widthAt(j, zs.length - 1) });
+  }
+
+  for (let i = 0; i < xs.length - 1; i++) {
+    for (let j = 0; j < zs.length - 1; j++) {
+      const cx = (xs[i] + xs[i + 1]) / 2;
+      const cz = (zs[j] + zs[j + 1]) / 2;
+      if (boundary && !pointInPolygon(boundary, cx, cz)) continue;
+      // The road margin is taken off the block once, here, rather than off every lot
+      // inside it — otherwise neighbours would be padded apart and there is no terrace.
+      const block: Block = {
+        x: cx, z: cz,
+        w: Math.max(1, xs[i + 1] - xs[i] - GRID_AVENUE_WIDTH),
+        d: Math.max(1, zs[j + 1] - zs[j] - GRID_AVENUE_WIDTH),
+      };
+      blocks.push(...perimeterLots(block, rng));
+    }
+  }
+
+  return { blocks, roads };
+};
+
 export const LAYOUTS: Record<LayoutType, LayoutFn> = {
   BSP: bspLayout,
   GRID: gridLayout,
   SUPERBLOCK: superblockLayout,
   RING: ringLayout,
   VORONOI: voronoiLayout,
+  PERIMETER: perimeterLayout,
 };
 
 export * from './voronoi';
-export { VORONOI_AVENUE_WIDTH, VORONOI_STREET_WIDTH, VORONOI_AVENUE_RATIO, GRID_CELL, SUPERBLOCK_MIN_SIZE, AVENUE_EVERY, GRID_AVENUE_WIDTH, GRID_STREET_WIDTH, RING_COUNT, SPOKE_COUNT, RING_ROAD_WIDTH, SPOKE_ROAD_WIDTH, SPOKE_DECK_HEIGHT };
+export * from './lots';
+export { DOWNTOWN_CELL_SHORT, DOWNTOWN_CELL_LONG, VORONOI_AVENUE_WIDTH, VORONOI_STREET_WIDTH, VORONOI_AVENUE_RATIO, GRID_CELL, SUPERBLOCK_MIN_SIZE, AVENUE_EVERY, GRID_AVENUE_WIDTH, GRID_STREET_WIDTH, RING_COUNT, SPOKE_COUNT, RING_ROAD_WIDTH, SPOKE_ROAD_WIDTH, SPOKE_DECK_HEIGHT };
