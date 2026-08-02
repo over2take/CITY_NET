@@ -59,7 +59,7 @@ import { Sidewalks } from './components/Sidewalks';
 import { AutoSignage } from './components/AutoSignage';
 import { Signs, type SignData } from './components/Signs';
 import { type RemoteFont } from './utils/fontLoader';
-import type { LayoutType } from './cityGen';
+import type { LayoutType, WaterType } from './cityGen';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
 import { AdminPanel } from './components/AdminPanel';
 import MapExportController, { type MapExportApi } from './components/MapExportController';
@@ -372,6 +372,9 @@ function App() {
   // used, kept separate so showing it never silently pins the next generation.
   const [citySeed, setCitySeed] = useState<string>('');
   const [lastCitySeed, setLastCitySeed] = useState<string>('');
+  // NONE by default: generation has never produced water, so anything else would put
+  // a river through the city of everyone already using the button.
+  const [cityWater, setCityWater] = useState<WaterType>('NONE');
   const [mapExportApi, setMapExportApi] = useState<MapExportApi | null>(null);
   const [isPlacingSign, setIsPlacingSign] = useState(false);
   const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
@@ -1808,6 +1811,8 @@ function App() {
                 isExporting={mapExportApi?.isExporting ?? false}
                 citySeed={citySeed}
                 setCitySeed={setCitySeed}
+                cityWater={cityWater}
+                setCityWater={setCityWater}
                 lastCitySeed={lastCitySeed}
                 setLastCitySeed={setLastCitySeed}
                 cityLayout={cityLayout}

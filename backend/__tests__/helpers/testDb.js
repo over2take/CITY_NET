@@ -106,7 +106,8 @@ function makeTestDb() {
       db.run(`CREATE TABLE water_bodies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         points_json TEXT NOT NULL,
-        map_scale_multiplier TEXT DEFAULT '[1]'
+        map_scale_multiplier TEXT DEFAULT '[1]',
+        generated INTEGER DEFAULT 0
       )`);
 
       db.run(`CREATE TABLE signs (

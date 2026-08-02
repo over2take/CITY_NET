@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from './Buildings';
-import { generateCity, SpatialGrid, seededRng, seedFrom, countGeneratedInRegion, type SectionType, type OverpassDensity, type LayoutType } from '../cityGen';
+import { generateCity, SpatialGrid, seededRng, seedFrom, countGeneratedInRegion, type SectionType, type OverpassDensity, type LayoutType, type WaterType } from '../cityGen';
 
 /** Street layouts offered in the generator, with what each one reads as. */
 const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
@@ -12,6 +12,17 @@ const LAYOUT_OPTIONS: { value: LayoutType; label: string }[] = [
   { value: 'GRID', label: 'GRID — PLANNED, SQUARE BLOCKS' },
   { value: 'SUPERBLOCK', label: 'SUPERBLOCK — TOWER IN PARK' },
   { value: 'RING', label: 'RING — BELTWAYS AND SPOKES' },
+];
+
+/**
+ * Water to generate. NONE is the default and the off switch — the selector doubles as
+ * the disable, rather than a checkbox that could disagree with it.
+ */
+const WATER_OPTIONS: { value: WaterType; label: string }[] = [
+  { value: 'NONE', label: 'NONE — DRAW YOUR OWN (DEFAULT)' },
+  { value: 'RIVER', label: 'RIVER — DIVIDES THE CITY, BRIDGES IT' },
+  { value: 'COAST', label: 'COAST — WATERFRONT ON ONE EDGE' },
+  { value: 'LAKE', label: 'LAKE — AN OBSTACLE INSIDE IT' },
 ];
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
@@ -593,7 +604,7 @@ export function AdminPanel({
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
     onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
     cityGenDrawMode, setCityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail,
-    cityLayout, setCityLayout, citySeed, setCitySeed, lastCitySeed, setLastCitySeed,
+    cityLayout, setCityLayout, citySeed, setCitySeed, lastCitySeed, setLastCitySeed, cityWater, setCityWater,
   }: any) {
   if (view === 'battle_map') {
     return (
@@ -987,18 +998,32 @@ export function AdminPanel({
                 // the purge having failed.
                 setLastCitySeed?.(String(seed));
 
-                const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses } = generateCity(
+                const { blocks, roads: finalRoads, buildings: rawBuildings, overpasses: newOverpasses, waterBodies: newWater } = generateCity(
                   genBounds,
                   {
                     sectionType: citySectionType as SectionType,
                     excludeRoads: genExcludeRoads,
                     overpassDensity,
                     layout: cityLayout ?? 'BSP',
+                    water: cityWater ?? 'NONE',
                     boundary: drawing ? { points: tracedPoints } : undefined,
                   },
                   { locations: worldLocations, roads: worldRoads, waterBodies },
                   seededRng(seed)
                 );
+
+                // Water first: it shapes where the roads went, so it should exist
+                // before they are persisted. Marked generated so a later regenerate
+                // clears it without touching anything the GM drew.
+                for (const w of newWater) {
+                  const wRes = await fetch('/api/water', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ points: w.points, generated: true }),
+                  });
+                  if (!wRes.ok) throw new Error(`Water creation failed: ${wRes.status}`);
+                }
+                if (newWater.length > 0) fetchWaterBodies?.();
 
                 if (finalRoads.length > 0) {
                   const rRes = await fetch('/api/roads', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalRoads) });
@@ -1800,6 +1825,17 @@ export function AdminPanel({
               ))}
             </div>
           </div>
+          <label htmlFor="city-water" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>WATER</label>
+          <select
+            id="city-water"
+            value={cityWater ?? 'NONE'}
+            onChange={e => setCityWater?.(e.target.value)}
+            style={{width: '100%', backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem'}}
+          >
+            {WATER_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
           <label htmlFor="city-seed" style={{fontSize: '0.7rem', opacity: 0.8, display: 'block', marginTop: '10px', marginBottom: '4px'}}>SEED <span style={{opacity: 0.6}}>(BLANK = RANDOM)</span></label>
           <div style={{display: 'flex', gap: '6px'}}>
             <input

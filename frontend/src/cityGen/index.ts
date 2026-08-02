@@ -1,6 +1,7 @@
 import { consolidateRoads } from '../utils/roadHelpers';
 import { generateThemedBuildingsForPlot } from '../components/Buildings';
 import { LAYOUTS } from './layouts';
+import { generateWater } from './waterGen';
 import { normalizeBounds } from './bsp';
 import { SpatialGrid, createIsBlocked, footprintOnRoad, clampBuildingsUnderDecks } from './collision';
 import {
@@ -37,6 +38,7 @@ export * from './water';
 export * from './layouts';
 export * from './rng';
 export * from './region';
+export * from './waterGen';
 export {
   findBridges, MAX_BRIDGE_SPAN, BRIDGE_RAMP_LENGTH,
   BRIDGE_HEIGHTS, MIN_RAMP_RUN, MAX_RAMP_RUN,
@@ -78,7 +80,7 @@ export function generateCity(
   rng: Rng = Math.random,
   deps: GenerateCityDeps = DEFAULT_DEPS
 ): GenerateCityResult {
-  const { sectionType, excludeRoads, overpassDensity = 'normal', layout = 'BSP' } = options;
+  const { sectionType, excludeRoads, overpassDensity = 'normal', layout = 'BSP', water: waterType = 'NONE' } = options;
   // Fewer than three points cannot enclose an area. Treating a degenerate boundary as
   // absent falls back to the plain bounds, rather than generating nothing at all and
   // looking like a broken button.
@@ -86,7 +88,11 @@ export function generateCity(
     options.boundary && options.boundary.points.length >= 3 ? options.boundary : undefined;
   const { width, depth, centerX, centerZ } = normalizeBounds(bounds);
   const maxRadius = Math.max(1, Math.max(width, depth) / 2);
-  const water = parseWaterBodies(context.waterBodies ?? []);
+  // Water is generated *before* the split, because the split is already water-aware:
+  // the grid then stops at the banks of its own accord and bridges get sited. Doing it
+  // afterwards would mean cutting finished roads.
+  const generatedWater = generateWater(waterType, bounds, rng);
+  const water = [...parseWaterBodies(context.waterBodies ?? []), ...generatedWater];
 
   // Sector angles are drawn before anything else so the district layout is
   // stable regardless of how many blocks the split produces.
@@ -229,5 +235,6 @@ export function generateCity(
     roads: finalRoads,
     buildings: clampBuildingsUnderDecks(buildings, overpasses),
     overpasses,
+    waterBodies: generatedWater,
   };
 }

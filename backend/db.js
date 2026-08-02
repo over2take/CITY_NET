@@ -277,6 +277,10 @@ db.serialize(() => {
     points_json TEXT NOT NULL,
     map_scale_multiplier TEXT DEFAULT '[1]'
   )`);
+  // Tells a generated river from a lake the GM drew. Without it, regenerating an area
+  // cannot clear its own water without destroying hand-drawn work. Existing rows
+  // default to 0, so everything already on a map counts as hand-drawn.
+  db.run(`ALTER TABLE water_bodies ADD COLUMN generated INTEGER DEFAULT 0`, () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS player_accounts (
     username TEXT PRIMARY KEY,

@@ -1032,3 +1032,95 @@ describe('AdminPanel regenerate', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('AdminPanel water selector', () => {
+  const genProps = (over: any = {}): any => ({
+    ...baseProps(),
+    view: 'city_gen',
+    citySectionType: 'MIXED',
+    setCitySectionType: vi.fn(),
+    overpassDensity: 'normal',
+    setOverpassDensity: vi.fn(),
+    cityGenDrawMode: 'rect',
+    setCityGenDrawMode: vi.fn(),
+    genBoundaryTrail: [],
+    setGenBoundaryTrail: vi.fn(),
+    cityLayout: 'BSP',
+    setCityLayout: vi.fn(),
+    citySeed: '42',
+    setCitySeed: vi.fn(),
+    lastCitySeed: '',
+    setLastCitySeed: vi.fn(),
+    cityWater: 'NONE',
+    setCityWater: vi.fn(),
+    roadSelectionBounds: { min: { x: -300, z: -300 }, max: { x: 300, z: 300 } },
+    waterBodies: [],
+    locations: [],
+    roads: [],
+    refreshOverpasses: vi.fn(),
+    fetchWaterBodies: vi.fn(),
+    ...over,
+  });
+
+  const stubFetch = () => {
+    const mock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve([]) } as Response),
+    );
+    vi.stubGlobal('fetch', mock);
+    return mock;
+  };
+
+  it('offers every water type', () => {
+    render(<AdminPanel {...genProps()} />);
+    const select = screen.getByLabelText('WATER') as HTMLSelectElement;
+    expect([...select.options].map(o => o.value)).toEqual(['NONE', 'RIVER', 'COAST', 'LAKE']);
+  });
+
+  it('defaults to none, so existing generation is unchanged', () => {
+    // NONE doubles as the off switch, rather than a checkbox that could disagree
+    // with the selector.
+    render(<AdminPanel {...genProps()} />);
+    expect((screen.getByLabelText('WATER') as HTMLSelectElement).value).toBe('NONE');
+  });
+
+  it('reports a water choice', async () => {
+    const props = genProps();
+    render(<AdminPanel {...props} />);
+    await userEvent.selectOptions(screen.getByLabelText('WATER'), 'RIVER');
+    expect(props.setCityWater).toHaveBeenCalledWith('RIVER');
+  });
+
+  it('persists no water when set to none', async () => {
+    const mock = stubFetch();
+    render(<AdminPanel {...genProps({ cityWater: 'NONE' })} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+    expect(mock.mock.calls.filter(([u]) => String(u) === '/api/water')).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
+  it('persists a generated river, marked so a regenerate can clear it', async () => {
+    const mock = stubFetch();
+    render(<AdminPanel {...genProps({ cityWater: 'RIVER' })} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+
+    const posts = mock.mock.calls.filter(([u]) => String(u) === '/api/water');
+    expect(posts).toHaveLength(1);
+    const body = JSON.parse(String((posts[0][1] as RequestInit).body));
+    expect(body.generated).toBe(true);
+    expect(body.points.length).toBeGreaterThan(2);
+    vi.unstubAllGlobals();
+  });
+
+  it('saves the water before the roads it shaped', async () => {
+    const mock = stubFetch();
+    render(<AdminPanel {...genProps({ cityWater: 'RIVER' })} />);
+    await userEvent.click(screen.getByText('GENERATE_CITY_GRID'));
+
+    const urls = mock.mock.calls.map(([u]) => String(u));
+    const waterAt = urls.indexOf('/api/water');
+    const roadsAt = urls.indexOf('/api/roads');
+    expect(waterAt).toBeGreaterThanOrEqual(0);
+    if (roadsAt >= 0) expect(waterAt).toBeLessThan(roadsAt);
+    vi.unstubAllGlobals();
+  });
+});

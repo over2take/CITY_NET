@@ -29,6 +29,7 @@ export type { RoadSegment };
 import type { OverpassDensity, OverpassSpec } from './bridges';
 import type { Polygon } from './water';
 import type { LayoutType } from './layouts';
+import type { WaterType } from './waterGen';
 export type { OverpassDensity, OverpassSpec };
 
 /** Zoning preset chosen in the admin panel. */
@@ -76,6 +77,12 @@ export interface GenerateCityOptions {
   boundary?: Polygon;
   /** Street layout. Defaults to BSP, which is what generation has always produced. */
   layout?: LayoutType;
+  /**
+   * Water to generate before laying the city out. Defaults to NONE — generation has
+   * never produced water, and defaulting otherwise would put a river through the city
+   * of everyone already using the button.
+   */
+  water?: WaterType;
   /** When true, no roads are generated and road collision is skipped. */
   excludeRoads: boolean;
   /** How freely roads bridge the water they cross. Defaults to 'normal'. */
@@ -101,4 +108,6 @@ export interface GenerateCityResult {
   buildings: RawBuilding[];
   /** Bridges spanning water crossings that qualified. */
   overpasses: OverpassSpec[];
+  /** Water the run generated, for the caller to persist. Empty unless asked for. */
+  waterBodies: Polygon[];
 }

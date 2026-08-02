@@ -197,24 +197,44 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             db.run(`DELETE FROM ${table} WHERE id IN (${list.map(() => '?').join(',')})`, list);
           };
 
-          db.serialize(() => {
-            db.run('BEGIN TRANSACTION');
-            del('locations', ids);
-            del('roads', roadIds);
-            del('overpasses', overpassIds);
-            db.run('COMMIT', (err4) => {
-              if (err4) return res.status(500).json({ error: err4.message });
-              recordAction('region_purge', {
-                locations: doomed,
-                roads,
-                overpasses,
-              });
-              emitUpdate();
-              res.json({
-                locations: ids.length,
-                roads: roadIds.length,
-                overpasses: overpassIds.length,
-                keptNamed,
+          // Only water the generator made. A lake the GM drew is hand-placed work and
+          // survives a regenerate exactly as a named structure does.
+          db.all('SELECT * FROM water_bodies WHERE generated = 1', [], (err4, waterRows) => {
+            if (err4) return res.status(500).json({ error: err4.message });
+            const water = (waterRows || []).filter(w => {
+              let points;
+              try { points = JSON.parse(w.points_json); } catch { return false; }
+              if (!Array.isArray(points) || points.length === 0) return false;
+              // Its centroid decides, so a river trimmed at the region edge goes with
+              // the city it belonged to.
+              const cx = points.reduce((a, p) => a + p.x, 0) / points.length;
+              const cz = points.reduce((a, p) => a + p.z, 0) / points.length;
+              return inRegion(cx, cz);
+            });
+            const waterIds = water.map(w => w.id);
+
+            db.serialize(() => {
+              db.run('BEGIN TRANSACTION');
+              del('locations', ids);
+              del('roads', roadIds);
+              del('overpasses', overpassIds);
+              del('water_bodies', waterIds);
+              db.run('COMMIT', (err5) => {
+                if (err5) return res.status(500).json({ error: err5.message });
+                recordAction('region_purge', {
+                  locations: doomed,
+                  roads,
+                  overpasses,
+                  water,
+                });
+                emitUpdate();
+                res.json({
+                  locations: ids.length,
+                  roads: roadIds.length,
+                  overpasses: overpassIds.length,
+                  water: waterIds.length,
+                  keptNamed,
+                });
               });
             });
           });

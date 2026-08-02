@@ -130,14 +130,34 @@ describe('POST /api/locations/purge-region', () => {
     expect(await all(db, 'SELECT * FROM roads')).toHaveLength(1);
   });
 
-  it('never touches water or signs', async () => {
-    await run(db, `INSERT INTO water_bodies (points_json) VALUES (?)`,
+  it('never touches hand-drawn water or signs', async () => {
+    // A lake the GM drew is hand-placed work and survives exactly as a named
+    // structure does.
+    await run(db, `INSERT INTO water_bodies (points_json, generated) VALUES (?, 0)`,
       [JSON.stringify([{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 10 }])]);
     await run(db, `INSERT INTO signs (text, x, y, z) VALUES ('DOCKS', 5, 0, 5)`);
 
     await purge(app);
     expect(await all(db, 'SELECT * FROM water_bodies')).toHaveLength(1);
     expect(await all(db, 'SELECT * FROM signs')).toHaveLength(1);
+  });
+
+  it('clears water the generator made', async () => {
+    await run(db, `INSERT INTO water_bodies (points_json, generated) VALUES (?, 1)`,
+      [JSON.stringify([{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 10 }])]);
+
+    const res = await purge(app);
+    expect(res.body.water).toBe(1);
+    expect(await all(db, 'SELECT * FROM water_bodies')).toHaveLength(0);
+  });
+
+  it('leaves generated water outside the region alone', async () => {
+    await run(db, `INSERT INTO water_bodies (points_json, generated) VALUES (?, 1)`,
+      [JSON.stringify([{ x: 900, z: 900 }, { x: 950, z: 900 }, { x: 950, z: 950 }])]);
+
+    const res = await purge(app);
+    expect(res.body.water).toBe(0);
+    expect(await all(db, 'SELECT * FROM water_bodies')).toHaveLength(1);
   });
 
   it('clears exactly the drawn shape, not its bounding box', async () => {
