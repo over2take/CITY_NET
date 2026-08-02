@@ -14,7 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - **Drawn generation bounds** — the city generator gains a `DRAG_RECT` / `DRAW_AREA` toggle. `DRAW_AREA` traces a boundary the way water is drawn, and generation is confined to that shape: blocks centred outside it are dropped, road seams are clipped to it, and a footprint straddling its edge is rejected. A concave shape generates nothing in its notch, so an L or a crescent works as drawn. The traced outline stays on screen until GENERATE, unlike water, which saves immediately.
-- **Street layouts** — a `LAYOUT` selector offering four distinct city types. Everything downstream of the block list is layout-agnostic, so a layout only has to produce blocks and the roads between them.
+- **Street layouts** — a `LAYOUT` selector offering six distinct city types. Everything downstream of the block list is layout-agnostic, so a layout only has to produce blocks and the roads between them.
   - **`GRID`** — two perpendicular families of streets with avenues every fourth line. Reads as Manhattan or Chicago, and is genuinely distinct from the default, which always produces *irregular* rectangles however it is tuned. That road hierarchy is most of what makes a grid look designed rather than generated.
   - **`SUPERBLOCK`** — the same recursive split with a much larger floor: fewer roads, larger plots, open ground between them. Soviet microdistrict or corporate arcology.
   - **`RING`** — a beltway city, San Antonio being the reference: concentric loop roads with elevated arterials running out from downtown. The corners of a square selection are left empty on purpose, because a ring city is round.
