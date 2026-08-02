@@ -1809,8 +1809,8 @@ export function AdminPanel({
               onChange={e => setCitySeed?.(e.target.value)}
               style={{flex: 1, backgroundColor: '#222', color: 'var(--green)', border: '1px solid var(--green)', padding: '4px', fontSize: '0.7rem', fontFamily: 'monospace'}}
             />
-            <button className="utility-btn" title="ROLL A NEW SEED" style={{padding: '2px 10px'}}
-              onClick={() => setCitySeed?.('')}>⟲</button>
+            <button className="utility-btn" title="CLEAR SEED" style={{padding: '2px 10px'}}
+              onClick={() => setCitySeed?.('')}>🗑</button>
           </div>
           {lastCitySeed
             ? <p style={{fontSize: '0.65rem', opacity: 0.75, marginTop: '4px'}}>

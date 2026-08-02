@@ -811,10 +811,10 @@ describe('AdminPanel city seed', () => {
     expect(props.setCitySeed).toHaveBeenCalledWith('7');
   });
 
-  it('clears the field to roll a fresh seed', async () => {
+  it('clears the field, which is how a fresh seed is rolled', async () => {
     const props = genProps({ citySeed: '12345' });
     render(<AdminPanel {...props} />);
-    await userEvent.click(screen.getByTitle('ROLL A NEW SEED'));
+    await userEvent.click(screen.getByTitle('CLEAR SEED'));
     expect(props.setCitySeed).toHaveBeenCalledWith('');
   });
 
