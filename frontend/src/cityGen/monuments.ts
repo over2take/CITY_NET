@@ -8,11 +8,16 @@ import type { Block, RawBuilding, Rng } from './types';
  * across the city. Putting one on a roundabout produced a tower rising out of a traffic
  * island, which is not what a roundabout has in the middle of it.
  *
- * What a roundabout actually has is a column, a statue, a fountain, or a clock — a
- * couple of storeys at most, sized against the island rather than the city. Everything
- * here is proportional to the island span, so a small circus gets a small ornament and
- * a large one gets something worth looking at, with no absolute heights to go wrong
- * when the road widths are next retuned.
+ * Everything here is proportional to the island span, so a small circus gets a small
+ * ornament and a large one gets something worth looking at, with no absolute heights to
+ * go wrong when the road widths are next retuned.
+ *
+ * **On detail.** A first version was two stacked boxes and read as exactly that. The
+ * renderer supports more than a box — `cylinder`, `sphere`, `rhombus` (an octahedron),
+ * `pyramid` (a cone), a `polyCount` that turns a cylinder into a hexagonal prism at 6
+ * or a smooth column at 16, and all three rotation axes. Silhouette is what carries a
+ * monument at this size, so these use the lot: stepped plinths turned 45° against each
+ * other, rings of bollards, tapered shafts, finials.
  */
 
 /** Monument height as a multiple of the island span, per style. */
@@ -21,7 +26,19 @@ const STATUE_HEIGHT = 1.0;
 const FOUNTAIN_HEIGHT = 0.3;
 const CLOCK_HEIGHT = 1.5;
 
-export const MONUMENT_STYLE_COUNT = 4;
+export const MONUMENT_STYLE_COUNT = 6;
+
+/** Segments for a shape meant to read as round rather than faceted. */
+const SMOOTH = 16;
+
+/** Segments for a shape meant to read as cut stone. */
+const FACETED = 6;
+
+/** Right angle, for turning a flat cylinder into a disc facing sideways. */
+const QUARTER = Math.PI / 2;
+
+/** Eighth turn — a square rotated by this against another reads as an eight-pointed star. */
+const EIGHTH = Math.PI / 4;
 
 /**
  * Place one monument centred on the island.
@@ -35,82 +52,192 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
   const style = Math.floor(rng() * MONUMENT_STYLE_COUNT);
   const color = '';
   const { x, z } = block;
+  let rooted = false;
+
+  /** Emit a part, making the first one the unparented root. */
+  const part = (p: Partial<RawBuilding> & { y: number; width: number; height: number }) => {
+    const base: RawBuilding = {
+      name: '', x, z, depth: p.width, color, shape: 'box', polyCount: 5,
+      ...(p as object),
+    } as RawBuilding;
+    if (!rooted) {
+      base.description = '';
+      rooted = true;
+    } else {
+      base.parent_name = 'ROOT';
+    }
+    out.push(base);
+  };
+
+  /** Repeat something evenly around a circle — bollards, spouts, corner posts. */
+  const around = (count: number, radius: number, make: (px: number, pz: number, angle: number) => void) => {
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2;
+      make(x + Math.cos(a) * radius, z + Math.sin(a) * radius, a);
+    }
+  };
 
   if (style === 0) {
-    // Victory column: a stepped plinth carrying a slender shaft and a figure on top.
-    const baseW = span * 0.42;
-    const baseH = span * 0.16;
-    out.push({
-      name: '', description: '', x, y: 0, z,
-      width: baseW, depth: baseW, height: baseH,
-      color, shape: 'box',
+    // Victory column. Three plinth steps turned against each other, a fluted shaft, a
+    // capital, and a faceted finial — then a ring of bollards to give the base a skirt.
+    let y = 0;
+    const steps = [0.56, 0.46, 0.38];
+    steps.forEach((w, i) => {
+      const h = span * 0.05;
+      part({ y, width: span * w, height: h, rotation: i % 2 ? EIGHTH : 0 });
+      y += h;
     });
-    const shaftW = span * 0.14;
+
+    const shaftW = span * 0.13;
     const shaftH = span * COLUMN_HEIGHT * 0.42;
-    out.push({
-      name: '', x, y: baseH, z,
-      width: shaftW, depth: shaftW, height: shaftH,
-      color, shape: 'cylinder', parent_name: 'ROOT',
-    });
-    out.push({
-      name: '', x, y: baseH + shaftH, z,
-      width: shaftW * 1.6, depth: shaftW * 1.6, height: span * 0.22,
-      color, shape: 'pyramid', parent_name: 'ROOT',
-    });
+    part({ y, width: shaftW, height: shaftH, shape: 'cylinder', polyCount: SMOOTH });
+    y += shaftH;
+
+    part({ y, width: span * 0.2, height: span * 0.06, shape: 'cylinder', polyCount: SMOOTH });
+    y += span * 0.06;
+    part({ y, width: span * 0.17, height: span * 0.22, shape: 'rhombus' });
+
+    around(8, span * 0.42, (px, pz) =>
+      part({ x: px, z: pz, y: 0, width: span * 0.05, height: span * 0.09, shape: 'cylinder', polyCount: FACETED }));
     return;
   }
 
   if (style === 1) {
-    // Statue: a broad plinth and a figure, deliberately off-square so it reads as
-    // something facing a direction rather than a post.
+    // Statue: a plinth, then a figure assembled from a torso, a head and two arms, all
+    // turned to one bearing so it reads as facing somewhere rather than standing to
+    // attention. The arms are what stop it being a post on a box.
+    const facing = rng() * Math.PI * 2;
     const plinthW = span * 0.34;
-    const plinthH = span * STATUE_HEIGHT * 0.3;
-    out.push({
-      name: '', description: '', x, y: 0, z,
-      width: plinthW, depth: plinthW, height: plinthH,
-      color, shape: 'box',
+    const plinthH = span * STATUE_HEIGHT * 0.26;
+    part({ y: 0, width: plinthW, height: plinthH, rotation: facing });
+    part({ y: plinthH, width: plinthW * 1.12, height: span * 0.04, rotation: facing });
+
+    const deckY = plinthH + span * 0.04;
+    const torsoW = span * 0.13;
+    const torsoH = span * STATUE_HEIGHT * 0.42;
+    part({ y: deckY, width: torsoW, depth: torsoW * 0.62, height: torsoH, rotation: facing });
+
+    const headY = deckY + torsoH;
+    part({ y: headY, width: span * 0.09, height: span * 0.09, shape: 'sphere', polyCount: SMOOTH });
+
+    // One arm raised, one at rest — the asymmetry is most of the silhouette.
+    part({
+      x: x + Math.cos(facing + QUARTER) * torsoW * 0.7,
+      z: z + Math.sin(facing + QUARTER) * torsoW * 0.7,
+      y: deckY + torsoH * 0.45, width: span * 0.045, height: torsoH * 0.75,
+      rotation: facing, rotation_z: -EIGHTH,
     });
-    const figureW = span * 0.16;
-    out.push({
-      name: '', x, y: plinthH, z,
-      width: figureW, depth: figureW * 0.6, height: span * STATUE_HEIGHT * 0.7,
-      color, shape: 'box', parent_name: 'ROOT',
-      rotation: rng() * Math.PI * 2,
+    part({
+      x: x - Math.cos(facing + QUARTER) * torsoW * 0.7,
+      z: z - Math.sin(facing + QUARTER) * torsoW * 0.7,
+      y: deckY + torsoH * 0.2, width: span * 0.045, height: torsoH * 0.6,
+      rotation: facing, rotation_z: EIGHTH * 0.4,
     });
     return;
   }
 
   if (style === 2) {
-    // Fountain: a wide, low basin with a small jet at the centre. The only style that
-    // is broader than it is tall, which is what keeps a run of roundabouts from all
-    // reading the same.
-    const basinW = span * 0.7;
-    out.push({
-      name: '', description: '', x, y: 0, z,
-      width: basinW, depth: basinW, height: span * FOUNTAIN_HEIGHT,
-      color, shape: 'cylinder',
-    });
-    out.push({
-      name: '', x, y: span * FOUNTAIN_HEIGHT, z,
-      width: span * 0.12, depth: span * 0.12, height: span * 0.5,
-      color, shape: 'cylinder', parent_name: 'ROOT',
-    });
+    // Fountain: three tiers of narrowing basins with a jet through the middle and
+    // spouts around the rim. The only style broader than it is tall, which is what
+    // keeps a run of roundabouts from all reading the same.
+    const basinW = span * 0.78;
+    const basinH = span * FOUNTAIN_HEIGHT * 0.4;
+    part({ y: 0, width: basinW, height: basinH, shape: 'cylinder', polyCount: SMOOTH });
+    part({ y: basinH, width: basinW * 0.92, height: span * 0.02, shape: 'cylinder', polyCount: SMOOTH });
+
+    let y = basinH + span * 0.02;
+    const tiers = [0.36, 0.22];
+    for (const w of tiers) {
+      part({ y, width: span * 0.08, height: span * 0.12, shape: 'cylinder', polyCount: FACETED });
+      y += span * 0.12;
+      part({ y, width: span * w, height: span * 0.05, shape: 'cylinder', polyCount: SMOOTH });
+      y += span * 0.05;
+    }
+
+    part({ y, width: span * 0.05, height: span * 0.22, shape: 'cylinder', polyCount: SMOOTH });
+    y += span * 0.22;
+    part({ y, width: span * 0.1, height: span * 0.1, shape: 'sphere', polyCount: SMOOTH });
+
+    around(6, basinW * 0.36, (px, pz) =>
+      part({ x: px, z: pz, y: basinH, width: span * 0.05, height: span * 0.1, shape: 'cylinder', polyCount: FACETED }));
     return;
   }
 
-  // Clock tower: the tallest of the four, and still under one and a half island spans.
-  const towerW = span * 0.26;
-  const towerH = span * CLOCK_HEIGHT * 0.8;
-  out.push({
-    name: '', description: '', x, y: 0, z,
-    width: towerW, depth: towerW, height: towerH,
-    color, shape: 'box',
-  });
-  out.push({
-    name: '', x, y: towerH, z,
-    width: towerW * 1.3, depth: towerW * 1.3, height: span * 0.25,
-    color, shape: 'pyramid', parent_name: 'ROOT',
-  });
+  if (style === 3) {
+    // Clock tower: a tapering stack with a clock face on each side, a belfry and a
+    // spire. The faces are flat cylinders stood on edge — the one place the rotation
+    // axes earn their keep, since a disc has to face outward to read as a clock.
+    let y = 0;
+    part({ y, width: span * 0.34, height: span * 0.08 });
+    y += span * 0.08;
+    part({ y, width: span * 0.28, height: span * 0.05, rotation: EIGHTH });
+    y += span * 0.05;
+
+    const shaftW = span * 0.24;
+    const shaftH = span * CLOCK_HEIGHT * 0.62;
+    part({ y, width: shaftW, height: shaftH });
+
+    const faceY = y + shaftH * 0.78;
+    const faceR = shaftW * 0.52;
+    const faceW = span * 0.15;
+    // Two on the X faces, two on the Z faces; a cylinder's axis is Y, so each is
+    // tipped a quarter turn about the axis that leaves it facing outward.
+    part({ x: x + faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', polyCount: SMOOTH, rotation_z: QUARTER });
+    part({ x: x - faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', polyCount: SMOOTH, rotation_z: QUARTER });
+    part({ z: z + faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', polyCount: SMOOTH, rotation_x: QUARTER });
+    part({ z: z - faceR, y: faceY, width: faceW, height: span * 0.02, shape: 'cylinder', polyCount: SMOOTH, rotation_x: QUARTER });
+
+    y += shaftH;
+    part({ y, width: span * 0.3, height: span * 0.1 });
+    y += span * 0.1;
+    part({ y, width: span * 0.32, height: span * 0.26, shape: 'pyramid', polyCount: 4, rotation: EIGHTH });
+    y += span * 0.26;
+    part({ y, width: span * 0.07, height: span * 0.12, shape: 'rhombus' });
+    return;
+  }
+
+  if (style === 4) {
+    // Triumphal arch: two piers carrying a lintel, with an attic above. Reads as a gate
+    // rather than an object, which is a different silhouette from everything else here
+    // and the one you can see through.
+    const facing = Math.floor(rng() * 4) * QUARTER;
+    const gap = span * 0.24;
+    const pierW = span * 0.15;
+    const pierH = span * 0.52;
+    const dx = Math.cos(facing);
+    const dz = Math.sin(facing);
+
+    part({ x: x + dx * gap, z: z + dz * gap, y: 0, width: pierW, height: pierH, rotation: facing });
+    part({ x: x - dx * gap, z: z - dz * gap, y: 0, width: pierW, height: pierH, rotation: facing });
+
+    const spanW = gap * 2 + pierW;
+    part({ y: pierH, width: spanW, depth: pierW, height: span * 0.13, rotation: facing });
+    part({ y: pierH + span * 0.13, width: spanW * 0.82, depth: pierW * 0.9, height: span * 0.16, rotation: facing });
+    part({ y: pierH + span * 0.29, width: span * 0.13, height: span * 0.18, shape: 'rhombus' });
+
+    around(4, span * 0.4, (px, pz) =>
+      part({ x: px, z: pz, y: 0, width: span * 0.05, height: span * 0.1, shape: 'cylinder', polyCount: FACETED }));
+    return;
+  }
+
+  // Obelisk: a squat base under a shaft that tapers in three turned stages to a point.
+  // The turn between stages is what keeps a plain taper from reading as one long box.
+  let y = 0;
+  part({ y, width: span * 0.36, height: span * 0.07 });
+  y += span * 0.07;
+  part({ y, width: span * 0.26, height: span * 0.08, rotation: EIGHTH });
+  y += span * 0.08;
+
+  const stages = [0.17, 0.135, 0.1];
+  for (let i = 0; i < stages.length; i++) {
+    const h = span * 0.29;
+    part({ y, width: span * stages[i], height: h, rotation: i % 2 ? EIGHTH : 0 });
+    y += h;
+  }
+  part({ y, width: span * 0.1, height: span * 0.16, shape: 'pyramid', polyCount: 4 });
+
+  around(4, span * 0.34, (px, pz) =>
+    part({ x: px, z: pz, y: 0, width: span * 0.06, height: span * 0.14, shape: 'rhombus' }));
 }
 
-export { COLUMN_HEIGHT, STATUE_HEIGHT, FOUNTAIN_HEIGHT, CLOCK_HEIGHT };
+export { COLUMN_HEIGHT, STATUE_HEIGHT, FOUNTAIN_HEIGHT, CLOCK_HEIGHT, SMOOTH, FACETED };

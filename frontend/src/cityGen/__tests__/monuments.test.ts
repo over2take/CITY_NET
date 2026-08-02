@@ -84,13 +84,17 @@ describe('generateMonument', () => {
     }
   });
 
-  it('stacks its parts without gaps or floating', () => {
+  it('leaves nothing floating', () => {
     // y is the bottom of a mesh, so a part resting on another has its y set to that
     // one's height. Getting this wrong is what left skyscrapers hanging in mid-air.
+    // A part is anchored if it stands on the ground or if its base falls within the
+    // vertical extent of another part — the second case covers what is attached to a
+    // side rather than stacked on top, such as a clock face or a raised arm.
     for (const parts of allStyles()) {
-      for (const p of parts.slice(1)) {
-        const supported = parts.some(q => Math.abs(q.y + q.height - p.y) < 1e-6);
-        expect(supported, `part at y=${p.y}`).toBe(true);
+      for (const p of parts) {
+        if (p.y === 0) continue;
+        const anchored = parts.some(q => q !== p && p.y >= q.y - 1e-6 && p.y <= q.y + q.height + 1e-6);
+        expect(anchored, `part at y=${p.y}`).toBe(true);
       }
     }
   });
@@ -104,13 +108,33 @@ describe('generateMonument', () => {
     }
   });
 
-  it('centres on the island', () => {
+  it('keeps every part within the island', () => {
+    // Parts are no longer all on the centreline — bollards, spouts and arch piers sit
+    // out from it — so what matters is that the whole thing stays off the ring road.
     for (const parts of allStyles()) {
       for (const p of parts) {
-        expect(p.x).toBeCloseTo(0);
-        expect(p.z).toBeCloseTo(0);
+        const reach = Math.max(Math.abs(p.x), Math.abs(p.z)) + Math.max(p.width, p.depth) / 2;
+        expect(reach, p.shape).toBeLessThanOrEqual(SPAN / 2);
       }
     }
+  });
+
+  it('is built from more than stacked boxes', () => {
+    // The complaint that prompted this: two boxes on top of each other read as two
+    // boxes on top of each other. Silhouette is what carries an object this small.
+    for (const parts of allStyles()) {
+      const shapes = new Set(parts.map(p => p.shape));
+      expect(shapes.size, [...shapes].join(',')).toBeGreaterThan(1);
+      expect(parts.length).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it('varies its silhouette between styles', () => {
+    // If every style used the same shapes in the same proportions there would be no
+    // point having six of them.
+    const signatures = allStyles().map(parts =>
+      [...parts.map(p => p.shape)].sort().join('|') + ':' + parts.length);
+    expect(new Set(signatures).size).toBe(MONUMENT_STYLE_COUNT);
   });
 
   it('offers visibly different styles', () => {

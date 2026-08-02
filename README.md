@@ -412,7 +412,7 @@ CITY_NET/
 │   │   │   ├── zoning.ts       # Sector layout, concentric-ring zone assignment, park probability, plot aspect clamp
 │   │   │   ├── parks.ts        # Holotree park plots and their optional ponds; a pond is elliptical so it fills a long thin plot, and is returned rather than pushed as a building
 │   │   │   ├── landmarks.ts    # The four hero-building styles and their siting rule
-│   │   │   ├── monuments.ts    # Four small civic ornaments for a roundabout island — column, statue, fountain, clock — sized against the island rather than the skyline
+│   │   │   ├── monuments.ts    # Six small civic ornaments for a roundabout island — column, statue, fountain, clock tower, arch, obelisk — multi-part silhouettes using the renderer's full shape set, sized against the island rather than the skyline
 │   │   │   ├── water.ts        # Water polygon parsing, point/footprint tests, submerged spans, and one clipper shared by water and drawn bounds (keepInside flips which side survives)
 │   │   │   ├── waterGen.ts     # Generated rivers, coastlines and lakes; runs before the split so the grid stops at the banks and bridges get sited. NONE is both the default and the off switch
 │   │   │   ├── shoreline.ts    # Waterfront roads offset onto land; snaps approach ends onto them
