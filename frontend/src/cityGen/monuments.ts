@@ -28,6 +28,18 @@ const CLOCK_HEIGHT = 1.5;
 
 export const MONUMENT_STYLE_COUNT = 6;
 
+/**
+ * Muted green, so a monument sits back into the city rather than glowing out of it.
+ *
+ * The renderer resolves a part's colour as `(p.color && p.color !== '#00ff00') ? p.color
+ * : district_color ?? theme.primary`. Leaving it empty — as the landmark styles do —
+ * lands on `theme.primary`, full brightness. That is survivable on a single large mass
+ * but not here: a monument packs six to fourteen parts into a few units, and the
+ * coincident wireframe edges stack into a bright blob beside neighbours built from one
+ * or two. An explicit colour is used verbatim, which is the only way to opt out.
+ */
+const MONUMENT_COLOR = '#00aa33';
+
 /** Segments for a shape meant to read as round rather than faceted. */
 const SMOOTH = 16;
 
@@ -45,12 +57,12 @@ const EIGHTH = Math.PI / 4;
  *
  * Parts follow the same convention as the landmark styles: a single unparented root
  * first, then `ROOT` children the caller groups under it once the root has an id.
- * Colour is left empty — the renderer picks its own from whether the structure carries
- * data, so anything set here would be discarded.
+ * Every part carries an explicit colour rather than deferring to the theme; see
+ * `MONUMENT_COLOR` for why.
  */
 export function generateMonument(block: Block, span: number, out: RawBuilding[], rng: Rng): void {
   const style = Math.floor(rng() * MONUMENT_STYLE_COUNT);
-  const color = '';
+  const color = MONUMENT_COLOR;
   const { x, z } = block;
   let rooted = false;
 
@@ -240,4 +252,4 @@ export function generateMonument(block: Block, span: number, out: RawBuilding[],
     part({ x: px, z: pz, y: 0, width: span * 0.06, height: span * 0.14, shape: 'rhombus' }));
 }
 
-export { COLUMN_HEIGHT, STATUE_HEIGHT, FOUNTAIN_HEIGHT, CLOCK_HEIGHT, SMOOTH, FACETED };
+export { COLUMN_HEIGHT, STATUE_HEIGHT, FOUNTAIN_HEIGHT, CLOCK_HEIGHT, SMOOTH, FACETED, MONUMENT_COLOR };

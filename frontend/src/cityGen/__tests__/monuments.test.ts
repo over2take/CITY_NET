@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateMonument, generateLandmark, MONUMENT_STYLE_COUNT, SpatialGrid } from '../index';
+import { generateMonument, generateLandmark, MONUMENT_STYLE_COUNT, MONUMENT_COLOR, SpatialGrid } from '../index';
 import type { Block, RawBuilding } from '../types';
 
 /**
@@ -141,6 +141,21 @@ describe('generateMonument', () => {
     // A run of roundabouts all carrying the same column would read worse than none.
     const shapes = allStyles().map(parts => topOf(parts).toFixed(2));
     expect(new Set(shapes).size).toBeGreaterThan(1);
+  });
+
+  it('carries an explicit colour so it does not glow at theme brightness', () => {
+    // The renderer only honours a part's colour when it is set and is not the '#00ff00'
+    // sentinel; anything else falls through to theme.primary at full brightness. On a
+    // single large mass that is fine, but a monument packs a dozen parts into a few
+    // units and the stacked wireframe edges read as a bright blob beside its
+    // neighbours.
+    for (const parts of allStyles()) {
+      for (const p of parts) {
+        expect(p.color).toBe(MONUMENT_COLOR);
+        expect(p.color).not.toBe('');
+        expect(p.color).not.toBe('#00ff00');
+      }
+    }
   });
 
   it('reproduces from a seed', () => {
