@@ -16,6 +16,7 @@ import {
 } from './zoning';
 import { generatePark } from './parks';
 import { shouldPlaceLandmark, generateLandmark } from './landmarks';
+import { generateMonument } from './monuments';
 import { parseWaterBodies, pointInWater, footprintInWater, clipSegmentToBoundary } from './water';
 import type { Polygon } from './water';
 import { findBridges } from './bridges';
@@ -37,6 +38,7 @@ export { SpatialGrid, createIsBlocked, footprintOnRoad, clampBuildingsUnderDecks
 export * from './zoning';
 export { generatePark } from './parks';
 export { shouldPlaceLandmark, generateLandmark } from './landmarks';
+export * from './monuments';
 export * from './water';
 export * from './layouts';
 export * from './rng';
@@ -276,7 +278,10 @@ export function generateCity(
     const wantsMonument = rng() < ISLAND_MONUMENT_CHANCE;
     const monument = wantsMonument && span >= MIN_MONUMENT_SPAN;
     if (monument) {
-      generateLandmark(island, span, span, buildings, grid, rng);
+      // Not generateLandmark: those are 150-to-220-unit hero buildings sized to anchor
+      // a skyline, and one on a traffic island is a tower growing out of a roundabout.
+      // A monument is sized against the island instead.
+      generateMonument(island, span, buildings, rng);
     } else {
       generatePark(island, span, span, buildings, isBlocked, rng, false);
     }
