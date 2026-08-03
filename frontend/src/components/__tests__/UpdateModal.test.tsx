@@ -122,7 +122,12 @@ describe('UpdateModal — non-docker install', () => {
 
 describe('UpdateModal — Update Now', () => {
   it('shows updating status message after clicking UPDATE NOW', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => (String(url).includes('/api/update/status')
+        ? { phase: 'idle' }
+        : { version: '1.8.0', bootId: 'boot-1' }),
+    })));
     render(<UpdateModal {...baseProps} isDocker={true} />);
     await userEvent.click(screen.getByText('UPDATE NOW'));
     await waitFor(() => {
@@ -131,7 +136,12 @@ describe('UpdateModal — Update Now', () => {
   });
 
   it('hides action buttons while updating', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => (String(url).includes('/api/update/status')
+        ? { phase: 'idle' }
+        : { version: '1.8.0', bootId: 'boot-1' }),
+    })));
     render(<UpdateModal {...baseProps} isDocker={true} />);
     await userEvent.click(screen.getByText('UPDATE NOW'));
     await waitFor(() => {
@@ -141,7 +151,11 @@ describe('UpdateModal — Update Now', () => {
   });
 
   it('shows failure message if update fetch throws', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')));
+    vi.stubGlobal('fetch', vi.fn(async (url: string, opts: any) => {
+      if (String(url).includes('/api/update/status')) return { ok: true, json: async () => ({ phase: 'idle' }) };
+      if (opts?.method === 'POST') throw new Error('network error');
+      return { ok: true, json: async () => ({ version: '1.8.0', bootId: 'boot-1' }) };
+    }));
     render(<UpdateModal {...baseProps} isDocker={true} />);
     await userEvent.click(screen.getByText('UPDATE NOW'));
     await waitFor(() => {
@@ -150,12 +164,66 @@ describe('UpdateModal — Update Now', () => {
     expect(screen.getByText(/network error/)).toBeInTheDocument();
   });
 
+  it('detects a container too old to update itself and gives the host command', async () => {
+    // A stale backend has no /api/update/status. Its /api/update answers "Update
+    // started" and then does nothing, so without this probe the client waits six
+    // minutes to learn what can be known immediately.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/update/status')) return { ok: false, status: 404, json: async () => ({}) };
+      return { ok: true, json: async () => ({ version: '1.7.0' }) };
+    }));
+
+    render(<UpdateModal {...baseProps} isDocker={true} />);
+    await userEvent.click(screen.getByText('UPDATE NOW'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/CANNOT UPDATE ITSELF/)).toBeInTheDocument();
+    });
+    expect(screen.getByText('docker compose pull && docker compose up -d')).toBeInTheDocument();
+  });
+
+  it('treats an index.html fallback as a stale server, not a modern one', async () => {
+    // A setup that serves the SPA for unknown paths answers 200 with a page, which a
+    // status-code check alone would read as "this server has the new updater".
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/update/status')) {
+        return { ok: true, json: async () => { throw new Error('not json'); } };
+      }
+      return { ok: true, json: async () => ({ version: '1.7.0' }) };
+    }));
+
+    render(<UpdateModal {...baseProps} isDocker={true} />);
+    await userEvent.click(screen.getByText('UPDATE NOW'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/CANNOT UPDATE ITSELF/)).toBeInTheDocument();
+    });
+  });
+
+  it('does not send the update to a server that cannot run it', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes('/api/update/status')) return { ok: false, status: 404, json: async () => ({}) };
+      return { ok: true, json: async () => ({ version: '1.7.0' }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<UpdateModal {...baseProps} isDocker={true} />);
+    await userEvent.click(screen.getByText('UPDATE NOW'));
+    await waitFor(() => expect(screen.getByText(/CANNOT UPDATE ITSELF/)).toBeInTheDocument());
+
+    const posted = fetchMock.mock.calls.some(([u, o]: any[]) => String(u).endsWith('/api/update') && o?.method === 'POST');
+    expect(posted).toBe(false);
+  });
+
   it('reports why the server refused, rather than waiting for a restart', async () => {
     // Preflight rejects a container that cannot possibly update — most often one started
     // before the compose file mounted itself. Previously the client ignored the response
     // entirely and polled for a version change that was never coming, which is how an
     // instance sits on WAITING FOR SERVER indefinitely.
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/update/status')) {
+        return { ok: true, json: async () => ({ phase: 'idle' }) };
+      }
       if (String(url).includes('/api/version')) {
         return { ok: true, json: async () => ({ version: '1.8.0', bootId: 'boot-1' }) };
       }
@@ -176,7 +244,11 @@ describe('UpdateModal — Update Now', () => {
   });
 
   it('offers a way back after a failure instead of stranding the modal', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')));
+    vi.stubGlobal('fetch', vi.fn(async (url: string, opts: any) => {
+      if (String(url).includes('/api/update/status')) return { ok: true, json: async () => ({ phase: 'idle' }) };
+      if (opts?.method === 'POST') throw new Error('network error');
+      return { ok: true, json: async () => ({ version: '1.8.0', bootId: 'boot-1' }) };
+    }));
     render(<UpdateModal {...baseProps} isDocker={true} />);
     await userEvent.click(screen.getByText('UPDATE NOW'));
     await waitFor(() => expect(screen.getByText('BACK')).toBeInTheDocument());

@@ -14,6 +14,7 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
   const [phase, setPhase] = useState<'idle' | 'updating' | 'failed' | 'done'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
   const [detail, setDetail] = useState('');
+  const [command, setCommand] = useState('');
 
   // Draggable
   const modalRef = useRef<HTMLDivElement>(null);
@@ -50,10 +51,51 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
    */
   const DEADLINE_MS = 6 * 60 * 1000;
 
+  /** Long enough that a normal pull has not finished, short enough to reassure. */
+  const REASSURE_MS = 45 * 1000;
+
+  /** What to run on the host when the container cannot update itself. */
+  const MANUAL_COMMAND = 'docker compose pull && docker compose up -d';
+
+  /**
+   * Does the server behind this page have the self-checking updater?
+   *
+   * A container from before it has no `/api/update/status`, and asking is the one
+   * reliable way to find out — its `/api/update` cheerfully answers "Update started"
+   * and then does nothing, which is the whole failure being guarded against here.
+   *
+   * The shape is checked, not just the status code: a setup that serves index.html for
+   * unknown paths would otherwise answer 200 with a page and look modern.
+   */
+  const hasModernUpdater = async () => {
+    try {
+      const res = await fetch('/api/update/status');
+      if (!res.ok) return false;
+      const data = await res.json();
+      return typeof data?.phase === 'string';
+    } catch {
+      return false;
+    }
+  };
+
   const handleUpdate = async () => {
     setPhase('updating');
-    setStatusMsg('UPDATE IN PROGRESS — WAITING FOR SERVER...');
+    setStatusMsg('CHECKING SERVER...');
     setDetail('');
+
+    if (!(await hasModernUpdater())) {
+      // Told immediately rather than after a six-minute wait for a restart that this
+      // container was never going to perform.
+      setPhase('failed');
+      setStatusMsg('THIS CONTAINER CANNOT UPDATE ITSELF');
+      setDetail('It was built before the self-updating backend, so the in-app update would '
+        + 'report success and then do nothing. Run this on the host, in the folder holding '
+        + 'docker-compose.yml — after that, in-app updates work.');
+      setCommand(MANUAL_COMMAND);
+      return;
+    }
+
+    setStatusMsg('UPDATE IN PROGRESS — WAITING FOR SERVER...');
 
     let bootId = '';
     try {
@@ -79,8 +121,12 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
       return;
     }
 
-    const deadline = Date.now() + DEADLINE_MS;
+    const started = Date.now();
+    const deadline = started + DEADLINE_MS;
     const poll = async () => {
+      if (Date.now() - started > REASSURE_MS) {
+        setStatusMsg('STILL WORKING — PULLING IMAGES, THIS CAN TAKE A FEW MINUTES...');
+      }
       // The server reports its own failures now, so ask before assuming it is just slow.
       try {
         const st = await (await fetch('/api/update/status')).json();
@@ -109,8 +155,9 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
       if (Date.now() > deadline) {
         setPhase('failed');
         setStatusMsg('UPDATE TIMED OUT');
-        setDetail('The server did not come back within six minutes. It may still be pulling — '
-          + 'check "docker compose ps" on the host, and backend/data/update.log for what happened.');
+        setDetail('The server did not come back within six minutes. Check backend/data/update.log '
+          + 'for what happened, then recreate the stack from the host:');
+        setCommand(MANUAL_COMMAND);
         return;
       }
       setTimeout(poll, 3000);
@@ -221,8 +268,19 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
           <>
             <div style={{ marginTop: '16px', fontSize: '0.65rem', color: 'var(--danger, #ff4444)' }}>{statusMsg}</div>
             <div style={{ marginTop: '6px', fontSize: '0.6rem', opacity: 0.75, lineHeight: 1.5 }}>{detail}</div>
+            {command && (
+              <div
+                style={{
+                  marginTop: '8px', padding: '6px 8px', fontSize: '0.6rem',
+                  border: '1px solid var(--green, #00ff88)', background: 'rgba(0,0,0,0.4)',
+                  userSelect: 'all', wordBreak: 'break-all',
+                }}
+              >
+                {command}
+              </div>
+            )}
             <div style={btnRow}>
-              <button className="modal-btn" onClick={() => setPhase('idle')}>BACK</button>
+              <button className="modal-btn" onClick={() => { setPhase('idle'); setCommand(''); }}>BACK</button>
               <button className="modal-btn muted" onClick={onDismiss}>CLOSE</button>
             </div>
           </>
