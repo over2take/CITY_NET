@@ -1,12 +1,18 @@
 name: CI Tests
 
 on:
-  # Runs tests whenever someone opens or updates a Pull Request targeting 'main'
+  # Runs tests whenever someone opens or updates a Pull Request targeting 'main' or
+  # 'dev' — the integration branch that publishes development images.
   pull_request:
     branches:
       - main
-  
-  # Runs tests when code is merged or pushed directly to 'main'
+      - dev
+
+  # Runs tests when code is merged or pushed directly to 'main'.
+  #
+  # Not 'dev': a push there triggers Dev Build to Docker Hub, which runs both suites
+  # itself before publishing. Adding it here would run the same tests twice on every
+  # dev commit for no extra signal.
   push:
     branches:
       - main
