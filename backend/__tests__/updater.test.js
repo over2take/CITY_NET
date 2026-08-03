@@ -55,20 +55,25 @@ describe('isNewerVersion', () => {
   });
 });
 
-describe('dev channel', () => {
-  it('is off unless explicitly turned on', () => {
-    // A dev build is unreleased code. Nobody should land on one by leaving a value out.
-    expect(updater.devChannelEnabled({})).toBe(false);
-    expect(updater.devChannelEnabled({ DEV: 'false' })).toBe(false);
-    expect(updater.devChannelEnabled({ DEV: '' })).toBe(false);
-    expect(updater.devChannelEnabled({ DEV: '1' })).toBe(false);
-    expect(updater.devChannelEnabled({ DEV: 'yes' })).toBe(false);
+describe('release channel', () => {
+  it('is stable unless the operator points it elsewhere', () => {
+    // Dev builds are unreleased code. Nobody should arrive on one by omission.
+    expect(updater.imageTag({})).toBe('latest');
+    expect(updater.imageTag({ IMAGE_TAG: '' })).toBe('latest');
+    expect(updater.allowsDevBuilds({})).toBe(false);
+    expect(updater.allowsDevBuilds({ IMAGE_TAG: 'latest' })).toBe(false);
   });
 
-  it('turns on for true, whatever the casing or padding', () => {
-    expect(updater.devChannelEnabled({ DEV: 'true' })).toBe(true);
-    expect(updater.devChannelEnabled({ DEV: 'TRUE' })).toBe(true);
-    expect(updater.devChannelEnabled({ DEV: ' true ' })).toBe(true);
+  it('follows dev builds only when pointed at the dev images', () => {
+    // The same setting compose resolves, so what is offered and what is installed
+    // cannot disagree. A separate boolean alongside this produced three contradictory
+    // states, each needing a guard; none of them is expressible now.
+    expect(updater.allowsDevBuilds({ IMAGE_TAG: 'dev' })).toBe(true);
+  });
+
+  it('treats a pinned version tag as stable', () => {
+    // Pinning 1.8.1 is a legitimate thing to do and is not a dev channel.
+    expect(updater.allowsDevBuilds({ IMAGE_TAG: '1.8.1' })).toBe(false);
   });
 
   it('hides dev tags from the stable channel', () => {
@@ -133,85 +138,6 @@ describe('dev version ordering', () => {
 
   it('offers no update between identical dev builds', () => {
     expect(updater.isNewerVersion('1.9.0-dev', '1.9.0-dev')).toBe(false);
-  });
-});
-
-describe('channel mismatch', () => {
-  it('is silent when the channel is consistent', () => {
-    expect(updater.channelMismatch({ DEV: 'false', IMAGE_TAG: 'latest' })).toBeNull();
-    expect(updater.channelMismatch({ DEV: 'true', IMAGE_TAG: 'dev' })).toBeNull();
-    expect(updater.channelMismatch({})).toBeNull();
-  });
-
-  it('catches DEV=true against a stable image tag', () => {
-    // The state a user can easily land in: told about 1.9.0-dev, handed the stable
-    // image, and offered the same dev version again on the next check for ever, since
-    // compose is what decides which image is actually pulled.
-    const problem = updater.channelMismatch({ DEV: 'true', IMAGE_TAG: 'latest' });
-    expect(problem).toContain('IMAGE_TAG');
-    expect(problem).toContain('latest');
-  });
-
-  it('catches DEV=true with IMAGE_TAG left unset, which defaults to latest', () => {
-    expect(updater.channelMismatch({ DEV: 'true' })).not.toBeNull();
-  });
-
-  it('mentions the root .env, which is what compose actually reads', () => {
-    // Setting IMAGE_TAG only in backend/.env is the second way into this state:
-    // compose interpolates from the file beside docker-compose.yml, not from env_file.
-    const problem = updater.channelMismatch({ DEV: 'true', IMAGE_TAG: 'latest' });
-    expect(problem).toMatch(/docker-compose\.yml/);
-  });
-
-  it('stops offering dev versions until intent and capability agree', () => {
-    // Capability wins over intent. Offering something that cannot be installed is worse
-    // than not offering it, because it never resolves.
-    expect(updater.shouldOfferDev({ DEV: 'true', IMAGE_TAG: 'dev' })).toBe(true);
-    expect(updater.shouldOfferDev({ DEV: 'true', IMAGE_TAG: 'latest' })).toBe(false);
-    expect(updater.shouldOfferDev({ DEV: 'true' })).toBe(false);
-    expect(updater.shouldOfferDev({ DEV: 'false', IMAGE_TAG: 'dev' })).toBe(false);
-  });
-
-  it('catches the reverse mismatch, which is the quieter of the two', () => {
-    // IMAGE_TAG=dev with DEV=false filters dev tags out of the check, so a *release* is
-    // offered and whatever ":dev" currently points at gets installed under its name.
-    // Version and boot id both change, so the update reports success — and the operator
-    // believes they are on stable while running dev.
-    const problem = updater.channelMismatch({ DEV: 'false', IMAGE_TAG: 'dev' });
-    expect(problem).not.toBeNull();
-    expect(problem).toMatch(/DEV=true/);
-    expect(problem).toMatch(/IMAGE_TAG=latest/);
-  });
-
-  it('suspends updates entirely when nothing can be offered honestly', () => {
-    // Suppressing only dev offers is enough the other way round, because a stable offer
-    // does install correctly from a stable tag. Here every offer would be a lie.
-    expect(updater.shouldOfferUpdates({ DEV: 'false', IMAGE_TAG: 'dev' })).toBe(false);
-    expect(updater.shouldOfferUpdates({ DEV: 'true', IMAGE_TAG: 'latest' })).toBe(true);
-    expect(updater.shouldOfferUpdates({ DEV: 'true', IMAGE_TAG: 'dev' })).toBe(true);
-    expect(updater.shouldOfferUpdates({ DEV: 'false', IMAGE_TAG: 'latest' })).toBe(true);
-  });
-
-  it('names both ways out of the reverse mismatch', () => {
-    // Either direction is a legitimate intention; the point is only that they agree.
-    const problem = updater.channelMismatch({ DEV: 'false', IMAGE_TAG: 'dev' });
-    expect(problem).toContain('DEV=true to follow dev builds');
-    expect(problem).toContain('IMAGE_TAG=latest to return to stable');
-  });
-
-  it('warns at boot, where a config error belongs', () => {
-    // The update modal only appears when there is an update, and a suppressed dev
-    // channel is usually exactly why there is not one.
-    const logged = [];
-    updater.warnOnChannelMismatch((m) => logged.push(m), { DEV: 'true', IMAGE_TAG: 'latest' });
-    expect(logged).toHaveLength(1);
-    expect(logged[0]).toContain('[update]');
-  });
-
-  it('says nothing at boot when the channel is consistent', () => {
-    const logged = [];
-    updater.warnOnChannelMismatch((m) => logged.push(m), { DEV: 'true', IMAGE_TAG: 'dev' });
-    expect(logged).toHaveLength(0);
   });
 });
 

@@ -61,9 +61,6 @@ require('./sockets')(io, db, { elevatedUsers, ...helpers });
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
-  // A contradictory release channel is a config error, and the log is where a config
-  // error belongs — the update modal only shows when there is an update to show.
-  require('./updater').warnOnChannelMismatch();
   if (process.env.ADMIN_PASS === 'cyberpunk_password' || !process.env.ADMIN_PASS) {
     console.warn('\x1b[33m⚠️  WARNING: Default admin password in use. Set ADMIN_PASS in your .env file.\x1b[0m');
   }

@@ -243,7 +243,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           // parsed to NaN, which made the comparator return NaN and left the sort
           // order undefined — one dev tag on the registry could stop stable users
           // being told about releases at all.
-          const allowDev = updater.shouldOfferDev();
+          const allowDev = updater.allowsDevBuilds();
           const versionTags = data.results
             ?.filter(tag => updater.isVersionTag(tag.name, allowDev))
             .map(tag => tag.name)
@@ -251,26 +251,15 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           const latestTag = versionTags[0] || 'unknown';
           // Strictly newer, not merely different. Comparing with !== offers a
           // downgrade whenever the published tag trails the running one.
-          // A contradictory channel installs something other than what is offered, so
-          // in the direction where nothing can be offered honestly, nothing is.
-          const hasUpdate = updater.shouldOfferUpdates()
-            && latestTag !== 'unknown'
-            && updater.isNewerVersion(latestTag, currentVersion);
+          const hasUpdate = latestTag !== 'unknown' && updater.isNewerVersion(latestTag, currentVersion);
 
           res.json({
             current: currentVersion,
             latest: latestTag,
             hasUpdate,
-            // "Up to date" would be a claim, not a fact, when the channel is
-            // contradictory: nothing is being compared because nothing can be offered.
             message: hasUpdate
               ? `Update available: ${currentVersion} → ${latestTag}`
-              : updater.shouldOfferUpdates()
-                ? `You're up to date (${currentVersion})`
-                : `Updates suspended — release channel needs attention (${currentVersion})`,
-            // Surfaced even when there is no update, since a suppressed dev channel is
-            // usually why there isn't one.
-            warning: updater.channelMismatch(),
+              : `You're up to date (${currentVersion})`,
           });
         } catch (e) {
           res.status(500).json({ error: 'Failed to parse Docker Hub response' });

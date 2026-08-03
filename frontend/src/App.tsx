@@ -143,7 +143,7 @@ function App() {
   }, [token, isAdmin]);
 
   // Silent update check on admin login
-  const [updateInfo, setUpdateInfo] = useState<{ current: string; latest: string; message: string; warning: string; isDocker: boolean } | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<{ current: string; latest: string; message: string; isDocker: boolean } | null>(null);
   useEffect(() => {
     if (!token || !isAdmin) return;
     const skipped = localStorage.getItem('citynet_skipped_version');
@@ -154,15 +154,12 @@ function App() {
       fetch('/api/version').then(r => r.json()),
     ])
       .then(([updateData, versionData]) => {
-        // A release-channel contradiction is shown even with no update available, since
-        // suppressing the dev channel is usually the reason there isn't one.
-        if (!updateData.hasUpdate && !updateData.warning) return;
-        if (updateData.hasUpdate && skipped === updateData.latest) return;
+        if (!updateData.hasUpdate) return;
+        if (skipped === updateData.latest) return;
         setUpdateInfo({
           current: updateData.current,
           latest: updateData.latest,
           message: updateData.message,
-          warning: updateData.warning ?? '',
           isDocker: versionData.isDocker ?? false,
         });
       })
@@ -1470,7 +1467,6 @@ function App() {
           current={updateInfo.current}
           latest={updateInfo.latest}
           message={updateInfo.message}
-          warning={updateInfo.warning}
           token={token}
           isDocker={updateInfo.isDocker}
           onDismiss={() => {

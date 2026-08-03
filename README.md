@@ -323,7 +323,7 @@ CITY_NET/
 ├── backend/
 │   ├── server.js               # Express entrypoint — mounts routes, starts Socket.IO
 │   ├── db.js                   # SQLite schema and migrations
-│   ├── updater.js              # In-app self-update — release channels (DEV=false by default; X.Y.Z-dev tags with an optional counter, ordered so a release supersedes its own dev builds); preflight (compose file mounted, docker socket, compose project labels) so a stack that cannot update says why instead of hanging; upgrade-only semver check; update log on the data volume; boot id so a restart is detectable without a version change
+│   ├── updater.js              # In-app self-update — release channels selected by IMAGE_TAG alone, the same variable compose pulls with (X.Y.Z-dev tags with an optional counter, ordered so a release supersedes its own dev builds); preflight (compose file mounted, docker socket, compose project labels) so a stack that cannot update says why instead of hanging; upgrade-only semver check; update log on the data volume; boot id so a restart is detectable without a version change
 │   ├── middleware/
 │   │   └── auth.js             # JWT verify middleware (admin + elevated users)
 │   ├── routes/
@@ -365,7 +365,7 @@ CITY_NET/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
 │       ├── admin.test.js               # Admin endpoints (auth, settings, undo access); update routes — 409 with a reason rather than a false success, unauthenticated status, boot id on /version
 │       ├── updater.test.js             # Version ordering including X.Y.Z-dev, tag filtering per channel, preflight refusals, and an update that records its failures instead of returning silently
-│       ├── docker_config.test.js       # Deployment invariants — DB_PATH baked in, data excluded from the image, image tags parameterised by IMAGE_TAG, compose file mounted for the updater, dev channel shipped off
+│       ├── docker_config.test.js       # Deployment invariants — DB_PATH baked in, data excluded from the image, image tags parameterised by IMAGE_TAG, compose file mounted for the updater, channel shipped pointing at stable
 │       ├── battle_maps.test.js         # Battle map upload/list/delete
 │       ├── locations.test.js           # Location CRUD and classification
 │       ├── locations.global.test.js    # Custom structure global persistence tests

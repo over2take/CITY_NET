@@ -4,15 +4,13 @@ interface Props {
   current: string;
   latest: string;
   message: string;
-  /** A release-channel contradiction, shown regardless of whether an update exists. */
-  warning?: string;
   token: string;
   isDocker: boolean;
   onDismiss: () => void;
   onSkip: () => void;
 }
 
-export function UpdateModal({ current, latest, message, warning, token, isDocker, onDismiss, onSkip }: Props) {
+export function UpdateModal({ current, latest, message, token, isDocker, onDismiss, onSkip }: Props) {
   const [phase, setPhase] = useState<'idle' | 'updating' | 'failed' | 'done'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
   const [detail, setDetail] = useState('');
@@ -214,16 +212,6 @@ export function UpdateModal({ current, latest, message, warning, token, isDocker
       </div>
       <div style={bodyStyle}>
         <div style={{ marginBottom: '8px', opacity: 0.7 }}>{message}</div>
-        {warning && (
-          <div
-            style={{
-              margin: '8px 0', padding: '6px 8px', fontSize: '0.6rem', lineHeight: 1.5,
-              border: '1px solid var(--danger, #ff4444)', color: 'var(--danger, #ff4444)',
-            }}
-          >
-            {warning}
-          </div>
-        )}
         <div style={{ fontSize: '0.6rem', opacity: 0.5 }}>
           running: <span style={{ opacity: 1 }}>{current}</span>
           {' → '}

@@ -90,14 +90,19 @@ describe('docker-compose.yml release channel', () => {
 describe('.env.example release channel', () => {
   const env = () => readRoot('backend/.env.example');
 
-  it('ships the dev channel switched off', () => {
+  it('ships pointed at stable', () => {
     // Dev builds are unreleased code; nobody should arrive on one by default.
-    expect(env()).toMatch(/^DEV=false$/m);
+    expect(env()).toMatch(/^IMAGE_TAG=latest$/m);
   });
 
-  it('documents both settings, since one without the other misleads', () => {
-    const text = env();
-    expect(text).toMatch(/^IMAGE_TAG=latest$/m);
-    expect(text).toMatch(/IMAGE_TAG=dev/);
+  it('documents the dev value on the same setting', () => {
+    // One setting, because it is one decision. A second one alongside it produced three
+    // contradictory states — offering a dev version and installing stable, offering a
+    // release and installing dev under its name, and a nag loop that never settled.
+    expect(env()).toMatch(/IMAGE_TAG=dev/);
+  });
+
+  it('does not reintroduce a second channel switch', () => {
+    expect(env()).not.toMatch(/^DEV=/m);
   });
 });
