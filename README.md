@@ -323,10 +323,11 @@ CITY_NET/
 ├── backend/
 │   ├── server.js               # Express entrypoint — mounts routes, starts Socket.IO
 │   ├── db.js                   # SQLite schema and migrations
+│   ├── updater.js              # In-app self-update — release channels selected by IMAGE_TAG alone, the same variable compose pulls with (X.Y.Z-dev tags with an optional counter, ordered so a release supersedes its own dev builds); preflight (compose file mounted, docker socket, compose project labels) so a stack that cannot update says why instead of hanging; upgrade-only semver check; update log on the data volume; boot id so a restart is detectable without a version change
 │   ├── middleware/
 │   │   └── auth.js             # JWT verify middleware (admin + elevated users)
 │   ├── routes/
-│   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs; POST /water marks generated water so a regenerate can clear its own river without touching a lake the GM drew
+│   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs; POST /update preflights and returns 409 naming what is missing, GET /update/status reports phase, error and log tail, POST /check-update offers only genuine upgrades from the deployment's own channel; POST /water marks generated water so a regenerate can clear its own river without touching a lake the GM drew
 │   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only); GET / includes sheet_data for NPC initiative rolls; POST /purge-region clears one region's generated content in a single transaction, keeping GM-named structures, tokens, battle-map content and hand-drawn water
 │   │   ├── battle_maps.js      # Battle map image upload/management
 │   │   ├── maps.js             # Saved map snapshots (locations, districts, roads, overpasses, water bodies); preserves only rhombus tokens on load/clear; records active_map_name in global_settings so exports can name their files
@@ -362,7 +363,9 @@ CITY_NET/
 │   └── __tests__/
 │       ├── helpers/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
-│       ├── admin.test.js               # Admin endpoints (auth, settings, undo access)
+│       ├── admin.test.js               # Admin endpoints (auth, settings, undo access); update routes — 409 with a reason rather than a false success, unauthenticated status, boot id on /version; check-update against a stubbed registry — upgrades only, dev tags per channel, and a prerelease not hiding a stable release
+│       ├── updater.test.js             # Version ordering including X.Y.Z-dev, tag filtering per channel, preflight refusals, and an update that records its failures instead of returning silently
+│       ├── docker_config.test.js       # Deployment invariants — DB_PATH baked in, data excluded from the image, image tags parameterised by IMAGE_TAG, compose file mounted for the updater, channel shipped pointing at stable
 │       ├── battle_maps.test.js         # Battle map upload/list/delete
 │       ├── locations.test.js           # Location CRUD and classification
 │       ├── locations.global.test.js    # Custom structure global persistence tests
@@ -543,6 +546,7 @@ CITY_NET/
 │   │   │       └── shadowrun_6e.ts             # Shadowrun 6E — attributes, d6 pool skills, Edge pips (SPEND button, admin replenish), weapons (DV/AR), Stun track, gated AWAKENED/EMERGED tabs; dynamic spell list (DRAIN/CAST) and adept power list (PP cost auto-summed)
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
 │   │   └── utils/
+│   │       ├── updateClient.ts     # One implementation of the in-app update flow, shared by the update modal and the nav panel — stale-container probe, server refusal passed through verbatim, restart detected by boot id, bounded wait. Two copies is how one of them stayed unhardened
 │   │       ├── locationHelpers.ts  # Location geometry utilities; exports ZONE_TYPE_NAMES and isUserDefinedName
 │   │       ├── rhombusHelpers.ts   # Player token position math
 │   │       ├── threeHelpers.tsx    # Three.js scene utilities
@@ -556,6 +560,7 @@ CITY_NET/
 │   │           ├── roadHelpers.test.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry
 │   │           ├── mapExportBounds.test.ts  # Bounds coverage; GPU clamping on both axes, aspect preserved when scaling down
 │   │           ├── mapExportWatermark.test.ts # Watermark anchor and stacking, scaling floor, filename slugging, download link cleanup
+│   │           ├── updateClient.test.ts     # Stale-container detection including an index.html fallback answering 200, refusals passed through, nothing POSTed to a server that cannot act
 │   │           └── overpassHelpers.test.ts  # Elevation, geometry, and path-sampling tests
 │   └── public/
 │       ├── signs/              # Preset neon SVG sign images (motel, bar, cyber-clinic, etc.)
@@ -564,7 +569,8 @@ CITY_NET/
 ├── docs/                       # Reference docs (deployment plans, feature notes)
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
-├── docker-compose.yml
+├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev
+├── docker-compose.yml          # Image tags read ${IMAGE_TAG:-latest}, so the release channel is a setting rather than an edit
 ├── nginx.conf
 └── .env.example
 ```

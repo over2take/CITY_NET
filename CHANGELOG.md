@@ -9,6 +9,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.8.1] - 2026-08-02
+
+### Added
+
+- **An optional development channel, selected by one setting.** `IMAGE_TAG=latest` by default, which is stable; `IMAGE_TAG=dev` follows development builds. That is the same variable `docker-compose.yml` interpolates to decide which images are pulled, so what the update check offers and what it installs cannot disagree — the check reads the deployment's own tag rather than a separate declaration of intent.
+
+  Development builds are tagged `X.Y.Z-dev`, with a counter accepted but not required, so `1.9.0-dev` and `1.9.0-dev.7` both work and introducing counters later is a build-workflow change rather than a code one. A dev build of a newer release is offered to someone on an older release, the release itself supersedes its own dev builds when it lands, and a release user is never dragged back onto a dev build of the same version. A pinned version tag counts as stable, since pinning is not a channel.
+
+  A `Dev Build to Docker Hub` workflow publishes them, on manual dispatch or a push to a `dev` branch. It runs the test suites first, never touches `latest`, and pushes two tags per build: `dev`, which is what `IMAGE_TAG=dev` pulls, and `X.Y.Z-dev.N`, which is the only form the update check can see — `dev` is not a version and is filtered out of the tag listing. It refuses to run when `package.json` still holds an already-released version, since `X.Y.Z-dev` sorts *below* `X.Y.Z` and such a build could never be offered to anyone.
+
+  `IMAGE_TAG` must also reach the `.env` beside `docker-compose.yml`, which the setup steps already cover by copying `backend/.env` to the project root: compose interpolates from the project file rather than from `env_file`.
+
+### Fixed
+
+- **One dev tag on the registry would have silenced update notices for everyone.** The tag filter was `/^\d+\.\d+\.\d+/`, unanchored, so `1.9.0-dev` passed it and then parsed to `NaN` — which made the sort comparator return `NaN`, leaving the ordering undefined and letting a prerelease surface as the newest tag, whereupon the version check correctly refused it and reported no update at all. Version tags are matched strictly now, and sorted by a comparator that understands them.
+- **The in-app updater could sit on `WAITING FOR SERVER` indefinitely.** Every step failed silently — both child processes discarded their output, the route answered "Update started" before checking anything could work, and a non-zero exit from `docker compose pull` simply returned — so a stack that *could not* update was indistinguishable from one still working, and the client polled every three seconds forever with no deadline.
+
+  The likeliest cause on a long-running instance is the compose file's own self-mount at `/tmp/docker-compose.yml`, which the update reads. A container started before that line existed does not have it, the pull fails, and everything above turns that into an endless wait — so the instances least able to update in place are exactly the ones that have been running longest.
+
+  `POST /api/update` now checks the mount, the Docker socket and the compose project labels *before* answering, and returns `409` naming what is missing and what to do about it. Both steps append to `backend/data/update.log`, which lives on the data volume and so survives the container being replaced. `GET /api/update/status` reports phase and error, and the modal shows them, reassures at 45 seconds that a pull legitimately takes minutes, and gives up after six with the host command to fall back to.
+- **A container too old to update itself now says so immediately.** Such a container answers `POST /api/update` with "Update started" and then does nothing, so the client used to wait out the full deadline to learn what could be known at once. It is asked for `GET /api/update/status` first — a route that only exists in the self-checking build — and if that is missing the modal says the container predates it and shows the command to run on the host. The response shape is checked rather than just the status code, since a setup serving `index.html` for unknown paths answers `200` with a page. Nothing is POSTed to a server that cannot act on it.
+- **The nav-panel update button had none of the above.** There were two implementations of the update flow — the modal and the panel — and only the modal's was hardened. The panel ignored the server's refusal entirely, waited on the version rather than the restart, and polled every three seconds with no deadline, so the original symptom survived in the path the upgrade guide tells people to use. Both now drive one shared client, which is the only reason a second copy could go unfixed.
+- **The "read more" link on the update panel pointed at a heading that does not exist.** `README.md#updating` has no such anchor, so someone whose update just failed landed at the top of a 570-line README. Both links now go to `UPGRADE.md`, which is the actual guide.
+- **A successful update could hang too.** The client waited for the reported version to change, but a build without `APP_VERSION` reports `dev` before and after. `/api/version` now carries a boot id and the client waits for the restart itself.
+- **The update check offered downgrades.** `hasUpdate` was `latest !== current`, so a published tag trailing the running one counted as an update — a 1.8.0 instance was offered 1.7.4. It is a numeric version comparison now, and anything unparseable (`dev`, `latest`) is never offered.
+
+### Technical
+
+- The update logic moved out of the admin route into `backend/updater.js`. None of it was reachable from a test where it was, which is a large part of why three separate faults sat in it unnoticed.
+
+---
+
 ## [1.8.0] - 2026-08-01
 
 ### Added

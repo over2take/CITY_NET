@@ -1,0 +1,114 @@
+name: Dev Build to Docker Hub
+
+# Publishes a development build. Deliberately separate from Release, and deliberately
+# never touching `latest` — a stable deployment must not be able to reach these images.
+#
+# Two tags go out for each build, and both are needed:
+#   dev            the moving pointer that IMAGE_TAG=dev pulls
+#   X.Y.Z-dev.N    an immutable build, and the only form the update check can see,
+#                  since `dev` is not a version and is filtered out of the tag listing
+#
+# The version comes from frontend/package.json, so dev builds must run *ahead* of the
+# last release: with package.json at 1.9.0 the builds are 1.9.0-dev.N, which supersede
+# 1.8.1 and are in turn superseded by 1.9.0 when it ships.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Backend tests
+        working-directory: ./backend
+        run: npm ci && npm test
+
+      - name: Frontend tests
+        working-directory: ./frontend
+        run: npm ci && npm test
+
+  publish:
+    name: Build & Push
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compose the dev version
+        id: version
+        run: |
+          BASE=$(jq -r '.version' frontend/package.json)
+          # The run number gives each build a distinct, increasing identity, so a dev
+          # deployment is offered the next one. A single moving X.Y.Z-dev tag would be
+          # the same version every time and would never be seen as an update.
+          echo "VERSION=${BASE}-dev.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "BASE=${BASE}" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse to publish a dev build older than the latest release
+        env:
+          BASE: ${{ steps.version.outputs.BASE }}
+          REPO: ${{ secrets.DOCKERHUB_USERNAME }}/citynet-frontend
+        run: |
+          set -euo pipefail
+          LATEST=$(curl -fsSL "https://hub.docker.com/v2/repositories/${REPO}/tags?page_size=100" \
+            | jq -r '[.results[].name | select(test("^[0-9]+[.][0-9]+[.][0-9]+$"))]
+                     | sort_by(split(".") | map(tonumber)) | last // "0.0.0"')
+          echo "package.json: ${BASE}   latest release: ${LATEST}"
+          # X.Y.Z-dev sorts *below* X.Y.Z, so a dev build of an already-released version
+          # is older than what is already out and would never be offered to anyone.
+          # Catching that here is far cheaper than working out later why a dev
+          # deployment is being told it is up to date.
+          NEWEST=$(printf '%s\n%s\n' "${BASE}" "${LATEST}" | sort -V | tail -1)
+          if [ "${BASE}" = "${LATEST}" ] || [ "${NEWEST}" != "${BASE}" ]; then
+            echo "::error::Dev builds must be ahead of the last release. Bump package.json and frontend/package.json past ${LATEST} first."
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.backend
+          push: true
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.VERSION }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/citynet-backend:dev
+            ${{ secrets.DOCKERHUB_USERNAME }}/citynet-backend:${{ steps.version.outputs.VERSION }}
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.frontend
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/citynet-frontend:dev
+            ${{ secrets.DOCKERHUB_USERNAME }}/citynet-frontend:${{ steps.version.outputs.VERSION }}
+
+      - name: Summary
+        run: |
+          {
+            echo "Published \`${{ steps.version.outputs.VERSION }}\` and \`:dev\`."
+            echo ""
+            echo "A deployment with \`IMAGE_TAG=dev\` will be offered this build."
+          } >> "$GITHUB_STEP_SUMMARY"

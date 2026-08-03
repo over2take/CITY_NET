@@ -3,6 +3,8 @@ import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
+import https from 'https';
+import { vi } from 'vitest';
 import { makeTestDb, get, all, run } from './helpers/testDb.js';
 import adminRouteFactory from '../routes/admin.js';
 
@@ -237,5 +239,188 @@ describe('DELETE /api/admin/water (purge all)', () => {
     expect(res.status).toBe(200);
     const rows = await all(db, 'SELECT * FROM water_bodies');
     expect(rows).toHaveLength(0);
+  });
+});
+
+// ─── update routes ────────────────────────────────────────────────────────────
+
+/**
+ * These test the wiring, not the logic — updater.test.js covers the logic.
+ *
+ * The gap they close is real: every fault this branch fixed lived in the seam between
+ * the route and what it called, and a module can be correct while the route ignores it.
+ */
+describe('update routes', () => {
+  it('GET /version carries a boot id, so a restart is detectable', async () => {
+    // The client waits on this rather than a version change, because a build without
+    // APP_VERSION reports 'dev' before and after and would hang on a working update.
+    const res = await request(app).get('/api/admin/version');
+    expect(res.status).toBe(200);
+    expect(typeof res.body.bootId).toBe('string');
+    expect(res.body.bootId.length).toBeGreaterThan(0);
+  });
+
+  it('GET /update/status needs no auth, since the restart drops the session', async () => {
+    const res = await request(app).get('/api/admin/update/status');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('phase');
+    expect(res.body).toHaveProperty('bootId');
+  });
+
+  it('POST /update refuses with a reason instead of reporting success', async () => {
+    // Nothing about this test environment is a Docker stack, so preflight must refuse.
+    // The route previously answered 200 "Update started" regardless, which is what left
+    // a client polling for a restart that was never going to happen.
+    const res = await request(app)
+      .post('/api/admin/update')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(res.status).toBe(409);
+    expect(typeof res.body.error).toBe('string');
+    expect(res.body.error.length).toBeGreaterThan(0);
+    expect(res.body.message).toBeUndefined();
+  });
+
+  it('POST /update refuses a temporary admin', async () => {
+    // Rejected at 401 by the middleware, which turns away a temporary token unless the
+    // user has been elevated — the route's own isTemporary guard is the second line,
+    // for an elevated temporary who gets past that.
+    const tempToken = jwt.sign(
+      { id: 2, username: 'temp', role: 'admin', isTemporary: true },
+      'test-secret'
+    );
+    const res = await request(app)
+      .post('/api/admin/update')
+      .set('Authorization', `Bearer ${tempToken}`);
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /update refuses with no token at all', async () => {
+    const res = await request(app).post('/api/admin/update');
+    expect(res.status).toBe(401);
+  });
+});
+
+// ─── check-update ─────────────────────────────────────────────────────────────
+
+/**
+ * The route where three of this branch's faults lived: an unanchored tag filter, a
+ * comparator that returned NaN, and a "different" test that counted a downgrade as an
+ * update. Each was fixed in the module and each is tested there — but the module was
+ * always correct in isolation, and it was the route's use of it that shipped broken.
+ */
+describe('POST /api/admin/check-update', () => {
+  /** Stand in for the Docker Hub tag listing. */
+  const withTags = (names) => {
+    const body = JSON.stringify({ results: names.map((name) => ({ name })) });
+    return vi.spyOn(https, 'request').mockImplementation((options, cb) => {
+      const handlers = {};
+      const upstream = { on: (evt, fn) => { handlers[evt] = fn; return upstream; } };
+      const req = {
+        on: () => req,
+        end: () => {
+          cb(upstream);
+          process.nextTick(() => { handlers.data?.(body); handlers.end?.(); });
+        },
+      };
+      return req;
+    });
+  };
+
+  const check = () => request(app)
+    .post('/api/admin/check-update')
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+  const withChannel = async (tag, fn) => {
+    const prev = process.env.IMAGE_TAG;
+    const prevVersion = process.env.APP_VERSION;
+    if (tag === undefined) delete process.env.IMAGE_TAG;
+    else process.env.IMAGE_TAG = tag;
+    try {
+      return await fn();
+    } finally {
+      if (prev === undefined) delete process.env.IMAGE_TAG;
+      else process.env.IMAGE_TAG = prev;
+      if (prevVersion === undefined) delete process.env.APP_VERSION;
+      else process.env.APP_VERSION = prevVersion;
+    }
+  };
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('offers a newer stable release', async () => {
+    withTags(['1.8.0', '1.8.1', 'latest']);
+    await withChannel(undefined, async () => {
+      process.env.APP_VERSION = '1.8.0';
+      const res = await check();
+      expect(res.body.hasUpdate).toBe(true);
+      expect(res.body.latest).toBe('1.8.1');
+    });
+  });
+
+  it('does not offer a downgrade when the registry trails the running build', async () => {
+    // The reported symptom: a 1.8.0 instance told "Update available: 1.8.0 → 1.7.4".
+    withTags(['1.7.4', '1.7.3', 'latest']);
+    await withChannel(undefined, async () => {
+      process.env.APP_VERSION = '1.8.0';
+      const res = await check();
+      expect(res.body.hasUpdate).toBe(false);
+      expect(res.body.message).toMatch(/up to date/i);
+    });
+  });
+
+  it('a dev tag on the registry does not hide a stable release', async () => {
+    // The fault that would have appeared on the first dev tag published, and would have
+    // hurt stable users: the unanchored filter let 1.9.0-dev through, it parsed to NaN,
+    // the comparator returned NaN, the sort order became undefined, and a prerelease
+    // could surface as "latest" — which the version check then correctly refused,
+    // reporting no update when there was one.
+    withTags(['1.8.0', '1.9.0-dev.3', '1.8.1', 'latest']);
+    await withChannel(undefined, async () => {
+      process.env.APP_VERSION = '1.8.0';
+      const res = await check();
+      expect(res.body.hasUpdate).toBe(true);
+      expect(res.body.latest).toBe('1.8.1');
+    });
+  });
+
+  it('ignores dev builds on the stable channel', async () => {
+    withTags(['1.8.1', '1.9.0-dev', 'latest']);
+    await withChannel('latest', async () => {
+      process.env.APP_VERSION = '1.8.1';
+      const res = await check();
+      expect(res.body.hasUpdate).toBe(false);
+    });
+  });
+
+  it('offers dev builds when the deployment runs the dev images', async () => {
+    // Same registry, same running version, different channel — and the channel comes
+    // from the tag compose pulls, so what is offered cannot diverge from what installs.
+    withTags(['1.8.1', '1.9.0-dev', 'latest']);
+    await withChannel('dev', async () => {
+      process.env.APP_VERSION = '1.8.1';
+      const res = await check();
+      expect(res.body.hasUpdate).toBe(true);
+      expect(res.body.latest).toBe('1.9.0-dev');
+    });
+  });
+
+  it('carries a dev deployment onto the release when it lands', async () => {
+    withTags(['1.9.0', '1.9.0-dev.7', 'latest']);
+    await withChannel('dev', async () => {
+      process.env.APP_VERSION = '1.9.0-dev.7';
+      const res = await check();
+      expect(res.body.hasUpdate).toBe(true);
+      expect(res.body.latest).toBe('1.9.0');
+    });
+  });
+
+  it('offers nothing when the registry has no version tags at all', async () => {
+    withTags(['latest', 'dev']);
+    await withChannel(undefined, async () => {
+      process.env.APP_VERSION = '1.8.1';
+      const res = await check();
+      expect(res.body.hasUpdate).toBe(false);
+    });
   });
 });

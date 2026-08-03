@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { startUpdate, waitForRestart, currentBootId } from '../utils/updateClient';
 
 interface Props {
   current: string;
@@ -11,8 +12,10 @@ interface Props {
 }
 
 export function UpdateModal({ current, latest, message, token, isDocker, onDismiss, onSkip }: Props) {
-  const [phase, setPhase] = useState<'idle' | 'updating' | 'done'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'updating' | 'failed' | 'done'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
+  const [detail, setDetail] = useState('');
+  const [command, setCommand] = useState('');
 
   // Draggable
   const modalRef = useRef<HTMLDivElement>(null);
@@ -41,25 +44,33 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
 
   const handleUpdate = async () => {
     setPhase('updating');
-    setStatusMsg('UPDATE IN PROGRESS — WAITING FOR SERVER...');
-    try {
-      await fetch('/api/update', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      const poll = async () => {
-        try {
-          const res = await fetch('/api/version');
-          if (!res.ok) throw new Error();
-          const data = await res.json();
-          if (data.version !== current) {
-            window.location.href = `/?v=${Date.now()}`;
-            return;
-          }
-        } catch { /* server restarting */ }
-        setTimeout(poll, 3000);
-      };
-      setTimeout(poll, 10000);
-    } catch {
-      setStatusMsg('Update failed — try manually from the nav panel');
+    setStatusMsg('CHECKING SERVER...');
+    setDetail('');
+    setCommand('');
+
+    const bootId = await currentBootId();
+    const started = await startUpdate(token);
+    if (!started.ok) {
+      setPhase('failed');
+      setStatusMsg(started.command ? 'THIS CONTAINER CANNOT UPDATE ITSELF' : 'UPDATE CANNOT RUN');
+      setDetail(started.error ?? '');
+      setCommand(started.command ?? '');
+      return;
     }
+
+    setStatusMsg('UPDATE IN PROGRESS — WAITING FOR SERVER...');
+    await waitForRestart({
+      bootId,
+      currentVersion: current,
+      onRestart: () => { window.location.href = `/?v=${Date.now()}`; },
+      onStillWorking: () => setStatusMsg('STILL WORKING — PULLING IMAGES, THIS CAN TAKE A FEW MINUTES...'),
+      onFailed: (error, cmd) => {
+        setPhase('failed');
+        setStatusMsg('UPDATE FAILED');
+        setDetail(error);
+        setCommand(cmd ?? '');
+      },
+    });
   };
 
   const panelStyle: React.CSSProperties = {
@@ -116,12 +127,12 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
         </div>
         <div style={{ marginTop: '8px', fontSize: '0.6rem', opacity: 0.5 }}>
           <a
-            href="https://github.com/over2take/CITY_NET/blob/main/README.md#updating"
+            href="https://github.com/over2take/CITY_NET/blob/main/UPGRADE.md"
             target="_blank"
             rel="noreferrer"
             style={{ color: 'var(--green, #00ff88)' }}
           >
-            README ↗
+            UPGRADE GUIDE ↗
           </a>
         </div>
 
@@ -159,6 +170,28 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
 
         {phase === 'updating' && (
           <div style={{ marginTop: '16px', fontSize: '0.65rem', opacity: 0.8 }}>{statusMsg}</div>
+        )}
+
+        {phase === 'failed' && (
+          <>
+            <div style={{ marginTop: '16px', fontSize: '0.65rem', color: 'var(--danger, #ff4444)' }}>{statusMsg}</div>
+            <div style={{ marginTop: '6px', fontSize: '0.6rem', opacity: 0.75, lineHeight: 1.5 }}>{detail}</div>
+            {command && (
+              <div
+                style={{
+                  marginTop: '8px', padding: '6px 8px', fontSize: '0.6rem',
+                  border: '1px solid var(--green, #00ff88)', background: 'rgba(0,0,0,0.4)',
+                  userSelect: 'all', wordBreak: 'break-all',
+                }}
+              >
+                {command}
+              </div>
+            )}
+            <div style={btnRow}>
+              <button className="modal-btn" onClick={() => { setPhase('idle'); setCommand(''); }}>BACK</button>
+              <button className="modal-btn muted" onClick={onDismiss}>CLOSE</button>
+            </div>
+          </>
         )}
       </div>
     </div>

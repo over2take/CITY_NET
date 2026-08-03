@@ -156,7 +156,12 @@ function App() {
       .then(([updateData, versionData]) => {
         if (!updateData.hasUpdate) return;
         if (skipped === updateData.latest) return;
-        setUpdateInfo({ current: updateData.current, latest: updateData.latest, message: updateData.message, isDocker: versionData.isDocker ?? false });
+        setUpdateInfo({
+          current: updateData.current,
+          latest: updateData.latest,
+          message: updateData.message,
+          isDocker: versionData.isDocker ?? false,
+        });
       })
       .catch(() => {});
   }, [token, isAdmin]);

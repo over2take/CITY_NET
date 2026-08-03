@@ -6,27 +6,7 @@ const { authenticate } = require('../middleware/auth');
 const SECRET = process.env.JWT_SECRET;
 let currentController = 'GM';
 
-/**
- * Build the docker-run argument list for the self-update helper container.
- *
- * The host project directory MUST be mounted at its own absolute path, not at
- * an alias like /project. Compose passes volume host-paths straight to the
- * Docker daemon; if those paths don't exist on the host the daemon silently
- * creates a new empty directory, wiping existing bind-mount data (issue that
- * caused data loss on in-app updates prior to 1.6.3).
- */
-function buildUpdateHelperArgs(hostWorkingDir, hostConfigFile, projectArgs) {
-  const projectArgsStr = projectArgs.join(' ');
-  return [
-    'run', '--rm',
-    '-v', '/var/run/docker.sock:/var/run/docker.sock',
-    '-v', `${hostWorkingDir}:${hostWorkingDir}`,
-    '-v', `${hostConfigFile}:/tmp/docker-compose.yml:ro`,
-    'over2take/citynet-backend:latest',
-    'sh', '-c',
-    `docker compose --project-directory "${hostWorkingDir}" -f /tmp/docker-compose.yml ${projectArgsStr} up -d`,
-  ];
-}
+const updater = require('../updater');
 
 module.exports = (db, io, { emitUpdate, recordAction }) => {
   const router = express.Router();
@@ -232,7 +212,10 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     const { execSync } = require('child_process');
     let isDocker = false;
     try { execSync('docker info', { stdio: 'ignore' }); isDocker = true; } catch {}
-    res.json({ version: process.env.APP_VERSION || 'dev', isDocker });
+    // bootId changes on every process start. The client waits for *that*, not for the
+    // version to differ: a build without APP_VERSION reports 'dev' before and after, so
+    // waiting on the version hangs even when the update worked.
+    res.json({ version: process.env.APP_VERSION || 'dev', isDocker, bootId: updater.BOOT_ID });
   });
 
   // --- Version Check (Docker Hub) ---
@@ -255,19 +238,20 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         try {
           const data = JSON.parse(body);
           // Find version tags (skip 'latest'), sort and get highest version
+          // Dev builds are published as X.Y.Z-dev and ignored unless DEV=true. The
+          // previous filter was unanchored, so a tag like 1.9.0-dev passed it and then
+          // parsed to NaN, which made the comparator return NaN and left the sort
+          // order undefined — one dev tag on the registry could stop stable users
+          // being told about releases at all.
+          const allowDev = updater.allowsDevBuilds();
           const versionTags = data.results
-            ?.filter(tag => tag.name !== 'latest' && /^\d+\.\d+\.\d+/.test(tag.name))
+            ?.filter(tag => updater.isVersionTag(tag.name, allowDev))
             .map(tag => tag.name)
-            .sort((a, b) => {
-              const aParts = a.split('.').map(Number);
-              const bParts = b.split('.').map(Number);
-              for (let i = 0; i < 3; i++) {
-                if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
-              }
-              return 0;
-            }) || [];
+            .sort((a, b) => updater.compareVersions(updater.parseVersion(b), updater.parseVersion(a))) || [];
           const latestTag = versionTags[0] || 'unknown';
-          const hasUpdate = latestTag !== 'unknown' && latestTag !== currentVersion;
+          // Strictly newer, not merely different. Comparing with !== offers a
+          // downgrade whenever the published tag trails the running one.
+          const hasUpdate = latestTag !== 'unknown' && updater.isNewerVersion(latestTag, currentVersion);
 
           res.json({
             current: currentVersion,
@@ -294,44 +278,20 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   router.post('/update', authenticate, (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
 
-    const { spawn, execSync } = require('child_process');
-    const fs = require('fs');
+    // Checked before answering, so a stack that cannot update says why instead of
+    // reporting success and leaving the client polling for a restart that never comes.
+    const check = updater.preflight();
+    if (!check.ok) return res.status(409).json({ error: check.error });
 
+    updater.runUpdate(check.labels);
     res.json({ message: 'Update started' });
+  });
 
-    // Read compose project name and host paths from this container's own Docker labels
-    let projectArgs = [];
-    let hostConfigFile = null;
-    let hostWorkingDir = null;
-    try {
-      const containerId = fs.readFileSync('/etc/hostname', 'utf8').trim();
-      const labels = JSON.parse(execSync(
-        `docker inspect ${containerId} --format '{{json .Config.Labels}}'`,
-        { encoding: 'utf8' }
-      ).trim());
-      const projectName = labels['com.docker.compose.project'];
-      if (projectName) projectArgs = ['-p', projectName];
-      hostConfigFile = labels['com.docker.compose.project.config_files'];
-      hostWorkingDir = labels['com.docker.compose.project.working_dir'];
-    } catch (_) {}
-
-    const composeArgs = ['compose', '-f', '/tmp/docker-compose.yml', ...projectArgs];
-
-    const pull = spawn('docker', [...composeArgs, 'pull'], { detached: true, stdio: 'ignore' });
-    pull.unref();
-    pull.on('close', (code) => {
-      if (code !== 0) return;
-      // Spawn a temporary helper container to run up -d so it survives
-      // the backend container being replaced mid-execution.
-      // Mount the host project dir at its *own host path* (not /project) so
-      // that when compose resolves relative paths like ./backend/data, the
-      // resulting absolute path matches what the host Docker daemon sees.
-      // Using a different mountpoint (e.g. /project) caused the daemon to
-      // look for /project/backend/data on the host, which doesn't exist,
-      // creating a new empty bind mount and wiping data on every update.
-      const helper = spawn('docker', buildUpdateHelperArgs(hostWorkingDir, hostConfigFile, projectArgs), { detached: true, stdio: 'ignore' });
-      helper.unref();
-    });
+  // --- Update progress ---
+  // Unauthenticated on purpose: it carries no secrets, and the client needs to keep
+  // reading it across the restart that drops its session.
+  router.get('/update/status', (req, res) => {
+    res.json(updater.getState());
   });
 
   // --- Chat ---
@@ -350,4 +310,4 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   return router;
 };
 
-module.exports.buildUpdateHelperArgs = buildUpdateHelperArgs;
+module.exports.buildUpdateHelperArgs = updater.buildUpdateHelperArgs;
