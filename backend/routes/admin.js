@@ -251,7 +251,11 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           const latestTag = versionTags[0] || 'unknown';
           // Strictly newer, not merely different. Comparing with !== offers a
           // downgrade whenever the published tag trails the running one.
-          const hasUpdate = latestTag !== 'unknown' && updater.isNewerVersion(latestTag, currentVersion);
+          // A contradictory channel installs something other than what is offered, so
+          // in the direction where nothing can be offered honestly, nothing is.
+          const hasUpdate = updater.shouldOfferUpdates()
+            && latestTag !== 'unknown'
+            && updater.isNewerVersion(latestTag, currentVersion);
 
           res.json({
             current: currentVersion,

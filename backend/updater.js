@@ -98,31 +98,70 @@ function imageTag(env = process.env) {
 }
 
 /**
- * Why `DEV` and `IMAGE_TAG` disagree, or null when they do not.
+ * How `DEV` and `IMAGE_TAG` relate, and what can safely be offered.
  *
- * `DEV` states an intention and `IMAGE_TAG` is the capability: compose decides what is
- * actually fetched, so `DEV=true` with a stable tag offers a dev version and then
- * installs the release. Worse, it cannot settle — the next check sees the same dev
- * version as newer and offers it again, for ever.
+ * `DEV` states an intention; `IMAGE_TAG` is the capability, because compose is what
+ * decides which image is actually fetched. When they disagree the update offers one
+ * thing and installs another, and the two directions fail differently:
  *
- * There is a second way to land here even with both set correctly in `backend/.env`:
- * compose interpolates `${IMAGE_TAG}` from the project `.env` beside the compose file,
- * not from `env_file:`, so the value has to reach the root copy as well.
+ * `DEV=true` with a stable tag offers a dev version and installs the release. It cannot
+ * settle either — the next check sees the same dev version as newer and offers it
+ * again, for ever. Stable offers still install correctly, so only dev offers are
+ * suppressed.
+ *
+ * `DEV=false` with `IMAGE_TAG=dev` is worse and quieter. Dev tags are filtered out, so a
+ * *release* is offered, and pulling installs whatever `:dev` currently points at. The
+ * version and the boot id both change, so the update reports success — and the operator
+ * believes they are on stable while running dev. Nothing can be offered honestly here,
+ * so nothing is.
+ *
+ * There is a second way into either state with both values set correctly in
+ * `backend/.env`: compose interpolates `${IMAGE_TAG}` from the project `.env` beside the
+ * compose file, not from `env_file:`, so the value has to reach the root copy as well.
  */
-function channelMismatch(env = process.env) {
-  if (!devChannelEnabled(env)) return null;
+function channelState(env = process.env) {
+  const dev = devChannelEnabled(env);
   const tag = imageTag(env);
-  if (tag === 'dev') return null;
-  return `DEV=true asks for development builds, but IMAGE_TAG is "${tag}", which is what `
-    + 'docker compose actually pulls — so a dev version would be offered and the stable '
-    + 'image installed instead. Dev versions are being ignored until they agree. Set '
-    + 'IMAGE_TAG=dev in backend/.env *and* in the .env beside docker-compose.yml, since '
-    + 'compose reads the root copy rather than env_file.';
+  const rootEnvNote = 'Set them in backend/.env *and* in the .env beside docker-compose.yml, '
+    + 'since compose reads the root copy rather than env_file.';
+
+  if (dev && tag !== 'dev') {
+    return {
+      problem: `DEV=true asks for development builds, but IMAGE_TAG is "${tag}", which is what `
+        + 'docker compose actually pulls — so a dev version would be offered and the stable '
+        + `image installed instead. Dev versions are being ignored until they agree. ${rootEnvNote}`,
+      offerDev: false,
+      offerAny: true,
+    };
+  }
+
+  if (!dev && tag === 'dev') {
+    return {
+      problem: `IMAGE_TAG is "dev", so this deployment pulls development images, but DEV is not `
+        + 'true — so a stable release would be offered and a development build installed under '
+        + 'its name, with the update reporting success. Updates are suspended until they agree: '
+        + `set DEV=true to follow dev builds, or IMAGE_TAG=latest to return to stable. ${rootEnvNote}`,
+      offerDev: false,
+      offerAny: false,
+    };
+  }
+
+  return { problem: null, offerDev: dev, offerAny: true };
+}
+
+/** Why the release channel is contradictory, or null when it is not. */
+function channelMismatch(env = process.env) {
+  return channelState(env).problem;
 }
 
 /** Whether dev versions should be offered — intent and capability must agree. */
 function shouldOfferDev(env = process.env) {
-  return devChannelEnabled(env) && channelMismatch(env) === null;
+  return channelState(env).offerDev;
+}
+
+/** Whether any update can be offered honestly at all. */
+function shouldOfferUpdates(env = process.env) {
+  return channelState(env).offerAny;
 }
 
 /**
@@ -312,7 +351,9 @@ module.exports = {
   devChannelEnabled,
   imageTag,
   channelMismatch,
+  channelState,
   shouldOfferDev,
+  shouldOfferUpdates,
   warnOnChannelMismatch,
   isNewerVersion,
   buildUpdateHelperArgs,

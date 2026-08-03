@@ -172,6 +172,33 @@ describe('channel mismatch', () => {
     expect(updater.shouldOfferDev({ DEV: 'false', IMAGE_TAG: 'dev' })).toBe(false);
   });
 
+  it('catches the reverse mismatch, which is the quieter of the two', () => {
+    // IMAGE_TAG=dev with DEV=false filters dev tags out of the check, so a *release* is
+    // offered and whatever ":dev" currently points at gets installed under its name.
+    // Version and boot id both change, so the update reports success — and the operator
+    // believes they are on stable while running dev.
+    const problem = updater.channelMismatch({ DEV: 'false', IMAGE_TAG: 'dev' });
+    expect(problem).not.toBeNull();
+    expect(problem).toMatch(/DEV=true/);
+    expect(problem).toMatch(/IMAGE_TAG=latest/);
+  });
+
+  it('suspends updates entirely when nothing can be offered honestly', () => {
+    // Suppressing only dev offers is enough the other way round, because a stable offer
+    // does install correctly from a stable tag. Here every offer would be a lie.
+    expect(updater.shouldOfferUpdates({ DEV: 'false', IMAGE_TAG: 'dev' })).toBe(false);
+    expect(updater.shouldOfferUpdates({ DEV: 'true', IMAGE_TAG: 'latest' })).toBe(true);
+    expect(updater.shouldOfferUpdates({ DEV: 'true', IMAGE_TAG: 'dev' })).toBe(true);
+    expect(updater.shouldOfferUpdates({ DEV: 'false', IMAGE_TAG: 'latest' })).toBe(true);
+  });
+
+  it('names both ways out of the reverse mismatch', () => {
+    // Either direction is a legitimate intention; the point is only that they agree.
+    const problem = updater.channelMismatch({ DEV: 'false', IMAGE_TAG: 'dev' });
+    expect(problem).toContain('DEV=true to follow dev builds');
+    expect(problem).toContain('IMAGE_TAG=latest to return to stable');
+  });
+
   it('warns at boot, where a config error belongs', () => {
     // The update modal only appears when there is an update, and a suppressed dev
     // channel is usually exactly why there is not one.
