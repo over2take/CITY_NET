@@ -11,8 +11,9 @@ interface Props {
 }
 
 export function UpdateModal({ current, latest, message, token, isDocker, onDismiss, onSkip }: Props) {
-  const [phase, setPhase] = useState<'idle' | 'updating' | 'done'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'updating' | 'failed' | 'done'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
+  const [detail, setDetail] = useState('');
 
   // Draggable
   const modalRef = useRef<HTMLDivElement>(null);
@@ -39,27 +40,82 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
     };
   }, []);
 
+  /**
+   * How long to wait for the server to come back before calling it a failure.
+   *
+   * A pull and a container recreate is minutes, not seconds, on a slow connection. But
+   * it is bounded: the previous version polled every three seconds forever, so a stack
+   * that could not update looked identical to one still working, and sat on
+   * "WAITING FOR SERVER" indefinitely.
+   */
+  const DEADLINE_MS = 6 * 60 * 1000;
+
   const handleUpdate = async () => {
     setPhase('updating');
     setStatusMsg('UPDATE IN PROGRESS — WAITING FOR SERVER...');
+    setDetail('');
+
+    let bootId = '';
     try {
-      await fetch('/api/update', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      const poll = async () => {
-        try {
-          const res = await fetch('/api/version');
-          if (!res.ok) throw new Error();
+      const before = await (await fetch('/api/version')).json();
+      bootId = before.bootId ?? '';
+    } catch { /* carry on; the restart check falls back to the version */ }
+
+    try {
+      const res = await fetch('/api/update', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        // Preflight refused it and said why — much the commonest case being a container
+        // started before the compose file mounted itself.
+        const body = await res.json().catch(() => ({}));
+        setPhase('failed');
+        setStatusMsg('UPDATE CANNOT RUN');
+        setDetail(body.error || `Server returned ${res.status}.`);
+        return;
+      }
+    } catch (e) {
+      setPhase('failed');
+      setStatusMsg('UPDATE FAILED TO START');
+      setDetail(e instanceof Error ? e.message : 'The server could not be reached.');
+      return;
+    }
+
+    const deadline = Date.now() + DEADLINE_MS;
+    const poll = async () => {
+      // The server reports its own failures now, so ask before assuming it is just slow.
+      try {
+        const st = await (await fetch('/api/update/status')).json();
+        if (st.phase === 'failed') {
+          setPhase('failed');
+          setStatusMsg('UPDATE FAILED');
+          setDetail(st.error || 'No reason given.');
+          return;
+        }
+      } catch { /* the server is restarting, which is the point */ }
+
+      try {
+        const res = await fetch('/api/version');
+        if (res.ok) {
           const data = await res.json();
-          if (data.version !== current) {
+          // A restart is what matters. Waiting on the version alone hangs forever on a
+          // build without APP_VERSION, which reports 'dev' before and after.
+          const restarted = bootId ? data.bootId && data.bootId !== bootId : data.version !== current;
+          if (restarted) {
             window.location.href = `/?v=${Date.now()}`;
             return;
           }
-        } catch { /* server restarting */ }
-        setTimeout(poll, 3000);
-      };
-      setTimeout(poll, 10000);
-    } catch {
-      setStatusMsg('Update failed — try manually from the nav panel');
-    }
+        }
+      } catch { /* server restarting */ }
+
+      if (Date.now() > deadline) {
+        setPhase('failed');
+        setStatusMsg('UPDATE TIMED OUT');
+        setDetail('The server did not come back within six minutes. It may still be pulling — '
+          + 'check "docker compose ps" on the host, and backend/data/update.log for what happened.');
+        return;
+      }
+      setTimeout(poll, 3000);
+    };
+    setTimeout(poll, 10000);
   };
 
   const panelStyle: React.CSSProperties = {
@@ -159,6 +215,17 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
 
         {phase === 'updating' && (
           <div style={{ marginTop: '16px', fontSize: '0.65rem', opacity: 0.8 }}>{statusMsg}</div>
+        )}
+
+        {phase === 'failed' && (
+          <>
+            <div style={{ marginTop: '16px', fontSize: '0.65rem', color: 'var(--danger, #ff4444)' }}>{statusMsg}</div>
+            <div style={{ marginTop: '6px', fontSize: '0.6rem', opacity: 0.75, lineHeight: 1.5 }}>{detail}</div>
+            <div style={btnRow}>
+              <button className="modal-btn" onClick={() => setPhase('idle')}>BACK</button>
+              <button className="modal-btn muted" onClick={onDismiss}>CLOSE</button>
+            </div>
+          </>
         )}
       </div>
     </div>

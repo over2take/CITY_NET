@@ -323,10 +323,11 @@ CITY_NET/
 ├── backend/
 │   ├── server.js               # Express entrypoint — mounts routes, starts Socket.IO
 │   ├── db.js                   # SQLite schema and migrations
+│   ├── updater.js              # In-app self-update — preflight (compose file mounted, docker socket, compose project labels) so a stack that cannot update says why instead of hanging; upgrade-only semver check; update log on the data volume; boot id so a restart is detectable without a version change
 │   ├── middleware/
 │   │   └── auth.js             # JWT verify middleware (admin + elevated users)
 │   ├── routes/
-│   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs; POST /water marks generated water so a regenerate can clear its own river without touching a lake the GM drew
+│   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs; POST /update preflights and returns 409 naming what is missing, GET /update/status reports phase, error and log tail; POST /water marks generated water so a regenerate can clear its own river without touching a lake the GM drew
 │   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only); GET / includes sheet_data for NPC initiative rolls; POST /purge-region clears one region's generated content in a single transaction, keeping GM-named structures, tokens, battle-map content and hand-drawn water
 │   │   ├── battle_maps.js      # Battle map image upload/management
 │   │   ├── maps.js             # Saved map snapshots (locations, districts, roads, overpasses, water bodies); preserves only rhombus tokens on load/clear; records active_map_name in global_settings so exports can name their files

@@ -145,7 +145,43 @@ describe('UpdateModal — Update Now', () => {
     render(<UpdateModal {...baseProps} isDocker={true} />);
     await userEvent.click(screen.getByText('UPDATE NOW'));
     await waitFor(() => {
-      expect(screen.getByText(/Update failed/)).toBeInTheDocument();
+      expect(screen.getByText(/UPDATE FAILED TO START/)).toBeInTheDocument();
     });
+    expect(screen.getByText(/network error/)).toBeInTheDocument();
+  });
+
+  it('reports why the server refused, rather than waiting for a restart', async () => {
+    // Preflight rejects a container that cannot possibly update — most often one started
+    // before the compose file mounted itself. Previously the client ignored the response
+    // entirely and polled for a version change that was never coming, which is how an
+    // instance sits on WAITING FOR SERVER indefinitely.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/version')) {
+        return { ok: true, json: async () => ({ version: '1.8.0', bootId: 'boot-1' }) };
+      }
+      return {
+        ok: false,
+        status: 409,
+        json: async () => ({ error: '/tmp/docker-compose.yml is not mounted in this container' }),
+      };
+    }));
+
+    render(<UpdateModal {...baseProps} isDocker={true} />);
+    await userEvent.click(screen.getByText('UPDATE NOW'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/UPDATE CANNOT RUN/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/docker-compose.yml is not mounted/)).toBeInTheDocument();
+  });
+
+  it('offers a way back after a failure instead of stranding the modal', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')));
+    render(<UpdateModal {...baseProps} isDocker={true} />);
+    await userEvent.click(screen.getByText('UPDATE NOW'));
+    await waitFor(() => expect(screen.getByText('BACK')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByText('BACK'));
+    expect(screen.getByText('UPDATE NOW')).toBeInTheDocument();
   });
 });

@@ -9,6 +9,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.8.1] - 2026-08-02
+
+### Fixed
+
+- **The in-app updater could sit on `WAITING FOR SERVER` indefinitely.** Every step failed silently — both child processes discarded their output, the route answered "Update started" before checking anything could work, and a non-zero exit from `docker compose pull` simply returned — so a stack that *could not* update was indistinguishable from one still working, and the client polled every three seconds forever with no deadline.
+
+  The likeliest cause on a long-running instance is the compose file's own self-mount at `/tmp/docker-compose.yml`, which the update reads. A container started before that line existed does not have it, the pull fails, and everything above turns that into an endless wait — so the instances least able to update in place are exactly the ones that have been running longest.
+
+  `POST /api/update` now checks the mount, the Docker socket and the compose project labels *before* answering, and returns `409` naming what is missing and what to do about it. Both steps append to `backend/data/update.log`, which lives on the data volume and so survives the container being replaced. `GET /api/update/status` reports phase and error, and the modal shows them and gives up after six minutes.
+- **A successful update could hang too.** The client waited for the reported version to change, but a build without `APP_VERSION` reports `dev` before and after. `/api/version` now carries a boot id and the client waits for the restart itself.
+- **The update check offered downgrades.** `hasUpdate` was `latest !== current`, so a published tag trailing the running one counted as an update — a 1.8.0 instance was offered 1.7.4. It is a numeric version comparison now, and anything unparseable (`dev`, `latest`) is never offered.
+
+### Technical
+
+- The update logic moved out of the admin route into `backend/updater.js`. None of it was reachable from a test where it was, which is a large part of why three separate faults sat in it unnoticed.
+
+---
+
 ## [1.8.0] - 2026-08-01
 
 ### Added
