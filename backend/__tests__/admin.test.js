@@ -239,3 +239,62 @@ describe('DELETE /api/admin/water (purge all)', () => {
     expect(rows).toHaveLength(0);
   });
 });
+
+// ─── update routes ────────────────────────────────────────────────────────────
+
+/**
+ * These test the wiring, not the logic — updater.test.js covers the logic.
+ *
+ * The gap they close is real: every fault this branch fixed lived in the seam between
+ * the route and what it called, and a module can be correct while the route ignores it.
+ */
+describe('update routes', () => {
+  it('GET /version carries a boot id, so a restart is detectable', async () => {
+    // The client waits on this rather than a version change, because a build without
+    // APP_VERSION reports 'dev' before and after and would hang on a working update.
+    const res = await request(app).get('/api/admin/version');
+    expect(res.status).toBe(200);
+    expect(typeof res.body.bootId).toBe('string');
+    expect(res.body.bootId.length).toBeGreaterThan(0);
+  });
+
+  it('GET /update/status needs no auth, since the restart drops the session', async () => {
+    const res = await request(app).get('/api/admin/update/status');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('phase');
+    expect(res.body).toHaveProperty('bootId');
+  });
+
+  it('POST /update refuses with a reason instead of reporting success', async () => {
+    // Nothing about this test environment is a Docker stack, so preflight must refuse.
+    // The route previously answered 200 "Update started" regardless, which is what left
+    // a client polling for a restart that was never going to happen.
+    const res = await request(app)
+      .post('/api/admin/update')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(res.status).toBe(409);
+    expect(typeof res.body.error).toBe('string');
+    expect(res.body.error.length).toBeGreaterThan(0);
+    expect(res.body.message).toBeUndefined();
+  });
+
+  it('POST /update refuses a temporary admin', async () => {
+    // Rejected at 401 by the middleware, which turns away a temporary token unless the
+    // user has been elevated — the route's own isTemporary guard is the second line,
+    // for an elevated temporary who gets past that.
+    const tempToken = jwt.sign(
+      { id: 2, username: 'temp', role: 'admin', isTemporary: true },
+      'test-secret'
+    );
+    const res = await request(app)
+      .post('/api/admin/update')
+      .set('Authorization', `Bearer ${tempToken}`);
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /update refuses with no token at all', async () => {
+    const res = await request(app).post('/api/admin/update');
+    expect(res.status).toBe(401);
+  });
+});

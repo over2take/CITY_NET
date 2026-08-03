@@ -363,8 +363,9 @@ CITY_NET/
 │   └── __tests__/
 │       ├── helpers/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
-│       ├── admin.test.js               # Admin endpoints (auth, settings, undo access)
+│       ├── admin.test.js               # Admin endpoints (auth, settings, undo access); update routes — 409 with a reason rather than a false success, unauthenticated status, boot id on /version
 │       ├── updater.test.js             # Version ordering including X.Y.Z-dev, tag filtering per channel, preflight refusals, and an update that records its failures instead of returning silently
+│       ├── docker_config.test.js       # Deployment invariants — DB_PATH baked in, data excluded from the image, image tags parameterised by IMAGE_TAG, compose file mounted for the updater, dev channel shipped off
 │       ├── battle_maps.test.js         # Battle map upload/list/delete
 │       ├── locations.test.js           # Location CRUD and classification
 │       ├── locations.global.test.js    # Custom structure global persistence tests

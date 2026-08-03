@@ -61,3 +61,43 @@ describe('db.js DB_PATH resolution', () => {
     expect(src).toMatch(/DB_PATH.*city\.db/);
   });
 });
+
+describe('docker-compose.yml release channel', () => {
+  const compose = () => readRoot('docker-compose.yml');
+
+  it('reads the image tag from IMAGE_TAG and defaults to latest', () => {
+    // Hardcoding :latest is what made the DEV flag cosmetic — the check would offer a
+    // dev version and compose would then pull the stable one, because the compose file
+    // is what decides the image.
+    const yml = compose();
+    expect(yml).toMatch(/citynet-backend:\$\{IMAGE_TAG:-latest\}/);
+    expect(yml).toMatch(/citynet-frontend:\$\{IMAGE_TAG:-latest\}/);
+  });
+
+  it('pins no image to a bare :latest', () => {
+    // Leaving one service pinned would half-switch a channel: a dev backend against a
+    // stable frontend, or the reverse.
+    expect(compose()).not.toMatch(/citynet-(backend|frontend):latest/);
+  });
+
+  it('still mounts the compose file into the backend, which the updater reads', () => {
+    // Its absence is the single likeliest reason an in-app update does nothing, since a
+    // container started before this line was added does not have it.
+    expect(compose()).toMatch(/\.\/docker-compose\.yml:\/tmp\/docker-compose\.yml:ro/);
+  });
+});
+
+describe('.env.example release channel', () => {
+  const env = () => readRoot('backend/.env.example');
+
+  it('ships the dev channel switched off', () => {
+    // Dev builds are unreleased code; nobody should arrive on one by default.
+    expect(env()).toMatch(/^DEV=false$/m);
+  });
+
+  it('documents both settings, since one without the other misleads', () => {
+    const text = env();
+    expect(text).toMatch(/^IMAGE_TAG=latest$/m);
+    expect(text).toMatch(/IMAGE_TAG=dev/);
+  });
+});
