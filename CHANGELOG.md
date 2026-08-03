@@ -15,7 +15,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **An optional development channel.** Off by default — `DEV=false` in `backend/.env`, and stable releases are all anyone sees unless they ask otherwise. Setting `DEV=true` makes the update check consider `X.Y.Z-dev` builds alongside releases, with a counter accepted but not required, so `1.9.0-dev` and `1.9.0-dev.7` both work and adding counters later is a build-workflow change rather than a code one. A dev build of a newer release is offered to someone on an older release, the release itself supersedes its own dev builds when it lands, and a release user is never dragged back onto a dev build of the same version.
 
-  It takes two settings, not one, because they do different jobs: `DEV` decides what is *offered*, and `IMAGE_TAG=dev` decides what is *pulled* — `docker-compose.yml` now reads `${IMAGE_TAG:-latest}` instead of hardcoding `latest`. Setting only `DEV` would offer a dev version and then install the stable one. `.env.example` says so where both are defined.
+  It takes two settings, not one, because they do different jobs: `DEV` decides what is *offered*, and `IMAGE_TAG=dev` decides what is *pulled* — `docker-compose.yml` now reads `${IMAGE_TAG:-latest}` instead of hardcoding `latest`. Setting only `DEV` would offer a dev version and then install the stable one, and would never settle: the next check sees the same dev version as newer and offers it again. So the two are checked against each other — dev versions are ignored until they agree, the reason is logged at startup, and the update modal shows it even when there is no update, since a suppressed dev channel is usually why there isn't one.
+
+  `IMAGE_TAG` has to reach the `.env` beside `docker-compose.yml` as well as `backend/.env`: compose interpolates from the project file, not from `env_file`, so setting it in only one place silently falls back to `latest`. That is a second route into the same contradiction, and the warning names it.
 
 ### Fixed
 
