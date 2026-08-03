@@ -238,17 +238,16 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         try {
           const data = JSON.parse(body);
           // Find version tags (skip 'latest'), sort and get highest version
+          // Dev builds are published as X.Y.Z-dev and ignored unless DEV=true. The
+          // previous filter was unanchored, so a tag like 1.9.0-dev passed it and then
+          // parsed to NaN, which made the comparator return NaN and left the sort
+          // order undefined — one dev tag on the registry could stop stable users
+          // being told about releases at all.
+          const allowDev = updater.devChannelEnabled();
           const versionTags = data.results
-            ?.filter(tag => tag.name !== 'latest' && /^\d+\.\d+\.\d+/.test(tag.name))
+            ?.filter(tag => updater.isVersionTag(tag.name, allowDev))
             .map(tag => tag.name)
-            .sort((a, b) => {
-              const aParts = a.split('.').map(Number);
-              const bParts = b.split('.').map(Number);
-              for (let i = 0; i < 3; i++) {
-                if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
-              }
-              return 0;
-            }) || [];
+            .sort((a, b) => updater.compareVersions(updater.parseVersion(b), updater.parseVersion(a))) || [];
           const latestTag = versionTags[0] || 'unknown';
           // Strictly newer, not merely different. Comparing with !== offers a
           // downgrade whenever the published tag trails the running one.

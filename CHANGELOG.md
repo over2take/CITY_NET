@@ -11,8 +11,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [1.8.1] - 2026-08-02
 
+### Added
+
+- **An optional development channel.** Off by default — `DEV=false` in `backend/.env`, and stable releases are all anyone sees unless they ask otherwise. Setting `DEV=true` makes the update check consider `X.Y.Z-dev` builds alongside releases, with a counter accepted but not required, so `1.9.0-dev` and `1.9.0-dev.7` both work and adding counters later is a build-workflow change rather than a code one. A dev build of a newer release is offered to someone on an older release, the release itself supersedes its own dev builds when it lands, and a release user is never dragged back onto a dev build of the same version.
+
+  It takes two settings, not one, because they do different jobs: `DEV` decides what is *offered*, and `IMAGE_TAG=dev` decides what is *pulled* — `docker-compose.yml` now reads `${IMAGE_TAG:-latest}` instead of hardcoding `latest`. Setting only `DEV` would offer a dev version and then install the stable one. `.env.example` says so where both are defined.
+
 ### Fixed
 
+- **One dev tag on the registry would have silenced update notices for everyone.** The tag filter was `/^\d+\.\d+\.\d+/`, unanchored, so `1.9.0-dev` passed it and then parsed to `NaN` — which made the sort comparator return `NaN`, leaving the ordering undefined and letting a prerelease surface as the newest tag, whereupon the version check correctly refused it and reported no update at all. Version tags are matched strictly now, and sorted by a comparator that understands them.
 - **The in-app updater could sit on `WAITING FOR SERVER` indefinitely.** Every step failed silently — both child processes discarded their output, the route answered "Update started" before checking anything could work, and a non-zero exit from `docker compose pull` simply returned — so a stack that *could not* update was indistinguishable from one still working, and the client polled every three seconds forever with no deadline.
 
   The likeliest cause on a long-running instance is the compose file's own self-mount at `/tmp/docker-compose.yml`, which the update reads. A container started before that line existed does not have it, the pull fails, and everything above turns that into an endless wait — so the instances least able to update in place are exactly the ones that have been running longest.

@@ -37,9 +37,13 @@ describe('isNewerVersion', () => {
     expect(updater.isNewerVersion('1.9.0', '1.10.0')).toBe(false);
   });
 
-  it('treats a missing segment as zero', () => {
-    expect(updater.isNewerVersion('1.9', '1.8.7')).toBe(true);
-    expect(updater.isNewerVersion('1.8', '1.8.0')).toBe(false);
+  it('requires all three segments rather than guessing at a partial version', () => {
+    // Deliberately strict. Every tag this project publishes comes from package.json and
+    // has three parts, and a loose parser is what let '1.9.0-dev' through the filter and
+    // then produce NaN in the sort comparator.
+    expect(updater.isNewerVersion('1.9', '1.8.7')).toBe(false);
+    expect(updater.isNewerVersion('1.9.0', '1.8')).toBe(false);
+    expect(updater.parseVersion('1.9')).toBeNull();
   });
 
   it('refuses anything it cannot parse rather than guessing', () => {
@@ -48,6 +52,87 @@ describe('isNewerVersion', () => {
     expect(updater.isNewerVersion('latest', '1.8.0')).toBe(false);
     expect(updater.isNewerVersion('1.8.1', 'dev')).toBe(false);
     expect(updater.isNewerVersion('', '1.0.0')).toBe(false);
+  });
+});
+
+describe('dev channel', () => {
+  it('is off unless explicitly turned on', () => {
+    // A dev build is unreleased code. Nobody should land on one by leaving a value out.
+    expect(updater.devChannelEnabled({})).toBe(false);
+    expect(updater.devChannelEnabled({ DEV: 'false' })).toBe(false);
+    expect(updater.devChannelEnabled({ DEV: '' })).toBe(false);
+    expect(updater.devChannelEnabled({ DEV: '1' })).toBe(false);
+    expect(updater.devChannelEnabled({ DEV: 'yes' })).toBe(false);
+  });
+
+  it('turns on for true, whatever the casing or padding', () => {
+    expect(updater.devChannelEnabled({ DEV: 'true' })).toBe(true);
+    expect(updater.devChannelEnabled({ DEV: 'TRUE' })).toBe(true);
+    expect(updater.devChannelEnabled({ DEV: ' true ' })).toBe(true);
+  });
+
+  it('hides dev tags from the stable channel', () => {
+    expect(updater.isVersionTag('1.9.0', false)).toBe(true);
+    expect(updater.isVersionTag('1.9.0-dev', false)).toBe(false);
+    expect(updater.isVersionTag('1.9.0-dev.7', false)).toBe(false);
+  });
+
+  it('shows dev tags to the dev channel', () => {
+    expect(updater.isVersionTag('1.9.0-dev', true)).toBe(true);
+    expect(updater.isVersionTag('1.9.0-dev.7', true)).toBe(true);
+    expect(updater.isVersionTag('1.9.0', true)).toBe(true);
+  });
+
+  it('rejects tags that are not versions on either channel', () => {
+    // The filter this replaces was unanchored, so '1.9.0-dev' passed it, parsed to NaN,
+    // made the sort comparator return NaN, and left the ordering undefined — a single
+    // dev tag on the registry could stop stable users hearing about releases at all.
+    for (const tag of ['latest', 'dev', '1.9.0-rc1', '1.9', 'v1.9.0', '']) {
+      expect(updater.isVersionTag(tag, false), tag).toBe(false);
+      expect(updater.isVersionTag(tag, true), tag).toBe(false);
+    }
+  });
+
+  it('sorts a mixed tag list without NaN poisoning the comparator', () => {
+    const tags = ['1.8.0', '1.9.0-dev.2', '1.10.0', '1.9.0', '1.9.0-dev.10'];
+    const sorted = [...tags].sort((a, b) =>
+      updater.compareVersions(updater.parseVersion(b), updater.parseVersion(a)));
+    expect(sorted[0]).toBe('1.10.0');
+    expect(sorted).toEqual(['1.10.0', '1.9.0', '1.9.0-dev.10', '1.9.0-dev.2', '1.8.0']);
+  });
+});
+
+describe('dev version ordering', () => {
+  it('offers a dev build of a newer release to someone on an older release', () => {
+    expect(updater.isNewerVersion('1.9.0-dev', '1.8.1')).toBe(true);
+  });
+
+  it('carries a dev user onto the release when it lands', () => {
+    expect(updater.isNewerVersion('1.9.0', '1.9.0-dev')).toBe(true);
+    expect(updater.isNewerVersion('1.9.0', '1.9.0-dev.7')).toBe(true);
+  });
+
+  it('never drags a release user back onto a dev build of the same version', () => {
+    expect(updater.isNewerVersion('1.9.0-dev', '1.9.0')).toBe(false);
+    expect(updater.isNewerVersion('1.9.0-dev.7', '1.9.0')).toBe(false);
+  });
+
+  it('orders dev builds by their counter when there is one', () => {
+    expect(updater.isNewerVersion('1.9.0-dev.7', '1.9.0-dev.3')).toBe(true);
+    expect(updater.isNewerVersion('1.9.0-dev.3', '1.9.0-dev.7')).toBe(false);
+    // Ten after two, not before it — the old comparison was textual.
+    expect(updater.isNewerVersion('1.9.0-dev.10', '1.9.0-dev.2')).toBe(true);
+  });
+
+  it('accepts a counter without requiring one', () => {
+    // So publishing counters later is a change to the build workflow, not to this code.
+    expect(updater.parseVersion('1.9.0-dev')).toEqual({ core: [1, 9, 0], dev: 0 });
+    expect(updater.parseVersion('1.9.0-dev.7')).toEqual({ core: [1, 9, 0], dev: 7 });
+    expect(updater.parseVersion('1.9.0')).toEqual({ core: [1, 9, 0], dev: null });
+  });
+
+  it('offers no update between identical dev builds', () => {
+    expect(updater.isNewerVersion('1.9.0-dev', '1.9.0-dev')).toBe(false);
   });
 });
 

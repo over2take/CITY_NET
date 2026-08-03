@@ -28,7 +28,52 @@ function logPath() {
 }
 
 /**
- * Compare two dotted versions. True when `candidate` is strictly newer than `current`.
+ * A released version, or a dev build of one.
+ *
+ * Dev builds are tagged `X.Y.Z-dev`, optionally with a counter — `1.9.0-dev.7`. The
+ * counter is accepted but not required, so publishing one later is a change to the
+ * build workflow and not to this code.
+ *
+ * Returns null for anything else, `dev` and `latest` included. That matters: a build
+ * without APP_VERSION reports `dev`, and there is no honest way to say whether some
+ * numbered release is newer than an unknown.
+ */
+function parseVersion(v) {
+  const m = /^(\d+)\.(\d+)\.(\d+)(?:-dev(?:\.(\d+))?)?$/.exec(String(v).trim());
+  if (!m) return null;
+  return {
+    core: [Number(m[1]), Number(m[2]), Number(m[3])],
+    // null means a release; a number means a dev build of that release.
+    dev: m[4] !== undefined ? Number(m[4]) : (/-dev/.test(v) ? 0 : null),
+  };
+}
+
+/** True when this tag is one the given channel should consider at all. */
+function isVersionTag(tag, allowDev) {
+  const parsed = parseVersion(tag);
+  if (!parsed) return false;
+  return allowDev || parsed.dev === null;
+}
+
+/**
+ * Order two parsed versions. Negative when `a` is older.
+ *
+ * `1.9.0-dev` precedes `1.9.0`, which is the rule that lets a dev user be carried onto
+ * the release when it lands, and stops a release user being dragged back onto a dev
+ * build of the same version.
+ */
+function compareVersions(a, b) {
+  for (let i = 0; i < 3; i++) {
+    if (a.core[i] !== b.core[i]) return a.core[i] - b.core[i];
+  }
+  if (a.dev === null && b.dev === null) return 0;
+  if (a.dev === null) return 1;
+  if (b.dev === null) return -1;
+  return a.dev - b.dev;
+}
+
+/**
+ * True when `candidate` is strictly newer than `current`.
  *
  * The check this replaces was `latest !== current`, which treats any difference as an
  * update — so a host publishing an older tag than the one running offers a downgrade,
@@ -36,16 +81,15 @@ function logPath() {
  * to act on.
  */
 function isNewerVersion(candidate, current) {
-  const parse = (v) => String(v).split('.').map((n) => parseInt(n, 10));
-  const a = parse(candidate);
-  const b = parse(current);
-  if (a.some(Number.isNaN) || b.some(Number.isNaN)) return false;
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const x = a[i] ?? 0;
-    const y = b[i] ?? 0;
-    if (x !== y) return x > y;
-  }
-  return false;
+  const a = parseVersion(candidate);
+  const b = parseVersion(current);
+  if (!a || !b) return false;
+  return compareVersions(a, b) > 0;
+}
+
+/** Whether this deployment has opted into dev builds. Off unless explicitly on. */
+function devChannelEnabled(env = process.env) {
+  return String(env.DEV ?? '').trim().toLowerCase() === 'true';
 }
 
 /**
@@ -219,6 +263,10 @@ function runUpdate(labels, deps = {}) {
 module.exports = {
   COMPOSE_FILE,
   BOOT_ID,
+  parseVersion,
+  compareVersions,
+  isVersionTag,
+  devChannelEnabled,
   isNewerVersion,
   buildUpdateHelperArgs,
   readComposeLabels,

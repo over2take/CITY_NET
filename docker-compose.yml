@@ -1,6 +1,9 @@
+# IMAGE_TAG selects the release channel and defaults to the stable images. Set it to
+# "dev" in backend/.env, alongside DEV=true, to run development builds — the flag alone
+# only changes what the update check *offers*, while this is what is actually pulled.
 services:
   backend:
-    image: over2take/citynet-backend:latest
+    image: over2take/citynet-backend:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -18,7 +21,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: over2take/citynet-frontend:latest
+    image: over2take/citynet-frontend:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.frontend
