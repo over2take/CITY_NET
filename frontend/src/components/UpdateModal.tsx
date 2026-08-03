@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { startUpdate, waitForRestart, currentBootId } from '../utils/updateClient';
 
 interface Props {
   current: string;
@@ -41,128 +42,35 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
     };
   }, []);
 
-  /**
-   * How long to wait for the server to come back before calling it a failure.
-   *
-   * A pull and a container recreate is minutes, not seconds, on a slow connection. But
-   * it is bounded: the previous version polled every three seconds forever, so a stack
-   * that could not update looked identical to one still working, and sat on
-   * "WAITING FOR SERVER" indefinitely.
-   */
-  const DEADLINE_MS = 6 * 60 * 1000;
-
-  /** Long enough that a normal pull has not finished, short enough to reassure. */
-  const REASSURE_MS = 45 * 1000;
-
-  /** What to run on the host when the container cannot update itself. */
-  const MANUAL_COMMAND = 'docker compose pull && docker compose up -d';
-
-  /**
-   * Does the server behind this page have the self-checking updater?
-   *
-   * A container from before it has no `/api/update/status`, and asking is the one
-   * reliable way to find out — its `/api/update` cheerfully answers "Update started"
-   * and then does nothing, which is the whole failure being guarded against here.
-   *
-   * The shape is checked, not just the status code: a setup that serves index.html for
-   * unknown paths would otherwise answer 200 with a page and look modern.
-   */
-  const hasModernUpdater = async () => {
-    try {
-      const res = await fetch('/api/update/status');
-      if (!res.ok) return false;
-      const data = await res.json();
-      return typeof data?.phase === 'string';
-    } catch {
-      return false;
-    }
-  };
-
   const handleUpdate = async () => {
     setPhase('updating');
     setStatusMsg('CHECKING SERVER...');
     setDetail('');
+    setCommand('');
 
-    if (!(await hasModernUpdater())) {
-      // Told immediately rather than after a six-minute wait for a restart that this
-      // container was never going to perform.
+    const bootId = await currentBootId();
+    const started = await startUpdate(token);
+    if (!started.ok) {
       setPhase('failed');
-      setStatusMsg('THIS CONTAINER CANNOT UPDATE ITSELF');
-      setDetail('It was built before the self-updating backend, so the in-app update would '
-        + 'report success and then do nothing. Run this on the host, in the folder holding '
-        + 'docker-compose.yml — after that, in-app updates work.');
-      setCommand(MANUAL_COMMAND);
+      setStatusMsg(started.command ? 'THIS CONTAINER CANNOT UPDATE ITSELF' : 'UPDATE CANNOT RUN');
+      setDetail(started.error ?? '');
+      setCommand(started.command ?? '');
       return;
     }
 
     setStatusMsg('UPDATE IN PROGRESS — WAITING FOR SERVER...');
-
-    let bootId = '';
-    try {
-      const before = await (await fetch('/api/version')).json();
-      bootId = before.bootId ?? '';
-    } catch { /* carry on; the restart check falls back to the version */ }
-
-    try {
-      const res = await fetch('/api/update', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) {
-        // Preflight refused it and said why — much the commonest case being a container
-        // started before the compose file mounted itself.
-        const body = await res.json().catch(() => ({}));
+    await waitForRestart({
+      bootId,
+      currentVersion: current,
+      onRestart: () => { window.location.href = `/?v=${Date.now()}`; },
+      onStillWorking: () => setStatusMsg('STILL WORKING — PULLING IMAGES, THIS CAN TAKE A FEW MINUTES...'),
+      onFailed: (error, cmd) => {
         setPhase('failed');
-        setStatusMsg('UPDATE CANNOT RUN');
-        setDetail(body.error || `Server returned ${res.status}.`);
-        return;
-      }
-    } catch (e) {
-      setPhase('failed');
-      setStatusMsg('UPDATE FAILED TO START');
-      setDetail(e instanceof Error ? e.message : 'The server could not be reached.');
-      return;
-    }
-
-    const started = Date.now();
-    const deadline = started + DEADLINE_MS;
-    const poll = async () => {
-      if (Date.now() - started > REASSURE_MS) {
-        setStatusMsg('STILL WORKING — PULLING IMAGES, THIS CAN TAKE A FEW MINUTES...');
-      }
-      // The server reports its own failures now, so ask before assuming it is just slow.
-      try {
-        const st = await (await fetch('/api/update/status')).json();
-        if (st.phase === 'failed') {
-          setPhase('failed');
-          setStatusMsg('UPDATE FAILED');
-          setDetail(st.error || 'No reason given.');
-          return;
-        }
-      } catch { /* the server is restarting, which is the point */ }
-
-      try {
-        const res = await fetch('/api/version');
-        if (res.ok) {
-          const data = await res.json();
-          // A restart is what matters. Waiting on the version alone hangs forever on a
-          // build without APP_VERSION, which reports 'dev' before and after.
-          const restarted = bootId ? data.bootId && data.bootId !== bootId : data.version !== current;
-          if (restarted) {
-            window.location.href = `/?v=${Date.now()}`;
-            return;
-          }
-        }
-      } catch { /* server restarting */ }
-
-      if (Date.now() > deadline) {
-        setPhase('failed');
-        setStatusMsg('UPDATE TIMED OUT');
-        setDetail('The server did not come back within six minutes. Check backend/data/update.log '
-          + 'for what happened, then recreate the stack from the host:');
-        setCommand(MANUAL_COMMAND);
-        return;
-      }
-      setTimeout(poll, 3000);
-    };
-    setTimeout(poll, 10000);
+        setStatusMsg('UPDATE FAILED');
+        setDetail(error);
+        setCommand(cmd ?? '');
+      },
+    });
   };
 
   const panelStyle: React.CSSProperties = {
@@ -219,12 +127,12 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
         </div>
         <div style={{ marginTop: '8px', fontSize: '0.6rem', opacity: 0.5 }}>
           <a
-            href="https://github.com/over2take/CITY_NET/blob/main/README.md#updating"
+            href="https://github.com/over2take/CITY_NET/blob/main/UPGRADE.md"
             target="_blank"
             rel="noreferrer"
             style={{ color: 'var(--green, #00ff88)' }}
           >
-            README ↗
+            UPGRADE GUIDE ↗
           </a>
         </div>
 

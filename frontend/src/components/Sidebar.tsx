@@ -9,6 +9,7 @@ import { CurrencyIcon } from './BankWindows';
 import { THEMES } from '../theme/themes';
 import type { ThemeName } from '../theme/themes';
 import { getTemplate } from '../sheets';
+import { startUpdate, waitForRestart, currentBootId } from '../utils/updateClient';
 
 // Token defense config for the active game system; default is D&D-style AC
 const getTokenDefense = (gameSystem?: string) =>
@@ -57,38 +58,33 @@ function CheckUpdateButton({ token }: { token: string }) {
 
   const applyUpdate = async () => {
     setStatus('updating');
-    try {
-      const checkRes = await fetch('/api/check-update', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const { current: originalCurrent } = await checkRes.json();
+    // Shared with the update modal. This path had its own copy and only the modal's was
+    // hardened, so the nav button — the one the upgrade guide tells people to click —
+    // still sat on "waiting for server" indefinitely when a stack could not update.
+    const { current: originalCurrent } = await fetch('/api/check-update', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => r.json()).catch(() => ({ current: '' }));
 
-      await fetch('/api/update', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setVersionMessage('Update in progress — waiting for server...');
-
-      // Poll /api/version until the server comes back on a different version
-      const poll = async () => {
-        try {
-          const res = await fetch('/api/version');
-          if (!res.ok) throw new Error();
-          const data = await res.json();
-          if (data.version !== originalCurrent) {
-            window.location.href = `/?v=${Date.now()}`;
-            return;
-          }
-        } catch { /* server still restarting */ }
-        setTimeout(poll, 3000);
-      };
-      setTimeout(poll, 10000);
-    } catch {
+    const bootId = await currentBootId();
+    const started = await startUpdate(token);
+    if (!started.ok) {
       setStatus('error');
-      setVersionMessage('Update failed — try manually');
-      setTimeout(() => setStatus('idle'), 5000);
+      setVersionMessage(started.command ? `${started.error} ${started.command}` : (started.error ?? 'Update failed'));
+      return;
     }
+
+    setVersionMessage('Update in progress — waiting for server...');
+    await waitForRestart({
+      bootId,
+      currentVersion: originalCurrent,
+      onRestart: () => { window.location.href = `/?v=${Date.now()}`; },
+      onStillWorking: () => setVersionMessage('Still working — pulling images, this can take a few minutes...'),
+      onFailed: (error, cmd) => {
+        setStatus('error');
+        setVersionMessage(cmd ? `${error} ${cmd}` : error);
+      },
+    });
   };
 
   const btnStyle = { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--green)', fontSize: '0.6rem', opacity: 0.7, letterSpacing: '1px', marginTop: '4px', padding: 0 };
@@ -116,7 +112,7 @@ function CheckUpdateButton({ token }: { token: string }) {
         <button onClick={applyUpdate} style={{ ...btnStyle, marginTop: 0, textDecoration: 'underline' }}>
           UPDATE NOW (DOCKER ONLY)
         </button>
-        <a href="https://github.com/over2take/CITY_NET/blob/main/README.md#updating" target="_blank" rel="noreferrer" style={{ fontSize: '0.6rem', opacity: 0.5, letterSpacing: '1px', color: 'var(--green)' }}>README ↗</a>
+        <a href="https://github.com/over2take/CITY_NET/blob/main/UPGRADE.md" target="_blank" rel="noreferrer" style={{ fontSize: '0.6rem', opacity: 0.5, letterSpacing: '1px', color: 'var(--green)' }}>UPGRADE GUIDE ↗</a>
       </div>
     );
   }

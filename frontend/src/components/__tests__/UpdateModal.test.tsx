@@ -39,9 +39,13 @@ describe('UpdateModal rendering', () => {
     expect(screen.getByText('1.2.2')).toBeInTheDocument();
   });
 
-  it('renders README link', () => {
+  it('links to the upgrade guide', () => {
+    // Was a README#updating anchor that does not exist — the link shown to someone
+    // whose update just failed landed at the top of a 570-line README.
     render(<UpdateModal {...baseProps} />);
-    expect(screen.getByText('README ↗')).toBeInTheDocument();
+    const link = screen.getByText('UPGRADE GUIDE ↗');
+    expect(link).toBeInTheDocument();
+    expect(link.getAttribute('href')).toContain('UPGRADE.md');
   });
 });
 
@@ -158,8 +162,11 @@ describe('UpdateModal — Update Now', () => {
     }));
     render(<UpdateModal {...baseProps} isDocker={true} />);
     await userEvent.click(screen.getByText('UPDATE NOW'));
+    // "cannot run" and "failed to start" were two messages for one situation; the
+    // shared client reports a single one. What matters is that the reason reaches the
+    // screen rather than being swallowed.
     await waitFor(() => {
-      expect(screen.getByText(/UPDATE FAILED TO START/)).toBeInTheDocument();
+      expect(screen.getByText(/UPDATE CANNOT RUN/)).toBeInTheDocument();
     });
     expect(screen.getByText(/network error/)).toBeInTheDocument();
   });
