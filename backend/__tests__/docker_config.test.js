@@ -106,3 +106,40 @@ describe('.env.example release channel', () => {
     expect(env()).not.toMatch(/^DEV=/m);
   });
 });
+
+describe('dev release workflow', () => {
+  const workflow = () => readRoot('.github/workflows/dev-release.yml');
+
+  it('never publishes to latest', () => {
+    // The one thing that must not happen. `latest` is what every stable deployment
+    // pulls, so a dev build landing there would push unreleased code to everybody.
+    expect(workflow()).not.toMatch(/:latest/);
+  });
+
+  it('publishes both the moving tag and an immutable version', () => {
+    // Both are needed: `dev` is what IMAGE_TAG=dev pulls, and X.Y.Z-dev.N is the only
+    // form the update check can see, since `dev` is not a version and is filtered out
+    // of the tag listing.
+    const yml = workflow();
+    expect(yml).toMatch(/citynet-backend:dev$/m);
+    expect(yml).toMatch(/citynet-frontend:dev$/m);
+    expect(yml).toMatch(/citynet-backend:\$\{\{ steps\.version\.outputs\.VERSION \}\}/);
+    expect(yml).toMatch(/citynet-frontend:\$\{\{ steps\.version\.outputs\.VERSION \}\}/);
+  });
+
+  it('bakes the dev version into the image as APP_VERSION', () => {
+    // Without it the container reports 'dev', which parses as nothing, and the update
+    // check can neither offer it an update nor confirm one landed.
+    expect(workflow()).toMatch(/APP_VERSION=\$\{\{ steps\.version\.outputs\.VERSION \}\}/);
+  });
+
+  it('gives each build a distinct version', () => {
+    // A single moving X.Y.Z-dev would be the same version every time, so a dev
+    // deployment would never see a newer one.
+    expect(workflow()).toMatch(/-dev\.\$\{\{ github\.run_number \}\}/);
+  });
+
+  it('runs the tests before publishing', () => {
+    expect(workflow()).toMatch(/needs: test/);
+  });
+});

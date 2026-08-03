@@ -567,6 +567,7 @@ CITY_NET/
 ├── docs/                       # Reference docs (deployment plans, feature notes)
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
+├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev
 ├── docker-compose.yml          # Image tags read ${IMAGE_TAG:-latest}, so the release channel is a setting rather than an edit
 ├── nginx.conf
 └── .env.example

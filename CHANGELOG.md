@@ -17,6 +17,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
   Development builds are tagged `X.Y.Z-dev`, with a counter accepted but not required, so `1.9.0-dev` and `1.9.0-dev.7` both work and introducing counters later is a build-workflow change rather than a code one. A dev build of a newer release is offered to someone on an older release, the release itself supersedes its own dev builds when it lands, and a release user is never dragged back onto a dev build of the same version. A pinned version tag counts as stable, since pinning is not a channel.
 
+  A `Dev Build to Docker Hub` workflow publishes them, on manual dispatch or a push to a `dev` branch. It runs the test suites first, never touches `latest`, and pushes two tags per build: `dev`, which is what `IMAGE_TAG=dev` pulls, and `X.Y.Z-dev.N`, which is the only form the update check can see — `dev` is not a version and is filtered out of the tag listing. It refuses to run when `package.json` still holds an already-released version, since `X.Y.Z-dev` sorts *below* `X.Y.Z` and such a build could never be offered to anyone.
+
   `IMAGE_TAG` must also reach the `.env` beside `docker-compose.yml`, which the setup steps already cover by copying `backend/.env` to the project root: compose interpolates from the project file rather than from `env_file`.
 
 ### Fixed
