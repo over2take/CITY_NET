@@ -243,7 +243,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           // parsed to NaN, which made the comparator return NaN and left the sort
           // order undefined — one dev tag on the registry could stop stable users
           // being told about releases at all.
-          const allowDev = updater.devChannelEnabled();
+          const allowDev = updater.shouldOfferDev();
           const versionTags = data.results
             ?.filter(tag => updater.isVersionTag(tag.name, allowDev))
             .map(tag => tag.name)
@@ -260,6 +260,9 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             message: hasUpdate
               ? `Update available: ${currentVersion} → ${latestTag}`
               : `You're up to date (${currentVersion})`,
+            // Surfaced even when there is no update, since a suppressed dev channel is
+            // usually why there isn't one.
+            warning: updater.channelMismatch(),
           });
         } catch (e) {
           res.status(500).json({ error: 'Failed to parse Docker Hub response' });

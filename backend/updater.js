@@ -92,6 +92,49 @@ function devChannelEnabled(env = process.env) {
   return String(env.DEV ?? '').trim().toLowerCase() === 'true';
 }
 
+/** The image tag this deployment actually pulls. */
+function imageTag(env = process.env) {
+  return String(env.IMAGE_TAG ?? '').trim() || 'latest';
+}
+
+/**
+ * Why `DEV` and `IMAGE_TAG` disagree, or null when they do not.
+ *
+ * `DEV` states an intention and `IMAGE_TAG` is the capability: compose decides what is
+ * actually fetched, so `DEV=true` with a stable tag offers a dev version and then
+ * installs the release. Worse, it cannot settle — the next check sees the same dev
+ * version as newer and offers it again, for ever.
+ *
+ * There is a second way to land here even with both set correctly in `backend/.env`:
+ * compose interpolates `${IMAGE_TAG}` from the project `.env` beside the compose file,
+ * not from `env_file:`, so the value has to reach the root copy as well.
+ */
+function channelMismatch(env = process.env) {
+  if (!devChannelEnabled(env)) return null;
+  const tag = imageTag(env);
+  if (tag === 'dev') return null;
+  return `DEV=true asks for development builds, but IMAGE_TAG is "${tag}", which is what `
+    + 'docker compose actually pulls — so a dev version would be offered and the stable '
+    + 'image installed instead. Dev versions are being ignored until they agree. Set '
+    + 'IMAGE_TAG=dev in backend/.env *and* in the .env beside docker-compose.yml, since '
+    + 'compose reads the root copy rather than env_file.';
+}
+
+/** Whether dev versions should be offered — intent and capability must agree. */
+function shouldOfferDev(env = process.env) {
+  return devChannelEnabled(env) && channelMismatch(env) === null;
+}
+
+/**
+ * Say so at boot, because the update modal only appears when there is an update — which
+ * is precisely what a suppressed dev channel means there is not.
+ */
+function warnOnChannelMismatch(log = console.warn, env = process.env) {
+  const problem = channelMismatch(env);
+  if (problem) log(`[update] ${problem}`);
+  return problem;
+}
+
 /**
  * Build the docker-run argument list for the self-update helper container.
  *
@@ -267,6 +310,10 @@ module.exports = {
   compareVersions,
   isVersionTag,
   devChannelEnabled,
+  imageTag,
+  channelMismatch,
+  shouldOfferDev,
+  warnOnChannelMismatch,
   isNewerVersion,
   buildUpdateHelperArgs,
   readComposeLabels,

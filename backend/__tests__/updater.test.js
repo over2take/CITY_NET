@@ -136,6 +136,58 @@ describe('dev version ordering', () => {
   });
 });
 
+describe('channel mismatch', () => {
+  it('is silent when the channel is consistent', () => {
+    expect(updater.channelMismatch({ DEV: 'false', IMAGE_TAG: 'latest' })).toBeNull();
+    expect(updater.channelMismatch({ DEV: 'true', IMAGE_TAG: 'dev' })).toBeNull();
+    expect(updater.channelMismatch({})).toBeNull();
+  });
+
+  it('catches DEV=true against a stable image tag', () => {
+    // The state a user can easily land in: told about 1.9.0-dev, handed the stable
+    // image, and offered the same dev version again on the next check for ever, since
+    // compose is what decides which image is actually pulled.
+    const problem = updater.channelMismatch({ DEV: 'true', IMAGE_TAG: 'latest' });
+    expect(problem).toContain('IMAGE_TAG');
+    expect(problem).toContain('latest');
+  });
+
+  it('catches DEV=true with IMAGE_TAG left unset, which defaults to latest', () => {
+    expect(updater.channelMismatch({ DEV: 'true' })).not.toBeNull();
+  });
+
+  it('mentions the root .env, which is what compose actually reads', () => {
+    // Setting IMAGE_TAG only in backend/.env is the second way into this state:
+    // compose interpolates from the file beside docker-compose.yml, not from env_file.
+    const problem = updater.channelMismatch({ DEV: 'true', IMAGE_TAG: 'latest' });
+    expect(problem).toMatch(/docker-compose\.yml/);
+  });
+
+  it('stops offering dev versions until intent and capability agree', () => {
+    // Capability wins over intent. Offering something that cannot be installed is worse
+    // than not offering it, because it never resolves.
+    expect(updater.shouldOfferDev({ DEV: 'true', IMAGE_TAG: 'dev' })).toBe(true);
+    expect(updater.shouldOfferDev({ DEV: 'true', IMAGE_TAG: 'latest' })).toBe(false);
+    expect(updater.shouldOfferDev({ DEV: 'true' })).toBe(false);
+    expect(updater.shouldOfferDev({ DEV: 'false', IMAGE_TAG: 'dev' })).toBe(false);
+  });
+
+  it('warns at boot, where a config error belongs', () => {
+    // The update modal only appears when there is an update, and a suppressed dev
+    // channel is usually exactly why there is not one.
+    const logged = [];
+    updater.warnOnChannelMismatch((m) => logged.push(m), { DEV: 'true', IMAGE_TAG: 'latest' });
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('[update]');
+  });
+
+  it('says nothing at boot when the channel is consistent', () => {
+    const logged = [];
+    updater.warnOnChannelMismatch((m) => logged.push(m), { DEV: 'true', IMAGE_TAG: 'dev' });
+    expect(logged).toHaveLength(0);
+  });
+});
+
 describe('preflight', () => {
   const labels = { projectName: 'citynet', configFile: '/srv/citynet/docker-compose.yml', workingDir: '/srv/citynet' };
   const allPresent = () => true;
