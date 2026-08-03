@@ -293,6 +293,29 @@ describe('update routes', () => {
     expect(res.status).toBe(401);
   });
 
+  it('POST /check-update does not claim you are up to date when it cannot tell', async () => {
+    // With a contradictory channel nothing is compared, because nothing can be offered.
+    // Reporting "up to date" beside a warning that updates are suspended is a
+    // contradiction, and the reassuring half is the one people read.
+    const prev = { DEV: process.env.DEV, IMAGE_TAG: process.env.IMAGE_TAG };
+    process.env.DEV = 'false';
+    process.env.IMAGE_TAG = 'dev';
+    try {
+      const res = await request(app)
+        .post('/api/admin/check-update')
+        .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+      // Reaching Docker Hub is not this test's business; a network failure is fine.
+      if (res.status === 200) {
+        expect(res.body.hasUpdate).toBe(false);
+        expect(res.body.message).toMatch(/suspended/i);
+        expect(res.body.warning).toBeTruthy();
+      }
+    } finally {
+      process.env.DEV = prev.DEV;
+      process.env.IMAGE_TAG = prev.IMAGE_TAG;
+    }
+  });
+
   it('POST /update refuses with no token at all', async () => {
     const res = await request(app).post('/api/admin/update');
     expect(res.status).toBe(401);

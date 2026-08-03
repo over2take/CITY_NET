@@ -261,9 +261,13 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             current: currentVersion,
             latest: latestTag,
             hasUpdate,
+            // "Up to date" would be a claim, not a fact, when the channel is
+            // contradictory: nothing is being compared because nothing can be offered.
             message: hasUpdate
               ? `Update available: ${currentVersion} → ${latestTag}`
-              : `You're up to date (${currentVersion})`,
+              : updater.shouldOfferUpdates()
+                ? `You're up to date (${currentVersion})`
+                : `Updates suspended — release channel needs attention (${currentVersion})`,
             // Surfaced even when there is no update, since a suppressed dev channel is
             // usually why there isn't one.
             warning: updater.channelMismatch(),
