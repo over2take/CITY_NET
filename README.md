@@ -364,6 +364,7 @@ CITY_NET/
 │       ├── helpers/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
 │       ├── admin.test.js               # Admin endpoints (auth, settings, undo access)
+│       ├── updater.test.js             # Version ordering including X.Y.Z-dev, tag filtering per channel, preflight refusals, and an update that records its failures instead of returning silently
 │       ├── battle_maps.test.js         # Battle map upload/list/delete
 │       ├── locations.test.js           # Location CRUD and classification
 │       ├── locations.global.test.js    # Custom structure global persistence tests
@@ -565,7 +566,7 @@ CITY_NET/
 ├── docs/                       # Reference docs (deployment plans, feature notes)
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
-├── docker-compose.yml
+├── docker-compose.yml          # Image tags read ${IMAGE_TAG:-latest}, so the release channel is a setting rather than an edit
 ├── nginx.conf
 └── .env.example
 ```
