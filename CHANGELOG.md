@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Dev builds could hide stable releases from everyone else.** The update check read a single page of a hundred registry tags. Tags come back ordered by recency, so a run of development builds after a release fills that page with `X.Y.Z-dev.N` — every one of which a stable deployment filters out, leaving it with nothing and reporting no update available when one existed. It reads further pages now, but only while it has found nothing usable: the newest release is on the first page in the ordinary case, so this normally makes exactly one request as before. Bounded at five pages, so a registry that keeps offering another one cannot hang the check.
+
+  It fails quietly and selectively, which is what makes it worth fixing ahead of the arithmetic — only people on older versions, only on the stable channel, with no error anywhere.
+
 ---
 
 ## [1.8.1] - 2026-08-02

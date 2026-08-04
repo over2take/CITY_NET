@@ -323,7 +323,7 @@ CITY_NET/
 ├── backend/
 │   ├── server.js               # Express entrypoint — mounts routes, starts Socket.IO
 │   ├── db.js                   # SQLite schema and migrations
-│   ├── updater.js              # In-app self-update — release channels selected by IMAGE_TAG alone, the same variable compose pulls with (X.Y.Z-dev tags with an optional counter, ordered so a release supersedes its own dev builds); preflight (compose file mounted, docker socket, compose project labels) so a stack that cannot update says why instead of hanging; upgrade-only semver check; update log on the data volume; boot id so a restart is detectable without a version change
+│   ├── updater.js              # In-app self-update — paginated registry tag listing so a run of dev builds cannot hide a stable release; release channels selected by IMAGE_TAG alone, the same variable compose pulls with (X.Y.Z-dev tags with an optional counter, ordered so a release supersedes its own dev builds); preflight (compose file mounted, docker socket, compose project labels) so a stack that cannot update says why instead of hanging; upgrade-only semver check; update log on the data volume; boot id so a restart is detectable without a version change
 │   ├── middleware/
 │   │   └── auth.js             # JWT verify middleware (admin + elevated users)
 │   ├── routes/

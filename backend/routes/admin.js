@@ -222,59 +222,32 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   router.post('/check-update', authenticate, (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
 
-    const https = require('https');
     const currentVersion = process.env.APP_VERSION || require('../../package.json').version;
 
-    const options = {
-      hostname: 'hub.docker.com',
-      path: '/v2/repositories/over2take/citynet-frontend/tags?page_size=100',
-      method: 'GET',
-    };
+    updater.fetchVersionTags({ allowDev: updater.allowsDevBuilds() })
+      .then((versionTags) => {
+        const latestTag = versionTags[0] || 'unknown';
+        // Strictly newer, not merely different. Comparing with !== offers a downgrade
+        // whenever the published tag trails the running one.
+        const hasUpdate = latestTag !== 'unknown' && updater.isNewerVersion(latestTag, currentVersion);
 
-    const request = https.request(options, (upstream) => {
-      let body = '';
-      upstream.on('data', chunk => { body += chunk; });
-      upstream.on('end', () => {
-        try {
-          const data = JSON.parse(body);
-          // Find version tags (skip 'latest'), sort and get highest version
-          // Dev builds are published as X.Y.Z-dev and ignored unless DEV=true. The
-          // previous filter was unanchored, so a tag like 1.9.0-dev passed it and then
-          // parsed to NaN, which made the comparator return NaN and left the sort
-          // order undefined — one dev tag on the registry could stop stable users
-          // being told about releases at all.
-          const allowDev = updater.allowsDevBuilds();
-          const versionTags = data.results
-            ?.filter(tag => updater.isVersionTag(tag.name, allowDev))
-            .map(tag => tag.name)
-            .sort((a, b) => updater.compareVersions(updater.parseVersion(b), updater.parseVersion(a))) || [];
-          const latestTag = versionTags[0] || 'unknown';
-          // Strictly newer, not merely different. Comparing with !== offers a
-          // downgrade whenever the published tag trails the running one.
-          const hasUpdate = latestTag !== 'unknown' && updater.isNewerVersion(latestTag, currentVersion);
-
-          res.json({
-            current: currentVersion,
-            latest: latestTag,
-            hasUpdate,
-            message: hasUpdate
-              ? `Update available: ${currentVersion} → ${latestTag}`
-              : `You're up to date (${currentVersion})`,
-          });
-        } catch (e) {
-          res.status(500).json({ error: 'Failed to parse Docker Hub response' });
+        res.json({
+          current: currentVersion,
+          latest: latestTag,
+          hasUpdate,
+          message: hasUpdate
+            ? `Update available: ${currentVersion} → ${latestTag}`
+            : `You're up to date (${currentVersion})`,
+        });
+      })
+      .catch((err) => {
+        if (err.message === 'Failed to parse Docker Hub response') {
+          return res.status(500).json({ error: err.message });
         }
+        res.status(502).json({ error: `Could not reach Docker Hub: ${err.message}` });
       });
-    });
-
-    request.on('error', (err) => {
-      res.status(502).json({ error: `Could not reach Docker Hub: ${err.message}` });
-    });
-
-    request.end();
   });
 
-  // --- Apply Update ---
   router.post('/update', authenticate, (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
 
