@@ -141,6 +141,119 @@ describe('dev version ordering', () => {
   });
 });
 
+describe('fetchVersionTags', () => {
+  /** A registry serving the given pages in order. */
+  const registry = (pages) => {
+    const calls = [];
+    let n = 0;
+    return {
+      calls,
+      https: {
+        request(options, cb) {
+          calls.push(`${options.hostname}${options.path}`);
+          const page = pages[n++] ?? { results: [] };
+          const handlers = {};
+          const upstream = { on: (evt, fn) => { handlers[evt] = fn; return upstream; } };
+          const req = {
+            on: () => req,
+            end: () => {
+              cb(upstream);
+              process.nextTick(() => {
+                handlers.data?.(JSON.stringify(page));
+                handlers.end?.();
+              });
+            },
+          };
+          return req;
+        },
+      },
+    };
+  };
+
+  const page = (names, next = null) => ({ results: names.map((name) => ({ name })), next });
+
+  it('reads one page when that page already has a usable tag', async () => {
+    // The normal case. Later pages were updated longer ago, so there is nothing on them
+    // worth having once this channel has found something.
+    const reg = registry([page(['1.8.0', '1.8.1', 'latest'], 'https://hub.docker.com/v2/x?page=2')]);
+    const tags = await updater.fetchVersionTags({ https: reg.https });
+    expect(tags[0]).toBe('1.8.1');
+    expect(reg.calls).toHaveLength(1);
+  });
+
+  it('follows the next page when dev builds have crowded the first one out', async () => {
+    // The failure this fixes. A burst of dev builds after a release fills page one with
+    // X.Y.Z-dev tags, a stable deployment filters every one of them out, and reading a
+    // single page left it with nothing — reporting no update when one existed.
+    const devTags = Array.from({ length: 100 }, (_, i) => `1.9.0-dev.${i + 1}`);
+    const reg = registry([
+      page(devTags, 'https://hub.docker.com/v2/repositories/x/tags?page=2'),
+      page(['1.8.1', '1.8.0']),
+    ]);
+    const tags = await updater.fetchVersionTags({ https: reg.https, allowDev: false });
+    expect(tags[0]).toBe('1.8.1');
+    expect(reg.calls).toHaveLength(2);
+    expect(reg.calls[1]).toContain('page=2');
+  });
+
+  it('stops at the first page for a dev deployment, which can use those tags', async () => {
+    const devTags = Array.from({ length: 100 }, (_, i) => `1.9.0-dev.${i + 1}`);
+    const reg = registry([page(devTags, 'https://hub.docker.com/v2/x?page=2'), page(['1.8.1'])]);
+    const tags = await updater.fetchVersionTags({ https: reg.https, allowDev: true });
+    expect(tags[0]).toBe('1.9.0-dev.100');
+    expect(reg.calls).toHaveLength(1);
+  });
+
+  it('gives up after the page limit rather than following for ever', async () => {
+    // A bound, not an open loop: a registry that keeps offering a next page must not be
+    // able to hang the request.
+    const endless = page(['latest'], 'https://hub.docker.com/v2/x?page=n');
+    const reg = registry([endless, endless, endless, endless, endless, endless, endless]);
+    const tags = await updater.fetchVersionTags({ https: reg.https, maxPages: 3 });
+    expect(tags).toEqual([]);
+    expect(reg.calls).toHaveLength(3);
+  });
+
+  it('stops when the registry offers no next page', async () => {
+    const reg = registry([page(['latest', 'dev'])]);
+    const tags = await updater.fetchVersionTags({ https: reg.https });
+    expect(tags).toEqual([]);
+    expect(reg.calls).toHaveLength(1);
+  });
+
+  it('returns tags newest first', async () => {
+    const reg = registry([page(['1.8.0', '1.10.0', '1.9.0'])]);
+    expect(await updater.fetchVersionTags({ https: reg.https })).toEqual(['1.10.0', '1.9.0', '1.8.0']);
+  });
+
+  it('rejects rather than resolving empty when the response is not JSON', async () => {
+    // Resolving empty would be indistinguishable from "no releases published", and the
+    // route would report you are up to date.
+    const https = {
+      request(options, cb) {
+        const handlers = {};
+        const upstream = { on: (evt, fn) => { handlers[evt] = fn; return upstream; } };
+        const req = {
+          on: () => req,
+          end: () => { cb(upstream); process.nextTick(() => { handlers.data?.('<html>'); handlers.end?.(); }); },
+        };
+        return req;
+      },
+    };
+    await expect(updater.fetchVersionTags({ https })).rejects.toThrow(/parse/i);
+  });
+
+  it('rejects when the registry cannot be reached', async () => {
+    const https = {
+      request() {
+        const req = { on: (evt, fn) => { if (evt === 'error') process.nextTick(() => fn(new Error('ENOTFOUND'))); return req; }, end: () => {} };
+        return req;
+      },
+    };
+    await expect(updater.fetchVersionTags({ https })).rejects.toThrow(/ENOTFOUND/);
+  });
+});
+
 describe('preflight', () => {
   const labels = { projectName: 'citynet', configFile: '/srv/citynet/docker-compose.yml', workingDir: '/srv/citynet' };
   const allPresent = () => true;

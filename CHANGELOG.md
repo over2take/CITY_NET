@@ -23,6 +23,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Dev builds could hide stable releases from everyone else.** The update check read a single page of a hundred registry tags. Tags come back ordered by recency, so a run of development builds after a release fills that page with `X.Y.Z-dev.N` — every one of which a stable deployment filters out, leaving it with nothing and reporting no update available when one existed. It reads further pages now, but only while it has found nothing usable: the newest release is on the first page in the ordinary case, so this normally makes exactly one request as before. Bounded at five pages, so a registry that keeps offering another one cannot hang the check.
+
+  It fails quietly and selectively, which is what makes it worth fixing ahead of the arithmetic — only people on older versions, only on the stable channel, with no error anywhere.
 - **One dev tag on the registry would have silenced update notices for everyone.** The tag filter was `/^\d+\.\d+\.\d+/`, unanchored, so `1.9.0-dev` passed it and then parsed to `NaN` — which made the sort comparator return `NaN`, leaving the ordering undefined and letting a prerelease surface as the newest tag, whereupon the version check correctly refused it and reported no update at all. Version tags are matched strictly now, and sorted by a comparator that understands them.
 - **The in-app updater could sit on `WAITING FOR SERVER` indefinitely.** Every step failed silently — both child processes discarded their output, the route answered "Update started" before checking anything could work, and a non-zero exit from `docker compose pull` simply returned — so a stack that *could not* update was indistinguishable from one still working, and the client polled every three seconds forever with no deadline.
 

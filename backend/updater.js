@@ -113,6 +113,80 @@ function allowsDevBuilds(env = process.env) {
   return imageTag(env) === 'dev';
 }
 
+/** The registry listing the update check reads. */
+const REGISTRY_HOST = 'hub.docker.com';
+const REGISTRY_PATH = '/v2/repositories/over2take/citynet-frontend/tags?page_size=100';
+
+/**
+ * How many pages of tags to read before giving up.
+ *
+ * Five is 500 tags, far more than this project will accumulate between releases, and a
+ * bound rather than an open loop so a registry misbehaving cannot hang the request.
+ */
+const MAX_TAG_PAGES = 5;
+
+/**
+ * Every version tag the given channel can use, newest first.
+ *
+ * Reads one page and then keeps going only while it has found nothing usable. That
+ * matters because the listing is ordered by recency, not by version: a burst of dev
+ * builds after a release fills the first page with `X.Y.Z-dev.N` tags, and a stable
+ * deployment filters every one of them out. Reading a single page, as this used to,
+ * would leave it with an empty list and report no update available — silently, only for
+ * people on the stable channel, and only once enough dev builds had accumulated.
+ *
+ * Normally it stops after one request, because the newest release is on the first page.
+ */
+function fetchVersionTags(opts = {}) {
+  const httpsMod = opts.https || require('https');
+  const allowDev = opts.allowDev ?? false;
+  const maxPages = opts.maxPages ?? MAX_TAG_PAGES;
+
+  const readPage = (host, path) => new Promise((resolve, reject) => {
+    const req = httpsMod.request({ hostname: host, path, method: 'GET' }, (upstream) => {
+      let body = '';
+      upstream.on('data', (chunk) => { body += chunk; });
+      upstream.on('end', () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          reject(new Error('Failed to parse Docker Hub response'));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+
+  const walk = async () => {
+    const found = [];
+    let host = REGISTRY_HOST;
+    let path = REGISTRY_PATH;
+
+    for (let page = 0; page < maxPages; page++) {
+      const data = await readPage(host, path);
+      for (const tag of data?.results ?? []) {
+        if (isVersionTag(tag.name, allowDev)) found.push(tag.name);
+      }
+      // Anything on a later page was updated longer ago, so once this channel has
+      // something there is nothing to gain by reading on.
+      if (found.length > 0 || !data?.next) break;
+
+      try {
+        const next = new URL(data.next);
+        host = next.hostname;
+        path = `${next.pathname}${next.search}`;
+      } catch {
+        break;
+      }
+    }
+
+    return found.sort((a, b) => compareVersions(parseVersion(b), parseVersion(a)));
+  };
+
+  return walk();
+}
+
 /**
  * Build the docker-run argument list for the self-update helper container.
  *
@@ -289,6 +363,10 @@ module.exports = {
   isVersionTag,
   imageTag,
   allowsDevBuilds,
+  fetchVersionTags,
+  REGISTRY_HOST,
+  REGISTRY_PATH,
+  MAX_TAG_PAGES,
   isNewerVersion,
   buildUpdateHelperArgs,
   readComposeLabels,
