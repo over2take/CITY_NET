@@ -94,6 +94,17 @@ const attack = async (extra = {}) => {
   };
 };
 
+/** The refusal path emits an error instead of an attackResult, so it needs its own wait. */
+const attackExpectingError = async (extra = {}) => {
+  const { handlers, emitted } = boot(db);
+  handlers['identify']('GHOST');
+  await flush(50);
+  const targetRow = await get(db, `SELECT id FROM locations WHERE owner = 'MOUSE'`);
+  handlers['sheetAttack']({ targetId: targetRow.id, ...extra });
+  await waitFor(() => emitted.some(e => e.event === 'sheetAttackError'));
+  return { errors: emitted.filter(e => e.event === 'sheetAttackError').map(e => e.data) };
+};
+
 const vehicleHp = async (username) => {
   const row = await get(db, `SELECT data FROM character_sheets WHERE username = ?`, [username]);
   return JSON.parse(row.data).vehicle1_hp;
@@ -195,6 +206,53 @@ describe('riding in another player’s vehicle', () => {
     const { result } = await attack();
     expect(result.ac).toBe(10);
     expect(await tokenHp('MOUSE')).toBe(30 - result.damage);
+  });
+});
+
+describe('a gunner firing the owner’s mounts', () => {
+  const MULE = {
+    vehicle1_name: 'Mule', vehicle1_hp_max: CAR_HP, vehicle1_armor: 0, vehicle1_ac: 12,
+    vehicle1_weapon1_name: 'Autocannon', vehicle1_weapon1_dmg: '1d6',
+    vehicle1_weapon1_skill: 'shoot', vehicle1_weapon1_atk: 0,
+  };
+
+  const rideIn = (owner) => run(db, `UPDATE character_sheets SET data = ? WHERE username = 'GHOST'`,
+    [JSON.stringify({ ...ATTACKER, in_vehicle: 'ride', ride_owner: owner, ride_vehicle: 1 })]);
+
+  it('fires a mount on a car it does not own', async () => {
+    await sheet('CODY', MULE);
+    await token('CODY');
+    await rideIn('CODY');
+    await sheet('MOUSE', {});
+    await token('MOUSE');
+
+    const { result, history } = await attack({ rideMount: true, weaponIndex: 1 });
+    expect(result.hit).toBe(true);
+    expect(result.weaponName).toBe('Autocannon');
+    // The gunner rolls their own skill; only the weapon row comes off the owner's sheet.
+    expect(history.some(h => /GHOST attacks/.test(h))).toBe(true);
+  });
+
+  it('refuses a ride mount from someone on foot', async () => {
+    await sheet('CODY', MULE);
+    await token('CODY');
+    await sheet('MOUSE', {});
+    await token('MOUSE');
+
+    // GHOST never declared a ride, so there is no car whose guns they could reach.
+    const { errors } = await attackExpectingError({ rideMount: true, weaponIndex: 1 });
+    expect(errors.some(e => /INVALID_MOUNT/.test(e.message))).toBe(true);
+  });
+
+  it('refuses a mount the owner has not filled in', async () => {
+    await sheet('CODY', CAR); // a car with no mounts on it
+    await token('CODY');
+    await rideIn('CODY');
+    await sheet('MOUSE', {});
+    await token('MOUSE');
+
+    const { errors } = await attackExpectingError({ rideMount: true, weaponIndex: 2 });
+    expect(errors.some(e => /INVALID_MOUNT/.test(e.message))).toBe(true);
   });
 });
 

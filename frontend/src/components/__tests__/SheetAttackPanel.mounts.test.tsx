@@ -42,7 +42,14 @@ const renderPanel = (system: 'cities_without_number' | 'cyberpunk_red' = 'cities
   return socket;
 };
 
-const sheet = (data: Record<string, string>) => ({ username: 'cody', data });
+const sheet = (data: Record<string, string>, ride?: unknown) => ({ username: 'cody', data, ride });
+
+/** The mounts of a car someone else owns, as the server sends them down. */
+const THEIR_CAR = {
+  owner: 'MOUSE',
+  vehicleName: 'Mule',
+  mounts: [{ index: 1, name: 'Autocannon', dmg: '3d6', skill: 'shoot' }],
+};
 
 const CARBINE = { weapon1_name: 'Carbine', weapon1_dmg: '1d10', weapon1_skill: 'shoot' };
 const CANNON = {
@@ -122,6 +129,35 @@ describe('vehicle mounts in the attack panel', () => {
       vehicle2_weapon1_skill: 'shoot',
     }));
     expect(screen.getByRole('option', { name: /VEHICLE 2 · MOUNT 1/ })).toBeInTheDocument();
+  });
+
+  it('offers the mounts of a car you are riding in', async () => {
+    const socket = renderPanel();
+    socket.deliver('sheetData', sheet(CARBINE, THEIR_CAR));
+    // The row lives on the owner's sheet, which this player cannot see — it only
+    // reaches them because the server sends the mounts down.
+    expect(screen.getByRole('option', { name: /MULE · AUTOCANNON · 3d6/ })).toBeInTheDocument();
+  });
+
+  it('fires a ride mount without naming a vehicle index', async () => {
+    const socket = renderPanel();
+    socket.deliver('sheetData', sheet(CARBINE, THEIR_CAR));
+    await userEvent.selectOptions(select(), 'r:1');
+    await userEvent.click(screen.getByRole('button', { name: /FIRE|STRIKE|SWING/ }));
+    const payload = lastAttack(socket);
+    // The server resolves the vehicle from the declared ride, so there is no index for
+    // the client to send and none for it to get wrong.
+    expect(payload).toMatchObject({ rideMount: true, weaponIndex: 1 });
+    expect('vehicleIndex' in payload).toBe(false);
+  });
+
+  it('keeps a ride mount distinct from your own mount 1', () => {
+    const socket = renderPanel();
+    socket.deliver('sheetData', sheet(CANNON, THEIR_CAR));
+    // Both are weaponIndex 1 on different sheets entirely.
+    expect(select().options).toHaveLength(2);
+    expect(screen.getByRole('option', { name: /CAR · CANNON/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /MULE · AUTOCANNON/ })).toBeInTheDocument();
   });
 
   it('leaves other systems without mounts', () => {

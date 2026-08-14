@@ -513,6 +513,9 @@ type WeaponChoice = {
   key: string;
   index: number;
   vehicleIndex?: number;
+  /** A mount on the vehicle you are riding in — the row lives on its owner's sheet, so
+   *  the server resolves it from your declared ride rather than from an index. */
+  rideMount?: boolean;
   vehicleName?: string;
   name: string;
   dmg: string;
@@ -557,6 +560,18 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
         const row = readWeapon(sheet.data, `weapon${i}`);
         if (row) rows.push({ key: String(i), index: i, name: row.name || `WEAPON ${i}`, dmg: row.dmg, skill: row.skill });
       }
+      // The mounts of someone else's car, sent down by the server because a gunner
+      // cannot see the sheet they live on.
+      if (cfg.vehicles && sheet.ride) {
+        for (const m of sheet.ride.mounts ?? []) {
+          rows.push({
+            key: `r:${m.index}`, index: m.index, rideMount: true,
+            vehicleName: String(sheet.ride.vehicleName ?? '').trim() || 'THEIR VEHICLE',
+            name: String(m.name ?? '').trim() || `MOUNT ${m.index}`,
+            dmg: String(m.dmg ?? ''), skill: String(m.skill ?? ''),
+          });
+        }
+      }
       // Mounts come after the carried weapons and are labelled with their
       // vehicle, since firing a turret is a different act from drawing a gun.
       if (cfg.vehicles) {
@@ -596,6 +611,7 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
       targetId,
       weaponIndex: choice.index,
       ...(choice.vehicleIndex ? { vehicleIndex: choice.vehicleIndex } : {}),
+      ...(choice.rideMount ? { rideMount: true } : {}),
       ...(cfg.hasAimed ? { aimed } : {}),
       ...(cfg.hasLuck ? {
         luck: luckSpend > 0 ? luckSpend : undefined,

@@ -750,7 +750,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             if (err2) return;
             if (row) {
               overlayLinkedData(info.userName, system, JSON.parse(row.data || '{}'), (data) => {
-                socket.emit('sheetData', { ...row, data });
+                if (system !== vehicleState.SYSTEM) return socket.emit('sheetData', { ...row, data });
+                // A gunner riding in someone else's car needs its mounts to fire them,
+                // and cannot see the sheet those rows live on. Only the mounts travel.
+                vehicleState.getRideMounts(db, data, (ride) => {
+                  socket.emit('sheetData', { ...row, data, ride });
+                });
               });
             } else {
               // Auto-create a blank sheet on first open, carrying the portrait
@@ -1601,12 +1606,20 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           // own action by a gunner, so the client names the vehicle rather than the
           // mount being merged into the personal weapon list.
           const vehicleIndex = payload.vehicleIndex;
-          const weapon = vehicleIndex
-            ? attackCwn.getVehicleWeapon(attackerData, vehicleIndex, payload.weaponIndex)
-            : attackCwn.getWeapon(attackerData, payload.weaponIndex);
+          // A gunner fires the car's guns with their own skill, so only the weapon row
+          // comes off the owner's sheet — everything the roll is built from is still the
+          // attacker's. The vehicle is whichever one they have declared they are in, so
+          // there is nothing for the client to name and nothing for it to get wrong.
+          const findWeapon = (cb) => {
+            if (payload.rideMount) return vehicleState.getRideWeapon(db, attackerData, payload.weaponIndex, cb);
+            cb(vehicleIndex
+              ? attackCwn.getVehicleWeapon(attackerData, vehicleIndex, payload.weaponIndex)
+              : attackCwn.getWeapon(attackerData, payload.weaponIndex));
+          };
+          findWeapon((weapon) => {
           if (!weapon) {
             return socket.emit('sheetAttackError', {
-              message: vehicleIndex
+              message: (vehicleIndex || payload.rideMount)
                 ? 'INVALID_MOUNT // SET NAME, DMG (e.g. 2d8) AND SKILL ON THE VEHICLE MOUNT'
                 : 'INVALID_WEAPON // SET NAME, DMG (e.g. 1d8+1) AND SKILL ON YOUR SHEET',
             });
@@ -1722,6 +1735,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             });
             }
           );
+          });
         }
       );
     };

@@ -40,6 +40,60 @@ function resolve(db, sheetId, sheetData, cb) {
   );
 }
 
+/**
+ * The mounts on the vehicle a player is riding in, when the vehicle is someone else's.
+ *
+ * A gunner fires the car's guns with their own skill, so the weapon row has to come off
+ * the owner's sheet — which the gunner cannot see. Only the mount rows travel, and only
+ * to someone who has declared they are sitting in that vehicle.
+ *
+ * cb(null) when on foot or in one of their own vehicles: those mounts are already on the
+ * sheet the client holds.
+ */
+function getRideMounts(db, sheetData, cb) {
+  const occ = attackCwn.readOccupancy(sheetData);
+  if (!occ || !occ.owner) return cb(null);
+  db.get(
+    `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+    [occ.owner, SYSTEM],
+    (err, row) => {
+      if (err || !row) return cb(null);
+      let ownerData;
+      try { ownerData = JSON.parse(row.data || '{}'); } catch (e) { return cb(null); }
+      const vehicle = attackCwn.getVehicle(ownerData, occ.vehicleIndex, { moving: occ.moving });
+      if (!vehicle) return cb(null);
+      const mounts = [];
+      for (let i = 1; i <= attackCwn.VEHICLE_WEAPON_ROWS; i++) {
+        const weapon = attackCwn.getVehicleWeapon(ownerData, occ.vehicleIndex, i);
+        if (weapon) mounts.push({ index: i, name: weapon.name, dmg: weapon.dmg, skill: weapon.skill });
+      }
+      cb(mounts.length ? { owner: occ.owner, vehicleName: vehicle.name, mounts } : null);
+    }
+  );
+}
+
+/**
+ * The mount a rider is firing, resolved off the owner's sheet.
+ *
+ * cb(null) when they are not riding in someone else's vehicle — the caller then falls
+ * back to the ordinary "not a valid weapon" error rather than silently firing something
+ * else.
+ */
+function getRideWeapon(db, sheetData, weaponIndex, cb) {
+  const occ = attackCwn.readOccupancy(sheetData);
+  if (!occ || !occ.owner) return cb(null);
+  db.get(
+    `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+    [occ.owner, SYSTEM],
+    (err, row) => {
+      if (err || !row) return cb(null);
+      let ownerData;
+      try { ownerData = JSON.parse(row.data || '{}'); } catch (e) { return cb(null); }
+      cb(attackCwn.getVehicleWeapon(ownerData, occ.vehicleIndex, weaponIndex));
+    }
+  );
+}
+
 /** What other players are allowed to see: the numbers they are shooting at, not the sheet. */
 function publicState(vehicle) {
   if (!vehicle) return null;
@@ -103,4 +157,4 @@ function syncTokens(db, username, cb) {
   );
 }
 
-module.exports = { SYSTEM, resolve, publicState, syncTokens };
+module.exports = { SYSTEM, resolve, publicState, syncTokens, getRideMounts, getRideWeapon };
