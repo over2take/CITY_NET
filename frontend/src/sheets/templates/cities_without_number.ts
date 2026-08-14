@@ -34,7 +34,7 @@ export const CWN_WEAPON_ROWS = 4;
 export const CWN_WEAPON_COLUMNS = 6;
 
 /** Vehicles a sheet can carry, and weapon mounts on each. */
-export const CWN_VEHICLE_ROWS = 3;
+export const CWN_VEHICLE_ROWS = 6;
 export const CWN_VEHICLE_WEAPON_ROWS = 2;
 export const CWN_VEHICLE_COLUMNS = 6;
 
@@ -237,6 +237,8 @@ export const citiesWithoutNumber: SheetTemplate = {
       layout: 'weapons',
       tab: 'GEAR',
       columns: CWN_VEHICLE_COLUMNS,
+      // 18 fields per vehicle: empty ones collapse, filled ones come back on reload.
+      groupSize: CWN_VEHICLE_COLUMNS * 3,
       fields: Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
     },
     {

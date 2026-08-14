@@ -30,8 +30,13 @@ const WEAPON_ROWS = 4;
  * Mounts are named per vehicle — `vehicle1_weapon1_dmg` — so a mount belongs to its
  * vehicle rather than to a shared pool. That is what lets one resolver read both:
  * `getWeapon` takes the prefix, and `vehicle1_weapon` is as valid a prefix as `weapon`.
+ *
+ * VEHICLE_ROWS must match CWN_VEHICLE_ROWS in the frontend template: the sheet declares
+ * that many vehicles and this decides how many can have their mounts fired. A test pins
+ * the pair, because the sheet showing a vehicle whose guns do not work would look like
+ * a broken weapon rather than a mismatched constant.
  */
-const VEHICLE_ROWS = 3;
+const VEHICLE_ROWS = 6;
 const VEHICLE_WEAPON_ROWS = 2;
 
 /** Field prefix for the weapon mounts of vehicle `i`. */

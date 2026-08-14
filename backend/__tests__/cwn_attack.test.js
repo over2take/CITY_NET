@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 
+import fs from 'fs';
+import path from 'path';
+
 const attackCwn = require('../sheets/attackCwn');
 
 // Deterministic rng: returns each queued value in order (0..1).
@@ -250,6 +253,20 @@ describe('vehicle combat rules', () => {
     expect(attackCwn.vehicleDestroyed(1)).toBe(false);
     expect(attackCwn.vehicleDestroyed(0)).toBe(true);
     expect(attackCwn.vehicleDestroyed(-3)).toBe(true);
+  });
+
+  it('declares as many vehicles as the sheet does', () => {
+    // The sheet template and the resolver each carry a count. If the sheet declares more
+    // vehicles than the resolver accepts, those vehicles render with mounts that
+    // silently refuse to fire — which reads as a broken weapon, not a bad constant.
+    const template = fs.readFileSync(
+      path.join(import.meta.dirname, '..', '..', 'frontend', 'src', 'sheets', 'templates', 'cities_without_number.ts'),
+      'utf8'
+    );
+    const rows = /export const CWN_VEHICLE_ROWS = (\d+);/.exec(template);
+    const mounts = /export const CWN_VEHICLE_WEAPON_ROWS = (\d+);/.exec(template);
+    expect(Number(rows[1])).toBe(attackCwn.VEHICLE_ROWS);
+    expect(Number(mounts[1])).toBe(attackCwn.VEHICLE_WEAPON_ROWS);
   });
 
   it('keeps the moving-fire penalty at the value the rules give', () => {

@@ -659,26 +659,86 @@ function WeaponsSection({ section, data, readOnly, onFieldChange }: {
   const gridTemplateColumns = perRow === 4
     ? '1fr 70px 130px 44px'
     : (rows[0] ?? []).map((f, i) => (i === 0 ? '1fr' : f.type === 'select' ? '90px' : '56px')).join(' ');
+
+  // Sections that repeat an entry (a vehicle and its mounts) collapse the empty ones.
+  const rowsPerGroup = section.groupSize ? Math.max(1, Math.round(section.groupSize / perRow)) : 0;
+  const groups: SheetField[][][] = [];
+  if (rowsPerGroup) {
+    for (let i = 0; i < rows.length; i += rowsPerGroup) groups.push(rows.slice(i, i + rowsPerGroup));
+  }
+
+  const hasData = (group: SheetField[][]) =>
+    group.some(row => row.some(f => {
+      const v = data[f.id];
+      return v !== undefined && v !== null && String(v).trim() !== '';
+    }));
+
+  // One past the last filled entry, so there is always a blank one to type into.
+  // Derived from the data rather than remembered, which is why the entries you filled
+  // in are the ones that come back after a reload.
+  const filled = rowsPerGroup ? groups.reduce((n, g, i) => (hasData(g) ? i + 1 : n), 0) : 0;
+  const [revealed, setRevealed] = React.useState(0);
+  const visibleGroups = rowsPerGroup
+    ? Math.min(groups.length, Math.max(filled + 1, revealed + 1))
+    : 0;
+
+  const labelRow = (row: SheetField[]) => row.map(f => (
+    <div key={`lbl_${f.id}`} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{f.label}</div>
+  ));
+
+  const fieldRow = (row: SheetField[]) => row.map(field => (
+    <FieldInput
+      key={field.id}
+      field={field}
+      data={data}
+      readOnly={readOnly}
+      onFieldChange={onFieldChange}
+      style={{ ...cell, ...(field.type === 'number' ? { textAlign: 'center' } : null) }}
+    />
+  ));
+
+  if (!rowsPerGroup) {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
+        {labelRow(rows[0] ?? [])}
+        {rows.map((row) => <React.Fragment key={row[0].id}>{fieldRow(row)}</React.Fragment>)}
+      </div>
+    );
+  }
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
-      {(rows[0] ?? []).map(f => (
-        <div key={f.id} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{f.label}</div>
-      ))}
-      {rows.map((row) => (
-        <React.Fragment key={row[0].id}>
-          {row.map((field) => (
-            <FieldInput
-              key={field.id}
-              field={field}
-              data={data}
-              readOnly={readOnly}
-              onFieldChange={onFieldChange}
-              style={{ ...cell, ...(field.type === 'number' ? { textAlign: 'center' } : null) }}
-            />
-          ))}
-        </React.Fragment>
-      ))}
-    </div>
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
+        {groups.slice(0, visibleGroups).map((group, gi) => (
+          <React.Fragment key={group[0][0].id}>
+            {group.map((row, ri) => (
+              <React.Fragment key={row[0].id}>
+                {/* Each row of an entry has its own headings — a mount line does not
+                    belong under the vehicle line's labels. Shown once, on the first
+                    entry, since every entry repeats the same shape. */}
+                {gi === 0 && labelRow(row)}
+                {gi > 0 && ri === 0 && (
+                  <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--green)', opacity: 0.25, margin: '4px 0 2px' }} />
+                )}
+                {fieldRow(row)}
+              </React.Fragment>
+            ))}
+          </React.Fragment>
+        ))}
+      </div>
+      {!readOnly && visibleGroups < groups.length && (
+        <button
+          onClick={() => setRevealed(visibleGroups)}
+          style={{
+            marginTop: '6px', background: 'none', border: '1px solid var(--green)',
+            color: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: '0.6rem', letterSpacing: '2px', padding: '2px 10px', opacity: 0.8,
+          }}
+        >
+          + ADD
+        </button>
+      )}
+    </>
   );
 }
 

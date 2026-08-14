@@ -63,6 +63,15 @@ export interface SheetSection {
   id: string;
   label: string;
   layout: SectionLayout;
+  /**
+   * Fields per repeated entry, for sections that hold several of the same thing.
+   *
+   * Set it and the section shows only entries that have data, plus one blank and a
+   * button to reveal the next — so a sheet with one vehicle shows one vehicle, and the
+   * ones you have filled in come back on their own after a reload. Leave it unset and
+   * the section renders every row it declares, which is what weapons and spells do.
+   */
+  groupSize?: number;
   /** grid layout: number of columns (default 4) */
   columns?: number;
   /** Which bottom tab this section lives under (default: the first tab). */
