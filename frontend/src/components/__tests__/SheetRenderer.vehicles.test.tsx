@@ -73,6 +73,39 @@ describe('vehicles section', () => {
     expect(screen.queryByText(/\+ ADD/)).toBeNull();
   });
 
+  it('keeps occupancy out of the collapsing group', () => {
+    // Where you are is one block, not one per vehicle — you can only be inside
+    // one at a time. Folding it into the vehicle rows would also break the
+    // group size, which has to divide the section evenly.
+    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
+    expect(status).toBeTruthy();
+    expect(status.groupSize).toBeUndefined();
+    expect(vehicles.fields.some(f => f.id === 'in_vehicle')).toBe(false);
+    expect(vehicles.fields.length % vehicles.groupSize!).toBe(0);
+  });
+
+  it('offers every own vehicle plus riding along', () => {
+    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
+    const values = status.fields.find(f => f.id === 'in_vehicle')!.options!.map(o => o.value);
+    // On foot is the default and has to be reachable again after mounting.
+    expect(values).toContain('');
+    expect(values).toContain('ride');
+    for (let i = 1; i <= 6; i++) expect(values).toContain(`own:${i}`);
+  });
+
+  it('renders the occupancy controls', () => {
+    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
+    render(
+      <SheetRenderer
+        template={{ ...citiesWithoutNumber, tabs: ['GEAR'], sections: [status] }}
+        data={{ in_vehicle: 'own:1' } as never}
+        readOnly={false}
+        onFieldChange={vi.fn()}
+      />
+    );
+    expect(screen.getByDisplayValue('MY VEHICLE 1')).toBeInTheDocument();
+  });
+
   it('leaves the weapons section alone, which declares no group size', () => {
     // Weapons render every row as before; only sections opting in collapse.
     const weapons = citiesWithoutNumber.sections.find(s => s.id === 'weapons')!;

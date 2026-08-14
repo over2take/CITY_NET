@@ -242,6 +242,55 @@ export const citiesWithoutNumber: SheetTemplate = {
       fields: Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
     },
     {
+      // Where you are, not what you own — one block rather than one per vehicle,
+      // because you can only be inside one at a time. Riding along points at
+      // another player's sheet so a shared car has one set of HP and armour
+      // instead of a copy per passenger.
+      id: 'vehicle_status',
+      label: 'IN A VEHICLE',
+      layout: 'grid',
+      tab: 'GEAR',
+      columns: 5,
+      fields: [
+        {
+          id: 'in_vehicle', label: 'RIDING IN', type: 'select',
+          options: [
+            { value: '', label: '— ON FOOT —' },
+            ...Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => ({
+              value: `own:${i + 1}`, label: `MY VEHICLE ${i + 1}`,
+            })),
+            { value: 'ride', label: "ANOTHER PLAYER'S VEHICLE" },
+          ],
+          hint: 'While you are in a vehicle, attacks on you hit the vehicle instead: its Armour Rating cuts the damage and the rest comes off its HP. You are only hurt once it is destroyed.',
+        },
+        {
+          id: 'ride_owner', label: 'WHOSE', type: 'text', placeholder: 'player name',
+          hint: "Only used when RIDING IN is another player's vehicle. Their login name — the vehicle's HP, AC and armour are read from their sheet, so it takes damage once no matter how many of you are aboard.",
+        },
+        {
+          id: 'ride_vehicle', label: 'THEIR #', type: 'number', placeholder: '1',
+          hint: 'Which of their vehicle rows, 1 to 6.',
+        },
+        {
+          id: 'vehicle_seat', label: 'SEAT', type: 'select',
+          options: [
+            { value: 'driver', label: 'DRIVER' },
+            { value: 'gunner', label: 'GUNNER' },
+            { value: 'passenger', label: 'PASSENGER' },
+          ],
+          hint: 'Informational. Firing a mount costs the gunner their main action.',
+        },
+        {
+          id: 'vehicle_moving', label: 'MOVING', type: 'select',
+          options: [
+            { value: '', label: 'STATIONARY' },
+            { value: '1', label: 'MOVING' },
+          ],
+          hint: 'A moving vehicle adds the driver\'s Drive skill to its AC; a stationary one takes -4, and shots you fire from it take -4. Declared rather than read from the map, because dragging a token is not the same as driving.',
+        },
+      ],
+    },
+    {
       id: 'vehicle_notes',
       label: 'VEHICLE NOTES',
       layout: 'notes',
