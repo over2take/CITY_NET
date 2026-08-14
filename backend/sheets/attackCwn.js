@@ -118,6 +118,71 @@ const applyArmorRating = (damage, armorRating) => Math.max(0, num(damage) - num(
 const vehicleDestroyed = (hpCurrent) => num(hpCurrent) <= 0;
 
 /**
+ * Where a character is: on foot, in one of their own vehicles, or riding in someone
+ * else's.
+ *
+ * `null` means on foot, and every unreadable state resolves to it — an out-of-range
+ * index, a ride with no owner named, a reference to a player who has since gone. That
+ * direction matters: falling back to on foot means the character is attacked exactly as
+ * they were before any of this existed, so a broken reference costs them cover rather
+ * than making them unhittable.
+ */
+const readOccupancy = (data) => {
+  const raw = String(data?.in_vehicle ?? '').trim();
+  if (!raw) return null;
+  const moving = !!num(data?.vehicle_moving);
+  const seat = String(data?.vehicle_seat ?? '').trim().toLowerCase();
+  const inRange = (i) => Number.isInteger(i) && i >= 1 && i <= VEHICLE_ROWS;
+
+  if (raw === 'ride') {
+    const owner = String(data?.ride_owner ?? '').trim();
+    const index = Number(data?.ride_vehicle);
+    if (!owner || !inRange(index)) return null;
+    return { owner, vehicleIndex: index, moving, seat };
+  }
+  const own = /^own:(\d+)$/.exec(raw);
+  if (!own) return null;
+  const index = Number(own[1]);
+  if (!inRange(index)) return null;
+  // No owner: the vehicle is on this same sheet, so the caller needs no second lookup.
+  return { owner: null, vehicleIndex: index, moving, seat };
+};
+
+/**
+ * The vehicle a character is riding in, read off whichever sheet holds it.
+ *
+ * A vehicle with no HP maximum is not a vehicle yet — a half-filled row should not start
+ * soaking damage on its owner's behalf, so it resolves to `null` and the occupant is
+ * attacked normally.
+ */
+const getVehicle = (ownerData, index, opts = {}) => {
+  const i = Number(index);
+  if (!Number.isInteger(i) || i < 1 || i > VEHICLE_ROWS) return null;
+  const hpMax = num(ownerData?.[`vehicle${i}_hp_max`]);
+  if (hpMax <= 0) return null;
+  const raw = ownerData?.[`vehicle${i}_hp`];
+  // Blank current HP means undamaged, matching how token HP is read.
+  const hp = raw === undefined || raw === null || raw === '' ? hpMax : num(raw);
+  return {
+    index: i,
+    name: String(ownerData?.[`vehicle${i}_name`] ?? '').trim() || `VEHICLE ${i}`,
+    hp,
+    hpMax,
+    hpField: `vehicle${i}_hp`,
+    armorRating: num(ownerData?.[`vehicle${i}_armor`]),
+    ac: vehicleAc(ownerData?.[`vehicle${i}_ac`], {
+      moving: opts.moving,
+      // Drive is the driver's skill; the owner is presumed to be driving, which is who
+      // the AC is read from anyway.
+      driveSkill: num(ownerData?.drive),
+    }),
+    moving: !!opts.moving,
+    // Already wrecked: it stops being cover rather than absorbing forever.
+    destroyed: vehicleDestroyed(hp),
+  };
+};
+
+/**
  * Read one weapon row off a sheet.
  *
  * `prefix` and `rows` exist so vehicle mounts resolve through this same function rather
@@ -222,6 +287,7 @@ module.exports = {
   VEHICLE_ROWS, VEHICLE_WEAPON_ROWS, vehicleWeaponPrefix,
   VEHICLE_STATIONARY_AC_PENALTY, MOVING_FIRE_PENALTY,
   vehicleAc, applyArmorRating, vehicleDestroyed,
+  readOccupancy, getVehicle,
   parseTrauma, parseShock, getWeapon, getVehicleWeapon,
   rollToHit, rollDamage, rollTrauma, shockDamage, rollStabilize,
 };
