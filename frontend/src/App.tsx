@@ -76,7 +76,7 @@ import { StreamerVisibilityContext } from './context/StreamerVisibilityContext';
 import { StreamerOverlay } from './components/StreamerOverlay';
 import { StreamerDirectorPanel } from './components/StreamerDirectorPanel';
 import { DEFAULT_DIRECTOR_STATE, ALL_VISIBLE } from './types';
-import type { DirectorState } from './types';
+import type { DirectorState, AttackVehicle } from './types';
 import { IS_SPECTATOR } from './streamerMode';
 
 function App() {
@@ -188,7 +188,7 @@ function App() {
   }));
 
   // Attack state
-  const [attackPending, setAttackPending] = useState<{ targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null>(null);
+  const [attackPending, setAttackPending] = useState<{ targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number; vehicle?: AttackVehicle | null } | null>(null);
   // Active TTRPG system - drives token defense labels (AC vs DV) and the
   // token menu's armor section
   const [gameSystem, setGameSystem] = useState('generic');

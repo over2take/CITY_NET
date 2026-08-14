@@ -10,6 +10,8 @@
 // system uses 'name' (CP:R's field is *labelled* Handle but stored as
 // 'name') — only list systems that store something else. A missing entry
 // makes tokens/rolls silently fall back to the login username.
+const vehicleState = require('./vehicleState');
+
 const NAME_FIELDS = {};
 const nameField = (system) => NAME_FIELDS[system] || 'name';
 
@@ -56,7 +58,12 @@ function syncToken(db, system, username, cb) {
         `UPDATE locations SET name = ?, description = ? WHERE shape = 'rhombus' AND owner = ?`,
         [name || null, description || null, username],
         function (err2) {
-          if (cb) cb(!err2 && this && this.changes > 0);
+          const changed = !err2 && this && this.changes > 0;
+          // Vehicle occupancy rides along on the same mirror: it is another sheet value
+          // other players need to see on the token, and hanging it here means every
+          // caller that saves a sheet already refreshes it.
+          if (system !== vehicleState.SYSTEM) return cb && cb(changed);
+          vehicleState.syncTokens(db, username, () => cb && cb(changed));
         }
       );
     }

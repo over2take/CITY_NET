@@ -5,6 +5,38 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { HealthBar } from '../HealthBar';
 import { useStreamerVisibility } from '../context/StreamerVisibilityContext';
 import { IS_SPECTATOR } from '../streamerMode';
+import { parseVehicleState } from '../types';
+
+/**
+ * Marks a token as being inside a vehicle.
+ *
+ * Always drawn rather than gated behind hover, unlike the name tag: cover you have to
+ * hover to discover is cover nobody accounts for. The state is mirrored onto the token
+ * by the server, so this never reads anyone's sheet.
+ */
+function VehicleTag({ raw, height, isBattleMap }: { raw: string | null | undefined; height: number; isBattleMap: boolean }) {
+  const vehicle = parseVehicleState(raw);
+  if (!vehicle) return null;
+  return (
+    <Html
+      position={[0, isBattleMap ? 0.1 : (height * 0.8) + 1.6, 0]}
+      center
+      zIndexRange={[100, 0]}
+      occlude={!isBattleMap}
+      style={{ pointerEvents: 'none', userSelect: 'none' }}
+    >
+      <div style={{
+        background: 'rgba(0,0,0,0.75)', border: '1px solid #ffcc00', padding: '1px 5px',
+        fontSize: '9px', color: '#ffcc00', whiteSpace: 'nowrap', textTransform: 'uppercase',
+        fontFamily: 'monospace', letterSpacing: '1px',
+        transform: isBattleMap ? 'translateY(-24px)' : undefined,
+      }}>
+        {vehicle.name} · AC {vehicle.ac} · AR {vehicle.armorRating} · {vehicle.hp}/{vehicle.hpMax}
+        {vehicle.moving ? ' · MOVING' : ''}
+      </div>
+    </Html>
+  );
+}
 
 // Streamer name tags follow the admin's hover: the admin broadcasts hover
 // state per rhombus; the spectator shows the tag only for that rhombus.
@@ -289,7 +321,9 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
       {isAdmin && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
-      
+
+      <VehicleTag raw={location.vehicle_state} height={location.height} isBattleMap={isBattleMap} />
+
       {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && streamerHovered)) && (
           <Html position={[0, isBattleMap ? 0.1 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude={!isBattleMap} style={{ pointerEvents: 'none', userSelect: 'none' }}>
             <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #ff0000`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px', transform: isBattleMap ? 'translateY(-40px)' : undefined }}>
@@ -550,7 +584,9 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
       {isAdmin && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
-      
+
+      <VehicleTag raw={location.vehicle_state} height={location.height} isBattleMap={isBattleMap} />
+
       {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && streamerHovered)) && (
           <Html position={[0, isBattleMap ? 0.1 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude={!isBattleMap} style={{ pointerEvents: 'none', userSelect: 'none' }}>
             <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #00ccff`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px', transform: isBattleMap ? 'translateY(-40px)' : undefined }}>
@@ -860,6 +896,8 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
       {isOnline && streamerVis.showHealthBars && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
+
+      <VehicleTag raw={location.vehicle_state} height={location.height} isBattleMap={isBattleMap} />
 
       {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && streamerHovered)) && (
           <Html position={[0, isBattleMap ? 0.1 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude={!isBattleMap} style={{ pointerEvents: 'none', userSelect: 'none' }}>

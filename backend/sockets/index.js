@@ -10,6 +10,7 @@ const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
+const vehicleState = require('../sheets/vehicleState');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -1337,15 +1338,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('initiateAttack', (data) => {
       const info = userSockets.get(socket.id);
       if (!info || !data || !data.targetId || !data.attackType) return;
-      db.get('SELECT id, name, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index FROM locations WHERE id = ?', [data.targetId], (err, target) => {
+      db.get('SELECT id, name, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index, vehicle_state FROM locations WHERE id = ?', [data.targetId], (err, target) => {
         if (err || !target) return;
         const isRhombus = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'].includes(target.shape);
         if (!isRhombus) return;
         const meleeAc = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 10;
         const rangedAc = target.ranged_ac !== null && target.ranged_ac !== undefined ? target.ranged_ac : meleeAc;
-        const ac = data.attackType === 'ranged' ? rangedAc : meleeAc;
+        // The car is what you are shooting at, so its AC is the number to show — quoting
+        // the occupant's would be worse than showing nothing.
+        let vehicle = null;
+        try { vehicle = target.vehicle_state ? JSON.parse(target.vehicle_state) : null; } catch (e) { vehicle = null; }
+        const ac = vehicle ? vehicle.ac : (data.attackType === 'ranged' ? rangedAc : meleeAc);
         pendingAttacks.set(socket.id, { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, targetX: target.x, targetZ: target.z, targetBattleMapId: target.battle_map_id, targetFloorIndex: target.floor_index });
-        socket.emit('attackPending', { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac });
+        socket.emit('attackPending', { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, vehicle });
       });
     });
 
@@ -1433,28 +1438,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
      * vehicle stops being cover, so the people inside it become hittable again.
      */
     const resolveOccupiedVehicle = (defender, defenderData, cb) => {
-      const occ = attackCwn.readOccupancy(defenderData);
-      if (!occ) return cb(null);
-      const done = (sheetId, ownerData) => {
-        const vehicle = attackCwn.getVehicle(ownerData, occ.vehicleIndex, { moving: occ.moving });
-        cb(vehicle && !vehicle.destroyed ? { vehicle, sheetId, ownerData } : null);
-      };
-      if (!occ.owner) {
-        if (!defender) return cb(null);
-        return done(defender.id, defenderData);
-      }
-      db.get(
-        `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-        [occ.owner, 'cities_without_number'],
-        (err, row) => {
-          // The owner logged out, was purged, or was never a player: the rider loses
-          // their cover rather than the attack failing.
-          if (err || !row) return cb(null);
-          let ownerData;
-          try { ownerData = JSON.parse(row.data || '{}'); } catch (e) { return cb(null); }
-          done(row.id, ownerData);
-        }
-      );
+      vehicleState.resolve(db, defender ? defender.id : null, defenderData, (vehicle) => {
+        cb(vehicle ? { vehicle, sheetId: vehicle.sheetId } : null);
+      });
     };
 
     /**
@@ -1465,17 +1451,27 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
      */
     const applyVehicleDamage = (ride, amount, cb) => {
       const newHp = Math.max(0, ride.vehicle.hp - Math.max(0, amount));
-      const data = { ...ride.ownerData, [ride.vehicle.hpField]: newHp };
-      db.run(
-        `UPDATE character_sheets SET data = ? WHERE id = ?`,
-        [JSON.stringify(data), ride.sheetId],
-        () => {
-          db.get(`SELECT username FROM character_sheets WHERE id = ?`, [ride.sheetId], (err, row) => {
-            if (row && row.username) io.emit('sheetUpdated', { username: row.username });
-            cb(newHp);
-          });
-        }
-      );
+      // Re-read rather than writing back the copy the attack resolved against: the sheet
+      // blob is stored whole, so a stale copy would silently undo any other edit made
+      // between the roll and the damage landing.
+      db.get(`SELECT username, data FROM character_sheets WHERE id = ?`, [ride.sheetId], (err, row) => {
+        if (err || !row) return cb(newHp);
+        let data;
+        try { data = JSON.parse(row.data || '{}'); } catch (e) { return cb(newHp); }
+        data[ride.vehicle.hpField] = newHp;
+        db.run(
+          `UPDATE character_sheets SET data = ? WHERE id = ?`,
+          [JSON.stringify(data), ride.sheetId],
+          () => {
+            io.emit('sheetUpdated', { username: row.username });
+            // The badge carries the vehicle's HP, so a wreck has to stop showing as cover.
+            vehicleState.syncTokens(db, row.username, () => {
+              emitUpdate({ isRhombusOnly: true });
+              cb(newHp);
+            });
+          }
+        );
+      });
     };
 
     // Shared attack scaffolding for sheet-driven systems (CWN, SR6):

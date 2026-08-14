@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import kofiLogo from '../assets/kofi.png';
 import { CityDataBaseMenu } from './CityDatabase';
-import type { CustomDie } from '../types';
+import type { CustomDie, AttackVehicle } from '../types';
 import { InitiativeWindow } from '../modules/initiative';
 import { InitiativeNavPanel } from '../modules/initiative/components/InitiativeNavPanel';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
@@ -676,7 +676,7 @@ interface DiceMenuProps {
   rhombusState: any;
   setIsDiceTrayOpen: (v: any) => void;
   setNotification: (msg: string) => void;
-  attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
+  attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number; vehicle?: AttackVehicle | null } | null;
   onCancelAttack?: () => void;
   gameSystem?: string;
 }
@@ -755,6 +755,18 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
           <div style={{ color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '1px' }}>
             ATTACK ROLL — vs {attackPending.targetName}
           </div>
+          {attackPending.vehicle && (
+            // Shown before the shot, not after: an attacker who cannot see the car has
+            // no way to know why their damage vanished.
+            <div style={{ color: '#ffcc00', fontSize: '0.7rem', marginBottom: '6px', letterSpacing: '0.5px' }}>
+              TARGET IN VEHICLE — {attackPending.vehicle.name.toUpperCase()} ·{' '}
+              {attackPending.vehicle.moving ? 'MOVING' : 'STATIONARY'} · AC {attackPending.vehicle.ac} · AR{' '}
+              {attackPending.vehicle.armorRating} · {attackPending.vehicle.hp}/{attackPending.vehicle.hpMax} HP
+              <div style={{ color: '#888', marginTop: '2px' }}>
+                DAMAGE HITS THE VEHICLE UNTIL IT IS DESTROYED
+              </div>
+            </div>
+          )}
           <div style={{ color: 'var(--green)', fontSize: '0.75rem', marginBottom: '6px' }}>
             {hasSheetCombat(gameSystem)
               ? 'PICK A WEAPON — TO-HIT, DAMAGE & ARMOR RESOLVE AUTOMATICALLY'
