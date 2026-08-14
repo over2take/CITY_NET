@@ -228,9 +228,16 @@ const getVehicleWeapon = (data, vehicleIndex, weaponIndex) => {
   });
 };
 
-const rollToHit = (data, weapon, rng = cryptoRng) => {
+/**
+ * `opts.penalty` is a flat situational modifier — firing out of a moving vehicle is the
+ * only one so far. It sits outside the weapon because it belongs to the circumstance
+ * rather than to the gun: the same weapon fired from a parked car takes none of it.
+ */
+const rollToHit = (data, weapon, rng = cryptoRng, opts = {}) => {
   let formula = `1d20 + @base_hit_bonus + @${weapon.skill} + @${weapon.mod}`;
   if (weapon.atk !== 0) formula += weapon.atk > 0 ? ` + ${weapon.atk}` : ` - ${Math.abs(weapon.atk)}`;
+  const penalty = num(opts.penalty);
+  if (penalty !== 0) formula += penalty > 0 ? ` + ${penalty}` : ` - ${Math.abs(penalty)}`;
   const resolved = rollEngine.resolveFormula(formula, data);
   return rollEngine.executeRoll(resolved, 'sum', rng);
 };

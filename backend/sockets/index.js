@@ -1422,6 +1422,62 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       }
     };
 
+    /**
+     * The vehicle standing between a CWN defender and the shot, if any.
+     *
+     * `own:` needs no second lookup — the vehicle is on the defender's own sheet.
+     * `ride:` reads the owner's sheet instead, which is what makes a car with four
+     * people in it take damage once rather than four times.
+     *
+     * Calls back `null` for anything unreadable, including a wreck: a destroyed
+     * vehicle stops being cover, so the people inside it become hittable again.
+     */
+    const resolveOccupiedVehicle = (defender, defenderData, cb) => {
+      const occ = attackCwn.readOccupancy(defenderData);
+      if (!occ) return cb(null);
+      const done = (sheetId, ownerData) => {
+        const vehicle = attackCwn.getVehicle(ownerData, occ.vehicleIndex, { moving: occ.moving });
+        cb(vehicle && !vehicle.destroyed ? { vehicle, sheetId, ownerData } : null);
+      };
+      if (!occ.owner) {
+        if (!defender) return cb(null);
+        return done(defender.id, defenderData);
+      }
+      db.get(
+        `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+        [occ.owner, 'cities_without_number'],
+        (err, row) => {
+          // The owner logged out, was purged, or was never a player: the rider loses
+          // their cover rather than the attack failing.
+          if (err || !row) return cb(null);
+          let ownerData;
+          try { ownerData = JSON.parse(row.data || '{}'); } catch (e) { return cb(null); }
+          done(row.id, ownerData);
+        }
+      );
+    };
+
+    /**
+     * Damage to a vehicle lands on its owner's sheet, not on any occupant's token.
+     *
+     * Writes the whole data blob back because that is how sheets are stored; the read
+     * that produced `ride.ownerData` happened in the same tick as this write.
+     */
+    const applyVehicleDamage = (ride, amount, cb) => {
+      const newHp = Math.max(0, ride.vehicle.hp - Math.max(0, amount));
+      const data = { ...ride.ownerData, [ride.vehicle.hpField]: newHp };
+      db.run(
+        `UPDATE character_sheets SET data = ? WHERE id = ?`,
+        [JSON.stringify(data), ride.sheetId],
+        () => {
+          db.get(`SELECT username FROM character_sheets WHERE id = ?`, [ride.sheetId], (err, row) => {
+            if (row && row.username) io.emit('sheetUpdated', { username: row.username });
+            cb(newHp);
+          });
+        }
+      );
+    };
+
     // Shared attack scaffolding for sheet-driven systems (CWN, SR6):
     // fetch + validate the target token, and build the attackResult emitter
     // (attacker position resolved per map). Per-system handlers only supply
@@ -1560,41 +1616,79 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             });
           }
           getAttackTarget(payload.targetId, (target) => {
+            // The defender's sheet is read once, before the to-hit rather than after it:
+            // whether they are in a vehicle decides the AC, so it can no longer be
+            // fetched lazily at damage time. It was already being fetched twice below.
+            getDefenderSheet(target, system, (defender) => {
+              let defenderData = {};
+              try { defenderData = defender ? JSON.parse(defender.data || '{}') : {}; } catch (e) { defenderData = {}; }
+
+              resolveOccupiedVehicle(defender, defenderData, (ride) => {
               // CWN has one flat AC; melee_ac is the canonical token slot and
               // ranged falls back to it.
               const meleeAc = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 10;
-              const ac = weapon.attackType === 'ranged'
+              const tokenAc = weapon.attackType === 'ranged'
                 ? (target.ranged_ac !== null && target.ranged_ac !== undefined ? target.ranged_ac : meleeAc)
                 : meleeAc;
+              // You are shooting the vehicle, so you are beating its AC, not the AC of
+              // whoever is sitting inside it.
+              const ac = ride ? ride.vehicle.ac : tokenAc;
+              const acNote = ride ? ` (${ride.vehicle.name}, ${ride.vehicle.moving ? 'moving' : 'stationary'})` : '';
+
+              // Firing out of a moving vehicle is harder, whether the gun is a mount or
+              // one you are leaning out of the window with.
+              const attackerRide = attackCwn.readOccupancy(attackerData);
+              const firePenalty = attackerRide && attackerRide.moving ? attackCwn.MOVING_FIRE_PENALTY : 0;
 
               db.get(`SELECT value FROM global_settings WHERE key = 'cwn_trauma'`, (tErr, tRow) => {
                 const traumaOn = tErr || !tRow || tRow.value !== '0'; // default ON
                 let toHit;
-                try { toHit = attackCwn.rollToHit(attackerData, weapon); } catch (e) { return; }
+                try { toHit = attackCwn.rollToHit(attackerData, weapon, undefined, { penalty: firePenalty }); } catch (e) { return; }
                 const hit = toHit.total >= ac;
                 const hitHistory =
                   `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name} ` +
-                  `[${toHit.breakdown} = ${toHit.total} vs AC ${ac}] — ${hit ? 'HIT' : 'MISS'}`;
+                  (firePenalty ? 'from a moving vehicle ' : '') +
+                  `[${toHit.breakdown} = ${toHit.total} vs AC ${ac}${acNote}] — ${hit ? 'HIT' : 'MISS'}`;
 
-                const emitResult = makeEmitResult(info, target, weapon, { hit, roll: toHit.total, ac });
+                const emitResult = makeEmitResult(info, target, weapon, {
+                  hit, roll: toHit.total, ac,
+                  vehicle: ride ? { name: ride.vehicle.name, moving: ride.vehicle.moving, armorRating: ride.vehicle.armorRating } : null,
+                });
 
                 // Applies damage and tags Frail deaths / GM prompts in the
                 // result. `outcome` carries the actual dice of the damage
                 // roll so the dice tray can render them (shock passes none -
                 // no dice are rolled on shock).
                 const dealDamage = (amount, outcome, tagHistory, resultExtras, traumatic) => {
-                  getDefenderSheet(target, system, (defender) => {
-                    const defenderData = defender ? JSON.parse(defender.data || '{}') : {};
-                    const frail = Number(defenderData.frail) === 1;
-                    applyTokenDamage(target, amount, (newHp) => {
-                      const down = newHp <= 0;
-                      let history = tagHistory;
-                      if (down && frail) history += ' — FRAIL: INSTANT DEATH';
-                      else if (down && traumatic) history += ' — DOWNED BY A TRAUMATIC HIT · GM: PHYSICAL SAVE OR MAJOR INJURY';
-                      else if (down) history += ' — MORTALLY WOUNDED';
+                  // A hit on an occupied vehicle hits the vehicle: Armour Rating cuts
+                  // the damage and the rest comes off its HP. Nobody inside is touched
+                  // until it is destroyed, at which point it stops being cover and the
+                  // next shot resolves against them normally.
+                  if (ride) {
+                    const through = attackCwn.applyArmorRating(amount, ride.vehicle.armorRating);
+                    return applyVehicleDamage(ride, through, (newHp) => {
+                      const wrecked = attackCwn.vehicleDestroyed(newHp);
+                      let history = `${tagHistory} — ${ride.vehicle.name}: ${amount} − AR ${ride.vehicle.armorRating} = ${through} (${newHp}/${ride.vehicle.hpMax})`;
+                      if (wrecked) history += ' — VEHICLE DESTROYED';
+                      else if (through === 0) history += ' — ARMOR HELD';
                       broadcastRoll(info.userName, outcome ?? { rolls: {}, modTotal: 0, total: amount }, history, color, () => {
-                        emitResult({ ...resultExtras, targetHp: newHp, targetDown: down, frailDeath: down && frail });
+                        emitResult({
+                          ...resultExtras,
+                          through,
+                          vehicleHp: newHp, vehicleHpMax: ride.vehicle.hpMax, vehicleDestroyed: wrecked,
+                        });
                       });
+                    });
+                  }
+                  const frail = Number(defenderData.frail) === 1;
+                  applyTokenDamage(target, amount, (newHp) => {
+                    const down = newHp <= 0;
+                    let history = tagHistory;
+                    if (down && frail) history += ' — FRAIL: INSTANT DEATH';
+                    else if (down && traumatic) history += ' — DOWNED BY A TRAUMATIC HIT · GM: PHYSICAL SAVE OR MAJOR INJURY';
+                    else if (down) history += ' — MORTALLY WOUNDED';
+                    broadcastRoll(info.userName, outcome ?? { rolls: {}, modTotal: 0, total: amount }, history, color, () => {
+                      emitResult({ ...resultExtras, targetHp: newHp, targetDown: down, frailDeath: down && frail });
                     });
                   });
                 };
@@ -1613,24 +1707,23 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   // Trauma resolves vs the DEFENDER's Trauma Target (sheet
                   // field trauma_target, default 6); the weapon rating is
                   // the damage multiplier.
-                  getDefenderSheet(target, system, (defender) => {
-                    const defenderData = defender ? JSON.parse(defender.data || '{}') : {};
-                    const trauma = attackCwn.rollTrauma(weapon, traumaOn, defenderData.trauma_target);
-                    const traumatic = !!(trauma && trauma.traumatic);
-                    const total = Math.max(0, traumatic ? dmg.total * trauma.rating : dmg.total);
-                    let dmgHistory = `${weapon.name} damage vs ${target.name} [${dmg.breakdown} = ${dmg.total}]`;
-                    if (trauma) {
-                      dmgHistory += traumatic
-                        ? ` — TRAUMA d${trauma.die}: ${trauma.roll} vs TT ${trauma.tt} — TRAUMATIC HIT x${trauma.rating} = ${total}`
-                        : ` — trauma d${trauma.die}: ${trauma.roll} < TT ${trauma.tt}, no trauma`;
-                    }
-                    dealDamage(total, dmg, dmgHistory, {
-                      damage: total, through: total,
-                      traumatic, traumaRoll: trauma ? trauma.roll : null,
-                    }, traumatic);
-                  });
+                  const trauma = attackCwn.rollTrauma(weapon, traumaOn, defenderData.trauma_target);
+                  const traumatic = !!(trauma && trauma.traumatic);
+                  const total = Math.max(0, traumatic ? dmg.total * trauma.rating : dmg.total);
+                  let dmgHistory = `${weapon.name} damage vs ${target.name} [${dmg.breakdown} = ${dmg.total}]`;
+                  if (trauma) {
+                    dmgHistory += traumatic
+                      ? ` — TRAUMA d${trauma.die}: ${trauma.roll} vs TT ${trauma.tt} — TRAUMATIC HIT x${trauma.rating} = ${total}`
+                      : ` — trauma d${trauma.die}: ${trauma.roll} < TT ${trauma.tt}, no trauma`;
+                  }
+                  dealDamage(total, dmg, dmgHistory, {
+                    damage: total, through: total,
+                    traumatic, traumaRoll: trauma ? trauma.roll : null,
+                  }, traumatic);
                 });
               });
+              });
+            });
             }
           );
         }
