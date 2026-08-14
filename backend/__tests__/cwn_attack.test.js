@@ -130,3 +130,71 @@ describe('CWN stabilization', () => {
     expect(out.success).toBe(false);
   });
 });
+
+// ─── vehicle mounts ───────────────────────────────────────────────────────────
+
+/**
+ * Mounted weapons resolve through the same `getWeapon` as personal ones, differing only
+ * in the field prefix. A second implementation is the thing being avoided here — two
+ * copies of dice parsing and skill validation would drift.
+ */
+describe('vehicle weapon mounts', () => {
+  const sheet = {
+    weapon1_name: 'Pistol', weapon1_dmg: '1d8+1', weapon1_skill: 'shoot',
+    vehicle1_weapon1_name: 'Autocannon', vehicle1_weapon1_dmg: '2d8', vehicle1_weapon1_skill: 'shoot', vehicle1_weapon1_atk: '2',
+    vehicle1_weapon2_name: 'Grenade Launcher', vehicle1_weapon2_dmg: '3d6', vehicle1_weapon2_skill: 'shoot',
+    vehicle2_weapon1_name: 'Roof Gun', vehicle2_weapon1_dmg: '1d10', vehicle2_weapon1_skill: 'shoot',
+  };
+
+  it('reads a mount off the vehicle it belongs to', () => {
+    const w = attackCwn.getVehicleWeapon(sheet, 1, 1);
+    expect(w.name).toBe('Autocannon');
+    expect(w.dmg).toBe('2d8');
+    expect(w.atk).toBe(2);
+  });
+
+  it('keeps each vehicle mounts separate', () => {
+    // Mount ids nest under the vehicle, so vehicle 2's gun is not vehicle 1's.
+    expect(attackCwn.getVehicleWeapon(sheet, 2, 1).name).toBe('Roof Gun');
+    expect(attackCwn.getVehicleWeapon(sheet, 1, 2).name).toBe('Grenade Launcher');
+  });
+
+  it('does not confuse a mount with a personal weapon', () => {
+    expect(attackCwn.getWeapon(sheet, 1).name).toBe('Pistol');
+    expect(attackCwn.getVehicleWeapon(sheet, 1, 1).name).toBe('Autocannon');
+  });
+
+  it('rejects a vehicle index outside the sheet', () => {
+    expect(attackCwn.getVehicleWeapon(sheet, 0, 1)).toBeNull();
+    expect(attackCwn.getVehicleWeapon(sheet, attackCwn.VEHICLE_ROWS + 1, 1)).toBeNull();
+    expect(attackCwn.getVehicleWeapon(sheet, 'x', 1)).toBeNull();
+  });
+
+  it('rejects a mount index outside the vehicle', () => {
+    expect(attackCwn.getVehicleWeapon(sheet, 1, 0)).toBeNull();
+    expect(attackCwn.getVehicleWeapon(sheet, 1, attackCwn.VEHICLE_WEAPON_ROWS + 1)).toBeNull();
+  });
+
+  it('applies the same damage validation as a personal weapon', () => {
+    // The point of sharing the resolver: no @field sneak-ins through the vehicle path.
+    const bad = { ...sheet, vehicle1_weapon1_dmg: '@str_mod' };
+    expect(attackCwn.getVehicleWeapon(bad, 1, 1)).toBeNull();
+  });
+
+  it('applies the same skill validation as a personal weapon', () => {
+    const bad = { ...sheet, vehicle1_weapon1_skill: 'drive' };
+    expect(attackCwn.getVehicleWeapon(bad, 1, 1)).toBeNull();
+  });
+
+  it('rolls damage for a mount exactly as for a personal weapon', () => {
+    // Same resolver, so a mount is not a special case downstream either.
+    const w = attackCwn.getVehicleWeapon(sheet, 1, 1);
+    const rolled = attackCwn.rollDamage(sheet, w);
+    expect(rolled.total).toBeGreaterThan(0);
+  });
+
+  it('leaves the personal weapon path unchanged when no prefix is given', () => {
+    // Every existing caller passes two arguments; the default must stay `weapon`.
+    expect(attackCwn.getWeapon(sheet, 1)).toEqual(attackCwn.getWeapon(sheet, 1, {}));
+  });
+});

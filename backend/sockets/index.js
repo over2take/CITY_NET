@@ -1545,9 +1545,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         (err2, sheetRow) => {
           if (err2 || !sheetRow) return;
           const attackerData = JSON.parse(sheetRow.data || '{}');
-          const weapon = attackCwn.getWeapon(attackerData, payload.weaponIndex);
+          // A mounted weapon belongs to one of the sheet's vehicles and is fired as its
+          // own action by a gunner, so the client names the vehicle rather than the
+          // mount being merged into the personal weapon list.
+          const vehicleIndex = payload.vehicleIndex;
+          const weapon = vehicleIndex
+            ? attackCwn.getVehicleWeapon(attackerData, vehicleIndex, payload.weaponIndex)
+            : attackCwn.getWeapon(attackerData, payload.weaponIndex);
           if (!weapon) {
-            return socket.emit('sheetAttackError', { message: 'INVALID_WEAPON // SET NAME, DMG (e.g. 1d8+1) AND SKILL ON YOUR SHEET' });
+            return socket.emit('sheetAttackError', {
+              message: vehicleIndex
+                ? 'INVALID_MOUNT // SET NAME, DMG (e.g. 2d8) AND SKILL ON THE VEHICLE MOUNT'
+                : 'INVALID_WEAPON // SET NAME, DMG (e.g. 1d8+1) AND SKILL ON YOUR SHEET',
+            });
           }
           getAttackTarget(payload.targetId, (target) => {
               // CWN has one flat AC; melee_ac is the canonical token slot and

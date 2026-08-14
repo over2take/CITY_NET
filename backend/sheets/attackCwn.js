@@ -23,6 +23,19 @@ const { cryptoRng } = require('../utils/random');
 const rollEngine = require('./rollEngine');
 
 const WEAPON_ROWS = 4;
+
+/**
+ * Vehicles a character sheet can carry, and weapon mounts on each.
+ *
+ * Mounts are named per vehicle — `vehicle1_weapon1_dmg` — so a mount belongs to its
+ * vehicle rather than to a shared pool. That is what lets one resolver read both:
+ * `getWeapon` takes the prefix, and `vehicle1_weapon` is as valid a prefix as `weapon`.
+ */
+const VEHICLE_ROWS = 3;
+const VEHICLE_WEAPON_ROWS = 2;
+
+/** Field prefix for the weapon mounts of vehicle `i`. */
+const vehicleWeaponPrefix = (i) => `vehicle${Number(i)}_weapon`;
 const MORTAL_WOUND_ROUNDS = 6;
 const STABILIZE_BASE_DC = 8;
 const NO_TOOLS_PENALTY = 2;
@@ -55,28 +68,52 @@ const parseShock = (s) => {
 
 // Read and validate one structured weapon row off a sheet's data.
 // Returns { name, dmg, skill, mod, atk, trauma, shock, attackType } or null.
-const getWeapon = (data, index) => {
+/**
+ * Read one weapon row off a sheet.
+ *
+ * `prefix` and `rows` exist so vehicle mounts resolve through this same function rather
+ * than a copy of it. Personal weapons are `weapon1_*` out of four rows; a vehicle's
+ * mounts are `vehicle1_weapon1_*` out of two. Nothing else about resolution differs, and
+ * a second implementation would be free to drift from this one.
+ */
+const getWeapon = (data, index, opts = {}) => {
+  const prefix = opts.prefix || 'weapon';
+  const rows = opts.rows || WEAPON_ROWS;
   const i = Number(index);
-  if (!Number.isInteger(i) || i < 1 || i > WEAPON_ROWS) return null;
-  const skill = String(data[`weapon${i}_skill`] || '');
+  if (!Number.isInteger(i) || i < 1 || i > rows) return null;
+  const skill = String(data[`${prefix}${i}_skill`] || '');
   if (!WEAPON_SKILLS[skill]) return null;
-  const dmg = String(data[`weapon${i}_dmg`] || '').trim();
+  const dmg = String(data[`${prefix}${i}_dmg`] || '').trim();
   // Dice with an optional flat modifier (1d8, 1d8+1, 2d6-1). No @field
   // sneak-ins from the client.
   if (!/^\d+d\d+([+-]\d+)?$/i.test(dmg)) return null;
   return {
-    name: String(data[`weapon${i}_name`] || '').trim() || `WEAPON ${i}`,
+    name: String(data[`${prefix}${i}_name`] || '').trim() || `WEAPON ${i}`,
     dmg,
     skill,
     mod: WEAPON_SKILLS[skill],
-    atk: num(data[`weapon${i}_atk`]),
-    trauma: parseTrauma(data[`weapon${i}_trauma`]),
-    shock: parseShock(data[`weapon${i}_shock`]),
+    atk: num(data[`${prefix}${i}_atk`]),
+    trauma: parseTrauma(data[`${prefix}${i}_trauma`]),
+    shock: parseShock(data[`${prefix}${i}_shock`]),
     attackType: MELEE_SKILLS.includes(skill) ? 'melee' : 'ranged',
   };
 };
 
-// Roll the to-hit check: 1d20 + BHB + skill + attribute mod (+weapon atk).
+/**
+ * A weapon mounted on one of the sheet's vehicles, or null.
+ *
+ * Kept as its own entry point rather than leaving callers to build prefixes, so the
+ * naming convention lives in one place.
+ */
+const getVehicleWeapon = (data, vehicleIndex, weaponIndex) => {
+  const v = Number(vehicleIndex);
+  if (!Number.isInteger(v) || v < 1 || v > VEHICLE_ROWS) return null;
+  return getWeapon(data, weaponIndex, {
+    prefix: vehicleWeaponPrefix(v),
+    rows: VEHICLE_WEAPON_ROWS,
+  });
+};
+
 const rollToHit = (data, weapon, rng = cryptoRng) => {
   let formula = `1d20 + @base_hit_bonus + @${weapon.skill} + @${weapon.mod}`;
   if (weapon.atk !== 0) formula += weapon.atk > 0 ? ` + ${weapon.atk}` : ` - ${Math.abs(weapon.atk)}`;
@@ -133,6 +170,7 @@ const rollStabilize = (data, roundsDown, noTools, rng = cryptoRng) => {
 module.exports = {
   WEAPON_ROWS, WEAPON_SKILLS, MELEE_SKILLS,
   MORTAL_WOUND_ROUNDS, STABILIZE_BASE_DC, NO_TOOLS_PENALTY, DEFAULT_TRAUMA_TARGET,
-  parseTrauma, parseShock, getWeapon,
+  VEHICLE_ROWS, VEHICLE_WEAPON_ROWS, vehicleWeaponPrefix,
+  parseTrauma, parseShock, getWeapon, getVehicleWeapon,
   rollToHit, rollDamage, rollTrauma, shockDamage, rollStabilize,
 };

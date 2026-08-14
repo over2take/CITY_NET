@@ -33,6 +33,45 @@ export const CWN_WEAPON_ROWS = 4;
 /** Fields per weapon row (drives the renderer's row chunking). */
 export const CWN_WEAPON_COLUMNS = 6;
 
+/** Vehicles a sheet can carry, and weapon mounts on each. */
+export const CWN_VEHICLE_ROWS = 3;
+export const CWN_VEHICLE_WEAPON_ROWS = 2;
+export const CWN_VEHICLE_COLUMNS = 6;
+
+/**
+ * One vehicle, then its weapon mounts.
+ *
+ * Mount ids are nested under the vehicle — `vehicle1_weapon1_dmg` — so a mount belongs to
+ * its vehicle rather than to a shared pool, and the server reads them with the same
+ * `getWeapon` as personal weapons by passing the prefix.
+ *
+ * Armour is Armour Rating and is subtracted from damage, unlike personal armour which is
+ * AC and avoids the hit entirely. The two are not interchangeable and the hint says so.
+ *
+ * Exactly three rows of six: the vehicle itself, then one row per mount. The renderer
+ * chunks a section's fields into rows of `columns`, so the shape has to divide evenly —
+ * which is also why notes live in their own section, as they do for weapons.
+ */
+const vehicleRow = (i: number): SheetField[] => [
+  { id: `vehicle${i}_name`, label: 'VEHICLE', type: 'text', placeholder: 'Kestrel AV' },
+  { id: `vehicle${i}_hp`, label: 'HP', type: 'number', maxField: `vehicle${i}_hp_max`, placeholder: '20' },
+  { id: `vehicle${i}_hp_max`, label: 'HP MAX', type: 'number', placeholder: '20' },
+  { id: `vehicle${i}_armor`, label: 'AR', type: 'number', placeholder: '5', hint: 'Armor Rating: subtracted from all damage the vehicle takes. Not the same as personal AC, which avoids the hit instead of reducing it.' },
+  { id: `vehicle${i}_ac`, label: 'AC', type: 'number', placeholder: '12', hint: 'Base AC while stationary. A moving vehicle adds the Drive skill of whoever is driving; a stationary one takes -4.' },
+  { id: `vehicle${i}_speed`, label: 'SPEED', type: 'text', placeholder: 'Fast' },
+  ...Array.from({ length: CWN_VEHICLE_WEAPON_ROWS }, (_, w) => {
+    const j = w + 1;
+    return [
+      { id: `vehicle${i}_weapon${j}_name`, label: `MOUNT ${j}`, type: 'text', placeholder: 'Autocannon' },
+      { id: `vehicle${i}_weapon${j}_dmg`, label: 'DMG', type: 'text', placeholder: '2d8', hint: 'Damage dice, flat bonus allowed. Rolled by the server on a hit.' },
+      { id: `vehicle${i}_weapon${j}_skill`, label: 'SKILL', type: 'select', options: CWN_WEAPON_SKILLS, hint: 'Attack skill the gunner fires with. Firing a mount costs that gunner a main action.' },
+      { id: `vehicle${i}_weapon${j}_atk`, label: 'ATK', type: 'number', placeholder: '0', hint: 'Flat attack bonus for this mount, added to the to-hit roll.' },
+      { id: `vehicle${i}_weapon${j}_trauma`, label: 'TRAUMA', type: 'text', placeholder: 'd8/x3', hint: 'Trauma die / rating. Traumatic hits apply to vehicles as they do to people.' },
+      { id: `vehicle${i}_weapon${j}_shock`, label: 'SHOCK', type: 'text', placeholder: '', hint: 'Shock damage / max AC. Usually blank on a mount.' },
+    ] as SheetField[];
+  }).flat(),
+];
+
 const weaponRow = (i: number): SheetField[] => [
   { id: `weapon${i}_name`, label: 'NAME', type: 'text', placeholder: 'Heavy Pistol' },
   { id: `weapon${i}_dmg`, label: 'DMG', type: 'text', placeholder: '1d8+1', hint: 'Damage dice, flat bonus allowed: 1d8 or 1d8+1. Rolled by the server on a hit; attribute mod is added automatically.' },
@@ -187,6 +226,26 @@ export const citiesWithoutNumber: SheetTemplate = {
       tab: 'GEAR',
       fields: [
         { id: 'weapons_notes', label: 'Ammo, mods, notes', type: 'textarea', placeholder: 'Smartlinked pistol; monoblade never leaves the boot' },
+      ],
+    },
+    {
+      id: 'vehicles',
+      // 'weapons' is the row-chunking layout, not a weapons-only one — the name is
+      // historical. Reusing it avoids a new SectionLayout member and a renderer branch
+      // that would do exactly the same thing.
+      label: 'VEHICLES',
+      layout: 'weapons',
+      tab: 'GEAR',
+      columns: CWN_VEHICLE_COLUMNS,
+      fields: Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
+    },
+    {
+      id: 'vehicle_notes',
+      label: 'VEHICLE NOTES',
+      layout: 'notes',
+      tab: 'GEAR',
+      fields: [
+        { id: 'vehicles_notes', label: 'Mods, damage, passengers', type: 'textarea', placeholder: 'Kestrel: armoured glass, spoofed plates. Bike: stripped for speed, no armour.' },
       ],
     },
     {
