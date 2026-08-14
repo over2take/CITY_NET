@@ -9,6 +9,7 @@ import { CurrencyIcon } from './BankWindows';
 import { THEMES } from '../theme/themes';
 import type { ThemeName } from '../theme/themes';
 import { getTemplate } from '../sheets';
+import { CWN_VEHICLE_ROWS, CWN_VEHICLE_WEAPON_ROWS } from '../sheets/templates/cities_without_number';
 import { startUpdate, waitForRestart, currentBootId } from '../utils/updateClient';
 
 // Token defense config for the active game system; default is D&D-style AC
@@ -470,25 +471,32 @@ export function SystemInfoMenu({ userName, token, currentTheme, onThemeChange }:
 // sheet's weapon rows and fire; the server rolls everything against stored
 // data. Per-system extras: CP:R adds the aimed shot (−8, head, x2 through
 // armor) and declared LUCK; CWN is weapon-only (trauma/shock resolve
-// server-side per the house rules).
+// server-side per the house rules) but adds the mounts on its sheet vehicles,
+// which fire through the same server path as a carried weapon.
 const ATTACK_PANEL_CONFIG = {
   cyberpunk_red: {
     dmgExample: '3d6',
     meleeSkills: ['melee_weapon', 'brawling', 'martial_arts'],
     hasAimed: true,
     hasLuck: true,
+    vehicles: null,
   },
   cities_without_number: {
     dmgExample: '1d8+1',
     meleeSkills: ['stab', 'punch'],
     hasAimed: false,
     hasLuck: false,
+    // Counts come from the template rather than being repeated here: listing
+    // fewer than the sheet declares makes the last vehicles' mounts unfireable
+    // with nothing to show for it.
+    vehicles: { rows: CWN_VEHICLE_ROWS, weaponRows: CWN_VEHICLE_WEAPON_ROWS },
   },
   shadowrun_6e: {
     dmgExample: '3P',
     meleeSkills: ['close_combat'],
     hasAimed: false,
     hasLuck: false,
+    vehicles: null,
   },
 } as const;
 
@@ -498,7 +506,29 @@ const ATTACK_PANEL_CONFIG = {
 export const hasSheetCombat = (system: string | undefined): system is keyof typeof ATTACK_PANEL_CONFIG =>
   !!system && system in ATTACK_PANEL_CONFIG;
 
-function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState, setIsDiceTrayOpen }: {
+/** One firable thing: a weapon row on the sheet, or a mount on one of its
+ *  vehicles. A mount carries the vehicle it belongs to; the server reads the
+ *  mount's fields through the same code path either way. */
+type WeaponChoice = {
+  key: string;
+  index: number;
+  vehicleIndex?: number;
+  vehicleName?: string;
+  name: string;
+  dmg: string;
+  skill: string;
+};
+
+/** A row is firable only with both DMG and SKILL set — the same bar the server
+ *  applies, so an incomplete row is left out rather than offered and refused. */
+const readWeapon = (data: any, prefix: string) => {
+  const dmg = String(data?.[`${prefix}_dmg`] ?? '').trim();
+  const skill = String(data?.[`${prefix}_skill`] ?? '');
+  if (!dmg || !skill) return null;
+  return { name: String(data?.[`${prefix}_name`] ?? '').trim(), dmg, skill };
+};
+
+export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState, setIsDiceTrayOpen }: {
   system: keyof typeof ATTACK_PANEL_CONFIG;
   userName: string;
   socketRef: React.MutableRefObject<any>;
@@ -507,8 +537,10 @@ function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState,
   setIsDiceTrayOpen: (v: any) => void;
 }) {
   const cfg = ATTACK_PANEL_CONFIG[system];
-  const [weapons, setWeapons] = useState<{ index: number; name: string; dmg: string; skill: string }[]>([]);
-  const [selected, setSelected] = useState<number | null>(null);
+  // `key` rather than `index`, because a mount is identified by the pair
+  // (vehicle, mount) and the index alone stopped being unique.
+  const [weapons, setWeapons] = useState<WeaponChoice[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
   const [aimed, setAimed] = useState(false);
   const [luckAvailable, setLuckAvailable] = useState(0);
   const [luckSpend, setLuckSpend] = useState(0);
@@ -520,16 +552,24 @@ function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState,
     if (!s) return;
     const onSheetData = (sheet: any) => {
       if (!sheet || sheet.username !== userName) return;
-      const rows: { index: number; name: string; dmg: string; skill: string }[] = [];
+      const rows: WeaponChoice[] = [];
       for (let i = 1; i <= 4; i++) {
-        const dmg = String(sheet.data?.[`weapon${i}_dmg`] ?? '').trim();
-        const skill = String(sheet.data?.[`weapon${i}_skill`] ?? '');
-        if (dmg && skill) {
-          rows.push({ index: i, name: String(sheet.data?.[`weapon${i}_name`] ?? '').trim() || `WEAPON ${i}`, dmg, skill });
+        const row = readWeapon(sheet.data, `weapon${i}`);
+        if (row) rows.push({ key: String(i), index: i, name: row.name || `WEAPON ${i}`, dmg: row.dmg, skill: row.skill });
+      }
+      // Mounts come after the carried weapons and are labelled with their
+      // vehicle, since firing a turret is a different act from drawing a gun.
+      if (cfg.vehicles) {
+        for (let v = 1; v <= cfg.vehicles.rows; v++) {
+          const vehicleName = String(sheet.data?.[`vehicle${v}_name`] ?? '').trim() || `VEHICLE ${v}`;
+          for (let w = 1; w <= cfg.vehicles.weaponRows; w++) {
+            const row = readWeapon(sheet.data, `vehicle${v}_weapon${w}`);
+            if (row) rows.push({ key: `v${v}:${w}`, index: w, vehicleIndex: v, vehicleName, name: row.name || `MOUNT ${w}`, dmg: row.dmg, skill: row.skill });
+          }
         }
       }
       setWeapons(rows);
-      setSelected(prev => (prev !== null && rows.some(r => r.index === prev)) ? prev : (rows[0]?.index ?? null));
+      setSelected(prev => (prev !== null && rows.some(r => r.key === prev)) ? prev : (rows[0]?.key ?? null));
       if (cfg.hasLuck) {
         const luck = Number(sheet.data?.luck) || 0;
         setLuckAvailable(luck);
@@ -550,9 +590,12 @@ function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState,
 
   const fire = () => {
     if (selected === null) return;
+    const choice = weapons.find(w => w.key === selected);
+    if (!choice) return;
     socketRef.current?.emit('sheetAttack', {
       targetId,
-      weaponIndex: selected,
+      weaponIndex: choice.index,
+      ...(choice.vehicleIndex ? { vehicleIndex: choice.vehicleIndex } : {}),
       ...(cfg.hasAimed ? { aimed } : {}),
       ...(cfg.hasLuck ? {
         luck: luckSpend > 0 ? luckSpend : undefined,
@@ -572,17 +615,19 @@ function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState,
       </div>
     );
   }
-  const isMelee = (cfg.meleeSkills as readonly string[]).includes(weapons.find(w => w.index === selected)?.skill ?? '');
+  const isMelee = (cfg.meleeSkills as readonly string[]).includes(weapons.find(w => w.key === selected)?.skill ?? '');
   return (
     <div style={{ marginBottom: '6px' }}>
       <select
         aria-label="Weapon"
         value={selected ?? ''}
-        onChange={(e) => setSelected(Number(e.target.value))}
+        onChange={(e) => setSelected(e.target.value)}
         style={{ width: '100%', background: 'rgba(0,10,0,0.7)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px', marginBottom: '5px' }}
       >
         {weapons.map(w => (
-          <option key={w.index} value={w.index}>{w.name.toUpperCase()} · {w.dmg} · {w.skill.replace(/_/g, ' ').toUpperCase()}</option>
+          <option key={w.key} value={w.key}>
+            {w.vehicleName ? `${w.vehicleName.toUpperCase()} · ` : ''}{w.name.toUpperCase()} · {w.dmg} · {w.skill.replace(/_/g, ' ').toUpperCase()}
+          </option>
         ))}
       </select>
       {cfg.hasAimed && (
