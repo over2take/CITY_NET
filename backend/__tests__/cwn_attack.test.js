@@ -198,3 +198,62 @@ describe('vehicle weapon mounts', () => {
     expect(attackCwn.getWeapon(sheet, 1)).toEqual(attackCwn.getWeapon(sheet, 1, {}));
   });
 });
+
+// ─── vehicle combat rules ─────────────────────────────────────────────────────
+
+/**
+ * Not wired into an attack yet — a sheet-held vehicle cannot be targeted, because
+ * getAttackTarget resolves only token rows. These pin the arithmetic so that wiring is
+ * the only thing left to do, and so the AC/AR distinction cannot quietly invert.
+ */
+describe('vehicle combat rules', () => {
+  it('makes a moving vehicle harder to hit, by its driver skill', () => {
+    // A vehicle is only as hard to hit as its driver is good.
+    expect(attackCwn.vehicleAc(12, { moving: true, driveSkill: 3 })).toBe(15);
+    expect(attackCwn.vehicleAc(12, { moving: true, driveSkill: 0 })).toBe(12);
+  });
+
+  it('makes a stationary vehicle easier to hit, by a flat penalty', () => {
+    expect(attackCwn.vehicleAc(12, { moving: false })).toBe(8);
+    expect(attackCwn.vehicleAc(12)).toBe(8);
+  });
+
+  it('does not treat the two cases symmetrically', () => {
+    // The bonus scales with the driver, the penalty does not. Worth pinning because a
+    // "+/- driveSkill" implementation would look right and be wrong.
+    const moving = attackCwn.vehicleAc(12, { moving: true, driveSkill: 6 });
+    const stationary = attackCwn.vehicleAc(12, { moving: false, driveSkill: 6 });
+    expect(moving).toBe(18);
+    expect(stationary).toBe(8);
+  });
+
+  it('subtracts Armour Rating from damage rather than avoiding the hit', () => {
+    // The distinction this whole subsystem turns on: AC decides whether a hit lands,
+    // AR decides how much of a landed hit gets through.
+    expect(attackCwn.applyArmorRating(10, 5)).toBe(5);
+    expect(attackCwn.applyArmorRating(10, 0)).toBe(10);
+  });
+
+  it('lets armour absorb a hit entirely rather than going negative', () => {
+    expect(attackCwn.applyArmorRating(3, 5)).toBe(0);
+    expect(attackCwn.applyArmorRating(0, 5)).toBe(0);
+  });
+
+  it('treats missing or junk values as zero rather than NaN', () => {
+    // Sheet fields arrive as strings and are often blank.
+    expect(attackCwn.applyArmorRating('10', '5')).toBe(5);
+    expect(attackCwn.applyArmorRating(10, '')).toBe(10);
+    expect(attackCwn.vehicleAc('12', { moving: true, driveSkill: '3' })).toBe(15);
+  });
+
+  it('destroys a vehicle at zero HP, not below it', () => {
+    expect(attackCwn.vehicleDestroyed(1)).toBe(false);
+    expect(attackCwn.vehicleDestroyed(0)).toBe(true);
+    expect(attackCwn.vehicleDestroyed(-3)).toBe(true);
+  });
+
+  it('keeps the moving-fire penalty at the value the rules give', () => {
+    expect(attackCwn.MOVING_FIRE_PENALTY).toBe(-4);
+    expect(attackCwn.VEHICLE_STATIONARY_AC_PENALTY).toBe(-4);
+  });
+});

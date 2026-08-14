@@ -69,6 +69,50 @@ const parseShock = (s) => {
 // Read and validate one structured weapon row off a sheet's data.
 // Returns { name, dmg, skill, mod, atk, trauma, shock, attackType } or null.
 /**
+ * Vehicle combat.
+ *
+ * Encoded here rather than left to the table because they are arithmetic, and because
+ * the AC rule in particular is easy to get backwards. Nothing in this block is wired
+ * into an attack yet: `getAttackTarget` resolves only token rows, so a vehicle held on a
+ * sheet cannot currently be the target of one. These are the rules, ready for the moment
+ * it can be.
+ */
+
+/** A stationary vehicle is easier to hit than its own base AC suggests. */
+const VEHICLE_STATIONARY_AC_PENALTY = -4;
+
+/** Firing a personal weapon out of a moving vehicle. */
+const MOVING_FIRE_PENALTY = -4;
+
+/**
+ * The AC an attacker must beat to hit a vehicle.
+ *
+ * Moving, it adds the Drive skill of whoever is driving — a vehicle is only as hard to
+ * hit as its driver is good. Stationary, it takes a flat penalty instead. Note the two
+ * are not symmetric: the bonus scales with the driver and the penalty does not.
+ */
+const vehicleAc = (baseAc, opts = {}) => {
+  const base = num(baseAc);
+  if (!opts.moving) return base + VEHICLE_STATIONARY_AC_PENALTY;
+  return base + num(opts.driveSkill);
+};
+
+/**
+ * Damage a vehicle actually takes after its Armour Rating.
+ *
+ * AR is *subtraction*, which is the thing that makes vehicle armour different in kind
+ * from personal armour: AC decides whether the hit lands at all, AR decides how much of
+ * a landed hit gets through. Applying one where the other belongs is the likeliest
+ * mistake in this whole subsystem.
+ *
+ * Floors at zero — armour can absorb a hit entirely.
+ */
+const applyArmorRating = (damage, armorRating) => Math.max(0, num(damage) - num(armorRating));
+
+/** True once a vehicle has taken enough to be destroyed. */
+const vehicleDestroyed = (hpCurrent) => num(hpCurrent) <= 0;
+
+/**
  * Read one weapon row off a sheet.
  *
  * `prefix` and `rows` exist so vehicle mounts resolve through this same function rather
@@ -171,6 +215,8 @@ module.exports = {
   WEAPON_ROWS, WEAPON_SKILLS, MELEE_SKILLS,
   MORTAL_WOUND_ROUNDS, STABILIZE_BASE_DC, NO_TOOLS_PENALTY, DEFAULT_TRAUMA_TARGET,
   VEHICLE_ROWS, VEHICLE_WEAPON_ROWS, vehicleWeaponPrefix,
+  VEHICLE_STATIONARY_AC_PENALTY, MOVING_FIRE_PENALTY,
+  vehicleAc, applyArmorRating, vehicleDestroyed,
   parseTrauma, parseShock, getWeapon, getVehicleWeapon,
   rollToHit, rollDamage, rollTrauma, shockDamage, rollStabilize,
 };
