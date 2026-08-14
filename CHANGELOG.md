@@ -9,6 +9,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.8.2] - 2026-08-14
+
+### Added
+
+- **Vehicles on the Cities Without Number sheet, with weapon mounts.** Six vehicles, each with a name, type, speed, armour rating, HP and crew, and two weapon mounts of its own. A mount rolls to hit through the same code path as a carried weapon rather than a parallel one — the attack resolver takes a field prefix, so `vehicle2_weapon1` is read exactly as `weapon1` is, and everything already true of a CWN attack stays true of one fired from a turret.
+
+  The vehicle lives on the sheet and not on the map. There is no vehicle token, so nothing had to be taught to treat a vehicle as a thing that occupies a square. Notes are a section of their own rather than a column, since the useful thing to write about a vehicle does not fit in a grid cell.
+- **The CWN vehicle combat rules, encoded.** Armour Rating as flat damage reduction, AC that is the vehicle's own while moving plus the driver's Drive skill and four *worse* while stationary, the penalty for firing from a moving vehicle, and destruction at zero HP. This is arithmetic the resolver can do and does not yet get asked to do: a vehicle held on a character sheet is not something an attack can currently be aimed at, so the rules are in place and tested ahead of the targeting that would use them, rather than being written twice.
+- **A roll button for BODY in Cyberpunk RED.** It was the one stat with a modifier and no way to roll it. The roll is resolved server-side by field id like every other, which is the part adding a button alone would have missed — and a test now walks the template and fails if any roll button lacks a server-side roll behind it, so the next stat added cannot render a control that does nothing when pressed.
+
+### Changed
+
+- **Empty repeated sections collapse instead of filling the page.** Six vehicles declared meant eighteen rows of blank fields on a sheet with no vehicles on it. A section can now declare a group size, and only the entries holding data render, plus one blank and a button to reveal the next. Visibility is derived from the data rather than remembered, so the vehicles you filled in are the ones that come back after a reload without anything having to store that they should. Whitespace does not count as data, so a stray space cannot pin a row open. Sections that do not opt in — weapons, armour — render as before.
+- **The Cyberpunk RED stats grid groups the rollable stats first.** BODY moved up among the stats you roll, and MOVE and LUCK moved to the end, since neither is a check: MOVE is a movement allowance and LUCK is a pool you spend. The grid no longer mixes the two kinds together.
+
+---
+
 ## [1.8.1] - 2026-08-02
 
 ### Added
