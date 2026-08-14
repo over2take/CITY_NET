@@ -87,12 +87,14 @@ export const cyberpunkRed: SheetTemplate = {
         { id: 'tech', label: 'TECH', type: 'number', roll: { formula: '1d10 + @tech', label: 'TECH' } },
         { id: 'cool', label: 'COOL', type: 'number', roll: { formula: '1d10 + @cool', label: 'COOL' } },
         { id: 'will', label: 'WILL', type: 'number', roll: { formula: '1d10 + @will', label: 'WILL' } },
-        { id: 'move', label: 'MOVE', type: 'number' },
-        { id: 'body', label: 'BODY', type: 'number' },
-        { id: 'luck', label: 'LUCK', type: 'number', maxField: 'luck_max', hint: 'Spend LUCK points to boost rolls; they refresh at the start of a session. Current / maximum.' },
-        { id: 'luck_max', label: 'LUCK MAX', type: 'number' },
+        // Rollable stats first, then the two that are not: MOVE is a movement
+        // allowance rather than a check, and LUCK is a pool you spend.
+        { id: 'body', label: 'BODY', type: 'number', roll: { formula: '1d10 + @body', label: 'BODY' } },
         { id: 'emp', label: 'EMP', type: 'number', maxField: 'emp_max', roll: { formula: '1d10 + @emp', label: 'EMP' }, hint: 'Empathy erodes as Humanity is lost to cyberware. Rolls use CURRENT EMP, not the max.' },
         { id: 'emp_max', label: 'EMP MAX', type: 'number' },
+        { id: 'luck', label: 'LUCK', type: 'number', maxField: 'luck_max', hint: 'Spend LUCK points to boost rolls; they refresh at the start of a session. Current / maximum.' },
+        { id: 'luck_max', label: 'LUCK MAX', type: 'number' },
+        { id: 'move', label: 'MOVE', type: 'number' },
       ],
     },
     {

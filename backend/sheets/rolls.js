@@ -8,7 +8,9 @@
 // CP:R stats roll 1d10 + stat, skills roll 1d10 + stat + skill level.
 // All CP:R checks use the exploding check die (nat 10 adds a d10, nat 1
 // subtracts one).
-const CPR_STATS = ['int', 'ref', 'dex', 'tech', 'cool', 'will', 'emp'];
+// Rollable stats. MOVE and LUCK are absent on purpose: MOVE is a movement allowance
+// rather than a check, and LUCK is a pool you spend rather than roll.
+const CPR_STATS = ['int', 'ref', 'dex', 'tech', 'cool', 'will', 'body', 'emp'];
 
 const CPR_SKILLS = {
   // AWARENESS
