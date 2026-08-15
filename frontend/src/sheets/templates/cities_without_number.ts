@@ -322,6 +322,9 @@ export const citiesWithoutNumber: SheetTemplate = {
       // historical. Reusing it avoids a new SectionLayout member and a renderer branch
       // that would do exactly the same thing.
       label: 'VEHICLES',
+      // Who is sitting where is shared state, so the way to it belongs beside the
+      // section rather than in it.
+      headerAction: 'WHO IS ABOARD',
       layout: 'weapons',
       tab: 'GEAR',
       columns: CWN_VEHICLE_COLUMNS,

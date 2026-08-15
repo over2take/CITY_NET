@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { VehicleArt } from './vehicleArt';
 import { getPreset } from '../sheets/vehiclePresets';
@@ -38,6 +38,8 @@ interface Props {
   socket: any;
   userName: string;
   isAdmin?: boolean;
+  vehicles: RosterVehicle[];
+  players: string[];
 }
 
 /** Seat labels come from the book vehicle; anything past those is numbered. */
@@ -64,33 +66,16 @@ const seatAnchor = (i: number, total: number) => {
   return { x: left ? 36 : 64, y, side: left ? ('left' as const) : ('right' as const) };
 };
 
-export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin }: Props) {
-  const [vehicles, setVehicles] = useState<RosterVehicle[]>([]);
-  const [players, setPlayers] = useState<string[]>([]);
+export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin, vehicles, players }: Props) {
   const [selected, setSelected] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(() => socket?.emit('requestVehicleRoster'), [socket]);
-
   useEffect(() => {
     if (!socket) return;
-    const onRoster = (data: { vehicles: RosterVehicle[]; players: string[] }) => {
-      setVehicles(data.vehicles ?? []);
-      setPlayers(data.players ?? []);
-    };
     const onError = (e: { message: string }) => setError(e?.message ?? 'REFUSED');
-    socket.on('vehicleRoster', onRoster);
-    socket.on('vehicleSeatingChanged', refresh);
-    socket.on('sheetUpdated', refresh);
     socket.on('vehicleSeatingError', onError);
-    refresh();
-    return () => {
-      socket.off('vehicleRoster', onRoster);
-      socket.off('vehicleSeatingChanged', refresh);
-      socket.off('sheetUpdated', refresh);
-      socket.off('vehicleSeatingError', onError);
-    };
-  }, [socket, refresh]);
+    return () => { socket.off('vehicleSeatingError', onError); };
+  }, [socket]);
 
   const key = (v: RosterVehicle) => `${v.owner}:${v.index}`;
   const current = vehicles.find(v => key(v) === selected) ?? vehicles[0];

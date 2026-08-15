@@ -47,6 +47,9 @@ interface SheetRendererProps {
   /** House-rule gate: show the 1-LUCK fumble shield control. Off = a natural
    *  1 always fumbles and the button is hidden. */
   allowFumbleShield?: boolean;
+  /** A section's header button was pressed. Sections declare the label; what it does is
+   *  the surface's business — the renderer has no idea what a window is. */
+  onSectionAction?: (sectionId: string) => void;
   /** Write several fields as one save. Needed wherever one control changes many
    *  values — separate saves race on the server and all but the last are lost. */
   onFieldsChange?: (fields: Record<string, string | number>) => void;
@@ -1141,7 +1144,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // If the active tab gets hidden (house rule toggled off), fall back to the
@@ -1195,16 +1198,32 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
           const open = !closedSections.has(section.id);
           return (
             <div key={section.id}>
-              <button
-                onClick={() => toggle(section.id)}
-                style={{
-                  background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer',
-                  fontFamily: 'inherit', fontSize: '0.62rem', letterSpacing: '2px', opacity: 0.7,
-                  padding: '2px 0', width: '100%', textAlign: 'left',
-                }}
-              >
-                {open ? '▾' : '▸'} ─── {section.label} ───
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => toggle(section.id)}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: '0.62rem', letterSpacing: '2px', opacity: 0.7,
+                    padding: '2px 0', textAlign: 'left', flex: 1,
+                  }}
+                >
+                  {open ? '▾' : '▸'} ─── {section.label} ───
+                </button>
+                {/* In the header bar rather than inside the section, so collapsing the
+                    section does not take it with them. */}
+                {section.headerAction && onSectionAction && (
+                  <button
+                    onClick={() => onSectionAction(section.id)}
+                    style={{
+                      background: 'none', border: '1px solid var(--green)', color: 'var(--green)',
+                      cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.55rem',
+                      letterSpacing: '1px', padding: '1px 8px', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {section.headerAction}
+                  </button>
+                )}
+              </div>
               {open && (
                 <div style={{ padding: '4px 0 6px' }}>
                   {section.layout === 'grid' && <GridSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}

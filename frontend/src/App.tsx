@@ -34,6 +34,7 @@ import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, Quick
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { VehiclesWindow } from './components/VehiclesWindow';
 import { VehicleBadgeButton } from './components/VehicleBadgeButton';
+import { useVehicleRoster } from './hooks/useVehicleRoster';
 import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
@@ -926,6 +927,9 @@ function App() {
     ? (globalSettings['cwn_individual_initiative'] === '1' ? 'individual' : 'side')
     : 'individual';
   const initiative = useInitiative(socketRef, initiativeSceneKey, initiativeSystem);
+  // Held here, not in the window: the buttons that open it need to know whether this
+  // table owns any vehicles at all.
+  const vehicleRoster = useVehicleRoster(socketRef.current, gameSystem);
 
   const initiativeSceneLabel = view === 'battle_map' && activeBattleMapData
     ? (() => {
@@ -1944,6 +1948,7 @@ function App() {
                   else setIsHitPointsOpen(true);
                 }}
                 onRolled={() => setIsDiceTrayOpen(true)}
+                onOpenVehicles={() => setIsVehiclesOpen(true)}
                 currentTheme={currentTheme}
               />
             )}
@@ -1955,6 +1960,8 @@ function App() {
                 socket={socketRef.current}
                 userName={userName}
                 isAdmin={isAdmin}
+                vehicles={vehicleRoster.vehicles}
+                players={vehicleRoster.players}
               />
             )}
               <ChatWindow
@@ -2402,6 +2409,17 @@ function App() {
                           </button>
                         </div>
                       </div>
+                    )}
+                    {/* The shared seating window. Only where there is something to seat
+                        anyone in — an empty roster means the button says nothing. */}
+                    {isRhombus && vehicleRoster.hasVehicles && (
+                      <button
+                        className="upload-btn"
+                        style={{ marginTop: '10px', width: '100%' }}
+                        onClick={() => setIsVehiclesOpen(true)}
+                      >
+                        WHO_IS_ABOARD
+                      </button>
                     )}
                     {/* In a vehicle: the badge says which, and gets you out of it. Shown
                         for anyone's token — knowing they are in a car is the point — but

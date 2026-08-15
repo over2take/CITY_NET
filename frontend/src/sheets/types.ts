@@ -113,6 +113,9 @@ export interface SheetSection {
    * sensible default. Without it, ADD reveals a blank row as before.
    */
   onAdd?: (index: number) => Record<string, string | number>;
+  /** A button in the section's header bar, beside the collapse toggle rather than inside
+   *  the section — so it stays reachable when the section is closed. */
+  headerAction?: string;
   /** Which bottom tab this section lives under (default: the first tab). */
   tab?: string;
   fields: SheetField[];

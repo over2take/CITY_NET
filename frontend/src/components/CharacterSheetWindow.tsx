@@ -24,11 +24,13 @@ interface CharacterSheetWindowProps {
   /** Called when the player rolls from the sheet - App opens the dice tray
    *  so the result is visible. */
   onRolled?: () => void;
+  /** Open the shared seating window from the VEHICLES section header. */
+  onOpenVehicles?: () => void;
   /** Active theme name - handed to the standalone tab so it matches. */
   currentTheme?: string;
 }
 
-export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, currentTheme }: CharacterSheetWindowProps) {
+export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, onOpenVehicles, currentTheme }: CharacterSheetWindowProps) {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, hiddenTabs, actions } =
@@ -106,6 +108,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
           onFieldsChange={handleFieldsChange}
+          onSectionAction={(id) => { if (id === 'vehicles') onOpenVehicles?.(); }}
           onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
           onOpenLink={onOpenLink}
           onRoll={actions.onRoll}

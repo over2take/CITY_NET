@@ -33,7 +33,14 @@ const CAR = {
   occupants: {} as Record<string, string>,
 };
 
-const open = (opts: { userName?: string; isAdmin?: boolean } = {}) => {
+const open = (
+  opts: {
+    userName?: string;
+    isAdmin?: boolean;
+    vehicles?: typeof CAR[];
+    players?: string[];
+  } = {},
+) => {
   const socket = makeSocket();
   render(
     <VehiclesWindow
@@ -43,6 +50,8 @@ const open = (opts: { userName?: string; isAdmin?: boolean } = {}) => {
       socket={socket}
       userName={opts.userName ?? 'cody'}
       isAdmin={opts.isAdmin}
+      vehicles={opts.vehicles ?? [CAR]}
+      players={opts.players ?? ['cody', 'mouse']}
     />
   );
   return socket;
@@ -54,20 +63,13 @@ const lastEmit = (socket: ReturnType<typeof makeSocket>, event: string) =>
 beforeEach(() => vi.clearAllMocks());
 
 describe('the vehicles window', () => {
-  it('asks for the roster as soon as it opens', () => {
-    const socket = open();
-    expect(socket.emitted.some(e => e.event === 'requestVehicleRoster')).toBe(true);
-  });
-
   it('says what to do when there are no vehicles', () => {
-    const socket = open();
-    socket.deliver('vehicleRoster', { vehicles: [], players: [] });
+    open({ vehicles: [], players: [] });
     expect(screen.getByText(/NO VEHICLES/)).toBeInTheDocument();
   });
 
   it('draws one seat per crew, named from the book', () => {
-    const socket = open();
-    socket.deliver('vehicleRoster', { vehicles: [CAR], players: ['cody', 'mouse'] });
+    open();
     // A Car is crew 5 and the book names all five.
     expect(screen.getByLabelText('DRIVER')).toBeInTheDocument();
     expect(screen.getByLabelText('SHOTGUN')).toBeInTheDocument();
@@ -75,20 +77,15 @@ describe('the vehicles window', () => {
   });
 
   it('numbers seats the book does not name', () => {
-    const socket = open();
     // An APC seats sixteen and the book names two of them.
-    socket.deliver('vehicleRoster', {
-      vehicles: [{ ...CAR, type: 'apc', crew: 3, seats: ['driver', 'seat2', 'seat3'] }],
-      players: ['cody'],
-    });
+    open({ vehicles: [{ ...CAR, type: 'apc', crew: 3, seats: ['driver', 'seat2', 'seat3'] }], players: ['cody'] });
     expect(screen.getByLabelText('DRIVER')).toBeInTheDocument();
     expect(screen.getByLabelText('GUNNER')).toBeInTheDocument();
     expect(screen.getByLabelText('CREW 3')).toBeInTheDocument();
   });
 
   it('shows the numbers the table needs without opening a sheet', () => {
-    const socket = open();
-    socket.deliver('vehicleRoster', { vehicles: [{ ...CAR, occupants: { driver: 'cody' } }], players: ['cody'] });
+    open({ vehicles: [{ ...CAR, occupants: { driver: 'cody' } }], players: ['cody'] });
     expect(screen.getByText('AC 8')).toBeInTheDocument();
     expect(screen.getByText('AR 6')).toBeInTheDocument();
     expect(screen.getByText('30/30 HP')).toBeInTheDocument();
@@ -97,7 +94,6 @@ describe('the vehicles window', () => {
 
   it('seats someone by picking them', async () => {
     const socket = open();
-    socket.deliver('vehicleRoster', { vehicles: [CAR], players: ['cody', 'mouse'] });
     await userEvent.selectOptions(screen.getByLabelText('SHOTGUN'), 'mouse');
     expect(lastEmit(socket, 'seatIn')).toMatchObject({
       occupant: 'mouse', owner: 'cody', vehicleIndex: 1, seat: 'seat2',
@@ -105,19 +101,13 @@ describe('the vehicles window', () => {
   });
 
   it('lets you out of your own seat', async () => {
-    const socket = open({ userName: 'mouse' });
-    socket.deliver('vehicleRoster', {
-      vehicles: [{ ...CAR, occupants: { seat2: 'mouse' } }], players: ['cody', 'mouse'],
-    });
+    const socket = open({ userName: 'mouse', vehicles: [{ ...CAR, occupants: { seat2: 'mouse' } }] });
     await userEvent.selectOptions(screen.getByLabelText('SHOTGUN'), '');
     expect(lastEmit(socket, 'seatOut')).toMatchObject({ occupant: 'mouse' });
   });
 
   it('refuses to turn someone else out, and says why', async () => {
-    const socket = open({ userName: 'cody' });
-    socket.deliver('vehicleRoster', {
-      vehicles: [{ ...CAR, occupants: { seat2: 'mouse' } }], players: ['cody', 'mouse'],
-    });
+    const socket = open({ userName: 'cody', vehicles: [{ ...CAR, occupants: { seat2: 'mouse' } }] });
     await userEvent.selectOptions(screen.getByLabelText('SHOTGUN'), '');
     // Caught here to save a round trip; the server refuses it as well.
     expect(socket.emitted.some(e => e.event === 'seatOut')).toBe(false);
@@ -125,17 +115,13 @@ describe('the vehicles window', () => {
   });
 
   it('lets the GM turn anyone out', async () => {
-    const socket = open({ userName: 'gm', isAdmin: true });
-    socket.deliver('vehicleRoster', {
-      vehicles: [{ ...CAR, occupants: { seat2: 'mouse' } }], players: ['cody', 'mouse'],
-    });
+    const socket = open({ userName: 'gm', isAdmin: true, vehicles: [{ ...CAR, occupants: { seat2: 'mouse' } }] });
     await userEvent.selectOptions(screen.getByLabelText('SHOTGUN'), '');
     expect(lastEmit(socket, 'seatOut')).toMatchObject({ occupant: 'mouse' });
   });
 
   it('sets movement on the vehicle, not on a person', async () => {
     const socket = open();
-    socket.deliver('vehicleRoster', { vehicles: [CAR], players: ['cody'] });
     await userEvent.click(screen.getByLabelText('MOVING'));
     expect(lastEmit(socket, 'setVehicleMoving')).toMatchObject({
       owner: 'cody', vehicleIndex: 1, moving: true,
@@ -143,27 +129,20 @@ describe('the vehicles window', () => {
   });
 
   it('marks a wreck as no longer cover', () => {
-    const socket = open();
-    socket.deliver('vehicleRoster', { vehicles: [{ ...CAR, destroyed: true }], players: ['cody'] });
+    open({ vehicles: [{ ...CAR, destroyed: true }], players: ['cody'] });
     // Flagged in the picker and spelled out under the diagram.
     expect(screen.getByRole('option', { name: /WRECKED/ })).toBeInTheDocument();
     expect(screen.getByText(/no longer cover/)).toBeInTheDocument();
   });
 
   it('lists every car in play, not just yours', () => {
-    const socket = open();
-    socket.deliver('vehicleRoster', {
-      vehicles: [CAR, { ...CAR, owner: 'mouse', name: 'Mule' }],
-      players: ['cody', 'mouse'],
-    });
+    open({ vehicles: [CAR, { ...CAR, owner: 'mouse', name: 'Mule' }] });
     expect((screen.getByLabelText('Vehicle') as HTMLSelectElement).options).toHaveLength(2);
   });
 
-  it('refreshes when someone else moves', () => {
+  it('surfaces a refusal from the server', () => {
     const socket = open();
-    socket.deliver('vehicleRoster', { vehicles: [CAR], players: ['cody'] });
-    const before = socket.emitted.filter(e => e.event === 'requestVehicleRoster').length;
-    socket.deliver('vehicleSeatingChanged', {});
-    expect(socket.emitted.filter(e => e.event === 'requestVehicleRoster').length).toBeGreaterThan(before);
+    socket.deliver('vehicleSeatingError', { message: 'NO_SUCH_SEAT' });
+    expect(screen.getByText(/NO SUCH SEAT/)).toBeInTheDocument();
   });
 });
