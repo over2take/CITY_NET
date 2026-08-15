@@ -100,13 +100,27 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
 
   const art = getPreset(current?.type ?? '')?.art ?? 'car';
 
+  /**
+   * The diagram is sized to the vehicle rather than fixed.
+   *
+   * Seats stack in two columns down the hull, so what sets the height is how many rows a
+   * side carries — two for a car, eight for an APC. Sized off the crew, a car needs a
+   * fraction of the room sixteen people do, and neither has to scroll: the window's
+   * content pane caps at 300px and scrolls by default, which a square diagram the width of
+   * the window overran every time.
+   */
+  const rowsPerSide = Math.ceil(Math.max(0, (current?.seats.length ?? 5) - 1) / 2);
+  const diagram = Math.min(540, Math.max(250, Math.round((rowsPerSide * 34) / 0.52) + 60));
+
   return (
     <DraggableWindow
       title="VEHICLES"
       pos={pos}
       setPos={setPos}
       onClose={onClose}
-      windowStyle={{ width: '470px' }}
+      windowStyle={{ width: `${Math.max(400, diagram + 56)}px` }}
+      // Tall vehicles are still bounded by the viewport rather than running off it.
+      contentStyle={{ maxHeight: '84vh' }}
     >
       {vehicles.length === 0 ? (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px 4px' }}>
@@ -146,7 +160,9 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                 </label>
               </div>
 
-              <div style={{ position: 'relative', width: '100%', aspectRatio: '1', color: 'var(--green)' }}>
+              {/* Square and centred, so the art, its leader lines and the controls at
+                  either edge all scale as one piece and cannot drift apart. */}
+              <div style={{ position: 'relative', width: `${diagram}px`, height: `${diagram}px`, margin: '0 auto', color: 'var(--green)' }}>
                 <svg viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
                   <VehicleArt layout={art} />
                   {current.seats.map((seatId, i) => {
