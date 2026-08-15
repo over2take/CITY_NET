@@ -14,7 +14,7 @@
 //            That tension is the rule, not a rounding error, so mounts are a separate
 //            list from seats and anyone aboard can fire one as their action.
 
-export type VehicleArt = 'bike' | 'car' | 'van' | 'air' | 'tracked';
+export type VehicleArt = 'bike' | 'car' | 'van' | 'air' | 'heli' | 'tracked' | 'hover';
 
 export interface VehiclePreset {
   id: string;
@@ -61,7 +61,7 @@ export const VEHICLE_PRESETS: VehiclePreset[] = [
     seatNames: ['DRIVER', 'SHOTGUN'],
   },
   {
-    id: 'helicopter', label: 'HELICOPTER', art: 'air',
+    id: 'helicopter', label: 'HELICOPTER', art: 'heli',
     cost: 50000, spd: 3, armor: 6, tt: 12, ac: 14, hp: 20, crew: 6, hrdpt: 1, size: 'M',
     seatNames: ['PILOT', 'CO-PILOT'],
   },
@@ -76,7 +76,7 @@ export const VEHICLE_PRESETS: VehiclePreset[] = [
     seatNames: ['DRIVER', 'GUNNER'], note: HEAVY_ONLY,
   },
   {
-    id: 'gev', label: 'GEV', art: 'tracked',
+    id: 'gev', label: 'GEV', art: 'hover',
     cost: 100000, spd: 1, armor: null, tt: 12, ac: 16, hp: 30, crew: 3, hrdpt: 2, size: 'L',
     seatNames: ['DRIVER', 'GUNNER', 'COMMANDER'], note: HEAVY_ONLY,
   },

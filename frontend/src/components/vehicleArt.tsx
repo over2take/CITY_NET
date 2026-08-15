@@ -7,13 +7,18 @@ import React from 'react';
  * segment counts, and a photo-real car dropped into that would read as a foreign object.
  * Stroke-only and `currentColor` throughout, so each takes the theme it is rendered in.
  *
- * The viewBox is 0 0 100 100 and the seat anchors in sheets/vehicleLayouts.ts are
- * percentages, which makes them the same numbers — a seat marker lands where the seat is
- * drawn without a conversion step in between to get wrong.
+ * The viewBox is 0 0 100 100 and the seat anchors are percentages, which makes them the
+ * same numbers — a seat marker lands where the seat is drawn without a conversion step in
+ * between to get wrong.
+ *
+ * Seven shapes cover the book's ten vehicles. Sharing is fine where the silhouette is
+ * honest — a Truck and an APC are both boxes on wheels from above — but a Helicopter and
+ * a Dropcraft are not the same object and should not borrow one outline.
  */
 
 const BODY = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round' as const };
 const DETAIL = { fill: 'none', stroke: 'currentColor', strokeWidth: 0.9, opacity: 0.55, strokeLinejoin: 'round' as const };
+const GHOST = { fill: 'none', stroke: 'currentColor', strokeWidth: 0.7, opacity: 0.28 };
 
 /** Wheels sit outside the body on both sides, mirrored about the centre line. */
 const Wheels = ({ ys, inset = 20, w = 7, h = 13 }: { ys: number[]; inset?: number; w?: number; h?: number }) => (
@@ -66,7 +71,72 @@ function Van() {
   );
 }
 
-const ART: Record<string, () => React.JSX.Element> = { car: Car, bike: Bike, van: Van };
+function Air() {
+  return (
+    <>
+      <path d="M50 3 L55 18 L55 54 L53 90 L47 90 L45 54 L45 18 Z" {...BODY} />
+      {/* Swept wings, so it reads as fixed-wing rather than as a very thin car. */}
+      <path d="M45 32 L13 52 L13 59 L45 47 Z" {...BODY} />
+      <path d="M55 32 L87 52 L87 59 L55 47 Z" {...BODY} />
+      <path d="M45 76 L29 85 L29 90 L45 83 Z" {...DETAIL} />
+      <path d="M55 76 L71 85 L71 90 L55 83 Z" {...DETAIL} />
+      <path d="M47 13 L53 13 L53 27 L47 27 Z" {...DETAIL} />
+    </>
+  );
+}
+
+function Heli() {
+  return (
+    <>
+      {/* The rotor disc first and faintest — it is the largest shape but not the subject. */}
+      <circle cx={50} cy={38} r={44} {...GHOST} />
+      <path d="M12 16 L88 60" {...GHOST} />
+      <path d="M12 60 L88 16" {...GHOST} />
+      <path d="M50 10 L61 20 L62 38 L57 54 L43 54 L38 38 L39 20 Z" {...BODY} />
+      <path d="M48 54 L52 54 L52 84 L48 84 Z" {...BODY} />
+      <path d="M42 84 L58 84" {...DETAIL} />
+      <circle cx={50} cy={84} r={4} {...DETAIL} />
+      <path d="M43 18 L57 18 L58 28 L42 28 Z" {...DETAIL} />
+    </>
+  );
+}
+
+function Tracked() {
+  return (
+    <>
+      <path d="M31 12 L69 12 L69 88 L31 88 Z" {...BODY} />
+      <rect x={17} y={9} width={11} height={82} rx={1} {...BODY} />
+      <rect x={72} y={9} width={11} height={82} rx={1} {...BODY} />
+      {/* Track links, spaced wide enough to read as tread rather than as hatching. */}
+      {[16, 28, 40, 52, 64, 76].map((y) => (
+        <React.Fragment key={y}>
+          <path d={`M17 ${y} L28 ${y}`} {...GHOST} />
+          <path d={`M72 ${y} L83 ${y}`} {...GHOST} />
+        </React.Fragment>
+      ))}
+      <path d="M40 34 L60 34 L62 48 L58 58 L42 58 L38 48 Z" {...BODY} />
+      <path d="M48 34 L48 6 L52 6 L52 34" {...BODY} />
+    </>
+  );
+}
+
+function Hover() {
+  return (
+    <>
+      {/* The skirt is the widest thing on a ground-effect vehicle, so it is the outline. */}
+      <path d="M36 6 L64 6 L82 26 L82 74 L64 94 L36 94 L18 74 L18 26 Z" {...BODY} />
+      <path d="M40 20 L60 20 L69 34 L69 66 L60 80 L40 80 L31 66 L31 34 Z" {...DETAIL} />
+      <circle cx={50} cy={30} r={7} {...DETAIL} />
+      <circle cx={50} cy={68} r={7} {...DETAIL} />
+      <path d="M18 50 L31 50" {...GHOST} />
+      <path d="M69 50 L82 50" {...GHOST} />
+    </>
+  );
+}
+
+const ART: Record<string, () => React.JSX.Element> = {
+  bike: Bike, car: Car, van: Van, air: Air, heli: Heli, tracked: Tracked, hover: Hover,
+};
 
 /** The wireframe for a layout, as SVG children — the caller owns the <svg> and its size. */
 export function VehicleArt({ layout }: { layout: string }) {
