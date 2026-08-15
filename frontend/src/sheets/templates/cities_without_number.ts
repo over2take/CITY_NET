@@ -1,5 +1,5 @@
 import type { SheetTemplate, SheetField } from '../types';
-import { VEHICLE_TYPE_OPTIONS } from '../vehiclePresets';
+import { VEHICLE_TYPE_OPTIONS, getPreset, presetFields } from '../vehiclePresets';
 
 // Cities Without Number template.
 //
@@ -49,13 +49,34 @@ export const CWN_VEHICLE_COLUMNS = 6;
  * Armour is Armour Rating and is subtracted from damage, unlike personal armour which is
  * AC and avoids the hit entirely. The two are not interchangeable and the hint says so.
  *
- * Exactly three rows of six: the vehicle itself, then one row per mount. The renderer
- * chunks a section's fields into rows of `columns`, so the shape has to divide evenly —
- * which is also why notes live in their own section, as they do for weapons.
+ * Five rows of six: two of stats, then one per mount. The renderer chunks a section's
+ * fields into rows of `columns`, so the shape has to divide evenly — which is also why
+ * notes live in their own section, as they do for weapons.
+ *
+ * Every mount is declared because field ids are static, but only as many as the vehicle
+ * has hardpoints are drawn. A motorcycle carries none and shows none.
  */
 const vehicleRow = (i: number): SheetField[] => [
   { id: `vehicle${i}_name`, label: 'VEHICLE', type: 'text', placeholder: 'Kestrel AV' },
-  { id: `vehicle${i}_type`, label: 'TYPE', type: 'select', options: VEHICLE_TYPE_OPTIONS, hint: 'Book vehicle this is. Sets the seating plan and the wireframe in the VEHICLES window, which can also fill the whole stat block from it.' },
+  {
+    id: `vehicle${i}_type`, label: 'TYPE', type: 'select', options: VEHICLE_TYPE_OPTIONS,
+    hint: 'Book vehicle this is. Picking one fills the stat block, sets how many seats and mounts it has, and chooses its wireframe. CUSTOM leaves everything to you.',
+    presetFill: (value, data) => {
+      const preset = getPreset(value);
+      if (!preset) return {};
+      const out = presetFields(i, preset);
+      // A vehicle someone has named is theirs; the type should not rename it.
+      if (String(data[`vehicle${i}_name`] ?? '').trim()) delete out[`vehicle${i}_name`];
+      // The * and ** vehicles have an immunity rather than an Armour Rating, so the rule
+      // goes where the table can be read. Appended once, not on every re-pick.
+      if (preset.note) {
+        const notes = String(data.vehicles_notes ?? '');
+        const line = `${preset.label}: ${preset.note}`;
+        if (!notes.includes(line)) out.vehicles_notes = notes ? `${notes}\n${line}` : line;
+      }
+      return out;
+    },
+  },
   { id: `vehicle${i}_hp`, label: 'HP', type: 'number', maxField: `vehicle${i}_hp_max`, placeholder: '30' },
   { id: `vehicle${i}_hp_max`, label: 'HP MAX', type: 'number', placeholder: '30' },
   { id: `vehicle${i}_armor`, label: 'AR', type: 'number', placeholder: '6', hint: 'Armor Rating: subtracted from all damage the vehicle takes. Not the same as personal AC, which avoids the hit instead of reducing it. Blank on vehicles the book marks * or ** — those are immunities, not numbers, and the GM rules on them.' },
@@ -244,6 +265,17 @@ export const citiesWithoutNumber: SheetTemplate = {
       layout: 'weapons',
       tab: 'GEAR',
       columns: CWN_VEHICLE_COLUMNS,
+      // Hardpoints are how many Heavy weapons the vehicle carries, so a motorcycle shows
+      // no mount rows and a tank shows three. Drawing empty mounts on a vehicle that
+      // cannot mount anything states something false about it.
+      rowHidden: (row, data) => {
+        const m = /^vehicle(\d+)_weapon(\d+)_name$/.exec(row[0]?.id ?? '');
+        if (!m) return false;
+        if (Number(m[2]) <= (Number(data[`vehicle${m[1]}_hrdpt`]) || 0)) return false;
+        // Past the hardpoints, but never hide a mount someone has filled in: that reads
+        // as data loss, and a GM may have deliberately overloaded a vehicle.
+        return !row.some(f => String(data[f.id] ?? '').trim() !== '');
+      },
       // 30 fields per vehicle: empty ones collapse, filled ones come back on reload.
       groupSize: CWN_VEHICLE_COLUMNS * 5,
       fields: Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),

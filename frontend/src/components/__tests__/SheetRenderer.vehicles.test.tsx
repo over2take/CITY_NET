@@ -104,6 +104,76 @@ describe('vehicles section', () => {
   });
 });
 
+describe('the sheet reacting to the vehicle type', () => {
+  const typeField = vehicles.fields.find(f => f.id === 'vehicle1_type')!;
+  const fill = (value: string, data: Record<string, unknown> = {}) =>
+    typeField.presetFill!(value, data as never);
+
+  it('fills the stat block when a type is picked', () => {
+    expect(fill('car')).toMatchObject({
+      vehicle1_hp: 30, vehicle1_hp_max: 30, vehicle1_ac: 11, vehicle1_armor: 6,
+      vehicle1_tt: 12, vehicle1_crew: 5, vehicle1_hrdpt: 1,
+    });
+  });
+
+  it('does not rename a vehicle someone has already named', () => {
+    expect(fill('car')).toHaveProperty('vehicle1_name', 'CAR');
+    // Their Betty stays Betty.
+    expect(fill('car', { vehicle1_name: 'Betty' })).not.toHaveProperty('vehicle1_name');
+  });
+
+  it('writes the immunity rule into the notes, once', () => {
+    const first = fill('tank');
+    expect(String(first.vehicles_notes)).toMatch(/TANK: Immune/);
+    // Re-picking the same type must not stack the note up.
+    expect(fill('tank', { vehicles_notes: first.vehicles_notes })).not.toHaveProperty('vehicles_notes');
+  });
+
+  it('writes nothing for a custom vehicle', () => {
+    expect(fill('')).toEqual({});
+  });
+
+  it('hides the mounts a vehicle has no hardpoints for', () => {
+    const hidden = vehicles.rowHidden!;
+    const mount2 = vehicles.fields.filter(f => f.id.startsWith('vehicle1_weapon2_'));
+    const statRow = vehicles.fields.slice(0, 6);
+
+    // A motorcycle carries none, so drawing three empty mount rows says something false.
+    expect(hidden(mount2, { vehicle1_hrdpt: 0 } as never)).toBe(true);
+    expect(hidden(mount2, { vehicle1_hrdpt: 1 } as never)).toBe(true);
+    expect(hidden(mount2, { vehicle1_hrdpt: 2 } as never)).toBe(false);
+    // Stat rows are never hidden.
+    expect(hidden(statRow, { vehicle1_hrdpt: 0 } as never)).toBe(false);
+  });
+
+  it('never hides a mount that has something in it', () => {
+    const hidden = vehicles.rowHidden!;
+    const mount3 = vehicles.fields.filter(f => f.id.startsWith('vehicle1_weapon3_'));
+    // Past the hardpoints and empty: hidden. Past them but filled in: shown, because
+    // vanishing someone's data reads as loss and a GM may have overloaded it on purpose.
+    expect(hidden(mount3, { vehicle1_hrdpt: 1 } as never)).toBe(true);
+    expect(hidden(mount3, { vehicle1_hrdpt: 1, vehicle1_weapon3_dmg: '2d8' } as never)).toBe(false);
+    // Whitespace is not data, same reading as everywhere else on the sheet.
+    expect(hidden(mount3, { vehicle1_hrdpt: 1, vehicle1_weapon3_dmg: '  ' } as never)).toBe(true);
+  });
+
+  it('hides mounts per vehicle, not across the section', () => {
+    const hidden = vehicles.rowHidden!;
+    const data = { vehicle1_hrdpt: 0, vehicle2_hrdpt: 3 } as never;
+    expect(hidden(vehicles.fields.filter(f => f.id.startsWith('vehicle1_weapon1_')), data)).toBe(true);
+    expect(hidden(vehicles.fields.filter(f => f.id.startsWith('vehicle2_weapon3_')), data)).toBe(false);
+  });
+
+  it('draws no mounts on a motorcycle and three on a tank', () => {
+    renderSheet({ ...presetFields(1, getPreset('motorcycle')!) });
+    expect(screen.queryByText('MOUNT 1')).toBeNull();
+
+    document.body.innerHTML = '';
+    renderSheet({ ...presetFields(1, getPreset('tank')!) });
+    expect(screen.getByText('MOUNT 3')).toBeInTheDocument();
+  });
+});
+
 describe('vehicle presets', () => {
   it('matches the book for a car', () => {
     expect(getPreset('car')).toMatchObject({ ac: 11, hp: 30, armor: 6, tt: 12, crew: 5, hrdpt: 1, spd: 0 });

@@ -42,6 +42,12 @@ export interface SheetField {
   /** For 'select' fields: the allowed choices. Supply one with an empty value to name
    *  the blank state; otherwise an em-dash placeholder is added for you. */
   options?: SheetOption[];
+  /** For 'select' fields: other fields to write when this one changes.
+   *
+   *  Picking a vehicle type fills its stat block from the book. Given the chosen value
+   *  and the current data, so it can decline to overwrite what someone has already
+   *  typed. Returning {} writes nothing. */
+  presetFill?: (value: string, data: SheetData) => Record<string, string | number>;
 }
 
 /** 'weapons' lays fields out as structured rows (name / dmg / skill / rof),
@@ -77,6 +83,14 @@ export interface SheetSection {
   groupSize?: number;
   /** grid layout: number of columns (default 4) */
   columns?: number;
+  /**
+   * Hide a row of a repeated entry, given its fields and the sheet's data.
+   *
+   * A vehicle with no hardpoints has no mounts, and drawing three empty mount rows for a
+   * motorcycle states something false about it. Applied at render time only, so the
+   * grouping arithmetic is untouched and a hidden row keeps whatever is stored in it.
+   */
+  rowHidden?: (row: SheetField[], data: SheetData) => boolean;
   /** Which bottom tab this section lives under (default: the first tab). */
   tab?: string;
   fields: SheetField[];

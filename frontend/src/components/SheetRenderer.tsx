@@ -145,7 +145,17 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
         style={{ ...inputStyle, ...style }}
         value={String(value)}
         disabled={readOnly}
-        onChange={(e) => onFieldChange(field.id, e.target.value)}
+        onChange={(e) => {
+          const chosen = e.target.value;
+          onFieldChange(field.id, chosen);
+          // A select can carry a whole stat block behind it. Written as individual field
+          // changes so the save path, its debounce and its clamping all still apply.
+          if (field.presetFill) {
+            for (const [id, val] of Object.entries(field.presetFill(chosen, data))) {
+              if (id !== field.id) onFieldChange(id, val);
+            }
+          }
+        }}
       >
         {!hasBlank && <option value="">—</option>}
         {options.map(o => (
@@ -701,6 +711,14 @@ function WeaponsSection({ section, data, readOnly, onFieldChange }: {
     />
   ));
 
+  const hiddenRow = (row: SheetField[]) => !!section.rowHidden && section.rowHidden(row, data);
+
+  // Which entry should carry each row's headings: the first one that shows that row.
+  const labelGroupFor = new Map<number, number>();
+  groups.forEach((group, gi) => group.forEach((row, ri) => {
+    if (!hiddenRow(row) && !labelGroupFor.has(ri)) labelGroupFor.set(ri, gi);
+  }));
+
   if (!rowsPerGroup) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
@@ -715,12 +733,13 @@ function WeaponsSection({ section, data, readOnly, onFieldChange }: {
       <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
         {groups.slice(0, visibleGroups).map((group, gi) => (
           <React.Fragment key={group[0][0].id}>
-            {group.map((row, ri) => (
+            {group.map((row, ri) => hiddenRow(row) ? null : (
               <React.Fragment key={row[0].id}>
                 {/* Each row of an entry has its own headings — a mount line does not
-                    belong under the vehicle line's labels. Shown once, on the first
-                    entry, since every entry repeats the same shape. */}
-                {gi === 0 && labelRow(row)}
+                    belong under the vehicle line's labels. Shown once, on the first entry
+                    that actually shows the row: entries can hide different rows, so
+                    "first entry" alone would strand a heading. */}
+                {labelGroupFor.get(ri) === gi && labelRow(row)}
                 {gi > 0 && ri === 0 && (
                   <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--green)', opacity: 0.25, margin: '4px 0 2px' }} />
                 )}
