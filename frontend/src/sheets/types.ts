@@ -6,6 +6,8 @@
 
 export type SheetFieldType = 'number' | 'text' | 'textarea' | 'select';
 
+export interface SheetOption { value: string; label: string }
+
 export interface SheetField {
   id: string;
   label: string;
@@ -37,8 +39,13 @@ export interface SheetField {
   /** Writable linked field: renders as a normal input; the server routes the
    *  write to the owning system (e.g. token_ac -> the token's AC). */
   sourceWritable?: boolean;
-  /** For 'select' fields: the allowed choices. */
-  options?: { value: string; label: string }[];
+  /** For 'select' fields: the allowed choices.
+   *
+   *  A function is given the sheet's current data, for choices that can only be named
+   *  once the sheet has something in it — picking a vehicle by its name rather than by
+   *  its row number. Supply an option with an empty value to name the blank state
+   *  ("ON FOOT"); otherwise a plain em-dash placeholder is added for you. */
+  options?: SheetOption[] | ((data: SheetData) => SheetOption[]);
 }
 
 /** 'weapons' lays fields out as structured rows (name / dmg / skill / rof),

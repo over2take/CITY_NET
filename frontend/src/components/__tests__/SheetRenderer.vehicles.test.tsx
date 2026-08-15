@@ -16,6 +16,14 @@ import { citiesWithoutNumber } from '../../sheets/templates/cities_without_numbe
 
 const vehicles = citiesWithoutNumber.sections.find(s => s.id === 'vehicles')!;
 
+/** The RIDING IN choices are derived from the sheet, so they need data to resolve. */
+const inVehicleOptions = (data: Record<string, unknown>) => {
+  const field = citiesWithoutNumber.sections
+    .find(s => s.id === 'vehicle_status')!.fields.find(f => f.id === 'in_vehicle')!;
+  if (typeof field.options !== 'function') throw new Error('expected data-driven options');
+  return field.options(data as never);
+};
+
 const renderSheet = (data: Record<string, unknown>) =>
   render(
     <SheetRenderer
@@ -84,26 +92,49 @@ describe('vehicles section', () => {
     expect(vehicles.fields.length % vehicles.groupSize!).toBe(0);
   });
 
-  it('offers every own vehicle plus riding along', () => {
-    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
-    const values = status.fields.find(f => f.id === 'in_vehicle')!.options!.map(o => o.value);
-    // On foot is the default and has to be reachable again after mounting.
-    expect(values).toContain('');
-    expect(values).toContain('ride');
-    for (let i = 1; i <= 6; i++) expect(values).toContain(`own:${i}`);
+  it('names the vehicles you own instead of numbering them', () => {
+    // You know you drive the Kestrel. You do not know it is vehicle 2.
+    const opts = inVehicleOptions({ vehicle1_name: 'Car', vehicle3_name: 'Kestrel AV' });
+    expect(opts.map(o => o.label)).toEqual(['ON FOOT', 'CAR', 'KESTREL AV', "ANOTHER PLAYER'S VEHICLE"]);
+    expect(opts.map(o => o.value)).toEqual(['', 'own:1', 'own:3', 'ride']);
   });
 
-  it('renders the occupancy controls', () => {
+  it('offers no vehicles at all on an empty sheet', () => {
+    // Six placeholder rows in the dropdown are six ways to pick the wrong one.
+    expect(inVehicleOptions({}).map(o => o.value)).toEqual(['', 'ride']);
+  });
+
+  it('keeps the vehicle you are in listed even if its name is cleared', () => {
+    // Otherwise the field holds a selection its own dropdown does not contain, and the
+    // browser silently shows the first option instead.
+    const opts = inVehicleOptions({ in_vehicle: 'own:2' });
+    expect(opts.map(o => o.value)).toContain('own:2');
+    expect(opts.find(o => o.value === 'own:2')!.label).toBe('VEHICLE 2');
+  });
+
+  it('always offers on foot and riding along', () => {
+    const opts = inVehicleOptions({ vehicle1_name: 'Car' });
+    // On foot has to be reachable again after mounting, and it names the blank state
+    // rather than leaving a bare dash.
+    expect(opts[0]).toEqual({ value: '', label: 'ON FOOT' });
+    expect(opts.some(o => o.value === 'ride')).toBe(true);
+  });
+
+  it('shows the vehicle name in the rendered dropdown, with no stray blank', () => {
     const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
     render(
       <SheetRenderer
         template={{ ...citiesWithoutNumber, tabs: ['GEAR'], sections: [status] }}
-        data={{ in_vehicle: 'own:1' } as never}
+        data={{ vehicle1_name: 'Car', in_vehicle: 'own:1' } as never}
         readOnly={false}
         onFieldChange={vi.fn()}
       />
     );
-    expect(screen.getByDisplayValue('MY VEHICLE 1')).toBeInTheDocument();
+    const select = screen.getByLabelText('RIDING IN') as HTMLSelectElement;
+    expect(select.value).toBe('own:1');
+    // The template names its own blank state, so the renderer must not add a second one.
+    expect([...select.options].filter(o => o.value === '')).toHaveLength(1);
+    expect([...select.options].map(o => o.textContent)).toContain('CAR');
   });
 
   it('leaves the weapons section alone, which declares no group size', () => {

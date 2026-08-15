@@ -254,13 +254,23 @@ export const citiesWithoutNumber: SheetTemplate = {
       fields: [
         {
           id: 'in_vehicle', label: 'RIDING IN', type: 'select',
-          options: [
-            { value: '', label: '— ON FOOT —' },
-            ...Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => ({
-              value: `own:${i + 1}`, label: `MY VEHICLE ${i + 1}`,
-            })),
-            { value: 'ride', label: "ANOTHER PLAYER'S VEHICLE" },
-          ],
+          // Named from the sheet rather than listed as row numbers: you know you drive
+          // the Kestrel, not that the Kestrel is vehicle 2. Only vehicles you have
+          // actually filled in are offered, and the one you are currently in stays
+          // listed even if its row is later emptied, so the sheet cannot show a
+          // selection its own dropdown does not contain.
+          options: (data) => {
+            const current = String(data.in_vehicle ?? '');
+            const owned = Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => i + 1)
+              .map(i => ({ i, name: String(data[`vehicle${i}_name`] ?? '').trim() }))
+              .filter(({ i, name }) => name || current === `own:${i}`)
+              .map(({ i, name }) => ({ value: `own:${i}`, label: (name || `VEHICLE ${i}`).toUpperCase() }));
+            return [
+              { value: '', label: 'ON FOOT' },
+              ...owned,
+              { value: 'ride', label: "ANOTHER PLAYER'S VEHICLE" },
+            ];
+          },
           hint: 'While you are in a vehicle, attacks on you hit the vehicle instead: its Armour Rating cuts the damage and the rest comes off its HP. You are only hurt once it is destroyed.',
         },
         {

@@ -134,6 +134,10 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
     );
   }
   if (field.type === 'select') {
+    const options = typeof field.options === 'function' ? field.options(data) : (field.options ?? []);
+    // A template that names its own blank state keeps it; anything else gets the
+    // placeholder, so a select is never silently pre-set to its first real choice.
+    const hasBlank = options.some(o => o.value === '');
     return (
       <select
         aria-label={field.label}
@@ -143,8 +147,8 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
         disabled={readOnly}
         onChange={(e) => onFieldChange(field.id, e.target.value)}
       >
-        <option value="">—</option>
-        {(field.options ?? []).map(o => (
+        {!hasBlank && <option value="">—</option>}
+        {options.map(o => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
