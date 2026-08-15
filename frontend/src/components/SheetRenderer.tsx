@@ -791,13 +791,21 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
     ? Math.min(groups.length, Math.max(filled, revealed + 1, 1))
     : 0;
 
-  const labelRow = (row: SheetField[]) => row.map(f => (
-    <div key={`lbl_${f.id}`} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{f.label}</div>
+  // A row shorter than the grid is wide leaves columns free, and CSS grid flows the next
+  // row's cells up into them — which is how POW and MASS ended up sharing a line with
+  // MOUNT 1. Starting every row at column 1 forces the break.
+  const startsLine = (i: number) => (i === 0 ? { gridColumnStart: 1 } : null);
+
+  const labelRow = (row: SheetField[]) => row.map((f, i) => (
+    <div
+      key={`lbl_${f.id}`}
+      style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px', ...startsLine(i) }}
+    >{f.label}</div>
   ));
 
   const fullWidthRow = (field: SheetField) => (
     <div key={field.id} style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '2px', margin: '2px 0' }}>
-      <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{field.label}</div>
+      <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px', textAlign: 'left' }}>{field.label}</div>
       <FieldInput
         field={field}
         data={data}
@@ -809,7 +817,7 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
     </div>
   );
 
-  const fieldRow = (row: SheetField[]) => row.map(field => (
+  const fieldRow = (row: SheetField[]) => row.map((field, i) => (
     <FieldInput
       key={field.id}
       field={field}
@@ -817,7 +825,7 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
       readOnly={readOnly}
       onFieldChange={onFieldChange}
       onFieldsChange={onFieldsChange}
-      style={{ ...cell, ...(field.type === 'number' ? { textAlign: 'center' } : null) }}
+      style={{ ...cell, ...(field.type === 'number' ? { textAlign: 'center' } : null), ...startsLine(i) }}
     />
   ));
 

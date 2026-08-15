@@ -90,10 +90,11 @@ const vehicleRow = (i: number): SheetField[] => [
   { id: `vehicle${i}_tt`, label: 'TT', type: 'number', placeholder: '12', hint: 'Trauma Target for the vehicle itself. Hits on it roll against this, not against the trauma target of whoever is inside.' },
   { id: `vehicle${i}_crew`, label: 'CREW', type: 'number', placeholder: '5', hint: 'How many it seats, driver included. The VEHICLES window draws exactly this many places.' },
   { id: `vehicle${i}_hrdpt`, label: 'HRDPT', type: 'number', placeholder: '1', hint: 'Hardpoints: how many Heavy weapons it mounts. Mounts beyond this are ignored. Note this is not a gunner count — a Tank is crew 3 with 3 hardpoints and can never man every gun and drive at once.' },
-  { id: `vehicle${i}_cost`, label: 'COST', type: 'number', placeholder: '5000' },
-  { id: `vehicle${i}_size`, label: 'SIZE', type: 'text', placeholder: 'M', hint: 'S, M or L. Decides which fittings and weapons the hull can take.' },
   { id: `vehicle${i}_pow`, label: 'POW', type: 'number', placeholder: '3', hint: 'Power the hull has to spend on fittings and mounted weapons.' },
   { id: `vehicle${i}_mass`, label: 'MASS', type: 'number', placeholder: '7', hint: 'Mass the hull has to spend on fittings and mounted weapons.' },
+  // Reference rather than combat, so they take the short row on their own.
+  { id: `vehicle${i}_cost`, label: 'COST', type: 'number', placeholder: '5000', startsRow: true },
+  { id: `vehicle${i}_size`, label: 'SIZE', type: 'text', placeholder: 'M', hint: 'S, M or L. Decides which fittings and weapons the hull can take.' },
   ...Array.from({ length: CWN_VEHICLE_WEAPON_ROWS }, (_, w) => {
     const j = w + 1;
     return [
