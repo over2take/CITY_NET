@@ -344,7 +344,7 @@ CITY_NET/
 │   │   └── systemDice.js       # Built-in dice manifest keyed by game system (ids namespaced `builtin:`); lives in code, not the DB, so app updates change definitions with no migration and nothing is mutable through the API
 │   ├── sheets/
 │   │   ├── templates.js        # Server-side template metadata (public/combat/linked fields, max pairs, derived fields, per-system recompute hooks)
-│   │   ├── rolls.js            # Per-system roll map (fieldId → formula); server-authoritative
+│   │   ├── rolls.js            # Per-system roll map (fieldId → formula); server-authoritative, so a sheet's roll button does nothing unless the field appears here. CP:R rollable stats include BODY; MOVE and LUCK are deliberately absent
 │   │   ├── rollEngine.js       # Formula parse/resolve/execute (explode10, SR6 d6 hit-counting pool, deterministic RNG for tests)
 │   │   ├── attack.js           # CP:R combat resolution — to-hit, damage, SP soak/ablation, shield, crits, death saves
 │   │   ├── attackCwn.js        # CWN combat resolution — 1d20+BHB roll-to-hit, damage, trauma die vs TT, shock on miss, stabilize roll
@@ -364,6 +364,7 @@ CITY_NET/
 │       ├── helpers/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
 │       ├── admin.test.js               # Admin endpoints (auth, settings, undo access); update routes — 409 with a reason rather than a false success, unauthenticated status, boot id on /version; check-update against a stubbed registry — upgrades only, dev tags per channel, and a prerelease not hiding a stable release
+│       ├── cpr_stats.test.js           # CP:R stat rolls — BODY rollable, MOVE and LUCK not, and every roll button in the template backed by a server-side roll
 │       ├── updater.test.js             # Version ordering including X.Y.Z-dev, tag filtering per channel, preflight refusals, and an update that records its failures instead of returning silently
 │       ├── docker_config.test.js       # Deployment invariants — DB_PATH baked in, data excluded from the image, image tags parameterised by IMAGE_TAG, compose file mounted for the updater, channel shipped pointing at stable
 │       ├── battle_maps.test.js         # Battle map upload/list/delete
@@ -541,7 +542,7 @@ CITY_NET/
 │   │   │   ├── SheetPage.tsx       # Standalone browser-tab sheet (?sheet=true); reads theme from auth handshake or localStorage; shares logic via usePlayerSheet
 │   │   │   └── templates/
 │   │   │       ├── generic.ts                  # Minimal fallback template
-│   │   │       ├── cyberpunk_red.ts            # Cyberpunk RED — stats, skills, weapons, armor, tiers (labels + dice math only, no book content)
+│   │   │       ├── cyberpunk_red.ts            # Cyberpunk RED — stats (rollable ones first, MOVE and LUCK last as they have no roll), skills, weapons, armor, tiers (labels + dice math only, no book content)
 │   │   │       ├── cities_without_number.ts    # Cities Without Number — attributes + SWN mods, saves, AC (token-linked), armor rows, weapons, Deluxe tab (spells/summoning), conditions
 │   │   │       └── shadowrun_6e.ts             # Shadowrun 6E — attributes, d6 pool skills, Edge pips (SPEND button, admin replenish), weapons (DV/AR), Stun track, gated AWAKENED/EMERGED tabs; dynamic spell list (DRAIN/CAST) and adept power list (PP cost auto-summed)
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param

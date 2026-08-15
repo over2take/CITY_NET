@@ -9,6 +9,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.8.2] - 2026-08-14
+
+### Added
+
+- **A roll button for BODY in Cyberpunk RED.** It was the one stat with a modifier and no way to roll it. The roll is resolved server-side by field id like every other, which is the part adding a button alone would have missed — and a test now walks the template and fails if any roll button lacks a server-side roll behind it, so the next stat added cannot render a control that does nothing when pressed.
+
+### Changed
+
+- **The Cyberpunk RED stats grid groups the rollable stats first.** BODY moved up among the stats you roll, and MOVE and LUCK moved to the end, since neither is a check: MOVE is a movement allowance and LUCK is a pool you spend. The grid no longer mixes the two kinds together.
+
+---
+
 ## [1.8.1] - 2026-08-02
 
 ### Added
