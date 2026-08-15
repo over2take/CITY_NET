@@ -26,7 +26,9 @@ function VehicleTag({ raw, height, isBattleMap }: { raw: string | null | undefin
       style={{ pointerEvents: 'none', userSelect: 'none' }}
     >
       <div style={{
-        background: 'rgba(0,0,0,0.75)', border: '1px solid var(--vehicle)', padding: '1px 5px',
+        // Framed in the theme's own colour like every other token label; the accent is
+        // reserved for the text, which is the part that says a vehicle is involved.
+        background: 'rgba(0,0,0,0.8)', border: '1px solid var(--green)', padding: '1px 5px',
         fontSize: '9px', color: 'var(--vehicle)', whiteSpace: 'nowrap', textTransform: 'uppercase',
         fontFamily: 'monospace', letterSpacing: '1px',
         transform: isBattleMap ? 'translateY(-24px)' : undefined,

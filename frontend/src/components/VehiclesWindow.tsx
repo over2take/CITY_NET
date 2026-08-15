@@ -174,19 +174,22 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                     const edge = a.side === 'left' ? 4 : 96;
                     return (
                       <g key={seatId}>
+                        {/* Seat furniture is part of the diagram, so it is drawn in the
+                            diagram's colour. The accent marks the one thing worth
+                            calling out — that somebody is sitting there. */}
                         <path
                           d={`M${a.x} ${a.y} L${edge} ${a.y}`}
                           fill="none"
-                          stroke='var(--vehicle)'
+                          stroke="currentColor"
                           strokeWidth={0.4}
-                          opacity={0.55}
+                          opacity={0.4}
                         />
                         <circle
                           cx={a.x}
                           cy={a.y}
                           r={2.4}
-                          fill={current.occupants[seatId] ? 'var(--vehicle)' : 'rgba(0,0,0,0.8)'}
-                          stroke='var(--vehicle)'
+                          fill={current.occupants[seatId] ? 'var(--vehicle)' : 'var(--black)'}
+                          stroke={current.occupants[seatId] ? 'var(--vehicle)' : 'currentColor'}
                           strokeWidth={1}
                         />
                       </g>
@@ -213,7 +216,7 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                         gap: '1px',
                       } as React.CSSProperties}
                     >
-                      <span style={{ fontSize: '0.5rem', letterSpacing: '1px', color: 'var(--vehicle)', opacity: 0.85 }}>
+                      <span style={{ fontSize: '0.5rem', letterSpacing: '1px', color: 'var(--green)', opacity: 0.7 }}>
                         {seatLabel(current, seatId, i)}
                       </span>
                       <select
@@ -222,7 +225,7 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                         onChange={(e) => setSeat(current, seatId, e.target.value)}
                         style={{
                           background: 'rgba(0,10,0,0.85)',
-                          color: mine ? 'var(--vehicle)' : 'var(--green)',
+                          color: sitting ? 'var(--vehicle)' : 'var(--green)',
                           border: `1px solid ${sitting ? 'var(--vehicle)' : 'var(--dark-green)'}`,
                           fontFamily: 'inherit', fontSize: '0.6rem', padding: '1px 2px', maxWidth: '104px',
                         }}
