@@ -25,6 +25,7 @@ export interface RosterVehicle {
   hpMax: number;
   moving: boolean;
   destroyed: boolean;
+  ownerName: string;
   crew: number;
   seats: string[];
   /** seat id -> username */
@@ -39,7 +40,8 @@ interface Props {
   userName: string;
   isAdmin?: boolean;
   vehicles: RosterVehicle[];
-  players: string[];
+  /** Login name and character name: the first is the key, the second is the label. */
+  players: { username: string; name: string }[];
 }
 
 /** Seat labels come from the book vehicle; anything past those is numbered. */
@@ -118,7 +120,9 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
       pos={pos}
       setPos={setPos}
       onClose={onClose}
-      windowStyle={{ width: `${Math.max(400, diagram + 56)}px` }}
+      // The class sets max-width: 400px, and a max beats a width — so it has to be
+      // raised here or the window simply never grows, whatever width it is given.
+      windowStyle={{ width: `${Math.max(400, diagram + 56)}px`, maxWidth: '96vw' }}
       // Tall vehicles are still bounded by the viewport rather than running off it.
       contentStyle={{ maxHeight: '84vh' }}
     >
@@ -138,7 +142,7 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
           >
             {vehicles.map(v => (
               <option key={key(v)} value={key(v)}>
-                {v.name.toUpperCase()} · {v.owner.toUpperCase()}{v.destroyed ? ' · WRECKED' : ''}
+                {v.name.toUpperCase()} · {(v.ownerName || v.owner).toUpperCase()}{v.destroyed ? ' · WRECKED' : ''}
               </option>
             ))}
           </select>
@@ -224,7 +228,9 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                         }}
                       >
                         <option value="">— EMPTY —</option>
-                        {players.map(p => <option key={p} value={p}>{p.toUpperCase()}</option>)}
+                        {players.map(p => (
+                          <option key={p.username} value={p.username}>{p.name.toUpperCase()}</option>
+                        ))}
                       </select>
                     </div>
                   );

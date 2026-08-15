@@ -26,8 +26,13 @@ const makeSocket = () => {
   };
 };
 
+const PLAYERS = [
+  { username: 'cody', name: 'Sam' },
+  { username: 'mouse', name: 'Vega' },
+];
+
 const CAR = {
-  owner: 'cody', index: 1, name: 'Kestrel', type: 'car',
+  owner: 'cody', ownerName: 'Sam', index: 1, name: 'Kestrel', type: 'car',
   ac: 8, armorRating: 6, hp: 30, hpMax: 30, moving: false, destroyed: false,
   crew: 5, seats: ['driver', 'seat2', 'seat3', 'seat4', 'seat5'],
   occupants: {} as Record<string, string>,
@@ -38,7 +43,7 @@ const open = (
     userName?: string;
     isAdmin?: boolean;
     vehicles?: typeof CAR[];
-    players?: string[];
+    players?: typeof PLAYERS;
   } = {},
 ) => {
   const socket = makeSocket();
@@ -51,14 +56,14 @@ const open = (
       userName={opts.userName ?? 'cody'}
       isAdmin={opts.isAdmin}
       vehicles={opts.vehicles ?? [CAR]}
-      players={opts.players ?? ['cody', 'mouse']}
+      players={opts.players ?? PLAYERS}
     />
   );
   return socket;
 };
 
 /** Same as `open`, but hands back the render result for the tests that measure. */
-const renderWindow = (opts: { vehicles?: typeof CAR[]; players?: string[] } = {}) =>
+const renderWindow = (opts: { vehicles?: typeof CAR[]; players?: typeof PLAYERS } = {}) =>
   render(
     <VehiclesWindow
       pos={{ x: 0, y: 0 }}
@@ -67,7 +72,7 @@ const renderWindow = (opts: { vehicles?: typeof CAR[]; players?: string[] } = {}
       socket={makeSocket()}
       userName="cody"
       vehicles={opts.vehicles ?? [CAR]}
-      players={opts.players ?? ['cody', 'mouse']}
+      players={opts.players ?? PLAYERS}
     />
   );
 
@@ -92,14 +97,14 @@ describe('the vehicles window', () => {
 
   it('numbers seats the book does not name', () => {
     // An APC seats sixteen and the book names two of them.
-    open({ vehicles: [{ ...CAR, type: 'apc', crew: 3, seats: ['driver', 'seat2', 'seat3'] }], players: ['cody'] });
+    open({ vehicles: [{ ...CAR, type: 'apc', crew: 3, seats: ['driver', 'seat2', 'seat3'] }], players: [PLAYERS[0]] });
     expect(screen.getByLabelText('DRIVER')).toBeInTheDocument();
     expect(screen.getByLabelText('GUNNER')).toBeInTheDocument();
     expect(screen.getByLabelText('CREW 3')).toBeInTheDocument();
   });
 
   it('shows the numbers the table needs without opening a sheet', () => {
-    open({ vehicles: [{ ...CAR, occupants: { driver: 'cody' } }], players: ['cody'] });
+    open({ vehicles: [{ ...CAR, occupants: { driver: 'cody' } }], players: [PLAYERS[0]] });
     expect(screen.getByText('AC 8')).toBeInTheDocument();
     expect(screen.getByText('AR 6')).toBeInTheDocument();
     expect(screen.getByText('30/30 HP')).toBeInTheDocument();
@@ -143,7 +148,7 @@ describe('the vehicles window', () => {
   });
 
   it('marks a wreck as no longer cover', () => {
-    open({ vehicles: [{ ...CAR, destroyed: true }], players: ['cody'] });
+    open({ vehicles: [{ ...CAR, destroyed: true }], players: [PLAYERS[0]] });
     // Flagged in the picker and spelled out under the diagram.
     expect(screen.getByRole('option', { name: /WRECKED/ })).toBeInTheDocument();
     expect(screen.getByText(/no longer cover/)).toBeInTheDocument();
@@ -176,6 +181,21 @@ describe('the vehicles window', () => {
     const big = renderWindow({ vehicles: [{ ...CAR, type: 'apc', crew: 16, seats }] });
     const bigH = parseInt((big.container.querySelector('svg')!.parentElement as HTMLElement).style.height, 10);
     expect(bigH).toBeGreaterThan(smallH);
+  });
+
+  it('names characters in the dropdowns, not accounts', async () => {
+    // Nobody at the table thinks of each other by login name.
+    const socket = open();
+    const seat = screen.getByLabelText('SHOTGUN') as HTMLSelectElement;
+    expect([...seat.options].map(o => o.textContent)).toEqual(['— EMPTY —', 'SAM', 'VEGA']);
+    // The username is still what gets written, since it is the key everything else uses.
+    await userEvent.selectOptions(seat, 'mouse');
+    expect(lastEmit(socket, 'seatIn')).toMatchObject({ occupant: 'mouse' });
+  });
+
+  it('names the owner by character in the picker', () => {
+    open();
+    expect(screen.getByRole('option', { name: /KESTREL · SAM/ })).toBeInTheDocument();
   });
 
   it('surfaces a refusal from the server', () => {

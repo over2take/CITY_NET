@@ -140,3 +140,23 @@ describe('vehicle state on the token', () => {
     expect((await state('MOUSE')).occupants).toEqual(['MOUSE']);
   });
 });
+describe('names on the badge', () => {
+  it('uses the character name, not the login', async () => {
+    // The badge and the attack panel are read by people, and nobody at the table thinks
+    // of each other by account name.
+    await sheet('CODY', { ...CAR, in_vehicle: 'own:1', name: 'Sam' });
+    await token('CODY');
+    await sheet('MOUSE', { in_vehicle: 'ride', ride_owner: 'CODY', ride_vehicle: 1, name: 'Vega' });
+    await token('MOUSE');
+    await sync(db);
+
+    expect((await state('CODY')).occupants.sort()).toEqual(['Sam', 'Vega']);
+  });
+
+  it('falls back to the login when a sheet has no name yet', async () => {
+    await sheet('CODY', { ...CAR, in_vehicle: 'own:1' });
+    await token('CODY');
+    await sync(db);
+    expect((await state('CODY')).occupants).toEqual(['CODY']);
+  });
+});

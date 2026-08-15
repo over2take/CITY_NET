@@ -95,6 +95,18 @@ function getRideWeapon(db, sheetData, weaponIndex, cb) {
   );
 }
 
+/**
+ * The character's name, falling back to the login name when the sheet has none.
+ *
+ * `identity` is required here rather than at the top: it requires this module for the
+ * vehicle mirror, and a cycle at load time leaves one of the two half-built. The require
+ * cache makes the repeat call free.
+ */
+const displayNameOf = (data, username) => {
+  const { nameField } = require('./identity');
+  return String(data?.[nameField(SYSTEM)] ?? '').trim() || username;
+};
+
 /** What other players are allowed to see: the numbers they are shooting at, not the sheet. */
 function publicState(vehicle, occupants = []) {
   if (!vehicle) return null;
@@ -156,7 +168,11 @@ function syncAll(db, cb) {
           ? attackCwn.getVehicle(ownerSheet.data, occ.vehicleIndex)
           : null;
         const usable = vehicle && !vehicle.destroyed ? vehicle : null;
-        const occupants = usable ? (aboard.get(vehicleKey(sh.username, occ)) || []) : [];
+        // Names rather than logins: this is read by people, on a badge and in an attack
+        // panel, and nobody at the table thinks of each other by account name.
+        const occupants = usable
+          ? (aboard.get(vehicleKey(sh.username, occ)) || []).map(u => displayNameOf(byUser.get(u)?.data, u))
+          : [];
         db.run(
           `UPDATE locations SET vehicle_state = ? WHERE shape = 'rhombus' AND owner = ?`,
           [publicState(usable, occupants), sh.username],
@@ -306,6 +322,7 @@ function roster(db, cb) {
           if (!vehicle) continue;
           vehicles.push({
             owner: sh.username,
+            ownerName: displayNameOf(sh.data, sh.username),
             index: i,
             name: vehicle.name,
             type: String(sh.data[`vehicle${i}_type`] || ''),
@@ -321,7 +338,12 @@ function roster(db, cb) {
           });
         }
       }
-      cb({ vehicles, players: sheets.map(sh => sh.username) });
+      // The username is the key everything else is written against, so it travels with
+      // the name rather than being replaced by it.
+      cb({
+        vehicles,
+        players: sheets.map(sh => ({ username: sh.username, name: displayNameOf(sh.data, sh.username) })),
+      });
     }
   );
 }

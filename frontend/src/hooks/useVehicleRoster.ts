@@ -16,7 +16,7 @@ import type { RosterVehicle } from '../components/VehiclesWindow';
  */
 export function useVehicleRoster(socketRef: React.MutableRefObject<any>, gameSystem?: string) {
   const [vehicles, setVehicles] = useState<RosterVehicle[]>([]);
-  const [players, setPlayers] = useState<string[]>([]);
+  const [players, setPlayers] = useState<{ username: string; name: string }[]>([]);
   const [socketReadyCount, forceReady] = useReducer((n: number) => n + 1, 0);
 
   const enabled = gameSystem === 'cities_without_number';
@@ -42,7 +42,7 @@ export function useVehicleRoster(socketRef: React.MutableRefObject<any>, gameSys
     }
 
     const s = socketRef.current;
-    const onRoster = (data: { vehicles?: RosterVehicle[]; players?: string[] }) => {
+    const onRoster = (data: { vehicles?: RosterVehicle[]; players?: { username: string; name: string }[] }) => {
       setVehicles(data?.vehicles ?? []);
       setPlayers(data?.players ?? []);
     };
