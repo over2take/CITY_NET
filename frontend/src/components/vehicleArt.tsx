@@ -11,9 +11,10 @@ import React from 'react';
  * same numbers — a seat marker lands where the seat is drawn without a conversion step in
  * between to get wrong.
  *
- * Seven shapes cover the book's ten vehicles. Sharing is fine where the silhouette is
- * honest — a Truck and an APC are both boxes on wheels from above — but a Helicopter and
- * a Dropcraft are not the same object and should not borrow one outline.
+ * One shape per vehicle. Sharing looked reasonable until the book's own descriptions were
+ * read: a Micro Flyer is fabric over spars that packs into a pickup, a CASRA is a
+ * rotorwing, a Dropcraft is a VTOL transport built to loiter. Three of them had been given
+ * the same fixed-wing outline, which was not a simplification but a wrong drawing.
  */
 
 const BODY = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinejoin: 'round' as const };
@@ -71,16 +72,53 @@ function Van() {
   );
 }
 
-function Air() {
+function Microlight() {
   return (
     <>
-      <path d="M50 3 L55 18 L55 54 L53 90 L47 90 L45 54 L45 18 Z" {...BODY} />
-      {/* Swept wings, so it reads as fixed-wing rather than as a very thin car. */}
-      <path d="M45 32 L13 52 L13 59 L45 47 Z" {...BODY} />
-      <path d="M55 32 L87 52 L87 59 L55 47 Z" {...BODY} />
-      <path d="M45 76 L29 85 L29 90 L45 83 Z" {...DETAIL} />
-      <path d="M55 76 L71 85 L71 90 L55 83 Z" {...DETAIL} />
-      <path d="M47 13 L53 13 L53 27 L47 27 Z" {...DETAIL} />
+      {/* A delta wing with a pod slung under it — featherlight, and packs into a pickup.
+          Drawn thin on purpose: this is fabric over spars, not a fuselage. */}
+      <path d="M50 8 L91 64 L74 69 L50 52 L26 69 L9 64 Z" {...BODY} />
+      <path d="M50 8 L50 52" {...GHOST} />
+      <path d="M26 69 L74 69" {...GHOST} />
+      <rect x={45} y={46} width={10} height={22} rx={2} {...DETAIL} />
+      <path d="M50 68 L50 90" {...DETAIL} />
+      <path d="M42 90 L58 90" {...DETAIL} />
+    </>
+  );
+}
+
+function Multirotor() {
+  return (
+    <>
+      {/* CASRA: a rotorwing, not a jet. Four discs and a gun on the nose. */}
+      <circle cx={19} cy={21} r={15} {...GHOST} />
+      <circle cx={81} cy={21} r={15} {...GHOST} />
+      <circle cx={19} cy={79} r={15} {...GHOST} />
+      <circle cx={81} cy={79} r={15} {...GHOST} />
+      <path d="M42 34 L19 21" {...DETAIL} />
+      <path d="M58 34 L81 21" {...DETAIL} />
+      <path d="M42 64 L19 79" {...DETAIL} />
+      <path d="M58 64 L81 79" {...DETAIL} />
+      <path d="M50 18 L59 30 L59 64 L50 78 L41 64 L41 30 Z" {...BODY} />
+      <path d="M50 18 L50 6" {...BODY} />
+      <path d="M44 36 L56 36 L56 48 L44 48 Z" {...DETAIL} />
+    </>
+  );
+}
+
+function Vtol() {
+  return (
+    <>
+      {/* Dropcraft: armoured box, tilt rotors, rear ramp. Built to loiter and unload. */}
+      <circle cx={13} cy={46} r={13} {...GHOST} />
+      <circle cx={87} cy={46} r={13} {...GHOST} />
+      <path d="M40 6 L60 6 L68 19 L68 77 L60 93 L40 93 L32 77 L32 19 Z" {...BODY} />
+      <path d="M32 36 L15 41 L15 52 L32 47 Z" {...BODY} />
+      <path d="M68 36 L85 41 L85 52 L68 47 Z" {...BODY} />
+      <path d="M39 16 L61 16 L64 25 L36 25 Z" {...DETAIL} />
+      <circle cx={50} cy={33} r={5} {...DETAIL} />
+      <path d="M36 79 L64 79" {...DETAIL} />
+      <path d="M40 85 L60 85" {...GHOST} />
     </>
   );
 }
@@ -97,6 +135,19 @@ function Heli() {
       <path d="M42 84 L58 84" {...DETAIL} />
       <circle cx={50} cy={84} r={4} {...DETAIL} />
       <path d="M43 18 L57 18 L58 28 L42 28 Z" {...DETAIL} />
+    </>
+  );
+}
+
+function Apc() {
+  return (
+    <>
+      <path d="M38 5 L62 5 L70 18 L70 82 L62 95 L38 95 L30 82 L30 18 Z" {...BODY} />
+      <path d="M30 30 L70 30" {...DETAIL} />
+      <path d="M30 62 L70 62" {...DETAIL} />
+      <path d="M43 40 L57 40 L59 48 L57 56 L43 56 L41 48 Z" {...BODY} />
+      <path d="M49 40 L49 20 L51 20 L51 40" {...BODY} />
+      <Wheels ys={[14, 42, 70]} inset={19} w={8} h={14} />
     </>
   );
 }
@@ -135,7 +186,8 @@ function Hover() {
 }
 
 const ART: Record<string, () => React.JSX.Element> = {
-  bike: Bike, car: Car, van: Van, air: Air, heli: Heli, tracked: Tracked, hover: Hover,
+  bike: Bike, car: Car, van: Van, microlight: Microlight, heli: Heli,
+  multirotor: Multirotor, vtol: Vtol, apc: Apc, tracked: Tracked, hover: Hover,
 };
 
 /** The wireframe for a layout, as SVG children — the caller owns the <svg> and its size. */

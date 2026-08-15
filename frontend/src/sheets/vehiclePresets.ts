@@ -14,7 +14,8 @@
 //            That tension is the rule, not a rounding error, so mounts are a separate
 //            list from seats and anyone aboard can fire one as their action.
 
-export type VehicleArt = 'bike' | 'car' | 'van' | 'air' | 'heli' | 'tracked' | 'hover';
+export type VehicleArt =
+  | 'bike' | 'car' | 'van' | 'microlight' | 'heli' | 'multirotor' | 'vtol' | 'apc' | 'tracked' | 'hover';
 
 export interface VehiclePreset {
   id: string;
@@ -46,7 +47,7 @@ export const VEHICLE_PRESETS: VehiclePreset[] = [
     seatNames: ['RIDER'],
   },
   {
-    id: 'micro_flyer', label: 'MICRO FLYER', art: 'air',
+    id: 'micro_flyer', label: 'MICRO FLYER', art: 'microlight',
     cost: 3000, spd: 0, armor: 0, tt: 6, ac: 13, hp: 10, crew: 1, hrdpt: 0, size: 'S',
     seatNames: ['PILOT'],
   },
@@ -71,7 +72,7 @@ export const VEHICLE_PRESETS: VehiclePreset[] = [
     seatNames: ['DRIVER', 'GUNNER', 'COMMANDER'], note: GM_CALL,
   },
   {
-    id: 'apc', label: 'APC', art: 'van',
+    id: 'apc', label: 'APC', art: 'apc',
     cost: 60000, spd: -1, armor: null, tt: 12, ac: 16, hp: 30, crew: 16, hrdpt: 1, size: 'L',
     seatNames: ['DRIVER', 'GUNNER'], note: HEAVY_ONLY,
   },
@@ -81,12 +82,12 @@ export const VEHICLE_PRESETS: VehiclePreset[] = [
     seatNames: ['DRIVER', 'GUNNER', 'COMMANDER'], note: HEAVY_ONLY,
   },
   {
-    id: 'casra', label: 'CASRA', art: 'air',
+    id: 'casra', label: 'CASRA', art: 'multirotor',
     cost: 200000, spd: 2, armor: 10, tt: 12, ac: 18, hp: 35, crew: 2, hrdpt: 2, size: 'L',
     seatNames: ['PILOT', 'GUNNER'],
   },
   {
-    id: 'dropcraft', label: 'DROPCRAFT', art: 'air',
+    id: 'dropcraft', label: 'DROPCRAFT', art: 'vtol',
     cost: 1000000, spd: 3, armor: 10, tt: 12, ac: 16, hp: 40, crew: 13, hrdpt: 2, size: 'L',
     seatNames: ['PILOT', 'CO-PILOT'],
   },
