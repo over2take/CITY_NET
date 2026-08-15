@@ -32,6 +32,7 @@ import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './
 import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
+import { VehiclesWindow } from './components/VehiclesWindow';
 import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
@@ -321,7 +322,9 @@ function App() {
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isVehiclesOpen, setIsVehiclesOpen] = useState(false);
   const [sheetPos, setSheetPos] = useState(() => ({ x: window.innerWidth / 2 - 220, y: 60 }));
+  const [vehiclesPos, setVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 90 }));
   const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean }>({ balance: 0, debt: 0 });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
@@ -1561,6 +1564,8 @@ function App() {
               setIsBankOpen={setIsBankOpen}
               isSheetOpen={isSheetOpen}
               setIsSheetOpen={setIsSheetOpen}
+              isVehiclesOpen={isVehiclesOpen}
+              setIsVehiclesOpen={setIsVehiclesOpen}
               gameSystem={gameSystem}
               onSelect={setSelectedLocation}
               onZoom={setCameraTarget}
@@ -1735,7 +1740,7 @@ function App() {
                 token={token}
                 userName={userName}
                 controlsRef={controlsRef}
-                onLogout={() => { setToken(''); setIsAdmin(false); setShowAdminPanel(false); setIsSheetOpen(false); setOpenNpcSheet(null); setOpenPlayerSheetUser(null); setIsBankOpen(false); }}
+                onLogout={() => { setToken(''); setIsAdmin(false); setShowAdminPanel(false); setIsSheetOpen(false); setIsVehiclesOpen(false); setOpenNpcSheet(null); setOpenPlayerSheetUser(null); setIsBankOpen(false); }}
                 tempCityMapScale={tempCityMapScale}
                 setTempCityMapScale={setTempCityMapScale}
                 globalSettings={globalSettings}
@@ -1938,6 +1943,16 @@ function App() {
                 }}
                 onRolled={() => setIsDiceTrayOpen(true)}
                 currentTheme={currentTheme}
+              />
+            )}
+            {isVehiclesOpen && (
+              <VehiclesWindow
+                pos={vehiclesPos}
+                setPos={setVehiclesPos}
+                onClose={() => setIsVehiclesOpen(false)}
+                socket={socketRef.current}
+                userName={userName}
+                isAdmin={isAdmin}
               />
             )}
               <ChatWindow

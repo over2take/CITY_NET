@@ -758,6 +758,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     };
 
+    socket.on('requestVehicleRoster', () => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      withCwn(() => vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data)));
+    });
+
     socket.on('seatIn', (payload) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName || !payload) return;

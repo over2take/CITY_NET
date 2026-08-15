@@ -267,7 +267,66 @@ function setMoving(db, { owner, vehicleIndex, moving }, cb) {
   });
 }
 
+
+/**
+ * Every vehicle in play, with who is in which seat.
+ *
+ * Built from all the sheets at once rather than per-player, because a vehicle's occupants
+ * are spread across their own sheets — the car does not know who is in it, the passengers
+ * know which car they are in. One pass turns that inside out.
+ *
+ * Only the numbers a table needs travel. The rest of anyone's sheet stays where it is.
+ */
+function roster(db, cb) {
+  db.all(
+    `SELECT username, data FROM character_sheets WHERE system = ? AND is_npc = 0 ORDER BY username`,
+    [SYSTEM],
+    (err, rows) => {
+      if (err || !rows) return cb({ vehicles: [], players: [] });
+      const sheets = rows.map((r) => {
+        let data;
+        try { data = JSON.parse(r.data || '{}'); } catch (e) { data = {}; }
+        return { username: r.username, data };
+      });
+
+      // Who is sitting where, keyed so a rider and the owner agree on the car.
+      const seated = new Map();
+      for (const sh of sheets) {
+        const occ = attackCwn.readOccupancy(sh.data);
+        if (!occ || !occ.seat) continue;
+        const key = vehicleKey(sh.username, occ);
+        if (!seated.has(key)) seated.set(key, {});
+        seated.get(key)[occ.seat] = sh.username;
+      }
+
+      const vehicles = [];
+      for (const sh of sheets) {
+        for (let i = 1; i <= attackCwn.VEHICLE_ROWS; i++) {
+          const vehicle = attackCwn.getVehicle(sh.data, i);
+          if (!vehicle) continue;
+          vehicles.push({
+            owner: sh.username,
+            index: i,
+            name: vehicle.name,
+            type: String(sh.data[`vehicle${i}_type`] || ''),
+            ac: vehicle.ac,
+            armorRating: vehicle.armorRating,
+            hp: vehicle.hp,
+            hpMax: vehicle.hpMax,
+            moving: vehicle.moving,
+            destroyed: vehicle.destroyed,
+            crew: vehicleSeats.crewOf(sh.data, i),
+            seats: vehicleSeats.seatsFor(sh.data, i),
+            occupants: seated.get(`${sh.username}:${i}`) || {},
+          });
+        }
+      }
+      cb({ vehicles, players: sheets.map(sh => sh.username) });
+    }
+  );
+}
+
 module.exports = {
   SYSTEM, resolve, publicState, syncAll, vehicleKey, getRideMounts, getRideWeapon,
-  seatIn, seatOut, setMoving, loadSheet, OCCUPANCY_FIELDS,
+  seatIn, seatOut, setMoving, loadSheet, roster, OCCUPANCY_FIELDS,
 };
