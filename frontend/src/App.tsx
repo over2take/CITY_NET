@@ -2231,7 +2231,12 @@ function App() {
                       selectedLocation.shape === 'rhombus' && selectedLocation.owner
                         ? (
                           <VehicleBadgeButton
-                            vehicle={parseVehicleState(selectedLocation.vehicle_state)}
+                            // selectedLocation is a snapshot taken when the token was
+                            // clicked, so it still says "in a vehicle" after getting out.
+                            // The live row carries the state the server just recomputed.
+                            vehicle={parseVehicleState(
+                              (locations.find((l: any) => l.id === selectedLocation.id) ?? selectedLocation).vehicle_state
+                            )}
                             occupant={selectedLocation.owner}
                             userName={userName}
                             isAdmin={isAdmin}

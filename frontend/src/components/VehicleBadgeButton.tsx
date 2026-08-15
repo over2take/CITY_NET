@@ -43,7 +43,11 @@ interface Props {
 export function VehicleBadgeButton({ vehicle, occupant, userName, isAdmin, onDisembark, compact }: Props) {
   if (!vehicle) return null;
   const mine = occupant === userName || !!isAdmin;
-  const label = `${vehicle.name.toUpperCase()}${vehicle.moving ? ' · MOVING' : ''}`;
+  // Yours reads as the action it performs, since that is the whole point of it being a
+  // button; someone else's is a statement of fact and reads as one.
+  const label = mine
+    ? `LEAVE ${vehicle.name.toUpperCase()}`
+    : `${vehicle.name.toUpperCase()}${vehicle.moving ? ' · MOVING' : ''}`;
 
   return (
     <button

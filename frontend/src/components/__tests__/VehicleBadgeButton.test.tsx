@@ -34,15 +34,17 @@ describe('the vehicle badge', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('names the vehicle', () => {
+  it('reads as the action, on your own', () => {
     show();
-    expect(screen.getByRole('button', { name: /Get out of the Kestrel/ })).toBeInTheDocument();
-    expect(screen.getByText('KESTREL')).toBeInTheDocument();
+    // It is a button that does something, so it says what it does rather than restating
+    // where you are.
+    expect(screen.getByText('LEAVE KESTREL')).toBeInTheDocument();
   });
 
-  it('says when it is moving, which is worth eight points of AC', () => {
-    show({ vehicle: { name: 'Kestrel', moving: true } });
+  it('reads as a statement on someone else’s, since it does nothing there', () => {
+    show({ occupant: 'cody', userName: 'mouse', vehicle: { name: 'Kestrel', moving: true } });
     expect(screen.getByText(/KESTREL · MOVING/)).toBeInTheDocument();
+    expect(screen.queryByText(/LEAVE/)).toBeNull();
   });
 
   it('gets you out of your own', async () => {
