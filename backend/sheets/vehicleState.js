@@ -9,7 +9,7 @@
 // before they shoot. They must agree, which is why this is one function rather than two.
 
 const attackCwn = require('./attackCwn');
-const vehicleLayouts = require('./vehicleLayouts');
+const vehicleSeats = require('./vehicleSeats');
 
 const SYSTEM = 'cities_without_number';
 
@@ -210,7 +210,7 @@ function seatIn(db, { occupant, owner, vehicleIndex, seat }, cb) {
   loadSheet(db, owner, (ownerSheet) => {
     if (!ownerSheet) return cb('NO_SUCH_VEHICLE_OWNER');
     if (!attackCwn.getVehicle(ownerSheet.data, index)) return cb('NO_SUCH_VEHICLE');
-    if (!vehicleLayouts.hasSeat(ownerSheet.data, index, seat)) return cb('NO_SUCH_SEAT');
+    if (!vehicleSeats.hasSeat(ownerSheet.data, index, seat)) return cb('NO_SUCH_SEAT');
 
     loadSheet(db, occupant, (occSheet) => {
       if (!occSheet) return cb('NO_SUCH_PLAYER');

@@ -54,8 +54,8 @@ beforeEach(async () => {
   await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', 'cities_without_number')`);
 });
 
-const CAR = { vehicle1_name: 'Kestrel', vehicle1_hp_max: 20, vehicle1_armor: 3, vehicle1_ac: 12 };
-const BIKE = { vehicle1_name: 'Wasp', vehicle1_hp_max: 8, vehicle1_ac: 14, vehicle1_layout: 'bike' };
+const CAR = { vehicle1_name: 'Kestrel', vehicle1_hp_max: 20, vehicle1_armor: 3, vehicle1_ac: 12, vehicle1_crew: 5, vehicle1_hrdpt: 1 };
+const BIKE = { vehicle1_name: 'Wasp', vehicle1_hp_max: 8, vehicle1_ac: 14, vehicle1_crew: 1, vehicle1_hrdpt: 0 };
 
 const sheet = (username, data) =>
   run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES (?, 'cities_without_number', ?, 0)`,
@@ -85,24 +85,24 @@ describe('seating someone', () => {
   });
 
   it('points a passenger at the owner’s sheet', async () => {
-    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'shotgun' });
+    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'seat2' });
     expect(await dataOf('MOUSE')).toMatchObject({
-      in_vehicle: 'ride', ride_owner: 'CODY', ride_vehicle: 1, vehicle_seat: 'shotgun',
+      in_vehicle: 'ride', ride_owner: 'CODY', ride_vehicle: 1, vehicle_seat: 'seat2',
     });
   });
 
   it('moves someone rather than putting them in two seats', async () => {
-    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'shotgun' });
-    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'gunner' });
-    expect((await dataOf('MOUSE')).vehicle_seat).toBe('gunner');
+    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'seat2' });
+    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'seat5' });
+    expect((await dataOf('MOUSE')).vehicle_seat).toBe('seat5');
   });
 
   it('turns out whoever was already in the seat', async () => {
     await sheet('RAY', {});
-    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'shotgun' });
-    await seat({ occupant: 'RAY', owner: 'CODY', vehicleIndex: 1, seat: 'shotgun' });
+    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'seat2' });
+    await seat({ occupant: 'RAY', owner: 'CODY', vehicleIndex: 1, seat: 'seat2' });
     // One seat, one person — that is what choosing a name in the dropdown means.
-    expect((await dataOf('RAY')).vehicle_seat).toBe('shotgun');
+    expect((await dataOf('RAY')).vehicle_seat).toBe('seat2');
     expect((await dataOf('MOUSE')).in_vehicle).toBeUndefined();
   });
 
@@ -117,9 +117,9 @@ describe('seating someone', () => {
 
   it('refuses a seat the vehicle does not have', async () => {
     await run(db, `UPDATE character_sheets SET data = ? WHERE username = 'CODY'`, [JSON.stringify(BIKE)]);
-    // A bike has two seats, which is what stops five people boarding one.
-    expect(await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'pillion' })).toBeNull();
-    expect(await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'back_left' })).toBe('NO_SUCH_SEAT');
+    // A motorcycle is crew 1 in the book, so it seats its rider and nobody else.
+    expect(await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'driver' })).toBeNull();
+    expect(await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'seat2' })).toBe('NO_SUCH_SEAT');
   });
 
   it('refuses a vehicle that is not there', async () => {
@@ -136,7 +136,7 @@ describe('getting out', () => {
   beforeEach(async () => {
     await sheet('CODY', CAR);
     await sheet('MOUSE', {});
-    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'shotgun' });
+    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'seat2' });
   });
 
   it('clears every trace of where they were', async () => {
@@ -156,7 +156,7 @@ describe('the seatOut permission, over the socket', () => {
     await sheet('CODY', CAR);
     await sheet('MOUSE', {});
     await sheet('GHOST', {});
-    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'shotgun' });
+    await seat({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'seat2' });
   });
 
   it('refuses to pull someone else out', async () => {
@@ -193,9 +193,9 @@ describe('the seatOut permission, over the socket', () => {
     const { handlers } = boot(db);
     handlers['identify']('GHOST');
     await flush(50);
-    handlers['seatIn']({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'gunner' });
+    handlers['seatIn']({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'seat5' });
     await flush(60);
-    expect((await dataOf('MOUSE')).vehicle_seat).toBe('gunner');
+    expect((await dataOf('MOUSE')).vehicle_seat).toBe('seat5');
   });
 });
 

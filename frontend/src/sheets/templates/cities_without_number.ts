@@ -1,4 +1,5 @@
 import type { SheetTemplate, SheetField } from '../types';
+import { VEHICLE_TYPE_OPTIONS } from '../vehiclePresets';
 
 // Cities Without Number template.
 //
@@ -35,7 +36,7 @@ export const CWN_WEAPON_COLUMNS = 6;
 
 /** Vehicles a sheet can carry, and weapon mounts on each. */
 export const CWN_VEHICLE_ROWS = 6;
-export const CWN_VEHICLE_WEAPON_ROWS = 2;
+export const CWN_VEHICLE_WEAPON_ROWS = 3;
 export const CWN_VEHICLE_COLUMNS = 6;
 
 /**
@@ -54,17 +55,23 @@ export const CWN_VEHICLE_COLUMNS = 6;
  */
 const vehicleRow = (i: number): SheetField[] => [
   { id: `vehicle${i}_name`, label: 'VEHICLE', type: 'text', placeholder: 'Kestrel AV' },
-  { id: `vehicle${i}_hp`, label: 'HP', type: 'number', maxField: `vehicle${i}_hp_max`, placeholder: '20' },
-  { id: `vehicle${i}_hp_max`, label: 'HP MAX', type: 'number', placeholder: '20' },
-  { id: `vehicle${i}_armor`, label: 'AR', type: 'number', placeholder: '5', hint: 'Armor Rating: subtracted from all damage the vehicle takes. Not the same as personal AC, which avoids the hit instead of reducing it.' },
-  { id: `vehicle${i}_ac`, label: 'AC', type: 'number', placeholder: '12', hint: 'Base AC while stationary. A moving vehicle adds the Drive skill of whoever is driving; a stationary one takes -4.' },
-  { id: `vehicle${i}_speed`, label: 'SPEED', type: 'text', placeholder: 'Fast' },
+  { id: `vehicle${i}_type`, label: 'TYPE', type: 'select', options: VEHICLE_TYPE_OPTIONS, hint: 'Book vehicle this is. Sets the seating plan and the wireframe in the VEHICLES window, which can also fill the whole stat block from it.' },
+  { id: `vehicle${i}_hp`, label: 'HP', type: 'number', maxField: `vehicle${i}_hp_max`, placeholder: '30' },
+  { id: `vehicle${i}_hp_max`, label: 'HP MAX', type: 'number', placeholder: '30' },
+  { id: `vehicle${i}_armor`, label: 'AR', type: 'number', placeholder: '6', hint: 'Armor Rating: subtracted from all damage the vehicle takes. Not the same as personal AC, which avoids the hit instead of reducing it. Blank on vehicles the book marks * or ** — those are immunities, not numbers, and the GM rules on them.' },
+  { id: `vehicle${i}_ac`, label: 'AC', type: 'number', placeholder: '11', hint: 'Base AC. A moving vehicle adds the Drive skill of whoever is driving; a stationary one takes -4.' },
+  { id: `vehicle${i}_spd`, label: 'SPD', type: 'number', placeholder: '0', hint: 'Speed rating, -1 to 3.' },
+  { id: `vehicle${i}_tt`, label: 'TT', type: 'number', placeholder: '12', hint: 'Trauma Target for the vehicle itself. Hits on it roll against this, not against the trauma target of whoever is inside.' },
+  { id: `vehicle${i}_crew`, label: 'CREW', type: 'number', placeholder: '5', hint: 'How many it seats, driver included. The VEHICLES window draws exactly this many places.' },
+  { id: `vehicle${i}_hrdpt`, label: 'HRDPT', type: 'number', placeholder: '1', hint: 'Hardpoints: how many Heavy weapons it mounts. Mounts beyond this are ignored. Note this is not a gunner count — a Tank is crew 3 with 3 hardpoints and can never man every gun and drive at once.' },
+  { id: `vehicle${i}_cost`, label: 'COST', type: 'number', placeholder: '5000' },
+  { id: `vehicle${i}_size`, label: 'SIZE', type: 'text', placeholder: 'M', hint: 'S, M or L.' },
   ...Array.from({ length: CWN_VEHICLE_WEAPON_ROWS }, (_, w) => {
     const j = w + 1;
     return [
       { id: `vehicle${i}_weapon${j}_name`, label: `MOUNT ${j}`, type: 'text', placeholder: 'Autocannon' },
       { id: `vehicle${i}_weapon${j}_dmg`, label: 'DMG', type: 'text', placeholder: '2d8', hint: 'Damage dice, flat bonus allowed. Rolled by the server on a hit.' },
-      { id: `vehicle${i}_weapon${j}_skill`, label: 'SKILL', type: 'select', options: CWN_WEAPON_SKILLS, hint: 'Attack skill the gunner fires with. Firing a mount costs that gunner a main action.' },
+      { id: `vehicle${i}_weapon${j}_skill`, label: 'SKILL', type: 'select', options: CWN_WEAPON_SKILLS, hint: 'Attack skill the gunner fires with. Firing a mount costs that gunner their main action, so a crew can rarely work every gun at once.' },
       { id: `vehicle${i}_weapon${j}_atk`, label: 'ATK', type: 'number', placeholder: '0', hint: 'Flat attack bonus for this mount, added to the to-hit roll.' },
       { id: `vehicle${i}_weapon${j}_trauma`, label: 'TRAUMA', type: 'text', placeholder: 'd8/x3', hint: 'Trauma die / rating. Traumatic hits apply to vehicles as they do to people.' },
       { id: `vehicle${i}_weapon${j}_shock`, label: 'SHOCK', type: 'text', placeholder: '', hint: 'Shock damage / max AC. Usually blank on a mount.' },
@@ -237,81 +244,9 @@ export const citiesWithoutNumber: SheetTemplate = {
       layout: 'weapons',
       tab: 'GEAR',
       columns: CWN_VEHICLE_COLUMNS,
-      // 18 fields per vehicle: empty ones collapse, filled ones come back on reload.
-      groupSize: CWN_VEHICLE_COLUMNS * 3,
+      // 30 fields per vehicle: empty ones collapse, filled ones come back on reload.
+      groupSize: CWN_VEHICLE_COLUMNS * 5,
       fields: Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
-    },
-    {
-      // Where you are, not what you own — one block rather than one per vehicle,
-      // because you can only be inside one at a time. Riding along points at
-      // another player's sheet so a shared car has one set of HP and armour
-      // instead of a copy per passenger.
-      id: 'vehicle_status',
-      label: 'IN A VEHICLE',
-      layout: 'grid',
-      tab: 'GEAR',
-      columns: 5,
-      fields: [
-        {
-          id: 'in_vehicle', label: 'RIDING IN', type: 'select',
-          // Named from the sheet rather than listed as row numbers: you know you drive
-          // the Kestrel, not that the Kestrel is vehicle 2. Only vehicles you have
-          // actually filled in are offered, and the one you are currently in stays
-          // listed even if its row is later emptied, so the sheet cannot show a
-          // selection its own dropdown does not contain.
-          options: (data) => {
-            const current = String(data.in_vehicle ?? '');
-            const owned = Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => i + 1)
-              .map(i => ({ i, name: String(data[`vehicle${i}_name`] ?? '').trim() }))
-              .filter(({ i, name }) => name || current === `own:${i}`)
-              .map(({ i, name }) => ({ value: `own:${i}`, label: (name || `VEHICLE ${i}`).toUpperCase() }));
-            return [
-              { value: '', label: 'ON FOOT' },
-              ...owned,
-              { value: 'ride', label: "ANOTHER PLAYER'S VEHICLE" },
-            ];
-          },
-          hint: 'While you are in a vehicle, attacks on you hit the vehicle instead: its Armour Rating cuts the damage and the rest comes off its HP. You are only hurt once it is destroyed.',
-        },
-        {
-          // Picked, not typed: this is a login name, and a typo silently drops you back
-          // to being on foot with no cover and nothing on screen to say why.
-          id: 'ride_owner', label: 'RIDING WITH', type: 'select',
-          options: (data, ctx) => {
-            const current = String(data.ride_owner ?? '').trim();
-            const names = ctx.players ?? [];
-            return [
-              { value: '', label: '—' },
-              ...names.map(n => ({ value: n, label: n.toUpperCase() })),
-              // Someone who has since been removed still shows, rather than the field
-              // appearing to be blank while it holds their name.
-              ...(current && !names.includes(current) ? [{ value: current, label: `${current.toUpperCase()} (GONE)` }] : []),
-            ];
-          },
-          hint: "The other player whose vehicle you are in, not you. The car's HP, AC and armour are read from their sheet, so it takes damage once no matter how many of you are aboard.",
-        },
-        {
-          id: 'ride_vehicle', label: 'THEIR #', type: 'number', placeholder: '1',
-          hint: 'Which of their vehicle rows, 1 to 6. Ask them — you cannot see their sheet.',
-        },
-        {
-          id: 'vehicle_seat', label: 'SEAT', type: 'select',
-          options: [
-            { value: 'driver', label: 'DRIVER' },
-            { value: 'gunner', label: 'GUNNER' },
-            { value: 'passenger', label: 'PASSENGER' },
-          ],
-          hint: 'Informational. Firing a mount costs the gunner their main action.',
-        },
-        {
-          id: 'vehicle_moving', label: 'MOVING', type: 'select',
-          options: [
-            { value: '', label: 'STATIONARY' },
-            { value: '1', label: 'MOVING' },
-          ],
-          hint: 'A moving vehicle adds the driver\'s Drive skill to its AC; a stationary one takes -4, and shots you fire from it take -4. Declared rather than read from the map, because dragging a token is not the same as driving.',
-        },
-      ],
     },
     {
       id: 'vehicle_notes',

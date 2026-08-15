@@ -21,6 +21,7 @@ const { cryptoRng } = require('../utils/random');
 //   hitting 0 HP again is instant death.
 
 const rollEngine = require('./rollEngine');
+const vehicleSeats = require('./vehicleSeats');
 
 const WEAPON_ROWS = 4;
 
@@ -37,7 +38,7 @@ const WEAPON_ROWS = 4;
  * a broken weapon rather than a mismatched constant.
  */
 const VEHICLE_ROWS = 6;
-const VEHICLE_WEAPON_ROWS = 2;
+const VEHICLE_WEAPON_ROWS = 3;
 
 /** Field prefix for the weapon mounts of vehicle `i`. */
 const vehicleWeaponPrefix = (i) => `vehicle${Number(i)}_weapon`;
@@ -226,9 +227,14 @@ const getWeapon = (data, index, opts = {}) => {
 const getVehicleWeapon = (data, vehicleIndex, weaponIndex) => {
   const v = Number(vehicleIndex);
   if (!Number.isInteger(v) || v < 1 || v > VEHICLE_ROWS) return null;
+  // Hardpoints are how many Heavy weapons the vehicle mounts in its factory
+  // configuration, so they bound the mounts rather than the sheet's row count doing it: a
+  // motorcycle has none and must not be offered a gun it cannot carry.
+  const hardpoints = Math.min(vehicleSeats.hardpointsOf(data, v), VEHICLE_WEAPON_ROWS);
+  if (hardpoints <= 0) return null;
   return getWeapon(data, weaponIndex, {
     prefix: vehicleWeaponPrefix(v),
-    rows: VEHICLE_WEAPON_ROWS,
+    rows: hardpoints,
   });
 };
 

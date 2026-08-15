@@ -144,9 +144,9 @@ describe('CWN stabilization', () => {
 describe('vehicle weapon mounts', () => {
   const sheet = {
     weapon1_name: 'Pistol', weapon1_dmg: '1d8+1', weapon1_skill: 'shoot',
-    vehicle1_weapon1_name: 'Autocannon', vehicle1_weapon1_dmg: '2d8', vehicle1_weapon1_skill: 'shoot', vehicle1_weapon1_atk: '2',
+    vehicle1_hrdpt: 3, vehicle1_weapon1_name: 'Autocannon', vehicle1_weapon1_dmg: '2d8', vehicle1_weapon1_skill: 'shoot', vehicle1_weapon1_atk: '2',
     vehicle1_weapon2_name: 'Grenade Launcher', vehicle1_weapon2_dmg: '3d6', vehicle1_weapon2_skill: 'shoot',
-    vehicle2_weapon1_name: 'Roof Gun', vehicle2_weapon1_dmg: '1d10', vehicle2_weapon1_skill: 'shoot',
+    vehicle2_hrdpt: 3, vehicle2_weapon1_name: 'Roof Gun', vehicle2_weapon1_dmg: '1d10', vehicle2_weapon1_skill: 'shoot',
   };
 
   it('reads a mount off the vehicle it belongs to', () => {

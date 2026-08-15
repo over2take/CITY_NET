@@ -3,26 +3,18 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SheetRenderer } from '../SheetRenderer';
-import { citiesWithoutNumber } from '../../sheets/templates/cities_without_number';
+import { citiesWithoutNumber, CWN_VEHICLE_WEAPON_ROWS } from '../../sheets/templates/cities_without_number';
+import { VEHICLE_PRESETS, getPreset, presetFields } from '../../sheets/vehiclePresets';
 
 /**
  * Repeated entries collapse.
  *
- * Six vehicles declared and all six rendered gave eighteen rows of empty fields on a
- * blank sheet. Visibility is derived from the data instead — which also means the
- * vehicles you filled in are the ones that come back after a reload, with nothing
- * remembering anything.
+ * Six vehicles declared and all six rendered gave thirty rows of empty fields on a blank
+ * sheet. Visibility is derived from the data instead — which also means the vehicles you
+ * filled in are the ones that come back after a reload, with nothing remembering anything.
  */
 
 const vehicles = citiesWithoutNumber.sections.find(s => s.id === 'vehicles')!;
-
-/** The RIDING IN choices are derived from the sheet, so they need data to resolve. */
-const inVehicleOptions = (data: Record<string, unknown>) => {
-  const field = citiesWithoutNumber.sections
-    .find(s => s.id === 'vehicle_status')!.fields.find(f => f.id === 'in_vehicle')!;
-  if (typeof field.options !== 'function') throw new Error('expected data-driven options');
-  return field.options(data as never);
-};
 
 const renderSheet = (data: Record<string, unknown>) =>
   render(
@@ -40,7 +32,15 @@ describe('vehicles section', () => {
     // The template has to declare every field it might ever need, because ids are
     // static. Showing them all is the thing being avoided.
     expect(vehicles.fields.filter(f => /^vehicle\d+_name$/.test(f.id))).toHaveLength(6);
-    expect(vehicles.groupSize).toBe(18);
+    // Twelve stat fields plus three mounts of six.
+    expect(vehicles.groupSize).toBe(30);
+    expect(vehicles.fields.length % vehicles.groupSize!).toBe(0);
+  });
+
+  it('carries a mount row per hardpoint the book allows', () => {
+    // A Tank mounts three. Declaring fewer would leave its guns unfireable.
+    expect(CWN_VEHICLE_WEAPON_ROWS).toBe(3);
+    expect(Math.max(...VEHICLE_PRESETS.map(p => p.hrdpt))).toBe(CWN_VEHICLE_WEAPON_ROWS);
   });
 
   it('shows one empty vehicle on a blank sheet, not six', () => {
@@ -81,113 +81,58 @@ describe('vehicles section', () => {
     expect(screen.queryByText(/\+ ADD/)).toBeNull();
   });
 
-  it('keeps occupancy out of the collapsing group', () => {
-    // Where you are is one block, not one per vehicle — you can only be inside
-    // one at a time. Folding it into the vehicle rows would also break the
-    // group size, which has to divide the section evenly.
-    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
-    expect(status).toBeTruthy();
-    expect(status.groupSize).toBeUndefined();
-    expect(vehicles.fields.some(f => f.id === 'in_vehicle')).toBe(false);
-    expect(vehicles.fields.length % vehicles.groupSize!).toBe(0);
+  it('holds the stats the rules actually resolve', () => {
+    const ids = vehicles.fields.map(f => f.id);
+    for (const f of ['crew', 'hrdpt', 'tt', 'spd', 'ac', 'armor', 'hp_max']) {
+      expect(ids, `vehicle1_${f} missing`).toContain(`vehicle1_${f}`);
+    }
   });
 
-  it('names the vehicles you own instead of numbering them', () => {
-    // You know you drive the Kestrel. You do not know it is vehicle 2.
-    const opts = inVehicleOptions({ vehicle1_name: 'Car', vehicle3_name: 'Kestrel AV' });
-    expect(opts.map(o => o.label)).toEqual(['ON FOOT', 'CAR', 'KESTREL AV', "ANOTHER PLAYER'S VEHICLE"]);
-    expect(opts.map(o => o.value)).toEqual(['', 'own:1', 'own:3', 'ride']);
-  });
-
-  it('offers no vehicles at all on an empty sheet', () => {
-    // Six placeholder rows in the dropdown are six ways to pick the wrong one.
-    expect(inVehicleOptions({}).map(o => o.value)).toEqual(['', 'ride']);
-  });
-
-  it('keeps the vehicle you are in listed even if its name is cleared', () => {
-    // Otherwise the field holds a selection its own dropdown does not contain, and the
-    // browser silently shows the first option instead.
-    const opts = inVehicleOptions({ in_vehicle: 'own:2' });
-    expect(opts.map(o => o.value)).toContain('own:2');
-    expect(opts.find(o => o.value === 'own:2')!.label).toBe('VEHICLE 2');
-  });
-
-  it('always offers on foot and riding along', () => {
-    const opts = inVehicleOptions({ vehicle1_name: 'Car' });
-    // On foot has to be reachable again after mounting, and it names the blank state
-    // rather than leaving a bare dash.
-    expect(opts[0]).toEqual({ value: '', label: 'ON FOOT' });
-    expect(opts.some(o => o.value === 'ride')).toBe(true);
-  });
-
-  it('shows the vehicle name in the rendered dropdown, with no stray blank', () => {
-    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
-    render(
-      <SheetRenderer
-        template={{ ...citiesWithoutNumber, tabs: ['GEAR'], sections: [status] }}
-        data={{ vehicle1_name: 'Car', in_vehicle: 'own:1' } as never}
-        readOnly={false}
-        onFieldChange={vi.fn()}
-      />
-    );
-    const select = screen.getByLabelText('RIDING IN') as HTMLSelectElement;
-    expect(select.value).toBe('own:1');
-    // The template names its own blank state, so the renderer must not add a second one.
-    expect([...select.options].filter(o => o.value === '')).toHaveLength(1);
-    expect([...select.options].map(o => o.textContent)).toContain('CAR');
-  });
-
-  it('picks the car owner from a list rather than typing a name', () => {
-    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
-    render(
-      <SheetRenderer
-        template={{ ...citiesWithoutNumber, tabs: ['GEAR'], sections: [status] }}
-        data={{ in_vehicle: 'ride' } as never}
-        readOnly={false}
-        onFieldChange={vi.fn()}
-        optionContext={{ players: ['cody', 'mouse'] }}
-      />
-    );
-    // It holds a login name, and a typo silently drops you back to being on foot.
-    const select = screen.getByLabelText('RIDING WITH') as HTMLSelectElement;
-    expect([...select.options].map(o => o.textContent)).toEqual(['—', 'CODY', 'MOUSE']);
-  });
-
-  it('keeps showing an owner who is no longer listed', () => {
-    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
-    render(
-      <SheetRenderer
-        template={{ ...citiesWithoutNumber, tabs: ['GEAR'], sections: [status] }}
-        data={{ in_vehicle: 'ride', ride_owner: 'ghost' } as never}
-        readOnly={false}
-        onFieldChange={vi.fn()}
-        optionContext={{ players: ['cody'] }}
-      />
-    );
-    // Otherwise the field looks blank while it still holds their name, and the sheet
-    // disagrees with itself about who you are riding with.
-    const select = screen.getByLabelText('RIDING WITH') as HTMLSelectElement;
-    expect(select.value).toBe('ghost');
-    expect([...select.options].map(o => o.textContent)).toContain('GHOST (GONE)');
-  });
-
-  it('offers nobody when the renderer was given no player list', () => {
-    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
-    render(
-      <SheetRenderer
-        template={{ ...citiesWithoutNumber, tabs: ['GEAR'], sections: [status] }}
-        data={{ in_vehicle: 'ride' } as never}
-        readOnly={false}
-        onFieldChange={vi.fn()}
-      />
-    );
-    // A missing context must not throw — the field is simply empty.
-    expect(([...(screen.getByLabelText('RIDING WITH') as HTMLSelectElement).options]).map(o => o.value)).toEqual(['']);
+  it('no longer carries the occupancy block, which the window replaced', () => {
+    // Where people are sitting is shared state, not something each occupant declares on
+    // their own sheet where nothing reconciles it.
+    expect(citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')).toBeUndefined();
+    for (const gone of ['in_vehicle', 'ride_owner', 'ride_vehicle', 'vehicle_seat', 'vehicle_moving']) {
+      expect(citiesWithoutNumber.sections.some(s => s.fields.some(f => f.id === gone))).toBe(false);
+    }
   });
 
   it('leaves the weapons section alone, which declares no group size', () => {
     // Weapons render every row as before; only sections opting in collapse.
     const weapons = citiesWithoutNumber.sections.find(s => s.id === 'weapons')!;
     expect(weapons.groupSize).toBeUndefined();
+  });
+});
+
+describe('vehicle presets', () => {
+  it('matches the book for a car', () => {
+    expect(getPreset('car')).toMatchObject({ ac: 11, hp: 30, armor: 6, tt: 12, crew: 5, hrdpt: 1, spd: 0 });
+  });
+
+  it('leaves armour unset where the book prints an immunity instead of a number', () => {
+    // Inventing a rating for a Tank would be worse than the GM reading the note.
+    expect(getPreset('tank')!.armor).toBeNull();
+    expect(getPreset('apc')!.armor).toBeNull();
+    expect(presetFields(1, getPreset('tank')!)).not.toHaveProperty('vehicle1_armor');
+    expect(getPreset('tank')!.note).toBeTruthy();
+  });
+
+  it('writes the stat block onto the right vehicle row', () => {
+    expect(presetFields(3, getPreset('motorcycle')!)).toMatchObject({
+      vehicle3_name: 'MOTORCYCLE', vehicle3_crew: 1, vehicle3_hrdpt: 0, vehicle3_tt: 10,
+    });
+  });
+
+  it('has a vehicle whose guns outnumber its crew', () => {
+    // The Tank: crew 3, three hardpoints. It can never man every gun and drive at once,
+    // which is why mounts are not seats — making them seats would hand it a fourth body.
+    const tank = getPreset('tank')!;
+    expect(tank.hrdpt).toBeGreaterThan(tank.crew - 1);
+  });
+
+  it('names only the seats worth naming', () => {
+    // An APC seats sixteen; the rest are numbered rather than invented.
+    expect(getPreset('car')!.seatNames).toHaveLength(5);
+    expect(getPreset('apc')!.seatNames!.length).toBeLessThan(getPreset('apc')!.crew);
   });
 });

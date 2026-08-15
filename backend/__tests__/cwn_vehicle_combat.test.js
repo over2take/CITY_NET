@@ -212,7 +212,7 @@ describe('riding in another player’s vehicle', () => {
 describe('a gunner firing the owner’s mounts', () => {
   const MULE = {
     vehicle1_name: 'Mule', vehicle1_hp_max: CAR_HP, vehicle1_armor: 0, vehicle1_ac: 12,
-    vehicle1_weapon1_name: 'Autocannon', vehicle1_weapon1_dmg: '1d6',
+    vehicle1_hrdpt: 3, vehicle1_weapon1_name: 'Autocannon', vehicle1_weapon1_dmg: '1d6',
     vehicle1_weapon1_skill: 'shoot', vehicle1_weapon1_atk: 0,
   };
 
