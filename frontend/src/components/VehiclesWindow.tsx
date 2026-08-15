@@ -177,7 +177,7 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                         <path
                           d={`M${a.x} ${a.y} L${edge} ${a.y}`}
                           fill="none"
-                          stroke="#ffcc00"
+                          stroke='var(--vehicle)'
                           strokeWidth={0.4}
                           opacity={0.55}
                         />
@@ -185,8 +185,8 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                           cx={a.x}
                           cy={a.y}
                           r={2.4}
-                          fill={current.occupants[seatId] ? '#ffcc00' : 'rgba(0,0,0,0.8)'}
-                          stroke="#ffcc00"
+                          fill={current.occupants[seatId] ? 'var(--vehicle)' : 'rgba(0,0,0,0.8)'}
+                          stroke='var(--vehicle)'
                           strokeWidth={1}
                         />
                       </g>
@@ -213,7 +213,7 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                         gap: '1px',
                       } as React.CSSProperties}
                     >
-                      <span style={{ fontSize: '0.5rem', letterSpacing: '1px', color: '#ffcc00', opacity: 0.85 }}>
+                      <span style={{ fontSize: '0.5rem', letterSpacing: '1px', color: 'var(--vehicle)', opacity: 0.85 }}>
                         {seatLabel(current, seatId, i)}
                       </span>
                       <select
@@ -222,8 +222,8 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                         onChange={(e) => setSeat(current, seatId, e.target.value)}
                         style={{
                           background: 'rgba(0,10,0,0.85)',
-                          color: mine ? '#ffcc00' : 'var(--green)',
-                          border: `1px solid ${sitting ? '#ffcc00' : 'var(--dark-green)'}`,
+                          color: mine ? 'var(--vehicle)' : 'var(--green)',
+                          border: `1px solid ${sitting ? 'var(--vehicle)' : 'var(--dark-green)'}`,
                           fontFamily: 'inherit', fontSize: '0.6rem', padding: '1px 2px', maxWidth: '104px',
                         }}
                       >

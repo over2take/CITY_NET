@@ -666,7 +666,7 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
         </label>
       )}
       {cfg.hasLuck && luckAvailable > 0 && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: luckSpend > 0 ? '#ffcc00' : 'var(--green)', marginBottom: '6px', userSelect: 'none' }} title="Declared before the roll: adds a flat bonus and negates a natural-1 fumble">
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: luckSpend > 0 ? 'var(--vehicle)' : 'var(--green)', marginBottom: '6px', userSelect: 'none' }} title="Declared before the roll: adds a flat bonus and negates a natural-1 fumble">
           LUCK
           <select
             aria-label="Spend LUCK"
@@ -787,7 +787,7 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
           {attackPending.vehicle && (
             // Shown before the shot, not after: an attacker who cannot see the car has
             // no way to know why their damage vanished.
-            <div style={{ color: '#ffcc00', fontSize: '0.7rem', marginBottom: '6px', letterSpacing: '0.5px' }}>
+            <div style={{ color: 'var(--vehicle)', fontSize: '0.7rem', marginBottom: '6px', letterSpacing: '0.5px' }}>
               TARGET IN VEHICLE — {attackPending.vehicle.name.toUpperCase()} ·{' '}
               {attackPending.vehicle.moving ? 'MOVING' : 'STATIONARY'} · AC {attackPending.vehicle.ac} · AR{' '}
               {attackPending.vehicle.armorRating} · {attackPending.vehicle.hp}/{attackPending.vehicle.hpMax} HP

@@ -59,6 +59,22 @@ describe('the vehicle badge', () => {
     expect(onDisembark).not.toHaveBeenCalled();
   });
 
+  it('takes its colour from the theme rather than a fixed amber', () => {
+    show();
+    // Monochrome paints the whole interface white; a hardcoded amber sat on it as the one
+    // thing that did not belong.
+    expect(screen.getByRole('button').style.color).toBe('var(--vehicle)');
+  });
+
+  it('sits on black in the title bar, where the bar is already the theme colour', () => {
+    show({ compact: true });
+    // An outline in a theme colour on a bar painted that colour is hard to read, and in
+    // monochrome disappears entirely.
+    const style = screen.getByRole('button').style;
+    expect(style.background).toBe('var(--black)');
+    expect(style.border).toBe('1px solid var(--black)');
+  });
+
   it('lets the GM pull anyone out', async () => {
     const onDisembark = show({ occupant: 'cody', userName: 'gm', isAdmin: true });
     await userEvent.click(screen.getByRole('button'));

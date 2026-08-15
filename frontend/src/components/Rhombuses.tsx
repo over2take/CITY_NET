@@ -26,8 +26,8 @@ function VehicleTag({ raw, height, isBattleMap }: { raw: string | null | undefin
       style={{ pointerEvents: 'none', userSelect: 'none' }}
     >
       <div style={{
-        background: 'rgba(0,0,0,0.75)', border: '1px solid #ffcc00', padding: '1px 5px',
-        fontSize: '9px', color: '#ffcc00', whiteSpace: 'nowrap', textTransform: 'uppercase',
+        background: 'rgba(0,0,0,0.75)', border: '1px solid var(--vehicle)', padding: '1px 5px',
+        fontSize: '9px', color: 'var(--vehicle)', whiteSpace: 'nowrap', textTransform: 'uppercase',
         fontFamily: 'monospace', letterSpacing: '1px',
         transform: isBattleMap ? 'translateY(-24px)' : undefined,
       }}>

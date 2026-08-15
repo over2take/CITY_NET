@@ -54,9 +54,15 @@ export function VehicleBadgeButton({ vehicle, occupant, userName, isAdmin, onDis
       aria-label={mine ? `Get out of the ${vehicle.name}` : `In the ${vehicle.name}`}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: '5px',
-        background: 'none', border: '1px solid #ffcc00', color: '#ffcc00',
         fontFamily: 'inherit', fontSize: compact ? '0.55rem' : '0.62rem',
-        letterSpacing: '1px', padding: compact ? '1px 4px' : '2px 6px',
+        letterSpacing: '1px', padding: compact ? '1px 5px' : '2px 6px',
+        color: 'var(--vehicle)',
+        // Compact means the sheet's title bar, which is painted in the theme colour — an
+        // outline in another theme colour on top of it is hard to read, and in monochrome
+        // the badge disappears into the bar entirely. It sits on black there, the way the
+        // buttons beside it already do.
+        background: compact ? 'var(--black)' : 'none',
+        border: compact ? '1px solid var(--black)' : '1px solid var(--vehicle)',
         // Inert for someone else's badge rather than hidden: knowing they are in a car is
         // the reason it is on the token menu at all.
         cursor: mine ? 'pointer' : 'default',
