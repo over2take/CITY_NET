@@ -1,0 +1,67 @@
+import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { VehicleBadgeButton } from '../VehicleBadgeButton';
+
+/**
+ * The car badge on a sheet and a token menu.
+ *
+ * Shown for anyone's token, clickable only on your own — knowing that someone else is in
+ * a car is the reason it is on their token at all, so it goes inert rather than hidden.
+ * The server refuses the same thing independently; this only saves a round trip.
+ */
+
+const KESTREL = { name: 'Kestrel', moving: false };
+
+const show = (props: Partial<React.ComponentProps<typeof VehicleBadgeButton>> = {}) => {
+  const onDisembark = vi.fn();
+  render(
+    <VehicleBadgeButton
+      vehicle={KESTREL}
+      occupant="mouse"
+      userName="mouse"
+      onDisembark={onDisembark}
+      {...props}
+    />
+  );
+  return onDisembark;
+};
+
+describe('the vehicle badge', () => {
+  it('shows nothing at all when on foot', () => {
+    show({ vehicle: null });
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('names the vehicle', () => {
+    show();
+    expect(screen.getByRole('button', { name: /Get out of the Kestrel/ })).toBeInTheDocument();
+    expect(screen.getByText('KESTREL')).toBeInTheDocument();
+  });
+
+  it('says when it is moving, which is worth eight points of AC', () => {
+    show({ vehicle: { name: 'Kestrel', moving: true } });
+    expect(screen.getByText(/KESTREL · MOVING/)).toBeInTheDocument();
+  });
+
+  it('gets you out of your own', async () => {
+    const onDisembark = show();
+    await userEvent.click(screen.getByRole('button'));
+    expect(onDisembark).toHaveBeenCalledWith('mouse');
+  });
+
+  it('is inert on someone else’s, but still visible', async () => {
+    const onDisembark = show({ occupant: 'cody', userName: 'mouse' });
+    const button = screen.getByRole('button', { name: /In the Kestrel/ });
+    expect(button).toBeDisabled();
+    await userEvent.click(button);
+    expect(onDisembark).not.toHaveBeenCalled();
+  });
+
+  it('lets the GM pull anyone out', async () => {
+    const onDisembark = show({ occupant: 'cody', userName: 'gm', isAdmin: true });
+    await userEvent.click(screen.getByRole('button'));
+    expect(onDisembark).toHaveBeenCalledWith('cody');
+  });
+});

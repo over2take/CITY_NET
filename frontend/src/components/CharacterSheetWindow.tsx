@@ -4,6 +4,7 @@ import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
+import { VehicleBadgeButton } from './VehicleBadgeButton';
 
 // The player's own character sheet (in-game floating window). Identity is
 // the socket's registered user - the server only ever returns / edits the
@@ -47,6 +48,15 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       onClose={onClose}
       titleControls={
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {/* Where you are, not what you own — the seating window is the shared record,
+              and this is the same fact on your own sheet, with the way out. */}
+          <VehicleBadgeButton
+            vehicle={sheet?.inVehicle}
+            occupant={userName}
+            userName={userName}
+            onDisembark={(occupant) => socket?.emit('seatOut', { occupant })}
+            compact
+          />
           <button
             title="Import from PDF / JSON / text"
             className="win95-close-btn"

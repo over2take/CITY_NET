@@ -33,6 +33,7 @@ import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { VehiclesWindow } from './components/VehiclesWindow';
+import { VehicleBadgeButton } from './components/VehicleBadgeButton';
 import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
@@ -78,6 +79,7 @@ import { StreamerOverlay } from './components/StreamerOverlay';
 import { StreamerDirectorPanel } from './components/StreamerDirectorPanel';
 import { DEFAULT_DIRECTOR_STATE, ALL_VISIBLE } from './types';
 import type { DirectorState, AttackVehicle } from './types';
+import { parseVehicleState } from './types';
 import { IS_SPECTATOR } from './streamerMode';
 
 function App() {
@@ -2399,6 +2401,20 @@ function App() {
                             ADD TO INIT
                           </button>
                         </div>
+                      </div>
+                    )}
+                    {/* In a vehicle: the badge says which, and gets you out of it. Shown
+                        for anyone's token — knowing they are in a car is the point — but
+                        only clickable on your own, or by the GM. */}
+                    {selectedLocation.shape === 'rhombus' && selectedLocation.owner && parseVehicleState(selectedLocation.vehicle_state) && (
+                      <div style={{ marginTop: '10px' }}>
+                        <VehicleBadgeButton
+                          vehicle={parseVehicleState(selectedLocation.vehicle_state)}
+                          occupant={selectedLocation.owner}
+                          userName={userName}
+                          isAdmin={isAdmin}
+                          onDisembark={(occupant) => socketRef.current?.emit('seatOut', { occupant })}
+                        />
                       </div>
                     )}
                     {/* Player token sheet: owner opens their own; admin opens any player's */}

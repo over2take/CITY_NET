@@ -826,6 +826,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 if (system !== vehicleState.SYSTEM) return socket.emit('sheetData', { ...row, data });
                 // A gunner riding in someone else's car needs its mounts to fire them,
                 // and cannot see the sheet those rows live on. Only the mounts travel.
+                // The vehicle they are sitting in, so the sheet can show the badge:
+                // occupancy is shared state now and no longer on the sheet itself.
+                vehicleState.resolve(db, row.id, data, (inVehicle) => {
                 vehicleState.getRideMounts(db, data, (ride) => {
                   // Who you could be riding with. Anyone holding a sheet in this system,
                   // not just whoever is online: the car is read off their sheet, which
@@ -835,9 +838,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     [system, info.userName],
                     (pErr, pRows) => {
                       const players = pErr || !pRows ? [] : pRows.map(r => r.username);
-                      socket.emit('sheetData', { ...row, data, ride, players });
+                      socket.emit('sheetData', {
+                        ...row, data, ride, players,
+                        inVehicle: inVehicle
+                          ? { name: inVehicle.name, moving: inVehicle.moving, hp: inVehicle.hp, hpMax: inVehicle.hpMax }
+                          : null,
+                      });
                     }
                   );
+                });
                 });
               });
             } else {

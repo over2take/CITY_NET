@@ -189,5 +189,7 @@ export interface CharacterSheet {
   npc_label?: string | null;
   /** Envelope fields the server attaches, not stored on the sheet. */
   players?: string[];
+  /** The vehicle this character is sitting in, if any. Shared state, not sheet data. */
+  inVehicle?: { name: string; moving: boolean; hp: number; hpMax: number } | null;
   ride?: { owner: string; vehicleName: string; mounts: { index: number; name: string; dmg: string; skill: string }[] } | null;
 }
