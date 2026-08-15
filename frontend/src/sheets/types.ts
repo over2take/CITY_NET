@@ -4,7 +4,7 @@
 // renderer (SheetRenderer) can draw for any system. Adding a system later
 // means adding a template file, not new UI.
 
-export type SheetFieldType = 'number' | 'text' | 'textarea' | 'select';
+export type SheetFieldType = 'number' | 'text' | 'textarea' | 'select' | 'tag_list';
 
 export interface SheetOption { value: string; label: string }
 
@@ -31,6 +31,18 @@ export interface SheetField {
   /** Give this field a row of its own spanning the whole grid, with its label above it.
    *  For a notes box inside a repeated entry, where a grid cell will not do. */
   fullWidth?: boolean;
+  /** Begin a new row here even if the previous one is not full. Without it a group whose
+   *  field count is not a multiple of `columns` bleeds one row's fields into the next,
+   *  which quietly breaks anything keyed on a row's first field. */
+  startsRow?: boolean;
+  /** For 'tag_list': a short suffix on each chip, e.g. what it costs to install. */
+  tagHint?: (value: string) => string;
+  /** For 'tag_list': a line under the list — a budget, a total, a warning. */
+  tagSummary?: (values: string[], data: SheetData) => { text: string; warn?: boolean };
+  /** For 'tag_list': narrow the choices using the rest of the sheet. */
+  tagOptions?: (data: SheetData) => SheetOption[];
+  /** For 'tag_list': the placeholder on the picker. Defaults to '+ ADD…'. */
+  addLabel?: string;
   /** Hint that this field is rollable (Phase 2 wires the actual roll). */
   roll?: { formula: string; label: string };
   /** Linked field: the value lives in another system and is overlaid by the

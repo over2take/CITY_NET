@@ -29,13 +29,13 @@ Dropcraft    1000000  3  12    12 16 40 13  8 12  L 2
   const p = line.trim().split(/\s+/);
   // Names run to one or two words; the numbers start at the cost.
   const at = p.findIndex(x => /^\d{4,}$/.test(x));
-  const [cost, spd, armor, tt, ac, hp, crew, , , size, hrdpt] = p.slice(at);
+  const [cost, spd, armor, tt, ac, hp, crew, pow, mass, size, hrdpt] = p.slice(at);
   return {
     label: p.slice(0, at).join(' ').toUpperCase(),
     cost: +cost, spd: +spd,
     // * and ** are immunities the GM rules on, not ratings.
     armor: /^\*+$/.test(armor) ? null : +armor,
-    tt: +tt, ac: +ac, hp: +hp, crew: +crew, size, hrdpt: +hrdpt,
+    tt: +tt, ac: +ac, hp: +hp, crew: +crew, pow: +pow, mass: +mass, size, hrdpt: +hrdpt,
   };
 });
 
@@ -49,7 +49,7 @@ describe('the CWN vehicle table', () => {
   it.each(BOOK)('matches the book for $label', (row) => {
     const preset = VEHICLE_PRESETS.find(p => p.label === row.label)!;
     expect(preset).toBeTruthy();
-    for (const key of ['cost', 'spd', 'armor', 'tt', 'ac', 'hp', 'crew', 'hrdpt', 'size'] as const) {
+    for (const key of ['cost', 'spd', 'armor', 'tt', 'ac', 'hp', 'crew', 'hrdpt', 'pow', 'mass', 'size'] as const) {
       expect(preset[key], `${row.label} ${key}`).toBe(row[key]);
     }
   });

@@ -1,6 +1,9 @@
 import type { SheetTemplate, SheetField } from '../types';
 import { VEHICLE_TYPE_OPTIONS, getPreset, presetFields } from '../vehiclePresets';
 import { VEHICLE_WEAPON_OPTIONS, getVehicleWeapon, weaponMountFields } from '../vehicleWeapons';
+import {
+  FITTING_OPTIONS, describeFitting, getFitting, fittingFitsVehicle, budgetFor,
+} from '../vehicleFittings';
 
 // Cities Without Number template.
 //
@@ -88,11 +91,15 @@ const vehicleRow = (i: number): SheetField[] => [
   { id: `vehicle${i}_crew`, label: 'CREW', type: 'number', placeholder: '5', hint: 'How many it seats, driver included. The VEHICLES window draws exactly this many places.' },
   { id: `vehicle${i}_hrdpt`, label: 'HRDPT', type: 'number', placeholder: '1', hint: 'Hardpoints: how many Heavy weapons it mounts. Mounts beyond this are ignored. Note this is not a gunner count — a Tank is crew 3 with 3 hardpoints and can never man every gun and drive at once.' },
   { id: `vehicle${i}_cost`, label: 'COST', type: 'number', placeholder: '5000' },
-  { id: `vehicle${i}_size`, label: 'SIZE', type: 'text', placeholder: 'M', hint: 'S, M or L.' },
+  { id: `vehicle${i}_size`, label: 'SIZE', type: 'text', placeholder: 'M', hint: 'S, M or L. Decides which fittings and weapons the hull can take.' },
+  { id: `vehicle${i}_pow`, label: 'POW', type: 'number', placeholder: '3', hint: 'Power the hull has to spend on fittings and mounted weapons.' },
+  { id: `vehicle${i}_mass`, label: 'MASS', type: 'number', placeholder: '7', hint: 'Mass the hull has to spend on fittings and mounted weapons.' },
   ...Array.from({ length: CWN_VEHICLE_WEAPON_ROWS }, (_, w) => {
     const j = w + 1;
     return [
-      { id: `vehicle${i}_weapon${j}_name`, label: `MOUNT ${j}`, type: 'text', placeholder: 'Autocannon' },
+      // Starts its own row: the stat block above is not a multiple of six, so without
+      // this a mount would begin midway along a row and stop being recognisable as one.
+      { id: `vehicle${i}_weapon${j}_name`, label: `MOUNT ${j}`, type: 'text', placeholder: 'Autocannon', startsRow: true },
       {
         // Replaces the old SHOCK column: no vehicle weapon in the book has shock, and a
         // picker earns the space more than a field that is always blank.
@@ -109,6 +116,35 @@ const vehicleRow = (i: number): SheetField[] => [
       { id: `vehicle${i}_weapon${j}_trauma`, label: 'TRAUMA', type: 'text', placeholder: 'd8/x3!', hint: 'Trauma die / rating. A trailing ! means it can inflict Traumatic Hits on vehicles and drones — without it, the die still works on people but does nothing to a car.' },
     ] as SheetField[];
   }).flat(),
+  {
+    // A list rather than fields, because a fitting can be stripped out again: a control
+    // that wrote "+25% HP" into the stat block would have no way to take it back. The
+    // effects are printed on the chips and the numbers stay yours to set.
+    id: `vehicle${i}_fittings`, label: 'FITTINGS', type: 'tag_list', fullWidth: true, addLabel: '+ INSTALL…',
+    hint: 'Installed fittings. Each spends Power and Mass, as mounted weapons do, and the hull has to be big enough. Effects are printed, not applied — several change the stat block and could not be undone if they were.',
+    tagOptions: (data) => {
+      const size = String(data[`vehicle${i}_size`] ?? '');
+      return FITTING_OPTIONS.filter(o => {
+        const fitting = getFitting(o.value);
+        return !fitting || fittingFitsVehicle(fitting, size);
+      });
+    },
+    tagHint: describeFitting,
+    tagSummary: (values, data) => {
+      const num = (v: unknown) => Number(v) || 0;
+      // Mounted weapons draw on the same budget: the book is explicit that a hardpoint
+      // costs Power and Mass just as a fitting does.
+      let weaponPower = 0;
+      let weaponMass = 0;
+      for (let j = 1; j <= CWN_VEHICLE_WEAPON_ROWS; j++) {
+        const weapon = getVehicleWeapon(String(data[`vehicle${i}_weapon${j}_type`] ?? ''));
+        if (weapon) { weaponPower += weapon.power; weaponMass += weapon.mass; }
+      }
+      const b = budgetFor(values, weaponPower, weaponMass, num(data[`vehicle${i}_pow`]), num(data[`vehicle${i}_mass`]));
+      const text = `POWER ${b.spentPower}/${num(data[`vehicle${i}_pow`])} · MASS ${b.spentMass}/${num(data[`vehicle${i}_mass`])}`;
+      return { text: b.over ? `${text} — OVER BUDGET` : text, warn: b.over };
+    },
+  },
   {
     // Belongs to this vehicle rather than to a box at the foot of the page: one shared
     // notes field for six vehicles cannot say which one it is describing.
@@ -293,8 +329,8 @@ export const citiesWithoutNumber: SheetTemplate = {
         // as data loss, and a GM may have deliberately overloaded a vehicle.
         return !row.some(f => String(data[f.id] ?? '').trim() !== '');
       },
-      // 31 fields per vehicle: empty ones collapse, filled ones come back on reload.
-      groupSize: CWN_VEHICLE_COLUMNS * 5 + 1,
+      // 34 fields per vehicle: empty ones collapse, filled ones come back on reload.
+      groupSize: CWN_VEHICLE_COLUMNS * 5 + 4,
       fields: Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
     },
     {

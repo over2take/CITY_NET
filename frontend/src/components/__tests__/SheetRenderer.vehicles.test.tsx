@@ -36,8 +36,8 @@ describe('vehicles section', () => {
     // The template has to declare every field it might ever need, because ids are
     // static. Showing them all is the thing being avoided.
     expect(vehicles.fields.filter(f => /^vehicle\d+_name$/.test(f.id))).toHaveLength(6);
-    // Twelve stat fields, three mounts of six, and a notes box.
-    expect(vehicles.groupSize).toBe(31);
+    // Fourteen stat fields, three mounts of six, a fittings list and a notes box.
+    expect(vehicles.groupSize).toBe(34);
     expect(vehicles.fields.length % vehicles.groupSize!).toBe(0);
   });
 
@@ -203,6 +203,51 @@ describe('the sheet reacting to the vehicle type', () => {
     document.body.innerHTML = '';
     renderSheet({ ...presetFields(1, getPreset('tank')!) });
     expect(screen.getByText('MOUNT 3')).toBeInTheDocument();
+  });
+});
+
+describe('the fittings list', () => {
+  const fittings = vehicles.fields.find(f => f.id === 'vehicle1_fittings')!;
+  const car = { ...presetFields(1, getPreset('car')!) } as Record<string, unknown>;
+
+  it('is a list rather than a set of fields', () => {
+    // A fitting can be stripped out again; a control that wrote "+25% HP" into the stat
+    // block would have no way to take it back.
+    expect(fittings.type).toBe('tag_list');
+    expect(fittings.fullWidth).toBe(true);
+  });
+
+  it('offers only what the hull can take', () => {
+    const onL = fittings.tagOptions!({ vehicle1_size: 'L' } as never).map(o => o.value);
+    const onS = fittings.tagOptions!({ vehicle1_size: 'S' } as never).map(o => o.value);
+    expect(onL).toContain('living_quarters');
+    expect(onS).not.toContain('living_quarters');
+    expect(onS).toContain('cargo_space');
+  });
+
+  it('reports the budget, counting mounted weapons too', () => {
+    // A Car is 3 power / 7 mass. A drone cannon is 1/1, a medbay 1/2.
+    const data = { ...car, vehicle1_weapon1_type: 'drone_cannon' } as never;
+    expect(fittings.tagSummary!(['medbay'], data)).toEqual({ text: 'POWER 2/3 · MASS 3/7', warn: false });
+  });
+
+  it('says so when the vehicle is overloaded', () => {
+    const out = fittings.tagSummary!(['medbay', 'ecm_emitter', 'jack_control_port'], car as never);
+    expect(out.warn).toBe(true);
+    expect(out.text).toMatch(/OVER BUDGET/);
+  });
+
+  it('installs and removes through the sheet', async () => {
+    const onFieldChange = vi.fn();
+    renderSheet(car, { onFieldChange });
+
+    await userEvent.selectOptions(screen.getByLabelText('Add FITTINGS'), 'medbay');
+    expect(onFieldChange).toHaveBeenCalledWith('vehicle1_fittings', '["medbay"]');
+
+    onFieldChange.mockClear();
+    renderSheet({ ...car, vehicle1_fittings: '["medbay"]' }, { onFieldChange });
+    await userEvent.click(screen.getAllByLabelText('Remove medbay')[0]);
+    expect(onFieldChange).toHaveBeenCalledWith('vehicle1_fittings', '[]');
   });
 });
 

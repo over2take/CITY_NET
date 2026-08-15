@@ -94,6 +94,15 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
+/** A tag_list stores a JSON array of ids in one field; anything else reads as empty. */
+const parseTagList = (raw: unknown): string[] => {
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(v => typeof v === 'string') : [];
+  } catch { return []; }
+};
+
 function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, style, onOpenLink }: {
   field: SheetField; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
@@ -134,6 +143,58 @@ function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, styl
       >
         <span>{value === '' || value === null || value === undefined ? '—' : String(value)}</span>
         <span style={{ opacity: 0.6, fontSize: '0.6rem' }}>{clickable ? '⇗ LINKED' : 'LINKED'}</span>
+      </div>
+    );
+  }
+  if (field.type === 'tag_list') {
+    // Installed things, as removable chips. A list rather than a set of fields because
+    // fittings come off again: a control that wrote "+25% HP" somewhere would have no way
+    // to take it back. What is stored is the list; the stat block stays hand-edited.
+    const chosen = parseTagList(value);
+    const options = field.tagOptions ? field.tagOptions(data) : (field.options ?? []);
+    const summary = field.tagSummary?.(chosen, data);
+    const write = (next: string[]) => onFieldChange(field.id, JSON.stringify(next));
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+          {chosen.map((id, i) => (
+            <span
+              key={`${id}_${i}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                border: '1px solid var(--green)', padding: '1px 4px', fontSize: '0.6rem',
+              }}
+            >
+              {options.find(o => o.value === id)?.label ?? id}
+              {field.tagHint?.(id) ? <em style={{ opacity: 0.6, fontStyle: 'normal' }}>{field.tagHint(id)}</em> : null}
+              {!readOnly && (
+                <button
+                  aria-label={`Remove ${id}`}
+                  onClick={() => write(chosen.filter((_, j) => j !== i))}
+                  style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', padding: 0, fontSize: '0.7rem', lineHeight: 1 }}
+                >×</button>
+              )}
+            </span>
+          ))}
+          {chosen.length === 0 && <span style={{ fontSize: '0.6rem', opacity: 0.4 }}>NONE INSTALLED</span>}
+        </div>
+        {!readOnly && (
+          <select
+            aria-label={`Add ${field.label}`}
+            className="sheet-input"
+            style={{ ...inputStyle, ...style, maxWidth: '260px' }}
+            value=""
+            onChange={(e) => { if (e.target.value) write([...chosen, e.target.value]); }}
+          >
+            <option value="">{field.addLabel ?? "+ ADD…"}</option>
+            {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        )}
+        {summary && (
+          <div style={{ fontSize: '0.6rem', opacity: summary.warn ? 1 : 0.65, color: summary.warn ? '#ff4444' : undefined }}>
+            {summary.text}
+          </div>
+        )}
       </div>
     );
   }
@@ -685,6 +746,7 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
         out.push([f]);
         continue;
       }
+      if (f.startsRow && cur.length) { out.push(cur); cur = []; }
       cur.push(f);
       if (cur.length === perRow) { out.push(cur); cur = []; }
     }

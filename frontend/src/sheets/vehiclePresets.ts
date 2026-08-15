@@ -30,6 +30,9 @@ export interface VehiclePreset {
   hp: number;
   crew: number;
   hrdpt: number;
+  /** Power and Mass the hull has to spend on fittings and mounted weapons. */
+  pow: number;
+  mass: number;
   size: 'S' | 'M' | 'L';
   /** Named positions, in order. Crew beyond this list are numbered. */
   seatNames?: string[];
@@ -43,52 +46,52 @@ const GM_CALL = 'Immune to anything the GM thinks could not reasonably harm it. 
 export const VEHICLE_PRESETS: VehiclePreset[] = [
   {
     id: 'motorcycle', label: 'MOTORCYCLE', art: 'bike',
-    cost: 1000, spd: 1, armor: 4, tt: 10, ac: 13, hp: 10, crew: 1, hrdpt: 0, size: 'S',
+    cost: 1000, spd: 1, armor: 4, tt: 10, ac: 13, hp: 10, crew: 1, hrdpt: 0, pow: 1, mass: 3, size: 'S',
     seatNames: ['RIDER'],
   },
   {
     id: 'micro_flyer', label: 'MICRO FLYER', art: 'microlight',
-    cost: 3000, spd: 0, armor: 0, tt: 6, ac: 13, hp: 10, crew: 1, hrdpt: 0, size: 'S',
+    cost: 3000, spd: 0, armor: 0, tt: 6, ac: 13, hp: 10, crew: 1, hrdpt: 0, pow: 1, mass: 4, size: 'S',
     seatNames: ['PILOT'],
   },
   {
     id: 'car', label: 'CAR', art: 'car',
-    cost: 5000, spd: 0, armor: 6, tt: 12, ac: 11, hp: 30, crew: 5, hrdpt: 1, size: 'M',
+    cost: 5000, spd: 0, armor: 6, tt: 12, ac: 11, hp: 30, crew: 5, hrdpt: 1, pow: 3, mass: 7, size: 'M',
     seatNames: ['DRIVER', 'SHOTGUN', 'B.LEFT', 'B.RIGHT', 'REAR'],
   },
   {
     id: 'truck', label: 'TRUCK', art: 'van',
-    cost: 7500, spd: 0, armor: 6, tt: 12, ac: 11, hp: 35, crew: 2, hrdpt: 1, size: 'L',
+    cost: 7500, spd: 0, armor: 6, tt: 12, ac: 11, hp: 35, crew: 2, hrdpt: 1, pow: 3, mass: 14, size: 'L',
     seatNames: ['DRIVER', 'SHOTGUN'],
   },
   {
     id: 'helicopter', label: 'HELICOPTER', art: 'heli',
-    cost: 50000, spd: 3, armor: 6, tt: 10, ac: 14, hp: 20, crew: 6, hrdpt: 1, size: 'M',
+    cost: 50000, spd: 3, armor: 6, tt: 10, ac: 14, hp: 20, crew: 6, hrdpt: 1, pow: 4, mass: 9, size: 'M',
     seatNames: ['PILOT', 'CO-PILOT'],
   },
   {
     id: 'tank', label: 'TANK', art: 'tracked',
-    cost: 500000, spd: 0, armor: null, tt: 12, ac: 18, hp: 40, crew: 3, hrdpt: 3, size: 'L',
+    cost: 500000, spd: 0, armor: null, tt: 12, ac: 18, hp: 40, crew: 3, hrdpt: 3, pow: 8, mass: 15, size: 'L',
     seatNames: ['DRIVER', 'GUNNER', 'COMMANDER'], note: GM_CALL,
   },
   {
     id: 'apc', label: 'APC', art: 'apc',
-    cost: 60000, spd: -1, armor: null, tt: 10, ac: 16, hp: 30, crew: 16, hrdpt: 1, size: 'L',
+    cost: 60000, spd: -1, armor: null, tt: 10, ac: 16, hp: 30, crew: 16, hrdpt: 1, pow: 5, mass: 14, size: 'L',
     seatNames: ['DRIVER', 'GUNNER'], note: HEAVY_ONLY,
   },
   {
     id: 'gev', label: 'GEV', art: 'hover',
-    cost: 100000, spd: 1, armor: null, tt: 10, ac: 16, hp: 30, crew: 3, hrdpt: 2, size: 'L',
+    cost: 100000, spd: 1, armor: null, tt: 10, ac: 16, hp: 30, crew: 3, hrdpt: 2, pow: 6, mass: 10, size: 'L',
     seatNames: ['DRIVER', 'GUNNER', 'COMMANDER'], note: HEAVY_ONLY,
   },
   {
     id: 'casra', label: 'CASRA', art: 'multirotor',
-    cost: 200000, spd: 2, armor: 10, tt: 10, ac: 18, hp: 35, crew: 2, hrdpt: 2, size: 'L',
+    cost: 200000, spd: 2, armor: 10, tt: 10, ac: 18, hp: 35, crew: 2, hrdpt: 2, pow: 7, mass: 10, size: 'L',
     seatNames: ['PILOT', 'GUNNER'],
   },
   {
     id: 'dropcraft', label: 'DROPCRAFT', art: 'vtol',
-    cost: 1000000, spd: 3, armor: 12, tt: 12, ac: 16, hp: 40, crew: 13, hrdpt: 2, size: 'L',
+    cost: 1000000, spd: 3, armor: 12, tt: 12, ac: 16, hp: 40, crew: 13, hrdpt: 2, pow: 8, mass: 12, size: 'L',
     seatNames: ['PILOT', 'CO-PILOT'],
   },
 ];
@@ -119,6 +122,8 @@ export const presetFields = (i: number, preset: VehiclePreset): Record<string, s
     [`vehicle${i}_tt`]: preset.tt,
     [`vehicle${i}_crew`]: preset.crew,
     [`vehicle${i}_hrdpt`]: preset.hrdpt,
+    [`vehicle${i}_pow`]: preset.pow,
+    [`vehicle${i}_mass`]: preset.mass,
     [`vehicle${i}_cost`]: preset.cost,
     [`vehicle${i}_size`]: preset.size,
   };
