@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useReducer } from 'react';
 import type { RosterVehicle } from '../components/VehiclesWindow';
 
 /**
@@ -8,40 +8,56 @@ import type { RosterVehicle } from '../components/VehiclesWindow';
  * and the buttons that open it — which should not appear at a table that owns no vehicles.
  * One subscription, so the button and the window can never disagree about whether there is
  * anything to show.
+ *
+ * Takes the ref rather than the socket, like useInitiative does. A ref's `.current` is not
+ * reactive: mutating it does not re-render, so a hook handed `socketRef.current` before
+ * the socket exists binds to nothing and never binds again. That looked exactly like an
+ * empty roster on a sheet with a vehicle plainly on it.
  */
-export function useVehicleRoster(socket: any, gameSystem?: string) {
+export function useVehicleRoster(socketRef: React.MutableRefObject<any>, gameSystem?: string) {
   const [vehicles, setVehicles] = useState<RosterVehicle[]>([]);
   const [players, setPlayers] = useState<string[]>([]);
+  const [socketReadyCount, forceReady] = useReducer((n: number) => n + 1, 0);
 
   const enabled = gameSystem === 'cities_without_number';
   const refresh = useCallback(() => {
-    if (enabled) socket?.emit('requestVehicleRoster');
-  }, [socket, enabled]);
+    if (enabled) socketRef.current?.emit('requestVehicleRoster');
+  }, [socketRef, enabled]);
 
   useEffect(() => {
-    if (!socket) return;
     if (!enabled) {
       // Switching away from CWN should empty it, or a stale roster keeps the buttons up.
       setVehicles([]);
       setPlayers([]);
       return;
     }
+    if (!socketRef.current) {
+      const interval = setInterval(() => {
+        if (socketRef.current) {
+          clearInterval(interval);
+          forceReady();
+        }
+      }, 200);
+      return () => clearInterval(interval);
+    }
+
+    const s = socketRef.current;
     const onRoster = (data: { vehicles?: RosterVehicle[]; players?: string[] }) => {
       setVehicles(data?.vehicles ?? []);
       setPlayers(data?.players ?? []);
     };
-    socket.on('vehicleRoster', onRoster);
-    socket.on('vehicleSeatingChanged', refresh);
+    s.on('vehicleRoster', onRoster);
+    s.on('vehicleSeatingChanged', refresh);
     // A vehicle appears the moment someone fills one in on their sheet, not only when
     // somebody sits in it.
-    socket.on('sheetUpdated', refresh);
+    s.on('sheetUpdated', refresh);
     refresh();
     return () => {
-      socket.off('vehicleRoster', onRoster);
-      socket.off('vehicleSeatingChanged', refresh);
-      socket.off('sheetUpdated', refresh);
+      s.off('vehicleRoster', onRoster);
+      s.off('vehicleSeatingChanged', refresh);
+      s.off('sheetUpdated', refresh);
     };
-  }, [socket, enabled, refresh]);
+  }, [socketRef, enabled, refresh, socketReadyCount]);
 
   return { vehicles, players, refresh, hasVehicles: vehicles.length > 0 };
 }

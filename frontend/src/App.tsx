@@ -929,7 +929,7 @@ function App() {
   const initiative = useInitiative(socketRef, initiativeSceneKey, initiativeSystem);
   // Held here, not in the window: the buttons that open it need to know whether this
   // table owns any vehicles at all.
-  const vehicleRoster = useVehicleRoster(socketRef.current, gameSystem);
+  const vehicleRoster = useVehicleRoster(socketRef, gameSystem);
 
   const initiativeSceneLabel = view === 'battle_map' && activeBattleMapData
     ? (() => {
