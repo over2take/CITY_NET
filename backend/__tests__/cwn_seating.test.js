@@ -151,6 +151,38 @@ describe('getting out', () => {
   });
 });
 
+describe('the roster arriving', () => {
+  beforeEach(async () => {
+    await sheet('CODY', { ...CAR, name: 'Sam' });
+    await sheet('GHOST', {});
+  });
+
+  it('is pushed on identify, without being asked', async () => {
+    // A client asks the moment its socket connects, which is before it has been
+    // identified — the request is dropped, and the window sat empty until the next sheet
+    // save happened to refresh it.
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(80);
+
+    const pushed = emitted.find(e => e.event === 'vehicleRoster');
+    expect(pushed).toBeTruthy();
+    expect(pushed.data.vehicles).toHaveLength(1);
+    expect(pushed.data.vehicles[0]).toMatchObject({ owner: 'CODY', ownerName: 'Sam' });
+  });
+
+  it('names players by character, keeping the login as the key', async () => {
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(80);
+
+    const { players } = emitted.find(e => e.event === 'vehicleRoster').data;
+    expect(players).toContainEqual({ username: 'CODY', name: 'Sam' });
+    // No name on the sheet yet, so the login stands in.
+    expect(players).toContainEqual({ username: 'GHOST', name: 'GHOST' });
+  });
+});
+
 describe('the seatOut permission, over the socket', () => {
   beforeEach(async () => {
     await sheet('CODY', CAR);

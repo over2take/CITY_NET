@@ -201,7 +201,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
       // Warm the display-name cache (sheet handle/name) for roll broadcasts
       if (info.userName) {
-        getGameSystem((e, system) => { if (!e) identity.refresh(db, system, info.userName); });
+        getGameSystem((e, system) => {
+          if (e) return;
+          identity.refresh(db, system, info.userName);
+          // Push the vehicle roster rather than waiting to be asked. A client that asks
+          // the moment its socket connects is asking before it has been identified, and
+          // the request is dropped — which left the window empty until the next sheet
+          // save happened to refresh it.
+          if (system === vehicleState.SYSTEM) {
+            vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data));
+          }
+        });
       }
 
       db.all('SELECT * FROM chat_logs ORDER BY timestamp DESC LIMIT 50', (err, rows) => {
