@@ -9,6 +9,7 @@
 // before they shoot. They must agree, which is why this is one function rather than two.
 
 const attackCwn = require('./attackCwn');
+const vehicleLayouts = require('./vehicleLayouts');
 
 const SYSTEM = 'cities_without_number';
 
@@ -166,4 +167,107 @@ function syncAll(db, cb) {
   );
 }
 
-module.exports = { SYSTEM, resolve, publicState, syncAll, vehicleKey, getRideMounts, getRideWeapon };
+
+/** The occupancy fields, as one place so seating and unseating cannot disagree. */
+const OCCUPANCY_FIELDS = ['in_vehicle', 'ride_owner', 'ride_vehicle', 'vehicle_seat'];
+
+const clearOccupancy = (data) => {
+  const out = { ...data };
+  OCCUPANCY_FIELDS.forEach((f) => { delete out[f]; });
+  return out;
+};
+
+/** Read one CWN sheet by username. cb(null) when they have none. */
+function loadSheet(db, username, cb) {
+  db.get(
+    `SELECT id, username, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+    [String(username || '').trim(), SYSTEM],
+    (err, row) => {
+      if (err || !row) return cb(null);
+      try { cb({ id: row.id, username: row.username, data: JSON.parse(row.data || '{}') }); }
+      catch (e) { cb(null); }
+    }
+  );
+}
+
+const writeSheet = (db, id, data, cb) =>
+  db.run(`UPDATE character_sheets SET data = ? WHERE id = ?`, [JSON.stringify(data), id], () => cb());
+
+/**
+ * Put someone in a seat.
+ *
+ * A seat holds one person and a person is in one seat, so this also empties whatever seat
+ * they were in and turns out whoever was in this one. That is what the window's dropdowns
+ * mean: choosing a name for a seat is a statement about where everyone is, not just an
+ * addition.
+ *
+ * cb(null) on success, or a short reason. The reasons are checks the window should not be
+ * able to trip — a seat that is not on the vehicle, a vehicle that does not exist — so
+ * they are worth refusing rather than papering over.
+ */
+function seatIn(db, { occupant, owner, vehicleIndex, seat }, cb) {
+  const index = Number(vehicleIndex);
+  loadSheet(db, owner, (ownerSheet) => {
+    if (!ownerSheet) return cb('NO_SUCH_VEHICLE_OWNER');
+    if (!attackCwn.getVehicle(ownerSheet.data, index)) return cb('NO_SUCH_VEHICLE');
+    if (!vehicleLayouts.hasSeat(ownerSheet.data, index, seat)) return cb('NO_SUCH_SEAT');
+
+    loadSheet(db, occupant, (occSheet) => {
+      if (!occSheet) return cb('NO_SUCH_PLAYER');
+      const seatId = String(seat).trim().toLowerCase();
+      const isOwn = occSheet.username === ownerSheet.username;
+      const data = {
+        ...clearOccupancy(occSheet.data),
+        in_vehicle: isOwn ? `own:${index}` : 'ride',
+        vehicle_seat: seatId,
+      };
+      if (!isOwn) { data.ride_owner = ownerSheet.username; data.ride_vehicle = index; }
+
+      // Turn out whoever was already in this seat — one seat, one person.
+      db.all(
+        `SELECT id, username, data FROM character_sheets WHERE system = ? AND is_npc = 0`,
+        [SYSTEM],
+        (err, rows) => {
+          const evictions = [];
+          for (const r of rows || []) {
+            if (r.username === occSheet.username) continue;
+            let d;
+            try { d = JSON.parse(r.data || '{}'); } catch (e) { continue; }
+            const occ = attackCwn.readOccupancy(d);
+            if (!occ || occ.seat !== seatId) continue;
+            if ((occ.owner || r.username) !== ownerSheet.username || occ.vehicleIndex !== index) continue;
+            evictions.push({ id: r.id, data: clearOccupancy(d) });
+          }
+          let left = evictions.length + 1;
+          const done = () => { if (--left === 0) cb(null); };
+          evictions.forEach(e => writeSheet(db, e.id, e.data, done));
+          writeSheet(db, occSheet.id, data, done);
+        }
+      );
+    });
+  });
+}
+
+/** Take someone out of whatever they are in. Idempotent — no seat is not an error. */
+function seatOut(db, occupant, cb) {
+  loadSheet(db, occupant, (sheet) => {
+    if (!sheet) return cb('NO_SUCH_PLAYER');
+    writeSheet(db, sheet.id, clearOccupancy(sheet.data), () => cb(null));
+  });
+}
+
+/** Set whether a vehicle is moving. It belongs to the car, so everyone aboard agrees. */
+function setMoving(db, { owner, vehicleIndex, moving }, cb) {
+  const index = Number(vehicleIndex);
+  loadSheet(db, owner, (ownerSheet) => {
+    if (!ownerSheet) return cb('NO_SUCH_VEHICLE_OWNER');
+    if (!attackCwn.getVehicle(ownerSheet.data, index)) return cb('NO_SUCH_VEHICLE');
+    const data = { ...ownerSheet.data, [`vehicle${index}_moving`]: moving ? 1 : 0 };
+    writeSheet(db, ownerSheet.id, data, () => cb(null));
+  });
+}
+
+module.exports = {
+  SYSTEM, resolve, publicState, syncAll, vehicleKey, getRideMounts, getRideWeapon,
+  seatIn, seatOut, setMoving, loadSheet, OCCUPANCY_FIELDS,
+};

@@ -738,6 +738,73 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       );
     };
 
+    // --- Vehicle seating ---
+    //
+    // Seating is shared: anyone can put anyone in a seat, because piling into a car is a
+    // decision the table makes out loud and the window only records it. Getting *out* is
+    // yours alone (or the GM's), and that is enforced here rather than by hiding a button
+    // — a client can send whatever it likes.
+    const withCwn = (cb) => getGameSystem((err, system) => {
+      if (err || system !== vehicleState.SYSTEM) return;
+      cb(system);
+    });
+
+    /** Re-derive every badge and tell the room, so no one is looking at a stale car. */
+    const afterSeatingChange = (usernames) => {
+      vehicleState.syncAll(db, () => {
+        usernames.filter(Boolean).forEach(u => io.emit('sheetUpdated', { username: u }));
+        emitUpdate({ isRhombusOnly: true });
+        io.emit('vehicleSeatingChanged');
+      });
+    };
+
+    socket.on('seatIn', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload) return;
+      withCwn(() => {
+        vehicleState.seatIn(db, {
+          occupant: payload.occupant,
+          owner: payload.owner,
+          vehicleIndex: payload.vehicleIndex,
+          seat: payload.seat,
+        }, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterSeatingChange([payload.occupant, payload.owner]);
+        });
+      });
+    });
+
+    socket.on('seatOut', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload) return;
+      const occupant = String(payload.occupant || '').trim();
+      // The one asymmetry in the whole feature: anyone can seat you, only you get out.
+      if (occupant !== info.userName && !isAdminSocket(socket)) {
+        return socket.emit('vehicleSeatingError', { message: 'NOT_YOURS' });
+      }
+      withCwn(() => {
+        vehicleState.seatOut(db, occupant, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterSeatingChange([occupant]);
+        });
+      });
+    });
+
+    socket.on('setVehicleMoving', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload) return;
+      withCwn(() => {
+        vehicleState.setMoving(db, {
+          owner: payload.owner,
+          vehicleIndex: payload.vehicleIndex,
+          moving: !!payload.moving,
+        }, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterSeatingChange([payload.owner]);
+        });
+      });
+    });
+
     socket.on('requestMySheet', () => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
