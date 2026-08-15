@@ -231,6 +231,15 @@ describe('the fittings list', () => {
     expect(fittings.tagSummary!(['medbay'], data)).toEqual({ text: 'POWER 2/3 · MASS 3/7', warn: false });
   });
 
+  it('shows a power supply in the total, not as a negative spend', () => {
+    // POWER -6/8 was nonsense: a Power System adds to the pool rather than un-spending.
+    const tank = { ...presetFields(1, getPreset('tank')!) } as never;
+    const out = fittings.tagSummary!(['tool_rack', 'power_medium', 'power_small'], tank);
+    expect(out.text.startsWith('POWER 0/14 (+6)')).toBe(true);
+    expect(out.text.includes('-')).toBe(false);
+    expect(out.warn).toBe(false);
+  });
+
   it('says so when the vehicle is overloaded', () => {
     const out = fittings.tagSummary!(['medbay', 'ecm_emitter', 'jack_control_port'], car as never);
     expect(out.warn).toBe(true);

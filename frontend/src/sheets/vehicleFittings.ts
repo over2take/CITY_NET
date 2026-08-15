@@ -2,8 +2,9 @@
 // CC BY-NC 4.0 by 0frames, like the rest of the QRD-derived data here.
 //
 // `power` is drain, so a Power System carries a negative one — it is the only thing in
-// the table that gives Power back rather than spending it. Keeping the sign consistent
-// means the budget is a plain sum instead of two special cases.
+// the table that supplies Power rather than spending it. The budget treats those as pool
+// rather than as negative spend: three fittings including two power systems is 0 Power
+// used out of a larger total, not minus six used out of the original.
 //
 // The effects are printed, not applied. Several rewrite the stat block (Extra Durability
 // is +25% max HP, Hardpoint Support adds a mount), and a fitting can be stripped again —
@@ -77,7 +78,11 @@ export const fittingFitsVehicle = (fitting: VehicleFitting, vehicleSize: string 
 };
 
 /**
- * What a vehicle has spent and what it has left.
+ * What a vehicle has spent and what it has to spend.
+ *
+ * Power Systems raise the pool rather than offsetting the drain — the book calls them
+ * "adds Power at a cost in Mass". Netting them off the spend instead would show a vehicle
+ * with two of them as having spent minus six Power, which reads as nonsense.
  *
  * Mounted weapons draw on the same budget as fittings — the book is explicit that a
  * hardpoint costs Power and Mass "just as a fitting does" — so both are counted, or the
@@ -90,13 +95,25 @@ export const budgetFor = (
   totalPower: number,
   totalMass: number,
 ) => {
-  const spentPower = fittingIds.reduce((n, id) => n + (getFitting(id)?.power ?? 0), 0) + weaponPower;
-  const spentMass = fittingIds.reduce((n, id) => n + (getFitting(id)?.mass ?? 0), 0) + weaponMass;
+  let drawn = weaponPower;
+  let supplied = 0;
+  let spentMass = weaponMass;
+  for (const id of fittingIds) {
+    const fitting = getFitting(id);
+    if (!fitting) continue;
+    if (fitting.power < 0) supplied -= fitting.power;
+    else drawn += fitting.power;
+    spentMass += fitting.mass;
+  }
+  const powerAvailable = totalPower + supplied;
   return {
-    spentPower, spentMass,
-    powerLeft: totalPower - spentPower,
+    spentPower: drawn,
+    powerAvailable,
+    supplied,
+    spentMass,
+    powerLeft: powerAvailable - drawn,
     massLeft: totalMass - spentMass,
-    over: spentPower > totalPower || spentMass > totalMass,
+    over: drawn > powerAvailable || spentMass > totalMass,
   };
 };
 

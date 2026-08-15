@@ -142,7 +142,10 @@ const vehicleRow = (i: number): SheetField[] => [
         if (weapon) { weaponPower += weapon.power; weaponMass += weapon.mass; }
       }
       const b = budgetFor(values, weaponPower, weaponMass, num(data[`vehicle${i}_pow`]), num(data[`vehicle${i}_mass`]));
-      const text = `POWER ${b.spentPower}/${num(data[`vehicle${i}_pow`])} · MASS ${b.spentMass}/${num(data[`vehicle${i}_mass`])}`;
+      // A Power System raises the pool, so it shows in the total rather than as a
+      // negative spend.
+      const power = `POWER ${b.spentPower}/${b.powerAvailable}${b.supplied ? ` (+${b.supplied})` : ''}`;
+      const text = `${power} · MASS ${b.spentMass}/${num(data[`vehicle${i}_mass`])}`;
       return { text: b.over ? `${text} — OVER BUDGET` : text, warn: b.over };
     },
   },

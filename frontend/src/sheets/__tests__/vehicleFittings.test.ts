@@ -68,6 +68,18 @@ describe('the power and mass budget', () => {
     expect(b.over).toBe(true);
   });
 
+  it('counts a Power System as pool, never as negative spend', () => {
+    // Two power systems on a Tank (8 power) and nothing drawing: spent stays at zero and
+    // the pool grows. Netting them off the spend showed POWER -6/8, which reads as
+    // nonsense — you have not used minus six Power.
+    const b = budgetFor(['tool_rack', 'power_medium', 'power_small'], 0, 0, 8, 15);
+    expect(b.spentPower).toBe(0);
+    expect(b.supplied).toBe(6);
+    expect(b.powerAvailable).toBe(14);
+    expect(b.spentMass).toBe(7);
+    expect(b.over).toBe(false);
+  });
+
   it('lets a power system pay for the thing that needed it', () => {
     // 2 power of kit on a 1 power hull is over budget; a small power system covers it.
     expect(budgetFor(['ecm_emitter'], 0, 0, 1, 10).over).toBe(true);
