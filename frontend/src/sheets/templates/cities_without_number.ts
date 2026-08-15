@@ -50,9 +50,8 @@ export const CWN_VEHICLE_COLUMNS = 6;
  * Armour is Armour Rating and is subtracted from damage, unlike personal armour which is
  * AC and avoids the hit entirely. The two are not interchangeable and the hint says so.
  *
- * Five rows of six: two of stats, then one per mount. The renderer chunks a section's
- * fields into rows of `columns`, so the shape has to divide evenly — which is also why
- * notes live in their own section, as they do for weapons.
+ * Five rows of six — two of stats, then one per mount — and a notes box spanning the grid
+ * on a row of its own.
  *
  * Every mount is declared because field ids are static, but only as many as the vehicle
  * has hardpoints are drawn. A motorcycle carries none and shows none.
@@ -68,12 +67,14 @@ const vehicleRow = (i: number): SheetField[] => [
       const out = presetFields(i, preset);
       // A vehicle someone has named is theirs; the type should not rename it.
       if (String(data[`vehicle${i}_name`] ?? '').trim()) delete out[`vehicle${i}_name`];
-      // The * and ** vehicles have an immunity rather than an Armour Rating, so the rule
-      // goes where the table can be read. Appended once, not on every re-pick.
+      // The * and ** vehicles carry an immunity rather than an Armour Rating, so the rule
+      // goes where that vehicle can be read.
       if (preset.note) {
-        const notes = String(data.vehicles_notes ?? '');
-        const line = `${preset.label}: ${preset.note}`;
-        if (!notes.includes(line)) out.vehicles_notes = notes ? `${notes}\n${line}` : line;
+        // Into that vehicle's own notes, appended once and never over what a player wrote.
+        const notes = String(data[`vehicle${i}_notes`] ?? '');
+        if (!notes.includes(preset.note)) {
+          out[`vehicle${i}_notes`] = notes ? `${notes}\n${preset.note}` : preset.note;
+        }
       }
       return out;
     },
@@ -108,6 +109,12 @@ const vehicleRow = (i: number): SheetField[] => [
       { id: `vehicle${i}_weapon${j}_trauma`, label: 'TRAUMA', type: 'text', placeholder: 'd8/x3!', hint: 'Trauma die / rating. A trailing ! means it can inflict Traumatic Hits on vehicles and drones — without it, the die still works on people but does nothing to a car.' },
     ] as SheetField[];
   }).flat(),
+  {
+    // Belongs to this vehicle rather than to a box at the foot of the page: one shared
+    // notes field for six vehicles cannot say which one it is describing.
+    id: `vehicle${i}_notes`, label: 'NOTES', type: 'textarea', fullWidth: true,
+    placeholder: 'Armoured glass, spoofed plates, damage taken',
+  },
 ];
 
 const weaponRow = (i: number): SheetField[] => [
@@ -286,18 +293,9 @@ export const citiesWithoutNumber: SheetTemplate = {
         // as data loss, and a GM may have deliberately overloaded a vehicle.
         return !row.some(f => String(data[f.id] ?? '').trim() !== '');
       },
-      // 30 fields per vehicle: empty ones collapse, filled ones come back on reload.
-      groupSize: CWN_VEHICLE_COLUMNS * 5,
+      // 31 fields per vehicle: empty ones collapse, filled ones come back on reload.
+      groupSize: CWN_VEHICLE_COLUMNS * 5 + 1,
       fields: Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
-    },
-    {
-      id: 'vehicle_notes',
-      label: 'VEHICLE NOTES',
-      layout: 'notes',
-      tab: 'GEAR',
-      fields: [
-        { id: 'vehicles_notes', label: 'Mods, damage, passengers', type: 'textarea', placeholder: 'Kestrel: armoured glass, spoofed plates. Bike: stripped for speed, no armour.' },
-      ],
     },
     {
       id: 'gear',

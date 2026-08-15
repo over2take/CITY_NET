@@ -36,8 +36,8 @@ describe('vehicles section', () => {
     // The template has to declare every field it might ever need, because ids are
     // static. Showing them all is the thing being avoided.
     expect(vehicles.fields.filter(f => /^vehicle\d+_name$/.test(f.id))).toHaveLength(6);
-    // Twelve stat fields plus three mounts of six.
-    expect(vehicles.groupSize).toBe(30);
+    // Twelve stat fields, three mounts of six, and a notes box.
+    expect(vehicles.groupSize).toBe(31);
     expect(vehicles.fields.length % vehicles.groupSize!).toBe(0);
   });
 
@@ -92,6 +92,27 @@ describe('vehicles section', () => {
     }
   });
 
+  it('gives each vehicle its own notes box', () => {
+    // A single box at the foot of the page cannot say which vehicle it describes.
+    expect(citiesWithoutNumber.sections.find(s => s.id === 'vehicle_notes')).toBeUndefined();
+    expect(vehicles.fields.filter(f => /^vehicle\d+_notes$/.test(f.id))).toHaveLength(6);
+    expect(vehicles.fields.find(f => f.id === 'vehicle1_notes')!.fullWidth).toBe(true);
+  });
+
+  it('shows exactly one entry for one vehicle', () => {
+    // A spare blank below it rendered one vehicle as two, the second full of ghost
+    // placeholder text that reads like real data at a glance.
+    renderSheet({ ...presetFields(1, getPreset('truck')!) });
+    expect(screen.getAllByLabelText('VEHICLE')).toHaveLength(1);
+  });
+
+  it('shows a single blank on an empty sheet, and one more per ADD', async () => {
+    renderSheet({});
+    expect(screen.getAllByLabelText('VEHICLE')).toHaveLength(1);
+    await userEvent.click(screen.getByText(/\+ ADD/));
+    expect(screen.getAllByLabelText('VEHICLE')).toHaveLength(2);
+  });
+
   it('no longer carries the occupancy block, which the window replaced', () => {
     // Where people are sitting is shared state, not something each occupant declares on
     // their own sheet where nothing reconciles it.
@@ -126,11 +147,18 @@ describe('the sheet reacting to the vehicle type', () => {
     expect(fill('car', { vehicle1_name: 'Betty' })).not.toHaveProperty('vehicle1_name');
   });
 
-  it('writes the immunity rule into the notes, once', () => {
+  it('writes the immunity rule into that vehicle’s own notes, once', () => {
     const first = fill('tank');
-    expect(String(first.vehicles_notes)).toMatch(/TANK: Immune/);
+    expect(String(first.vehicle1_notes)).toMatch(/Immune/);
+    // One shared notes box for six vehicles could not say which one it described.
+    expect(first).not.toHaveProperty('vehicles_notes');
     // Re-picking the same type must not stack the note up.
-    expect(fill('tank', { vehicles_notes: first.vehicles_notes })).not.toHaveProperty('vehicles_notes');
+    expect(fill('tank', { vehicle1_notes: first.vehicle1_notes })).not.toHaveProperty('vehicle1_notes');
+  });
+
+  it('leaves a note the player wrote alone', () => {
+    const out = fill('tank', { vehicle1_notes: 'Stolen from a cop' });
+    expect(String(out.vehicle1_notes).startsWith('Stolen from a cop\n')).toBe(true);
   });
 
   it('writes nothing for a custom vehicle', () => {
@@ -233,6 +261,7 @@ describe('removing a vehicle', () => {
 
     const cleared = onFieldsChange.mock.calls[0][0];
     expect(Object.keys(cleared)).toHaveLength(vehicles.groupSize);
+    expect(cleared.vehicle1_notes).toBe('');
     expect(cleared.vehicle1_name).toBe('');
     expect(cleared.vehicle1_hp_max).toBe('');
     expect(cleared.vehicle1_weapon3_dmg).toBe('');

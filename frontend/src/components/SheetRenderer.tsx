@@ -672,21 +672,44 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
   // on a control that wipes thirty fields is not something to leave one click away.
   const [confirmClear, setConfirmClear] = useState<number | null>(null);
   const perRow = section.columns ?? 4;
-  const rows: SheetField[][] = [];
-  for (let i = 0; i < section.fields.length; i += perRow) rows.push(section.fields.slice(i, i + perRow));
+  /**
+   * Fields into rows of `perRow`, except a fullWidth field, which takes a row to itself.
+   * That is what lets an entry carry a notes box without the grid arithmetic collapsing.
+   */
+  const toRows = (fields: SheetField[]) => {
+    const out: SheetField[][] = [];
+    let cur: SheetField[] = [];
+    for (const f of fields) {
+      if (f.fullWidth) {
+        if (cur.length) { out.push(cur); cur = []; }
+        out.push([f]);
+        continue;
+      }
+      cur.push(f);
+      if (cur.length === perRow) { out.push(cur); cur = []; }
+    }
+    if (cur.length) out.push(cur);
+    return out;
+  };
+
+  // Sections that repeat an entry (a vehicle and its mounts) collapse the empty ones.
+  // Grouped by field count rather than by row count: rows vary in width once one of them
+  // spans the grid, so counting rows would slice the groups in the wrong places.
+  const groups: SheetField[][][] = [];
+  if (section.groupSize) {
+    for (let i = 0; i < section.fields.length; i += section.groupSize) {
+      groups.push(toRows(section.fields.slice(i, i + section.groupSize)));
+    }
+  }
+  const rowsPerGroup = groups.length ? groups[0].length : 0;
+  const rows = section.groupSize ? (groups[0] ?? []) : toRows(section.fields);
   const cell: React.CSSProperties = { padding: '2px 4px', fontSize: '0.7rem' };
   // CP:R keeps its hand-tuned column widths; other row shapes get a generic
   // grid: name column flexes, selects get room, the rest stay compact.
+  const widthRow = (rows.find(r => r.length === perRow) ?? rows[0] ?? []);
   const gridTemplateColumns = perRow === 4
     ? '1fr 70px 130px 44px'
-    : (rows[0] ?? []).map((f, i) => (i === 0 ? '1fr' : f.type === 'select' ? '90px' : '56px')).join(' ');
-
-  // Sections that repeat an entry (a vehicle and its mounts) collapse the empty ones.
-  const rowsPerGroup = section.groupSize ? Math.max(1, Math.round(section.groupSize / perRow)) : 0;
-  const groups: SheetField[][][] = [];
-  if (rowsPerGroup) {
-    for (let i = 0; i < rows.length; i += rowsPerGroup) groups.push(rows.slice(i, i + rowsPerGroup));
-  }
+    : widthRow.map((f, i) => (i === 0 ? '1fr' : f.type === 'select' ? '90px' : '56px')).join(' ');
 
   const hasData = (group: SheetField[][]) =>
     group.some(row => row.some(f => {
@@ -694,18 +717,35 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
       return v !== undefined && v !== null && String(v).trim() !== '';
     }));
 
-  // One past the last filled entry, so there is always a blank one to type into.
-  // Derived from the data rather than remembered, which is why the entries you filled
-  // in are the ones that come back after a reload.
+  // Exactly the entries that hold something, and no more: + ADD is how you get another.
+  // Showing a spare blank as well meant one vehicle rendered as two, the second of them
+  // full of ghost placeholder text that reads like real data at a glance.
+  //
+  // Derived from the data rather than remembered, which is why the entries you filled in
+  // are the ones that come back after a reload.
   const filled = rowsPerGroup ? groups.reduce((n, g, i) => (hasData(g) ? i + 1 : n), 0) : 0;
   const [revealed, setRevealed] = React.useState(0);
   const visibleGroups = rowsPerGroup
-    ? Math.min(groups.length, Math.max(filled + 1, revealed + 1))
+    ? Math.min(groups.length, Math.max(filled, revealed + 1, 1))
     : 0;
 
   const labelRow = (row: SheetField[]) => row.map(f => (
     <div key={`lbl_${f.id}`} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{f.label}</div>
   ));
+
+  const fullWidthRow = (field: SheetField) => (
+    <div key={field.id} style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '2px', margin: '2px 0' }}>
+      <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{field.label}</div>
+      <FieldInput
+        field={field}
+        data={data}
+        readOnly={readOnly}
+        onFieldChange={onFieldChange}
+        onFieldsChange={onFieldsChange}
+        style={cell}
+      />
+    </div>
+  );
 
   const fieldRow = (row: SheetField[]) => row.map(field => (
     <FieldInput
@@ -747,11 +787,12 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
                     belong under the vehicle line's labels. Shown once, on the first entry
                     that actually shows the row: entries can hide different rows, so
                     "first entry" alone would strand a heading. */}
-                {labelGroupFor.get(ri) === gi && labelRow(row)}
                 {gi > 0 && ri === 0 && (
                   <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--green)', opacity: 0.25, margin: '4px 0 2px' }} />
                 )}
-                {fieldRow(row)}
+                {row[0].fullWidth
+                  ? fullWidthRow(row[0])
+                  : <>{labelGroupFor.get(ri) === gi && labelRow(row)}{fieldRow(row)}</>}
               </React.Fragment>
             ))}
             {!readOnly && hasData(group) && (
@@ -767,6 +808,7 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
                     if (onFieldsChange) onFieldsChange(blanks);
                     else Object.keys(blanks).forEach(id => onFieldChange(id, ''));
                     setConfirmClear(null);
+                    setRevealed(0);
                   }}
                   onBlur={() => setConfirmClear(c => (c === gi ? null : c))}
                   style={{

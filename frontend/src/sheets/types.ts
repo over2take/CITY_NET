@@ -28,6 +28,9 @@ export interface SheetField {
   hint?: string;
   /** Example value shown as ghost text inside an empty field (input placeholder). */
   placeholder?: string;
+  /** Give this field a row of its own spanning the whole grid, with its label above it.
+   *  For a notes box inside a repeated entry, where a grid cell will not do. */
+  fullWidth?: boolean;
   /** Hint that this field is rollable (Phase 2 wires the actual roll). */
   roll?: { formula: string; label: string };
   /** Linked field: the value lives in another system and is overlaid by the
