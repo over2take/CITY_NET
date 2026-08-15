@@ -93,6 +93,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
         <SheetRenderer
           template={template}
           data={sheet.data}
+          optionContext={{ players: sheet.players }}
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
           onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}

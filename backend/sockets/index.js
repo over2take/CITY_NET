@@ -754,7 +754,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 // A gunner riding in someone else's car needs its mounts to fire them,
                 // and cannot see the sheet those rows live on. Only the mounts travel.
                 vehicleState.getRideMounts(db, data, (ride) => {
-                  socket.emit('sheetData', { ...row, data, ride });
+                  // Who you could be riding with. Anyone holding a sheet in this system,
+                  // not just whoever is online: the car is read off their sheet, which
+                  // exists whether or not they are currently connected.
+                  db.all(
+                    `SELECT username FROM character_sheets WHERE system = ? AND is_npc = 0 AND username != ? ORDER BY username`,
+                    [system, info.userName],
+                    (pErr, pRows) => {
+                      const players = pErr || !pRows ? [] : pRows.map(r => r.username);
+                      socket.emit('sheetData', { ...row, data, ride, players });
+                    }
+                  );
                 });
               });
             } else {

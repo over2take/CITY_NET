@@ -137,6 +137,54 @@ describe('vehicles section', () => {
     expect([...select.options].map(o => o.textContent)).toContain('CAR');
   });
 
+  it('picks the car owner from a list rather than typing a name', () => {
+    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
+    render(
+      <SheetRenderer
+        template={{ ...citiesWithoutNumber, tabs: ['GEAR'], sections: [status] }}
+        data={{ in_vehicle: 'ride' } as never}
+        readOnly={false}
+        onFieldChange={vi.fn()}
+        optionContext={{ players: ['cody', 'mouse'] }}
+      />
+    );
+    // It holds a login name, and a typo silently drops you back to being on foot.
+    const select = screen.getByLabelText('OWNER') as HTMLSelectElement;
+    expect([...select.options].map(o => o.textContent)).toEqual(['—', 'CODY', 'MOUSE']);
+  });
+
+  it('keeps showing an owner who is no longer listed', () => {
+    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
+    render(
+      <SheetRenderer
+        template={{ ...citiesWithoutNumber, tabs: ['GEAR'], sections: [status] }}
+        data={{ in_vehicle: 'ride', ride_owner: 'ghost' } as never}
+        readOnly={false}
+        onFieldChange={vi.fn()}
+        optionContext={{ players: ['cody'] }}
+      />
+    );
+    // Otherwise the field looks blank while it still holds their name, and the sheet
+    // disagrees with itself about who you are riding with.
+    const select = screen.getByLabelText('OWNER') as HTMLSelectElement;
+    expect(select.value).toBe('ghost');
+    expect([...select.options].map(o => o.textContent)).toContain('GHOST (GONE)');
+  });
+
+  it('offers nobody when the renderer was given no player list', () => {
+    const status = citiesWithoutNumber.sections.find(s => s.id === 'vehicle_status')!;
+    render(
+      <SheetRenderer
+        template={{ ...citiesWithoutNumber, tabs: ['GEAR'], sections: [status] }}
+        data={{ in_vehicle: 'ride' } as never}
+        readOnly={false}
+        onFieldChange={vi.fn()}
+      />
+    );
+    // A missing context must not throw — the field is simply empty.
+    expect(([...(screen.getByLabelText('OWNER') as HTMLSelectElement).options]).map(o => o.value)).toEqual(['']);
+  });
+
   it('leaves the weapons section alone, which declares no group size', () => {
     // Weapons render every row as before; only sections opting in collapse.
     const weapons = citiesWithoutNumber.sections.find(s => s.id === 'weapons')!;

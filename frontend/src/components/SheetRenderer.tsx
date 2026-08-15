@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { SheetTemplate, SheetSection, SheetField, SheetData } from '../sheets';
+import type { SheetTemplate, SheetSection, SheetField, SheetData, SheetOptionContext } from '../sheets';
 import { TvPortrait } from './TvPortrait';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
@@ -47,6 +47,9 @@ interface SheetRendererProps {
   /** House-rule gate: show the 1-LUCK fumble shield control. Off = a natural
    *  1 always fumbles and the button is hidden. */
   allowFumbleShield?: boolean;
+  /** Choices a template cannot derive from the sheet, e.g. the other players
+   *  whose vehicle you could be riding in. */
+  optionContext?: SheetOptionContext;
   /** Roll a death save (shown at 0 HP when the template defines deathSave).
    *  Server-resolved: 1d10 + tracked penalty vs the save stat. */
   onDeathSave?: () => void;
@@ -91,12 +94,23 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
+/**
+ * Choices a template cannot derive from the sheet alone — the other players you could be
+ * riding with, say. Carried as context because it has to reach a field nested five
+ * section layouts deep, and threading a prop through all of them for one field would put
+ * the plumbing everywhere the need is not.
+ */
+/** Stable identity: a fresh {} each render would re-render every field below. */
+const EMPTY_OPTION_CONTEXT: SheetOptionContext = {};
+const OptionContext = React.createContext<SheetOptionContext>(EMPTY_OPTION_CONTEXT);
+
 function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }: {
   field: SheetField; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
   style?: React.CSSProperties;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
 }) {
+  const optionContext = React.useContext(OptionContext);
   const value = data[field.id] ?? '';
   if (field.source && field.sourceWritable && !readOnly) {
     // Writable linked field (token AC): edits go through the normal save
@@ -134,7 +148,7 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
     );
   }
   if (field.type === 'select') {
-    const options = typeof field.options === 'function' ? field.options(data) : (field.options ?? []);
+    const options = typeof field.options === 'function' ? field.options(data, optionContext) : (field.options ?? []);
     // A template that names its own blank state keeps it; anything else gets the
     // placeholder, so a select is never silently pre-set to its first real choice.
     const hasBlank = options.some(o => o.value === '');
@@ -968,7 +982,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, optionContext }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // If the active tab gets hidden (house rule toggled off), fall back to the
@@ -1002,6 +1016,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
   const tabHasRolls = sectionsForTab.some(s => s.fields.some(f => f.roll));
 
   return (
+    <OptionContext.Provider value={optionContext ?? EMPTY_OPTION_CONTEXT}>
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <style>{`
         .sheet-input::-webkit-outer-spin-button, .sheet-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -1068,5 +1083,6 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         </div>
       )}
     </div>
+    </OptionContext.Provider>
   );
 }

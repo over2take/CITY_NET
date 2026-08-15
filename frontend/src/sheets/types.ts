@@ -8,6 +8,12 @@ export type SheetFieldType = 'number' | 'text' | 'textarea' | 'select';
 
 export interface SheetOption { value: string; label: string }
 
+/** Choices a sheet cannot know from its own data — supplied by whatever renders it. */
+export interface SheetOptionContext {
+  /** Other players holding a sheet in this system, for fields that name one. */
+  players?: string[];
+}
+
 export interface SheetField {
   id: string;
   label: string;
@@ -45,7 +51,7 @@ export interface SheetField {
    *  once the sheet has something in it — picking a vehicle by its name rather than by
    *  its row number. Supply an option with an empty value to name the blank state
    *  ("ON FOOT"); otherwise a plain em-dash placeholder is added for you. */
-  options?: SheetOption[] | ((data: SheetData) => SheetOption[]);
+  options?: SheetOption[] | ((data: SheetData, ctx: SheetOptionContext) => SheetOption[]);
 }
 
 /** 'weapons' lays fields out as structured rows (name / dmg / skill / rof),
@@ -162,4 +168,7 @@ export interface CharacterSheet {
   portrait_url: string | null;
   is_npc: number;
   npc_label?: string | null;
+  /** Envelope fields the server attaches, not stored on the sheet. */
+  players?: string[];
+  ride?: { owner: string; vehicleName: string; mounts: { index: number; name: string; dmg: string; skill: string }[] } | null;
 }

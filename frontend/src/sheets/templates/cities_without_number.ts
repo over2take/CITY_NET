@@ -274,12 +274,25 @@ export const citiesWithoutNumber: SheetTemplate = {
           hint: 'While you are in a vehicle, attacks on you hit the vehicle instead: its Armour Rating cuts the damage and the rest comes off its HP. You are only hurt once it is destroyed.',
         },
         {
-          id: 'ride_owner', label: 'WHOSE', type: 'text', placeholder: 'player name',
-          hint: "Only used when RIDING IN is another player's vehicle. Their login name — the vehicle's HP, AC and armour are read from their sheet, so it takes damage once no matter how many of you are aboard.",
+          // Picked, not typed: this is a login name, and a typo silently drops you back
+          // to being on foot with no cover and nothing on screen to say why.
+          id: 'ride_owner', label: 'OWNER', type: 'select',
+          options: (data, ctx) => {
+            const current = String(data.ride_owner ?? '').trim();
+            const names = ctx.players ?? [];
+            return [
+              { value: '', label: '—' },
+              ...names.map(n => ({ value: n, label: n.toUpperCase() })),
+              // Someone who has since been removed still shows, rather than the field
+              // appearing to be blank while it holds their name.
+              ...(current && !names.includes(current) ? [{ value: current, label: `${current.toUpperCase()} (GONE)` }] : []),
+            ];
+          },
+          hint: "Whose vehicle you are in — the other player, not you. The car's HP, AC and armour are read from their sheet, so it takes damage once no matter how many of you are aboard.",
         },
         {
           id: 'ride_vehicle', label: 'THEIR #', type: 'number', placeholder: '1',
-          hint: 'Which of their vehicle rows, 1 to 6.',
+          hint: 'Which of their vehicle rows, 1 to 6. Ask them — you cannot see their sheet.',
         },
         {
           id: 'vehicle_seat', label: 'SEAT', type: 'select',
