@@ -21,7 +21,7 @@ function resolve(db, sheetId, sheetData, cb) {
   const occ = attackCwn.readOccupancy(sheetData);
   if (!occ) return cb(null);
   const done = (ownerSheetId, ownerData) => {
-    const vehicle = attackCwn.getVehicle(ownerData, occ.vehicleIndex, { moving: occ.moving });
+    const vehicle = attackCwn.getVehicle(ownerData, occ.vehicleIndex);
     cb(vehicle && !vehicle.destroyed ? { ...vehicle, sheetId: ownerSheetId } : null);
   };
   if (!occ.owner) {
@@ -60,7 +60,7 @@ function getRideMounts(db, sheetData, cb) {
       if (err || !row) return cb(null);
       let ownerData;
       try { ownerData = JSON.parse(row.data || '{}'); } catch (e) { return cb(null); }
-      const vehicle = attackCwn.getVehicle(ownerData, occ.vehicleIndex, { moving: occ.moving });
+      const vehicle = attackCwn.getVehicle(ownerData, occ.vehicleIndex);
       if (!vehicle) return cb(null);
       const mounts = [];
       for (let i = 1; i <= attackCwn.VEHICLE_WEAPON_ROWS; i++) {
@@ -152,7 +152,7 @@ function syncAll(db, cb) {
         const occ = occupancy.get(sh.username);
         const ownerSheet = occ ? (occ.owner ? byUser.get(occ.owner) : sh) : null;
         const vehicle = ownerSheet
-          ? attackCwn.getVehicle(ownerSheet.data, occ.vehicleIndex, { moving: occ.moving })
+          ? attackCwn.getVehicle(ownerSheet.data, occ.vehicleIndex)
           : null;
         const usable = vehicle && !vehicle.destroyed ? vehicle : null;
         const occupants = usable ? (aboard.get(vehicleKey(sh.username, occ)) || []) : [];

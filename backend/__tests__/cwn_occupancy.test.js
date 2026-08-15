@@ -30,7 +30,7 @@ describe('readOccupancy', () => {
   it('reads one of your own vehicles without naming an owner', () => {
     // No owner means no second sheet to fetch, which is the common case.
     expect(attackCwn.readOccupancy({ in_vehicle: 'own:2' }))
-      .toMatchObject({ owner: null, vehicleIndex: 2, moving: false });
+      .toMatchObject({ owner: null, vehicleIndex: 2 });
   });
 
   it('reads riding in another player’s vehicle', () => {
@@ -38,9 +38,10 @@ describe('readOccupancy', () => {
       .toMatchObject({ owner: 'cody', vehicleIndex: 3 });
   });
 
-  it('carries the declared movement', () => {
-    expect(attackCwn.readOccupancy({ in_vehicle: 'own:1', vehicle_moving: '1' }).moving).toBe(true);
-    expect(attackCwn.readOccupancy({ in_vehicle: 'own:1', vehicle_moving: '' }).moving).toBe(false);
+  it('does not carry movement, which belongs to the vehicle', () => {
+    // Two occupants declaring it separately could disagree, and it is an eight point
+    // swing in the vehicle's AC.
+    expect(attackCwn.readOccupancy({ in_vehicle: 'own:1' }).moving).toBeUndefined();
   });
 
   it('falls back to on foot when a ride names no one', () => {
@@ -75,9 +76,9 @@ describe('getVehicle', () => {
   });
 
   it('takes -4 while stationary and the driver’s Drive while moving', () => {
-    const data = { ...vehicle(1), drive: 3 };
-    expect(attackCwn.getVehicle(data, 1, { moving: false }).ac).toBe(8);
-    expect(attackCwn.getVehicle(data, 1, { moving: true }).ac).toBe(15);
+    // Read off the vehicle, so everyone aboard agrees about it.
+    expect(attackCwn.getVehicle({ ...vehicle(1), drive: 3 }, 1).ac).toBe(8);
+    expect(attackCwn.getVehicle({ ...vehicle(1, { vehicle1_moving: '1' }), drive: 3 }, 1).ac).toBe(15);
   });
 
   it('marks a wreck as destroyed so it stops being cover', () => {

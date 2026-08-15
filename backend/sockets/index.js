@@ -1607,7 +1607,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     const handleCwnAttack = (info, payload, color) => {
       const system = 'cities_without_number';
       db.get(
-        `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+        `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
         [info.userName, system],
         (err2, sheetRow) => {
           if (err2 || !sheetRow) return;
@@ -1655,9 +1655,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               const acNote = ride ? ` (${ride.vehicle.name}, ${ride.vehicle.moving ? 'moving' : 'stationary'})` : '';
 
               // Firing out of a moving vehicle is harder, whether the gun is a mount or
-              // one you are leaning out of the window with.
-              const attackerRide = attackCwn.readOccupancy(attackerData);
-              const firePenalty = attackerRide && attackerRide.moving ? attackCwn.MOVING_FIRE_PENALTY : 0;
+              // one you are leaning out of the window with. Resolved rather than read off
+              // the attacker's own sheet, because movement lives on the vehicle now and
+              // the vehicle may be someone else's.
+              vehicleState.resolve(db, sheetRow.id, attackerData, (attackerVehicle) => {
+              const firePenalty = attackerVehicle && attackerVehicle.moving ? attackCwn.MOVING_FIRE_PENALTY : 0;
 
               db.get(`SELECT value FROM global_settings WHERE key = 'cwn_trauma'`, (tErr, tRow) => {
                 const traumaOn = tErr || !tRow || tRow.value !== '0'; // default ON
@@ -1740,6 +1742,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     traumatic, traumaRoll: trauma ? trauma.roll : null,
                   }, traumatic);
                 });
+              });
               });
               });
             });

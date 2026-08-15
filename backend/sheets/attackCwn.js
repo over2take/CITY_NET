@@ -130,7 +130,6 @@ const vehicleDestroyed = (hpCurrent) => num(hpCurrent) <= 0;
 const readOccupancy = (data) => {
   const raw = String(data?.in_vehicle ?? '').trim();
   if (!raw) return null;
-  const moving = !!num(data?.vehicle_moving);
   const seat = String(data?.vehicle_seat ?? '').trim().toLowerCase();
   const inRange = (i) => Number.isInteger(i) && i >= 1 && i <= VEHICLE_ROWS;
 
@@ -138,28 +137,33 @@ const readOccupancy = (data) => {
     const owner = String(data?.ride_owner ?? '').trim();
     const index = Number(data?.ride_vehicle);
     if (!owner || !inRange(index)) return null;
-    return { owner, vehicleIndex: index, moving, seat };
+    return { owner, vehicleIndex: index, seat };
   }
   const own = /^own:(\d+)$/.exec(raw);
   if (!own) return null;
   const index = Number(own[1]);
   if (!inRange(index)) return null;
   // No owner: the vehicle is on this same sheet, so the caller needs no second lookup.
-  return { owner: null, vehicleIndex: index, moving, seat };
+  return { owner: null, vehicleIndex: index, seat };
 };
 
 /**
  * The vehicle a character is riding in, read off whichever sheet holds it.
  *
+ * Whether it is moving is read from the vehicle too, so everyone aboard agrees.
+ *
  * A vehicle with no HP maximum is not a vehicle yet — a half-filled row should not start
  * soaking damage on its owner's behalf, so it resolves to `null` and the occupant is
  * attacked normally.
  */
-const getVehicle = (ownerData, index, opts = {}) => {
+const getVehicle = (ownerData, index) => {
   const i = Number(index);
   if (!Number.isInteger(i) || i < 1 || i > VEHICLE_ROWS) return null;
   const hpMax = num(ownerData?.[`vehicle${i}_hp_max`]);
   if (hpMax <= 0) return null;
+  // Movement belongs to the vehicle, not to each person in it: two occupants declaring
+  // it separately could disagree, and it is an eight point swing in the vehicle's AC.
+  const moving = !!num(ownerData?.[`vehicle${i}_moving`]);
   const raw = ownerData?.[`vehicle${i}_hp`];
   // Blank current HP means undamaged, matching how token HP is read.
   const hp = raw === undefined || raw === null || raw === '' ? hpMax : num(raw);
@@ -171,12 +175,12 @@ const getVehicle = (ownerData, index, opts = {}) => {
     hpField: `vehicle${i}_hp`,
     armorRating: num(ownerData?.[`vehicle${i}_armor`]),
     ac: vehicleAc(ownerData?.[`vehicle${i}_ac`], {
-      moving: opts.moving,
+      moving,
       // Drive is the driver's skill; the owner is presumed to be driving, which is who
       // the AC is read from anyway.
       driveSkill: num(ownerData?.drive),
     }),
-    moving: !!opts.moving,
+    moving,
     // Already wrecked: it stops being cover rather than absorbing forever.
     destroyed: vehicleDestroyed(hp),
   };

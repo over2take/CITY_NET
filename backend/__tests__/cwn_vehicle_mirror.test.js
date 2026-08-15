@@ -36,7 +36,7 @@ const CAR = { vehicle1_name: 'Kestrel', vehicle1_hp_max: 20, vehicle1_armor: 5, 
 
 describe('vehicle state on the token', () => {
   it('writes the derived numbers, not the sheet', async () => {
-    await sheet('CODY', { ...CAR, in_vehicle: 'own:1', drive: 3, vehicle_moving: '1', name: 'Cody' });
+    await sheet('CODY', { ...CAR, in_vehicle: 'own:1', drive: 3, vehicle1_moving: '1', name: 'Cody' });
     await token('CODY');
     await sync(db);
 

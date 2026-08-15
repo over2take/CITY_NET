@@ -153,7 +153,7 @@ describe('attacking someone inside a vehicle', () => {
     expect((await attack()).result.ac).toBe(8);
 
     await run(db, `UPDATE character_sheets SET data = ? WHERE username = 'MOUSE'`,
-      [JSON.stringify({ ...CAR, in_vehicle: 'own:1', drive: 2, vehicle_moving: '1' })]);
+      [JSON.stringify({ ...CAR, in_vehicle: 'own:1', drive: 2, vehicle1_moving: '1' })]);
     expect((await attack()).result.ac).toBe(14);
   });
 
@@ -259,7 +259,7 @@ describe('a gunner firing the owner’s mounts', () => {
 describe('firing out of a moving vehicle', () => {
   it('takes -4 on the to-hit', async () => {
     await run(db, `UPDATE character_sheets SET data = ? WHERE username = 'GHOST'`,
-      [JSON.stringify({ ...ATTACKER, ...CAR, in_vehicle: 'own:1', vehicle_moving: '1' })]);
+      [JSON.stringify({ ...ATTACKER, ...CAR, in_vehicle: 'own:1', vehicle1_moving: '1' })]);
     await sheet('MOUSE', {});
     await token('MOUSE');
 
