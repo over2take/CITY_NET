@@ -99,11 +99,27 @@ export const VEHICLE_PRESETS: VehiclePreset[] = [
 export const getPreset = (id: string | null | undefined): VehiclePreset | null =>
   VEHICLE_PRESETS.find(p => p.id === String(id ?? '').trim().toLowerCase()) ?? null;
 
-/** Choices for the TYPE field. Blank stays available — a custom vehicle is legitimate. */
-export const VEHICLE_TYPE_OPTIONS = [
-  { value: '', label: 'CUSTOM' },
-  ...VEHICLE_PRESETS.map(p => ({ value: p.id, label: p.label })),
-];
+/**
+ * Choices for the TYPE field. Every vehicle is one of the book's — there is no CUSTOM.
+ *
+ * A custom vehicle was a hole rather than a feature: with no type it had no crew, no
+ * hardpoints and no Trauma Target, so it seated one person, refused to fire the mounts you
+ * could still fill in, and took traumatic hits twice as often as any real vehicle. Start
+ * from the nearest book entry and edit the numbers instead.
+ */
+export const VEHICLE_TYPE_OPTIONS = VEHICLE_PRESETS.map(p => ({ value: p.id, label: p.label }));
+
+/** What a new vehicle starts as, before you change it to the one you meant. */
+export const DEFAULT_VEHICLE_TYPE = 'motorcycle';
+
+/**
+ * Whether a name is just a type label rather than something the player chose.
+ *
+ * A vehicle called MOTORCYCLE has not been named; one called Betty has. Changing the type
+ * should rename the first and leave the second alone.
+ */
+export const isPresetName = (name: string) =>
+  VEHICLE_PRESETS.some(p => p.label === String(name ?? '').trim().toUpperCase());
 
 /**
  * The sheet fields a preset writes for vehicle `i`.

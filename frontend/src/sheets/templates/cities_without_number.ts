@@ -1,5 +1,5 @@
 import type { SheetTemplate, SheetField } from '../types';
-import { VEHICLE_TYPE_OPTIONS, getPreset, presetFields } from '../vehiclePresets';
+import { VEHICLE_TYPE_OPTIONS, DEFAULT_VEHICLE_TYPE, getPreset, presetFields, isPresetName } from '../vehiclePresets';
 import { VEHICLE_WEAPON_OPTIONS, getVehicleWeapon, weaponMountFields } from '../vehicleWeapons';
 import {
   FITTING_OPTIONS, describeFitting, getFitting, fittingFitsVehicle, budgetFor,
@@ -68,8 +68,11 @@ const vehicleRow = (i: number): SheetField[] => [
       const preset = getPreset(value);
       if (!preset) return {};
       const out = presetFields(i, preset);
-      // A vehicle someone has named is theirs; the type should not rename it.
-      if (String(data[`vehicle${i}_name`] ?? '').trim()) delete out[`vehicle${i}_name`];
+      // A vehicle someone has named is theirs. One still carrying a type label has not
+      // been named at all, so it follows the type — otherwise a MOTORCYCLE changed to a
+      // Tank stays called MOTORCYCLE.
+      const current = String(data[`vehicle${i}_name`] ?? '').trim();
+      if (current && !isPresetName(current)) delete out[`vehicle${i}_name`];
       // The * and ** vehicles carry an immunity rather than an Armour Rating, so the rule
       // goes where that vehicle can be read.
       if (preset.note) {
@@ -322,6 +325,10 @@ export const citiesWithoutNumber: SheetTemplate = {
       layout: 'weapons',
       tab: 'GEAR',
       columns: CWN_VEHICLE_COLUMNS,
+      // A new vehicle starts as the cheapest thing in the book rather than as a blank:
+      // an unset type meant no crew, no hardpoints and no Trauma Target, which is a hole
+      // rather than a choice. Change it to the one you meant.
+      onAdd: (index) => presetFields(index, getPreset(DEFAULT_VEHICLE_TYPE)!),
       // Hardpoints are how many Heavy weapons the vehicle carries, so a motorcycle shows
       // no mount rows and a tank shows three. Drawing empty mounts on a vehicle that
       // cannot mount anything states something false about it.

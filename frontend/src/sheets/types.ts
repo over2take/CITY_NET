@@ -106,6 +106,13 @@ export interface SheetSection {
    * grouping arithmetic is untouched and a hidden row keeps whatever is stored in it.
    */
   rowHidden?: (row: SheetField[], data: SheetData) => boolean;
+  /**
+   * Fields to write when + ADD creates an entry, given its 1-based index.
+   *
+   * With it, a section holds nothing until you add something and each entry starts from a
+   * sensible default. Without it, ADD reveals a blank row as before.
+   */
+  onAdd?: (index: number) => Record<string, string | number>;
   /** Which bottom tab this section lives under (default: the first tab). */
   tab?: string;
   fields: SheetField[];

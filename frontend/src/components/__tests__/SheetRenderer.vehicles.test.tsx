@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SheetRenderer } from '../SheetRenderer';
 import { citiesWithoutNumber, CWN_VEHICLE_WEAPON_ROWS } from '../../sheets/templates/cities_without_number';
-import { VEHICLE_PRESETS, getPreset, presetFields } from '../../sheets/vehiclePresets';
+import { VEHICLE_PRESETS, VEHICLE_TYPE_OPTIONS, getPreset, presetFields, isPresetName } from '../../sheets/vehiclePresets';
 
 /**
  * Repeated entries collapse.
@@ -47,16 +47,29 @@ describe('vehicles section', () => {
     expect(Math.max(...VEHICLE_PRESETS.map(p => p.hrdpt))).toBe(CWN_VEHICLE_WEAPON_ROWS);
   });
 
-  it('shows one empty vehicle on a blank sheet, not six', () => {
+  it('shows nothing at all until a vehicle is added', () => {
     renderSheet({});
+    // A blank entry full of placeholder text reads like real data at a glance.
+    expect(screen.queryByLabelText('VEHICLE')).toBeNull();
     expect(screen.getByText(/\+ ADD/)).toBeInTheDocument();
   });
 
-  it('offers a way to reveal the next one', async () => {
-    renderSheet({});
-    const before = document.querySelectorAll('input').length;
+  it('seeds a motorcycle when you add one', async () => {
+    const onFieldsChange = vi.fn();
+    renderSheet({}, { onFieldsChange });
     await userEvent.click(screen.getByText(/\+ ADD/));
-    expect(document.querySelectorAll('input').length).toBeGreaterThan(before);
+    // Not a blank row: an unset type meant no crew, no hardpoints and no Trauma Target.
+    expect(onFieldsChange).toHaveBeenCalledTimes(1);
+    expect(onFieldsChange.mock.calls[0][0]).toMatchObject({
+      vehicle1_type: 'motorcycle', vehicle1_crew: 1, vehicle1_hrdpt: 0, vehicle1_tt: 10,
+    });
+  });
+
+  it('adds the next one after the ones already there', async () => {
+    const onFieldsChange = vi.fn();
+    renderSheet({ ...presetFields(1, getPreset('car')!) }, { onFieldsChange });
+    await userEvent.click(screen.getByText(/\+ ADD/));
+    expect(onFieldsChange.mock.calls[0][0]).toHaveProperty('vehicle2_type', 'motorcycle');
   });
 
   it('shows a filled vehicle without anyone pressing anything', () => {
@@ -106,13 +119,6 @@ describe('vehicles section', () => {
     expect(screen.getAllByLabelText('VEHICLE')).toHaveLength(1);
   });
 
-  it('shows a single blank on an empty sheet, and one more per ADD', async () => {
-    renderSheet({});
-    expect(screen.getAllByLabelText('VEHICLE')).toHaveLength(1);
-    await userEvent.click(screen.getByText(/\+ ADD/));
-    expect(screen.getAllByLabelText('VEHICLE')).toHaveLength(2);
-  });
-
   it('no longer carries the occupancy block, which the window replaced', () => {
     // Where people are sitting is shared state, not something each occupant declares on
     // their own sheet where nothing reconciles it.
@@ -145,6 +151,23 @@ describe('the sheet reacting to the vehicle type', () => {
     expect(fill('car')).toHaveProperty('vehicle1_name', 'CAR');
     // Their Betty stays Betty.
     expect(fill('car', { vehicle1_name: 'Betty' })).not.toHaveProperty('vehicle1_name');
+  });
+
+  it('renames one still carrying a type label', () => {
+    // A vehicle called MOTORCYCLE has not been named at all, so changing it to a Tank
+    // should not leave it called MOTORCYCLE.
+    expect(fill('tank', { vehicle1_name: 'MOTORCYCLE' })).toHaveProperty('vehicle1_name', 'TANK');
+    expect(fill('tank', { vehicle1_name: '  micro flyer ' })).toHaveProperty('vehicle1_name', 'TANK');
+  });
+
+  it('offers no CUSTOM type', () => {
+    // A vehicle with no type had no crew, no hardpoints and no Trauma Target: it seated
+    // one person, refused to fire mounts you could still fill in, and took traumatic hits
+    // twice as often as any real vehicle.
+    expect(VEHICLE_TYPE_OPTIONS.some(o => o.value === '')).toBe(false);
+    expect(VEHICLE_TYPE_OPTIONS).toHaveLength(VEHICLE_PRESETS.length);
+    expect(isPresetName('TANK')).toBe(true);
+    expect(isPresetName('Betty')).toBe(false);
   });
 
   it('writes the immunity rule into that vehicle’s own notes, once', () => {
@@ -280,8 +303,8 @@ describe('picking a type writes once', () => {
 
   it('falls back to single writes when no batch handler is given', async () => {
     const onFieldChange = vi.fn();
-    renderSheet({}, { onFieldChange });
-    await userEvent.selectOptions(screen.getAllByLabelText('TYPE')[0], 'motorcycle');
+    renderSheet({ ...presetFields(1, getPreset('car')!) }, { onFieldChange });
+    await userEvent.selectOptions(screen.getAllByLabelText('TYPE')[0], 'tank');
     expect(onFieldChange.mock.calls.length).toBeGreaterThan(1);
   });
 });

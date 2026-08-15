@@ -34,6 +34,9 @@ Cities Without Number gets vehicles: on the sheet, in combat, and shared across 
 
 ### Changed
 
+- **There is no CUSTOM vehicle.** It was a hole rather than a feature: with no type a vehicle had no crew, no hardpoints and no Trauma Target, so it seated one person, refused to fire the mounts you could still fill in, and took traumatic hits twice as often as any real one — none of which said anything on screen. Every vehicle is one of the book's now; start from the nearest and edit the numbers.
+
+  The section holds nothing until you add something, and a new vehicle starts as a Motorcycle. Changing the type renames it, unless you have given it a name of your own — a vehicle called MOTORCYCLE has not been named, one called Betty has.
 - **Attacks on someone in a vehicle hit the vehicle.** Armour Rating subtracts and the remainder comes off the vehicle's HP; the people inside are untouched until it is destroyed, at which point it stops being cover. A vehicle's AC is its own plus the driver's Drive while moving and four *worse* while stationary, and firing out of a moving one costs four either way.
 
   Damage lands on the owner's sheet, so four people in one car share one pool. Every unreadable state resolves to *on foot* — an owner who logged out, a row never filled in, a wreck — because a broken reference should cost someone their cover, never make them impossible to hit.

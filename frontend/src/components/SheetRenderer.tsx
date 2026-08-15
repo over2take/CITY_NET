@@ -780,15 +780,16 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
     }));
 
   // Exactly the entries that hold something, and no more: + ADD is how you get another.
-  // Showing a spare blank as well meant one vehicle rendered as two, the second of them
-  // full of ghost placeholder text that reads like real data at a glance.
+  // A section that can create its own entries shows nothing at all until you add one —
+  // an empty row of placeholder text reads like real data at a glance.
   //
   // Derived from the data rather than remembered, which is why the entries you filled in
   // are the ones that come back after a reload.
   const filled = rowsPerGroup ? groups.reduce((n, g, i) => (hasData(g) ? i + 1 : n), 0) : 0;
   const [revealed, setRevealed] = React.useState(0);
+  const floor = section.onAdd ? 0 : 1;
   const visibleGroups = rowsPerGroup
-    ? Math.min(groups.length, Math.max(filled, revealed + 1, 1))
+    ? Math.min(groups.length, Math.max(filled, revealed, floor))
     : 0;
 
   // A row shorter than the grid is wide leaves columns free, and CSS grid flows the next
@@ -898,7 +899,13 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
       </div>
       {!readOnly && visibleGroups < groups.length && (
         <button
-          onClick={() => setRevealed(visibleGroups)}
+          onClick={() => {
+            // A section that seeds its entries writes one; otherwise ADD just reveals the
+            // next blank row, which is what weapons and spells still do.
+            const seed = section.onAdd?.(visibleGroups + 1);
+            if (seed && onFieldsChange) onFieldsChange(seed);
+            else setRevealed(visibleGroups + 1);
+          }}
           style={{
             marginTop: '6px', background: 'none', border: '1px solid var(--green)',
             color: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit',
