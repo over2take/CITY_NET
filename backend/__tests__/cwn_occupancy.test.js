@@ -95,3 +95,46 @@ describe('getVehicle', () => {
     expect(attackCwn.getVehicle(vehicle(1), attackCwn.VEHICLE_ROWS + 1)).toBeNull();
   });
 });
+
+describe('trauma against a vehicle', () => {
+  const weapon = (trauma) => ({ name: 'Gun', dmg: '1d6', trauma: attackCwn.parseTrauma(trauma) });
+  const always = () => 0.999; // top of the die, so the trauma threshold is always met
+
+  it('reads the book marker off the trauma value', () => {
+    expect(attackCwn.parseTrauma('d12/x3!').vsVehicles).toBe(true);
+    expect(attackCwn.parseTrauma('d12/x3').vsVehicles).toBe(false);
+    // Spacing is a typo waiting to happen in a hand-typed field.
+    expect(attackCwn.parseTrauma('d12/x3 !').vsVehicles).toBe(true);
+  });
+
+  it('lets a marked weapon traumatise a vehicle', () => {
+    const t = attackCwn.rollTrauma(weapon('d12/x3!'), true, 12, always, { vsVehicle: true });
+    expect(t).toBeTruthy();
+    expect(t.traumatic).toBe(true);
+  });
+
+  it('refuses an unmarked one', () => {
+    // A pistol's trauma die is devastating to a person and does nothing at all to a car.
+    expect(attackCwn.rollTrauma(weapon('d12/x3'), true, 12, always, { vsVehicle: true })).toBeNull();
+  });
+
+  it('leaves people alone — an unmarked weapon still traumatises them', () => {
+    const t = attackCwn.rollTrauma(weapon('d12/x3'), true, 12, always);
+    expect(t).toBeTruthy();
+    expect(t.traumatic).toBe(true);
+  });
+
+  it('rolls against the trauma target it is given', () => {
+    // The vehicle's own TT, which is what the attack path now passes for a car.
+    const t = attackCwn.rollTrauma(weapon('d12/x3!'), true, 10, always, { vsVehicle: true });
+    expect(t.tt).toBe(10);
+  });
+});
+
+describe('a vehicle carries its own trauma target', () => {
+  it('reads it off the vehicle, defaulting when unset', () => {
+    expect(attackCwn.getVehicle({ vehicle1_hp_max: 20, vehicle1_tt: 10 }, 1).traumaTarget).toBe(10);
+    expect(attackCwn.getVehicle({ vehicle1_hp_max: 20 }, 1).traumaTarget)
+      .toBe(attackCwn.DEFAULT_TRAUMA_TARGET);
+  });
+});

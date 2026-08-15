@@ -56,13 +56,17 @@ const num = (v) => {
 };
 
 // 'd8/x3' or 'd8/3' -> { die: 8, rating: 3 }; blank/invalid -> null.
+//
+// A trailing '!' is the book's marker for a weapon whose Trauma Die can inflict Traumatic
+// Hits on vehicles and drones. Without it the die still works on people and does nothing
+// to a car, so it is carried through rather than discarded.
 const parseTrauma = (s) => {
-  const m = String(s || '').trim().match(/^d(\d{1,3})\s*\/\s*x?(\d{1,2})$/i);
+  const m = String(s || '').trim().match(/^d(\d{1,3})\s*\/\s*x?(\d{1,2})\s*(!?)$/i);
   if (!m) return null;
   const die = parseInt(m[1], 10);
   const rating = parseInt(m[2], 10);
   if (die < 2 || rating < 2) return null;
-  return { die, rating };
+  return { die, rating, vsVehicles: m[3] === '!' };
 };
 
 // '2/13' or '2/AC13' -> { dmg: 2, ac: 13 }; blank/invalid -> null.
@@ -77,11 +81,9 @@ const parseShock = (s) => {
 /**
  * Vehicle combat.
  *
- * Encoded here rather than left to the table because they are arithmetic, and because
- * the AC rule in particular is easy to get backwards. Nothing in this block is wired
- * into an attack yet: `getAttackTarget` resolves only token rows, so a vehicle held on a
- * sheet cannot currently be the target of one. These are the rules, ready for the moment
- * it can be.
+ * Encoded here rather than left to the table because it is arithmetic, and because the AC
+ * rule in particular is easy to get backwards: the moving bonus scales with the driver
+ * while the stationary penalty is flat.
  */
 
 /** A stationary vehicle is easier to hit than its own base AC suggests. */
@@ -175,6 +177,8 @@ const getVehicle = (ownerData, index) => {
     hpMax,
     hpField: `vehicle${i}_hp`,
     armorRating: num(ownerData?.[`vehicle${i}_armor`]),
+    // The vehicle's own Trauma Target, not that of whoever is sitting in it.
+    traumaTarget: num(ownerData?.[`vehicle${i}_tt`]) || DEFAULT_TRAUMA_TARGET,
     ac: vehicleAc(ownerData?.[`vehicle${i}_ac`], {
       moving,
       // Drive is the driver's skill; the owner is presumed to be driving, which is who
@@ -264,8 +268,11 @@ const rollDamage = (data, weapon, rng = cryptoRng) => {
 // Returns null when the weapon has no trauma or the rule is off; otherwise
 // { die, rating, roll, tt, traumatic }.
 const DEFAULT_TRAUMA_TARGET = 6;
-const rollTrauma = (weapon, traumaEnabled, targetTT = DEFAULT_TRAUMA_TARGET, rng = cryptoRng) => {
+const rollTrauma = (weapon, traumaEnabled, targetTT = DEFAULT_TRAUMA_TARGET, rng = cryptoRng, opts = {}) => {
   if (!traumaEnabled || !weapon.trauma) return null;
+  // Only weapons the book marks with ! can traumatise a machine. A pistol's trauma die is
+  // devastating to a person and does nothing at all to a car.
+  if (opts.vsVehicle && !weapon.trauma.vsVehicles) return null;
   const tt = num(targetTT) > 0 ? num(targetTT) : DEFAULT_TRAUMA_TARGET;
   const roll = Math.floor(rng() * weapon.trauma.die) + 1;
   return {

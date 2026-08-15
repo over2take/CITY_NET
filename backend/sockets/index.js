@@ -1812,7 +1812,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   // Trauma resolves vs the DEFENDER's Trauma Target (sheet
                   // field trauma_target, default 6); the weapon rating is
                   // the damage multiplier.
-                  const trauma = attackCwn.rollTrauma(weapon, traumaOn, defenderData.trauma_target);
+                  // A vehicle has its own Trauma Target, and only weapons marked ! in the book can
+                  // traumatise one at all — the occupant's trauma target is not the car's.
+                  const trauma = ride
+                    ? attackCwn.rollTrauma(weapon, traumaOn, ride.vehicle.traumaTarget, undefined, { vsVehicle: true })
+                    : attackCwn.rollTrauma(weapon, traumaOn, defenderData.trauma_target);
                   const traumatic = !!(trauma && trauma.traumatic);
                   const total = Math.max(0, traumatic ? dmg.total * trauma.rating : dmg.total);
                   let dmgHistory = `${weapon.name} damage vs ${target.name} [${dmg.breakdown} = ${dmg.total}]`;

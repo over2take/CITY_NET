@@ -26,7 +26,7 @@ describe('CWN weapon parsing', () => {
     expect(w.dmg).toBe('1d8+1');
     expect(w.mod).toBe('dex_mod');
     expect(w.atk).toBe(1);
-    expect(w.trauma).toEqual({ die: 8, rating: 3 });
+    expect(w.trauma).toEqual({ die: 8, rating: 3, vsVehicles: false });
     expect(w.shock).toEqual({ dmg: 2, ac: 13 });
     expect(w.attackType).toBe('ranged');
   });
@@ -49,8 +49,8 @@ describe('CWN weapon parsing', () => {
   });
 
   it('parses trauma and shock string variants', () => {
-    expect(attackCwn.parseTrauma('d10/x2')).toEqual({ die: 10, rating: 2 });
-    expect(attackCwn.parseTrauma('d6/3')).toEqual({ die: 6, rating: 3 });
+    expect(attackCwn.parseTrauma('d10/x2')).toEqual({ die: 10, rating: 2, vsVehicles: false });
+    expect(attackCwn.parseTrauma('d6/3')).toEqual({ die: 6, rating: 3, vsVehicles: false });
     expect(attackCwn.parseTrauma('garbage')).toBeNull();
     expect(attackCwn.parseShock('2/AC13')).toEqual({ dmg: 2, ac: 13 });
     expect(attackCwn.parseShock('3 / 15')).toEqual({ dmg: 3, ac: 15 });
@@ -75,7 +75,7 @@ describe('CWN to-hit and damage', () => {
 });
 
 describe('CWN trauma (optional rule)', () => {
-  const weapon = { trauma: { die: 8, rating: 3 } };
+  const weapon = { trauma: { die: 8, rating: 3, vsVehicles: false } };
 
   it('returns null when the rule is off or the weapon has no trauma', () => {
     expect(attackCwn.rollTrauma(weapon, false)).toBeNull();

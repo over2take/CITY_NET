@@ -1,5 +1,6 @@
 import type { SheetTemplate, SheetField } from '../types';
 import { VEHICLE_TYPE_OPTIONS, getPreset, presetFields } from '../vehiclePresets';
+import { VEHICLE_WEAPON_OPTIONS, getVehicleWeapon, weaponMountFields } from '../vehicleWeapons';
 
 // Cities Without Number template.
 //
@@ -91,11 +92,20 @@ const vehicleRow = (i: number): SheetField[] => [
     const j = w + 1;
     return [
       { id: `vehicle${i}_weapon${j}_name`, label: `MOUNT ${j}`, type: 'text', placeholder: 'Autocannon' },
+      {
+        // Replaces the old SHOCK column: no vehicle weapon in the book has shock, and a
+        // picker earns the space more than a field that is always blank.
+        id: `vehicle${i}_weapon${j}_type`, label: 'TYPE', type: 'select', options: VEHICLE_WEAPON_OPTIONS,
+        hint: 'Book weapon on this hardpoint. Picking one fills its damage and trauma. CUSTOM leaves it to you.',
+        presetFill: (value) => {
+          const weapon = getVehicleWeapon(value);
+          return weapon ? weaponMountFields(i, j, weapon) : {};
+        },
+      },
       { id: `vehicle${i}_weapon${j}_dmg`, label: 'DMG', type: 'text', placeholder: '2d8', hint: 'Damage dice, flat bonus allowed. Rolled by the server on a hit.' },
       { id: `vehicle${i}_weapon${j}_skill`, label: 'SKILL', type: 'select', options: CWN_WEAPON_SKILLS, hint: 'Attack skill the gunner fires with. Firing a mount costs that gunner their main action, so a crew can rarely work every gun at once.' },
       { id: `vehicle${i}_weapon${j}_atk`, label: 'ATK', type: 'number', placeholder: '0', hint: 'Flat attack bonus for this mount, added to the to-hit roll.' },
-      { id: `vehicle${i}_weapon${j}_trauma`, label: 'TRAUMA', type: 'text', placeholder: 'd8/x3', hint: 'Trauma die / rating. Traumatic hits apply to vehicles as they do to people.' },
-      { id: `vehicle${i}_weapon${j}_shock`, label: 'SHOCK', type: 'text', placeholder: '', hint: 'Shock damage / max AC. Usually blank on a mount.' },
+      { id: `vehicle${i}_weapon${j}_trauma`, label: 'TRAUMA', type: 'text', placeholder: 'd8/x3!', hint: 'Trauma die / rating. A trailing ! means it can inflict Traumatic Hits on vehicles and drones — without it, the die still works on people but does nothing to a car.' },
     ] as SheetField[];
   }).flat(),
 ];
