@@ -61,9 +61,9 @@ describe('the vehicle badge', () => {
 
   it('takes its colour from the theme rather than a fixed amber', () => {
     show();
-    // Monochrome paints the whole interface white; a hardcoded amber sat on it as the one
-    // thing that did not belong.
-    expect(screen.getByRole('button').style.color).toBe('var(--vehicle)');
+    // The theme's own green, not the seat accent: the accent means "occupied" inside the
+    // diagram, and a button among buttons should look like the ones beside it.
+    expect(screen.getByRole('button').style.color).toBe('var(--green)');
   });
 
   it('sits on black in the title bar, where the bar is already the theme colour', () => {

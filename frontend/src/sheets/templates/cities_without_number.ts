@@ -324,7 +324,7 @@ export const citiesWithoutNumber: SheetTemplate = {
       label: 'VEHICLES',
       // Who is sitting where is shared state, so the way to it belongs beside the
       // section rather than in it.
-      headerAction: 'WHO IS ABOARD',
+      headerAction: 'SEATING',
       layout: 'weapons',
       tab: 'GEAR',
       columns: CWN_VEHICLE_COLUMNS,

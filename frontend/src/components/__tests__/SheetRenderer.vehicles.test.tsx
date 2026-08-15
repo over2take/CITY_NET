@@ -244,7 +244,7 @@ describe('the section header action', () => {
   it('offers a way to the seating window', async () => {
     const onSectionAction = vi.fn();
     withAction(onSectionAction);
-    await userEvent.click(screen.getByText('WHO IS ABOARD'));
+    await userEvent.click(screen.getByText('SEATING'));
     expect(onSectionAction).toHaveBeenCalledWith('vehicles');
   });
 
@@ -253,15 +253,15 @@ describe('the section header action', () => {
     withAction(onSectionAction);
     // In the header bar, not inside the section — collapsing must not take it away.
     await userEvent.click(screen.getByText(/VEHICLES ───/));
-    expect(screen.getByText('WHO IS ABOARD')).toBeInTheDocument();
-    await userEvent.click(screen.getByText('WHO IS ABOARD'));
+    expect(screen.getByText('SEATING')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('SEATING'));
     expect(onSectionAction).toHaveBeenCalledWith('vehicles');
   });
 
   it('shows nothing where the surface cannot act on it', () => {
     // The standalone sheet tab has no windows to open, so it passes no handler.
     withAction(undefined);
-    expect(screen.queryByText('WHO IS ABOARD')).toBeNull();
+    expect(screen.queryByText('SEATING')).toBeNull();
   });
 });
 

@@ -56,13 +56,16 @@ export function VehicleBadgeButton({ vehicle, occupant, userName, isAdmin, onDis
         display: 'inline-flex', alignItems: 'center', gap: '5px',
         fontFamily: 'inherit', fontSize: compact ? '0.55rem' : '0.62rem',
         letterSpacing: '1px', padding: compact ? '1px 5px' : '2px 6px',
-        color: 'var(--vehicle)',
+        // The theme's own green. The accent is reserved for the seat markers inside the
+        // diagram, where it distinguishes an occupied seat from an empty one; a button is
+        // a button and should look like the ones beside it.
+        color: 'var(--green)',
         // Compact means the sheet's title bar, which is painted in the theme colour — an
         // outline in another theme colour on top of it is hard to read, and in monochrome
         // the badge disappears into the bar entirely. It sits on black there, the way the
         // buttons beside it already do.
         background: compact ? 'var(--black)' : 'none',
-        border: compact ? '1px solid var(--black)' : '1px solid var(--vehicle)',
+        border: compact ? '1px solid var(--black)' : '1px solid var(--green)',
         // Inert for someone else's badge rather than hidden: knowing they are in a car is
         // the reason it is on the token menu at all.
         cursor: mine ? 'pointer' : 'default',

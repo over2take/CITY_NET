@@ -2227,6 +2227,20 @@ function App() {
                     pos={infoPanelPos} 
                     setPos={setInfoPanelPos} 
                     onClose={() => setSelectedLocation(null)}
+                    titleControls={
+                      selectedLocation.shape === 'rhombus' && selectedLocation.owner
+                        ? (
+                          <VehicleBadgeButton
+                            vehicle={parseVehicleState(selectedLocation.vehicle_state)}
+                            occupant={selectedLocation.owner}
+                            userName={userName}
+                            isAdmin={isAdmin}
+                            onDisembark={(occupant) => socketRef.current?.emit('seatOut', { occupant })}
+                            compact
+                          />
+                        )
+                        : undefined
+                    }
                   >
                     <div className="content">
                       {isRhombus ? (
@@ -2418,22 +2432,8 @@ function App() {
                         style={{ marginTop: '10px', width: '100%' }}
                         onClick={() => setIsVehiclesOpen(true)}
                       >
-                        WHO_IS_ABOARD
+                        VEHICLES
                       </button>
-                    )}
-                    {/* In a vehicle: the badge says which, and gets you out of it. Shown
-                        for anyone's token — knowing they are in a car is the point — but
-                        only clickable on your own, or by the GM. */}
-                    {selectedLocation.shape === 'rhombus' && selectedLocation.owner && parseVehicleState(selectedLocation.vehicle_state) && (
-                      <div style={{ marginTop: '10px' }}>
-                        <VehicleBadgeButton
-                          vehicle={parseVehicleState(selectedLocation.vehicle_state)}
-                          occupant={selectedLocation.owner}
-                          userName={userName}
-                          isAdmin={isAdmin}
-                          onDisembark={(occupant) => socketRef.current?.emit('seatOut', { occupant })}
-                        />
-                      </div>
                     )}
                     {/* Player token sheet: owner opens their own; admin opens any player's */}
                     {selectedLocation.shape === 'rhombus' && selectedLocation.owner && (isOwner || isAdmin) && (
