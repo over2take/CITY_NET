@@ -63,7 +63,7 @@ export const VEHICLE_PRESETS: VehiclePreset[] = [
   },
   {
     id: 'helicopter', label: 'HELICOPTER', art: 'heli',
-    cost: 50000, spd: 3, armor: 6, tt: 12, ac: 14, hp: 20, crew: 6, hrdpt: 1, size: 'M',
+    cost: 50000, spd: 3, armor: 6, tt: 10, ac: 14, hp: 20, crew: 6, hrdpt: 1, size: 'M',
     seatNames: ['PILOT', 'CO-PILOT'],
   },
   {
@@ -73,22 +73,22 @@ export const VEHICLE_PRESETS: VehiclePreset[] = [
   },
   {
     id: 'apc', label: 'APC', art: 'apc',
-    cost: 60000, spd: -1, armor: null, tt: 12, ac: 16, hp: 30, crew: 16, hrdpt: 1, size: 'L',
+    cost: 60000, spd: -1, armor: null, tt: 10, ac: 16, hp: 30, crew: 16, hrdpt: 1, size: 'L',
     seatNames: ['DRIVER', 'GUNNER'], note: HEAVY_ONLY,
   },
   {
     id: 'gev', label: 'GEV', art: 'hover',
-    cost: 100000, spd: 1, armor: null, tt: 12, ac: 16, hp: 30, crew: 3, hrdpt: 2, size: 'L',
+    cost: 100000, spd: 1, armor: null, tt: 10, ac: 16, hp: 30, crew: 3, hrdpt: 2, size: 'L',
     seatNames: ['DRIVER', 'GUNNER', 'COMMANDER'], note: HEAVY_ONLY,
   },
   {
     id: 'casra', label: 'CASRA', art: 'multirotor',
-    cost: 200000, spd: 2, armor: 10, tt: 12, ac: 18, hp: 35, crew: 2, hrdpt: 2, size: 'L',
+    cost: 200000, spd: 2, armor: 10, tt: 10, ac: 18, hp: 35, crew: 2, hrdpt: 2, size: 'L',
     seatNames: ['PILOT', 'GUNNER'],
   },
   {
     id: 'dropcraft', label: 'DROPCRAFT', art: 'vtol',
-    cost: 1000000, spd: 3, armor: 10, tt: 12, ac: 16, hp: 40, crew: 13, hrdpt: 2, size: 'L',
+    cost: 1000000, spd: 3, armor: 12, tt: 12, ac: 16, hp: 40, crew: 13, hrdpt: 2, size: 'L',
     seatNames: ['PILOT', 'CO-PILOT'],
   },
 ];
