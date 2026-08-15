@@ -1480,7 +1480,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           () => {
             io.emit('sheetUpdated', { username: row.username });
             // The badge carries the vehicle's HP, so a wreck has to stop showing as cover.
-            vehicleState.syncTokens(db, row.username, () => {
+            vehicleState.syncAll(db, () => {
               emitUpdate({ isRhombusOnly: true });
               cb(newHp);
             });

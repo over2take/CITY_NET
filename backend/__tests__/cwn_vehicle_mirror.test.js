@@ -13,7 +13,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const vehicleState = require('../sheets/vehicleState.js');
 
-const sync = (db, username) => new Promise((r) => vehicleState.syncTokens(db, username, r));
+const sync = (db) => new Promise((r) => vehicleState.syncAll(db, r));
 
 let db;
 beforeEach(async () => {
@@ -38,22 +38,22 @@ describe('vehicle state on the token', () => {
   it('writes the derived numbers, not the sheet', async () => {
     await sheet('CODY', { ...CAR, in_vehicle: 'own:1', drive: 3, vehicle_moving: '1', name: 'Cody' });
     await token('CODY');
-    await sync(db, 'CODY');
+    await sync(db);
 
     const s = await state('CODY');
     expect(s).toMatchObject({ name: 'Kestrel', ac: 15, armorRating: 5, hp: 20, hpMax: 20, moving: true });
     // Nothing else from the sheet rides along.
-    expect(Object.keys(s).sort()).toEqual(['ac', 'armorRating', 'hp', 'hpMax', 'moving', 'name']);
+    expect(Object.keys(s).sort()).toEqual(['ac', 'armorRating', 'hp', 'hpMax', 'moving', 'name', 'occupants']);
   });
 
   it('clears when the player gets out', async () => {
     await sheet('CODY', { ...CAR, in_vehicle: 'own:1' });
     await token('CODY');
-    await sync(db, 'CODY');
+    await sync(db);
     expect(await state('CODY')).not.toBeNull();
 
     await run(db, `UPDATE character_sheets SET data = ? WHERE username = 'CODY'`, [JSON.stringify(CAR)]);
-    await sync(db, 'CODY');
+    await sync(db);
     expect(await state('CODY')).toBeNull();
   });
 
@@ -62,7 +62,7 @@ describe('vehicle state on the token', () => {
     await token('CODY');
     await sheet('MOUSE', { in_vehicle: 'ride', ride_owner: 'CODY', ride_vehicle: 1 });
     await token('MOUSE');
-    await sync(db, 'MOUSE');
+    await sync(db);
 
     expect(await state('MOUSE')).toMatchObject({ name: 'Kestrel', armorRating: 5 });
     // The owner is not in it, so their own token stays clear.
@@ -74,29 +74,69 @@ describe('vehicle state on the token', () => {
     await token('CODY');
     await sheet('MOUSE', { in_vehicle: 'ride', ride_owner: 'CODY', ride_vehicle: 1 });
     await token('MOUSE');
-    await sync(db, 'MOUSE');
+    await sync(db);
     expect((await state('MOUSE')).armorRating).toBe(5);
 
     // A passenger's badge is derived from someone else's sheet, so saving that sheet has
     // to refresh them too or every passenger is quietly stale.
     await run(db, `UPDATE character_sheets SET data = ? WHERE username = 'CODY'`,
       [JSON.stringify({ ...CAR, vehicle1_armor: 9 })]);
-    await sync(db, 'CODY');
+    await sync(db);
     expect((await state('MOUSE')).armorRating).toBe(9);
   });
 
   it('leaves a rider clear when the owner is gone', async () => {
     await sheet('MOUSE', { in_vehicle: 'ride', ride_owner: 'GHOST', ride_vehicle: 1 });
     await token('MOUSE');
-    await sync(db, 'MOUSE');
+    await sync(db);
     expect(await state('MOUSE')).toBeNull();
   });
 
   it('shows no cover for a wreck', async () => {
     await sheet('CODY', { ...CAR, vehicle1_hp: 0, in_vehicle: 'own:1' });
     await token('CODY');
-    await sync(db, 'CODY');
+    await sync(db);
     // It is still declared on the sheet, but it has stopped protecting anyone.
     expect(await state('CODY')).toBeNull();
+  });
+
+  it('names everyone aboard, to all of them', async () => {
+    await sheet('CODY', { ...CAR, in_vehicle: 'own:1' });
+    await token('CODY');
+    await sheet('MOUSE', { in_vehicle: 'ride', ride_owner: 'CODY', ride_vehicle: 1 });
+    await token('MOUSE');
+    await sync(db);
+
+    // One car, one passenger list — the driver and the passenger see the same thing.
+    expect((await state('CODY')).occupants.sort()).toEqual(['CODY', 'MOUSE']);
+    expect((await state('MOUSE')).occupants.sort()).toEqual(['CODY', 'MOUSE']);
+  });
+
+  it('updates the driver when someone else climbs in', async () => {
+    await sheet('CODY', { ...CAR, in_vehicle: 'own:1' });
+    await token('CODY');
+    await sheet('MOUSE', {});
+    await token('MOUSE');
+    await sync(db);
+    expect((await state('CODY')).occupants).toEqual(['CODY']);
+
+    // Boarding changes what the driver's badge should say as much as the passenger's,
+    // which is why the mirror recomputes everyone rather than the person who saved.
+    await run(db, `UPDATE character_sheets SET data = ? WHERE username = 'MOUSE'`,
+      [JSON.stringify({ in_vehicle: 'ride', ride_owner: 'CODY', ride_vehicle: 1 })]);
+    await sync(db);
+    expect((await state('CODY')).occupants.sort()).toEqual(['CODY', 'MOUSE']);
+  });
+
+  it('keeps two different cars apart', async () => {
+    await sheet('CODY', { ...CAR, in_vehicle: 'own:1' });
+    await token('CODY');
+    await sheet('MOUSE', { ...CAR, vehicle1_name: 'Mule', in_vehicle: 'own:1' });
+    await token('MOUSE');
+    await sync(db);
+
+    // Both are 'vehicle 1' — keyed by owner as well, they are two cars, not one.
+    expect((await state('CODY')).occupants).toEqual(['CODY']);
+    expect((await state('MOUSE')).occupants).toEqual(['MOUSE']);
   });
 });

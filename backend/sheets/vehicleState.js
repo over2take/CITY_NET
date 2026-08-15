@@ -95,7 +95,7 @@ function getRideWeapon(db, sheetData, weaponIndex, cb) {
 }
 
 /** What other players are allowed to see: the numbers they are shooting at, not the sheet. */
-function publicState(vehicle) {
+function publicState(vehicle, occupants = []) {
   if (!vehicle) return null;
   return JSON.stringify({
     name: vehicle.name,
@@ -104,57 +104,66 @@ function publicState(vehicle) {
     hp: vehicle.hp,
     hpMax: vehicle.hpMax,
     moving: vehicle.moving,
+    occupants,
   });
 }
 
+/** Which vehicle a sheet is in, as a key two occupants of the same car agree on. */
+const vehicleKey = (username, occ) => `${occ.owner || username}:${occ.vehicleIndex}`;
+
 /**
- * Mirror one player's vehicle state onto their token(s).
+ * Recompute every player's vehicle state and mirror it onto their token(s).
  *
- * Also re-mirrors anyone riding with them, because a rider's badge is derived from this
- * player's sheet: change the car's armour and every passenger's token is stale. Riders
- * are found by scanning, which is cheap on a table with one row per player and avoids
- * keeping a second index of who is in whose car.
+ * Whole-table rather than one player, because occupancy is not a property of one sheet:
+ * boarding someone's car changes what their badge should say as much as yours, and the
+ * badge now names who is aboard. Working out which subset to refresh means working out
+ * the whole thing anyway, so the partial version was only ever more code for the same
+ * scan — on a table with one row per player.
  */
-function syncTokens(db, username, cb) {
-  const write = (user, state, done) => {
-    db.run(`UPDATE locations SET vehicle_state = ? WHERE shape = 'rhombus' AND owner = ?`,
-      [state, user], () => done());
-  };
-  db.get(
-    `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-    [username, SYSTEM],
-    (err, row) => {
-      if (err || !row) return cb && cb();
-      let data;
-      try { data = JSON.parse(row.data || '{}'); } catch (e) { return cb && cb(); }
-      resolve(db, row.id, data, (vehicle) => {
-        write(username, publicState(vehicle), () => {
-          db.all(
-            `SELECT username, data FROM character_sheets WHERE system = ? AND is_npc = 0 AND username != ?`,
-            [SYSTEM, username],
-            (err2, rows) => {
-              if (err2 || !rows || !rows.length) return cb && cb();
-              const riders = rows.filter((r) => {
-                let d;
-                try { d = JSON.parse(r.data || '{}'); } catch (e) { return false; }
-                const occ = attackCwn.readOccupancy(d);
-                return !!occ && occ.owner === username;
-              });
-              let left = riders.length;
-              if (!left) return cb && cb();
-              riders.forEach((r) => {
-                let d = {};
-                try { d = JSON.parse(r.data || '{}'); } catch (e) { /* treated as on foot */ }
-                resolve(db, null, d, (v) => write(r.username, publicState(v), () => {
-                  if (--left === 0 && cb) cb();
-                }));
-              });
-            }
-          );
-        });
+function syncAll(db, cb) {
+  const done = () => cb && cb();
+  db.all(
+    `SELECT id, username, data FROM character_sheets WHERE system = ? AND is_npc = 0`,
+    [SYSTEM],
+    (err, rows) => {
+      if (err || !rows) return done();
+      const sheets = rows.map((r) => {
+        let data;
+        try { data = JSON.parse(r.data || '{}'); } catch (e) { data = {}; }
+        return { id: r.id, username: r.username, data };
       });
+      const byUser = new Map(sheets.map(sh => [sh.username, sh]));
+
+      // Everyone aboard each car, keyed so a rider and the owner land in the same bucket.
+      const aboard = new Map();
+      const occupancy = new Map();
+      for (const sh of sheets) {
+        const occ = attackCwn.readOccupancy(sh.data);
+        if (!occ) continue;
+        occupancy.set(sh.username, occ);
+        const key = vehicleKey(sh.username, occ);
+        if (!aboard.has(key)) aboard.set(key, []);
+        aboard.get(key).push(sh.username);
+      }
+
+      let left = sheets.length;
+      if (!left) return done();
+      for (const sh of sheets) {
+        const occ = occupancy.get(sh.username);
+        const ownerSheet = occ ? (occ.owner ? byUser.get(occ.owner) : sh) : null;
+        const vehicle = ownerSheet
+          ? attackCwn.getVehicle(ownerSheet.data, occ.vehicleIndex, { moving: occ.moving })
+          : null;
+        const usable = vehicle && !vehicle.destroyed ? vehicle : null;
+        const occupants = usable ? (aboard.get(vehicleKey(sh.username, occ)) || []) : [];
+        db.run(
+          `UPDATE locations SET vehicle_state = ? WHERE shape = 'rhombus' AND owner = ?`,
+          [publicState(usable, occupants), sh.username],
+          () => { if (--left === 0) done(); }
+        );
+      }
     }
   );
 }
 
-module.exports = { SYSTEM, resolve, publicState, syncTokens, getRideMounts, getRideWeapon };
+module.exports = { SYSTEM, resolve, publicState, syncAll, vehicleKey, getRideMounts, getRideWeapon };

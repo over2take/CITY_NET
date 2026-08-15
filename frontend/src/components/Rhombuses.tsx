@@ -33,6 +33,10 @@ function VehicleTag({ raw, height, isBattleMap }: { raw: string | null | undefin
       }}>
         {vehicle.name} · AC {vehicle.ac} · AR {vehicle.armorRating} · {vehicle.hp}/{vehicle.hpMax}
         {vehicle.moving ? ' · MOVING' : ''}
+        {(vehicle.occupants?.length ?? 0) > 1 && (
+          // Only worth saying when it is shared: one name on your own car is noise.
+          <div style={{ opacity: 0.8, fontSize: '8px' }}>{vehicle.occupants!.join(' · ')}</div>
+        )}
       </div>
     </Html>
   );

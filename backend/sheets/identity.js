@@ -63,7 +63,7 @@ function syncToken(db, system, username, cb) {
           // other players need to see on the token, and hanging it here means every
           // caller that saves a sheet already refreshes it.
           if (system !== vehicleState.SYSTEM) return cb && cb(changed);
-          vehicleState.syncTokens(db, username, () => cb && cb(changed));
+          vehicleState.syncAll(db, () => cb && cb(changed));
         }
       );
     }

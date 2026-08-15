@@ -52,6 +52,18 @@ describe('target in a vehicle', () => {
     expect(screen.getByText(/STATIONARY/)).toBeInTheDocument();
   });
 
+  it('names who else is in the car', () => {
+    renderMenu({ name: 'Kestrel', ac: 8, armorRating: 5, hp: 20, hpMax: 20, moving: false, occupants: ['cody', 'mouse'] });
+    // Three people behind one armour rating is a different decision from one.
+    expect(screen.getByText(/ABOARD: CODY, MOUSE/)).toBeInTheDocument();
+  });
+
+  it('stays quiet about a car with one person in it', () => {
+    renderMenu({ name: 'Kestrel', ac: 8, armorRating: 5, hp: 20, hpMax: 20, moving: false, occupants: ['cody'] });
+    // The target's own name back at you is noise.
+    expect(screen.queryByText(/ABOARD/)).toBeNull();
+  });
+
   it('shows nothing for a target on foot', () => {
     renderMenu(null);
     expect(screen.queryByText(/TARGET IN VEHICLE/)).toBeNull();

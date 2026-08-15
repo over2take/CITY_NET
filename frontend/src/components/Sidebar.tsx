@@ -778,6 +778,11 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
               TARGET IN VEHICLE — {attackPending.vehicle.name.toUpperCase()} ·{' '}
               {attackPending.vehicle.moving ? 'MOVING' : 'STATIONARY'} · AC {attackPending.vehicle.ac} · AR{' '}
               {attackPending.vehicle.armorRating} · {attackPending.vehicle.hp}/{attackPending.vehicle.hpMax} HP
+              {(attackPending.vehicle.occupants?.length ?? 0) > 1 && (
+                <div style={{ marginTop: '2px' }}>
+                  ABOARD: {attackPending.vehicle.occupants!.join(', ').toUpperCase()}
+                </div>
+              )}
               <div style={{ color: '#888', marginTop: '2px' }}>
                 DAMAGE HITS THE VEHICLE UNTIL IT IS DESTROYED
               </div>

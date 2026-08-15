@@ -276,7 +276,7 @@ export const citiesWithoutNumber: SheetTemplate = {
         {
           // Picked, not typed: this is a login name, and a typo silently drops you back
           // to being on foot with no cover and nothing on screen to say why.
-          id: 'ride_owner', label: 'OWNER', type: 'select',
+          id: 'ride_owner', label: 'RIDING WITH', type: 'select',
           options: (data, ctx) => {
             const current = String(data.ride_owner ?? '').trim();
             const names = ctx.players ?? [];
@@ -288,7 +288,7 @@ export const citiesWithoutNumber: SheetTemplate = {
               ...(current && !names.includes(current) ? [{ value: current, label: `${current.toUpperCase()} (GONE)` }] : []),
             ];
           },
-          hint: "Whose vehicle you are in — the other player, not you. The car's HP, AC and armour are read from their sheet, so it takes damage once no matter how many of you are aboard.",
+          hint: "The other player whose vehicle you are in, not you. The car's HP, AC and armour are read from their sheet, so it takes damage once no matter how many of you are aboard.",
         },
         {
           id: 'ride_vehicle', label: 'THEIR #', type: 'number', placeholder: '1',

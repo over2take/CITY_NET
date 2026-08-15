@@ -51,6 +51,8 @@ export interface AttackVehicle {
   hp: number;
   hpMax: number;
   moving: boolean;
+  /** Everyone declared to be in this vehicle, owner included. */
+  occupants?: string[];
 }
 
 /** Tokens carry the state as a string so it survives the generic locations payload. */

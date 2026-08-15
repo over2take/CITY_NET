@@ -149,7 +149,7 @@ describe('vehicles section', () => {
       />
     );
     // It holds a login name, and a typo silently drops you back to being on foot.
-    const select = screen.getByLabelText('OWNER') as HTMLSelectElement;
+    const select = screen.getByLabelText('RIDING WITH') as HTMLSelectElement;
     expect([...select.options].map(o => o.textContent)).toEqual(['—', 'CODY', 'MOUSE']);
   });
 
@@ -166,7 +166,7 @@ describe('vehicles section', () => {
     );
     // Otherwise the field looks blank while it still holds their name, and the sheet
     // disagrees with itself about who you are riding with.
-    const select = screen.getByLabelText('OWNER') as HTMLSelectElement;
+    const select = screen.getByLabelText('RIDING WITH') as HTMLSelectElement;
     expect(select.value).toBe('ghost');
     expect([...select.options].map(o => o.textContent)).toContain('GHOST (GONE)');
   });
@@ -182,7 +182,7 @@ describe('vehicles section', () => {
       />
     );
     // A missing context must not throw — the field is simply empty.
-    expect(([...(screen.getByLabelText('OWNER') as HTMLSelectElement).options]).map(o => o.value)).toEqual(['']);
+    expect(([...(screen.getByLabelText('RIDING WITH') as HTMLSelectElement).options]).map(o => o.value)).toEqual(['']);
   });
 
   it('leaves the weapons section alone, which declares no group size', () => {
