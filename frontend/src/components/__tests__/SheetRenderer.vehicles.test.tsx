@@ -16,14 +16,18 @@ import { VEHICLE_PRESETS, getPreset, presetFields } from '../../sheets/vehiclePr
 
 const vehicles = citiesWithoutNumber.sections.find(s => s.id === 'vehicles')!;
 
-const renderSheet = (data: Record<string, unknown>) =>
+const renderSheet = (
+  data: Record<string, unknown>,
+  handlers: { onFieldChange?: ReturnType<typeof vi.fn>; onFieldsChange?: ReturnType<typeof vi.fn> } = {},
+) =>
   render(
     <SheetRenderer
       // One tab holding only the vehicles section, so it is the active tab on render.
       template={{ ...citiesWithoutNumber, tabs: ['GEAR'], sections: [vehicles] }}
       data={data as never}
       readOnly={false}
-      onFieldChange={vi.fn()}
+      onFieldChange={handlers.onFieldChange ?? vi.fn()}
+      onFieldsChange={handlers.onFieldsChange}
     />
   );
 
@@ -171,6 +175,69 @@ describe('the sheet reacting to the vehicle type', () => {
     document.body.innerHTML = '';
     renderSheet({ ...presetFields(1, getPreset('tank')!) });
     expect(screen.getByText('MOUNT 3')).toBeInTheDocument();
+  });
+});
+
+describe('picking a type writes once', () => {
+  it('sends the whole stat block as a single change', async () => {
+    const onFieldsChange = vi.fn();
+    const onFieldChange = vi.fn();
+    renderSheet({ vehicle1_name: 'Betty' }, { onFieldsChange, onFieldChange });
+
+    await userEvent.selectOptions(screen.getAllByLabelText('TYPE')[0], 'car');
+
+    // One save, not a dozen: the server rewrites the whole sheet per field change, so
+    // separate saves race and all but the last are lost.
+    expect(onFieldsChange).toHaveBeenCalledTimes(1);
+    expect(onFieldChange).not.toHaveBeenCalled();
+    const batch = onFieldsChange.mock.calls[0][0];
+    expect(batch).toMatchObject({ vehicle1_type: 'car', vehicle1_hp_max: 30, vehicle1_crew: 5 });
+    // The type itself has to be in the batch, or it saves as CUSTOM.
+    expect(batch.vehicle1_type).toBe('car');
+  });
+
+  it('falls back to single writes when no batch handler is given', async () => {
+    const onFieldChange = vi.fn();
+    renderSheet({}, { onFieldChange });
+    await userEvent.selectOptions(screen.getAllByLabelText('TYPE')[0], 'motorcycle');
+    expect(onFieldChange.mock.calls.length).toBeGreaterThan(1);
+  });
+});
+
+describe('removing a vehicle', () => {
+  const filled = { ...presetFields(1, getPreset('car')!) } as Record<string, unknown>;
+
+  it('offers no remove on an entry with nothing in it', () => {
+    renderSheet({});
+    expect(screen.queryByText('REMOVE')).toBeNull();
+  });
+
+  it('takes two clicks, so a stray one cannot wipe thirty fields', async () => {
+    const onFieldsChange = vi.fn();
+    renderSheet(filled, { onFieldsChange });
+
+    await userEvent.click(screen.getByText('REMOVE'));
+    expect(onFieldsChange).not.toHaveBeenCalled();
+    expect(screen.getByText('REMOVE — CONFIRM')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('REMOVE — CONFIRM'));
+    expect(onFieldsChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('blanks every field of that vehicle and no other', async () => {
+    const onFieldsChange = vi.fn();
+    renderSheet({ ...filled, vehicle2_name: 'Mule' }, { onFieldsChange });
+
+    await userEvent.click(screen.getAllByText('REMOVE')[0]);
+    await userEvent.click(screen.getByText('REMOVE — CONFIRM'));
+
+    const cleared = onFieldsChange.mock.calls[0][0];
+    expect(Object.keys(cleared)).toHaveLength(vehicles.groupSize);
+    expect(cleared.vehicle1_name).toBe('');
+    expect(cleared.vehicle1_hp_max).toBe('');
+    expect(cleared.vehicle1_weapon3_dmg).toBe('');
+    // Entries are referenced by position elsewhere, so nothing shifts up.
+    expect(cleared).not.toHaveProperty('vehicle2_name');
   });
 });
 

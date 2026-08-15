@@ -928,6 +928,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     if (changed) emitUpdate({ isRhombusOnly: true });
                   });
                 }
+                // Same for a single vehicle field edited on the sheet: everyone aboard is
+                // looking at a badge derived from it.
+                if (system === vehicleState.SYSTEM && payload.fieldId.startsWith('vehicle')) {
+                  vehicleState.syncAll(db, () => emitUpdate({ isRhombusOnly: true }));
+                }
                 // SR6 stun overflow lands on the token's Physical track
                 if (stunOverflow > 0) {
                   db.run(
@@ -996,6 +1001,18 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   io.emit('sheetUpdated', { username: info.userName, system });
                   socket.emit('sheetImportApplied', { count: entries.length });
                 };
+                // Editing a vehicle changes what every badge showing it should say —
+                // including the badges of passengers, whose sheets were not touched.
+                if (system === vehicleState.SYSTEM && entries.some(([k]) => k.startsWith('vehicle'))) {
+                  return vehicleState.syncAll(db, () => {
+                    emitUpdate({ isRhombusOnly: true });
+                    if (effAc === null) return finish();
+                    db.run(
+                      `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
+                      [effAc, effAc, info.userName], () => finish()
+                    );
+                  });
+                }
                 if (effAc !== null) {
                   db.run(
                     `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,

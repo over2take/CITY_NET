@@ -30,7 +30,7 @@ interface CharacterSheetWindowProps {
 export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, currentTheme }: CharacterSheetWindowProps) {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
-  const { sheet, template, handleFieldChange, allowFumbleShield, hiddenTabs, actions } =
+  const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, hiddenTabs, actions } =
     usePlayerSheet(socket, userName, { onRolled });
 
   const handlePortraitUpload = useCallback(
@@ -95,6 +95,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           data={sheet.data}
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
+          onFieldsChange={handleFieldsChange}
           onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
           onOpenLink={onOpenLink}
           onRoll={actions.onRoll}

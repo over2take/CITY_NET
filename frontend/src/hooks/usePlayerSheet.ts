@@ -76,6 +76,40 @@ export function usePlayerSheet(
     };
   }, [socket, userName]);
 
+  /**
+   * Write several fields as one save.
+   *
+   * Not a loop over handleFieldChange: each of those is a separate read-modify-write of
+   * the whole sheet blob on the server, so a dozen fired together race and all but the
+   * last are lost. Picking a vehicle type is exactly that case.
+   */
+  const handleFieldsChange = useCallback((fields: Record<string, string | number>) => {
+    const entries = Object.entries(fields);
+    if (!entries.length) return;
+    setSheet(prev => {
+      if (!prev) return prev;
+      const template = getTemplate(prev.system);
+      const pairs = getMaxPairs(template);
+      const data = { ...prev.data };
+      entries.forEach(([fieldId, value]) => {
+        data[fieldId] = value;
+        const curField = pairs[fieldId]; // non-null when fieldId is a max field
+        if (curField !== undefined && data[curField] !== undefined) {
+          const newMax = Number(value);
+          if (Number(data[curField]) > newMax) data[curField] = newMax;
+        }
+      });
+      return { ...prev, data };
+    });
+    // A pending single-field save for any of these would land after the batch and
+    // reinstate the old value.
+    entries.forEach(([fieldId]) => {
+      const t = pendingSaves.current.get(fieldId);
+      if (t) { clearTimeout(t); pendingSaves.current.delete(fieldId); }
+    });
+    socket?.emit('importSheetFields', { fields });
+  }, [socket]);
+
   // Cancel outstanding debounce timers on unmount
   useEffect(() => () => {
     pendingSaves.current.forEach(t => clearTimeout(t));
@@ -120,7 +154,7 @@ export function usePlayerSheet(
   const template = sheet ? getTemplate(sheet.system) : null;
   const hiddenTabs = hiddenTabsFor(sheet?.system, ruleSettings);
 
-  return { sheet, template, handleFieldChange, allowFumbleShield, hiddenTabs, actions };
+  return { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, hiddenTabs, actions };
 }
 
 /** Portrait upload shared by both sheet surfaces. The server emits

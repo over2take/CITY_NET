@@ -47,6 +47,9 @@ interface SheetRendererProps {
   /** House-rule gate: show the 1-LUCK fumble shield control. Off = a natural
    *  1 always fumbles and the button is hidden. */
   allowFumbleShield?: boolean;
+  /** Write several fields as one save. Needed wherever one control changes many
+   *  values — separate saves race on the server and all but the last are lost. */
+  onFieldsChange?: (fields: Record<string, string | number>) => void;
   /** Roll a death save (shown at 0 HP when the template defines deathSave).
    *  Server-resolved: 1d10 + tracked penalty vs the save stat. */
   onDeathSave?: () => void;
@@ -91,9 +94,10 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }: {
+function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, style, onOpenLink }: {
   field: SheetField; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldsChange?: (fields: Record<string, string | number>) => void;
   style?: React.CSSProperties;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
 }) {
@@ -147,14 +151,13 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
         disabled={readOnly}
         onChange={(e) => {
           const chosen = e.target.value;
-          onFieldChange(field.id, chosen);
-          // A select can carry a whole stat block behind it. Written as individual field
-          // changes so the save path, its debounce and its clamping all still apply.
-          if (field.presetFill) {
-            for (const [id, val] of Object.entries(field.presetFill(chosen, data))) {
-              if (id !== field.id) onFieldChange(id, val);
-            }
-          }
+          // A select can carry a whole stat block behind it, and it has to land as one
+          // save: the server rewrites the entire sheet per field change, so a dozen sent
+          // together overwrite each other and only the last survives.
+          const extra = field.presetFill ? field.presetFill(chosen, data) : {};
+          const batch: Record<string, string | number> = { ...extra, [field.id]: chosen };
+          if (Object.keys(batch).length > 1 && onFieldsChange) onFieldsChange(batch);
+          else for (const [id, val] of Object.entries(batch)) onFieldChange(id, val);
         }}
       >
         {!hasBlank && <option value="">—</option>}
@@ -660,10 +663,14 @@ function SkillsSection({ section, data, readOnly, onFieldChange, onRoll }: {
 // Structured weapon rows: every N consecutive fields form one weapon, where
 // N is section.columns (default 4, CP:R's name/dmg/skill/rof). Headers come
 // from the first row's field labels.
-function WeaponsSection({ section, data, readOnly, onFieldChange }: {
+function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldsChange?: (fields: Record<string, string | number>) => void;
 }) {
+  // Two clicks to clear an entry: the first arms it, the second does it. A stray click
+  // on a control that wipes thirty fields is not something to leave one click away.
+  const [confirmClear, setConfirmClear] = useState<number | null>(null);
   const perRow = section.columns ?? 4;
   const rows: SheetField[][] = [];
   for (let i = 0; i < section.fields.length; i += perRow) rows.push(section.fields.slice(i, i + perRow));
@@ -707,6 +714,7 @@ function WeaponsSection({ section, data, readOnly, onFieldChange }: {
       data={data}
       readOnly={readOnly}
       onFieldChange={onFieldChange}
+      onFieldsChange={onFieldsChange}
       style={{ ...cell, ...(field.type === 'number' ? { textAlign: 'center' } : null) }}
     />
   ));
@@ -746,6 +754,33 @@ function WeaponsSection({ section, data, readOnly, onFieldChange }: {
                 {fieldRow(row)}
               </React.Fragment>
             ))}
+            {!readOnly && hasData(group) && (
+              <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginBottom: '2px' }}>
+                <button
+                  onClick={() => {
+                    if (confirmClear !== gi) return setConfirmClear(gi);
+                    // Blanked in place rather than shifted up: entries are referenced by
+                    // position elsewhere, and closing the gap would silently repoint
+                    // anything looking at a later one.
+                    const blanks: Record<string, string> = {};
+                    group.forEach(r => r.forEach(f => { blanks[f.id] = ''; }));
+                    if (onFieldsChange) onFieldsChange(blanks);
+                    else Object.keys(blanks).forEach(id => onFieldChange(id, ''));
+                    setConfirmClear(null);
+                  }}
+                  onBlur={() => setConfirmClear(c => (c === gi ? null : c))}
+                  style={{
+                    background: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: '0.55rem', letterSpacing: '1px', padding: '1px 6px',
+                    border: `1px solid ${confirmClear === gi ? '#ff4444' : 'var(--green)'}`,
+                    color: confirmClear === gi ? '#ff4444' : 'var(--green)',
+                    opacity: confirmClear === gi ? 1 : 0.5,
+                  }}
+                >
+                  {confirmClear === gi ? 'REMOVE — CONFIRM' : 'REMOVE'}
+                </button>
+              </div>
+            )}
           </React.Fragment>
         ))}
       </div>
@@ -987,7 +1022,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // If the active tab gets hidden (house rule toggled off), fall back to the
@@ -1055,7 +1090,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                 <div style={{ padding: '4px 0 6px' }}>
                   {section.layout === 'grid' && <GridSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
                   {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
-                  {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
+                  {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
