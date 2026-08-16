@@ -31,7 +31,13 @@ Cities Without Number gets vehicles: on the sheet, in combat, and shared across 
 
   Anyone can seat anyone — piling into a car is a decision the table makes out loud — but only you or the GM can take you out, enforced on the server rather than by hiding a button.
 
-  Three ways in, all the same window: `VEHICLES` under GEOMETRY_PROTOCOLS, `SEATING` in the sheet's VEHICLES header — beside the collapse toggle, so folding the section away does not take it with them — and `VEHICLES` on a token menu, which appears only once some vehicle exists. Players are listed by character name rather than login, since nobody at the table thinks of each other by account name.
+  Three ways in, all the same window:
+
+  - **`VEHICLES`** under GEOMETRY_PROTOCOLS in the sidebar
+  - **`SEATING`** in the sheet's VEHICLES section header — beside the collapse toggle rather than inside the section, so folding it away does not take the button with it
+  - **`VEHICLES`** on a token menu, shown only once some vehicle exists
+
+  Players are listed by character name rather than login, since nobody at the table thinks of each other by account name.
 - **A car badge on the sheet and the token menu**, naming the vehicle you are in, with the way out. Shown on anyone's token but inert unless it is yours: seeing that someone is in a car is the reason it is there.
 
 ### Changed
@@ -49,12 +55,6 @@ Cities Without Number gets vehicles: on the sheet, in combat, and shared across 
 - **Repeated sheet entries collapse.** Six vehicles declared meant thirty rows of blank fields on a sheet with no vehicles on it. Only entries holding data render, plus one on an empty sheet, and `+ ADD` reveals another. Each has a REMOVE behind a confirm click.
 - **Themes carry a vehicle accent.** Seat markers use each theme's own secondary colour rather than one imported hue, and only to mark a seat as occupied — the leader lines, the labels and an empty seat are drawn in the theme's own colour, because they are part of the diagram. Monochrome stays monochrome.
 - **New column on `locations`: `vehicle_state`.** Added by the usual startup migration — no action needed on upgrade, and empty for anyone not in a car.
-
-### Fixed
-
-- **Preset fields no longer revert.** Every field change is a separate read-modify-write of the whole sheet blob on the server, so the eleven a preset sends raced and all but one were overwritten. They go as one write now.
-- **Short rows no longer collapse into the next one.** Fourteen stat fields do not divide into rows of six, and CSS grid filled the spare columns with whatever came next — so POW and MASS shared a line with MOUNT 1 and every label after that sat above the wrong field.
-- **Editing a vehicle refreshes the badges.** Only name and description were mirrored onto tokens, so changing a car's armour left every passenger showing the old number.
 
 ---
 
