@@ -220,16 +220,26 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                       <div style={{ width: `${pct * 100}%`, height: '100%', background: color, transition: 'width 0.3s ease' }} />
                     </div>
                     {mine && (
-                      <div style={{ display: 'flex', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'stretch' }}>
+                        {/* Zero vertical padding rather than a fixed height: the row
+                            stretches to whatever the buttons are, and the box follows
+                            instead of standing taller with its text pinned to the top. */}
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
                           aria-label="Hull amount"
                           placeholder="0"
                           value={amount || ''}
-                          onChange={(e) => setAmount(Math.abs(parseInt(e.target.value, 10)) || 0)}
-                          className="sheet-input"
-                          style={{ flex: 1, minWidth: 0, background: 'rgba(0,10,0,0.7)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.7rem', padding: '2px 4px' }}
+                          // Digits only, and stripped rather than rejected so a pasted
+                          // "12hp" still leaves you with 12. The sign belongs to the
+                          // button pressed, so a typed minus is not a direction.
+                          onChange={(e) => setAmount(Number(e.target.value.replace(/\D/g, '').slice(0, 4)) || 0)}
+                          style={{
+                            flex: 1, minWidth: 0, boxSizing: 'border-box',
+                            background: 'rgba(0,10,0,0.7)', color: 'var(--green)',
+                            border: '1px solid var(--green)', fontFamily: 'inherit',
+                            fontSize: '0.75rem', padding: '0 8px', textAlign: 'center',
+                          }}
                         />
                         <button className="upload-btn" style={{ flex: 1, minWidth: 0 }} onClick={() => send(+1)}>REPAIR</button>
                         <button className="upload-btn danger-btn" style={{ flex: 1, minWidth: 0 }} onClick={() => send(-1)}>DAMAGE</button>

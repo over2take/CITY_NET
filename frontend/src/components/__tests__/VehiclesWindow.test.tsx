@@ -291,7 +291,7 @@ describe('the hull', () => {
     const socket = open();
     await userEvent.type(amountBox(), '5');
     await userEvent.click(screen.getByText('DAMAGE'));
-    expect(amountBox()).toHaveValue(null);
+    expect(amountBox()).toHaveValue('');
 
     // A second click with nothing typed sends nothing at all.
     const before = socket.emitted.length;
@@ -305,6 +305,26 @@ describe('the hull', () => {
     await userEvent.type(amountBox(), '-8');
     await userEvent.click(screen.getByText('DAMAGE'));
     expect(lastEmit(socket, 'setVehicleHp')).toMatchObject({ delta: -8 });
+  });
+
+  it('keeps everything but digits out of the box', async () => {
+    open();
+    await userEvent.type(amountBox(), 'abc');
+    expect(amountBox()).toHaveValue('');
+
+    // Stripped rather than rejected, so a fumbled or pasted entry still leaves the number.
+    await userEvent.type(amountBox(), '1e2');
+    expect(amountBox()).toHaveValue('12');
+
+    await userEvent.clear(amountBox());
+    await userEvent.type(amountBox(), '3.5');
+    expect(amountBox()).toHaveValue('35');
+  });
+
+  it('will not take an amount long enough to overflow the field', async () => {
+    open();
+    await userEvent.type(amountBox(), '123456789');
+    expect(amountBox()).toHaveValue('1234');
   });
 
   it('shows the bar to everyone but the buttons only to the owner', () => {
