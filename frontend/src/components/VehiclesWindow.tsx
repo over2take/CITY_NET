@@ -221,9 +221,15 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                     </div>
                     {mine && (
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'stretch' }}>
-                        {/* Zero vertical padding rather than a fixed height: the row
-                            stretches to whatever the buttons are, and the box follows
-                            instead of standing taller with its text pinned to the top. */}
+                        {/* `.win95-window .upload-btn` carries a 15px top margin, which in
+                            a flex row pushes both buttons down inside the stretched line
+                            while the box fills it — so the box looked taller than the
+                            buttons when it was simply the only one at full height. Cleared
+                            here rather than in the stylesheet, where every other window
+                            still wants the gap.
+
+                            Zero vertical padding on the box for the same reason: the row
+                            takes its height from the buttons and the box follows. */}
                         <input
                           type="text"
                           inputMode="numeric"
@@ -241,8 +247,8 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                             fontSize: '0.75rem', padding: '0 8px', textAlign: 'center',
                           }}
                         />
-                        <button className="upload-btn" style={{ flex: 1, minWidth: 0 }} onClick={() => send(+1)}>REPAIR</button>
-                        <button className="upload-btn danger-btn" style={{ flex: 1, minWidth: 0 }} onClick={() => send(-1)}>DAMAGE</button>
+                        <button className="upload-btn" style={{ flex: 1, minWidth: 0, marginTop: 0 }} onClick={() => send(+1)}>REPAIR</button>
+                        <button className="upload-btn danger-btn" style={{ flex: 1, minWidth: 0, marginTop: 0 }} onClick={() => send(-1)}>DAMAGE</button>
                       </div>
                     )}
                   </div>
