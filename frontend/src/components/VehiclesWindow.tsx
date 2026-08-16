@@ -50,22 +50,32 @@ const seatLabel = (vehicle: RosterVehicle, seatId: string, i: number) => {
   return named ?? (seatId === 'driver' ? 'DRIVER' : `CREW ${i + 1}`);
 };
 
+/** Rows of seats a vehicle draws: pairs from the front, plus a lone one at the back. */
+export const seatRows = (total: number) => Math.floor(total / 2) + (total % 2);
+
 /**
  * Where each seat's marker and label sit, as percentages of the diagram.
  *
- * Generated rather than hand-placed: crews run from one to sixteen, and sixteen
- * hand-tuned anchors per vehicle would be a lot of numbers to get subtly wrong. The
- * driver takes the nose; everyone else fills alternating sides down the hull.
+ * Seats pair off from the front, so the first two are the front bench — driver on the
+ * left, shotgun beside them — rather than the driver sitting alone at the nose with the
+ * passenger behind. An odd seat left at the end goes down the centre line at the back,
+ * which is where a rear gunner or a lone rider belongs.
+ *
+ * Generated rather than hand-placed: crews run from one to sixteen, and sixteen tuned
+ * positions per vehicle would be a lot of numbers to get subtly wrong.
  */
-const seatAnchor = (i: number, total: number) => {
-  if (i === 0) return { x: 50, y: 16, side: 'left' as const };
-  const rows = Math.ceil((total - 1) / 2);
-  const row = Math.floor((i - 1) / 2);
-  const left = (i - 1) % 2 === 0;
-  const top = 34;
-  const span = 52;
-  const y = rows <= 1 ? top + span / 2 : top + (span * row) / (rows - 1);
-  return { x: left ? 36 : 64, y, side: left ? ('left' as const) : ('right' as const) };
+export const seatAnchor = (i: number, total: number) => {
+  const rows = seatRows(total);
+  const top = 22;
+  const span = 60;
+  const rowY = (r: number) => (rows <= 1 ? top + span / 2 : top + (span * r) / (rows - 1));
+
+  // The odd seat out sits alone, so it takes the centre line rather than a side.
+  if (total % 2 === 1 && i === total - 1) {
+    return { x: 50, y: rowY(rows - 1), side: 'left' as const };
+  }
+  const left = i % 2 === 0;
+  return { x: left ? 36 : 64, y: rowY(Math.floor(i / 2)), side: left ? ('left' as const) : ('right' as const) };
 };
 
 export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin, vehicles, players }: Props) {
@@ -105,14 +115,14 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
   /**
    * The diagram is sized to the vehicle rather than fixed.
    *
-   * Seats stack in two columns down the hull, so what sets the height is how many rows a
-   * side carries — two for a car, eight for an APC. Sized off the crew, a car needs a
-   * fraction of the room sixteen people do, and neither has to scroll: the window's
-   * content pane caps at 300px and scrolls by default, which a square diagram the width of
-   * the window overran every time.
+   * Seats pair off down the hull, so what sets the height is how many rows there are —
+   * three for a car, eight for an APC. Sized off the crew, a car needs a fraction of the
+   * room sixteen people do, and neither has to scroll: the window's content pane caps at
+   * 300px and scrolls by default, which a square diagram the width of the window overran
+   * every time.
    */
-  const rowsPerSide = Math.ceil(Math.max(0, (current?.seats.length ?? 5) - 1) / 2);
-  const diagram = Math.min(540, Math.max(250, Math.round((rowsPerSide * 34) / 0.52) + 60));
+  const rows = seatRows(current?.seats.length ?? 5);
+  const diagram = Math.min(540, Math.max(250, Math.round((rows * 34) / 0.6) + 60));
 
   return (
     <DraggableWindow

@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { VehiclesWindow } from '../VehiclesWindow';
+import { VehiclesWindow, seatAnchor, seatRows } from '../VehiclesWindow';
 
 /**
  * The shared seating window.
@@ -196,6 +196,43 @@ describe('the vehicles window', () => {
   it('names the owner by character in the picker', () => {
     open();
     expect(screen.getByRole('option', { name: /KESTREL · SAM/ })).toBeInTheDocument();
+  });
+
+  it('seats the front pair side by side', () => {
+    // A car is DRIVER, SHOTGUN, B.LEFT, B.RIGHT, REAR. Shotgun is the front passenger
+    // seat, not the one behind the driver — the driver used to sit alone at the nose with
+    // shotgun tucked in behind them.
+    const [driver, shotgun, backLeft, backRight, rear] = [0, 1, 2, 3, 4].map(i => seatAnchor(i, 5));
+    expect(driver.y).toBe(shotgun.y);
+    expect(driver.side).toBe('left');
+    expect(shotgun.side).toBe('right');
+    // The back bench is a row further down, and matches sides with the front.
+    expect(backLeft.y).toBeGreaterThan(driver.y);
+    expect(backLeft.side).toBe('left');
+    expect(backRight.side).toBe('right');
+    expect(backRight.y).toBe(backLeft.y);
+    // The odd seat out goes down the centre line at the back.
+    expect(rear.x).toBe(50);
+    expect(rear.y).toBeGreaterThan(backLeft.y);
+  });
+
+  it('puts a lone rider on the centre line', () => {
+    // A motorcycle is crew 1; it should not be pushed to one side of the frame.
+    expect(seatAnchor(0, 1).x).toBe(50);
+    expect(seatRows(1)).toBe(1);
+  });
+
+  it('pairs an even crew off with no centre seat', () => {
+    // A truck is DRIVER and SHOTGUN, both on the front bench.
+    expect(seatAnchor(0, 2).side).toBe('left');
+    expect(seatAnchor(1, 2).side).toBe('right');
+    expect(seatAnchor(0, 2).y).toBe(seatAnchor(1, 2).y);
+    expect(seatRows(2)).toBe(1);
+  });
+
+  it('counts rows for the big hulls', () => {
+    expect(seatRows(16)).toBe(8);
+    expect(seatRows(13)).toBe(7);
   });
 
   it('surfaces a refusal from the server', () => {
