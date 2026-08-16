@@ -78,9 +78,20 @@ export const seatAnchor = (i: number, total: number) => {
   return { x: left ? 36 : 64, y: rowY(Math.floor(i / 2)), side: left ? ('left' as const) : ('right' as const) };
 };
 
+/**
+ * Hull colour by how much of it is left — the same thresholds the character health
+ * windows use, so a car at a quarter reads as urgently as a person at a quarter.
+ */
+export const hullColor = (hp: number, hpMax: number) => {
+  if (hp <= 0) return '#ff3333';
+  const pct = hpMax > 0 ? hp / hpMax : 0;
+  return pct > 0.5 ? 'var(--green)' : pct > 0.25 ? '#ffaa00' : '#ff3333';
+};
+
 export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin, vehicles, players }: Props) {
   const [selected, setSelected] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [amount, setAmount] = useState(0);
 
   useEffect(() => {
     if (!socket) return;
@@ -162,7 +173,6 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
               <div style={{ display: 'flex', gap: '10px', fontSize: '0.65rem', letterSpacing: '1px', flexWrap: 'wrap' }}>
                 <span>AC {current.ac}</span>
                 <span>AR {current.armorRating}</span>
-                <span>{current.hp}/{current.hpMax} HP</span>
                 <span style={{ opacity: 0.6 }}>{Object.keys(current.occupants).length}/{current.crew} ABOARD</span>
                 <label style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', userSelect: 'none' }}>
                   <input
@@ -173,6 +183,61 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                   MOVING
                 </label>
               </div>
+
+              {/* The hull, and the way to change it.
+                  Combat writes this field on its own; what it never covered was the repair
+                  afterwards, or a crash, or anything else the attack path does not model —
+                  all of which meant opening the owner's sheet to edit a number. Only the
+                  owner and the GM get the buttons, since taking someone else's car apart
+                  is what shooting it is for. */}
+              {(() => {
+                const pct = current.hpMax > 0 ? Math.max(0, Math.min(1, current.hp / current.hpMax)) : 0;
+                const color = hullColor(current.hp, current.hpMax);
+                const mine = current.owner === userName || !!isAdmin;
+                const send = (sign: number) => {
+                  if (!amount) return;
+                  act('setVehicleHp', {
+                    owner: current.owner,
+                    vehicleIndex: current.index,
+                    delta: sign * Math.abs(amount),
+                  });
+                  setAmount(0);
+                };
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', letterSpacing: '1px', color }}>
+                      <span>{current.destroyed ? 'WRECKED' : 'HULL'}</span>
+                      <span>{current.hp} / {current.hpMax}</span>
+                    </div>
+                    <div
+                      role="progressbar"
+                      aria-label="Hull"
+                      aria-valuenow={current.hp}
+                      aria-valuemin={0}
+                      aria-valuemax={current.hpMax}
+                      style={{ height: '8px', background: 'rgba(0,0,0,0.6)', border: `1px solid ${color}`, borderRadius: '2px', overflow: 'hidden' }}
+                    >
+                      <div style={{ width: `${pct * 100}%`, height: '100%', background: color, transition: 'width 0.3s ease' }} />
+                    </div>
+                    {mine && (
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <input
+                          type="number"
+                          min={0}
+                          aria-label="Hull amount"
+                          placeholder="0"
+                          value={amount || ''}
+                          onChange={(e) => setAmount(Math.abs(parseInt(e.target.value, 10)) || 0)}
+                          className="sheet-input"
+                          style={{ flex: 1, minWidth: 0, background: 'rgba(0,10,0,0.7)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.7rem', padding: '2px 4px' }}
+                        />
+                        <button className="upload-btn" style={{ flex: 1, minWidth: 0 }} onClick={() => send(+1)}>REPAIR</button>
+                        <button className="upload-btn danger-btn" style={{ flex: 1, minWidth: 0 }} onClick={() => send(-1)}>DAMAGE</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Square and centred, so the art, its leader lines and the controls at
                   either edge all scale as one piece and cannot drift apart. */}

@@ -821,6 +821,27 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
+    // Damage and repair by hand. Unlike seating, which anyone may do to anyone, the hull
+    // belongs to its owner — combat is what lets other people take a car apart.
+    socket.on('setVehicleHp', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload) return;
+      const owner = String(payload.owner || '').trim();
+      if (owner !== info.userName && !isAdminSocket(socket)) {
+        return socket.emit('vehicleSeatingError', { message: 'NOT_YOURS' });
+      }
+      withCwn(() => {
+        vehicleState.adjustHp(db, {
+          owner,
+          vehicleIndex: payload.vehicleIndex,
+          delta: payload.delta,
+        }, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterSeatingChange([owner]);
+        });
+      });
+    });
+
     socket.on('requestMySheet', () => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;

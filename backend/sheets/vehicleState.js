@@ -272,6 +272,32 @@ function seatOut(db, occupant, cb) {
   });
 }
 
+/**
+ * Damage or repair a vehicle by hand.
+ *
+ * Combat already writes this field when someone shoots the car. This is for everything
+ * combat does not model — a crash, a ram, an explosion, and above all the repair
+ * afterwards, which until now meant opening the owner's sheet and editing the number.
+ *
+ * Clamped to the hull rather than trusting the client: a repair cannot exceed the maximum
+ * and damage cannot drive it below zero, so `destroyed` stays a fact derived from HP
+ * instead of a state the UI can invent. Landing exactly where it already was is not an
+ * error — it just writes nothing.
+ */
+function adjustHp(db, { owner, vehicleIndex, delta }, cb) {
+  const index = Number(vehicleIndex);
+  const amount = Math.trunc(Number(delta));
+  if (!Number.isFinite(amount) || amount === 0) return cb('NO_CHANGE');
+  loadSheet(db, owner, (ownerSheet) => {
+    if (!ownerSheet) return cb('NO_SUCH_VEHICLE_OWNER');
+    const vehicle = attackCwn.getVehicle(ownerSheet.data, index);
+    if (!vehicle) return cb('NO_SUCH_VEHICLE');
+    const next = Math.max(0, Math.min(vehicle.hpMax, vehicle.hp + amount));
+    if (next === vehicle.hp) return cb(null);
+    writeSheet(db, ownerSheet.id, { ...ownerSheet.data, [vehicle.hpField]: next }, () => cb(null));
+  });
+}
+
 /** Set whether a vehicle is moving. It belongs to the car, so everyone aboard agrees. */
 function setMoving(db, { owner, vehicleIndex, moving }, cb) {
   const index = Number(vehicleIndex);
@@ -350,5 +376,5 @@ function roster(db, cb) {
 
 module.exports = {
   SYSTEM, resolve, publicState, syncAll, vehicleKey, getRideMounts, getRideWeapon,
-  seatIn, seatOut, setMoving, loadSheet, roster, OCCUPANCY_FIELDS,
+  seatIn, seatOut, setMoving, adjustHp, loadSheet, roster, OCCUPANCY_FIELDS,
 };

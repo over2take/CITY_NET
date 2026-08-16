@@ -39,6 +39,9 @@ Cities Without Number gets vehicles: on the sheet, in combat, and shared across 
 
   Players are listed by character name rather than login, since nobody at the table thinks of each other by account name.
 - **A car badge on the sheet and the token menu**, naming the vehicle you are in, with the way out. Shown on anyone's token but inert unless it is yours: seeing that someone is in a car is the reason it is there.
+- **A hull bar in the VEHICLES window, with REPAIR and DAMAGE.** Combat already wrote the vehicle's HP when someone shot the car; what it never covered was the repair afterwards, or a crash, or a ram — all of which meant opening the owner's sheet and editing a number. The bar grades green to amber to red at the same thresholds as the character health windows and reads WRECKED at zero.
+
+  Both directions clamp to the hull on the server: a repair cannot exceed the maximum and damage cannot go below zero, because *destroyed* is derived from HP rather than stored, and an unclamped write could invent a state the rules have no name for. Everyone sees the bar; only the owner and the GM get the buttons, since taking someone else's car apart is what shooting it is for.
 
 ### Changed
 

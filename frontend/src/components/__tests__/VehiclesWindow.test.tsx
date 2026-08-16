@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { VehiclesWindow, seatAnchor, seatRows } from '../VehiclesWindow';
+import { VehiclesWindow, seatAnchor, seatRows, hullColor } from '../VehiclesWindow';
 
 /**
  * The shared seating window.
@@ -107,7 +107,7 @@ describe('the vehicles window', () => {
     open({ vehicles: [{ ...CAR, occupants: { driver: 'cody' } }], players: [PLAYERS[0]] });
     expect(screen.getByText('AC 8')).toBeInTheDocument();
     expect(screen.getByText('AR 6')).toBeInTheDocument();
-    expect(screen.getByText('30/30 HP')).toBeInTheDocument();
+    expect(screen.getByText('30 / 30')).toBeInTheDocument();
     expect(screen.getByText('1/5 ABOARD')).toBeInTheDocument();
   });
 
@@ -239,5 +239,83 @@ describe('the vehicles window', () => {
     const socket = open();
     socket.deliver('vehicleSeatingError', { message: 'NO_SUCH_SEAT' });
     expect(screen.getByText(/NO SUCH SEAT/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The hull bar.
+ *
+ * The clamping is the server's test — what matters here is that the right sign goes out,
+ * and that the buttons only appear for someone entitled to press them.
+ */
+describe('the hull', () => {
+  const amountBox = () => screen.getByLabelText('Hull amount');
+
+  it('draws the bar against the maximum', () => {
+    open({ vehicles: [{ ...CAR, hp: 12 }] });
+    const bar = screen.getByRole('progressbar', { name: 'Hull' });
+    expect(bar).toHaveAttribute('aria-valuenow', '12');
+    expect(bar).toHaveAttribute('aria-valuemax', '30');
+    expect(screen.getByText('12 / 30')).toBeInTheDocument();
+  });
+
+  it('says WRECKED rather than HULL at zero', () => {
+    open({ vehicles: [{ ...CAR, hp: 0, destroyed: true }] });
+    expect(screen.getByText('WRECKED')).toBeInTheDocument();
+    expect(screen.queryByText('HULL')).not.toBeInTheDocument();
+  });
+
+  it('grades the colour by what is left', () => {
+    // Same thresholds as the character health windows, so a car at a quarter reads as
+    // urgently as a person at a quarter.
+    expect(hullColor(30, 30)).toBe('var(--green)');
+    expect(hullColor(10, 30)).toBe('#ffaa00');
+    expect(hullColor(4, 30)).toBe('#ff3333');
+    expect(hullColor(0, 30)).toBe('#ff3333');
+    // A hull with no maximum is not a divide-by-zero.
+    expect(hullColor(0, 0)).toBe('#ff3333');
+  });
+
+  it('sends damage negative and a repair positive', async () => {
+    const socket = open();
+    await userEvent.type(amountBox(), '7');
+    await userEvent.click(screen.getByText('DAMAGE'));
+    expect(lastEmit(socket, 'setVehicleHp')).toMatchObject({ owner: 'cody', vehicleIndex: 1, delta: -7 });
+
+    await userEvent.type(amountBox(), '4');
+    await userEvent.click(screen.getByText('REPAIR'));
+    expect(lastEmit(socket, 'setVehicleHp')).toMatchObject({ owner: 'cody', vehicleIndex: 1, delta: 4 });
+  });
+
+  it('clears the amount after sending, so a click cannot repeat itself', async () => {
+    const socket = open();
+    await userEvent.type(amountBox(), '5');
+    await userEvent.click(screen.getByText('DAMAGE'));
+    expect(amountBox()).toHaveValue(null);
+
+    // A second click with nothing typed sends nothing at all.
+    const before = socket.emitted.length;
+    await userEvent.click(screen.getByText('DAMAGE'));
+    expect(socket.emitted.length).toBe(before);
+  });
+
+  it('reads a typed minus as an amount, not a direction', async () => {
+    // REPAIR and DAMAGE carry the sign. A minus in the box would otherwise invert them.
+    const socket = open();
+    await userEvent.type(amountBox(), '-8');
+    await userEvent.click(screen.getByText('DAMAGE'));
+    expect(lastEmit(socket, 'setVehicleHp')).toMatchObject({ delta: -8 });
+  });
+
+  it('shows the bar to everyone but the buttons only to the owner', () => {
+    open({ userName: 'mouse' });
+    expect(screen.getByRole('progressbar', { name: 'Hull' })).toBeInTheDocument();
+    expect(screen.queryByText('REPAIR')).not.toBeInTheDocument();
+    expect(screen.queryByText('DAMAGE')).not.toBeInTheDocument();
+  });
+
+  it('gives the GM the buttons on a car that is not theirs', () => {
+    open({ userName: 'mouse', isAdmin: true });
+    expect(screen.getByText('REPAIR')).toBeInTheDocument();
   });
 });
