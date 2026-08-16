@@ -30,6 +30,8 @@ Cities Without Number gets vehicles: on the sheet, in combat, and shared across 
   Seats come from the book's Crew number, so a Motorcycle seats one and an APC sixteen. Guns are deliberately *not* seats: a Tank is crew 3 with three hardpoints and can never man every gun and drive at once, and making each hardpoint a seat would hand it a fourth body and quietly resolve a tension the rules intend.
 
   Anyone can seat anyone — piling into a car is a decision the table makes out loud — but only you or the GM can take you out, enforced on the server rather than by hiding a button.
+
+  Three ways in, all the same window: `VEHICLES` under GEOMETRY_PROTOCOLS, `SEATING` in the sheet's VEHICLES header — beside the collapse toggle, so folding the section away does not take it with them — and `VEHICLES` on a token menu, which appears only once some vehicle exists. Players are listed by character name rather than login, since nobody at the table thinks of each other by account name.
 - **A car badge on the sheet and the token menu**, naming the vehicle you are in, with the way out. Shown on anyone's token but inert unless it is yours: seeing that someone is in a car is the reason it is there.
 
 ### Changed
@@ -45,6 +47,7 @@ Cities Without Number gets vehicles: on the sheet, in combat, and shared across 
 - **A vehicle rolls trauma against its own Trauma Target**, not against that of whoever happens to be sitting in it.
 - **A CWN attack reads the defender's sheet before rolling to hit**, not after. Whether they are in a vehicle decides the AC. It was already being fetched twice further down, so this is one read where there were two.
 - **Repeated sheet entries collapse.** Six vehicles declared meant thirty rows of blank fields on a sheet with no vehicles on it. Only entries holding data render, plus one on an empty sheet, and `+ ADD` reveals another. Each has a REMOVE behind a confirm click.
+- **Themes carry a vehicle accent.** Seat markers use each theme's own secondary colour rather than one imported hue, and only to mark a seat as occupied — the leader lines, the labels and an empty seat are drawn in the theme's own colour, because they are part of the diagram. Monochrome stays monochrome.
 - **New column on `locations`: `vehicle_state`.** Added by the usual startup migration — no action needed on upgrade, and empty for anyone not in a car.
 
 ### Fixed
