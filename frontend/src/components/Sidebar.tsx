@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import kofiLogo from '../assets/kofi.png';
 import { CityDataBaseMenu } from './CityDatabase';
-import type { CustomDie } from '../types';
+import type { CustomDie, AttackVehicle } from '../types';
 import { InitiativeWindow } from '../modules/initiative';
 import { InitiativeNavPanel } from '../modules/initiative/components/InitiativeNavPanel';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
@@ -9,6 +9,7 @@ import { CurrencyIcon } from './BankWindows';
 import { THEMES } from '../theme/themes';
 import type { ThemeName } from '../theme/themes';
 import { getTemplate } from '../sheets';
+import { CWN_VEHICLE_ROWS, CWN_VEHICLE_WEAPON_ROWS } from '../sheets/templates/cities_without_number';
 import { startUpdate, waitForRestart, currentBootId } from '../utils/updateClient';
 
 // Token defense config for the active game system; default is D&D-style AC
@@ -176,10 +177,12 @@ interface GeometryMenuProps {
   setMeasureMode: (v: boolean) => void;
   isSheetOpen: boolean;
   setIsSheetOpen: (v: boolean) => void;
+  isVehiclesOpen?: boolean;
+  setIsVehiclesOpen?: (v: boolean) => void;
   gameSystem?: string;
 }
 
-export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen, gameSystem }: GeometryMenuProps) {
+export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem }: GeometryMenuProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -316,6 +319,17 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
         >
           CHARACTER_SHEET
         </button>
+
+        {/* Vehicles are a CWN feature; other systems have no roster to show. */}
+        {gameSystem === 'cities_without_number' && setIsVehiclesOpen && (
+          <button
+            className={`upload-btn ${isVehiclesOpen ? 'active' : ''}`}
+            onClick={() => setIsVehiclesOpen(!isVehiclesOpen)}
+            style={{ width: '100%', fontSize: '0.65rem' }}
+          >
+            VEHICLES
+          </button>
+        )}
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
@@ -470,25 +484,32 @@ export function SystemInfoMenu({ userName, token, currentTheme, onThemeChange }:
 // sheet's weapon rows and fire; the server rolls everything against stored
 // data. Per-system extras: CP:R adds the aimed shot (−8, head, x2 through
 // armor) and declared LUCK; CWN is weapon-only (trauma/shock resolve
-// server-side per the house rules).
+// server-side per the house rules) but adds the mounts on its sheet vehicles,
+// which fire through the same server path as a carried weapon.
 const ATTACK_PANEL_CONFIG = {
   cyberpunk_red: {
     dmgExample: '3d6',
     meleeSkills: ['melee_weapon', 'brawling', 'martial_arts'],
     hasAimed: true,
     hasLuck: true,
+    vehicles: null,
   },
   cities_without_number: {
     dmgExample: '1d8+1',
     meleeSkills: ['stab', 'punch'],
     hasAimed: false,
     hasLuck: false,
+    // Counts come from the template rather than being repeated here: listing
+    // fewer than the sheet declares makes the last vehicles' mounts unfireable
+    // with nothing to show for it.
+    vehicles: { rows: CWN_VEHICLE_ROWS, weaponRows: CWN_VEHICLE_WEAPON_ROWS },
   },
   shadowrun_6e: {
     dmgExample: '3P',
     meleeSkills: ['close_combat'],
     hasAimed: false,
     hasLuck: false,
+    vehicles: null,
   },
 } as const;
 
@@ -498,7 +519,32 @@ const ATTACK_PANEL_CONFIG = {
 export const hasSheetCombat = (system: string | undefined): system is keyof typeof ATTACK_PANEL_CONFIG =>
   !!system && system in ATTACK_PANEL_CONFIG;
 
-function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState, setIsDiceTrayOpen }: {
+/** One firable thing: a weapon row on the sheet, or a mount on one of its
+ *  vehicles. A mount carries the vehicle it belongs to; the server reads the
+ *  mount's fields through the same code path either way. */
+type WeaponChoice = {
+  key: string;
+  index: number;
+  vehicleIndex?: number;
+  /** A mount on the vehicle you are riding in — the row lives on its owner's sheet, so
+   *  the server resolves it from your declared ride rather than from an index. */
+  rideMount?: boolean;
+  vehicleName?: string;
+  name: string;
+  dmg: string;
+  skill: string;
+};
+
+/** A row is firable only with both DMG and SKILL set — the same bar the server
+ *  applies, so an incomplete row is left out rather than offered and refused. */
+const readWeapon = (data: any, prefix: string) => {
+  const dmg = String(data?.[`${prefix}_dmg`] ?? '').trim();
+  const skill = String(data?.[`${prefix}_skill`] ?? '');
+  if (!dmg || !skill) return null;
+  return { name: String(data?.[`${prefix}_name`] ?? '').trim(), dmg, skill };
+};
+
+export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState, setIsDiceTrayOpen }: {
   system: keyof typeof ATTACK_PANEL_CONFIG;
   userName: string;
   socketRef: React.MutableRefObject<any>;
@@ -507,8 +553,10 @@ function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState,
   setIsDiceTrayOpen: (v: any) => void;
 }) {
   const cfg = ATTACK_PANEL_CONFIG[system];
-  const [weapons, setWeapons] = useState<{ index: number; name: string; dmg: string; skill: string }[]>([]);
-  const [selected, setSelected] = useState<number | null>(null);
+  // `key` rather than `index`, because a mount is identified by the pair
+  // (vehicle, mount) and the index alone stopped being unique.
+  const [weapons, setWeapons] = useState<WeaponChoice[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
   const [aimed, setAimed] = useState(false);
   const [luckAvailable, setLuckAvailable] = useState(0);
   const [luckSpend, setLuckSpend] = useState(0);
@@ -520,16 +568,36 @@ function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState,
     if (!s) return;
     const onSheetData = (sheet: any) => {
       if (!sheet || sheet.username !== userName) return;
-      const rows: { index: number; name: string; dmg: string; skill: string }[] = [];
+      const rows: WeaponChoice[] = [];
       for (let i = 1; i <= 4; i++) {
-        const dmg = String(sheet.data?.[`weapon${i}_dmg`] ?? '').trim();
-        const skill = String(sheet.data?.[`weapon${i}_skill`] ?? '');
-        if (dmg && skill) {
-          rows.push({ index: i, name: String(sheet.data?.[`weapon${i}_name`] ?? '').trim() || `WEAPON ${i}`, dmg, skill });
+        const row = readWeapon(sheet.data, `weapon${i}`);
+        if (row) rows.push({ key: String(i), index: i, name: row.name || `WEAPON ${i}`, dmg: row.dmg, skill: row.skill });
+      }
+      // The mounts of someone else's car, sent down by the server because a gunner
+      // cannot see the sheet they live on.
+      if (cfg.vehicles && sheet.ride) {
+        for (const m of sheet.ride.mounts ?? []) {
+          rows.push({
+            key: `r:${m.index}`, index: m.index, rideMount: true,
+            vehicleName: String(sheet.ride.vehicleName ?? '').trim() || 'THEIR VEHICLE',
+            name: String(m.name ?? '').trim() || `MOUNT ${m.index}`,
+            dmg: String(m.dmg ?? ''), skill: String(m.skill ?? ''),
+          });
+        }
+      }
+      // Mounts come after the carried weapons and are labelled with their
+      // vehicle, since firing a turret is a different act from drawing a gun.
+      if (cfg.vehicles) {
+        for (let v = 1; v <= cfg.vehicles.rows; v++) {
+          const vehicleName = String(sheet.data?.[`vehicle${v}_name`] ?? '').trim() || `VEHICLE ${v}`;
+          for (let w = 1; w <= cfg.vehicles.weaponRows; w++) {
+            const row = readWeapon(sheet.data, `vehicle${v}_weapon${w}`);
+            if (row) rows.push({ key: `v${v}:${w}`, index: w, vehicleIndex: v, vehicleName, name: row.name || `MOUNT ${w}`, dmg: row.dmg, skill: row.skill });
+          }
         }
       }
       setWeapons(rows);
-      setSelected(prev => (prev !== null && rows.some(r => r.index === prev)) ? prev : (rows[0]?.index ?? null));
+      setSelected(prev => (prev !== null && rows.some(r => r.key === prev)) ? prev : (rows[0]?.key ?? null));
       if (cfg.hasLuck) {
         const luck = Number(sheet.data?.luck) || 0;
         setLuckAvailable(luck);
@@ -550,9 +618,13 @@ function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState,
 
   const fire = () => {
     if (selected === null) return;
+    const choice = weapons.find(w => w.key === selected);
+    if (!choice) return;
     socketRef.current?.emit('sheetAttack', {
       targetId,
-      weaponIndex: selected,
+      weaponIndex: choice.index,
+      ...(choice.vehicleIndex ? { vehicleIndex: choice.vehicleIndex } : {}),
+      ...(choice.rideMount ? { rideMount: true } : {}),
       ...(cfg.hasAimed ? { aimed } : {}),
       ...(cfg.hasLuck ? {
         luck: luckSpend > 0 ? luckSpend : undefined,
@@ -572,17 +644,19 @@ function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState,
       </div>
     );
   }
-  const isMelee = (cfg.meleeSkills as readonly string[]).includes(weapons.find(w => w.index === selected)?.skill ?? '');
+  const isMelee = (cfg.meleeSkills as readonly string[]).includes(weapons.find(w => w.key === selected)?.skill ?? '');
   return (
     <div style={{ marginBottom: '6px' }}>
       <select
         aria-label="Weapon"
         value={selected ?? ''}
-        onChange={(e) => setSelected(Number(e.target.value))}
+        onChange={(e) => setSelected(e.target.value)}
         style={{ width: '100%', background: 'rgba(0,10,0,0.7)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px', marginBottom: '5px' }}
       >
         {weapons.map(w => (
-          <option key={w.index} value={w.index}>{w.name.toUpperCase()} · {w.dmg} · {w.skill.replace(/_/g, ' ').toUpperCase()}</option>
+          <option key={w.key} value={w.key}>
+            {w.vehicleName ? `${w.vehicleName.toUpperCase()} · ` : ''}{w.name.toUpperCase()} · {w.dmg} · {w.skill.replace(/_/g, ' ').toUpperCase()}
+          </option>
         ))}
       </select>
       {cfg.hasAimed && (
@@ -592,7 +666,7 @@ function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState,
         </label>
       )}
       {cfg.hasLuck && luckAvailable > 0 && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: luckSpend > 0 ? '#ffcc00' : 'var(--green)', marginBottom: '6px', userSelect: 'none' }} title="Declared before the roll: adds a flat bonus and negates a natural-1 fumble">
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: luckSpend > 0 ? 'var(--vehicle)' : 'var(--green)', marginBottom: '6px', userSelect: 'none' }} title="Declared before the roll: adds a flat bonus and negates a natural-1 fumble">
           LUCK
           <select
             aria-label="Spend LUCK"
@@ -631,7 +705,7 @@ interface DiceMenuProps {
   rhombusState: any;
   setIsDiceTrayOpen: (v: any) => void;
   setNotification: (msg: string) => void;
-  attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
+  attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number; vehicle?: AttackVehicle | null } | null;
   onCancelAttack?: () => void;
   gameSystem?: string;
 }
@@ -710,6 +784,23 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
           <div style={{ color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '1px' }}>
             ATTACK ROLL — vs {attackPending.targetName}
           </div>
+          {attackPending.vehicle && (
+            // Shown before the shot, not after: an attacker who cannot see the car has
+            // no way to know why their damage vanished.
+            <div style={{ color: 'var(--vehicle)', fontSize: '0.7rem', marginBottom: '6px', letterSpacing: '0.5px' }}>
+              TARGET IN VEHICLE — {attackPending.vehicle.name.toUpperCase()} ·{' '}
+              {attackPending.vehicle.moving ? 'MOVING' : 'STATIONARY'} · AC {attackPending.vehicle.ac} · AR{' '}
+              {attackPending.vehicle.armorRating} · {attackPending.vehicle.hp}/{attackPending.vehicle.hpMax} HP
+              {(attackPending.vehicle.occupants?.length ?? 0) > 1 && (
+                <div style={{ marginTop: '2px' }}>
+                  ABOARD: {attackPending.vehicle.occupants!.join(', ').toUpperCase()}
+                </div>
+              )}
+              <div style={{ color: '#888', marginTop: '2px' }}>
+                DAMAGE HITS THE VEHICLE UNTIL IT IS DESTROYED
+              </div>
+            </div>
+          )}
           <div style={{ color: 'var(--green)', fontSize: '0.75rem', marginBottom: '6px' }}>
             {hasSheetCombat(gameSystem)
               ? 'PICK A WEAPON — TO-HIT, DAMAGE & ARMOR RESOLVE AUTOMATICALLY'
@@ -984,6 +1075,8 @@ interface SidebarProps {
   setIsBankOpen: (v: boolean) => void;
   isSheetOpen: boolean;
   setIsSheetOpen: (v: boolean) => void;
+  isVehiclesOpen?: boolean;
+  setIsVehiclesOpen?: (v: boolean) => void;
   gameSystem?: string;
   attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
   onCancelAttack?: () => void;
@@ -1007,7 +1100,7 @@ interface SidebarProps {
   onDeleteCustomDie?: (id: number | string) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -1213,7 +1306,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'system_info' && <SystemInfoMenu userName={userName} token={token} currentTheme={currentTheme} onThemeChange={onThemeChange} />}
           {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} view={view} activeUsers={activeUsers} />}
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
-          {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} gameSystem={gameSystem} />}
+          {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
           {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} />}
           {activeMenu === 'initiative_tracker' && (

@@ -9,6 +9,58 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.0] - 2026-08-15
+
+Cities Without Number gets vehicles: on the sheet, in combat, and shared across the table.
+
+### Added
+
+- **The book's vehicle table, as presets.** Ten vehicles from p.82 — Motorcycle to Dropcraft — with their AC, HP, Armour, Trauma Target, Speed, Crew, Hardpoints, Power, Mass, Size and cost. Picking a TYPE fills the whole stat block, and the row then follows it: a Motorcycle shows no weapon mounts because it has no hardpoints, a Tank shows three.
+
+  Armour is left unset on the Tank, APC and GEV. The book prints `*` and `**` there rather than a number, meaning an immunity the GM rules on, and inventing a rating would be worse than writing the rule into the vehicle's notes — which the preset does.
+
+  Every row is pinned to the book by a test holding the table verbatim, in its own column order. Five values had already been transcribed wrong from a screenshot before that existed.
+- **Ten wireframes, one per vehicle.** Drawn rather than illustrated: the city is wireframe with deliberately low segment counts, and a photo-real car dropped into that reads as a foreign object. Stroke-only and `currentColor`, so each takes the theme it is rendered in.
+- **Mounted weapons from the book.** Ten guns a hardpoint can carry, as a picker on each mount that fills damage, trauma and skill. Five are purpose-built vehicle weapons; the rest are Heavy weapons from the personal tables, two of which have no fixed damage at all — a grenade launcher fires whatever you loaded.
+- **Vehicle fittings, against a Power and Mass budget.** All 24 from p.84 as a per-vehicle list: install, remove, and a running `POWER 2/8 · MASS 6/15` that turns red when overloaded. Mounted weapons count toward the same budget, because the book is explicit that a hardpoint costs Power and Mass just as a fitting does.
+
+  A list rather than a dropdown filling fields, because a fitting comes off again. Several rewrite the stat block — Extra Durability is +25% HP, Hardpoint Support adds a mount — and a control that wrote those numbers in would have no way to take them back. The effects are printed; the numbers stay yours. Power Systems raise the pool rather than un-spending, so two of them read as `POWER 0/14 (+6)` rather than as minus six spent.
+- **A shared VEHICLES window.** A picker across every player's sheet, the vehicle's wireframe with a leader line and a dropdown per seat, a MOVING toggle, and its AC, AR, HP and crew count — so the table can read a car without opening anyone's sheet.
+
+  Seats come from the book's Crew number, so a Motorcycle seats one and an APC sixteen. Guns are deliberately *not* seats: a Tank is crew 3 with three hardpoints and can never man every gun and drive at once, and making each hardpoint a seat would hand it a fourth body and quietly resolve a tension the rules intend.
+
+  Anyone can seat anyone — piling into a car is a decision the table makes out loud — but only you or the GM can take you out, enforced on the server rather than by hiding a button.
+
+  Three ways in, all the same window:
+
+  - **`VEHICLES`** under GEOMETRY_PROTOCOLS in the sidebar
+  - **`SEATING`** in the sheet's VEHICLES section header — beside the collapse toggle rather than inside the section, so folding it away does not take the button with it
+  - **`VEHICLES`** on a token menu, shown only once some vehicle exists
+
+  Players are listed by character name rather than login, since nobody at the table thinks of each other by account name.
+- **A car badge on the sheet and the token menu**, naming the vehicle you are in, with the way out. Shown on anyone's token but inert unless it is yours: seeing that someone is in a car is the reason it is there.
+- **A hull bar in the VEHICLES window, with REPAIR and DAMAGE.** Combat already wrote the vehicle's HP when someone shot the car; what it never covered was the repair afterwards, or a crash, or a ram — all of which meant opening the owner's sheet and editing a number. The bar grades green to amber to red at the same thresholds as the character health windows and reads WRECKED at zero.
+
+  Both directions clamp to the hull on the server: a repair cannot exceed the maximum and damage cannot go below zero, because *destroyed* is derived from HP rather than stored, and an unclamped write could invent a state the rules have no name for. Everyone sees the bar; only the owner and the GM get the buttons, since taking someone else's car apart is what shooting it is for.
+
+### Changed
+
+- **There is no CUSTOM vehicle.** It was a hole rather than a feature: with no type a vehicle had no crew, no hardpoints and no Trauma Target, so it seated one person, refused to fire the mounts you could still fill in, and took traumatic hits twice as often as any real one — none of which said anything on screen. Every vehicle is one of the book's now; start from the nearest and edit the numbers.
+
+  The section holds nothing until you add something, and a new vehicle starts as a Motorcycle. Changing the type renames it, unless you have given it a name of your own — a vehicle called MOTORCYCLE has not been named, one called Betty has.
+- **Attacks on someone in a vehicle hit the vehicle.** Armour Rating subtracts and the remainder comes off the vehicle's HP; the people inside are untouched until it is destroyed, at which point it stops being cover. A vehicle's AC is its own plus the driver's Drive while moving and four *worse* while stationary, and firing out of a moving one costs four either way.
+
+  Damage lands on the owner's sheet, so four people in one car share one pool. Every unreadable state resolves to *on foot* — an owner who logged out, a row never filled in, a wreck — because a broken reference should cost someone their cover, never make them impossible to hit.
+- **Mounts can be fired at all**, from the weapon picker, keyed by the *(vehicle, mount)* pair so mount 1 on two different cars do not shadow each other. A gunner can fire the guns of a car they are riding in: the to-hit was already built from the attacker's sheet, so they fire someone else's cannon with their own skill.
+- **Only weapons the book marks `!` can traumatise a vehicle.** Every trauma die was working on cars. A pistol's trauma die is devastating to a person and does nothing at all to a car. The marker rides on the trauma value — `d20/x4!` — because the damage string is fed to the dice roller and a marker in it would break the roll.
+- **A vehicle rolls trauma against its own Trauma Target**, not against that of whoever happens to be sitting in it.
+- **A CWN attack reads the defender's sheet before rolling to hit**, not after. Whether they are in a vehicle decides the AC. It was already being fetched twice further down, so this is one read where there were two.
+- **Repeated sheet entries collapse.** Six vehicles declared meant thirty rows of blank fields on a sheet with no vehicles on it. Only entries holding data render, plus one on an empty sheet, and `+ ADD` reveals another. Each has a REMOVE behind a confirm click.
+- **Themes carry a vehicle accent.** Seat markers use each theme's own secondary colour rather than one imported hue, and only to mark a seat as occupied — the leader lines, the labels and an empty seat are drawn in the theme's own colour, because they are part of the diagram. Monochrome stays monochrome.
+- **New column on `locations`: `vehicle_state`.** Added by the usual startup migration — no action needed on upgrade, and empty for anyone not in a car.
+
+---
+
 ## [1.8.2] - 2026-08-14
 
 ### Added

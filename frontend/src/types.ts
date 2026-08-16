@@ -37,7 +37,29 @@ export interface Location {
   has_signage: number;
   has_sidewalk: number;
   is_hidden: number;
+  /** JSON blob mirrored from the owner's sheet when they are riding in a vehicle;
+   *  null when on foot. Parse it with `parseVehicleState`. */
+  vehicle_state?: string | null;
 }
+
+/** The vehicle someone is riding in, as everyone else is allowed to see it: the numbers
+ *  you are shooting at, not their sheet. */
+export interface AttackVehicle {
+  name: string;
+  ac: number;
+  armorRating: number;
+  hp: number;
+  hpMax: number;
+  moving: boolean;
+  /** Everyone declared to be in this vehicle, owner included. */
+  occupants?: string[];
+}
+
+/** Tokens carry the state as a string so it survives the generic locations payload. */
+export const parseVehicleState = (raw: string | null | undefined): AttackVehicle | null => {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as AttackVehicle; } catch { return null; }
+};
 
 export interface District {
   id: number;

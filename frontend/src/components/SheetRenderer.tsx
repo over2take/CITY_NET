@@ -47,6 +47,12 @@ interface SheetRendererProps {
   /** House-rule gate: show the 1-LUCK fumble shield control. Off = a natural
    *  1 always fumbles and the button is hidden. */
   allowFumbleShield?: boolean;
+  /** A section's header button was pressed. Sections declare the label; what it does is
+   *  the surface's business — the renderer has no idea what a window is. */
+  onSectionAction?: (sectionId: string) => void;
+  /** Write several fields as one save. Needed wherever one control changes many
+   *  values — separate saves race on the server and all but the last are lost. */
+  onFieldsChange?: (fields: Record<string, string | number>) => void;
   /** Roll a death save (shown at 0 HP when the template defines deathSave).
    *  Server-resolved: 1d10 + tracked penalty vs the save stat. */
   onDeathSave?: () => void;
@@ -91,9 +97,19 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }: {
+/** A tag_list stores a JSON array of ids in one field; anything else reads as empty. */
+const parseTagList = (raw: unknown): string[] => {
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(v => typeof v === 'string') : [];
+  } catch { return []; }
+};
+
+function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, style, onOpenLink }: {
   field: SheetField; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldsChange?: (fields: Record<string, string | number>) => void;
   style?: React.CSSProperties;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
 }) {
@@ -133,7 +149,63 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
       </div>
     );
   }
+  if (field.type === 'tag_list') {
+    // Installed things, as removable chips. A list rather than a set of fields because
+    // fittings come off again: a control that wrote "+25% HP" somewhere would have no way
+    // to take it back. What is stored is the list; the stat block stays hand-edited.
+    const chosen = parseTagList(value);
+    const options = field.tagOptions ? field.tagOptions(data) : (field.options ?? []);
+    const summary = field.tagSummary?.(chosen, data);
+    const write = (next: string[]) => onFieldChange(field.id, JSON.stringify(next));
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+          {chosen.map((id, i) => (
+            <span
+              key={`${id}_${i}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                border: '1px solid var(--green)', padding: '1px 4px', fontSize: '0.6rem',
+              }}
+            >
+              {options.find(o => o.value === id)?.label ?? id}
+              {field.tagHint?.(id) ? <em style={{ opacity: 0.6, fontStyle: 'normal' }}>{field.tagHint(id)}</em> : null}
+              {!readOnly && (
+                <button
+                  aria-label={`Remove ${id}`}
+                  onClick={() => write(chosen.filter((_, j) => j !== i))}
+                  style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', padding: 0, fontSize: '0.7rem', lineHeight: 1 }}
+                >×</button>
+              )}
+            </span>
+          ))}
+          {chosen.length === 0 && <span style={{ fontSize: '0.6rem', opacity: 0.4 }}>NONE INSTALLED</span>}
+        </div>
+        {!readOnly && (
+          <select
+            aria-label={`Add ${field.label}`}
+            className="sheet-input"
+            style={{ ...inputStyle, ...style, maxWidth: '260px' }}
+            value=""
+            onChange={(e) => { if (e.target.value) write([...chosen, e.target.value]); }}
+          >
+            <option value="">{field.addLabel ?? "+ ADD…"}</option>
+            {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        )}
+        {summary && (
+          <div style={{ fontSize: '0.6rem', opacity: summary.warn ? 1 : 0.65, color: summary.warn ? '#ff4444' : undefined }}>
+            {summary.text}
+          </div>
+        )}
+      </div>
+    );
+  }
   if (field.type === 'select') {
+    const options = field.options ?? [];
+    // A template that names its own blank state keeps it; anything else gets the
+    // placeholder, so a select is never silently pre-set to its first real choice.
+    const hasBlank = options.some(o => o.value === '');
     return (
       <select
         aria-label={field.label}
@@ -141,10 +213,19 @@ function FieldInput({ field, data, readOnly, onFieldChange, style, onOpenLink }:
         style={{ ...inputStyle, ...style }}
         value={String(value)}
         disabled={readOnly}
-        onChange={(e) => onFieldChange(field.id, e.target.value)}
+        onChange={(e) => {
+          const chosen = e.target.value;
+          // A select can carry a whole stat block behind it, and it has to land as one
+          // save: the server rewrites the entire sheet per field change, so a dozen sent
+          // together overwrite each other and only the last survives.
+          const extra = field.presetFill ? field.presetFill(chosen, data) : {};
+          const batch: Record<string, string | number> = { ...extra, [field.id]: chosen };
+          if (Object.keys(batch).length > 1 && onFieldsChange) onFieldsChange(batch);
+          else for (const [id, val] of Object.entries(batch)) onFieldChange(id, val);
+        }}
       >
-        <option value="">—</option>
-        {(field.options ?? []).map(o => (
+        {!hasBlank && <option value="">—</option>}
+        {options.map(o => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
@@ -646,39 +727,198 @@ function SkillsSection({ section, data, readOnly, onFieldChange, onRoll }: {
 // Structured weapon rows: every N consecutive fields form one weapon, where
 // N is section.columns (default 4, CP:R's name/dmg/skill/rof). Headers come
 // from the first row's field labels.
-function WeaponsSection({ section, data, readOnly, onFieldChange }: {
+function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldsChange?: (fields: Record<string, string | number>) => void;
 }) {
+  // Two clicks to clear an entry: the first arms it, the second does it. A stray click
+  // on a control that wipes thirty fields is not something to leave one click away.
+  const [confirmClear, setConfirmClear] = useState<number | null>(null);
   const perRow = section.columns ?? 4;
-  const rows: SheetField[][] = [];
-  for (let i = 0; i < section.fields.length; i += perRow) rows.push(section.fields.slice(i, i + perRow));
+  /**
+   * Fields into rows of `perRow`, except a fullWidth field, which takes a row to itself.
+   * That is what lets an entry carry a notes box without the grid arithmetic collapsing.
+   */
+  const toRows = (fields: SheetField[]) => {
+    const out: SheetField[][] = [];
+    let cur: SheetField[] = [];
+    for (const f of fields) {
+      if (f.fullWidth) {
+        if (cur.length) { out.push(cur); cur = []; }
+        out.push([f]);
+        continue;
+      }
+      if (f.startsRow && cur.length) { out.push(cur); cur = []; }
+      cur.push(f);
+      if (cur.length === perRow) { out.push(cur); cur = []; }
+    }
+    if (cur.length) out.push(cur);
+    return out;
+  };
+
+  // Sections that repeat an entry (a vehicle and its mounts) collapse the empty ones.
+  // Grouped by field count rather than by row count: rows vary in width once one of them
+  // spans the grid, so counting rows would slice the groups in the wrong places.
+  const groups: SheetField[][][] = [];
+  if (section.groupSize) {
+    for (let i = 0; i < section.fields.length; i += section.groupSize) {
+      groups.push(toRows(section.fields.slice(i, i + section.groupSize)));
+    }
+  }
+  const rowsPerGroup = groups.length ? groups[0].length : 0;
+  const rows = section.groupSize ? (groups[0] ?? []) : toRows(section.fields);
   const cell: React.CSSProperties = { padding: '2px 4px', fontSize: '0.7rem' };
   // CP:R keeps its hand-tuned column widths; other row shapes get a generic
   // grid: name column flexes, selects get room, the rest stay compact.
+  const widthRow = (rows.find(r => r.length === perRow) ?? rows[0] ?? []);
   const gridTemplateColumns = perRow === 4
     ? '1fr 70px 130px 44px'
-    : (rows[0] ?? []).map((f, i) => (i === 0 ? '1fr' : f.type === 'select' ? '90px' : '56px')).join(' ');
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
-      {(rows[0] ?? []).map(f => (
-        <div key={f.id} style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px' }}>{f.label}</div>
-      ))}
-      {rows.map((row) => (
-        <React.Fragment key={row[0].id}>
-          {row.map((field) => (
-            <FieldInput
-              key={field.id}
-              field={field}
-              data={data}
-              readOnly={readOnly}
-              onFieldChange={onFieldChange}
-              style={{ ...cell, ...(field.type === 'number' ? { textAlign: 'center' } : null) }}
-            />
-          ))}
-        </React.Fragment>
-      ))}
+    : widthRow.map((f, i) => (i === 0 ? '1fr' : f.type === 'select' ? '90px' : '56px')).join(' ');
+
+  const hasData = (group: SheetField[][]) =>
+    group.some(row => row.some(f => {
+      const v = data[f.id];
+      return v !== undefined && v !== null && String(v).trim() !== '';
+    }));
+
+  // Exactly the entries that hold something, and no more: + ADD is how you get another.
+  // A section that can create its own entries shows nothing at all until you add one —
+  // an empty row of placeholder text reads like real data at a glance.
+  //
+  // Derived from the data rather than remembered, which is why the entries you filled in
+  // are the ones that come back after a reload.
+  const filled = rowsPerGroup ? groups.reduce((n, g, i) => (hasData(g) ? i + 1 : n), 0) : 0;
+  const [revealed, setRevealed] = React.useState(0);
+  const floor = section.onAdd ? 0 : 1;
+  const visibleGroups = rowsPerGroup
+    ? Math.min(groups.length, Math.max(filled, revealed, floor))
+    : 0;
+
+  // A row shorter than the grid is wide leaves columns free, and CSS grid flows the next
+  // row's cells up into them — which is how POW and MASS ended up sharing a line with
+  // MOUNT 1. Starting every row at column 1 forces the break.
+  const startsLine = (i: number) => (i === 0 ? { gridColumnStart: 1 } : null);
+
+  const labelRow = (row: SheetField[]) => row.map((f, i) => (
+    <div
+      key={`lbl_${f.id}`}
+      style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px', ...startsLine(i) }}
+    >{f.label}</div>
+  ));
+
+  const fullWidthRow = (field: SheetField) => (
+    <div key={field.id} style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '2px', margin: '2px 0' }}>
+      <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px', textAlign: 'left' }}>{field.label}</div>
+      <FieldInput
+        field={field}
+        data={data}
+        readOnly={readOnly}
+        onFieldChange={onFieldChange}
+        onFieldsChange={onFieldsChange}
+        style={cell}
+      />
     </div>
+  );
+
+  const fieldRow = (row: SheetField[]) => row.map((field, i) => (
+    <FieldInput
+      key={field.id}
+      field={field}
+      data={data}
+      readOnly={readOnly}
+      onFieldChange={onFieldChange}
+      onFieldsChange={onFieldsChange}
+      style={{ ...cell, ...(field.type === 'number' ? { textAlign: 'center' } : null), ...startsLine(i) }}
+    />
+  ));
+
+  const hiddenRow = (row: SheetField[]) => !!section.rowHidden && section.rowHidden(row, data);
+
+  // Which entry should carry each row's headings: the first one that shows that row.
+  const labelGroupFor = new Map<number, number>();
+  groups.forEach((group, gi) => group.forEach((row, ri) => {
+    if (!hiddenRow(row) && !labelGroupFor.has(ri)) labelGroupFor.set(ri, gi);
+  }));
+
+  if (!rowsPerGroup) {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
+        {labelRow(rows[0] ?? [])}
+        {rows.map((row) => <React.Fragment key={row[0].id}>{fieldRow(row)}</React.Fragment>)}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
+        {groups.slice(0, visibleGroups).map((group, gi) => (
+          <React.Fragment key={group[0][0].id}>
+            {group.map((row, ri) => hiddenRow(row) ? null : (
+              <React.Fragment key={row[0].id}>
+                {/* Each row of an entry has its own headings — a mount line does not
+                    belong under the vehicle line's labels. Shown once, on the first entry
+                    that actually shows the row: entries can hide different rows, so
+                    "first entry" alone would strand a heading. */}
+                {gi > 0 && ri === 0 && (
+                  <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--green)', opacity: 0.25, margin: '4px 0 2px' }} />
+                )}
+                {row[0].fullWidth
+                  ? fullWidthRow(row[0])
+                  : <>{labelGroupFor.get(ri) === gi && labelRow(row)}{fieldRow(row)}</>}
+              </React.Fragment>
+            ))}
+            {!readOnly && hasData(group) && (
+              <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginBottom: '2px' }}>
+                <button
+                  onClick={() => {
+                    if (confirmClear !== gi) return setConfirmClear(gi);
+                    // Blanked in place rather than shifted up: entries are referenced by
+                    // position elsewhere, and closing the gap would silently repoint
+                    // anything looking at a later one.
+                    const blanks: Record<string, string> = {};
+                    group.forEach(r => r.forEach(f => { blanks[f.id] = ''; }));
+                    if (onFieldsChange) onFieldsChange(blanks);
+                    else Object.keys(blanks).forEach(id => onFieldChange(id, ''));
+                    setConfirmClear(null);
+                    setRevealed(0);
+                  }}
+                  onBlur={() => setConfirmClear(c => (c === gi ? null : c))}
+                  style={{
+                    background: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: '0.55rem', letterSpacing: '1px', padding: '1px 6px',
+                    border: `1px solid ${confirmClear === gi ? '#ff4444' : 'var(--green)'}`,
+                    color: confirmClear === gi ? '#ff4444' : 'var(--green)',
+                    opacity: confirmClear === gi ? 1 : 0.5,
+                  }}
+                >
+                  {confirmClear === gi ? 'REMOVE — CONFIRM' : 'REMOVE'}
+                </button>
+              </div>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+      {!readOnly && visibleGroups < groups.length && (
+        <button
+          onClick={() => {
+            // A section that seeds its entries writes one; otherwise ADD just reveals the
+            // next blank row, which is what weapons and spells still do.
+            const seed = section.onAdd?.(visibleGroups + 1);
+            if (seed && onFieldsChange) onFieldsChange(seed);
+            else setRevealed(visibleGroups + 1);
+          }}
+          style={{
+            marginTop: '6px', background: 'none', border: '1px solid var(--green)',
+            color: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: '0.6rem', letterSpacing: '2px', padding: '2px 10px', opacity: 0.8,
+          }}
+        >
+          + ADD
+        </button>
+      )}
+    </>
   );
 }
 
@@ -904,7 +1144,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // If the active tab gets hidden (house rule toggled off), fall back to the
@@ -958,21 +1198,37 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
           const open = !closedSections.has(section.id);
           return (
             <div key={section.id}>
-              <button
-                onClick={() => toggle(section.id)}
-                style={{
-                  background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer',
-                  fontFamily: 'inherit', fontSize: '0.62rem', letterSpacing: '2px', opacity: 0.7,
-                  padding: '2px 0', width: '100%', textAlign: 'left',
-                }}
-              >
-                {open ? '▾' : '▸'} ─── {section.label} ───
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => toggle(section.id)}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: '0.62rem', letterSpacing: '2px', opacity: 0.7,
+                    padding: '2px 0', textAlign: 'left', flex: 1,
+                  }}
+                >
+                  {open ? '▾' : '▸'} ─── {section.label} ───
+                </button>
+                {/* In the header bar rather than inside the section, so collapsing the
+                    section does not take it with them. */}
+                {section.headerAction && onSectionAction && (
+                  <button
+                    onClick={() => onSectionAction(section.id)}
+                    style={{
+                      background: 'none', border: '1px solid var(--green)', color: 'var(--green)',
+                      cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.55rem',
+                      letterSpacing: '1px', padding: '1px 8px', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {section.headerAction}
+                  </button>
+                )}
+              </div>
               {open && (
                 <div style={{ padding: '4px 0 6px' }}>
                   {section.layout === 'grid' && <GridSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
                   {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
-                  {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
+                  {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}

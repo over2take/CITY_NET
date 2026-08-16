@@ -184,6 +184,10 @@ db.serialize(() => {
   db.run(`ALTER TABLE locations ADD COLUMN has_sidewalk INTEGER DEFAULT 1`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN has_signage INTEGER DEFAULT 1`, (err) => {});
   db.run(`ALTER TABLE locations ADD COLUMN is_hidden INTEGER DEFAULT 0`, (err) => {});
+  // Mirrored from the owner's character sheet, like name and description: the derived
+  // combat numbers of the vehicle a player is riding in, so other players can see the
+  // cover they are shooting at without the sheet itself being exposed. NULL = on foot.
+  db.run(`ALTER TABLE locations ADD COLUMN vehicle_state TEXT`, (err) => {});
 
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN melee_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN ranged_ac INTEGER`, (err) => {});

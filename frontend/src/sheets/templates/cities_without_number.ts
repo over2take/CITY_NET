@@ -1,4 +1,9 @@
 import type { SheetTemplate, SheetField } from '../types';
+import { VEHICLE_TYPE_OPTIONS, DEFAULT_VEHICLE_TYPE, getPreset, presetFields, isPresetName } from '../vehiclePresets';
+import { VEHICLE_WEAPON_OPTIONS, getVehicleWeapon, weaponMountFields } from '../vehicleWeapons';
+import {
+  FITTING_OPTIONS, describeFitting, getFitting, fittingFitsVehicle, budgetFor,
+} from '../vehicleFittings';
 
 // Cities Without Number template.
 //
@@ -32,6 +37,128 @@ export const CWN_WEAPON_ROWS = 4;
 
 /** Fields per weapon row (drives the renderer's row chunking). */
 export const CWN_WEAPON_COLUMNS = 6;
+
+/** Vehicles a sheet can carry, and weapon mounts on each. */
+export const CWN_VEHICLE_ROWS = 6;
+export const CWN_VEHICLE_WEAPON_ROWS = 3;
+export const CWN_VEHICLE_COLUMNS = 6;
+
+/**
+ * One vehicle, then its weapon mounts.
+ *
+ * Mount ids are nested under the vehicle — `vehicle1_weapon1_dmg` — so a mount belongs to
+ * its vehicle rather than to a shared pool, and the server reads them with the same
+ * `getWeapon` as personal weapons by passing the prefix.
+ *
+ * Armour is Armour Rating and is subtracted from damage, unlike personal armour which is
+ * AC and avoids the hit entirely. The two are not interchangeable and the hint says so.
+ *
+ * Five rows of six — two of stats, then one per mount — and a notes box spanning the grid
+ * on a row of its own.
+ *
+ * Every mount is declared because field ids are static, but only as many as the vehicle
+ * has hardpoints are drawn. A motorcycle carries none and shows none.
+ */
+const vehicleRow = (i: number): SheetField[] => [
+  { id: `vehicle${i}_name`, label: 'VEHICLE', type: 'text', placeholder: 'Kestrel AV' },
+  {
+    id: `vehicle${i}_type`, label: 'TYPE', type: 'select', options: VEHICLE_TYPE_OPTIONS,
+    hint: 'Book vehicle this is. Picking one fills the stat block, sets how many seats and mounts it has, and chooses its wireframe. CUSTOM leaves everything to you.',
+    presetFill: (value, data) => {
+      const preset = getPreset(value);
+      if (!preset) return {};
+      const out = presetFields(i, preset);
+      // A vehicle someone has named is theirs. One still carrying a type label has not
+      // been named at all, so it follows the type — otherwise a MOTORCYCLE changed to a
+      // Tank stays called MOTORCYCLE.
+      const current = String(data[`vehicle${i}_name`] ?? '').trim();
+      if (current && !isPresetName(current)) delete out[`vehicle${i}_name`];
+      // The * and ** vehicles carry an immunity rather than an Armour Rating, so the rule
+      // goes where that vehicle can be read.
+      if (preset.note) {
+        // Into that vehicle's own notes, appended once and never over what a player wrote.
+        const notes = String(data[`vehicle${i}_notes`] ?? '');
+        if (!notes.includes(preset.note)) {
+          out[`vehicle${i}_notes`] = notes ? `${notes}\n${preset.note}` : preset.note;
+        }
+      }
+      return out;
+    },
+  },
+  { id: `vehicle${i}_hp`, label: 'HP', type: 'number', maxField: `vehicle${i}_hp_max`, placeholder: '30' },
+  { id: `vehicle${i}_hp_max`, label: 'HP MAX', type: 'number', placeholder: '30' },
+  { id: `vehicle${i}_armor`, label: 'AR', type: 'number', placeholder: '6', hint: 'Armor Rating: subtracted from all damage the vehicle takes. Not the same as personal AC, which avoids the hit instead of reducing it. Blank on vehicles the book marks * or ** — those are immunities, not numbers, and the GM rules on them.' },
+  { id: `vehicle${i}_ac`, label: 'AC', type: 'number', placeholder: '11', hint: 'Base AC. A moving vehicle adds the Drive skill of whoever is driving; a stationary one takes -4.' },
+  { id: `vehicle${i}_spd`, label: 'SPD', type: 'number', placeholder: '0', hint: 'Speed rating, -1 to 3.' },
+  { id: `vehicle${i}_tt`, label: 'TT', type: 'number', placeholder: '12', hint: 'Trauma Target for the vehicle itself. Hits on it roll against this, not against the trauma target of whoever is inside.' },
+  { id: `vehicle${i}_crew`, label: 'CREW', type: 'number', placeholder: '5', hint: 'How many it seats, driver included. The VEHICLES window draws exactly this many places.' },
+  { id: `vehicle${i}_hrdpt`, label: 'HRDPT', type: 'number', placeholder: '1', hint: 'Hardpoints: how many Heavy weapons it mounts. Mounts beyond this are ignored. Note this is not a gunner count — a Tank is crew 3 with 3 hardpoints and can never man every gun and drive at once.' },
+  { id: `vehicle${i}_pow`, label: 'POW', type: 'number', placeholder: '3', hint: 'Power the hull has to spend on fittings and mounted weapons.' },
+  { id: `vehicle${i}_mass`, label: 'MASS', type: 'number', placeholder: '7', hint: 'Mass the hull has to spend on fittings and mounted weapons.' },
+  // Reference rather than combat, so they take the short row on their own.
+  { id: `vehicle${i}_cost`, label: 'COST', type: 'number', placeholder: '5000', startsRow: true },
+  { id: `vehicle${i}_size`, label: 'SIZE', type: 'text', placeholder: 'M', hint: 'S, M or L. Decides which fittings and weapons the hull can take.' },
+  ...Array.from({ length: CWN_VEHICLE_WEAPON_ROWS }, (_, w) => {
+    const j = w + 1;
+    return [
+      // Starts its own row: the stat block above is not a multiple of six, so without
+      // this a mount would begin midway along a row and stop being recognisable as one.
+      { id: `vehicle${i}_weapon${j}_name`, label: `MOUNT ${j}`, type: 'text', placeholder: 'Autocannon', startsRow: true },
+      {
+        // Replaces the old SHOCK column: no vehicle weapon in the book has shock, and a
+        // picker earns the space more than a field that is always blank.
+        id: `vehicle${i}_weapon${j}_type`, label: 'TYPE', type: 'select', options: VEHICLE_WEAPON_OPTIONS,
+        hint: 'Book weapon on this hardpoint. Picking one fills its damage and trauma. CUSTOM leaves it to you.',
+        presetFill: (value) => {
+          const weapon = getVehicleWeapon(value);
+          return weapon ? weaponMountFields(i, j, weapon) : {};
+        },
+      },
+      { id: `vehicle${i}_weapon${j}_dmg`, label: 'DMG', type: 'text', placeholder: '2d8', hint: 'Damage dice, flat bonus allowed. Rolled by the server on a hit.' },
+      { id: `vehicle${i}_weapon${j}_skill`, label: 'SKILL', type: 'select', options: CWN_WEAPON_SKILLS, hint: 'Attack skill the gunner fires with. Firing a mount costs that gunner their main action, so a crew can rarely work every gun at once.' },
+      { id: `vehicle${i}_weapon${j}_atk`, label: 'ATK', type: 'number', placeholder: '0', hint: 'Flat attack bonus for this mount, added to the to-hit roll.' },
+      { id: `vehicle${i}_weapon${j}_trauma`, label: 'TRAUMA', type: 'text', placeholder: 'd8/x3!', hint: 'Trauma die / rating. A trailing ! means it can inflict Traumatic Hits on vehicles and drones — without it, the die still works on people but does nothing to a car.' },
+    ] as SheetField[];
+  }).flat(),
+  {
+    // A list rather than fields, because a fitting can be stripped out again: a control
+    // that wrote "+25% HP" into the stat block would have no way to take it back. The
+    // effects are printed on the chips and the numbers stay yours to set.
+    id: `vehicle${i}_fittings`, label: 'FITTINGS', type: 'tag_list', fullWidth: true, addLabel: '+ INSTALL…',
+    hint: 'Installed fittings. Each spends Power and Mass, as mounted weapons do, and the hull has to be big enough. Effects are printed, not applied — several change the stat block and could not be undone if they were.',
+    tagOptions: (data) => {
+      const size = String(data[`vehicle${i}_size`] ?? '');
+      return FITTING_OPTIONS.filter(o => {
+        const fitting = getFitting(o.value);
+        return !fitting || fittingFitsVehicle(fitting, size);
+      });
+    },
+    tagHint: describeFitting,
+    tagSummary: (values, data) => {
+      const num = (v: unknown) => Number(v) || 0;
+      // Mounted weapons draw on the same budget: the book is explicit that a hardpoint
+      // costs Power and Mass just as a fitting does.
+      let weaponPower = 0;
+      let weaponMass = 0;
+      for (let j = 1; j <= CWN_VEHICLE_WEAPON_ROWS; j++) {
+        const weapon = getVehicleWeapon(String(data[`vehicle${i}_weapon${j}_type`] ?? ''));
+        if (weapon) { weaponPower += weapon.power; weaponMass += weapon.mass; }
+      }
+      const b = budgetFor(values, weaponPower, weaponMass, num(data[`vehicle${i}_pow`]), num(data[`vehicle${i}_mass`]));
+      // A Power System raises the pool, so it shows in the total rather than as a
+      // negative spend.
+      const power = `POWER ${b.spentPower}/${b.powerAvailable}${b.supplied ? ` (+${b.supplied})` : ''}`;
+      const text = `${power} · MASS ${b.spentMass}/${num(data[`vehicle${i}_mass`])}`;
+      return { text: b.over ? `${text} — OVER BUDGET` : text, warn: b.over };
+    },
+  },
+  {
+    // Belongs to this vehicle rather than to a box at the foot of the page: one shared
+    // notes field for six vehicles cannot say which one it is describing.
+    id: `vehicle${i}_notes`, label: 'NOTES', type: 'textarea', fullWidth: true,
+    placeholder: 'Armoured glass, spoofed plates, damage taken',
+  },
+];
 
 const weaponRow = (i: number): SheetField[] => [
   { id: `weapon${i}_name`, label: 'NAME', type: 'text', placeholder: 'Heavy Pistol' },
@@ -188,6 +315,37 @@ export const citiesWithoutNumber: SheetTemplate = {
       fields: [
         { id: 'weapons_notes', label: 'Ammo, mods, notes', type: 'textarea', placeholder: 'Smartlinked pistol; monoblade never leaves the boot' },
       ],
+    },
+    {
+      id: 'vehicles',
+      // 'weapons' is the row-chunking layout, not a weapons-only one — the name is
+      // historical. Reusing it avoids a new SectionLayout member and a renderer branch
+      // that would do exactly the same thing.
+      label: 'VEHICLES',
+      // Who is sitting where is shared state, so the way to it belongs beside the
+      // section rather than in it.
+      headerAction: 'SEATING',
+      layout: 'weapons',
+      tab: 'GEAR',
+      columns: CWN_VEHICLE_COLUMNS,
+      // A new vehicle starts as the cheapest thing in the book rather than as a blank:
+      // an unset type meant no crew, no hardpoints and no Trauma Target, which is a hole
+      // rather than a choice. Change it to the one you meant.
+      onAdd: (index) => presetFields(index, getPreset(DEFAULT_VEHICLE_TYPE)!),
+      // Hardpoints are how many Heavy weapons the vehicle carries, so a motorcycle shows
+      // no mount rows and a tank shows three. Drawing empty mounts on a vehicle that
+      // cannot mount anything states something false about it.
+      rowHidden: (row, data) => {
+        const m = /^vehicle(\d+)_weapon(\d+)_name$/.exec(row[0]?.id ?? '');
+        if (!m) return false;
+        if (Number(m[2]) <= (Number(data[`vehicle${m[1]}_hrdpt`]) || 0)) return false;
+        // Past the hardpoints, but never hide a mount someone has filled in: that reads
+        // as data loss, and a GM may have deliberately overloaded a vehicle.
+        return !row.some(f => String(data[f.id] ?? '').trim() !== '');
+      },
+      // 34 fields per vehicle: empty ones collapse, filled ones come back on reload.
+      groupSize: CWN_VEHICLE_COLUMNS * 5 + 4,
+      fields: Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
     },
     {
       id: 'gear',

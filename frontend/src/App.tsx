@@ -32,6 +32,9 @@ import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './
 import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
+import { VehiclesWindow } from './components/VehiclesWindow';
+import { VehicleBadgeButton } from './components/VehicleBadgeButton';
+import { useVehicleRoster } from './hooks/useVehicleRoster';
 import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
@@ -76,7 +79,8 @@ import { StreamerVisibilityContext } from './context/StreamerVisibilityContext';
 import { StreamerOverlay } from './components/StreamerOverlay';
 import { StreamerDirectorPanel } from './components/StreamerDirectorPanel';
 import { DEFAULT_DIRECTOR_STATE, ALL_VISIBLE } from './types';
-import type { DirectorState } from './types';
+import type { DirectorState, AttackVehicle } from './types';
+import { parseVehicleState } from './types';
 import { IS_SPECTATOR } from './streamerMode';
 
 function App() {
@@ -188,7 +192,7 @@ function App() {
   }));
 
   // Attack state
-  const [attackPending, setAttackPending] = useState<{ targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null>(null);
+  const [attackPending, setAttackPending] = useState<{ targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number; vehicle?: AttackVehicle | null } | null>(null);
   // Active TTRPG system - drives token defense labels (AC vs DV) and the
   // token menu's armor section
   const [gameSystem, setGameSystem] = useState('generic');
@@ -321,7 +325,9 @@ function App() {
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isVehiclesOpen, setIsVehiclesOpen] = useState(false);
   const [sheetPos, setSheetPos] = useState(() => ({ x: window.innerWidth / 2 - 220, y: 60 }));
+  const [vehiclesPos, setVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 90 }));
   const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean }>({ balance: 0, debt: 0 });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
@@ -921,6 +927,9 @@ function App() {
     ? (globalSettings['cwn_individual_initiative'] === '1' ? 'individual' : 'side')
     : 'individual';
   const initiative = useInitiative(socketRef, initiativeSceneKey, initiativeSystem);
+  // Held here, not in the window: the buttons that open it need to know whether this
+  // table owns any vehicles at all.
+  const vehicleRoster = useVehicleRoster(socketRef, gameSystem);
 
   const initiativeSceneLabel = view === 'battle_map' && activeBattleMapData
     ? (() => {
@@ -1561,6 +1570,8 @@ function App() {
               setIsBankOpen={setIsBankOpen}
               isSheetOpen={isSheetOpen}
               setIsSheetOpen={setIsSheetOpen}
+              isVehiclesOpen={isVehiclesOpen}
+              setIsVehiclesOpen={setIsVehiclesOpen}
               gameSystem={gameSystem}
               onSelect={setSelectedLocation}
               onZoom={setCameraTarget}
@@ -1735,7 +1746,7 @@ function App() {
                 token={token}
                 userName={userName}
                 controlsRef={controlsRef}
-                onLogout={() => { setToken(''); setIsAdmin(false); setShowAdminPanel(false); setIsSheetOpen(false); setOpenNpcSheet(null); setOpenPlayerSheetUser(null); setIsBankOpen(false); }}
+                onLogout={() => { setToken(''); setIsAdmin(false); setShowAdminPanel(false); setIsSheetOpen(false); setIsVehiclesOpen(false); setOpenNpcSheet(null); setOpenPlayerSheetUser(null); setIsBankOpen(false); }}
                 tempCityMapScale={tempCityMapScale}
                 setTempCityMapScale={setTempCityMapScale}
                 globalSettings={globalSettings}
@@ -1937,7 +1948,20 @@ function App() {
                   else setIsHitPointsOpen(true);
                 }}
                 onRolled={() => setIsDiceTrayOpen(true)}
+                onOpenVehicles={() => setIsVehiclesOpen(true)}
                 currentTheme={currentTheme}
+              />
+            )}
+            {isVehiclesOpen && (
+              <VehiclesWindow
+                pos={vehiclesPos}
+                setPos={setVehiclesPos}
+                onClose={() => setIsVehiclesOpen(false)}
+                socket={socketRef.current}
+                userName={userName}
+                isAdmin={isAdmin}
+                vehicles={vehicleRoster.vehicles}
+                players={vehicleRoster.players}
               />
             )}
               <ChatWindow
@@ -2203,6 +2227,25 @@ function App() {
                     pos={infoPanelPos} 
                     setPos={setInfoPanelPos} 
                     onClose={() => setSelectedLocation(null)}
+                    titleControls={
+                      selectedLocation.shape === 'rhombus' && selectedLocation.owner
+                        ? (
+                          <VehicleBadgeButton
+                            // selectedLocation is a snapshot taken when the token was
+                            // clicked, so it still says "in a vehicle" after getting out.
+                            // The live row carries the state the server just recomputed.
+                            vehicle={parseVehicleState(
+                              (locations.find((l: any) => l.id === selectedLocation.id) ?? selectedLocation).vehicle_state
+                            )}
+                            occupant={selectedLocation.owner}
+                            userName={userName}
+                            isAdmin={isAdmin}
+                            onDisembark={(occupant) => socketRef.current?.emit('seatOut', { occupant })}
+                            compact
+                          />
+                        )
+                        : undefined
+                    }
                   >
                     <div className="content">
                       {isRhombus ? (
@@ -2385,6 +2428,17 @@ function App() {
                           </button>
                         </div>
                       </div>
+                    )}
+                    {/* The shared seating window. Only where there is something to seat
+                        anyone in — an empty roster means the button says nothing. */}
+                    {isRhombus && vehicleRoster.hasVehicles && (
+                      <button
+                        className="upload-btn"
+                        style={{ marginTop: '10px', width: '100%' }}
+                        onClick={() => setIsVehiclesOpen(true)}
+                      >
+                        VEHICLES
+                      </button>
                     )}
                     {/* Player token sheet: owner opens their own; admin opens any player's */}
                     {selectedLocation.shape === 'rhombus' && selectedLocation.owner && (isOwner || isAdmin) && (

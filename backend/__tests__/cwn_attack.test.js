@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 
+import fs from 'fs';
+import path from 'path';
+
 const attackCwn = require('../sheets/attackCwn');
 
 // Deterministic rng: returns each queued value in order (0..1).
@@ -23,7 +26,7 @@ describe('CWN weapon parsing', () => {
     expect(w.dmg).toBe('1d8+1');
     expect(w.mod).toBe('dex_mod');
     expect(w.atk).toBe(1);
-    expect(w.trauma).toEqual({ die: 8, rating: 3 });
+    expect(w.trauma).toEqual({ die: 8, rating: 3, vsVehicles: false });
     expect(w.shock).toEqual({ dmg: 2, ac: 13 });
     expect(w.attackType).toBe('ranged');
   });
@@ -46,8 +49,8 @@ describe('CWN weapon parsing', () => {
   });
 
   it('parses trauma and shock string variants', () => {
-    expect(attackCwn.parseTrauma('d10/x2')).toEqual({ die: 10, rating: 2 });
-    expect(attackCwn.parseTrauma('d6/3')).toEqual({ die: 6, rating: 3 });
+    expect(attackCwn.parseTrauma('d10/x2')).toEqual({ die: 10, rating: 2, vsVehicles: false });
+    expect(attackCwn.parseTrauma('d6/3')).toEqual({ die: 6, rating: 3, vsVehicles: false });
     expect(attackCwn.parseTrauma('garbage')).toBeNull();
     expect(attackCwn.parseShock('2/AC13')).toEqual({ dmg: 2, ac: 13 });
     expect(attackCwn.parseShock('3 / 15')).toEqual({ dmg: 3, ac: 15 });
@@ -72,7 +75,7 @@ describe('CWN to-hit and damage', () => {
 });
 
 describe('CWN trauma (optional rule)', () => {
-  const weapon = { trauma: { die: 8, rating: 3 } };
+  const weapon = { trauma: { die: 8, rating: 3, vsVehicles: false } };
 
   it('returns null when the rule is off or the weapon has no trauma', () => {
     expect(attackCwn.rollTrauma(weapon, false)).toBeNull();
@@ -128,5 +131,146 @@ describe('CWN stabilization', () => {
     expect(out.dc).toBe(10);
     // 1+1 dice + 3 mods = 5 vs 10
     expect(out.success).toBe(false);
+  });
+});
+
+// ─── vehicle mounts ───────────────────────────────────────────────────────────
+
+/**
+ * Mounted weapons resolve through the same `getWeapon` as personal ones, differing only
+ * in the field prefix. A second implementation is the thing being avoided here — two
+ * copies of dice parsing and skill validation would drift.
+ */
+describe('vehicle weapon mounts', () => {
+  const sheet = {
+    weapon1_name: 'Pistol', weapon1_dmg: '1d8+1', weapon1_skill: 'shoot',
+    vehicle1_hrdpt: 3, vehicle1_weapon1_name: 'Autocannon', vehicle1_weapon1_dmg: '2d8', vehicle1_weapon1_skill: 'shoot', vehicle1_weapon1_atk: '2',
+    vehicle1_weapon2_name: 'Grenade Launcher', vehicle1_weapon2_dmg: '3d6', vehicle1_weapon2_skill: 'shoot',
+    vehicle2_hrdpt: 3, vehicle2_weapon1_name: 'Roof Gun', vehicle2_weapon1_dmg: '1d10', vehicle2_weapon1_skill: 'shoot',
+  };
+
+  it('reads a mount off the vehicle it belongs to', () => {
+    const w = attackCwn.getVehicleWeapon(sheet, 1, 1);
+    expect(w.name).toBe('Autocannon');
+    expect(w.dmg).toBe('2d8');
+    expect(w.atk).toBe(2);
+  });
+
+  it('keeps each vehicle mounts separate', () => {
+    // Mount ids nest under the vehicle, so vehicle 2's gun is not vehicle 1's.
+    expect(attackCwn.getVehicleWeapon(sheet, 2, 1).name).toBe('Roof Gun');
+    expect(attackCwn.getVehicleWeapon(sheet, 1, 2).name).toBe('Grenade Launcher');
+  });
+
+  it('does not confuse a mount with a personal weapon', () => {
+    expect(attackCwn.getWeapon(sheet, 1).name).toBe('Pistol');
+    expect(attackCwn.getVehicleWeapon(sheet, 1, 1).name).toBe('Autocannon');
+  });
+
+  it('rejects a vehicle index outside the sheet', () => {
+    expect(attackCwn.getVehicleWeapon(sheet, 0, 1)).toBeNull();
+    expect(attackCwn.getVehicleWeapon(sheet, attackCwn.VEHICLE_ROWS + 1, 1)).toBeNull();
+    expect(attackCwn.getVehicleWeapon(sheet, 'x', 1)).toBeNull();
+  });
+
+  it('rejects a mount index outside the vehicle', () => {
+    expect(attackCwn.getVehicleWeapon(sheet, 1, 0)).toBeNull();
+    expect(attackCwn.getVehicleWeapon(sheet, 1, attackCwn.VEHICLE_WEAPON_ROWS + 1)).toBeNull();
+  });
+
+  it('applies the same damage validation as a personal weapon', () => {
+    // The point of sharing the resolver: no @field sneak-ins through the vehicle path.
+    const bad = { ...sheet, vehicle1_weapon1_dmg: '@str_mod' };
+    expect(attackCwn.getVehicleWeapon(bad, 1, 1)).toBeNull();
+  });
+
+  it('applies the same skill validation as a personal weapon', () => {
+    const bad = { ...sheet, vehicle1_weapon1_skill: 'drive' };
+    expect(attackCwn.getVehicleWeapon(bad, 1, 1)).toBeNull();
+  });
+
+  it('rolls damage for a mount exactly as for a personal weapon', () => {
+    // Same resolver, so a mount is not a special case downstream either.
+    const w = attackCwn.getVehicleWeapon(sheet, 1, 1);
+    const rolled = attackCwn.rollDamage(sheet, w);
+    expect(rolled.total).toBeGreaterThan(0);
+  });
+
+  it('leaves the personal weapon path unchanged when no prefix is given', () => {
+    // Every existing caller passes two arguments; the default must stay `weapon`.
+    expect(attackCwn.getWeapon(sheet, 1)).toEqual(attackCwn.getWeapon(sheet, 1, {}));
+  });
+});
+
+// ─── vehicle combat rules ─────────────────────────────────────────────────────
+
+/**
+ * Not wired into an attack yet — a sheet-held vehicle cannot be targeted, because
+ * getAttackTarget resolves only token rows. These pin the arithmetic so that wiring is
+ * the only thing left to do, and so the AC/AR distinction cannot quietly invert.
+ */
+describe('vehicle combat rules', () => {
+  it('makes a moving vehicle harder to hit, by its driver skill', () => {
+    // A vehicle is only as hard to hit as its driver is good.
+    expect(attackCwn.vehicleAc(12, { moving: true, driveSkill: 3 })).toBe(15);
+    expect(attackCwn.vehicleAc(12, { moving: true, driveSkill: 0 })).toBe(12);
+  });
+
+  it('makes a stationary vehicle easier to hit, by a flat penalty', () => {
+    expect(attackCwn.vehicleAc(12, { moving: false })).toBe(8);
+    expect(attackCwn.vehicleAc(12)).toBe(8);
+  });
+
+  it('does not treat the two cases symmetrically', () => {
+    // The bonus scales with the driver, the penalty does not. Worth pinning because a
+    // "+/- driveSkill" implementation would look right and be wrong.
+    const moving = attackCwn.vehicleAc(12, { moving: true, driveSkill: 6 });
+    const stationary = attackCwn.vehicleAc(12, { moving: false, driveSkill: 6 });
+    expect(moving).toBe(18);
+    expect(stationary).toBe(8);
+  });
+
+  it('subtracts Armour Rating from damage rather than avoiding the hit', () => {
+    // The distinction this whole subsystem turns on: AC decides whether a hit lands,
+    // AR decides how much of a landed hit gets through.
+    expect(attackCwn.applyArmorRating(10, 5)).toBe(5);
+    expect(attackCwn.applyArmorRating(10, 0)).toBe(10);
+  });
+
+  it('lets armour absorb a hit entirely rather than going negative', () => {
+    expect(attackCwn.applyArmorRating(3, 5)).toBe(0);
+    expect(attackCwn.applyArmorRating(0, 5)).toBe(0);
+  });
+
+  it('treats missing or junk values as zero rather than NaN', () => {
+    // Sheet fields arrive as strings and are often blank.
+    expect(attackCwn.applyArmorRating('10', '5')).toBe(5);
+    expect(attackCwn.applyArmorRating(10, '')).toBe(10);
+    expect(attackCwn.vehicleAc('12', { moving: true, driveSkill: '3' })).toBe(15);
+  });
+
+  it('destroys a vehicle at zero HP, not below it', () => {
+    expect(attackCwn.vehicleDestroyed(1)).toBe(false);
+    expect(attackCwn.vehicleDestroyed(0)).toBe(true);
+    expect(attackCwn.vehicleDestroyed(-3)).toBe(true);
+  });
+
+  it('declares as many vehicles as the sheet does', () => {
+    // The sheet template and the resolver each carry a count. If the sheet declares more
+    // vehicles than the resolver accepts, those vehicles render with mounts that
+    // silently refuse to fire — which reads as a broken weapon, not a bad constant.
+    const template = fs.readFileSync(
+      path.join(import.meta.dirname, '..', '..', 'frontend', 'src', 'sheets', 'templates', 'cities_without_number.ts'),
+      'utf8'
+    );
+    const rows = /export const CWN_VEHICLE_ROWS = (\d+);/.exec(template);
+    const mounts = /export const CWN_VEHICLE_WEAPON_ROWS = (\d+);/.exec(template);
+    expect(Number(rows[1])).toBe(attackCwn.VEHICLE_ROWS);
+    expect(Number(mounts[1])).toBe(attackCwn.VEHICLE_WEAPON_ROWS);
+  });
+
+  it('keeps the moving-fire penalty at the value the rules give', () => {
+    expect(attackCwn.MOVING_FIRE_PENALTY).toBe(-4);
+    expect(attackCwn.VEHICLE_STATIONARY_AC_PENALTY).toBe(-4);
   });
 });

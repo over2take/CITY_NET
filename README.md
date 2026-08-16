@@ -347,9 +347,11 @@ CITY_NET/
 │   │   ├── rolls.js            # Per-system roll map (fieldId → formula); server-authoritative, so a sheet's roll button does nothing unless the field appears here. CP:R rollable stats include BODY; MOVE and LUCK are deliberately absent
 │   │   ├── rollEngine.js       # Formula parse/resolve/execute (explode10, SR6 d6 hit-counting pool, deterministic RNG for tests)
 │   │   ├── attack.js           # CP:R combat resolution — to-hit, damage, SP soak/ablation, shield, crits, death saves
-│   │   ├── attackCwn.js        # CWN combat resolution — 1d20+BHB roll-to-hit, damage, trauma die vs TT, shock on miss, stabilize roll
+│   │   ├── attackCwn.js        # CWN combat resolution — 1d20+BHB roll-to-hit, damage, trauma die vs TT, shock on miss, stabilize roll; vehicle mounts read through the same getWeapon via a field prefix; vehicle rules (AC moving vs stationary, Armour Rating as damage reduction, destruction, the -4 for firing from a moving vehicle) plus readOccupancy/getVehicle, which resolve where a character is and what is standing between them and the shot
 │   │   ├── attackSr6.js        # SR6 combat resolution — attack pool (hits/glitch), AR vs Armor Rating DV modifier, potential damage (soak manual)
-│   │   ├── identity.js         # Sheet = source of truth for player identity: mirrors name/description to tokens, display-name cache for rolls
+│   │   ├── identity.js         # Sheet = source of truth for player identity: mirrors name/description to tokens, display-name cache for rolls; also drives the vehicle mirror, so every caller that saves a sheet refreshes it
+│   │   ├── vehicleSeats.js     # Seats derived from the book's Crew number — ids are positional (driver, seat2..seatN) so the server needs only the count to validate one. Guns are deliberately not seats: a Tank is crew 3 with 3 hardpoints and can never man every gun and drive at once
+│   │   ├── vehicleState.js     # CWN vehicles, resolved against the DB: a rider points at another player's sheet by name, so it takes a query. Shared by the attack path and the token mirror so the badge cannot claim what the damage does not do. Mirrors only the derived combat numbers plus who is aboard onto tokens, never the sheet — whole-table, since boarding changes the driver's badge too. Also lends a gunner the mounts of the car they are in, seats and unseats people, and builds the roster the VEHICLES window reads — occupants live on their own sheets, so one pass turns that inside out
 │   │   ├── headshots.js        # Stock NPC headshot pools (enemy/friendly), random assignment, URL validation
 │   │   ├── importers.js        # Modular sheet import — PDF form extraction + data-driven per-system field mappers (makeMapFields)
 │   │   └── npcTiers.js         # Per-system NPC power tiers for GENERATE_SHEET (CP:R: Mook→Elite; CWN: +Spirits; SR6: Ganger→Prime Runner)
@@ -388,6 +390,11 @@ CITY_NET/
 │       ├── random.test.js              # cryptoRng range/uniqueness; roll engine and attack modules exercised without an injected rng
 │       ├── cwn_templates.test.js       # CWN template metadata (derived fields, AC linking, unset-stat neutrality)
 │       ├── cwn_attack.test.js          # CWN attack module (roll-to-hit, damage, trauma vs TT, shock, stabilize)
+│       ├── cwn_seating.test.js         # Seating and unseating: one seat one person, a seat the vehicle does not have refused, and only the occupant or the GM getting them out — checked over the socket, since hiding a button proves nothing
+│       ├── cwn_occupancy.test.js       # Reading where a character is: every unreadable state resolves to on foot, so a bad reference costs cover rather than making someone unhittable
+│       ├── cwn_vehicle_combat.test.js  # Shooting someone in a car: AR subtracts, HP comes off the owner's sheet, a wreck stops being cover, a rider whose owner is gone falls back, and a gunner fires a car they do not own
+│       ├── cwn_vehicle_mirror.test.js  # What reaches other players' screens: derived numbers only, cleared on dismount, refreshed for riders when the owner saves
+│       ├── cwn_vehicle_hp.test.js      # Damage and repair by hand: clamped to the hull at both ends, since `destroyed` is derived from HP rather than stored
 │       ├── cwn_sockets.test.js         # CWN socket integration: attack flow, dice-in-broadcast, system isolation
 │       ├── cwn_stim_heal.test.js       # STIM_HEAL action (strain check, +1 strain, 409 on maxed strain)
 │       ├── login_theme.test.js         # Login theme persistence (localStorage save, DB write on login, JWT round-trip)
@@ -450,7 +457,7 @@ CITY_NET/
 │   │   │   ├── AutoSignage.tsx         # Procedural signs on building faces (seeded RNG, weighted type pool: text, preset SVG images, vertical neon; overlap check)
 │   │   │   ├── Signs.tsx               # Custom sign meshes — canvas-texture renderer (text, image, multi-line), TV/CRT shader filter, free-transform gizmo; rotation on all three axes so signs can lie flat as ground labels
 │   │   │   ├── MapExportController.tsx # R3F bridge — renders null, lifts the export API out of the Canvas so AdminPanel buttons can drive it
-│   │   │   ├── Rhombuses.tsx           # Player token meshes
+│   │   │   ├── Rhombuses.tsx           # Player token meshes; carries the vehicle badge, drawn always rather than on hover — cover you have to hover to discover is cover nobody accounts for
 │   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
 │   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools; initiative button blinks when a roll is needed; exports `hasSheetCombat` + `SheetAttackPanel` (system-agnostic via ATTACK_PANEL_CONFIG)
@@ -472,9 +479,12 @@ CITY_NET/
 │   │   │   ├── CharacterSheetWindow.tsx # Player's own character sheet (socket-based, self-only)
 │   │   │   ├── NpcSheetWindow.tsx       # Admin view/edit of NPC or player sheets (REST-based)
 │   │   │   ├── NpcLibrary.tsx           # NPC sheet library (folders, attach-to-token, move, open)
-│   │   │   ├── SheetRenderer.tsx        # Template-driven sheet renderer (any game system); MORTALLY WOUNDED / FRAIL banners, ability_list layout (dynamic add/remove rows with attr dropdown, cost, die, roll), hidden-tab gating
+│   │   │   ├── SheetRenderer.tsx        # Template-driven sheet renderer (any game system); sections may declare groupSize to collapse repeated entries, rowHidden to drop a row of one, and fields may declare presetFill (one select writing a whole stat block, as one save), fullWidth, startsRow or the tag_list type (an add/remove list stored as JSON) — only entries holding data render, plus one blank and a reveal button, so what you filled in comes back after a reload without anything storing that it should; MORTALLY WOUNDED / FRAIL banners, ability_list layout (dynamic add/remove rows with attr dropdown, cost, die, roll), hidden-tab gating
 │   │   │   ├── ImportSheetDialog.tsx    # Sheet import — fillable PDF / JSON / stat-block paste with preview
 │   │   │   ├── QuickSheetCard.tsx       # Public sheet card shown to other players
+│   │   │   ├── VehiclesWindow.tsx       # Who is in which vehicle: a picker across every player's sheet, the wireframe with a dropdown per seat, a MOVING toggle, the car's AC/AR, and a hull bar with REPAIR/DAMAGE for its owner. Seat anchors are generated, so a crew of sixteen works
+│   │   │   ├── VehicleBadgeButton.tsx   # The car badge on the sheet and token menu — inline SVG so it takes the theme; inert on someone else's token rather than hidden
+│   │   │   ├── vehicleArt.tsx           # Ten top-down wireframes, one per book vehicle. Stroke-only and currentColor, matching how the city itself is drawn
 │   │   │   ├── TvPortrait.tsx           # Reusable glitchy TV/CRT portrait effect (chromatic fringe, scanlines, rollband); optional shadow silhouette
 │   │   │   ├── UpdateModal.tsx          # Draggable update notification modal (shown on admin login when update available; Update Now / Remind Me Later / Skip Version; docker-aware)
 │   │   │   └── __tests__/              # Component unit tests (Vitest + Testing Library)
@@ -501,6 +511,11 @@ CITY_NET/
 │   │   │       ├── NpcLibrary.test.tsx
 │   │   │       ├── ImportSheetDialog.test.tsx
 │   │   │       ├── QuickSheetCard.test.tsx
+│   │   │       ├── SheetAttackPanel.mounts.test.tsx # Mounts in the weapon picker: keyed by (vehicle, mount) so one does not shadow another, and the mounts of a car you are riding in
+│   │   │       ├── SheetAttackPanel.target.test.tsx # What the attacker is told before firing: the vehicle's name, AC, Armour Rating and whether it is moving
+│   │   │       ├── VehiclesWindow.test.tsx          # Seat naming from the book, the front pair sitting side by side, the permission asymmetry, sizing to the vehicle, and the hull bar sending the sign the button implies
+│   │   │       ├── VehicleBadgeButton.test.tsx      # Reads as an action on your own and a statement on someone else's; themed rather than a fixed colour
+│   │   │       ├── SheetRenderer.vehicles.test.tsx  # Collapsing repeated entries — one empty vehicle at rest, filled ones visible on reload, whitespace not counting as data
 │   │   │       ├── Sidebar.test.tsx
 │   │   │       └── UpdateModal.test.tsx  # Rendering, docker/non-docker branching, button callbacks, update flow
 │   │   ├── modules/
@@ -530,21 +545,31 @@ CITY_NET/
 │   │   │   ├── useMapExport.ts     # PNG/WebM city export — one cached off-screen renderer for the session, shared ortho camera, GPU size clamp, per-frame render loop for video, MediaRecorder with codec fallback; never touches the live camera
 │   │   │   ├── useMapData.ts       # Location/district/road/overpass/water body/sign data fetching
 │   │   │   ├── useCustomDice.ts    # Custom dice state — fetches GM dice and the active system's built-ins, merges them (built-ins first, flagged `locked`), and applies `customDiceUpdated` broadcasts
+│   │   │   ├── useVehicleRoster.ts # Every vehicle in play and who is in which seat. Held outside the window because the buttons that open it need to know whether the table owns a vehicle at all — one subscription, so the two cannot disagree. Takes the socket ref, not its current value: a ref is not reactive, and reading it before the socket exists binds to nothing forever
 │   │   │   ├── usePlayerSheet.ts   # Shared sheet state, debounced saves, house-rule flags, action emitters (roll/deathSave/stabilize/castSpell); used by CharacterSheetWindow and SheetPage
 │   │   │   └── __tests__/
 │   │   │       ├── useApi.test.ts                        # Fetch helper unit tests
 │   │   │       ├── useMapExport.test.ts                  # Recorder codec fallback (vp9 → vp8 → webm → default), export camera framing, grid fade restore, countdown drift under starved timers
 │   │   │       ├── useCustomDice.test.ts                 # Loading, system/GM merge order, locked flag, broadcast handling, mutation auth and errors
+│   │   │       ├── useVehicleRoster.test.tsx             # Binds when the socket turns up, empties on a system switch, re-asks on a sheet save
 │   │   │       └── useSocket.pendingRequests.test.ts     # Pending edit-request state; regression for stale requests on newly-promoted temp admins
 │   │   ├── sheets/
 │   │   │   ├── types.ts            # Sheet template type system (fields, sections, header, death saves, NPC tiers)
 │   │   │   ├── index.ts            # Template registry, getMaxPairs, GATED_TABS/hiddenTabsFor (house-rule-gated sheet tabs)
 │   │   │   ├── SheetPage.tsx       # Standalone browser-tab sheet (?sheet=true); reads theme from auth handshake or localStorage; shares logic via usePlayerSheet
-│   │   │   └── templates/
-│   │   │       ├── generic.ts                  # Minimal fallback template
-│   │   │       ├── cyberpunk_red.ts            # Cyberpunk RED — stats (rollable ones first, MOVE and LUCK last as they have no roll), skills, weapons, armor, tiers (labels + dice math only, no book content)
-│   │   │       ├── cities_without_number.ts    # Cities Without Number — attributes + SWN mods, saves, AC (token-linked), armor rows, weapons, Deluxe tab (spells/summoning), conditions
-│   │   │       └── shadowrun_6e.ts             # Shadowrun 6E — attributes, d6 pool skills, Edge pips (SPEND button, admin replenish), weapons (DV/AR), Stun track, gated AWAKENED/EMERGED tabs; dynamic spell list (DRAIN/CAST) and adept power list (PP cost auto-summed)
+│   │   │   ├── vehiclePresets.ts   # The CWN vehicle table (p.82) — picking a TYPE fills the stat block. Armour left unset on the * and ** vehicles: those are immunities the GM rules on, not numbers
+│   │   │   ├── vehicleWeapons.ts   # The ten weapons a hardpoint can carry (p.81). Damage stored as clean dice; the book's ! rides on the trauma value, since only marked weapons can traumatise a vehicle
+│   │   │   ├── vehicleFittings.ts  # The 24 fittings (p.84) and the Power/Mass budget they spend, weapons included. Power Systems raise the pool rather than un-spending
+│   │   │   ├── vehicleLayouts.ts   # Seat ids mirrored from the backend, with the diagram anchors
+│   │   │   ├── templates/
+│   │   │   │   ├── generic.ts                  # Minimal fallback template
+│   │   │   │   ├── cyberpunk_red.ts            # Cyberpunk RED — stats (rollable ones first, MOVE and LUCK last as they have no roll), skills, weapons, armor, tiers (labels + dice math only, no book content)
+│   │   │   │   ├── cities_without_number.ts    # Cities Without Number — attributes + SWN mods, saves, AC (token-linked), armor rows, weapons, vehicles (34 fields each: the book stat block, mounts bounded by hardpoints, a fittings list and its own notes; empty ones collapse and ADD seeds a Motorcycle), Deluxe tab (spells/summoning), conditions. Occupancy is not here — it is shared state, in the VEHICLES window
+│   │   │   │   └── shadowrun_6e.ts             # Shadowrun 6E — attributes, d6 pool skills, Edge pips (SPEND button, admin replenish), weapons (DV/AR), Stun track, gated AWAKENED/EMERGED tabs; dynamic spell list (DRAIN/CAST) and adept power list (PP cost auto-summed)
+│   │   │   └── __tests__/
+│   │   │       ├── vehiclePresets.book.test.ts  # The book's ten rows held verbatim, in the book's column order — five values had already been transcribed wrong before this existed
+│   │   │       ├── vehicleWeapons.test.ts       # Clean damage dice, the ! marker on the trauma value, hull-size gating
+│   │   │       └── vehicleFittings.test.ts      # The 24 fittings, and a budget where a Power System raises the pool rather than un-spending
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
 │   │   └── utils/
 │   │       ├── updateClient.ts     # One implementation of the in-app update flow, shared by the update modal and the nav panel — stale-container probe, server refusal passed through verbatim, restart detected by boot id, bounded wait. Two copies is how one of them stayed unhardened

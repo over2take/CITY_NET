@@ -48,7 +48,8 @@ function makeTestDb() {
         injuries TEXT DEFAULT '{}',
         is_global INTEGER DEFAULT 0,
         has_sidewalk INTEGER DEFAULT 1,
-        has_signage INTEGER DEFAULT 1
+        has_signage INTEGER DEFAULT 1,
+        vehicle_state TEXT
       )`);
 
       db.run(`CREATE TABLE districts (

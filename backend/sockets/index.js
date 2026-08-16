@@ -10,6 +10,7 @@ const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
+const vehicleState = require('../sheets/vehicleState');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -200,7 +201,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
       // Warm the display-name cache (sheet handle/name) for roll broadcasts
       if (info.userName) {
-        getGameSystem((e, system) => { if (!e) identity.refresh(db, system, info.userName); });
+        getGameSystem((e, system) => {
+          if (e) return;
+          identity.refresh(db, system, info.userName);
+          // Push the vehicle roster rather than waiting to be asked. A client that asks
+          // the moment its socket connects is asking before it has been identified, and
+          // the request is dropped — which left the window empty until the next sheet
+          // save happened to refresh it.
+          if (system === vehicleState.SYSTEM) {
+            vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data));
+          }
+        });
       }
 
       db.all('SELECT * FROM chat_logs ORDER BY timestamp DESC LIMIT 50', (err, rows) => {
@@ -737,6 +748,100 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       );
     };
 
+    // --- Vehicle seating ---
+    //
+    // Seating is shared: anyone can put anyone in a seat, because piling into a car is a
+    // decision the table makes out loud and the window only records it. Getting *out* is
+    // yours alone (or the GM's), and that is enforced here rather than by hiding a button
+    // — a client can send whatever it likes.
+    const withCwn = (cb) => getGameSystem((err, system) => {
+      if (err || system !== vehicleState.SYSTEM) return;
+      cb(system);
+    });
+
+    /** Re-derive every badge and tell the room, so no one is looking at a stale car. */
+    const afterSeatingChange = (usernames) => {
+      vehicleState.syncAll(db, () => {
+        usernames.filter(Boolean).forEach(u => io.emit('sheetUpdated', { username: u }));
+        emitUpdate({ isRhombusOnly: true });
+        io.emit('vehicleSeatingChanged');
+      });
+    };
+
+    socket.on('requestVehicleRoster', () => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      withCwn(() => vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data)));
+    });
+
+    socket.on('seatIn', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload) return;
+      withCwn(() => {
+        vehicleState.seatIn(db, {
+          occupant: payload.occupant,
+          owner: payload.owner,
+          vehicleIndex: payload.vehicleIndex,
+          seat: payload.seat,
+        }, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterSeatingChange([payload.occupant, payload.owner]);
+        });
+      });
+    });
+
+    socket.on('seatOut', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload) return;
+      const occupant = String(payload.occupant || '').trim();
+      // The one asymmetry in the whole feature: anyone can seat you, only you get out.
+      if (occupant !== info.userName && !isAdminSocket(socket)) {
+        return socket.emit('vehicleSeatingError', { message: 'NOT_YOURS' });
+      }
+      withCwn(() => {
+        vehicleState.seatOut(db, occupant, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterSeatingChange([occupant]);
+        });
+      });
+    });
+
+    socket.on('setVehicleMoving', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload) return;
+      withCwn(() => {
+        vehicleState.setMoving(db, {
+          owner: payload.owner,
+          vehicleIndex: payload.vehicleIndex,
+          moving: !!payload.moving,
+        }, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterSeatingChange([payload.owner]);
+        });
+      });
+    });
+
+    // Damage and repair by hand. Unlike seating, which anyone may do to anyone, the hull
+    // belongs to its owner — combat is what lets other people take a car apart.
+    socket.on('setVehicleHp', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload) return;
+      const owner = String(payload.owner || '').trim();
+      if (owner !== info.userName && !isAdminSocket(socket)) {
+        return socket.emit('vehicleSeatingError', { message: 'NOT_YOURS' });
+      }
+      withCwn(() => {
+        vehicleState.adjustHp(db, {
+          owner,
+          vehicleIndex: payload.vehicleIndex,
+          delta: payload.delta,
+        }, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterSeatingChange([owner]);
+        });
+      });
+    });
+
     socket.on('requestMySheet', () => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
@@ -749,7 +854,31 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             if (err2) return;
             if (row) {
               overlayLinkedData(info.userName, system, JSON.parse(row.data || '{}'), (data) => {
-                socket.emit('sheetData', { ...row, data });
+                if (system !== vehicleState.SYSTEM) return socket.emit('sheetData', { ...row, data });
+                // A gunner riding in someone else's car needs its mounts to fire them,
+                // and cannot see the sheet those rows live on. Only the mounts travel.
+                // The vehicle they are sitting in, so the sheet can show the badge:
+                // occupancy is shared state now and no longer on the sheet itself.
+                vehicleState.resolve(db, row.id, data, (inVehicle) => {
+                vehicleState.getRideMounts(db, data, (ride) => {
+                  // Who you could be riding with. Anyone holding a sheet in this system,
+                  // not just whoever is online: the car is read off their sheet, which
+                  // exists whether or not they are currently connected.
+                  db.all(
+                    `SELECT username FROM character_sheets WHERE system = ? AND is_npc = 0 AND username != ? ORDER BY username`,
+                    [system, info.userName],
+                    (pErr, pRows) => {
+                      const players = pErr || !pRows ? [] : pRows.map(r => r.username);
+                      socket.emit('sheetData', {
+                        ...row, data, ride, players,
+                        inVehicle: inVehicle
+                          ? { name: inVehicle.name, moving: inVehicle.moving, hp: inVehicle.hp, hpMax: inVehicle.hpMax }
+                          : null,
+                      });
+                    }
+                  );
+                });
+                });
               });
             } else {
               // Auto-create a blank sheet on first open, carrying the portrait
@@ -845,6 +974,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     if (changed) emitUpdate({ isRhombusOnly: true });
                   });
                 }
+                // Same for a single vehicle field edited on the sheet: everyone aboard is
+                // looking at a badge derived from it.
+                if (system === vehicleState.SYSTEM && payload.fieldId.startsWith('vehicle')) {
+                  vehicleState.syncAll(db, () => emitUpdate({ isRhombusOnly: true }));
+                }
                 // SR6 stun overflow lands on the token's Physical track
                 if (stunOverflow > 0) {
                   db.run(
@@ -913,6 +1047,18 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   io.emit('sheetUpdated', { username: info.userName, system });
                   socket.emit('sheetImportApplied', { count: entries.length });
                 };
+                // Editing a vehicle changes what every badge showing it should say —
+                // including the badges of passengers, whose sheets were not touched.
+                if (system === vehicleState.SYSTEM && entries.some(([k]) => k.startsWith('vehicle'))) {
+                  return vehicleState.syncAll(db, () => {
+                    emitUpdate({ isRhombusOnly: true });
+                    if (effAc === null) return finish();
+                    db.run(
+                      `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
+                      [effAc, effAc, info.userName], () => finish()
+                    );
+                  });
+                }
                 if (effAc !== null) {
                   db.run(
                     `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
@@ -1337,15 +1483,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('initiateAttack', (data) => {
       const info = userSockets.get(socket.id);
       if (!info || !data || !data.targetId || !data.attackType) return;
-      db.get('SELECT id, name, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index FROM locations WHERE id = ?', [data.targetId], (err, target) => {
+      db.get('SELECT id, name, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index, vehicle_state FROM locations WHERE id = ?', [data.targetId], (err, target) => {
         if (err || !target) return;
         const isRhombus = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'].includes(target.shape);
         if (!isRhombus) return;
         const meleeAc = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 10;
         const rangedAc = target.ranged_ac !== null && target.ranged_ac !== undefined ? target.ranged_ac : meleeAc;
-        const ac = data.attackType === 'ranged' ? rangedAc : meleeAc;
+        // The car is what you are shooting at, so its AC is the number to show — quoting
+        // the occupant's would be worse than showing nothing.
+        let vehicle = null;
+        try { vehicle = target.vehicle_state ? JSON.parse(target.vehicle_state) : null; } catch (e) { vehicle = null; }
+        const ac = vehicle ? vehicle.ac : (data.attackType === 'ranged' ? rangedAc : meleeAc);
         pendingAttacks.set(socket.id, { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, targetX: target.x, targetZ: target.z, targetBattleMapId: target.battle_map_id, targetFloorIndex: target.floor_index });
-        socket.emit('attackPending', { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac });
+        socket.emit('attackPending', { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, vehicle });
       });
     });
 
@@ -1420,6 +1570,53 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         db.run('UPDATE locations SET hp_current = ?, hp_temp = ? WHERE id = ?',
           [current, temp, target.id], done);
       }
+    };
+
+    /**
+     * The vehicle standing between a CWN defender and the shot, if any.
+     *
+     * `own:` needs no second lookup — the vehicle is on the defender's own sheet.
+     * `ride:` reads the owner's sheet instead, which is what makes a car with four
+     * people in it take damage once rather than four times.
+     *
+     * Calls back `null` for anything unreadable, including a wreck: a destroyed
+     * vehicle stops being cover, so the people inside it become hittable again.
+     */
+    const resolveOccupiedVehicle = (defender, defenderData, cb) => {
+      vehicleState.resolve(db, defender ? defender.id : null, defenderData, (vehicle) => {
+        cb(vehicle ? { vehicle, sheetId: vehicle.sheetId } : null);
+      });
+    };
+
+    /**
+     * Damage to a vehicle lands on its owner's sheet, not on any occupant's token.
+     *
+     * Writes the whole data blob back because that is how sheets are stored; the read
+     * that produced `ride.ownerData` happened in the same tick as this write.
+     */
+    const applyVehicleDamage = (ride, amount, cb) => {
+      const newHp = Math.max(0, ride.vehicle.hp - Math.max(0, amount));
+      // Re-read rather than writing back the copy the attack resolved against: the sheet
+      // blob is stored whole, so a stale copy would silently undo any other edit made
+      // between the roll and the damage landing.
+      db.get(`SELECT username, data FROM character_sheets WHERE id = ?`, [ride.sheetId], (err, row) => {
+        if (err || !row) return cb(newHp);
+        let data;
+        try { data = JSON.parse(row.data || '{}'); } catch (e) { return cb(newHp); }
+        data[ride.vehicle.hpField] = newHp;
+        db.run(
+          `UPDATE character_sheets SET data = ? WHERE id = ?`,
+          [JSON.stringify(data), ride.sheetId],
+          () => {
+            io.emit('sheetUpdated', { username: row.username });
+            // The badge carries the vehicle's HP, so a wreck has to stop showing as cover.
+            vehicleState.syncAll(db, () => {
+              emitUpdate({ isRhombusOnly: true });
+              cb(newHp);
+            });
+          }
+        );
+      });
     };
 
     // Shared attack scaffolding for sheet-driven systems (CWN, SR6):
@@ -1540,51 +1737,109 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     const handleCwnAttack = (info, payload, color) => {
       const system = 'cities_without_number';
       db.get(
-        `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+        `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
         [info.userName, system],
         (err2, sheetRow) => {
           if (err2 || !sheetRow) return;
           const attackerData = JSON.parse(sheetRow.data || '{}');
-          const weapon = attackCwn.getWeapon(attackerData, payload.weaponIndex);
+          // A mounted weapon belongs to one of the sheet's vehicles and is fired as its
+          // own action by a gunner, so the client names the vehicle rather than the
+          // mount being merged into the personal weapon list.
+          const vehicleIndex = payload.vehicleIndex;
+          // A gunner fires the car's guns with their own skill, so only the weapon row
+          // comes off the owner's sheet — everything the roll is built from is still the
+          // attacker's. The vehicle is whichever one they have declared they are in, so
+          // there is nothing for the client to name and nothing for it to get wrong.
+          const findWeapon = (cb) => {
+            if (payload.rideMount) return vehicleState.getRideWeapon(db, attackerData, payload.weaponIndex, cb);
+            cb(vehicleIndex
+              ? attackCwn.getVehicleWeapon(attackerData, vehicleIndex, payload.weaponIndex)
+              : attackCwn.getWeapon(attackerData, payload.weaponIndex));
+          };
+          findWeapon((weapon) => {
           if (!weapon) {
-            return socket.emit('sheetAttackError', { message: 'INVALID_WEAPON // SET NAME, DMG (e.g. 1d8+1) AND SKILL ON YOUR SHEET' });
+            return socket.emit('sheetAttackError', {
+              message: (vehicleIndex || payload.rideMount)
+                ? 'INVALID_MOUNT // SET NAME, DMG (e.g. 2d8) AND SKILL ON THE VEHICLE MOUNT'
+                : 'INVALID_WEAPON // SET NAME, DMG (e.g. 1d8+1) AND SKILL ON YOUR SHEET',
+            });
           }
           getAttackTarget(payload.targetId, (target) => {
+            // The defender's sheet is read once, before the to-hit rather than after it:
+            // whether they are in a vehicle decides the AC, so it can no longer be
+            // fetched lazily at damage time. It was already being fetched twice below.
+            getDefenderSheet(target, system, (defender) => {
+              let defenderData = {};
+              try { defenderData = defender ? JSON.parse(defender.data || '{}') : {}; } catch (e) { defenderData = {}; }
+
+              resolveOccupiedVehicle(defender, defenderData, (ride) => {
               // CWN has one flat AC; melee_ac is the canonical token slot and
               // ranged falls back to it.
               const meleeAc = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 10;
-              const ac = weapon.attackType === 'ranged'
+              const tokenAc = weapon.attackType === 'ranged'
                 ? (target.ranged_ac !== null && target.ranged_ac !== undefined ? target.ranged_ac : meleeAc)
                 : meleeAc;
+              // You are shooting the vehicle, so you are beating its AC, not the AC of
+              // whoever is sitting inside it.
+              const ac = ride ? ride.vehicle.ac : tokenAc;
+              const acNote = ride ? ` (${ride.vehicle.name}, ${ride.vehicle.moving ? 'moving' : 'stationary'})` : '';
+
+              // Firing out of a moving vehicle is harder, whether the gun is a mount or
+              // one you are leaning out of the window with. Resolved rather than read off
+              // the attacker's own sheet, because movement lives on the vehicle now and
+              // the vehicle may be someone else's.
+              vehicleState.resolve(db, sheetRow.id, attackerData, (attackerVehicle) => {
+              const firePenalty = attackerVehicle && attackerVehicle.moving ? attackCwn.MOVING_FIRE_PENALTY : 0;
 
               db.get(`SELECT value FROM global_settings WHERE key = 'cwn_trauma'`, (tErr, tRow) => {
                 const traumaOn = tErr || !tRow || tRow.value !== '0'; // default ON
                 let toHit;
-                try { toHit = attackCwn.rollToHit(attackerData, weapon); } catch (e) { return; }
+                try { toHit = attackCwn.rollToHit(attackerData, weapon, undefined, { penalty: firePenalty }); } catch (e) { return; }
                 const hit = toHit.total >= ac;
                 const hitHistory =
                   `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name} ` +
-                  `[${toHit.breakdown} = ${toHit.total} vs AC ${ac}] — ${hit ? 'HIT' : 'MISS'}`;
+                  (firePenalty ? 'from a moving vehicle ' : '') +
+                  `[${toHit.breakdown} = ${toHit.total} vs AC ${ac}${acNote}] — ${hit ? 'HIT' : 'MISS'}`;
 
-                const emitResult = makeEmitResult(info, target, weapon, { hit, roll: toHit.total, ac });
+                const emitResult = makeEmitResult(info, target, weapon, {
+                  hit, roll: toHit.total, ac,
+                  vehicle: ride ? { name: ride.vehicle.name, moving: ride.vehicle.moving, armorRating: ride.vehicle.armorRating } : null,
+                });
 
                 // Applies damage and tags Frail deaths / GM prompts in the
                 // result. `outcome` carries the actual dice of the damage
                 // roll so the dice tray can render them (shock passes none -
                 // no dice are rolled on shock).
                 const dealDamage = (amount, outcome, tagHistory, resultExtras, traumatic) => {
-                  getDefenderSheet(target, system, (defender) => {
-                    const defenderData = defender ? JSON.parse(defender.data || '{}') : {};
-                    const frail = Number(defenderData.frail) === 1;
-                    applyTokenDamage(target, amount, (newHp) => {
-                      const down = newHp <= 0;
-                      let history = tagHistory;
-                      if (down && frail) history += ' — FRAIL: INSTANT DEATH';
-                      else if (down && traumatic) history += ' — DOWNED BY A TRAUMATIC HIT · GM: PHYSICAL SAVE OR MAJOR INJURY';
-                      else if (down) history += ' — MORTALLY WOUNDED';
+                  // A hit on an occupied vehicle hits the vehicle: Armour Rating cuts
+                  // the damage and the rest comes off its HP. Nobody inside is touched
+                  // until it is destroyed, at which point it stops being cover and the
+                  // next shot resolves against them normally.
+                  if (ride) {
+                    const through = attackCwn.applyArmorRating(amount, ride.vehicle.armorRating);
+                    return applyVehicleDamage(ride, through, (newHp) => {
+                      const wrecked = attackCwn.vehicleDestroyed(newHp);
+                      let history = `${tagHistory} — ${ride.vehicle.name}: ${amount} − AR ${ride.vehicle.armorRating} = ${through} (${newHp}/${ride.vehicle.hpMax})`;
+                      if (wrecked) history += ' — VEHICLE DESTROYED';
+                      else if (through === 0) history += ' — ARMOR HELD';
                       broadcastRoll(info.userName, outcome ?? { rolls: {}, modTotal: 0, total: amount }, history, color, () => {
-                        emitResult({ ...resultExtras, targetHp: newHp, targetDown: down, frailDeath: down && frail });
+                        emitResult({
+                          ...resultExtras,
+                          through,
+                          vehicleHp: newHp, vehicleHpMax: ride.vehicle.hpMax, vehicleDestroyed: wrecked,
+                        });
                       });
+                    });
+                  }
+                  const frail = Number(defenderData.frail) === 1;
+                  applyTokenDamage(target, amount, (newHp) => {
+                    const down = newHp <= 0;
+                    let history = tagHistory;
+                    if (down && frail) history += ' — FRAIL: INSTANT DEATH';
+                    else if (down && traumatic) history += ' — DOWNED BY A TRAUMATIC HIT · GM: PHYSICAL SAVE OR MAJOR INJURY';
+                    else if (down) history += ' — MORTALLY WOUNDED';
+                    broadcastRoll(info.userName, outcome ?? { rolls: {}, modTotal: 0, total: amount }, history, color, () => {
+                      emitResult({ ...resultExtras, targetHp: newHp, targetDown: down, frailDeath: down && frail });
                     });
                   });
                 };
@@ -1603,26 +1858,31 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   // Trauma resolves vs the DEFENDER's Trauma Target (sheet
                   // field trauma_target, default 6); the weapon rating is
                   // the damage multiplier.
-                  getDefenderSheet(target, system, (defender) => {
-                    const defenderData = defender ? JSON.parse(defender.data || '{}') : {};
-                    const trauma = attackCwn.rollTrauma(weapon, traumaOn, defenderData.trauma_target);
-                    const traumatic = !!(trauma && trauma.traumatic);
-                    const total = Math.max(0, traumatic ? dmg.total * trauma.rating : dmg.total);
-                    let dmgHistory = `${weapon.name} damage vs ${target.name} [${dmg.breakdown} = ${dmg.total}]`;
-                    if (trauma) {
-                      dmgHistory += traumatic
-                        ? ` — TRAUMA d${trauma.die}: ${trauma.roll} vs TT ${trauma.tt} — TRAUMATIC HIT x${trauma.rating} = ${total}`
-                        : ` — trauma d${trauma.die}: ${trauma.roll} < TT ${trauma.tt}, no trauma`;
-                    }
-                    dealDamage(total, dmg, dmgHistory, {
-                      damage: total, through: total,
-                      traumatic, traumaRoll: trauma ? trauma.roll : null,
-                    }, traumatic);
-                  });
+                  // A vehicle has its own Trauma Target, and only weapons marked ! in the book can
+                  // traumatise one at all — the occupant's trauma target is not the car's.
+                  const trauma = ride
+                    ? attackCwn.rollTrauma(weapon, traumaOn, ride.vehicle.traumaTarget, undefined, { vsVehicle: true })
+                    : attackCwn.rollTrauma(weapon, traumaOn, defenderData.trauma_target);
+                  const traumatic = !!(trauma && trauma.traumatic);
+                  const total = Math.max(0, traumatic ? dmg.total * trauma.rating : dmg.total);
+                  let dmgHistory = `${weapon.name} damage vs ${target.name} [${dmg.breakdown} = ${dmg.total}]`;
+                  if (trauma) {
+                    dmgHistory += traumatic
+                      ? ` — TRAUMA d${trauma.die}: ${trauma.roll} vs TT ${trauma.tt} — TRAUMATIC HIT x${trauma.rating} = ${total}`
+                      : ` — trauma d${trauma.die}: ${trauma.roll} < TT ${trauma.tt}, no trauma`;
+                  }
+                  dealDamage(total, dmg, dmgHistory, {
+                    damage: total, through: total,
+                    traumatic, traumaRoll: trauma ? trauma.roll : null,
+                  }, traumatic);
                 });
               });
+              });
+              });
+            });
             }
           );
+          });
         }
       );
     };

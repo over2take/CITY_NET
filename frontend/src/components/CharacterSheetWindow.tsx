@@ -4,6 +4,7 @@ import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
+import { VehicleBadgeButton } from './VehicleBadgeButton';
 
 // The player's own character sheet (in-game floating window). Identity is
 // the socket's registered user - the server only ever returns / edits the
@@ -23,14 +24,16 @@ interface CharacterSheetWindowProps {
   /** Called when the player rolls from the sheet - App opens the dice tray
    *  so the result is visible. */
   onRolled?: () => void;
+  /** Open the shared seating window from the VEHICLES section header. */
+  onOpenVehicles?: () => void;
   /** Active theme name - handed to the standalone tab so it matches. */
   currentTheme?: string;
 }
 
-export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, currentTheme }: CharacterSheetWindowProps) {
+export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, onOpenVehicles, currentTheme }: CharacterSheetWindowProps) {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
-  const { sheet, template, handleFieldChange, allowFumbleShield, hiddenTabs, actions } =
+  const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, hiddenTabs, actions } =
     usePlayerSheet(socket, userName, { onRolled });
 
   const handlePortraitUpload = useCallback(
@@ -47,6 +50,15 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       onClose={onClose}
       titleControls={
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {/* Where you are, not what you own — the seating window is the shared record,
+              and this is the same fact on your own sheet, with the way out. */}
+          <VehicleBadgeButton
+            vehicle={sheet?.inVehicle}
+            occupant={userName}
+            userName={userName}
+            onDisembark={(occupant) => socket?.emit('seatOut', { occupant })}
+            compact
+          />
           <button
             title="Import from PDF / JSON / text"
             className="win95-close-btn"
@@ -95,6 +107,8 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           data={sheet.data}
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
+          onFieldsChange={handleFieldsChange}
+          onSectionAction={(id) => { if (id === 'vehicles') onOpenVehicles?.(); }}
           onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
           onOpenLink={onOpenLink}
           onRoll={actions.onRoll}

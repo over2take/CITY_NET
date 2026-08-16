@@ -4,7 +4,9 @@
 // renderer (SheetRenderer) can draw for any system. Adding a system later
 // means adding a template file, not new UI.
 
-export type SheetFieldType = 'number' | 'text' | 'textarea' | 'select';
+export type SheetFieldType = 'number' | 'text' | 'textarea' | 'select' | 'tag_list';
+
+export interface SheetOption { value: string; label: string }
 
 export interface SheetField {
   id: string;
@@ -26,6 +28,21 @@ export interface SheetField {
   hint?: string;
   /** Example value shown as ghost text inside an empty field (input placeholder). */
   placeholder?: string;
+  /** Give this field a row of its own spanning the whole grid, with its label above it.
+   *  For a notes box inside a repeated entry, where a grid cell will not do. */
+  fullWidth?: boolean;
+  /** Begin a new row here even if the previous one is not full. Without it a group whose
+   *  field count is not a multiple of `columns` bleeds one row's fields into the next,
+   *  which quietly breaks anything keyed on a row's first field. */
+  startsRow?: boolean;
+  /** For 'tag_list': a short suffix on each chip, e.g. what it costs to install. */
+  tagHint?: (value: string) => string;
+  /** For 'tag_list': a line under the list — a budget, a total, a warning. */
+  tagSummary?: (values: string[], data: SheetData) => { text: string; warn?: boolean };
+  /** For 'tag_list': narrow the choices using the rest of the sheet. */
+  tagOptions?: (data: SheetData) => SheetOption[];
+  /** For 'tag_list': the placeholder on the picker. Defaults to '+ ADD…'. */
+  addLabel?: string;
   /** Hint that this field is rollable (Phase 2 wires the actual roll). */
   roll?: { formula: string; label: string };
   /** Linked field: the value lives in another system and is overlaid by the
@@ -37,8 +54,15 @@ export interface SheetField {
   /** Writable linked field: renders as a normal input; the server routes the
    *  write to the owning system (e.g. token_ac -> the token's AC). */
   sourceWritable?: boolean;
-  /** For 'select' fields: the allowed choices. */
-  options?: { value: string; label: string }[];
+  /** For 'select' fields: the allowed choices. Supply one with an empty value to name
+   *  the blank state; otherwise an em-dash placeholder is added for you. */
+  options?: SheetOption[];
+  /** For 'select' fields: other fields to write when this one changes.
+   *
+   *  Picking a vehicle type fills its stat block from the book. Given the chosen value
+   *  and the current data, so it can decline to overwrite what someone has already
+   *  typed. Returning {} writes nothing. */
+  presetFill?: (value: string, data: SheetData) => Record<string, string | number>;
 }
 
 /** 'weapons' lays fields out as structured rows (name / dmg / skill / rof),
@@ -63,8 +87,35 @@ export interface SheetSection {
   id: string;
   label: string;
   layout: SectionLayout;
+  /**
+   * Fields per repeated entry, for sections that hold several of the same thing.
+   *
+   * Set it and the section shows only entries that have data, plus one blank and a
+   * button to reveal the next — so a sheet with one vehicle shows one vehicle, and the
+   * ones you have filled in come back on their own after a reload. Leave it unset and
+   * the section renders every row it declares, which is what weapons and spells do.
+   */
+  groupSize?: number;
   /** grid layout: number of columns (default 4) */
   columns?: number;
+  /**
+   * Hide a row of a repeated entry, given its fields and the sheet's data.
+   *
+   * A vehicle with no hardpoints has no mounts, and drawing three empty mount rows for a
+   * motorcycle states something false about it. Applied at render time only, so the
+   * grouping arithmetic is untouched and a hidden row keeps whatever is stored in it.
+   */
+  rowHidden?: (row: SheetField[], data: SheetData) => boolean;
+  /**
+   * Fields to write when + ADD creates an entry, given its 1-based index.
+   *
+   * With it, a section holds nothing until you add something and each entry starts from a
+   * sensible default. Without it, ADD reveals a blank row as before.
+   */
+  onAdd?: (index: number) => Record<string, string | number>;
+  /** A button in the section's header bar, beside the collapse toggle rather than inside
+   *  the section — so it stays reachable when the section is closed. */
+  headerAction?: string;
   /** Which bottom tab this section lives under (default: the first tab). */
   tab?: string;
   fields: SheetField[];
@@ -146,4 +197,9 @@ export interface CharacterSheet {
   portrait_url: string | null;
   is_npc: number;
   npc_label?: string | null;
+  /** Envelope fields the server attaches, not stored on the sheet. */
+  players?: string[];
+  /** The vehicle this character is sitting in, if any. Shared state, not sheet data. */
+  inVehicle?: { name: string; moving: boolean; hp: number; hpMax: number } | null;
+  ride?: { owner: string; vehicleName: string; mounts: { index: number; name: string; dmg: string; skill: string }[] } | null;
 }
