@@ -33,7 +33,7 @@ const VAN = {
   name: 'Gang Van', type: 'van', ac: 11, armorRating: 6,
   hp: 35, hpMax: 35, moving: false, destroyed: false, crew: 3,
   seats: ['driver', 'seat2', 'seat3'],
-  occupants: {} as Record<string, { locationId: number; name: string }>,
+  occupants: {} as Record<string, { locationId: number; name: string; shape: string }>,
 };
 const GANGER = { locationId: 101, name: 'GANGER', shape: 'enemy_rhombus', hp: 10, hpMax: 10 };
 const ALLY = { locationId: 202, name: 'STREET DOC', shape: 'friendly_rhombus', hp: 8, hpMax: 8 };
@@ -147,7 +147,7 @@ describe('the enemy vehicles window', () => {
 
   it('says which token is leaving when a seat is emptied', async () => {
     // Emptying is a statement about the token leaving, not about seating nobody.
-    const { socket } = open({ vehicles: [{ ...VAN, occupants: { driver: { locationId: 101, name: 'GANGER' } } }] });
+    const { socket } = open({ vehicles: [{ ...VAN, occupants: { driver: { locationId: 101, name: 'GANGER', shape: 'enemy_rhombus' } } }] });
     await userEvent.selectOptions(screen.getByLabelText('DRIVER'), '');
     expect(last(socket, 'seatEnemyToken')).toMatchObject({ locationId: null, clearLocationId: 101 });
   });
@@ -170,8 +170,26 @@ describe('the enemy vehicles window', () => {
     expect(screen.getByText(/2 TOKENS ON THIS MAP/)).toBeInTheDocument();
   });
 
+  it('keeps a passenger who has left this map level selectable', async () => {
+    // Otherwise their seat reads as empty, and the next change silently turns them out.
+    open({
+      vehicles: [{ ...VAN, occupants: { driver: { locationId: 999, name: 'WANDERER', shape: 'enemy_rhombus' } } }],
+    });
+    expect(screen.getByLabelText('DRIVER')).toHaveValue('999');
+    expect(screen.getByRole('option', { name: /WANDERER \(OFF MAP\)/ })).toBeInTheDocument();
+  });
+
+  it('colours a seated friendly from its own shape, not from the map list', () => {
+    // The token list is filtered to this level; the occupant carries its own shape.
+    open({
+      vehicles: [{ ...VAN, occupants: { driver: { locationId: 999, name: 'MEDIC', shape: 'friendly_rhombus' } } }],
+      tokens: [],
+    });
+    expect(screen.getByLabelText('DRIVER')).toHaveStyle({ color: '#00ccff' });
+  });
+
   it('shows a seated token in the seat it is in', () => {
-    open({ vehicles: [{ ...VAN, occupants: { seat2: { locationId: 202, name: 'STREET DOC' } } }] });
+    open({ vehicles: [{ ...VAN, occupants: { seat2: { locationId: 202, name: 'STREET DOC', shape: 'friendly_rhombus' } } }] });
     expect(screen.getByLabelText('CREW 2')).toHaveValue('202');
     expect(screen.getByLabelText('DRIVER')).toHaveValue('');
   });

@@ -43,8 +43,8 @@ const key = (v: EnemyVehicle) => `${v.sheetId}:${v.index}`;
  * in the driver's seat is a mistake made in a hurry.
  */
 const FRIENDLY = '#00ccff';
-const isFriendly = (t?: SeatableToken) => t?.shape === 'friendly_rhombus';
-const tokenColor = (t?: SeatableToken) => (isFriendly(t) ? FRIENDLY : 'var(--green)');
+const isFriendly = (t?: { shape?: string }) => t?.shape === 'friendly_rhombus';
+const tokenColor = (t?: { shape?: string }) => (isFriendly(t) ? FRIENDLY : 'var(--green)');
 
 /** Grouped by the NPC's folder: a campaign of antagonists is not one flat list. */
 const groupLabel = (v: EnemyVehicle) => v.folder ?? 'UNFILED';
@@ -182,9 +182,11 @@ export function EnemyVehiclesWindow({ pos, setPos, onClose, socket, vehicles, to
                   {current.seats.map((seatId, i) => {
                     const a = seatAnchor(i, current.seats.length);
                     const sitting = current.occupants[seatId];
-                    const token = tokens.find(t => t.locationId === sitting?.locationId);
                     const edge = a.side === 'left' ? 4 : 96;
-                    const mark = sitting ? tokenColor(token) : 'currentColor';
+                    // The occupant's own shape, not a lookup in `tokens` — that list is
+                    // filtered to this map level, so a passenger who walked off it would
+                    // otherwise be recoloured as hostile.
+                    const mark = sitting ? tokenColor(sitting) : 'currentColor';
                     return (
                       <g key={seatId}>
                         <path d={`M${a.x} ${a.y} L${edge} ${a.y}`} fill="none" stroke="currentColor" strokeWidth={0.4} opacity={0.4} />
@@ -197,8 +199,7 @@ export function EnemyVehiclesWindow({ pos, setPos, onClose, socket, vehicles, to
                 {current.seats.map((seatId, i) => {
                   const a = seatAnchor(i, current.seats.length);
                   const sitting = current.occupants[seatId];
-                  const token = tokens.find(t => t.locationId === sitting?.locationId);
-                  const colour = sitting ? tokenColor(token) : 'var(--green)';
+                  const colour = sitting ? tokenColor(sitting) : 'var(--green)';
                   return (
                     <div
                       key={seatId}
@@ -234,6 +235,14 @@ export function EnemyVehiclesWindow({ pos, setPos, onClose, socket, vehicles, to
                         }}
                       >
                         <option value="">— EMPTY —</option>
+                        {/* Someone already aboard who has since left this map level would
+                            otherwise have no option to select, and the seat would read as
+                            empty. */}
+                        {sitting && !tokens.some(t => t.locationId === sitting.locationId) && (
+                          <option value={sitting.locationId} style={{ color: tokenColor(sitting) }}>
+                            {isFriendly(sitting) ? '+ ' : ''}{sitting.name.toUpperCase()} (OFF MAP)
+                          </option>
+                        )}
                         {tokens.map(t => (
                           // Friendlies are offered but tinted, so a body on your side is
                           // not put in a hostile driver's seat by mistake.

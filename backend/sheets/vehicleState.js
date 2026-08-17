@@ -15,6 +15,7 @@
 
 const attackCwn = require('./attackCwn');
 const vehicleSeats = require('./vehicleSeats');
+const vehicleTokens = require('./vehicleTokens');
 const ramModule = require('./ram');
 
 /** The default for the CWN combat path, which is the only caller that is system-specific. */
@@ -228,8 +229,23 @@ const writeSheet = (db, id, data, cb) =>
  * able to trip — a seat that is not on the vehicle, a vehicle that does not exist — so
  * they are worth refusing rather than papering over.
  */
-function seatIn(db, { occupant, owner, vehicleIndex, seat, system = SYSTEM }, cb) {
+function seatIn(db, { occupant, owner, vehicleIndex, seat, guestId, system = SYSTEM }, cb) {
   const index = Number(vehicleIndex);
+  // Inviting a friendly NPC rather than seating a person. Same rule either way — one seat,
+  // one occupant — so this also turns out whoever was there, player or NPC.
+  if (guestId) {
+    return loadSheet(db, owner, (ownerSheet) => {
+      if (!ownerSheet) return cb('NO_SUCH_VEHICLE_OWNER');
+      if (!attackCwn.getVehicle(ownerSheet.data, index)) return cb('NO_SUCH_VEHICLE');
+      if (!vehicleSeats.hasSeat(ownerSheet.data, index, seat)) return cb('NO_SUCH_SEAT');
+      const seatId = String(seat).trim().toLowerCase();
+      evictPlayerFromSeat(db, ownerSheet, index, seatId, system, () =>
+        vehicleTokens.seat(db, {
+          locationId: guestId, sheetId: ownerSheet.id, vehicleIndex: index, seat: seatId,
+          shapes: vehicleTokens.FRIENDLY_SHAPES,
+        }, cb));
+    }, system);
+  }
   loadSheet(db, owner, (ownerSheet) => {
     if (!ownerSheet) return cb('NO_SUCH_VEHICLE_OWNER');
     if (!attackCwn.getVehicle(ownerSheet.data, index)) return cb('NO_SUCH_VEHICLE');
@@ -264,11 +280,41 @@ function seatIn(db, { occupant, owner, vehicleIndex, seat, system = SYSTEM }, cb
           let left = evictions.length + 1;
           const done = () => { if (--left === 0) cb(null); };
           evictions.forEach(e => writeSheet(db, e.id, e.data, done));
-          writeSheet(db, occSheet.id, data, done);
+          // A person taking a seat turns out any NPC sitting in it, the same way it turns
+          // out another person. One seat, one occupant, whichever mechanism holds it.
+          vehicleTokens.evictSeat(db, ownerSheet.id, index, seatId, () =>
+            writeSheet(db, occSheet.id, data, done));
         }
       );
     }, system);
   }, system);
+}
+
+/**
+ * Empty a seat of any *player* holding it, before something else takes it.
+ *
+ * Player occupancy lives on each player's own sheet, so this is a scan rather than a delete:
+ * the seat does not know who is in it, the occupant knows which seat they are in.
+ */
+function evictPlayerFromSeat(db, ownerSheet, index, seatId, system, cb) {
+  db.all(
+    `SELECT id, username, data FROM character_sheets WHERE system = ? AND is_npc = 0`,
+    [system],
+    (err, rows) => {
+      const writes = [];
+      for (const r of err ? [] : rows || []) {
+        let d;
+        try { d = JSON.parse(r.data || '{}'); } catch (e) { continue; }
+        const occ = attackCwn.readOccupancy(d);
+        if (!occ || occ.seat !== seatId) continue;
+        if ((occ.owner || r.username) !== ownerSheet.username || occ.vehicleIndex !== index) continue;
+        writes.push({ id: r.id, data: clearOccupancy(d) });
+      }
+      if (!writes.length) return cb();
+      let left = writes.length;
+      writes.forEach(w => writeSheet(db, w.id, w.data, () => { if (--left === 0) cb(); }));
+    },
+  );
 }
 
 /** Take someone out of whatever they are in. Idempotent — no seat is not an error. */
@@ -326,16 +372,16 @@ function setMoving(db, { owner, vehicleIndex, moving, system = SYSTEM }, cb) {
  *
  * Only the numbers a table needs travel. The rest of anyone's sheet stays where it is.
  */
-function roster(db, cb, system = SYSTEM) {
+function roster(db, cb, system = SYSTEM, level = null) {
   db.all(
-    `SELECT username, data FROM character_sheets WHERE system = ? AND is_npc = 0 ORDER BY username`,
+    `SELECT id, username, data FROM character_sheets WHERE system = ? AND is_npc = 0 ORDER BY username`,
     [system],
     (err, rows) => {
       if (err || !rows) return cb({ vehicles: [], players: [] });
       const sheets = rows.map((r) => {
         let data;
         try { data = JSON.parse(r.data || '{}'); } catch (e) { data = {}; }
-        return { username: r.username, data };
+        return { id: r.id, username: r.username, data };
       });
 
       // Who is sitting where, keyed so a rider and the owner agree on the car.
@@ -354,6 +400,9 @@ function roster(db, cb, system = SYSTEM) {
           const vehicle = attackCwn.getVehicle(sh.data, i);
           if (!vehicle) continue;
           vehicles.push({
+            // The sheet id is what `vehicle_occupants` keys against — a token rides in a
+            // vehicle on a sheet, whether that sheet is a player's or an NPC's.
+            sheetId: sh.id,
             owner: sh.username,
             ownerName: displayNameOf(sh.data, sh.username, system),
             index: i,
@@ -371,11 +420,22 @@ function roster(db, cb, system = SYSTEM) {
           });
         }
       }
-      // The username is the key everything else is written against, so it travels with
-      // the name rather than being replaced by it.
-      cb({
-        vehicles,
-        players: sheets.map(sh => ({ username: sh.username, name: displayNameOf(sh.data, sh.username, system) })),
+      // Friendly NPCs a player may invite along, and any already riding. Enemies are not
+      // offered: a player putting a hostile in their back seat is not a decision the
+      // fiction supports, and the server refuses it rather than trusting the picker.
+      vehicleTokens.candidates(db, vehicleTokens.FRIENDLY_SHAPES, level, (guests) => {
+        vehicleTokens.aboardMap(db, (aboard) => {
+          // The username is the key everything else is written against, so it travels with
+          // the name rather than being replaced by it.
+          cb({
+            vehicles: vehicles.map(v => ({
+              ...v,
+              guests: aboard.get(`${v.sheetId}:${v.index}`) || {},
+            })),
+            players: sheets.map(sh => ({ username: sh.username, name: displayNameOf(sh.data, sh.username, system) })),
+            guestTokens: guests,
+          });
+        });
       });
     }
   );
@@ -458,4 +518,5 @@ function ram(db, { actor, targetOwner, targetVehicleIndex, targetUsername, damag
 module.exports = {
   SYSTEM, resolve, publicState, syncAll, vehicleKey, getRideMounts, getRideWeapon,
   seatIn, seatOut, setMoving, adjustHp, ram, loadSheet, roster, OCCUPANCY_FIELDS,
+  unseatGuest: vehicleTokens.unseat,
 };

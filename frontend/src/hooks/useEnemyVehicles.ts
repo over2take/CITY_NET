@@ -19,7 +19,7 @@ export interface EnemyVehicle {
   crew: number;
   seats: string[];
   /** seat id -> the token sitting in it. */
-  occupants: Record<string, { locationId: number; name: string }>;
+  occupants: Record<string, { locationId: number; name: string; shape: string }>;
 }
 
 /** A token the GM could put in a seat, on the map level they are looking at. */

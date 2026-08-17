@@ -23,6 +23,7 @@
 
 const attackCwn = require('./attackCwn');
 const vehicleSeats = require('./vehicleSeats');
+const vehicleTokens = require('./vehicleTokens');
 
 const SYSTEM = 'cities_without_number';
 
@@ -31,21 +32,7 @@ const SYSTEM = 'cities_without_number';
  * window, and offering them here would give the GM a second, conflicting way to move
  * somebody who can already move themselves.
  */
-const GM_TOKEN_SHAPES = ['enemy_rhombus', 'friendly_rhombus'];
-
-/**
- * A token belongs to the city map when `battle_map_id` is null, and to a battle map floor
- * otherwise. Comparing with IS rather than = matters: `null = null` is null in SQL, so an
- * equality test would silently match nothing on the city map.
- */
-const onMapLevel = (battleMapId, floorIndex) => {
-  const map = battleMapId == null ? null : Number(battleMapId);
-  const floor = floorIndex == null ? null : Number(floorIndex);
-  return {
-    clause: `battle_map_id IS ? AND COALESCE(floor_index, 0) = COALESCE(?, 0)`,
-    params: [map, floor],
-  };
-};
+const GM_TOKEN_SHAPES = vehicleTokens.GM_SHAPES;
 
 /** An NPC sheet's display name: its label, or something rather than nothing. */
 const labelOf = (row) => String(row.npc_label || '').trim() || `NPC ${row.id}`;
@@ -98,45 +85,20 @@ function roster(db, level, cb, system = SYSTEM) {
           });
         }
       }
-      const { clause, params } = onMapLevel(level?.battleMapId, level?.floorIndex);
       // Who the GM can put in a seat, and who is already in one. Both are token reads, so
       // they happen together rather than leaving the window to reconcile two shapes.
-      db.all(
-        `SELECT id, name, shape, hp_current, hp_max FROM locations
-          WHERE shape IN (${GM_TOKEN_SHAPES.map(() => '?').join(', ')}) AND ${clause}
-          ORDER BY name, id`,
-        [...GM_TOKEN_SHAPES, ...params],
-        (tErr, tokens) => {
-          db.all(
-            `SELECT o.location_id, o.sheet_id, o.vehicle_index, o.seat, l.name
-               FROM vehicle_occupants o JOIN locations l ON l.id = o.location_id`,
-            [],
-            (oErr, seated) => {
-              const aboard = new Map();
-              for (const row of oErr ? [] : (seated || [])) {
-                const key = `${row.sheet_id}:${row.vehicle_index}`;
-                if (!aboard.has(key)) aboard.set(key, {});
-                aboard.get(key)[row.seat] = { locationId: row.location_id, name: row.name };
-              }
-              cb({
-                vehicles: vehicles.map(v => ({
-                  ...v,
-                  occupants: aboard.get(`${v.sheetId}:${v.index}`) || {},
-                })),
-                // Every token on this map level the GM could seat, whether it has a
-                // character sheet behind it or not.
-                tokens: (tErr ? [] : tokens || []).map(t => ({
-                  locationId: t.id,
-                  name: String(t.name || '').trim() || `TOKEN ${t.id}`,
-                  shape: t.shape,
-                  hp: t.hp_current,
-                  hpMax: t.hp_max,
-                })),
-              });
-            }
-          );
-        }
-      );
+      vehicleTokens.candidates(db, GM_TOKEN_SHAPES, level, (tokens) => {
+        vehicleTokens.aboardMap(db, (aboard) => {
+          cb({
+            vehicles: vehicles.map(v => ({
+              ...v,
+              occupants: aboard.get(`${v.sheetId}:${v.index}`) || {},
+            })),
+            // Every token on this map level, whether it has a character sheet or not.
+            tokens,
+          });
+        });
+      });
     }
   );
 }
@@ -197,39 +159,24 @@ function setMoving(db, { sheetId, vehicleIndex, moving, system = SYSTEM }, cb) {
 function seatToken(db, { locationId, sheetId, vehicleIndex, seat }, cb) {
   const index = Number(vehicleIndex);
   const seatId = String(seat || '').trim().toLowerCase();
-  const loc = Number(locationId);
   loadSheet(db, sheetId, (sheet) => {
     if (!sheet) return cb('NO_SUCH_SHEET');
     if (!attackCwn.getVehicle(sheet.data, index)) return cb('NO_SUCH_VEHICLE');
     if (!vehicleSeats.hasSeat(sheet.data, index, seatId)) return cb('NO_SUCH_SEAT');
-
-    db.get(
-      `SELECT id FROM locations WHERE id = ? AND shape IN (${GM_TOKEN_SHAPES.map(() => '?').join(', ')})`,
-      [loc, ...GM_TOKEN_SHAPES],
-      (err, token) => {
-        // A player's token is refused here rather than merely hidden: players seat
-        // themselves, and two ways to move one person is how they come to disagree.
-        if (err || !token) return cb('NOT_A_GM_TOKEN');
-        db.run(`DELETE FROM vehicle_occupants WHERE location_id = ?`, [loc], () => {
-          // Turn out whoever was already in this seat — one seat, one token.
-          db.run(
-            `DELETE FROM vehicle_occupants WHERE sheet_id = ? AND vehicle_index = ? AND seat = ?`,
-            [sheet.id, index, seatId],
-            () => db.run(
-              `INSERT INTO vehicle_occupants (location_id, sheet_id, vehicle_index, seat) VALUES (?, ?, ?, ?)`,
-              [loc, sheet.id, index, seatId],
-              () => cb(null),
-            ),
-          );
-        });
-      }
-    );
+    // The seat rules are this module's; the table write is the shared one, so the GM path
+    // and the player path cannot disagree about what being aboard means.
+    vehicleTokens.seat(db, {
+      locationId, sheetId: sheet.id, vehicleIndex: index, seat: seatId,
+      shapes: GM_TOKEN_SHAPES,
+    }, (reason) => cb(reason === 'NOT_INVITABLE' ? 'NOT_A_GM_TOKEN' : reason));
   });
 }
 
 /** Take a token out of whatever it is in. Idempotent — no seat is not an error. */
 function unseatToken(db, locationId, cb) {
-  db.run(`DELETE FROM vehicle_occupants WHERE location_id = ?`, [Number(locationId)], () => cb(null));
+  // No permission check: a token has no autonomy to protect. The "only you can take
+  // yourself out" rule exists for people, so anyone may move an NPC — the GM included.
+  return vehicleTokens.unseat(db, locationId, cb);
 }
 
 module.exports = {

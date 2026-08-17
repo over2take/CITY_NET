@@ -245,7 +245,11 @@ describe('seating a token', () => {
     expect(await seat(db, { locationId: loc, sheetId, vehicleIndex: 1, seat: 'driver' })).toBeNull();
 
     const { vehicles } = await rosterOf(db);
-    expect(vehicles[0].occupants).toEqual({ driver: { locationId: loc, name: 'GANGER' } });
+    // The occupant carries its own shape, so the window can colour a friendly even when
+    // the token is not on the map level currently being looked at.
+    expect(vehicles[0].occupants).toEqual({
+      driver: { locationId: loc, name: 'GANGER', shape: 'enemy_rhombus' },
+    });
   });
 
   it('moves a token rather than seating it twice', async () => {
