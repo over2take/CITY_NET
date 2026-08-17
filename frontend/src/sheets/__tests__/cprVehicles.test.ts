@@ -1,22 +1,27 @@
 import { describe, it, expect } from 'vitest';
 import { cyberpunkRed, CPR_VEHICLE_ROWS, CPR_VEHICLE_COLUMNS } from '../templates/cyberpunk_red';
 import { citiesWithoutNumber } from '../templates/cities_without_number';
-import { HULL_LABELS, HULL_OPTIONS, DEFAULT_HULL } from '../vehicleHulls';
+import {
+  ARCHETYPE_OPTIONS, VEHICLE_ARCHETYPES, DEFAULT_ARCHETYPE,
+  archetypeHullsAreDrawable, archetypeLook, getArchetype,
+} from '../vehicleArchetypes';
 import { ART_KEYS } from '../../components/vehicleArt';
 import type { SheetField, SheetTemplate } from '../types';
 
 /**
  * The Cyberpunk RED vehicle section.
  *
- * The load-bearing constraint here is legal rather than mechanical: the corebook's vehicle
- * table cannot ship, so unlike CWN there is no preset picker and the player types their own
- * numbers. What the tests guard is that nothing quietly reintroduces book data, and that
- * the field ids stay the ones the shared seating machinery reads.
+ * The load-bearing constraint is legal rather than mechanical: the corebook's vehicle table
+ * cannot ship. So the section works exactly like CWN's — one picker that fills the block —
+ * but fills it from archetypes we authored rather than from anyone's table, and leaves
+ * every field editable so a table can type their own values over the top.
  */
 
 const section = cyberpunkRed.sections.find(s => s.id === 'vehicles')!;
 const ids = section.fields.map((f: SheetField) => f.id);
 const field = (id: string) => section.fields.find((f: SheetField) => f.id === id)!;
+const fill = (value: string, data: Record<string, unknown> = {}) =>
+  (field('vehicle1_type') as any).presetFill(value, data);
 
 describe('the CP:R vehicle section', () => {
   it('sits on the GEAR tab with the seating button in its header', () => {
@@ -27,9 +32,8 @@ describe('the CP:R vehicle section', () => {
   });
 
   it('sits where CWN puts it, so the two GEAR tabs read the same way', () => {
-    // Above the gear list rather than below the pocket contents. Pinned by comparing the
-    // two templates rather than by naming a position, so if one moves the other follows
-    // or this fails.
+    // Pinned by comparing the two templates rather than by naming a position, so if one
+    // moves the other follows or this fails.
     const gearOf = (t: SheetTemplate) => t.sections.filter(s => s.tab === 'GEAR').map(s => s.id);
     const cpr = gearOf(cyberpunkRed);
     const shared = gearOf(citiesWithoutNumber).filter(id => cpr.includes(id));
@@ -54,17 +58,46 @@ describe('the CP:R vehicle section', () => {
     expect(field('vehicle1_hp').maxField).toBe('vehicle1_hp_max');
   });
 
-  it('offers no preset picker, because the table cannot ship', () => {
-    // CWN fills a whole stat block from the book. Doing that here would mean embedding a
-    // copyrighted table, so HULL chooses a drawing and nothing else.
-    expect(field('vehicle1_type').label).toBe('HULL');
-    expect(section.fields.some((f: SheetField) => 'presetFill' in f)).toBe(false);
+  it('has one picker, which is also what the wireframe is read from', () => {
+    // A separate HULL field would be a second thing to keep in step with the archetype for
+    // no gain — CWN stores one type and derives the drawing from it, and so does this.
+    expect(field('vehicle1_type').label).toBe('ARCHETYPE');
+    expect(field('vehicle1_type').options).toEqual(ARCHETYPE_OPTIONS);
+    expect(section.fields.filter((f: SheetField) => 'options' in f).map(f => f.id))
+      .toEqual([1, 2, 3, 4].map(i => `vehicle${i}_type`));
   });
 
-  it('seeds a new vehicle with a shape and nothing else', () => {
-    // Nothing breaks with the numbers missing - it simply has none yet - so unlike CWN
-    // there is no reason to invent a starting vehicle.
-    expect(section.onAdd?.(2)).toEqual({ vehicle2_type: DEFAULT_HULL });
+  it('fills the numbers, the seats and the name', () => {
+    expect(fill('speedboat')).toEqual({
+      vehicle1_name: 'SPEEDBOAT',
+      vehicle1_hp: 45, vehicle1_hp_max: 45, vehicle1_armor: 5, vehicle1_crew: 4,
+    });
+  });
+
+  it('names an unnamed vehicle and leaves a named one alone', () => {
+    // One still called SPEEDBOAT has not been named; one called Halcyon has.
+    expect(fill('yacht', {}).vehicle1_name).toBe('YACHT');
+    expect(fill('yacht', { vehicle1_name: 'SPEEDBOAT' }).vehicle1_name).toBe('YACHT');
+
+    const named = fill('yacht', { vehicle1_name: 'Halcyon' });
+    expect(named.vehicle1_name).toBeUndefined();
+    // The numbers still change — only the name is theirs.
+    expect(named.vehicle1_hp_max).toBe(110);
+  });
+
+  it('fills nothing for an id it does not know', () => {
+    expect(fill('nonsense')).toEqual({});
+  });
+
+  it('starts a new vehicle as the smallest archetype, not as a blank', () => {
+    // An unset type draws nothing and seats nobody, which is a hole rather than a choice —
+    // the same reasoning that made CWN start one as a Motorcycle.
+    const a = getArchetype(DEFAULT_ARCHETYPE)!;
+    expect(section.onAdd?.(2)).toEqual({
+      vehicle2_type: a.id, vehicle2_name: a.label,
+      vehicle2_hp: a.pool, vehicle2_hp_max: a.pool,
+      vehicle2_armor: a.armor, vehicle2_crew: a.seats,
+    });
   });
 
   it('repeats the row for every vehicle, with the group size the collapse depends on', () => {
@@ -74,32 +107,55 @@ describe('the CP:R vehicle section', () => {
   });
 
   it('carries no numbers from the book', () => {
-    // Placeholders are the one place a stat could slip in and look like UI copy. Every
-    // vehicle's real numbers are typed by the player from their own copy.
+    // Placeholders are the one place a stat could slip in and look like UI copy.
     const hints = section.fields.map((f: SheetField) => `${f.hint ?? ''} ${f.placeholder ?? ''}`).join(' ');
     expect(hints).not.toMatch(/\bSDP\s*\d/i);
-    expect(section.fields.some((f: SheetField) => 'options' in f && f.id.endsWith('_type'))).toBe(true);
-    // The only select is the hull picker, and its options are shapes, not vehicles.
-    expect(field('vehicle1_type').options).toEqual(HULL_OPTIONS);
   });
 });
 
-describe('the hull picker', () => {
-  it('labels every shape the app can draw', () => {
-    // A wireframe added without a label would silently drop out of the picker.
-    expect(Object.keys(HULL_LABELS).sort()).toEqual([...ART_KEYS].sort());
-    expect(HULL_OPTIONS).toHaveLength(ART_KEYS.length);
+describe('the archetypes', () => {
+  it('every one draws as something', () => {
+    // An archetype whose hull is not a real wireframe would silently fall back to a car.
+    expect(archetypeHullsAreDrawable()).toBe(true);
   });
 
-  it('names shapes, never a publisher\'s vehicle', () => {
+  it('resolves the wireframe through the archetype', () => {
+    expect(archetypeLook('yacht').art).toBe('yacht');
+    expect(archetypeLook('sedan').art).toBe('car');
+    // A saved sheet from before an archetype was renamed still draws something.
+    expect(archetypeLook('gone').art).toBe('car');
+    expect(ART_KEYS).toContain(archetypeLook('gone').art);
+  });
+
+  it('gives each a pool, armour and seats worth starting from', () => {
+    VEHICLE_ARCHETYPES.forEach(a => {
+      expect(a.pool).toBeGreaterThan(0);
+      expect(a.armor).toBeGreaterThanOrEqual(0);
+      expect(a.seats).toBeGreaterThan(0);
+    });
+  });
+
+  it('has no duplicate ids or labels', () => {
+    const ids2 = VEHICLE_ARCHETYPES.map(a => a.id);
+    const labels = VEHICLE_ARCHETYPES.map(a => a.label);
+    expect(new Set(ids2).size).toBe(ids2.length);
+    // Labels double as the auto-name, so a duplicate would make two vehicles indistinguishable.
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('names archetypes, never a publisher vehicle', () => {
     // Listing model names out of one book's table would be reproducing the table.
-    const labels = Object.values(HULL_LABELS).join(' ').toLowerCase();
-    for (const trademark of ['aerozep', 'av-4', 'av-9', 'thorton', 'chooh']) {
+    const labels = VEHICLE_ARCHETYPES.map(a => a.label).join(' ').toLowerCase();
+    for (const trademark of ['thorton', 'galena', 'aerozep', 'av-4', 'av-9', 'chooh']) {
       expect(labels).not.toContain(trademark);
     }
   });
 
-  it('defaults to something drawable', () => {
-    expect(ART_KEYS).toContain(DEFAULT_HULL);
+  it('has a default that is a real archetype', () => {
+    expect(getArchetype(DEFAULT_ARCHETYPE)).not.toBeNull();
+  });
+
+  it('ignores an unknown id rather than filling nonsense', () => {
+    expect(getArchetype('nope')).toBeNull();
   });
 });

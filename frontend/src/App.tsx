@@ -34,7 +34,7 @@ import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, Quick
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { VehiclesWindow } from './components/VehiclesWindow';
 import { vehicleLook as cwnVehicleLook } from './sheets/vehiclePresets';
-import { hullLook } from './sheets/vehicleHulls';
+import { archetypeLook } from './sheets/vehicleArchetypes';
 import { VehicleBadgeButton } from './components/VehicleBadgeButton';
 import { useVehicleRoster } from './hooks/useVehicleRoster';
 import { QuickSheetCard } from './components/QuickSheetCard';
@@ -1965,8 +1965,9 @@ function App() {
                 vehicles={vehicleRoster.vehicles}
                 players={vehicleRoster.players}
                 // CWN reads the wireframe and the seat names off its book table; systems
-                // without one store the hull shape directly and number their seats.
-                look={gameSystem === 'cities_without_number' ? cwnVehicleLook : hullLook}
+                // without one resolve the wireframe through an archetype and number their
+                // seats, since there is no table to name seat three from.
+                look={gameSystem === 'cities_without_number' ? cwnVehicleLook : archetypeLook}
               />
             )}
               <ChatWindow

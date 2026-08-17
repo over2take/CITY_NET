@@ -1,5 +1,5 @@
 import type { SheetTemplate, SheetField } from '../types';
-import { HULL_OPTIONS, DEFAULT_HULL } from '../vehicleHulls';
+import { ARCHETYPE_OPTIONS, DEFAULT_ARCHETYPE, getArchetype, isArchetypeName } from '../vehicleArchetypes';
 
 // Cyberpunk RED template.
 //
@@ -34,9 +34,12 @@ export const CPR_VEHICLE_COLUMNS = 5;
 /**
  * The vehicle row.
  *
- * There is no preset picker and there cannot be one: the vehicle table is book content and
- * this file may hold labels and dice math only. Players type the four numbers from their
- * own copy.
+ * One picker, like CWN's TYPE: ARCHETYPE is what is stored, it chooses the wireframe, and
+ * it fills the block. The difference is where the numbers come from — *our* archetypes
+ * rather than the book's table — that table is book content and this file may hold labels and dice
+ * math only. So the numbers are approximate starting points and every field stays
+ * editable: a table wanting their own book's values types four numbers over the top and
+ * keeps the seats and the wireframe.
  *
  * The field ids are the app's generic vocabulary — `hp`, `armor`, `crew` — while the labels
  * are Cyberpunk's. That is deliberate: the seating window, the roster and the hull bar are
@@ -45,10 +48,27 @@ export const CPR_VEHICLE_COLUMNS = 5;
  * armour that subtracts.
  */
 const vehicleRow = (i: number): SheetField[] => [
-  { id: `vehicle${i}_name`, label: 'VEHICLE', type: 'text', placeholder: 'Thorton Galena' },
+  { id: `vehicle${i}_name`, label: 'VEHICLE', type: 'text', placeholder: 'Something with a big engine' },
   {
-    id: `vehicle${i}_type`, label: 'HULL', type: 'select', options: HULL_OPTIONS,
-    hint: 'Which wireframe the seating diagram draws. Cosmetic — it changes no numbers.',
+    id: `vehicle${i}_type`, label: 'ARCHETYPE', type: 'select', options: ARCHETYPE_OPTIONS,
+    hint: 'A starting point, not a book vehicle. Picking one fills the numbers, the seats and the wireframe; every field stays editable, so type your own over the top.',
+    presetFill: (value, data) => {
+      const a = getArchetype(value);
+      if (!a) return {};
+      const out: Record<string, string | number> = {
+        [`vehicle${i}_name`]: a.label,
+        [`vehicle${i}_hp`]: a.pool,
+        [`vehicle${i}_hp_max`]: a.pool,
+        [`vehicle${i}_armor`]: a.armor,
+        [`vehicle${i}_crew`]: a.seats,
+      };
+      // A vehicle someone has named is theirs. One still carrying an archetype label has
+      // not been named at all, so it follows the archetype — otherwise a BIKE changed to a
+      // YACHT stays called BIKE.
+      const current = String(data[`vehicle${i}_name`] ?? '').trim();
+      if (current && !isArchetypeName(current)) delete out[`vehicle${i}_name`];
+      return out;
+    },
   },
   { id: `vehicle${i}_hp`, label: 'SDP', type: 'number', maxField: `vehicle${i}_hp_max`, placeholder: '50', hint: 'Structural Damage Points, current. At zero the vehicle is Destroyed: it stops being cover and cannot move until repaired.' },
   { id: `vehicle${i}_hp_max`, label: 'SDP MAX', type: 'number', placeholder: '50', hint: 'A vehicle counts as real once this is filled in — it is what puts the vehicle on the shared VEHICLES window.' },
@@ -335,10 +355,20 @@ export const cyberpunkRed: SheetTemplate = {
       layout: 'weapons',
       tab: 'GEAR',
       columns: CPR_VEHICLE_COLUMNS,
-      // No preset to seed, so a new vehicle is blank apart from a shape to draw. Unlike
-      // CWN, where an unset type left a vehicle with no crew and no trauma target, nothing
-      // here breaks when the numbers are missing — it simply has none yet.
-      onAdd: (index) => ({ [`vehicle${index}_type`]: DEFAULT_HULL }),
+      // A new vehicle starts as the smallest archetype rather than as a blank, the same
+      // way CWN starts one as a Motorcycle: an unset type draws nothing and seats nobody.
+      // Change it to the one you meant.
+      onAdd: (index) => {
+        const a = getArchetype(DEFAULT_ARCHETYPE)!;
+        return {
+          [`vehicle${index}_type`]: a.id,
+          [`vehicle${index}_name`]: a.label,
+          [`vehicle${index}_hp`]: a.pool,
+          [`vehicle${index}_hp_max`]: a.pool,
+          [`vehicle${index}_armor`]: a.armor,
+          [`vehicle${index}_crew`]: a.seats,
+        };
+      },
       // Derived from the row rather than written out: the collapse chunks the field list
       // by this number, so a hand-kept count that drifts from the row silently splits
       // every vehicle across two blocks.
