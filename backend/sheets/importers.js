@@ -322,10 +322,38 @@ const buildCwnAliases = () => {
       alias([`weapon${i}${part}`], `weapon${i}_${part}`)
     );
   }
+
+  // Vehicle rows. Less load-bearing than Cyberpunk's, since picking a book type fills the
+  // stat block here — but a car edited away from its preset, or one brought in from
+  // another sheet, should still survive the trip.
+  for (let i = 1; i <= CWN_VEHICLE_ROWS; i++) {
+    alias([`vehicle${i}`, `vehicle${i}name`], `vehicle${i}_name`);
+    alias([`vehicle${i}type`], `vehicle${i}_type`);
+    alias([`vehicle${i}hp`], `vehicle${i}_hp`);
+    alias([`vehicle${i}hpmax`], `vehicle${i}_hp_max`);
+    alias([`vehicle${i}ar`, `vehicle${i}armor`, `vehicle${i}armour`], `vehicle${i}_armor`);
+    alias([`vehicle${i}ac`], `vehicle${i}_ac`);
+    alias([`vehicle${i}spd`, `vehicle${i}speed`], `vehicle${i}_spd`);
+    alias([`vehicle${i}tt`, `vehicle${i}traumatarget`], `vehicle${i}_tt`);
+    alias([`vehicle${i}crew`, `vehicle${i}seats`], `vehicle${i}_crew`);
+    alias([`vehicle${i}hrdpt`, `vehicle${i}hardpoints`], `vehicle${i}_hrdpt`);
+    alias([`vehicle${i}pow`, `vehicle${i}power`], `vehicle${i}_pow`);
+    alias([`vehicle${i}mass`], `vehicle${i}_mass`);
+    alias([`vehicle${i}cost`], `vehicle${i}_cost`);
+    alias([`vehicle${i}size`], `vehicle${i}_size`);
+    alias([`vehicle${i}notes`], `vehicle${i}_notes`);
+  }
   return a;
 };
 
+/** Vehicle rows on the CWN sheet. Mirrors CWN_VEHICLE_ROWS in the template. */
+const CWN_VEHICLE_ROWS = 6;
+
 const NUMERIC_CWN_FIELDS = new Set([
+  ...Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => i + 1).flatMap(i =>
+    [`vehicle${i}_hp`, `vehicle${i}_hp_max`, `vehicle${i}_armor`, `vehicle${i}_ac`,
+     `vehicle${i}_spd`, `vehicle${i}_tt`, `vehicle${i}_crew`, `vehicle${i}_hrdpt`,
+     `vehicle${i}_pow`, `vehicle${i}_mass`, `vehicle${i}_cost`]),
   'level', 'base_hit_bonus', 'ac',
   'str', 'str_mod', 'dex', 'dex_mod', 'con', 'con_mod',
   'int', 'int_mod', 'wis', 'wis_mod', 'cha', 'cha_mod',
