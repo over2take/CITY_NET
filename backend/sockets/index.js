@@ -13,6 +13,7 @@ const identity = require('../sheets/identity');
 const vehicleState = require('../sheets/vehicleState');
 const vehicleSystems = require('../sheets/vehicleSystems');
 const ram = require('../sheets/ram');
+const enemyVehicles = require('../sheets/enemyVehicles');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -210,8 +211,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           // the moment its socket connects is asking before it has been identified, and
           // the request is dropped — which left the window empty until the next sheet
           // save happened to refresh it.
-          if (system === vehicleState.SYSTEM) {
-            vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data));
+          //
+          // Both halves of this were wrong for a second system and had to be fixed
+          // together: the gate only fired for CWN, and the call took no system so it read
+          // CWN sheets whatever was live. Under Cyberpunk that meant a player who had not
+          // added a vehicle of their own saw an empty window even with other people's cars
+          // on the roster — nothing had happened yet to trigger a refresh for them.
+          if (vehicleSystems.hasVehicles(system)) {
+            vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data), system);
           }
         });
       }
@@ -773,10 +780,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       }, system);
     };
 
-    socket.on('requestVehicleRoster', () => {
+    socket.on('requestVehicleRoster', (payload) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
-      withVehicles((system) => vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data), system));
+      withVehicles((system) => vehicleState.roster(
+        db,
+        (data) => socket.emit('vehicleRoster', data),
+        system,
+        // Which map the player is looking at, so the invite list offers the friendly NPCs
+        // in front of them rather than every one in the city.
+        { battleMapId: payload?.battleMapId ?? null, floorIndex: payload?.floorIndex ?? null },
+      ));
     });
 
     socket.on('seatIn', (payload) => {
@@ -788,11 +802,28 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           owner: payload.owner,
           vehicleIndex: payload.vehicleIndex,
           seat: payload.seat,
+          // Inviting a friendly NPC along instead of seating a person. Which token may be
+          // invited is the resolver's call, not the client's.
+          guestId: payload.guestId,
           system,
         }, (reason) => {
           if (reason) return socket.emit('vehicleSeatingError', { message: reason });
           afterSeatingChange([payload.occupant, payload.owner], system);
         });
+      });
+    });
+
+    /**
+     * Turn a friendly NPC out of a car.
+     *
+     * No permission check, unlike `seatOut`: that asymmetry protects a person's autonomy and
+     * a token has none. So anyone may do this, which is what lets a GM undo whatever a
+     * player has done with the invite.
+     */
+    socket.on('unseatGuest', (payload) => {
+      if (!payload || !payload.guestId) return;
+      withVehicles((system) => {
+        vehicleState.unseatGuest(db, payload.guestId, () => afterSeatingChange([payload.owner], system));
       });
     });
 
@@ -915,6 +946,89 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           );
         }
         go(payload.username);
+      });
+    });
+
+    /* ── Enemy vehicles ─────────────────────────────────────────────────────
+     *
+     * GM-only, which is what lets the whole thing skip the player path's permission
+     * model: enemy pools and armour stay behind this gate, so there is nothing to
+     * decide about what players may see. Attackers still get the cover badge on the
+     * token, which already works.
+     *
+     * Keyed by NPC sheet id rather than username — see `enemyVehicles.js`.
+     */
+    const withEnemyVehicles = (cb) => {
+      if (!isAdminSocket(socket)) return;
+      withVehicles(cb);
+    };
+
+    /** Re-derive and tell the room, so nobody is looking at a stale enemy car. */
+    const afterEnemyChange = (system) => {
+      vehicleState.syncAll(db, () => {
+        emitUpdate({ isRhombusOnly: true });
+        io.emit('enemyVehiclesChanged');
+      }, system);
+    };
+
+    socket.on('requestEnemyVehicles', (payload) => {
+      withEnemyVehicles((system) =>
+        enemyVehicles.roster(
+          db,
+          // Which map the GM is looking at. The vehicles have no position — they live on
+          // sheets — but the tokens offered for their seats are filtered to this level.
+          { battleMapId: payload?.battleMapId ?? null, floorIndex: payload?.floorIndex ?? null },
+          (data) => socket.emit('enemyVehicles', data),
+          system,
+        ));
+    });
+
+    socket.on('seatEnemyToken', (payload) => {
+      if (!payload) return;
+      withEnemyVehicles((system) => {
+        const done = (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterEnemyChange(system);
+        };
+        // An empty pick means "empty this seat", which is a different statement from
+        // seating nobody — the window sends the token it is removing.
+        if (!payload.locationId) return enemyVehicles.unseatToken(db, payload.clearLocationId, done);
+        enemyVehicles.seatToken(db, {
+          locationId: payload.locationId,
+          sheetId: payload.sheetId,
+          vehicleIndex: payload.vehicleIndex,
+          seat: payload.seat,
+        }, done);
+      });
+    });
+
+    socket.on('setEnemyVehicleHp', (payload) => {
+      if (!payload) return;
+      withEnemyVehicles((system) => {
+        enemyVehicles.adjustHp(db, {
+          sheetId: payload.sheetId,
+          vehicleIndex: payload.vehicleIndex,
+          delta: payload.delta,
+          system,
+        }, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterEnemyChange(system);
+        });
+      });
+    });
+
+    socket.on('setEnemyVehicleMoving', (payload) => {
+      if (!payload) return;
+      withEnemyVehicles((system) => {
+        enemyVehicles.setMoving(db, {
+          sheetId: payload.sheetId,
+          vehicleIndex: payload.vehicleIndex,
+          moving: !!payload.moving,
+          system,
+        }, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterEnemyChange(system);
+        });
       });
     });
 
@@ -1142,7 +1256,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
                       [effAc, effAc, info.userName], () => finish()
                     );
-                  });
+                  }, system);
                 }
                 if (effAc !== null) {
                   db.run(
@@ -1695,6 +1809,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           () => {
             io.emit('sheetUpdated', { username: row.username });
             // The badge carries the vehicle's HP, so a wreck has to stop showing as cover.
+            //
+            // No system argument on purpose, unlike every other syncAll: this is reached
+            // only from the CWN interception path — Cyberpunk routes no damage through a
+            // vehicle at all — so the CWN default is the right one rather than a missed
+            // parameter.
             vehicleState.syncAll(db, () => {
               emitUpdate({ isRhombusOnly: true });
               cb(newHp);

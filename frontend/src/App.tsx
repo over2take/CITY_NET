@@ -33,10 +33,13 @@ import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { VehiclesWindow } from './components/VehiclesWindow';
+import { EnemyVehiclesWindow } from './components/EnemyVehiclesWindow';
 import { vehicleLook as cwnVehicleLook } from './sheets/vehiclePresets';
 import { archetypeLook } from './sheets/vehicleArchetypes';
 import { VehicleBadgeButton } from './components/VehicleBadgeButton';
 import { useVehicleRoster } from './hooks/useVehicleRoster';
+import { useEnemyVehicles } from './hooks/useEnemyVehicles';
+import { hasVehicles } from './sheets/vehicleSystems';
 import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
@@ -328,8 +331,10 @@ function App() {
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isVehiclesOpen, setIsVehiclesOpen] = useState(false);
+  const [isEnemyVehiclesOpen, setIsEnemyVehiclesOpen] = useState(false);
   const [sheetPos, setSheetPos] = useState(() => ({ x: window.innerWidth / 2 - 220, y: 60 }));
   const [vehiclesPos, setVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 90 }));
+  const [enemyVehiclesPos, setEnemyVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 160, y: 130 }));
   const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean }>({ balance: 0, debt: 0 });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
@@ -931,7 +936,13 @@ function App() {
   const initiative = useInitiative(socketRef, initiativeSceneKey, initiativeSystem);
   // Held here, not in the window: the buttons that open it need to know whether this
   // table owns any vehicles at all.
-  const vehicleRoster = useVehicleRoster(socketRef, gameSystem);
+  const mapLevel = {
+    battleMapId: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
+    floorIndex: view === 'battle_map' && activeBattleMapData ? (activeBattleMapData.currentFloorIndex ?? 0) : null,
+  };
+  const vehicleRoster = useVehicleRoster(socketRef, gameSystem, mapLevel);
+  // The map the GM is looking at, so the seat pickers only offer tokens that are there.
+  const enemyRoster = useEnemyVehicles(socketRef, gameSystem, isAdmin, mapLevel);
 
   const initiativeSceneLabel = view === 'battle_map' && activeBattleMapData
     ? (() => {
@@ -1573,6 +1584,8 @@ function App() {
               isSheetOpen={isSheetOpen}
               setIsSheetOpen={setIsSheetOpen}
               isVehiclesOpen={isVehiclesOpen}
+              isEnemyVehiclesOpen={isEnemyVehiclesOpen}
+              setIsEnemyVehiclesOpen={setIsEnemyVehiclesOpen}
               setIsVehiclesOpen={setIsVehiclesOpen}
               gameSystem={gameSystem}
               onSelect={setSelectedLocation}
@@ -1954,6 +1967,18 @@ function App() {
                 currentTheme={currentTheme}
               />
             )}
+            {isEnemyVehiclesOpen && isAdmin && (
+              <EnemyVehiclesWindow
+                pos={enemyVehiclesPos}
+                setPos={setEnemyVehiclesPos}
+                onClose={() => setIsEnemyVehiclesOpen(false)}
+                socket={socketRef.current}
+                vehicles={enemyRoster.vehicles}
+                tokens={enemyRoster.tokens}
+                refresh={enemyRoster.refresh}
+                look={gameSystem === 'cities_without_number' ? cwnVehicleLook : archetypeLook}
+              />
+            )}
             {isVehiclesOpen && (
               <VehiclesWindow
                 pos={vehiclesPos}
@@ -1964,6 +1989,7 @@ function App() {
                 isAdmin={isAdmin}
                 vehicles={vehicleRoster.vehicles}
                 players={vehicleRoster.players}
+                guestTokens={vehicleRoster.guestTokens}
                 // CWN reads the wireframe and the seat names off its book table; systems
                 // without one resolve the wireframe through an archetype and number their
                 // seats, since there is no table to name seat three from.
@@ -2310,6 +2336,19 @@ function App() {
                         </>
                       )}
                     </div>
+                    {/* The GM's enemy cars. Admin-only, since the roster never reaches a
+                        player's client at all — which is what keeps enemy pools and armour
+                        from being a question about what players may see. */}
+                    {isAdmin && hasVehicles(gameSystem) && (
+                      <button
+                        className="upload-btn"
+                        style={{ marginTop: '10px', fontSize: '0.7rem' }}
+                        title="Enemy vehicles, kept on NPC sheets between sessions"
+                        onClick={() => setIsEnemyVehiclesOpen(true)}
+                      >
+                        ENEMY VEHICLES
+                      </button>
+                    )}
                     <button className="upload-btn" style={{marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: 'var(--blue)', color: '#fff'}} onClick={() => {
                         if (socketRef.current) {
                             let pingX = selectedLocation.x;

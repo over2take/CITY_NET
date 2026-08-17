@@ -354,6 +354,8 @@ CITY_NET/
 │   │   ├── vehicleState.js     # CWN vehicles, resolved against the DB: a rider points at another player's sheet by name, so it takes a query. Shared by the attack path and the token mirror so the badge cannot claim what the damage does not do. Mirrors only the derived combat numbers plus who is aboard onto tokens, never the sheet — whole-table, since boarding changes the driver's badge too. Also lends a gunner the mounts of the car they are in, seats and unseats people, and builds the roster the VEHICLES window reads — occupants live on their own sheets, so one pass turns that inside out
 │   │   ├── headshots.js        # Stock NPC headshot pools (enemy/friendly), random assignment, URL validation
 │   │   ├── vehicleSystems.js   # Which game systems have vehicles, and the field-id contract the shared machinery assumes. Small because the templates agree on ids: SDP is a damage pool and SP is armour, whatever a system calls them on screen
+│   │   ├── enemyVehicles.js    # The GM's enemy vehicles: a roster of the vehicles on NPC sheets, keyed by sheet id since an NPC sheet has no username. Nothing needed storing — NPC sheets already render the vehicle section and live in folders, so an enemy van has persisted between sessions all along; what was missing was a read, every roster query filtering is_npc = 0
+│   │   ├── vehicleTokens.js    # Tokens riding in vehicles (`vehicle_occupants`), shared by the GM seating enemies and a player inviting a friendly — the same write with a different allowlist of token shapes. Also the map-level filter: `battle_map_id IS ?`, since `= NULL` matches nothing in SQL and the city map is exactly the null case
 │   │   ├── ram.js              # Ramming. Symmetric and self-harming, armour does not apply, and everyone aboard both vehicles takes the injury — the three things about the rule that a later refactor would tidy away, so each has a test
 │   │   ├── pdfTemplate.js      # The blank fillable form the importer reads back. Field names are the contract, so the layout lives beside the importer and a test walks every label through mapFields
 │   │   ├── importers.js        # Modular sheet import — PDF form extraction + data-driven per-system field mappers (makeMapFields)
@@ -399,6 +401,8 @@ CITY_NET/
 │       ├── cwn_vehicle_mirror.test.js  # What reaches other players' screens: derived numbers only, cleared on dismount, refreshed for riders when the owner saves
 │       ├── cwn_vehicle_hp.test.js      # Damage and repair by hand: clamped to the hull at both ends, since `destroyed` is derived from HP rather than stored
 │       ├── cpr_vehicle_seating.test.js # Cyberpunk vehicles on the shared roster, and the system gate: neither system lists, seats into or damages the other's cars
+│       ├── enemy_vehicles.test.js      # The enemy roster and its seam: neither roster shows the other's vehicles, the enemy path refuses a player's sheet id, and the seat pickers filter to the map level the GM is looking at
+│       ├── cwn_vehicle_guests.test.js  # Friendly NPCs riding with players: hostiles refused by the server rather than merely hidden, and "one seat, one occupant" holding across both storage mechanisms in both directions
 │       ├── cpr_ram.test.js             # Ramming: symmetric damage, no armour, everyone aboard both vehicles injured, and the driver-seat rule the permission model rests on
 │       ├── cwn_sockets.test.js         # CWN socket integration: attack flow, dice-in-broadcast, system isolation
 │       ├── cwn_stim_heal.test.js       # STIM_HEAL action (strain check, +1 strain, 409 on maxed strain)
@@ -487,6 +491,7 @@ CITY_NET/
 │   │   │   ├── SheetRenderer.tsx        # Template-driven sheet renderer (any game system); sections may declare groupSize to collapse repeated entries, rowHidden to drop a row of one, and fields may declare presetFill (one select writing a whole stat block, as one save), fullWidth, startsRow or the tag_list type (an add/remove list stored as JSON) — only entries holding data render, plus one blank and a reveal button, so what you filled in comes back after a reload without anything storing that it should; MORTALLY WOUNDED / FRAIL banners, ability_list layout (dynamic add/remove rows with attr dropdown, cost, die, roll), hidden-tab gating
 │   │   │   ├── ImportSheetDialog.tsx    # Sheet import — fillable PDF / JSON / stat-block paste with preview, plus a download of the blank form that upload expects
 │   │   │   ├── QuickSheetCard.tsx       # Public sheet card shown to other players
+│   │   │   ├── EnemyVehiclesWindow.tsx  # The GM's enemy cars: same geometry and hull colours as the player window, keyed by NPC sheet id. Seat pickers offer the GM's tokens on the current map level, friendlies tinted blue so a body on your own side is not put in a hostile driver's seat in a hurry
 │   │   │   ├── VehiclesWindow.tsx       # Who is in which vehicle: a picker across every player's sheet, the wireframe with a dropdown per seat, a MOVING toggle, the car's AC/AR, and a hull bar with REPAIR/DAMAGE for its owner. Seat anchors are generated, so a crew of sixteen works
 │   │   │   ├── VehicleBadgeButton.tsx   # The car badge on the sheet and token menu — inline SVG so it takes the theme; inert on someone else's token rather than hidden
 │   │   │   ├── vehicleArt.tsx           # Ten top-down wireframes, one per book vehicle. Stroke-only and currentColor, matching how the city itself is drawn
@@ -518,6 +523,7 @@ CITY_NET/
 │   │   │       ├── QuickSheetCard.test.tsx
 │   │   │       ├── SheetAttackPanel.mounts.test.tsx # Mounts in the weapon picker: keyed by (vehicle, mount) so one does not shadow another, and the mounts of a car you are riding in
 │   │   │       ├── SheetAttackPanel.target.test.tsx # What the attacker is told before firing: the vehicle's name, AC, Armour Rating and whether it is moving
+│   │   │       ├── EnemyVehiclesWindow.test.tsx     # What the GM window sends: sheet-id keyed damage, seating a token, friendlies marked apart, and a passenger who has left the map level staying selectable rather than reading as empty
 │   │   │       ├── VehiclesWindow.test.tsx          # Seat naming from the book, the front pair sitting side by side, the permission asymmetry, sizing to the vehicle, the hull bar sending the sign the button implies, and the window running with no game system behind it
 │   │   │       ├── vehicleArt.test.tsx              # Every wireframe draws, stays inside the 0..100 box the seat anchors are percentages of, and is stroke-only on currentColor
 │   │   │       ├── SheetAttackPanel.ram.test.tsx    # RAM offered only to a driver, reading as melee, and leaving by its own event rather than the attack path
@@ -552,6 +558,7 @@ CITY_NET/
 │   │   │   ├── useMapExport.ts     # PNG/WebM city export — one cached off-screen renderer for the session, shared ortho camera, GPU size clamp, per-frame render loop for video, MediaRecorder with codec fallback; never touches the live camera
 │   │   │   ├── useMapData.ts       # Location/district/road/overpass/water body/sign data fetching
 │   │   │   ├── useCustomDice.ts    # Custom dice state — fetches GM dice and the active system's built-ins, merges them (built-ins first, flagged `locked`), and applies `customDiceUpdated` broadcasts
+│   │   │   ├── useEnemyVehicles.ts # The GM's enemy vehicles, and the tokens on the map level that could fill their seats. Asked for rather than pushed, and refused to anyone but the GM — so a player's client never holds enemy pools or armour at all, which is what keeps "what may players see" from being a question the feature has to answer
 │   │   │   ├── useVehicleRoster.ts # Every vehicle in play and who is in which seat. Held outside the window because the buttons that open it need to know whether the table owns a vehicle at all — one subscription, so the two cannot disagree. Takes the socket ref, not its current value: a ref is not reactive, and reading it before the socket exists binds to nothing forever
 │   │   │   ├── usePlayerSheet.ts   # Shared sheet state, debounced saves, house-rule flags, action emitters (roll/deathSave/stabilize/castSpell); used by CharacterSheetWindow and SheetPage
 │   │   │   └── __tests__/

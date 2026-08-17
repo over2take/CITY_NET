@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useReducer } from 'react';
 import type { RosterVehicle } from '../components/VehiclesWindow';
 import { hasVehicles as systemHasVehicles } from '../sheets/vehicleSystems';
+import type { SeatableToken, MapLevel } from './useEnemyVehicles';
 
 /**
  * Every vehicle in play, and who is in which seat.
@@ -15,15 +16,23 @@ import { hasVehicles as systemHasVehicles } from '../sheets/vehicleSystems';
  * the socket exists binds to nothing and never binds again. That looked exactly like an
  * empty roster on a sheet with a vehicle plainly on it.
  */
-export function useVehicleRoster(socketRef: React.MutableRefObject<any>, gameSystem?: string) {
+export function useVehicleRoster(
+  socketRef: React.MutableRefObject<any>,
+  gameSystem?: string,
+  level?: MapLevel,
+) {
   const [vehicles, setVehicles] = useState<RosterVehicle[]>([]);
   const [players, setPlayers] = useState<{ username: string; name: string }[]>([]);
+  // Friendly NPCs a player may invite along, filtered to the map they are looking at.
+  const [guestTokens, setGuestTokens] = useState<SeatableToken[]>([]);
   const [socketReadyCount, forceReady] = useReducer((n: number) => n + 1, 0);
 
   const enabled = systemHasVehicles(gameSystem);
+  const battleMapId = level?.battleMapId ?? null;
+  const floorIndex = level?.floorIndex ?? null;
   const refresh = useCallback(() => {
-    if (enabled) socketRef.current?.emit('requestVehicleRoster');
-  }, [socketRef, enabled]);
+    if (enabled) socketRef.current?.emit('requestVehicleRoster', { battleMapId, floorIndex });
+  }, [socketRef, enabled, battleMapId, floorIndex]);
 
   useEffect(() => {
     if (!enabled) {
@@ -31,6 +40,7 @@ export function useVehicleRoster(socketRef: React.MutableRefObject<any>, gameSys
       // the buttons up over a game that has nothing to put in them.
       setVehicles([]);
       setPlayers([]);
+      setGuestTokens([]);
       return;
     }
     if (!socketRef.current) {
@@ -44,9 +54,14 @@ export function useVehicleRoster(socketRef: React.MutableRefObject<any>, gameSys
     }
 
     const s = socketRef.current;
-    const onRoster = (data: { vehicles?: RosterVehicle[]; players?: { username: string; name: string }[] }) => {
+    const onRoster = (data: {
+      vehicles?: RosterVehicle[];
+      players?: { username: string; name: string }[];
+      guestTokens?: SeatableToken[];
+    }) => {
       setVehicles(data?.vehicles ?? []);
       setPlayers(data?.players ?? []);
+      setGuestTokens(data?.guestTokens ?? []);
     };
     s.on('vehicleRoster', onRoster);
     s.on('vehicleSeatingChanged', refresh);
@@ -61,5 +76,5 @@ export function useVehicleRoster(socketRef: React.MutableRefObject<any>, gameSys
     };
   }, [socketRef, enabled, refresh, socketReadyCount]);
 
-  return { vehicles, players, refresh, hasVehicles: vehicles.length > 0 };
+  return { vehicles, players, guestTokens, refresh, hasVehicles: vehicles.length > 0 };
 }

@@ -105,6 +105,44 @@ describe('a CP:R vehicle on the roster', () => {
   });
 });
 
+/**
+ * The system argument is load-bearing, and omitting it is silent.
+ *
+ * Every roster and mirror call defaults to CWN, which was right while CWN was the only
+ * system with vehicles and is a trap now. A caller that forgets the argument on a Cyberpunk
+ * table gets an empty answer rather than an error — which is exactly how a freshly logged-in
+ * player came to see an empty VEHICLES window while other people's cars sat on the roster.
+ *
+ * These pin the default so the next person to add a call site can see it is a choice.
+ */
+describe('omitting the system falls back to CWN', () => {
+  beforeEach(async () => {
+    await sheet('CODY', CPR, GALENA);
+  });
+
+  it('returns nothing for a Cyberpunk table when the system is not passed', async () => {
+    const withoutSystem = await new Promise((r) => vehicleState.roster(db, r));
+    expect(withoutSystem.vehicles).toEqual([]);
+
+    const withSystem = await rosterOf(db, CPR);
+    expect(withSystem.vehicles.map(v => v.name)).toEqual(['Galena']);
+  });
+
+  it('mirrors nothing onto a Cyberpunk token when the system is not passed', async () => {
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner) VALUES ('CODY', 0, 0, 0, 'rhombus', 'CODY')`);
+    await run(db, `UPDATE character_sheets SET data = ? WHERE username = 'CODY'`,
+      [JSON.stringify({ ...GALENA, in_vehicle: 'own:1', vehicle_seat: 'driver' })]);
+
+    await new Promise((r) => vehicleState.syncAll(db, r));
+    const bare = await get(db, `SELECT vehicle_state FROM locations WHERE owner = 'CODY'`);
+    expect(bare.vehicle_state).toBeNull();
+
+    await new Promise((r) => vehicleState.syncAll(db, r, CPR));
+    const passed = await get(db, `SELECT vehicle_state FROM locations WHERE owner = 'CODY'`);
+    expect(JSON.parse(passed.vehicle_state)).toMatchObject({ name: 'Galena', hp: 50 });
+  });
+});
+
 describe('the two systems do not see each other', () => {
   beforeEach(async () => {
     await sheet('CODY', CPR, GALENA);
