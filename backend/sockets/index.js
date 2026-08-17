@@ -211,8 +211,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           // the moment its socket connects is asking before it has been identified, and
           // the request is dropped — which left the window empty until the next sheet
           // save happened to refresh it.
-          if (system === vehicleState.SYSTEM) {
-            vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data));
+          //
+          // Both halves of this were wrong for a second system and had to be fixed
+          // together: the gate only fired for CWN, and the call took no system so it read
+          // CWN sheets whatever was live. Under Cyberpunk that meant a player who had not
+          // added a vehicle of their own saw an empty window even with other people's cars
+          // on the roster — nothing had happened yet to trigger a refresh for them.
+          if (vehicleSystems.hasVehicles(system)) {
+            vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data), system);
           }
         });
       }
@@ -1200,7 +1206,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
                       [effAc, effAc, info.userName], () => finish()
                     );
-                  });
+                  }, system);
                 }
                 if (effAc !== null) {
                   db.run(
@@ -1753,6 +1759,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           () => {
             io.emit('sheetUpdated', { username: row.username });
             // The badge carries the vehicle's HP, so a wreck has to stop showing as cover.
+            //
+            // No system argument on purpose, unlike every other syncAll: this is reached
+            // only from the CWN interception path — Cyberpunk routes no damage through a
+            // vehicle at all — so the CWN default is the right one rather than a missed
+            // parameter.
             vehicleState.syncAll(db, () => {
               emitUpdate({ isRhombusOnly: true });
               cb(newHp);
