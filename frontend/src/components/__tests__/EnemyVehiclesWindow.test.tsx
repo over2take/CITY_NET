@@ -33,14 +33,17 @@ const VAN = {
   name: 'Gang Van', type: 'van', ac: 11, armorRating: 6,
   hp: 35, hpMax: 35, moving: false, destroyed: false, crew: 3,
   seats: ['driver', 'seat2', 'seat3'],
+  occupants: {} as Record<string, { locationId: number; name: string }>,
 };
+const GANGER = { locationId: 101, name: 'GANGER', shape: 'enemy_rhombus', hp: 10, hpMax: 10 };
+const ALLY = { locationId: 202, name: 'STREET DOC', shape: 'friendly_rhombus', hp: 8, hpMax: 8 };
 const CAR = {
   ...VAN, sheetId: 19, owner: 'FIXER', folder: null, index: 1,
   name: 'Quiet Sedan', type: 'sedan', hp: 20, hpMax: 55,
 };
-const CREW = [{ sheetId: 12, label: 'ROAD GANG', folder: 'Session 4' }];
+const TOKENS = [GANGER, ALLY];
 
-const open = (opts: { vehicles?: typeof VAN[]; crew?: typeof CREW } = {}) => {
+const open = (opts: { vehicles?: typeof VAN[]; tokens?: typeof TOKENS } = {}) => {
   const socket = makeSocket();
   const refresh = vi.fn();
   render(
@@ -50,7 +53,7 @@ const open = (opts: { vehicles?: typeof VAN[]; crew?: typeof CREW } = {}) => {
       onClose={vi.fn()}
       socket={socket}
       vehicles={opts.vehicles ?? [VAN]}
-      crew={opts.crew ?? CREW}
+      tokens={opts.tokens ?? TOKENS}
       look={archetypeLook}
       refresh={refresh}
     />
@@ -124,16 +127,52 @@ describe('the enemy vehicles window', () => {
     expect(screen.getByText(/NO SUCH SHEET/)).toBeInTheDocument();
   });
 
-  it('draws a marker per seat', () => {
-    // Read-only for now: seating an NPC needs an occupancy field keyed by sheet id.
-    const { container } = render(
-      <EnemyVehiclesWindow
-        pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()}
-        socket={makeSocket()} vehicles={[VAN]} crew={CREW}
-        look={archetypeLook} refresh={vi.fn()}
-      />
-    );
-    // Three seats on the van, drawn as circles over the wireframe.
-    expect(container.querySelectorAll('svg circle').length).toBeGreaterThanOrEqual(3);
+  it('gives every seat a picker of the tokens on this map', () => {
+    open();
+    expect(screen.getByLabelText('DRIVER')).toBeInTheDocument();
+    expect(screen.getByLabelText('CREW 2')).toBeInTheDocument();
+    expect(screen.getByLabelText('CREW 3')).toBeInTheDocument();
+    // Both kinds of GM token are offered.
+    expect(screen.getAllByRole('option', { name: /GANGER/ }).length).toBe(3);
+    expect(screen.getAllByRole('option', { name: /STREET DOC/ }).length).toBe(3);
+  });
+
+  it('seats a token, sending the vehicle and the seat with it', async () => {
+    const { socket } = open();
+    await userEvent.selectOptions(screen.getByLabelText('DRIVER'), '101');
+    expect(last(socket, 'seatEnemyToken')).toMatchObject({
+      locationId: 101, sheetId: 12, vehicleIndex: 1, seat: 'driver',
+    });
+  });
+
+  it('says which token is leaving when a seat is emptied', async () => {
+    // Emptying is a statement about the token leaving, not about seating nobody.
+    const { socket } = open({ vehicles: [{ ...VAN, occupants: { driver: { locationId: 101, name: 'GANGER' } } }] });
+    await userEvent.selectOptions(screen.getByLabelText('DRIVER'), '');
+    expect(last(socket, 'seatEnemyToken')).toMatchObject({ locationId: null, clearLocationId: 101 });
+  });
+
+  it('marks a friendly apart from a hostile', () => {
+    // A GM in a hurry must not put a body on their own side in a hostile driver's seat.
+    open();
+    const friendly = screen.getAllByRole('option', { name: /STREET DOC/ })[0];
+    const hostile = screen.getAllByRole('option', { name: /^GANGER/ })[0];
+    expect(friendly).toHaveTextContent('+');
+    expect(friendly).toHaveStyle({ color: '#00ccff' });
+    expect(hostile).not.toHaveTextContent('+');
+    expect(hostile).not.toHaveStyle({ color: '#00ccff' });
+    // And the legend says what the marking means.
+    expect(screen.getByText('+ FRIENDLY')).toBeInTheDocument();
+  });
+
+  it('counts only the tokens on this map', () => {
+    open();
+    expect(screen.getByText(/2 TOKENS ON THIS MAP/)).toBeInTheDocument();
+  });
+
+  it('shows a seated token in the seat it is in', () => {
+    open({ vehicles: [{ ...VAN, occupants: { seat2: { locationId: 202, name: 'STREET DOC' } } }] });
+    expect(screen.getByLabelText('CREW 2')).toHaveValue('202');
+    expect(screen.getByLabelText('DRIVER')).toHaveValue('');
   });
 });

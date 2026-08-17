@@ -937,7 +937,11 @@ function App() {
   // Held here, not in the window: the buttons that open it need to know whether this
   // table owns any vehicles at all.
   const vehicleRoster = useVehicleRoster(socketRef, gameSystem);
-  const enemyRoster = useEnemyVehicles(socketRef, gameSystem, isAdmin);
+  // The map the GM is looking at, so the seat pickers only offer tokens that are there.
+  const enemyRoster = useEnemyVehicles(socketRef, gameSystem, isAdmin, {
+    battleMapId: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
+    floorIndex: view === 'battle_map' && activeBattleMapData ? (activeBattleMapData.currentFloorIndex ?? 0) : null,
+  });
 
   const initiativeSceneLabel = view === 'battle_map' && activeBattleMapData
     ? (() => {
@@ -1969,7 +1973,7 @@ function App() {
                 onClose={() => setIsEnemyVehiclesOpen(false)}
                 socket={socketRef.current}
                 vehicles={enemyRoster.vehicles}
-                crew={enemyRoster.crew}
+                tokens={enemyRoster.tokens}
                 refresh={enemyRoster.refresh}
                 look={gameSystem === 'cities_without_number' ? cwnVehicleLook : archetypeLook}
               />

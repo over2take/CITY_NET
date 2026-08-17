@@ -18,12 +18,24 @@ export interface EnemyVehicle {
   destroyed: boolean;
   crew: number;
   seats: string[];
+  /** seat id -> the token sitting in it. */
+  occupants: Record<string, { locationId: number; name: string }>;
 }
 
-export interface EnemyCrew {
-  sheetId: number;
-  label: string;
-  folder: string | null;
+/** A token the GM could put in a seat, on the map level they are looking at. */
+export interface SeatableToken {
+  locationId: number;
+  name: string;
+  /** `enemy_rhombus` or `friendly_rhombus`. The window colours friendlies differently. */
+  shape: string;
+  hp: number | null;
+  hpMax: number | null;
+}
+
+/** The map the GM is looking at: the city map when the battle map id is null. */
+export interface MapLevel {
+  battleMapId: number | null;
+  floorIndex: number | null;
 }
 
 /**
@@ -41,23 +53,28 @@ export function useEnemyVehicles(
   socketRef: React.MutableRefObject<any>,
   gameSystem?: string,
   isAdmin?: boolean,
+  level?: MapLevel,
 ) {
   const [vehicles, setVehicles] = useState<EnemyVehicle[]>([]);
-  const [crew, setCrew] = useState<EnemyCrew[]>([]);
+  const [tokens, setTokens] = useState<SeatableToken[]>([]);
   const [socketReadyCount, forceReady] = useReducer((n: number) => n + 1, 0);
 
   const enabled = !!isAdmin && systemHasVehicles(gameSystem);
 
+  // The level is sent with every ask, so walking onto a battle map re-filters the pickers
+  // rather than leaving yesterday's street full of gangers in them.
+  const battleMapId = level?.battleMapId ?? null;
+  const floorIndex = level?.floorIndex ?? null;
   const refresh = useCallback(() => {
-    if (enabled) socketRef.current?.emit('requestEnemyVehicles');
-  }, [socketRef, enabled]);
+    if (enabled) socketRef.current?.emit('requestEnemyVehicles', { battleMapId, floorIndex });
+  }, [socketRef, enabled, battleMapId, floorIndex]);
 
   useEffect(() => {
     if (!enabled) {
       // Losing the gate — a system with no vehicles, or elevation being revoked — has to
       // empty this, or a stale list keeps the button up over something nobody may open.
       setVehicles([]);
-      setCrew([]);
+      setTokens([]);
       return;
     }
     const socket = socketRef.current;
@@ -68,9 +85,9 @@ export function useEnemyVehicles(
       return () => clearInterval(timer);
     }
 
-    const onRoster = (data: { vehicles?: EnemyVehicle[]; crew?: EnemyCrew[] }) => {
+    const onRoster = (data: { vehicles?: EnemyVehicle[]; tokens?: SeatableToken[] }) => {
       setVehicles(data?.vehicles ?? []);
-      setCrew(data?.crew ?? []);
+      setTokens(data?.tokens ?? []);
     };
     socket.on('enemyVehicles', onRoster);
     socket.on('enemyVehiclesChanged', refresh);
@@ -87,5 +104,5 @@ export function useEnemyVehicles(
     };
   }, [socketRef, enabled, refresh, socketReadyCount]);
 
-  return { vehicles, crew, refresh, hasEnemyVehicles: vehicles.length > 0 };
+  return { vehicles, tokens, refresh, hasEnemyVehicles: vehicles.length > 0 };
 }

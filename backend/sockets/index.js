@@ -947,9 +947,35 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       }, system);
     };
 
-    socket.on('requestEnemyVehicles', () => {
+    socket.on('requestEnemyVehicles', (payload) => {
       withEnemyVehicles((system) =>
-        enemyVehicles.roster(db, (data) => socket.emit('enemyVehicles', data), system));
+        enemyVehicles.roster(
+          db,
+          // Which map the GM is looking at. The vehicles have no position — they live on
+          // sheets — but the tokens offered for their seats are filtered to this level.
+          { battleMapId: payload?.battleMapId ?? null, floorIndex: payload?.floorIndex ?? null },
+          (data) => socket.emit('enemyVehicles', data),
+          system,
+        ));
+    });
+
+    socket.on('seatEnemyToken', (payload) => {
+      if (!payload) return;
+      withEnemyVehicles((system) => {
+        const done = (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterEnemyChange(system);
+        };
+        // An empty pick means "empty this seat", which is a different statement from
+        // seating nobody — the window sends the token it is removing.
+        if (!payload.locationId) return enemyVehicles.unseatToken(db, payload.clearLocationId, done);
+        enemyVehicles.seatToken(db, {
+          locationId: payload.locationId,
+          sheetId: payload.sheetId,
+          vehicleIndex: payload.vehicleIndex,
+          seat: payload.seat,
+        }, done);
+      });
     });
 
     socket.on('setEnemyVehicleHp', (payload) => {

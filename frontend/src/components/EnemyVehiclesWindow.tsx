@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { VehicleArt } from './vehicleArt';
 import { seatAnchor, hullColor, type VehicleLook } from './VehiclesWindow';
-import type { EnemyVehicle, EnemyCrew } from '../hooks/useEnemyVehicles';
+import type { EnemyVehicle, SeatableToken } from '../hooks/useEnemyVehicles';
 
 /**
  * The GM's enemy vehicles.
@@ -25,7 +25,8 @@ interface Props {
   onClose: () => void;
   socket: any;
   vehicles: EnemyVehicle[];
-  crew: EnemyCrew[];
+  /** Only the tokens on the map level the GM is looking at. */
+  tokens: SeatableToken[];
   /** Resolves a vehicle's stored type to its wireframe, as on the player window. */
   look: (type: string) => VehicleLook;
   /** Asked for on open, since an NPC sheet may have been edited while this was shut. */
@@ -34,10 +35,21 @@ interface Props {
 
 const key = (v: EnemyVehicle) => `${v.sheetId}:${v.index}`;
 
+/**
+ * Friendlies are selectable but must not read as hostile.
+ *
+ * A GM scanning a seat list needs to see at a glance which of these is on their side —
+ * the label alone does not do it when both are the same green, and putting the wrong body
+ * in the driver's seat is a mistake made in a hurry.
+ */
+const FRIENDLY = '#00ccff';
+const isFriendly = (t?: SeatableToken) => t?.shape === 'friendly_rhombus';
+const tokenColor = (t?: SeatableToken) => (isFriendly(t) ? FRIENDLY : 'var(--green)');
+
 /** Grouped by the NPC's folder: a campaign of antagonists is not one flat list. */
 const groupLabel = (v: EnemyVehicle) => v.folder ?? 'UNFILED';
 
-export function EnemyVehiclesWindow({ pos, setPos, onClose, socket, vehicles, crew, look, refresh }: Props) {
+export function EnemyVehiclesWindow({ pos, setPos, onClose, socket, vehicles, tokens, look, refresh }: Props) {
   const [selected, setSelected] = useState<string>('');
   const [amount, setAmount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -164,25 +176,80 @@ export function EnemyVehiclesWindow({ pos, setPos, onClose, socket, vehicles, cr
                 );
               })()}
 
-              {/* The diagram is read-only for now: seating an NPC needs an occupancy field
-                  keyed by sheet id, which the player path spells as a username. Until then
-                  this shows the shape and how many places it has. */}
               <div style={{ position: 'relative', width: `${diagram}px`, height: `${diagram}px`, margin: '0 auto', color: 'var(--green)' }}>
                 <svg viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
                   <VehicleArt layout={art} />
                   {current.seats.map((seatId, i) => {
                     const a = seatAnchor(i, current.seats.length);
+                    const sitting = current.occupants[seatId];
+                    const token = tokens.find(t => t.locationId === sitting?.locationId);
+                    const edge = a.side === 'left' ? 4 : 96;
+                    const mark = sitting ? tokenColor(token) : 'currentColor';
                     return (
                       <g key={seatId}>
-                        <circle cx={a.x} cy={a.y} r={2.4} fill="none" stroke="currentColor" strokeWidth={1} opacity={0.7} />
+                        <path d={`M${a.x} ${a.y} L${edge} ${a.y}`} fill="none" stroke="currentColor" strokeWidth={0.4} opacity={0.4} />
+                        <circle cx={a.x} cy={a.y} r={2.4} fill={sitting ? mark : 'none'} stroke={mark} strokeWidth={1} />
                       </g>
                     );
                   })}
                 </svg>
+
+                {current.seats.map((seatId, i) => {
+                  const a = seatAnchor(i, current.seats.length);
+                  const sitting = current.occupants[seatId];
+                  const token = tokens.find(t => t.locationId === sitting?.locationId);
+                  const colour = sitting ? tokenColor(token) : 'var(--green)';
+                  return (
+                    <div
+                      key={seatId}
+                      style={{
+                        position: 'absolute',
+                        [a.side === 'left' ? 'left' : 'right']: 0,
+                        top: `${a.y}%`,
+                        transform: 'translateY(-50%)',
+                        display: 'flex', flexDirection: 'column',
+                        alignItems: a.side === 'left' ? 'flex-start' : 'flex-end',
+                        gap: '1px',
+                      } as React.CSSProperties}
+                    >
+                      <span style={{ fontSize: '0.5rem', letterSpacing: '1px', opacity: 0.7 }}>
+                        {seatId === 'driver' ? 'DRIVER' : `CREW ${i + 1}`}
+                      </span>
+                      <select
+                        aria-label={seatId === 'driver' ? 'DRIVER' : `CREW ${i + 1}`}
+                        value={sitting ? String(sitting.locationId) : ''}
+                        onChange={(e) => act('seatEnemyToken', {
+                          locationId: e.target.value ? Number(e.target.value) : null,
+                          // Emptying a seat is a statement about the token leaving it, so
+                          // the one being removed travels with the request.
+                          clearLocationId: sitting?.locationId ?? null,
+                          sheetId: current.sheetId,
+                          vehicleIndex: current.index,
+                          seat: seatId,
+                        })}
+                        style={{
+                          background: 'rgba(0,10,0,0.85)', color: colour,
+                          border: `1px solid ${sitting ? colour : 'var(--dark-green)'}`,
+                          fontFamily: 'inherit', fontSize: '0.6rem', padding: '1px 2px', maxWidth: '110px',
+                        }}
+                      >
+                        <option value="">— EMPTY —</option>
+                        {tokens.map(t => (
+                          // Friendlies are offered but tinted, so a body on your side is
+                          // not put in a hostile driver's seat by mistake.
+                          <option key={t.locationId} value={t.locationId} style={{ color: tokenColor(t) }}>
+                            {isFriendly(t) ? '+ ' : ''}{t.name.toUpperCase()}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
               </div>
 
               <div style={{ fontSize: '0.6rem', opacity: 0.5, letterSpacing: '1px', textAlign: 'center' }}>
-                {crew.length} NPC{crew.length === 1 ? '' : 'S'} AVAILABLE · SEATING TO COME
+                {tokens.length} TOKEN{tokens.length === 1 ? '' : 'S'} ON THIS MAP ·{' '}
+                <span style={{ color: FRIENDLY }}>+ FRIENDLY</span>
               </div>
             </>
           )}
