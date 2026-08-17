@@ -42,6 +42,8 @@ export interface RosterVehicle {
   seats: string[];
   /** seat id -> username */
   occupants: Record<string, string>;
+  /** seat id -> the friendly NPC token riding in it. */
+  guests?: Record<string, { locationId: number; name: string; shape: string }>;
 }
 
 interface Props {
@@ -57,7 +59,22 @@ interface Props {
   /** Resolves a vehicle's `type` to its wireframe and seat names. The one seam a game
    *  system reaches through — without it this component would have to know one. */
   look: (type: string) => VehicleLook;
+  /** Friendly NPCs on this map level, offered alongside the people at the table. */
+  guestTokens?: { locationId: number; name: string; shape: string }[];
 }
+
+/**
+ * A seat's value has to say *what kind* of occupant it is, not just which one.
+ *
+ * A username and a token id are both just strings in a dropdown, and a player called "12"
+ * would otherwise be indistinguishable from token 12. Prefixing is cheaper than a parallel
+ * lookup and cannot go stale.
+ */
+const asPlayer = (username: string) => `p:${username}`;
+const asGuest = (locationId: number) => `t:${locationId}`;
+
+/** Friendlies read blue, the same as in the GM's window, so the colour means one thing. */
+const FRIENDLY = '#00ccff';
 
 /** Seat labels come from the vehicle's own list; anything past it is numbered. */
 const seatLabel = (named: string | undefined, seatId: string, i: number) =>
@@ -101,7 +118,7 @@ export const hullColor = (hp: number, hpMax: number) => {
   return pct > 0.5 ? 'var(--green)' : pct > 0.25 ? '#ffaa00' : '#ff3333';
 };
 
-export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin, vehicles, players, look }: Props) {
+export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin, vehicles, players, look, guestTokens = [] }: Props) {
   const [selected, setSelected] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState(0);
@@ -132,16 +149,26 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
     socket?.emit(event, payload);
   };
 
-  const setSeat = (vehicle: RosterVehicle, seat: string, occupant: string) => {
+  const setSeat = (vehicle: RosterVehicle, seat: string, value: string) => {
     const sitting = vehicle.occupants[seat];
-    if (!occupant) {
+    const guest = vehicle.guests?.[seat];
+    if (!value) {
+      // An NPC has no autonomy to protect, so anyone may turn one out — which is also what
+      // lets the GM undo an invite they dislike.
+      if (guest) return act('unseatGuest', { guestId: guest.locationId, owner: vehicle.owner });
       if (!sitting) return;
       // Only the occupant or the GM may empty a seat. Refusing here as well as on the
       // server saves a round trip for the common case of clicking the wrong row.
       if (sitting !== userName && !isAdmin) return setError('NOT_YOURS');
       return act('seatOut', { occupant: sitting });
     }
-    act('seatIn', { occupant, owner: vehicle.owner, vehicleIndex: vehicle.index, seat });
+    if (value.startsWith('t:')) {
+      return act('seatIn', {
+        guestId: Number(value.slice(2)),
+        owner: vehicle.owner, vehicleIndex: vehicle.index, seat,
+      });
+    }
+    act('seatIn', { occupant: value.slice(2), owner: vehicle.owner, vehicleIndex: vehicle.index, seat });
   };
 
   const { art, seatNames } = look(current?.type ?? '');
@@ -334,6 +361,7 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                 {current.seats.map((seatId, i) => {
                   const a = seatAnchor(i, current.seats.length);
                   const sitting = current.occupants[seatId] ?? '';
+                  const guest = current.guests?.[seatId];
                   const mine = sitting === userName;
                   return (
                     <div
@@ -354,18 +382,33 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                       </span>
                       <select
                         aria-label={seatLabel(seatNames?.[i], seatId, i)}
-                        value={sitting}
+                        value={sitting ? asPlayer(sitting) : guest ? asGuest(guest.locationId) : ''}
                         onChange={(e) => setSeat(current, seatId, e.target.value)}
                         style={{
                           background: 'rgba(0,10,0,0.85)',
-                          color: sitting ? 'var(--vehicle)' : 'var(--green)',
-                          border: `1px solid ${sitting ? 'var(--vehicle)' : 'var(--dark-green)'}`,
+                          // A friendly rider is blue, a person is the vehicle accent. The
+                          // seat says which without being read.
+                          color: guest ? FRIENDLY : sitting ? 'var(--vehicle)' : 'var(--green)',
+                          border: `1px solid ${guest ? FRIENDLY : sitting ? 'var(--vehicle)' : 'var(--dark-green)'}`,
                           fontFamily: 'inherit', fontSize: '0.6rem', padding: '1px 2px', maxWidth: '104px',
                         }}
                       >
                         <option value="">— EMPTY —</option>
                         {players.map(p => (
-                          <option key={p.username} value={p.username}>{p.name.toUpperCase()}</option>
+                          <option key={p.username} value={asPlayer(p.username)}>{p.name.toUpperCase()}</option>
+                        ))}
+                        {/* A rider who has since left this map level keeps an option, or
+                            their seat would read as empty and the next change would turn
+                            them out without anyone meaning to. */}
+                        {guest && !guestTokens.some(t => t.locationId === guest.locationId) && (
+                          <option value={asGuest(guest.locationId)} style={{ color: FRIENDLY }}>
+                            + {guest.name.toUpperCase()} (OFF MAP)
+                          </option>
+                        )}
+                        {guestTokens.map(t => (
+                          <option key={t.locationId} value={asGuest(t.locationId)} style={{ color: FRIENDLY }}>
+                            + {t.name.toUpperCase()}
+                          </option>
                         ))}
                       </select>
                     </div>

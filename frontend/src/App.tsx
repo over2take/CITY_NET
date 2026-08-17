@@ -936,12 +936,13 @@ function App() {
   const initiative = useInitiative(socketRef, initiativeSceneKey, initiativeSystem);
   // Held here, not in the window: the buttons that open it need to know whether this
   // table owns any vehicles at all.
-  const vehicleRoster = useVehicleRoster(socketRef, gameSystem);
-  // The map the GM is looking at, so the seat pickers only offer tokens that are there.
-  const enemyRoster = useEnemyVehicles(socketRef, gameSystem, isAdmin, {
+  const mapLevel = {
     battleMapId: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
     floorIndex: view === 'battle_map' && activeBattleMapData ? (activeBattleMapData.currentFloorIndex ?? 0) : null,
-  });
+  };
+  const vehicleRoster = useVehicleRoster(socketRef, gameSystem, mapLevel);
+  // The map the GM is looking at, so the seat pickers only offer tokens that are there.
+  const enemyRoster = useEnemyVehicles(socketRef, gameSystem, isAdmin, mapLevel);
 
   const initiativeSceneLabel = view === 'battle_map' && activeBattleMapData
     ? (() => {
@@ -1988,6 +1989,7 @@ function App() {
                 isAdmin={isAdmin}
                 vehicles={vehicleRoster.vehicles}
                 players={vehicleRoster.players}
+                guestTokens={vehicleRoster.guestTokens}
                 // CWN reads the wireframe and the seat names off its book table; systems
                 // without one resolve the wireframe through an archetype and number their
                 // seats, since there is no table to name seat three from.

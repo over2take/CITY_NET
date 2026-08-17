@@ -116,7 +116,7 @@ describe('the vehicles window', () => {
 
   it('seats someone by picking them', async () => {
     const socket = open();
-    await userEvent.selectOptions(screen.getByLabelText('SHOTGUN'), 'mouse');
+    await userEvent.selectOptions(screen.getByLabelText('SHOTGUN'), 'p:mouse');
     expect(lastEmit(socket, 'seatIn')).toMatchObject({
       occupant: 'mouse', owner: 'cody', vehicleIndex: 1, seat: 'seat2',
     });
@@ -191,8 +191,9 @@ describe('the vehicles window', () => {
     const socket = open();
     const seat = screen.getByLabelText('SHOTGUN') as HTMLSelectElement;
     expect([...seat.options].map(o => o.textContent)).toEqual(['— EMPTY —', 'SAM', 'VEGA']);
-    // The username is still what gets written, since it is the key everything else uses.
-    await userEvent.selectOptions(seat, 'mouse');
+    // The username is still what gets written, since it is the key everything else uses —
+    // the `p:` prefix exists only so a login cannot be mistaken for a token id.
+    await userEvent.selectOptions(seat, 'p:mouse');
     expect(lastEmit(socket, 'seatIn')).toMatchObject({ occupant: 'mouse' });
   });
 
@@ -447,5 +448,74 @@ describe('the hull', () => {
   it('gives the GM the buttons on a car that is not theirs', () => {
     open({ userName: 'mouse', isAdmin: true });
     expect(screen.getByText('REPAIR')).toBeInTheDocument();
+  });
+});
+
+/**
+ * Friendly NPCs riding along.
+ *
+ * Players invite them, which is a table matter rather than a permission one. The server
+ * decides who may be invited; these cover what the window offers and what it sends.
+ */
+describe('inviting a friendly NPC', () => {
+  const DOC = { locationId: 55, name: 'Street Doc', shape: 'friendly_rhombus' };
+
+  const withGuests = (vehicle = CAR, tokens = [DOC]) => {
+    const socket = makeSocket();
+    render(
+      <VehiclesWindow
+        pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()}
+        socket={socket} userName="cody"
+        vehicles={[vehicle]} players={PLAYERS} look={vehicleLook}
+        guestTokens={tokens}
+      />
+    );
+    return socket;
+  };
+
+  it('offers friendlies alongside the people, marked apart', () => {
+    withGuests();
+    const seat = screen.getByLabelText('SHOTGUN') as HTMLSelectElement;
+    expect([...seat.options].map(o => o.textContent)).toEqual(['— EMPTY —', 'SAM', 'VEGA', '+ STREET DOC']);
+  });
+
+  it('sends a guest id rather than an occupant', async () => {
+    // A username and a token id are both strings; the prefix is what keeps them apart.
+    const socket = withGuests();
+    await userEvent.selectOptions(screen.getByLabelText('SHOTGUN'), 't:55');
+    const sent = lastEmit(socket, 'seatIn') as any;
+    expect(sent).toMatchObject({ guestId: 55, owner: 'cody', vehicleIndex: 1, seat: 'seat2' });
+    expect(sent.occupant).toBeUndefined();
+  });
+
+  it('shows a riding NPC in its seat, in blue', () => {
+    withGuests({ ...CAR, guests: { seat2: { locationId: 55, name: 'Street Doc', shape: 'friendly_rhombus' } } });
+    const seat = screen.getByLabelText('SHOTGUN');
+    expect(seat).toHaveValue('t:55');
+    expect(seat).toHaveStyle({ color: '#00ccff' });
+  });
+
+  it('turns an NPC out without the permission check people get', async () => {
+    // A token has no autonomy to protect, which is what lets a GM undo an invite.
+    const socket = withGuests({ ...CAR, guests: { seat2: { locationId: 55, name: 'Street Doc', shape: 'friendly_rhombus' } } });
+    await userEvent.selectOptions(screen.getByLabelText('SHOTGUN'), '');
+    expect(lastEmit(socket, 'unseatGuest')).toMatchObject({ guestId: 55, owner: 'cody' });
+    expect(lastEmit(socket, 'seatOut')).toBeUndefined();
+  });
+
+  it('keeps a rider who has left this map level selectable', () => {
+    // Otherwise the seat reads as empty and the next change turns them out unmeant.
+    withGuests(
+      { ...CAR, guests: { seat2: { locationId: 77, name: 'Wanderer', shape: 'friendly_rhombus' } } },
+      [],
+    );
+    expect(screen.getByLabelText('SHOTGUN')).toHaveValue('t:77');
+    expect(screen.getByRole('option', { name: /WANDERER \(OFF MAP\)/ })).toBeInTheDocument();
+  });
+
+  it('still lets a person be seated when a car has both', async () => {
+    const socket = withGuests({ ...CAR, guests: { seat3: { locationId: 55, name: 'Street Doc', shape: 'friendly_rhombus' } } });
+    await userEvent.selectOptions(screen.getByLabelText('SHOTGUN'), 'p:mouse');
+    expect(lastEmit(socket, 'seatIn')).toMatchObject({ occupant: 'mouse', seat: 'seat2' });
   });
 });

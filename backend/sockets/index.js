@@ -780,10 +780,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       }, system);
     };
 
-    socket.on('requestVehicleRoster', () => {
+    socket.on('requestVehicleRoster', (payload) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
-      withVehicles((system) => vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data), system));
+      withVehicles((system) => vehicleState.roster(
+        db,
+        (data) => socket.emit('vehicleRoster', data),
+        system,
+        // Which map the player is looking at, so the invite list offers the friendly NPCs
+        // in front of them rather than every one in the city.
+        { battleMapId: payload?.battleMapId ?? null, floorIndex: payload?.floorIndex ?? null },
+      ));
     });
 
     socket.on('seatIn', (payload) => {
@@ -795,11 +802,28 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           owner: payload.owner,
           vehicleIndex: payload.vehicleIndex,
           seat: payload.seat,
+          // Inviting a friendly NPC along instead of seating a person. Which token may be
+          // invited is the resolver's call, not the client's.
+          guestId: payload.guestId,
           system,
         }, (reason) => {
           if (reason) return socket.emit('vehicleSeatingError', { message: reason });
           afterSeatingChange([payload.occupant, payload.owner], system);
         });
+      });
+    });
+
+    /**
+     * Turn a friendly NPC out of a car.
+     *
+     * No permission check, unlike `seatOut`: that asymmetry protects a person's autonomy and
+     * a token has none. So anyone may do this, which is what lets a GM undo whatever a
+     * player has done with the invite.
+     */
+    socket.on('unseatGuest', (payload) => {
+      if (!payload || !payload.guestId) return;
+      withVehicles((system) => {
+        vehicleState.unseatGuest(db, payload.guestId, () => afterSeatingChange([payload.owner], system));
       });
     });
 
