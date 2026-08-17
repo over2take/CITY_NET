@@ -9,6 +9,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.1] - 2026-08-16
+
+Cyberpunk RED gets vehicles, sharing the machinery 1.9.0 built for Cities Without Number.
+
+### Added
+
+- **A vehicle section on the Cyberpunk RED sheet.** Name, SDP and its maximum, SP, seats, archetype, speed and cost as reference, and notes. Four vehicles, empty ones collapsed, `SEATING` in the header beside the collapse toggle — the same place, and the same order on the GEAR tab, as the CWN sheet.
+
+  There is no picker for the book's vehicle table and there cannot be one: that table is not ours to distribute, where CWN's is published under a licence that permits it. **ARCHETYPE** fills the block instead, from seventeen archetypes of our own — `BIKE`, `COMPACT CAR`, `SUPERCAR`, `SPEEDBOAT`, `CABIN CRUISER`, `AERODYNE`, `AIRSHIP` and the rest — on a scale that belongs to nobody. They are approximate on purpose and every field stays editable, so a table wanting their own book's values types four numbers over the top and keeps the seats and the wireframe. The vehicle's name follows the archetype until someone names it themselves, and then it is theirs.
+- **Eleven more wireframes**, for the water and civil aircraft the CWN table has none of. Keyed by what the shape is rather than by any book's name for it, so a third system can reuse a speedboat without inheriting somebody else's vocabulary. Twenty-one shapes now.
+- **Ramming, the driver's weapon.** Offered in the attack panel as `RAM · 6d6` to whoever holds the driver seat, and resolved whole rather than rolled to hit — driving into a thing is not an attack. Both vehicles take the same damage and armour does not apply, so ramming a parked car to death costs you most of a hull; the result says both hulls every time, because that is the half a table forgets. Everyone aboard both vehicles is named for the crash injury, which is what the seat roster is for.
+
+  Targeting a token decides what you hit: aim at someone in a car and the car takes it, aim at someone on foot and they do. Resolved on the server, because a client deciding that could aim at a passenger and leave the car untouched.
+- **A downloadable blank form for the sheet importer.** The dialog always accepted a fillable PDF, but there was nowhere to get one — you needed a sheet whose field names happened to match. `↓ DOWNLOAD BLANK FORM` gives you that sheet, for each of the three systems that have an importer. The field names are the contract, so a test walks every label on every form back through the importer: a box the importer cannot read is one a player fills in and loses.
+- **The importer understands vehicles**, for both systems. A car already written down elsewhere comes across rather than being retyped — which matters most in Cyberpunk, where there is no table to pick from. A `SDP` value also seeds the current pool, or every imported vehicle would arrive already wrecked.
+
+### Changed
+
+- **The seating window no longer knows a game system.** It read the wireframe and the seat names from the CWN book table directly, which meant a second system could only have a seating diagram by forking the component. Both now arrive through one resolver, and a test drives the window with no CWN behind it at all.
+- **Vehicles are a registry rather than a hardcoded system.** Which systems have them is now a list, and the active system travels with each call — so a table that has played both does not find last campaign's cars on this campaign's roster. Neither system lists the other's vehicles or players, or can seat into or damage the other's cars.
+- **Cities Without Number gained vehicle import fields**, which it never had. Less load-bearing there, since picking a book type fills the stat block, but a car edited away from its preset now survives a round trip.
+
+---
+
 ## [1.9.0] - 2026-08-15
 
 Cities Without Number gets vehicles: on the sheet, in combat, and shared across the table.

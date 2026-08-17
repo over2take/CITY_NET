@@ -1,4 +1,5 @@
 import type { SheetTemplate, SheetField } from '../types';
+import { ARCHETYPE_OPTIONS, DEFAULT_ARCHETYPE, getArchetype, isArchetypeName } from '../vehicleArchetypes';
 
 // Cyberpunk RED template.
 //
@@ -25,6 +26,63 @@ export const CPR_WEAPON_SKILLS: { value: string; label: string }[] = [
 
 /** Number of structured weapon rows on the sheet. */
 export const CPR_WEAPON_ROWS = 4;
+
+/** Vehicles a character can own. */
+export const CPR_VEHICLE_ROWS = 4;
+export const CPR_VEHICLE_COLUMNS = 5;
+
+/**
+ * The vehicle row.
+ *
+ * One picker, like CWN's TYPE: ARCHETYPE is what is stored, it chooses the wireframe, and
+ * it fills the block. The difference is where the numbers come from — *our* archetypes
+ * rather than the book's table — that table is book content and this file may hold labels and dice
+ * math only. So the numbers are approximate starting points and every field stays
+ * editable: a table wanting their own book's values types four numbers over the top and
+ * keeps the seats and the wireframe.
+ *
+ * The field ids are the app's generic vocabulary — `hp`, `armor`, `crew` — while the labels
+ * are Cyberpunk's. That is deliberate: the seating window, the roster and the hull bar are
+ * shared with Cities Without Number, and renaming the storage per system would fork all
+ * three to say the same thing in a different accent. SDP *is* a damage pool; SP *is*
+ * armour that subtracts.
+ */
+const vehicleRow = (i: number): SheetField[] => [
+  { id: `vehicle${i}_name`, label: 'VEHICLE', type: 'text', placeholder: 'Something with a big engine' },
+  {
+    id: `vehicle${i}_type`, label: 'ARCHETYPE', type: 'select', options: ARCHETYPE_OPTIONS,
+    hint: 'A starting point, not a book vehicle. Picking one fills the numbers, the seats and the wireframe; every field stays editable, so type your own over the top.',
+    presetFill: (value, data) => {
+      const a = getArchetype(value);
+      if (!a) return {};
+      const out: Record<string, string | number> = {
+        [`vehicle${i}_name`]: a.label,
+        [`vehicle${i}_hp`]: a.pool,
+        [`vehicle${i}_hp_max`]: a.pool,
+        [`vehicle${i}_armor`]: a.armor,
+        [`vehicle${i}_crew`]: a.seats,
+      };
+      // A vehicle someone has named is theirs. One still carrying an archetype label has
+      // not been named at all, so it follows the archetype — otherwise a BIKE changed to a
+      // YACHT stays called BIKE.
+      const current = String(data[`vehicle${i}_name`] ?? '').trim();
+      if (current && !isArchetypeName(current)) delete out[`vehicle${i}_name`];
+      return out;
+    },
+  },
+  { id: `vehicle${i}_hp`, label: 'SDP', type: 'number', maxField: `vehicle${i}_hp_max`, placeholder: '50', hint: 'Structural Damage Points, current. At zero the vehicle is Destroyed: it stops being cover and cannot move until repaired.' },
+  { id: `vehicle${i}_hp_max`, label: 'SDP MAX', type: 'number', placeholder: '50', hint: 'A vehicle counts as real once this is filled in — it is what puts the vehicle on the shared VEHICLES window.' },
+  { id: `vehicle${i}_armor`, label: 'SP', type: 'number', placeholder: '10', hint: 'Stopping Power: subtracted from damage the vehicle takes. Unlike personal SP it does not ablate.' },
+  { id: `vehicle${i}_crew`, label: 'SEATS', type: 'number', placeholder: '4', startsRow: true, hint: 'How many it seats, driver included. The VEHICLES window draws exactly this many places.' },
+  // Free text with a bare number for a placeholder: the units are whatever the table
+  // reads them in, and a worked example here looked like a format the field required.
+  { id: `vehicle${i}_speed`, label: 'SPEED', type: 'text', placeholder: '20', hint: 'Reference only, in whatever units you like — nothing here reads it.' },
+  { id: `vehicle${i}_cost`, label: 'COST', type: 'text', placeholder: '30,000eb' },
+  {
+    id: `vehicle${i}_notes`, label: 'NOTES', type: 'textarea', fullWidth: true,
+    placeholder: 'Armoured glass. Trunk full of someone else’s problem.',
+  },
+];
 
 const weaponRow = (i: number): SheetField[] => [
   { id: `weapon${i}_name`, label: 'NAME', type: 'text', placeholder: 'Militech Avenger' },
@@ -282,6 +340,40 @@ export const cyberpunkRed: SheetTemplate = {
       fields: [
         { id: 'weapons_notes', label: 'Ammo, attachments, notes', type: 'textarea', placeholder: 'Smartgun link on the Avenger; sword is monofilament' },
       ],
+    },
+    // Above the gear list, matching where CWN puts it: a vehicle is a big enough thing to
+    // sit with the weapons rather than below the pocket contents.
+    {
+      id: 'vehicles',
+      label: 'VEHICLES',
+      // Who is sitting where is shared state, so the way to it belongs beside the section
+      // rather than in it — folding the section away should not take the button with it.
+      headerAction: 'SEATING',
+      // 'weapons' is the row-chunking layout, not a weapons-only one; the name is
+      // historical. It is what makes each vehicle read as one block rather than as a
+      // continuous field soup.
+      layout: 'weapons',
+      tab: 'GEAR',
+      columns: CPR_VEHICLE_COLUMNS,
+      // A new vehicle starts as the smallest archetype rather than as a blank, the same
+      // way CWN starts one as a Motorcycle: an unset type draws nothing and seats nobody.
+      // Change it to the one you meant.
+      onAdd: (index) => {
+        const a = getArchetype(DEFAULT_ARCHETYPE)!;
+        return {
+          [`vehicle${index}_type`]: a.id,
+          [`vehicle${index}_name`]: a.label,
+          [`vehicle${index}_hp`]: a.pool,
+          [`vehicle${index}_hp_max`]: a.pool,
+          [`vehicle${index}_armor`]: a.armor,
+          [`vehicle${index}_crew`]: a.seats,
+        };
+      },
+      // Derived from the row rather than written out: the collapse chunks the field list
+      // by this number, so a hand-kept count that drifts from the row silently splits
+      // every vehicle across two blocks.
+      groupSize: vehicleRow(1).length,
+      fields: Array.from({ length: CPR_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
     },
     {
       id: 'gear',

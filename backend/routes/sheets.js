@@ -6,6 +6,7 @@ const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
 const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc } = require('../sheets/templates');
 const sheetImporters = require('../sheets/importers');
+const pdfTemplate = require('../sheets/pdfTemplate');
 const sheetAttack = require('../sheets/attack');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
@@ -198,6 +199,30 @@ module.exports = (db, io) => {
   });
 
   // --- Sheet import ---
+
+  // The blank form the upload above expects.
+  //
+  // Without it, "upload a fillable PDF" meant finding one whose field names happened to
+  // match our aliases. This is that PDF, generated from a layout the round-trip test walks
+  // through the importer — so what comes back out is what went in.
+  //
+  // Unauthenticated like the preview: it is a blank form with nobody's data in it.
+  router.get('/import/template.pdf', (req, res) => {
+    getGameSystem(async (err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!pdfTemplate.hasTemplate(system)) {
+        return res.status(400).json({ error: `No import form for ${system} yet` });
+      }
+      try {
+        const pdf = await pdfTemplate.buildTemplate(system);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="citynet-${system}-import.pdf"`);
+        res.send(pdf);
+      } catch (e) {
+        res.status(500).json({ error: 'Could not build the form' });
+      }
+    });
+  });
 
   // Stage-1+2 preview: extract candidates from a fillable PDF, JSON paste, or
   // raw text, and map them onto the active system's fields. No auth needed -

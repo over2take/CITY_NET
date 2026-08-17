@@ -101,6 +101,16 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply }: ImportSheet
           />
           UPLOAD FILLABLE PDF
         </label>
+        {/* The blank form the upload above expects. Without it, "upload a fillable PDF"
+            assumed you already had one whose field names matched — which players did not.
+            Generated per system, so it always asks for what the importer reads. */}
+        <a
+          href="/api/sheets/import/template.pdf"
+          download
+          style={{ ...label9, color: 'var(--green)', opacity: 0.8, textAlign: 'center', textDecoration: 'none', border: '1px dashed var(--green)', padding: '4px 8px' }}
+        >
+          ↓ DOWNLOAD BLANK FORM
+        </a>
         <div style={{ ...label9, opacity: 0.5, textAlign: 'center' }}>— OR PASTE JSON / STAT BLOCK —</div>
         <textarea
           value={pasted}

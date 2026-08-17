@@ -1,4 +1,4 @@
-// The vehicle a CWN character is riding in, resolved against the database.
+// The vehicle a character is riding in, resolved against the database.
 //
 // attackCwn holds the rules — how to read the declaration, what a vehicle's AC and
 // armour work out to. This holds the one thing those cannot: a rider points at another
@@ -7,10 +7,17 @@
 // Two callers share it. The attack path asks what is standing between a defender and a
 // bullet; the token mirror asks the same question so everyone else can see the answer
 // before they shoot. They must agree, which is why this is one function rather than two.
+//
+// Which system's sheets to read is a parameter rather than a constant. Only one system is
+// ever live in a game, and a table that has played both should not find last campaign's
+// cars on this campaign's roster — so the seating and roster calls are told the active
+// system, and the combat path, which is CWN's own, passes CWN.
 
 const attackCwn = require('./attackCwn');
 const vehicleSeats = require('./vehicleSeats');
+const ramModule = require('./ram');
 
+/** The default for the CWN combat path, which is the only caller that is system-specific. */
 const SYSTEM = 'cities_without_number';
 
 /**
@@ -18,7 +25,7 @@ const SYSTEM = 'cities_without_number';
  * an owner who has been purged, a vehicle row never filled in, a wreck. A destroyed
  * vehicle stops being cover rather than absorbing forever.
  */
-function resolve(db, sheetId, sheetData, cb) {
+function resolve(db, sheetId, sheetData, cb, system = SYSTEM) {
   const occ = attackCwn.readOccupancy(sheetData);
   if (!occ) return cb(null);
   const done = (ownerSheetId, ownerData) => {
@@ -31,7 +38,7 @@ function resolve(db, sheetId, sheetData, cb) {
   }
   db.get(
     `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-    [occ.owner, SYSTEM],
+    [occ.owner, system],
     (err, row) => {
       if (err || !row) return cb(null);
       let ownerData;
@@ -102,9 +109,9 @@ function getRideWeapon(db, sheetData, weaponIndex, cb) {
  * vehicle mirror, and a cycle at load time leaves one of the two half-built. The require
  * cache makes the repeat call free.
  */
-const displayNameOf = (data, username) => {
+const displayNameOf = (data, username, system = SYSTEM) => {
   const { nameField } = require('./identity');
-  return String(data?.[nameField(SYSTEM)] ?? '').trim() || username;
+  return String(data?.[nameField(system)] ?? '').trim() || username;
 };
 
 /** What other players are allowed to see: the numbers they are shooting at, not the sheet. */
@@ -133,11 +140,11 @@ const vehicleKey = (username, occ) => `${occ.owner || username}:${occ.vehicleInd
  * the whole thing anyway, so the partial version was only ever more code for the same
  * scan — on a table with one row per player.
  */
-function syncAll(db, cb) {
+function syncAll(db, cb, system = SYSTEM) {
   const done = () => cb && cb();
   db.all(
     `SELECT id, username, data FROM character_sheets WHERE system = ? AND is_npc = 0`,
-    [SYSTEM],
+    [system],
     (err, rows) => {
       if (err || !rows) return done();
       const sheets = rows.map((r) => {
@@ -171,7 +178,7 @@ function syncAll(db, cb) {
         // Names rather than logins: this is read by people, on a badge and in an attack
         // panel, and nobody at the table thinks of each other by account name.
         const occupants = usable
-          ? (aboard.get(vehicleKey(sh.username, occ)) || []).map(u => displayNameOf(byUser.get(u)?.data, u))
+          ? (aboard.get(vehicleKey(sh.username, occ)) || []).map(u => displayNameOf(byUser.get(u)?.data, u, system))
           : [];
         db.run(
           `UPDATE locations SET vehicle_state = ? WHERE shape = 'rhombus' AND owner = ?`,
@@ -193,11 +200,11 @@ const clearOccupancy = (data) => {
   return out;
 };
 
-/** Read one CWN sheet by username. cb(null) when they have none. */
-function loadSheet(db, username, cb) {
+/** Read one sheet by username, in the given system. cb(null) when they have none. */
+function loadSheet(db, username, cb, system = SYSTEM) {
   db.get(
     `SELECT id, username, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-    [String(username || '').trim(), SYSTEM],
+    [String(username || '').trim(), system],
     (err, row) => {
       if (err || !row) return cb(null);
       try { cb({ id: row.id, username: row.username, data: JSON.parse(row.data || '{}') }); }
@@ -221,7 +228,7 @@ const writeSheet = (db, id, data, cb) =>
  * able to trip — a seat that is not on the vehicle, a vehicle that does not exist — so
  * they are worth refusing rather than papering over.
  */
-function seatIn(db, { occupant, owner, vehicleIndex, seat }, cb) {
+function seatIn(db, { occupant, owner, vehicleIndex, seat, system = SYSTEM }, cb) {
   const index = Number(vehicleIndex);
   loadSheet(db, owner, (ownerSheet) => {
     if (!ownerSheet) return cb('NO_SUCH_VEHICLE_OWNER');
@@ -242,7 +249,7 @@ function seatIn(db, { occupant, owner, vehicleIndex, seat }, cb) {
       // Turn out whoever was already in this seat — one seat, one person.
       db.all(
         `SELECT id, username, data FROM character_sheets WHERE system = ? AND is_npc = 0`,
-        [SYSTEM],
+        [system],
         (err, rows) => {
           const evictions = [];
           for (const r of rows || []) {
@@ -260,16 +267,16 @@ function seatIn(db, { occupant, owner, vehicleIndex, seat }, cb) {
           writeSheet(db, occSheet.id, data, done);
         }
       );
-    });
-  });
+    }, system);
+  }, system);
 }
 
 /** Take someone out of whatever they are in. Idempotent — no seat is not an error. */
-function seatOut(db, occupant, cb) {
+function seatOut(db, occupant, cb, system = SYSTEM) {
   loadSheet(db, occupant, (sheet) => {
     if (!sheet) return cb('NO_SUCH_PLAYER');
     writeSheet(db, sheet.id, clearOccupancy(sheet.data), () => cb(null));
-  });
+  }, system);
 }
 
 /**
@@ -284,7 +291,7 @@ function seatOut(db, occupant, cb) {
  * instead of a state the UI can invent. Landing exactly where it already was is not an
  * error — it just writes nothing.
  */
-function adjustHp(db, { owner, vehicleIndex, delta }, cb) {
+function adjustHp(db, { owner, vehicleIndex, delta, system = SYSTEM }, cb) {
   const index = Number(vehicleIndex);
   const amount = Math.trunc(Number(delta));
   if (!Number.isFinite(amount) || amount === 0) return cb('NO_CHANGE');
@@ -295,18 +302,18 @@ function adjustHp(db, { owner, vehicleIndex, delta }, cb) {
     const next = Math.max(0, Math.min(vehicle.hpMax, vehicle.hp + amount));
     if (next === vehicle.hp) return cb(null);
     writeSheet(db, ownerSheet.id, { ...ownerSheet.data, [vehicle.hpField]: next }, () => cb(null));
-  });
+  }, system);
 }
 
 /** Set whether a vehicle is moving. It belongs to the car, so everyone aboard agrees. */
-function setMoving(db, { owner, vehicleIndex, moving }, cb) {
+function setMoving(db, { owner, vehicleIndex, moving, system = SYSTEM }, cb) {
   const index = Number(vehicleIndex);
   loadSheet(db, owner, (ownerSheet) => {
     if (!ownerSheet) return cb('NO_SUCH_VEHICLE_OWNER');
     if (!attackCwn.getVehicle(ownerSheet.data, index)) return cb('NO_SUCH_VEHICLE');
     const data = { ...ownerSheet.data, [`vehicle${index}_moving`]: moving ? 1 : 0 };
     writeSheet(db, ownerSheet.id, data, () => cb(null));
-  });
+  }, system);
 }
 
 
@@ -319,10 +326,10 @@ function setMoving(db, { owner, vehicleIndex, moving }, cb) {
  *
  * Only the numbers a table needs travel. The rest of anyone's sheet stays where it is.
  */
-function roster(db, cb) {
+function roster(db, cb, system = SYSTEM) {
   db.all(
     `SELECT username, data FROM character_sheets WHERE system = ? AND is_npc = 0 ORDER BY username`,
-    [SYSTEM],
+    [system],
     (err, rows) => {
       if (err || !rows) return cb({ vehicles: [], players: [] });
       const sheets = rows.map((r) => {
@@ -348,7 +355,7 @@ function roster(db, cb) {
           if (!vehicle) continue;
           vehicles.push({
             owner: sh.username,
-            ownerName: displayNameOf(sh.data, sh.username),
+            ownerName: displayNameOf(sh.data, sh.username, system),
             index: i,
             name: vehicle.name,
             type: String(sh.data[`vehicle${i}_type`] || ''),
@@ -368,13 +375,87 @@ function roster(db, cb) {
       // the name rather than being replaced by it.
       cb({
         vehicles,
-        players: sheets.map(sh => ({ username: sh.username, name: displayNameOf(sh.data, sh.username) })),
+        players: sheets.map(sh => ({ username: sh.username, name: displayNameOf(sh.data, sh.username, system) })),
       });
     }
   );
 }
 
+/**
+ * Drive into something.
+ *
+ * The rammed vehicle comes from the payload; the ramming one never does. It is whichever
+ * vehicle the actor is sitting in the driver's seat of, read from the roster — because
+ * "the driver may ram" is the whole permission model, and a client that could name its own
+ * vehicle could ram with a car it is not in.
+ *
+ * cb(reason) or cb(null, result). The result carries both crews so the caller can name
+ * everyone the crash injures.
+ */
+function ram(db, { actor, targetOwner, targetVehicleIndex, targetUsername, damage, system = SYSTEM }, cb) {
+  roster(db, ({ vehicles }) => {
+    const crewOf = (v) => Object.values(v.occupants || {});
+    const mine = vehicles.find(v => (v.occupants || {}).driver === actor);
+    if (!mine) return cb('NOT_DRIVING');
+    if (mine.destroyed) return cb('WRECKED');
+
+    const finish = (target, targetIsPerson, writeTarget) => {
+      const out = ramModule.resolveRam({ damage, rammer: mine, target, targetIsPerson });
+      loadSheet(db, mine.owner, (ownerSheet) => {
+        if (!ownerSheet) return cb('NO_SUCH_VEHICLE_OWNER');
+        writeSheet(
+          db,
+          ownerSheet.id,
+          { ...ownerSheet.data, [`vehicle${mine.index}_hp`]: out.rammerHp },
+          () => writeTarget(out.targetHp, () => cb(null, {
+            ...out,
+            rammer: { name: mine.name, owner: mine.owner, index: mine.index, hpMax: mine.hpMax },
+            target: { ...target, isPerson: targetIsPerson },
+            injured: ramModule.whiplashed(crewOf(mine), target.crew || []),
+          }))
+        );
+      }, system);
+    };
+
+    const asVehicle = (v) => finish({ ...v, crew: crewOf(v) }, false, (hp, done) =>
+      loadSheet(db, v.owner, (sheet) => {
+        if (!sheet) return done();
+        writeSheet(db, sheet.id, { ...sheet.data, [`vehicle${v.index}_hp`]: hp }, done);
+      }, system));
+
+    if (targetUsername) {
+      // You hit what they are in. Aiming at a person who is sitting in a car and having
+      // the car go unscathed would be the wrong answer to the obvious question — so the
+      // target is resolved through the roster before it is treated as a pedestrian.
+      const theirRide = vehicles.find(v => Object.values(v.occupants || {}).includes(targetUsername));
+      if (theirRide) {
+        if (theirRide.owner === mine.owner && theirRide.index === mine.index) return cb('SAME_VEHICLE');
+        return asVehicle(theirRide);
+      }
+      // On foot. Their pool is the token's, the same one every attack writes.
+      return db.get(
+        `SELECT hp_current, hp_max FROM locations WHERE shape = 'rhombus' AND owner = ?`,
+        [targetUsername],
+        (err, row) => {
+          if (err || !row) return cb('NO_SUCH_TARGET');
+          const target = { name: targetUsername, hp: row.hp_current, hpMax: row.hp_max, crew: [targetUsername] };
+          finish(target, true, (hp, done) =>
+            db.run(`UPDATE locations SET hp_current = ? WHERE shape = 'rhombus' AND owner = ?`, [hp, targetUsername], done));
+        }
+      );
+    }
+
+    const index = Number(targetVehicleIndex);
+    const hit = vehicles.find(v => v.owner === targetOwner && v.index === index);
+    if (!hit) return cb('NO_SUCH_TARGET');
+    // Ramming the car you are driving is not a manoeuvre.
+    if (hit.owner === mine.owner && hit.index === mine.index) return cb('SAME_VEHICLE');
+
+    asVehicle(hit);
+  }, system);
+}
+
 module.exports = {
   SYSTEM, resolve, publicState, syncAll, vehicleKey, getRideMounts, getRideWeapon,
-  seatIn, seatOut, setMoving, adjustHp, loadSheet, roster, OCCUPANCY_FIELDS,
+  seatIn, seatOut, setMoving, adjustHp, ram, loadSheet, roster, OCCUPANCY_FIELDS,
 };

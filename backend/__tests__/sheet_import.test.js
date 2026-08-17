@@ -5,6 +5,7 @@ import { PDFDocument } from 'pdf-lib';
 import { makeTestDb, run } from './helpers/testDb.js';
 import sheetsRouteFactory from '../routes/sheets.js';
 import { extractPdfFields, getImporter } from '../sheets/importers.js';
+import { LAYOUTS, labelsFor, hasTemplate, buildTemplate } from '../sheets/pdfTemplate.js';
 
 process.env.JWT_SECRET = 'test-secret';
 
@@ -74,6 +75,51 @@ describe('CP:R importer mapping', () => {
     expect(unmapped.mystery_field).toBe('x');
   });
 
+  /**
+   * Vehicles.
+   *
+   * The Cyberpunk vehicle table cannot ship, so there is no preset picker and a player
+   * would otherwise retype a car that already exists on a sheet somewhere else. Their own
+   * sheet is their own data, which is what makes this the route the presets cannot be.
+   */
+  it('maps an unnumbered vehicle onto the first row', () => {
+    const { mapped } = importer.mapFields({
+      Vehicle: 'Galena', SDP: '50', 'Vehicle SP': '10', Seats: '4',
+    });
+    // Labels are Cyberpunk's, storage is the app's generic vocabulary.
+    expect(mapped.vehicle1_name).toBe('Galena');
+    expect(mapped.vehicle1_hp_max).toBe(50);
+    expect(mapped.vehicle1_armor).toBe(10);
+    expect(mapped.vehicle1_crew).toBe(4);
+  });
+
+  it('brings an imported vehicle in undamaged', () => {
+    // A sheet saying "SDP 50" means a whole car. Without the seed every import would
+    // arrive already wrecked, since a blank current pool reads as zero on the roster.
+    const { mapped } = importer.mapFields({ Vehicle: 'Galena', SDP: '50' });
+    expect(mapped.vehicle1_hp).toBe(50);
+  });
+
+  it('keeps a bare SP as body armour, not the car', () => {
+    // On a Cyberpunk sheet, SP is personal armour far more often than it is a vehicle's,
+    // and guessing wrong would quietly overwrite the wrong field.
+    const { mapped } = importer.mapFields({ 'SP (Body)': '11', 'Vehicle SP': '7' });
+    expect(mapped.sp_body_max).toBe(11);
+    expect(mapped.vehicle1_armor).toBe(7);
+  });
+
+  it('takes a numbered fleet', () => {
+    const { mapped } = importer.mapFields({
+      Vehicle1: 'Galena', Vehicle1SDP: '50', Vehicle1Seats: '4',
+      Vehicle2: 'Quartz', Vehicle2SDP: '35', 'Vehicle2 Hull': 'sportbike',
+    });
+    expect(mapped.vehicle1_name).toBe('Galena');
+    expect(mapped.vehicle2_name).toBe('Quartz');
+    expect(mapped.vehicle2_hp_max).toBe(35);
+    expect(mapped.vehicle2_hp).toBe(35);
+    expect(mapped.vehicle2_type).toBe('sportbike');
+  });
+
   it('skips linked fields (HP, cash) and reports them', () => {
     const { mapped, skipped } = importer.mapFields({ hp: 30, cash: 500, ref: 7 });
     expect(mapped.hp).toBeUndefined();
@@ -106,6 +152,103 @@ describe('CP:R importer mapping', () => {
     expect(mapped.tech).toBe(7);
     expect(mapped.handgun).toBe(3);
     expect(mapped.stealth).toBe(4);
+  });
+});
+
+/**
+ * The blank form, and the round trip.
+ *
+ * The dialog always accepted a fillable PDF but there was nowhere to get one — you needed
+ * a sheet whose field names happened to match our aliases. These are the tests that make
+ * the generated form and the importer one thing rather than two that drift.
+ */
+describe('the import form', () => {
+  const SYSTEMS = Object.keys(LAYOUTS);
+
+  it('covers every system that has an importer, and no others', () => {
+    // A form for a system with no importer would be a download that cannot be uploaded.
+    expect(SYSTEMS.sort()).toEqual(['cities_without_number', 'cyberpunk_red', 'shadowrun_6e']);
+    expect(hasTemplate('generic')).toBe(false);
+  });
+
+  it.each(SYSTEMS)('%s names every field something the importer reads back', (system) => {
+    // The contract. A label the importer does not recognise is a box the player fills in
+    // and loses, and nothing else would catch it.
+    const labels = labelsFor(system);
+    const { mapped, unmapped, skipped } = getImporter(system)
+      .mapFields(Object.fromEntries(labels.map(l => [l, '1'])));
+
+    expect(labels.length).toBeGreaterThan(0);
+    // Nothing on the form may be unrecognised. `skipped` counts as recognised: linked
+    // fields like CWN's token AC are understood and deliberately routed elsewhere rather
+    // than written into sheet JSON, which is not the same as being lost.
+    expect(Object.keys(unmapped)).toEqual([]);
+    expect(Object.keys(mapped).length + Object.keys(skipped).length)
+      .toBeGreaterThanOrEqual(labels.length);
+  });
+
+  it.each(SYSTEMS)('%s names each box once', (system) => {
+    // A duplicate name is a second box that silently overwrites the first on upload.
+    const labels = labelsFor(system);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('asks for the vehicles, which are the part with no preset behind them', () => {
+    const labels = labelsFor('cyberpunk_red');
+    expect(labels).toContain('Vehicle1Name');
+    expect(labels).toContain('Vehicle1SDP');
+    expect(labels).toContain('Vehicle1Seats');
+  });
+
+  it('builds a PDF whose form fields survive extraction', async () => {
+    // Generated, written and read back through the same extractor the upload uses, so
+    // this covers the actual path rather than the intention.
+    const pdf = await buildTemplate('cyberpunk_red');
+    const extracted = await extractPdfFields(pdf);
+    const labels = labelsFor('cyberpunk_red');
+    labels.forEach(l => expect(extracted).toHaveProperty(l));
+  });
+
+  it('round-trips a filled form back into sheet fields', async () => {
+    const doc = await PDFDocument.load(await buildTemplate('cyberpunk_red'));
+    const form = doc.getForm();
+    form.getTextField('Handle').setText('V');
+    form.getTextField('REF').setText('7');
+    form.getTextField('Vehicle1Name').setText('Galena');
+    form.getTextField('Vehicle1SDP').setText('50');
+    form.getTextField('Vehicle1Seats').setText('4');
+
+    const raw = await extractPdfFields(Buffer.from(await doc.save()));
+    const { mapped } = getImporter('cyberpunk_red').mapFields(raw);
+
+    expect(mapped.name).toBe('V');
+    expect(mapped.ref).toBe(7);
+    expect(mapped.vehicle1_name).toBe('Galena');
+    expect(mapped.vehicle1_hp_max).toBe(50);
+    expect(mapped.vehicle1_hp).toBe(50);
+    expect(mapped.vehicle1_crew).toBe(4);
+  });
+
+  it('offers nothing for a system with no importer behind it', async () => {
+    expect(hasTemplate('generic')).toBe(false);
+    expect(await buildTemplate('generic')).toBeNull();
+  });
+});
+
+describe('GET /api/sheets/import/template.pdf', () => {
+  it('serves a PDF as a download', async () => {
+    const res = await request(app).get('/api/sheets/import/template.pdf');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    expect(res.headers['content-disposition']).toContain('citynet-cyberpunk_red-import.pdf');
+    expect(res.body.slice(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('says so rather than 500ing when the system has no form', async () => {
+    await run(db, `UPDATE global_settings SET value = 'generic' WHERE key = 'game_system'`);
+    const res = await request(app).get('/api/sheets/import/template.pdf');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/generic/);
   });
 });
 
