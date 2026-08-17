@@ -13,6 +13,7 @@ const identity = require('../sheets/identity');
 const vehicleState = require('../sheets/vehicleState');
 const vehicleSystems = require('../sheets/vehicleSystems');
 const ram = require('../sheets/ram');
+const enemyVehicles = require('../sheets/enemyVehicles');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -915,6 +916,63 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           );
         }
         go(payload.username);
+      });
+    });
+
+    /* ── Enemy vehicles ─────────────────────────────────────────────────────
+     *
+     * GM-only, which is what lets the whole thing skip the player path's permission
+     * model: enemy pools and armour stay behind this gate, so there is nothing to
+     * decide about what players may see. Attackers still get the cover badge on the
+     * token, which already works.
+     *
+     * Keyed by NPC sheet id rather than username — see `enemyVehicles.js`.
+     */
+    const withEnemyVehicles = (cb) => {
+      if (!isAdminSocket(socket)) return;
+      withVehicles(cb);
+    };
+
+    /** Re-derive and tell the room, so nobody is looking at a stale enemy car. */
+    const afterEnemyChange = (system) => {
+      vehicleState.syncAll(db, () => {
+        emitUpdate({ isRhombusOnly: true });
+        io.emit('enemyVehiclesChanged');
+      }, system);
+    };
+
+    socket.on('requestEnemyVehicles', () => {
+      withEnemyVehicles((system) =>
+        enemyVehicles.roster(db, (data) => socket.emit('enemyVehicles', data), system));
+    });
+
+    socket.on('setEnemyVehicleHp', (payload) => {
+      if (!payload) return;
+      withEnemyVehicles((system) => {
+        enemyVehicles.adjustHp(db, {
+          sheetId: payload.sheetId,
+          vehicleIndex: payload.vehicleIndex,
+          delta: payload.delta,
+          system,
+        }, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterEnemyChange(system);
+        });
+      });
+    });
+
+    socket.on('setEnemyVehicleMoving', (payload) => {
+      if (!payload) return;
+      withEnemyVehicles((system) => {
+        enemyVehicles.setMoving(db, {
+          sheetId: payload.sheetId,
+          vehicleIndex: payload.vehicleIndex,
+          moving: !!payload.moving,
+          system,
+        }, (reason) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+          afterEnemyChange(system);
+        });
       });
     });
 

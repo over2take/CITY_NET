@@ -180,10 +180,12 @@ interface GeometryMenuProps {
   setIsSheetOpen: (v: boolean) => void;
   isVehiclesOpen?: boolean;
   setIsVehiclesOpen?: (v: boolean) => void;
+  isEnemyVehiclesOpen?: boolean;
+  setIsEnemyVehiclesOpen?: (v: boolean) => void;
   gameSystem?: string;
 }
 
-export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem }: GeometryMenuProps) {
+export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, isEnemyVehiclesOpen, setIsEnemyVehiclesOpen, gameSystem }: GeometryMenuProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -329,6 +331,17 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
             style={{ width: '100%', fontSize: '0.65rem' }}
           >
             VEHICLES
+          </button>
+        )}
+
+        {/* Enemy vehicles are the GM's, so the way in is too. */}
+        {hasVehicles(gameSystem) && isAdmin && setIsEnemyVehiclesOpen && (
+          <button
+            className={`upload-btn ${isEnemyVehiclesOpen ? 'active' : ''}`}
+            onClick={() => setIsEnemyVehiclesOpen(!isEnemyVehiclesOpen)}
+            style={{ width: '100%', fontSize: '0.65rem' }}
+          >
+            ENEMY VEHICLES
           </button>
         )}
 
@@ -1103,6 +1116,8 @@ interface SidebarProps {
   setIsSheetOpen: (v: boolean) => void;
   isVehiclesOpen?: boolean;
   setIsVehiclesOpen?: (v: boolean) => void;
+  isEnemyVehiclesOpen?: boolean;
+  setIsEnemyVehiclesOpen?: (v: boolean) => void;
   gameSystem?: string;
   attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number } | null;
   onCancelAttack?: () => void;
