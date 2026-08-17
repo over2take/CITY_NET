@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { cyberpunkRed, CPR_VEHICLE_ROWS, CPR_VEHICLE_COLUMNS } from '../templates/cyberpunk_red';
+import { citiesWithoutNumber } from '../templates/cities_without_number';
 import { HULL_LABELS, HULL_OPTIONS, DEFAULT_HULL } from '../vehicleHulls';
 import { ART_KEYS } from '../../components/vehicleArt';
-import type { SheetField } from '../types';
+import type { SheetField, SheetTemplate } from '../types';
 
 /**
  * The Cyberpunk RED vehicle section.
@@ -23,6 +24,17 @@ describe('the CP:R vehicle section', () => {
     // Beside the collapse toggle rather than inside the section, so folding the section
     // away does not take the way into the shared window with it.
     expect(section.headerAction).toBe('SEATING');
+  });
+
+  it('sits where CWN puts it, so the two GEAR tabs read the same way', () => {
+    // Above the gear list rather than below the pocket contents. Pinned by comparing the
+    // two templates rather than by naming a position, so if one moves the other follows
+    // or this fails.
+    const gearOf = (t: SheetTemplate) => t.sections.filter(s => s.tab === 'GEAR').map(s => s.id);
+    const cpr = gearOf(cyberpunkRed);
+    const shared = gearOf(citiesWithoutNumber).filter(id => cpr.includes(id));
+    expect(cpr).toEqual(shared);
+    expect(cpr.indexOf('vehicles')).toBeLessThan(cpr.indexOf('gear'));
   });
 
   it('uses the field ids the shared seating machinery reads', () => {

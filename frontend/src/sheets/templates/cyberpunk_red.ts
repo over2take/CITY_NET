@@ -319,26 +319,8 @@ export const cyberpunkRed: SheetTemplate = {
         { id: 'weapons_notes', label: 'Ammo, attachments, notes', type: 'textarea', placeholder: 'Smartgun link on the Avenger; sword is monofilament' },
       ],
     },
-    {
-      id: 'gear',
-      label: 'GEAR & CASH',
-      layout: 'list',
-      tab: 'GEAR',
-      fields: [
-        { id: 'cash', label: 'Cash (eb)', type: 'number', source: 'bank_balance' },
-        { id: 'ammunition', label: 'Ammunition', type: 'text', placeholder: '30x heavy pistol, 2x grenade' },
-        { id: 'gear_notes', label: 'Gear', type: 'textarea', placeholder: 'Agent, medtech bag, grapple gun, 2x airhypo' },
-      ],
-    },
-    {
-      id: 'cyberware',
-      label: 'CYBERWARE',
-      layout: 'notes',
-      tab: 'GEAR',
-      fields: [
-        { id: 'cyberware_notes', label: 'Cyberware', type: 'textarea', placeholder: 'Cybereye (Low Light), Neural Link, Subdermal Grip' },
-      ],
-    },
+    // Above the gear list, matching where CWN puts it: a vehicle is a big enough thing to
+    // sit with the weapons rather than below the pocket contents.
     {
       id: 'vehicles',
       label: 'VEHICLES',
@@ -360,6 +342,26 @@ export const cyberpunkRed: SheetTemplate = {
       // every vehicle across two blocks.
       groupSize: vehicleRow(1).length,
       fields: Array.from({ length: CPR_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
+    },
+    {
+      id: 'gear',
+      label: 'GEAR & CASH',
+      layout: 'list',
+      tab: 'GEAR',
+      fields: [
+        { id: 'cash', label: 'Cash (eb)', type: 'number', source: 'bank_balance' },
+        { id: 'ammunition', label: 'Ammunition', type: 'text', placeholder: '30x heavy pistol, 2x grenade' },
+        { id: 'gear_notes', label: 'Gear', type: 'textarea', placeholder: 'Agent, medtech bag, grapple gun, 2x airhypo' },
+      ],
+    },
+    {
+      id: 'cyberware',
+      label: 'CYBERWARE',
+      layout: 'notes',
+      tab: 'GEAR',
+      fields: [
+        { id: 'cyberware_notes', label: 'Cyberware', type: 'textarea', placeholder: 'Cybereye (Low Light), Neural Link, Subdermal Grip' },
+      ],
     },
     {
       id: 'lifepath',
