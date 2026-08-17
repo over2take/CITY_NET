@@ -200,6 +200,15 @@ function makeTestDb() {
         FOREIGN KEY(sheet_id) REFERENCES character_sheets(id) ON DELETE CASCADE
       )`);
 
+      db.run(`CREATE TABLE vehicle_occupants (
+        location_id INTEGER NOT NULL UNIQUE,
+        sheet_id INTEGER NOT NULL,
+        vehicle_index INTEGER NOT NULL,
+        seat TEXT NOT NULL,
+        FOREIGN KEY(location_id) REFERENCES locations(id) ON DELETE CASCADE,
+        FOREIGN KEY(sheet_id) REFERENCES character_sheets(id) ON DELETE CASCADE
+      )`);
+
       db.run(`CREATE TABLE sqlite_sequence (name TEXT, seq INTEGER)`, () => {
         // ignore error — it may already exist
         resolve(db);

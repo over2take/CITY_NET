@@ -26,6 +26,27 @@ const vehicleSeats = require('./vehicleSeats');
 
 const SYSTEM = 'cities_without_number';
 
+/**
+ * The GM's own tokens. Players are not on this list: they seat themselves in their own
+ * window, and offering them here would give the GM a second, conflicting way to move
+ * somebody who can already move themselves.
+ */
+const GM_TOKEN_SHAPES = ['enemy_rhombus', 'friendly_rhombus'];
+
+/**
+ * A token belongs to the city map when `battle_map_id` is null, and to a battle map floor
+ * otherwise. Comparing with IS rather than = matters: `null = null` is null in SQL, so an
+ * equality test would silently match nothing on the city map.
+ */
+const onMapLevel = (battleMapId, floorIndex) => {
+  const map = battleMapId == null ? null : Number(battleMapId);
+  const floor = floorIndex == null ? null : Number(floorIndex);
+  return {
+    clause: `battle_map_id IS ? AND COALESCE(floor_index, 0) = COALESCE(?, 0)`,
+    params: [map, floor],
+  };
+};
+
 /** An NPC sheet's display name: its label, or something rather than nothing. */
 const labelOf = (row) => String(row.npc_label || '').trim() || `NPC ${row.id}`;
 
@@ -38,8 +59,13 @@ const parse = (raw) => {
  *
  * Grouped by the NPC's folder, because a GM with three sessions' worth of antagonists is
  * looking for "the gang's van", not scrolling one flat list.
+ *
+ * `level` is the map the GM is looking at — `{ battleMapId, floorIndex }`. The vehicles
+ * themselves have no position, since they live on sheets; the *tokens* offered for its seats
+ * are filtered to that level, because a GM running a rooftop fight should not be scrolling
+ * past every ganger in the city to find the two in front of them.
  */
-function roster(db, cb, system = SYSTEM) {
+function roster(db, level, cb, system = SYSTEM) {
   db.all(
     `SELECT id, npc_label, folder, data FROM character_sheets
       WHERE system = ? AND is_npc = 1
@@ -72,11 +98,45 @@ function roster(db, cb, system = SYSTEM) {
           });
         }
       }
-      // Who the GM can put in a seat: every NPC in the system, vehicle or not.
-      cb({
-        vehicles,
-        crew: rows.map(r => ({ sheetId: r.id, label: labelOf(r), folder: String(r.folder || '').trim() || null })),
-      });
+      const { clause, params } = onMapLevel(level?.battleMapId, level?.floorIndex);
+      // Who the GM can put in a seat, and who is already in one. Both are token reads, so
+      // they happen together rather than leaving the window to reconcile two shapes.
+      db.all(
+        `SELECT id, name, shape, hp_current, hp_max FROM locations
+          WHERE shape IN (${GM_TOKEN_SHAPES.map(() => '?').join(', ')}) AND ${clause}
+          ORDER BY name, id`,
+        [...GM_TOKEN_SHAPES, ...params],
+        (tErr, tokens) => {
+          db.all(
+            `SELECT o.location_id, o.sheet_id, o.vehicle_index, o.seat, l.name
+               FROM vehicle_occupants o JOIN locations l ON l.id = o.location_id`,
+            [],
+            (oErr, seated) => {
+              const aboard = new Map();
+              for (const row of oErr ? [] : (seated || [])) {
+                const key = `${row.sheet_id}:${row.vehicle_index}`;
+                if (!aboard.has(key)) aboard.set(key, {});
+                aboard.get(key)[row.seat] = { locationId: row.location_id, name: row.name };
+              }
+              cb({
+                vehicles: vehicles.map(v => ({
+                  ...v,
+                  occupants: aboard.get(`${v.sheetId}:${v.index}`) || {},
+                })),
+                // Every token on this map level the GM could seat, whether it has a
+                // character sheet behind it or not.
+                tokens: (tErr ? [] : tokens || []).map(t => ({
+                  locationId: t.id,
+                  name: String(t.name || '').trim() || `TOKEN ${t.id}`,
+                  shape: t.shape,
+                  hp: t.hp_current,
+                  hpMax: t.hp_max,
+                })),
+              });
+            }
+          );
+        }
+      );
     }
   );
 }
@@ -124,4 +184,54 @@ function setMoving(db, { sheetId, vehicleIndex, moving, system = SYSTEM }, cb) {
   }, system);
 }
 
-module.exports = { SYSTEM, roster, loadSheet, adjustHp, setMoving, labelOf };
+/**
+ * Put one of the GM's tokens in a seat.
+ *
+ * A seat holds one token and a token is in one seat, so this also empties whatever seat it
+ * was in — which the UNIQUE on `location_id` would enforce anyway, but replacing explicitly
+ * makes moving a ganger from the front to the back one statement rather than two.
+ *
+ * cb(null) or a short reason. The refusals are things the window should not be able to trip,
+ * so they are worth saying no to rather than papering over.
+ */
+function seatToken(db, { locationId, sheetId, vehicleIndex, seat }, cb) {
+  const index = Number(vehicleIndex);
+  const seatId = String(seat || '').trim().toLowerCase();
+  const loc = Number(locationId);
+  loadSheet(db, sheetId, (sheet) => {
+    if (!sheet) return cb('NO_SUCH_SHEET');
+    if (!attackCwn.getVehicle(sheet.data, index)) return cb('NO_SUCH_VEHICLE');
+    if (!vehicleSeats.hasSeat(sheet.data, index, seatId)) return cb('NO_SUCH_SEAT');
+
+    db.get(
+      `SELECT id FROM locations WHERE id = ? AND shape IN (${GM_TOKEN_SHAPES.map(() => '?').join(', ')})`,
+      [loc, ...GM_TOKEN_SHAPES],
+      (err, token) => {
+        // A player's token is refused here rather than merely hidden: players seat
+        // themselves, and two ways to move one person is how they come to disagree.
+        if (err || !token) return cb('NOT_A_GM_TOKEN');
+        db.run(`DELETE FROM vehicle_occupants WHERE location_id = ?`, [loc], () => {
+          // Turn out whoever was already in this seat — one seat, one token.
+          db.run(
+            `DELETE FROM vehicle_occupants WHERE sheet_id = ? AND vehicle_index = ? AND seat = ?`,
+            [sheet.id, index, seatId],
+            () => db.run(
+              `INSERT INTO vehicle_occupants (location_id, sheet_id, vehicle_index, seat) VALUES (?, ?, ?, ?)`,
+              [loc, sheet.id, index, seatId],
+              () => cb(null),
+            ),
+          );
+        });
+      }
+    );
+  });
+}
+
+/** Take a token out of whatever it is in. Idempotent — no seat is not an error. */
+function unseatToken(db, locationId, cb) {
+  db.run(`DELETE FROM vehicle_occupants WHERE location_id = ?`, [Number(locationId)], () => cb(null));
+}
+
+module.exports = {
+  SYSTEM, GM_TOKEN_SHAPES, roster, loadSheet, adjustHp, setMoving, seatToken, unseatToken, labelOf,
+};

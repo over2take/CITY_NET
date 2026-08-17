@@ -366,6 +366,25 @@ db.serialize(() => {
     FOREIGN KEY(sheet_id) REFERENCES character_sheets(id) ON DELETE CASCADE
   )`);
 
+  // Which of the GM's tokens are riding in which enemy vehicle.
+  //
+  // Keyed by the token rather than by a character sheet, because an enemy token need not
+  // have one — a nameless ganger in the back of a van is a location row and nothing else.
+  // It is also the thing that moves, so filtering the seat pickers down to the map the GM
+  // is looking at becomes a join rather than a guess.
+  //
+  // UNIQUE on location_id is the rule "a token is in one seat" expressed once, in the
+  // place that cannot drift: no amount of client mischief can seat the same ganger twice.
+  // Both foreign keys cascade, so deleting a token or an NPC sheet empties its seat.
+  db.run(`CREATE TABLE IF NOT EXISTS vehicle_occupants (
+    location_id INTEGER NOT NULL UNIQUE,
+    sheet_id INTEGER NOT NULL,
+    vehicle_index INTEGER NOT NULL,
+    seat TEXT NOT NULL,
+    FOREIGN KEY(location_id) REFERENCES locations(id) ON DELETE CASCADE,
+    FOREIGN KEY(sheet_id) REFERENCES character_sheets(id) ON DELETE CASCADE
+  )`);
+
   // NPC links ride along in map snapshots (location ids are preserved on load)
   db.run(`ALTER TABLE saved_maps ADD COLUMN npc_links_data TEXT`, () => {});
 
