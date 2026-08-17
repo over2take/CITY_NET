@@ -113,11 +113,51 @@ const buildCprAliases = () => {
   for (let i = 1; i <= 4; i++) {
     ['name', 'dmg', 'skill', 'rof'].forEach((part) => alias([`weapon${i}${part}`], `weapon${i}_${part}`));
   }
+
+  // Vehicle rows.
+  //
+  // Worth having because the vehicle table cannot ship: with no preset picker, a player
+  // whose car already exists on a sheet somewhere else would otherwise retype it. Their
+  // own sheet is their own data, so importing it carries none of the problem that
+  // embedding the book's table would.
+  //
+  // The storage is the app's generic vocabulary while the labels are Cyberpunk's, so the
+  // aliases bridge the two: SDP arrives and lands in the damage pool, SP in armour, Seats
+  // in crew.
+  for (let i = 1; i <= CPR_VEHICLE_ROWS; i++) {
+    alias([`vehicle${i}`, `vehicle${i}name`], `vehicle${i}_name`);
+    alias([`vehicle${i}sdp`, `vehicle${i}sdpmax`], `vehicle${i}_hp_max`);
+    alias([`vehicle${i}sp`, `vehicle${i}armor`, `vehicle${i}armour`], `vehicle${i}_armor`);
+    alias([`vehicle${i}seats`, `vehicle${i}crew`], `vehicle${i}_crew`);
+    alias([`vehicle${i}hull`, `vehicle${i}type`], `vehicle${i}_type`);
+    alias([`vehicle${i}speed`], `vehicle${i}_speed`);
+    alias([`vehicle${i}cost`], `vehicle${i}_cost`);
+    alias([`vehicle${i}notes`], `vehicle${i}_notes`);
+  }
+  // Most sheets carry one car and write it unnumbered. `sp` is deliberately absent: on a
+  // Cyberpunk sheet that is body armour far more often than it is a vehicle, and guessing
+  // wrong would quietly overwrite the wrong field.
+  alias(['vehicle', 'vehiclename', 'car'], 'vehicle1_name');
+  alias(['sdp', 'structuraldamagepoints', 'vehiclesdp'], 'vehicle1_hp_max');
+  alias(['vehiclesp', 'vehiclearmor', 'vehiclearmour'], 'vehicle1_armor');
+  alias(['seats', 'vehicleseats'], 'vehicle1_crew');
+  alias(['vehiclehull', 'vehicletype'], 'vehicle1_type');
+  alias(['vehiclespeed'], 'vehicle1_speed');
+  alias(['vehiclecost'], 'vehicle1_cost');
+  alias(['vehiclenotes'], 'vehicle1_notes');
   return a;
 };
 
+/** Vehicle rows on the CP:R sheet. Mirrors CPR_VEHICLE_ROWS in the template. */
+const CPR_VEHICLE_ROWS = 4;
+
 // Fields where the import value should also seed the paired current value.
 const CPR_MAX_SEEDS = {
+  // A sheet that says "SDP 50" means an undamaged car, so the current pool follows the
+  // maximum in — otherwise every imported vehicle would arrive already wrecked.
+  ...Object.fromEntries(
+    Array.from({ length: CPR_VEHICLE_ROWS }, (_, i) => [`vehicle${i + 1}_hp_max`, `vehicle${i + 1}_hp`]),
+  ),
   luck_max: 'luck',
   emp_max: 'emp',
   sp_head_max: 'sp_head',
@@ -126,6 +166,8 @@ const CPR_MAX_SEEDS = {
 };
 
 const NUMERIC_CPR_FIELDS = new Set([
+  ...Array.from({ length: CPR_VEHICLE_ROWS }, (_, i) => i + 1).flatMap(i =>
+    [`vehicle${i}_hp`, `vehicle${i}_hp_max`, `vehicle${i}_armor`, `vehicle${i}_crew`]),
   'int', 'ref', 'dex', 'tech', 'cool', 'will', 'move', 'body',
   'luck', 'luck_max', 'emp', 'emp_max', 'humanity', 'humanity_max',
   'seriously_wounded', 'death_save', 'armor_penalty',

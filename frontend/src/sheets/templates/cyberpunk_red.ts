@@ -54,7 +54,9 @@ const vehicleRow = (i: number): SheetField[] => [
   { id: `vehicle${i}_hp_max`, label: 'SDP MAX', type: 'number', placeholder: '50', hint: 'A vehicle counts as real once this is filled in — it is what puts the vehicle on the shared VEHICLES window.' },
   { id: `vehicle${i}_armor`, label: 'SP', type: 'number', placeholder: '10', hint: 'Stopping Power: subtracted from damage the vehicle takes. Unlike personal SP it does not ablate.' },
   { id: `vehicle${i}_crew`, label: 'SEATS', type: 'number', placeholder: '4', startsRow: true, hint: 'How many it seats, driver included. The VEHICLES window draws exactly this many places.' },
-  { id: `vehicle${i}_speed`, label: 'SPEED', type: 'text', placeholder: '20 MOVE', hint: 'Reference only. Speed drives nothing mechanical here.' },
+  // Free text with a bare number for a placeholder: the units are whatever the table
+  // reads them in, and a worked example here looked like a format the field required.
+  { id: `vehicle${i}_speed`, label: 'SPEED', type: 'text', placeholder: '20', hint: 'Reference only, in whatever units you like — nothing here reads it.' },
   { id: `vehicle${i}_cost`, label: 'COST', type: 'text', placeholder: '30,000eb' },
   {
     id: `vehicle${i}_notes`, label: 'NOTES', type: 'textarea', fullWidth: true,

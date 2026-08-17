@@ -74,6 +74,51 @@ describe('CP:R importer mapping', () => {
     expect(unmapped.mystery_field).toBe('x');
   });
 
+  /**
+   * Vehicles.
+   *
+   * The Cyberpunk vehicle table cannot ship, so there is no preset picker and a player
+   * would otherwise retype a car that already exists on a sheet somewhere else. Their own
+   * sheet is their own data, which is what makes this the route the presets cannot be.
+   */
+  it('maps an unnumbered vehicle onto the first row', () => {
+    const { mapped } = importer.mapFields({
+      Vehicle: 'Galena', SDP: '50', 'Vehicle SP': '10', Seats: '4',
+    });
+    // Labels are Cyberpunk's, storage is the app's generic vocabulary.
+    expect(mapped.vehicle1_name).toBe('Galena');
+    expect(mapped.vehicle1_hp_max).toBe(50);
+    expect(mapped.vehicle1_armor).toBe(10);
+    expect(mapped.vehicle1_crew).toBe(4);
+  });
+
+  it('brings an imported vehicle in undamaged', () => {
+    // A sheet saying "SDP 50" means a whole car. Without the seed every import would
+    // arrive already wrecked, since a blank current pool reads as zero on the roster.
+    const { mapped } = importer.mapFields({ Vehicle: 'Galena', SDP: '50' });
+    expect(mapped.vehicle1_hp).toBe(50);
+  });
+
+  it('keeps a bare SP as body armour, not the car', () => {
+    // On a Cyberpunk sheet, SP is personal armour far more often than it is a vehicle's,
+    // and guessing wrong would quietly overwrite the wrong field.
+    const { mapped } = importer.mapFields({ 'SP (Body)': '11', 'Vehicle SP': '7' });
+    expect(mapped.sp_body_max).toBe(11);
+    expect(mapped.vehicle1_armor).toBe(7);
+  });
+
+  it('takes a numbered fleet', () => {
+    const { mapped } = importer.mapFields({
+      Vehicle1: 'Galena', Vehicle1SDP: '50', Vehicle1Seats: '4',
+      Vehicle2: 'Quartz', Vehicle2SDP: '35', 'Vehicle2 Hull': 'sportbike',
+    });
+    expect(mapped.vehicle1_name).toBe('Galena');
+    expect(mapped.vehicle2_name).toBe('Quartz');
+    expect(mapped.vehicle2_hp_max).toBe(35);
+    expect(mapped.vehicle2_hp).toBe(35);
+    expect(mapped.vehicle2_type).toBe('sportbike');
+  });
+
   it('skips linked fields (HP, cash) and reports them', () => {
     const { mapped, skipped } = importer.mapFields({ hp: 30, cash: 500, ref: 7 });
     expect(mapped.hp).toBeUndefined();

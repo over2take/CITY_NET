@@ -82,7 +82,8 @@ describe('the ram row', () => {
     socket.deliver('sheetData', sheet({ driving: { name: 'Galena' } }));
 
     await userEvent.selectOptions(screen.getByLabelText('Weapon'), 'ram');
-    await userEvent.click(screen.getByText('FIRE'));
+    // Driving into something is melee, so the button says so rather than FIRE.
+    await userEvent.click(screen.getByText('SWING'));
 
     // Whether that token is a person or the car they are sitting in is the server's call.
     expect(last(socket, 'ramVehicle')).toEqual({ targetId: 7 });
@@ -98,6 +99,18 @@ describe('the ram row', () => {
 
     expect(last(socket, 'sheetAttack')).toMatchObject({ targetId: 7, weaponIndex: 1 });
     expect(last(socket, 'ramVehicle')).toBeUndefined();
+  });
+
+  it('reads as melee, not as a shot', async () => {
+    const socket = renderPanel();
+    socket.deliver('sheetData', sheet({ driving: { name: 'Galena' } }));
+
+    await userEvent.selectOptions(screen.getByLabelText('Weapon'), '1');
+    expect(screen.getByText('FIRE')).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText('Weapon'), 'ram');
+    expect(screen.getByText('SWING')).toBeInTheDocument();
+    expect(screen.queryByText('FIRE')).not.toBeInTheDocument();
   });
 
   it('hides the aimed shot while a ram is selected', async () => {

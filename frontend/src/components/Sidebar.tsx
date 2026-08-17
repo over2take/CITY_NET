@@ -665,7 +665,9 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
     );
   }
   const chosen = weapons.find(w => w.key === selected);
-  const isMelee = (cfg.meleeSkills as readonly string[]).includes(chosen?.skill ?? '');
+  // A ram is melee — you drive into the thing. It carries no skill, so it would otherwise
+  // fall through this check and be labelled as a shot.
+  const isMelee = !!chosen?.ram || (cfg.meleeSkills as readonly string[]).includes(chosen?.skill ?? '');
   // A ram has no to-hit roll, so nothing that modifies one belongs on screen for it.
   const isRam = !!chosen?.ram;
   return (
