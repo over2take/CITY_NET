@@ -9,6 +9,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.2] - 2026-08-17
+
+Enemy vehicles for the GM, and friendly NPCs who can ride along.
+
+### Added
+
+- **An `ENEMY VEHICLES` window, for the GM.** Every vehicle on an NPC sheet, grouped by that NPC's folder, with the hull bar, REPAIR and DAMAGE, and the MOVING toggle. Two ways in, both admin-only: the sidebar, and a button on a token menu.
+
+  **Nothing had to be stored to make them persist.** NPC sheets already render the vehicle section and already live in folders, so an enemy van typed last session has been sitting there all along — what was missing was a read, since every roster query filtered NPCs out. Fill one in, and it is there next session.
+
+  The roster is asked for rather than pushed, and refused to anyone but the GM, so a player's client never holds enemy hulls or armour at all. Attackers still see the cover badge on the token, which already worked.
+- **Seating for enemy vehicles, from the tokens on the map you are looking at.** Any of the GM's tokens can be put in a seat — including ones with no character sheet behind them, since a nameless ganger in the back of a van is just a token. The pickers filter to the city map or the battle-map floor currently in view, because running a rooftop fight should not mean scrolling past every ganger in the city.
+
+  Friendlies are offered alongside hostiles but marked apart, in blue: both being the same green is how a body from your own side ends up in a hostile driver's seat in a hurry.
+- **Players can invite friendly NPCs into their cars.** Friendly tokens on the map level appear in the seat pickers beside the people at the table. Hostiles are not offered, and are refused by the server rather than merely hidden — a picker is a suggestion, the server is the rule.
+
+  Anyone can turn an NPC out again, GM included. The rule that only you or the GM can empty *your* seat protects a person's autonomy; a token has none, so an invite is always undoable.
+
+### Changed
+
+- **A seat holds one occupant, whichever kind.** A person's seat and an NPC's are stored in different places — a player's on their own sheet, a token's in a new table — so taking a seat now turns out whoever was in it either way. Without that, a car quietly seats two bodies in one place and nobody notices until the shooting starts.
+- **A passenger who walks off the current map level stays visible in their seat**, marked `OFF MAP`, rather than reading as empty — which would have let the next change to that seat turn them out unintentionally.
+
+### Fixed
+
+- **The vehicle roster reaches a player who has just logged in.** Someone who had not added a vehicle of their own saw an empty window even with other people's cars on the roster. A client asks for the roster before the user logs in, so that request is dropped by design and a push at login covers it — but the push was still limited to Cities Without Number and still read CWN sheets whatever system was live. Nothing else refreshed the window until somebody happened to save a sheet. Applying an imported sheet had the same fault, one layer along.
+
+---
+
 ## [1.9.1] - 2026-08-16
 
 Cyberpunk RED gets vehicles, sharing the machinery 1.9.0 built for Cities Without Number.
