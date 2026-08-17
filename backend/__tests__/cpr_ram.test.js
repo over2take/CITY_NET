@@ -153,6 +153,38 @@ describe('driving into another vehicle', () => {
   });
 });
 
+describe('aiming at a person who is in a car', () => {
+  // The attack panel targets a token, not a vehicle. Hitting the person and leaving the
+  // car they are sitting in unscratched would be the wrong answer to the obvious question.
+  beforeEach(async () => {
+    await sheet('CODY', car('Galena'));
+    await sheet('MOUSE', car('Quartz'));
+    await sheet('VEGA', {});
+    await token('VEGA', 30, 30);
+    await seatIn('CODY', 'CODY', 'driver');
+    await seatIn('MOUSE', 'MOUSE', 'driver');
+    await seatIn('VEGA', 'MOUSE', 'seat2');
+  });
+
+  it('hits the car they are riding in, not them', async () => {
+    const { out } = await drive(db, { actor: 'CODY', targetUsername: 'VEGA', damage: 21 });
+    expect(out.target.name).toBe('Quartz');
+    expect(out.target.isPerson).toBe(false);
+    expect(await hpOf('MOUSE')).toBe(29);
+
+    // Their own token is untouched — the crash injury is what reaches them.
+    const row = await get(db, `SELECT hp_current FROM locations WHERE owner = 'VEGA'`);
+    expect(row.hp_current).toBe(30);
+    expect(out.injured.sort()).toEqual(['CODY', 'MOUSE', 'VEGA']);
+  });
+
+  it('refuses to ram a passenger in your own car', async () => {
+    await seatIn('VEGA', 'CODY', 'seat2');
+    expect((await drive(db, { actor: 'CODY', targetUsername: 'VEGA', damage: 21 })).reason)
+      .toBe('SAME_VEHICLE');
+  });
+});
+
 describe('driving into a person', () => {
   beforeEach(async () => {
     await sheet('CODY', car('Galena'));

@@ -25,7 +25,7 @@ const SYSTEM = 'cities_without_number';
  * an owner who has been purged, a vehicle row never filled in, a wreck. A destroyed
  * vehicle stops being cover rather than absorbing forever.
  */
-function resolve(db, sheetId, sheetData, cb) {
+function resolve(db, sheetId, sheetData, cb, system = SYSTEM) {
   const occ = attackCwn.readOccupancy(sheetData);
   if (!occ) return cb(null);
   const done = (ownerSheetId, ownerData) => {
@@ -38,7 +38,7 @@ function resolve(db, sheetId, sheetData, cb) {
   }
   db.get(
     `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-    [occ.owner, SYSTEM],
+    [occ.owner, system],
     (err, row) => {
       if (err || !row) return cb(null);
       let ownerData;
@@ -417,8 +417,22 @@ function ram(db, { actor, targetOwner, targetVehicleIndex, targetUsername, damag
       }, system);
     };
 
+    const asVehicle = (v) => finish({ ...v, crew: crewOf(v) }, false, (hp, done) =>
+      loadSheet(db, v.owner, (sheet) => {
+        if (!sheet) return done();
+        writeSheet(db, sheet.id, { ...sheet.data, [`vehicle${v.index}_hp`]: hp }, done);
+      }, system));
+
     if (targetUsername) {
-      // A pedestrian. Their pool is the token's, the same one every attack writes.
+      // You hit what they are in. Aiming at a person who is sitting in a car and having
+      // the car go unscathed would be the wrong answer to the obvious question — so the
+      // target is resolved through the roster before it is treated as a pedestrian.
+      const theirRide = vehicles.find(v => Object.values(v.occupants || {}).includes(targetUsername));
+      if (theirRide) {
+        if (theirRide.owner === mine.owner && theirRide.index === mine.index) return cb('SAME_VEHICLE');
+        return asVehicle(theirRide);
+      }
+      // On foot. Their pool is the token's, the same one every attack writes.
       return db.get(
         `SELECT hp_current, hp_max FROM locations WHERE shape = 'rhombus' AND owner = ?`,
         [targetUsername],
@@ -437,11 +451,7 @@ function ram(db, { actor, targetOwner, targetVehicleIndex, targetUsername, damag
     // Ramming the car you are driving is not a manoeuvre.
     if (hit.owner === mine.owner && hit.index === mine.index) return cb('SAME_VEHICLE');
 
-    finish({ ...hit, crew: crewOf(hit) }, false, (hp, done) =>
-      loadSheet(db, hit.owner, (sheet) => {
-        if (!sheet) return done();
-        writeSheet(db, sheet.id, { ...sheet.data, [`vehicle${hit.index}_hp`]: hp }, done);
-      }, system));
+    asVehicle(hit);
   }, system);
 }
 

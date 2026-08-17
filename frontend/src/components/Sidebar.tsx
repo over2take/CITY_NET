@@ -530,6 +530,9 @@ type WeaponChoice = {
   /** A mount on the vehicle you are riding in — the row lives on its owner's sheet, so
    *  the server resolves it from your declared ride rather than from an index. */
   rideMount?: boolean;
+  /** Driving into something. Not an attack: no skill, no to-hit, so it leaves the panel
+   *  by its own event and the ordinary attack controls do not apply to it. */
+  ram?: boolean;
   vehicleName?: string;
   name: string;
   dmg: string;
@@ -586,6 +589,15 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
           });
         }
       }
+      // Ramming is the driver's weapon, and only the driver's — the server decides that
+      // from the seat, this only decides whether to offer it.
+      if (sheet.driving) {
+        rows.push({
+          key: 'ram', index: 0, ram: true,
+          vehicleName: String(sheet.driving.name ?? '').trim() || 'YOUR VEHICLE',
+          name: 'RAM', dmg: '6d6', skill: '',
+        });
+      }
       // Mounts come after the carried weapons and are labelled with their
       // vehicle, since firing a turret is a different act from drawing a gun.
       if (cfg.vehicles) {
@@ -621,6 +633,13 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
     if (selected === null) return;
     const choice = weapons.find(w => w.key === selected);
     if (!choice) return;
+    if (choice.ram) {
+      // Both vehicles take it and everyone aboard both is injured, so this is resolved
+      // whole by the server rather than run through the attack path.
+      socketRef.current?.emit('ramVehicle', { targetId });
+      setIsDiceTrayOpen(true);
+      return;
+    }
     socketRef.current?.emit('sheetAttack', {
       targetId,
       weaponIndex: choice.index,
@@ -645,7 +664,10 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
       </div>
     );
   }
-  const isMelee = (cfg.meleeSkills as readonly string[]).includes(weapons.find(w => w.key === selected)?.skill ?? '');
+  const chosen = weapons.find(w => w.key === selected);
+  const isMelee = (cfg.meleeSkills as readonly string[]).includes(chosen?.skill ?? '');
+  // A ram has no to-hit roll, so nothing that modifies one belongs on screen for it.
+  const isRam = !!chosen?.ram;
   return (
     <div style={{ marginBottom: '6px' }}>
       <select
@@ -656,17 +678,18 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
       >
         {weapons.map(w => (
           <option key={w.key} value={w.key}>
-            {w.vehicleName ? `${w.vehicleName.toUpperCase()} · ` : ''}{w.name.toUpperCase()} · {w.dmg} · {w.skill.replace(/_/g, ' ').toUpperCase()}
+            {w.vehicleName ? `${w.vehicleName.toUpperCase()} · ` : ''}{w.name.toUpperCase()} · {w.dmg}
+            {w.skill ? ` · ${w.skill.replace(/_/g, ' ').toUpperCase()}` : ''}
           </option>
         ))}
       </select>
-      {cfg.hasAimed && (
+      {cfg.hasAimed && !isRam && (
         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: 'var(--green)', marginBottom: '6px', cursor: 'pointer', userSelect: 'none' }}>
           <input type="checkbox" checked={aimed} onChange={(e) => setAimed(e.target.checked)} />
           AIMED SHOT (−8 · HEAD · x2 DMG THROUGH ARMOR)
         </label>
       )}
-      {cfg.hasLuck && luckAvailable > 0 && (
+      {cfg.hasLuck && !isRam && luckAvailable > 0 && (
         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: luckSpend > 0 ? 'var(--vehicle)' : 'var(--green)', marginBottom: '6px', userSelect: 'none' }} title="Declared before the roll: adds a flat bonus and negates a natural-1 fumble">
           LUCK
           <select

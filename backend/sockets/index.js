@@ -866,11 +866,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           'sum',
           Math.random,
         );
-        vehicleState.ram(db, {
+        // The attack panel targets a token. Whether that resolves to a person or to the
+        // car they are sitting in is the resolver's call, not the client's.
+        const go = (targetUsername) => vehicleState.ram(db, {
           actor: info.userName,
           targetOwner: payload.owner,
           targetVehicleIndex: payload.vehicleIndex,
-          targetUsername: payload.username,
+          targetUsername,
           damage: roll.total,
           system,
         }, (reason, out) => {
@@ -898,10 +900,21 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 username: info.userName, total: out.damage, results: roll.rolls,
                 color: '#ff4444', historyString: history,
               });
-              afterSeatingChange([out.rammer.owner, payload.owner, payload.username], system);
+              afterSeatingChange([out.rammer.owner, payload.owner, targetUsername], system);
             }
           );
         });
+
+        if (payload.targetId) {
+          return db.get(
+            `SELECT owner FROM locations WHERE id = ? AND shape = 'rhombus'`,
+            [payload.targetId],
+            (err, row) => (err || !row || !row.owner)
+              ? socket.emit('vehicleSeatingError', { message: 'NO_SUCH_TARGET' })
+              : go(row.owner),
+          );
+        }
+        go(payload.username);
       });
     });
 
@@ -917,13 +930,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             if (err2) return;
             if (row) {
               overlayLinkedData(info.userName, system, JSON.parse(row.data || '{}'), (data) => {
-                if (system !== vehicleState.SYSTEM) return socket.emit('sheetData', { ...row, data });
+                if (!vehicleSystems.hasVehicles(system)) return socket.emit('sheetData', { ...row, data });
                 // A gunner riding in someone else's car needs its mounts to fire them,
                 // and cannot see the sheet those rows live on. Only the mounts travel.
+                // Mounts are CWN's; Cyberpunk has none, so there is nothing to send.
                 // The vehicle they are sitting in, so the sheet can show the badge:
                 // occupancy is shared state now and no longer on the sheet itself.
+                const withMounts = (next) => system === vehicleState.SYSTEM
+                  ? vehicleState.getRideMounts(db, data, next)
+                  : next(null);
                 vehicleState.resolve(db, row.id, data, (inVehicle) => {
-                vehicleState.getRideMounts(db, data, (ride) => {
+                withMounts((ride) => {
                   // Who you could be riding with. Anyone holding a sheet in this system,
                   // not just whoever is online: the car is read off their sheet, which
                   // exists whether or not they are currently connected.
@@ -936,6 +953,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         ...row, data, ride, players,
                         inVehicle: inVehicle
                           ? { name: inVehicle.name, moving: inVehicle.moving, hp: inVehicle.hp, hpMax: inVehicle.hpMax }
+                          : null,
+                        // Ramming is the driver's action, so the attack panel needs to
+                        // know whether this is the seat they are in.
+                        driving: inVehicle && attackCwn.readOccupancy(data)?.seat === 'driver'
+                          ? { name: inVehicle.name }
                           : null,
                       });
                     }
