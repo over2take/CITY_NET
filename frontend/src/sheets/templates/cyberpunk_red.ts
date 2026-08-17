@@ -1,4 +1,5 @@
 import type { SheetTemplate, SheetField } from '../types';
+import { HULL_OPTIONS, DEFAULT_HULL } from '../vehicleHulls';
 
 // Cyberpunk RED template.
 //
@@ -25,6 +26,41 @@ export const CPR_WEAPON_SKILLS: { value: string; label: string }[] = [
 
 /** Number of structured weapon rows on the sheet. */
 export const CPR_WEAPON_ROWS = 4;
+
+/** Vehicles a character can own. */
+export const CPR_VEHICLE_ROWS = 4;
+export const CPR_VEHICLE_COLUMNS = 5;
+
+/**
+ * The vehicle row.
+ *
+ * There is no preset picker and there cannot be one: the vehicle table is book content and
+ * this file may hold labels and dice math only. Players type the four numbers from their
+ * own copy.
+ *
+ * The field ids are the app's generic vocabulary — `hp`, `armor`, `crew` — while the labels
+ * are Cyberpunk's. That is deliberate: the seating window, the roster and the hull bar are
+ * shared with Cities Without Number, and renaming the storage per system would fork all
+ * three to say the same thing in a different accent. SDP *is* a damage pool; SP *is*
+ * armour that subtracts.
+ */
+const vehicleRow = (i: number): SheetField[] => [
+  { id: `vehicle${i}_name`, label: 'VEHICLE', type: 'text', placeholder: 'Thorton Galena' },
+  {
+    id: `vehicle${i}_type`, label: 'HULL', type: 'select', options: HULL_OPTIONS,
+    hint: 'Which wireframe the seating diagram draws. Cosmetic — it changes no numbers.',
+  },
+  { id: `vehicle${i}_hp`, label: 'SDP', type: 'number', maxField: `vehicle${i}_hp_max`, placeholder: '50', hint: 'Structural Damage Points, current. At zero the vehicle is Destroyed: it stops being cover and cannot move until repaired.' },
+  { id: `vehicle${i}_hp_max`, label: 'SDP MAX', type: 'number', placeholder: '50', hint: 'A vehicle counts as real once this is filled in — it is what puts the vehicle on the shared VEHICLES window.' },
+  { id: `vehicle${i}_armor`, label: 'SP', type: 'number', placeholder: '10', hint: 'Stopping Power: subtracted from damage the vehicle takes. Unlike personal SP it does not ablate.' },
+  { id: `vehicle${i}_crew`, label: 'SEATS', type: 'number', placeholder: '4', startsRow: true, hint: 'How many it seats, driver included. The VEHICLES window draws exactly this many places.' },
+  { id: `vehicle${i}_speed`, label: 'SPEED', type: 'text', placeholder: '20 MOVE', hint: 'Reference only. Speed drives nothing mechanical here.' },
+  { id: `vehicle${i}_cost`, label: 'COST', type: 'text', placeholder: '30,000eb' },
+  {
+    id: `vehicle${i}_notes`, label: 'NOTES', type: 'textarea', fullWidth: true,
+    placeholder: 'Armoured glass. Trunk full of someone else’s problem.',
+  },
+];
 
 const weaponRow = (i: number): SheetField[] => [
   { id: `weapon${i}_name`, label: 'NAME', type: 'text', placeholder: 'Militech Avenger' },
@@ -302,6 +338,28 @@ export const cyberpunkRed: SheetTemplate = {
       fields: [
         { id: 'cyberware_notes', label: 'Cyberware', type: 'textarea', placeholder: 'Cybereye (Low Light), Neural Link, Subdermal Grip' },
       ],
+    },
+    {
+      id: 'vehicles',
+      label: 'VEHICLES',
+      // Who is sitting where is shared state, so the way to it belongs beside the section
+      // rather than in it — folding the section away should not take the button with it.
+      headerAction: 'SEATING',
+      // 'weapons' is the row-chunking layout, not a weapons-only one; the name is
+      // historical. It is what makes each vehicle read as one block rather than as a
+      // continuous field soup.
+      layout: 'weapons',
+      tab: 'GEAR',
+      columns: CPR_VEHICLE_COLUMNS,
+      // No preset to seed, so a new vehicle is blank apart from a shape to draw. Unlike
+      // CWN, where an unset type left a vehicle with no crew and no trauma target, nothing
+      // here breaks when the numbers are missing — it simply has none yet.
+      onAdd: (index) => ({ [`vehicle${index}_type`]: DEFAULT_HULL }),
+      // Derived from the row rather than written out: the collapse chunks the field list
+      // by this number, so a hand-kept count that drifts from the row silently splits
+      // every vehicle across two blocks.
+      groupSize: vehicleRow(1).length,
+      fields: Array.from({ length: CPR_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
     },
     {
       id: 'lifepath',
