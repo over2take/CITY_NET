@@ -234,7 +234,7 @@ export function EnemyVehiclesWindow({ pos, setPos, onClose, socket, vehicles, to
                           fontFamily: 'inherit', fontSize: '0.6rem', padding: '1px 2px', maxWidth: '110px',
                         }}
                       >
-                        <option value="">— EMPTY —</option>
+                        <option value="" style={{ color: 'var(--green)' }}>— EMPTY —</option>
                         {/* Someone already aboard who has since left this map level would
                             otherwise have no option to select, and the seat would read as
                             empty. */}

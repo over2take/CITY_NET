@@ -393,9 +393,15 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                           fontFamily: 'inherit', fontSize: '0.6rem', padding: '1px 2px', maxWidth: '104px',
                         }}
                       >
-                        <option value="">— EMPTY —</option>
+                        {/* Every option states its own colour. The select is tinted by who
+                            is sitting there, and an option with no colour of its own
+                            inherits that — so seating a friendly turned the whole list
+                            blue, players included. */}
+                        <option value="" style={{ color: 'var(--green)' }}>— EMPTY —</option>
                         {players.map(p => (
-                          <option key={p.username} value={asPlayer(p.username)}>{p.name.toUpperCase()}</option>
+                          <option key={p.username} value={asPlayer(p.username)} style={{ color: 'var(--green)' }}>
+                            {p.name.toUpperCase()}
+                          </option>
                         ))}
                         {/* A rider who has since left this map level keeps an option, or
                             their seat would read as empty and the next change would turn

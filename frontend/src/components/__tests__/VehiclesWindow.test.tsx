@@ -503,6 +503,26 @@ describe('inviting a friendly NPC', () => {
     expect(lastEmit(socket, 'seatOut')).toBeUndefined();
   });
 
+  it('gives every option its own colour, so none inherits the seat tint', () => {
+    // The select is tinted by whoever is sitting there, and an option with no colour of its
+    // own inherits it — so seating one NPC turned the whole list blue, players included.
+    //
+    // Asserted on the inline style rather than the computed one: jsdom does not resolve
+    // inheritance, so a computed-colour check passes whether the bug is present or not.
+    // What is checkable, and what actually prevents it, is that every option states a
+    // colour of its own.
+    withGuests({ ...CAR, guests: { seat2: { locationId: 55, name: 'Street Doc', shape: 'friendly_rhombus' } } });
+    const seat = screen.getByLabelText('SHOTGUN') as HTMLSelectElement;
+    expect(seat).toHaveStyle({ color: '#00ccff' });
+
+    [...seat.options].forEach(option => {
+      expect(option.getAttribute('style') ?? '').toMatch(/color:/);
+    });
+    // And the friendly is the one marked out from the rest. `toHaveStyle` rather than a
+    // string match, since the DOM normalises the hex to rgb().
+    expect(screen.getAllByRole('option', { name: /STREET DOC/ })[0]).toHaveStyle({ color: '#00ccff' });
+  });
+
   it('keeps a rider who has left this map level selectable', () => {
     // Otherwise the seat reads as empty and the next change turns them out unmeant.
     withGuests(
