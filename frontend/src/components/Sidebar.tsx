@@ -10,6 +10,7 @@ import { THEMES } from '../theme/themes';
 import type { ThemeName } from '../theme/themes';
 import { getTemplate } from '../sheets';
 import { CWN_VEHICLE_ROWS, CWN_VEHICLE_WEAPON_ROWS } from '../sheets/templates/cities_without_number';
+import { hasVehicles } from '../sheets/vehicleSystems';
 import { startUpdate, waitForRestart, currentBootId } from '../utils/updateClient';
 
 // Token defense config for the active game system; default is D&D-style AC
@@ -321,7 +322,7 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
         </button>
 
         {/* Vehicles are a CWN feature; other systems have no roster to show. */}
-        {gameSystem === 'cities_without_number' && setIsVehiclesOpen && (
+        {hasVehicles(gameSystem) && setIsVehiclesOpen && (
           <button
             className={`upload-btn ${isVehiclesOpen ? 'active' : ''}`}
             onClick={() => setIsVehiclesOpen(!isVehiclesOpen)}

@@ -38,11 +38,20 @@ describe('the vehicle roster', () => {
     expect(socket.emitted).toContain('requestVehicleRoster');
   });
 
-  it('stays quiet under other systems', () => {
+  it('stays quiet under a system with no vehicles', () => {
+    const socket = makeSocket();
+    const ref = { current: socket } as never;
+    renderHook(() => useVehicleRoster(ref, 'shadowrun_6e'));
+    expect(socket.emitted).not.toContain('requestVehicleRoster');
+  });
+
+  it('subscribes for Cyberpunk RED too, not CWN alone', () => {
+    // The seating window is shared. Gating it on one system was the thing in the way of
+    // the second one having vehicles at all.
     const socket = makeSocket();
     const ref = { current: socket } as never;
     renderHook(() => useVehicleRoster(ref, 'cyberpunk_red'));
-    expect(socket.emitted).not.toContain('requestVehicleRoster');
+    expect(socket.emitted).toContain('requestVehicleRoster');
   });
 
   it('binds once the socket turns up, not only if it was there first', async () => {
@@ -82,7 +91,7 @@ describe('the vehicle roster', () => {
     expect(socket.emitted.filter(e => e === 'requestVehicleRoster').length).toBe(before + 2);
   });
 
-  it('empties on a switch away from CWN, so the buttons go with it', () => {
+  it('empties on a switch to a system with no vehicles, so the buttons go with it', () => {
     const socket = makeSocket();
     const ref = { current: socket } as never;
     const { result, rerender } = renderHook(
@@ -92,7 +101,7 @@ describe('the vehicle roster', () => {
     socket.deliver('vehicleRoster', { vehicles: [CAR], players: ['cody'] });
     expect(result.current.hasVehicles).toBe(true);
 
-    rerender({ system: 'cyberpunk_red' });
+    rerender({ system: 'shadowrun_6e' });
     expect(result.current.hasVehicles).toBe(false);
   });
 });

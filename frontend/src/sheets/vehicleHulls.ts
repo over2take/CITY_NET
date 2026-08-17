@@ -48,3 +48,16 @@ export const HULL_OPTIONS = Object.keys(HULL_LABELS)
 
 /** The shape a vehicle gets when nobody has chosen one. */
 export const DEFAULT_HULL = 'car';
+
+/**
+ * The seating window's `look` for a system whose players pick the hull themselves.
+ *
+ * Where CWN resolves the wireframe from its book entry, here the stored type *is* the art
+ * key, so this is nearly the identity function — its job is refusing a key that no longer
+ * draws anything, which is what would happen to a saved sheet if a shape were ever renamed.
+ *
+ * No seat names: without a book table there is nothing to call seat three but CREW 3.
+ */
+export const hullLook = (type: string) => ({
+  art: ART_KEYS.includes(type) ? type : DEFAULT_HULL,
+});

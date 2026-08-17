@@ -34,6 +34,7 @@ import { Sidebar, NavControlsMenu, GeometryMenu, SystemInfoMenu, DiceMenu, Quick
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { VehiclesWindow } from './components/VehiclesWindow';
 import { vehicleLook as cwnVehicleLook } from './sheets/vehiclePresets';
+import { hullLook } from './sheets/vehicleHulls';
 import { VehicleBadgeButton } from './components/VehicleBadgeButton';
 import { useVehicleRoster } from './hooks/useVehicleRoster';
 import { QuickSheetCard } from './components/QuickSheetCard';
@@ -1963,7 +1964,9 @@ function App() {
                 isAdmin={isAdmin}
                 vehicles={vehicleRoster.vehicles}
                 players={vehicleRoster.players}
-                look={cwnVehicleLook}
+                // CWN reads the wireframe and the seat names off its book table; systems
+                // without one store the hull shape directly and number their seats.
+                look={gameSystem === 'cities_without_number' ? cwnVehicleLook : hullLook}
               />
             )}
               <ChatWindow

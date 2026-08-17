@@ -11,6 +11,7 @@
 // 'name') — only list systems that store something else. A missing entry
 // makes tokens/rolls silently fall back to the login username.
 const vehicleState = require('./vehicleState');
+const { hasVehicles } = require('./vehicleSystems');
 
 const NAME_FIELDS = {};
 const nameField = (system) => NAME_FIELDS[system] || 'name';
@@ -62,8 +63,8 @@ function syncToken(db, system, username, cb) {
           // Vehicle occupancy rides along on the same mirror: it is another sheet value
           // other players need to see on the token, and hanging it here means every
           // caller that saves a sheet already refreshes it.
-          if (system !== vehicleState.SYSTEM) return cb && cb(changed);
-          vehicleState.syncAll(db, () => cb && cb(changed));
+          if (!hasVehicles(system)) return cb && cb(changed);
+          vehicleState.syncAll(db, () => cb && cb(changed), system);
         }
       );
     }

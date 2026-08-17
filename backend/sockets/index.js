@@ -11,6 +11,7 @@ const npcTiers = require('../sheets/npcTiers');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
 const vehicleState = require('../sheets/vehicleState');
+const vehicleSystems = require('../sheets/vehicleSystems');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -754,38 +755,42 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     // decision the table makes out loud and the window only records it. Getting *out* is
     // yours alone (or the GM's), and that is enforced here rather than by hiding a button
     // — a client can send whatever it likes.
-    const withCwn = (cb) => getGameSystem((err, system) => {
-      if (err || system !== vehicleState.SYSTEM) return;
+    // Any system with vehicles, not CWN alone. The active system travels with the call:
+    // only one is ever live, and a table that has played both should not find last
+    // campaign's cars on this campaign's roster.
+    const withVehicles = (cb) => getGameSystem((err, system) => {
+      if (err || !vehicleSystems.hasVehicles(system)) return;
       cb(system);
     });
 
     /** Re-derive every badge and tell the room, so no one is looking at a stale car. */
-    const afterSeatingChange = (usernames) => {
+    const afterSeatingChange = (usernames, system) => {
       vehicleState.syncAll(db, () => {
         usernames.filter(Boolean).forEach(u => io.emit('sheetUpdated', { username: u }));
         emitUpdate({ isRhombusOnly: true });
         io.emit('vehicleSeatingChanged');
-      });
+      }, system);
     };
 
     socket.on('requestVehicleRoster', () => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
-      withCwn(() => vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data)));
+      withVehicles((system) => vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data), system));
     });
 
     socket.on('seatIn', (payload) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName || !payload) return;
-      withCwn(() => {
+      withVehicles((system) => {
         vehicleState.seatIn(db, {
           occupant: payload.occupant,
           owner: payload.owner,
           vehicleIndex: payload.vehicleIndex,
           seat: payload.seat,
+          system,
         }, (reason) => {
           if (reason) return socket.emit('vehicleSeatingError', { message: reason });
-          afterSeatingChange([payload.occupant, payload.owner]);
+          afterSeatingChange([payload.occupant, payload.owner], system);
         });
       });
     });
@@ -798,25 +803,26 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (occupant !== info.userName && !isAdminSocket(socket)) {
         return socket.emit('vehicleSeatingError', { message: 'NOT_YOURS' });
       }
-      withCwn(() => {
+      withVehicles((system) => {
         vehicleState.seatOut(db, occupant, (reason) => {
           if (reason) return socket.emit('vehicleSeatingError', { message: reason });
-          afterSeatingChange([occupant]);
-        });
+          afterSeatingChange([occupant], system);
+        }, system);
       });
     });
 
     socket.on('setVehicleMoving', (payload) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName || !payload) return;
-      withCwn(() => {
+      withVehicles((system) => {
         vehicleState.setMoving(db, {
           owner: payload.owner,
           vehicleIndex: payload.vehicleIndex,
           moving: !!payload.moving,
+          system,
         }, (reason) => {
           if (reason) return socket.emit('vehicleSeatingError', { message: reason });
-          afterSeatingChange([payload.owner]);
+          afterSeatingChange([payload.owner], system);
         });
       });
     });
@@ -830,14 +836,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (owner !== info.userName && !isAdminSocket(socket)) {
         return socket.emit('vehicleSeatingError', { message: 'NOT_YOURS' });
       }
-      withCwn(() => {
+      withVehicles((system) => {
         vehicleState.adjustHp(db, {
           owner,
           vehicleIndex: payload.vehicleIndex,
           delta: payload.delta,
+          system,
         }, (reason) => {
           if (reason) return socket.emit('vehicleSeatingError', { message: reason });
-          afterSeatingChange([owner]);
+          afterSeatingChange([owner], system);
         });
       });
     });
@@ -976,8 +983,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 }
                 // Same for a single vehicle field edited on the sheet: everyone aboard is
                 // looking at a badge derived from it.
-                if (system === vehicleState.SYSTEM && payload.fieldId.startsWith('vehicle')) {
-                  vehicleState.syncAll(db, () => emitUpdate({ isRhombusOnly: true }));
+                if (vehicleSystems.hasVehicles(system) && payload.fieldId.startsWith('vehicle')) {
+                  vehicleState.syncAll(db, () => emitUpdate({ isRhombusOnly: true }), system);
                 }
                 // SR6 stun overflow lands on the token's Physical track
                 if (stunOverflow > 0) {
@@ -1049,7 +1056,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 };
                 // Editing a vehicle changes what every badge showing it should say —
                 // including the badges of passengers, whose sheets were not touched.
-                if (system === vehicleState.SYSTEM && entries.some(([k]) => k.startsWith('vehicle'))) {
+                if (vehicleSystems.hasVehicles(system) && entries.some(([k]) => k.startsWith('vehicle'))) {
                   return vehicleState.syncAll(db, () => {
                     emitUpdate({ isRhombusOnly: true });
                     if (effAc === null) return finish();

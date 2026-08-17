@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useReducer } from 'react';
 import type { RosterVehicle } from '../components/VehiclesWindow';
+import { hasVehicles as systemHasVehicles } from '../sheets/vehicleSystems';
 
 /**
  * Every vehicle in play, and who is in which seat.
@@ -19,14 +20,15 @@ export function useVehicleRoster(socketRef: React.MutableRefObject<any>, gameSys
   const [players, setPlayers] = useState<{ username: string; name: string }[]>([]);
   const [socketReadyCount, forceReady] = useReducer((n: number) => n + 1, 0);
 
-  const enabled = gameSystem === 'cities_without_number';
+  const enabled = systemHasVehicles(gameSystem);
   const refresh = useCallback(() => {
     if (enabled) socketRef.current?.emit('requestVehicleRoster');
   }, [socketRef, enabled]);
 
   useEffect(() => {
     if (!enabled) {
-      // Switching away from CWN should empty it, or a stale roster keeps the buttons up.
+      // Switching to a system without vehicles should empty it, or a stale roster keeps
+      // the buttons up over a game that has nothing to put in them.
       setVehicles([]);
       setPlayers([]);
       return;
