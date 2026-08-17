@@ -12,6 +12,7 @@ const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
 const vehicleState = require('../sheets/vehicleState');
 const vehicleSystems = require('../sheets/vehicleSystems');
+const ram = require('../sheets/ram');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -845,6 +846,61 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         }, (reason) => {
           if (reason) return socket.emit('vehicleSeatingError', { message: reason });
           afterSeatingChange([owner], system);
+        });
+      });
+    });
+
+    /**
+     * Drive into something.
+     *
+     * No to-hit roll — driving into a thing is not an attack, it resolves and applies. The
+     * ramming vehicle is never taken from the payload: it is whichever one the caller is
+     * sitting in the driver's seat of, which is the entire permission model.
+     */
+    socket.on('ramVehicle', (payload) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload) return;
+      withVehicles((system) => {
+        const roll = rollEngine.executeRoll(
+          rollEngine.resolveFormula(ram.RAM_FORMULA, {}),
+          'sum',
+          Math.random,
+        );
+        vehicleState.ram(db, {
+          actor: info.userName,
+          targetOwner: payload.owner,
+          targetVehicleIndex: payload.vehicleIndex,
+          targetUsername: payload.username,
+          damage: roll.total,
+          system,
+        }, (reason, out) => {
+          if (reason) return socket.emit('vehicleSeatingError', { message: reason });
+
+          // Both sides, always — the self-harm is the part a table forgets.
+          let history =
+            `${out.rammer.name} rams ${out.target.name} [${ram.RAM_FORMULA} = ${out.damage}] — ` +
+            `both take ${out.damage}, no SP` +
+            ` · ${out.rammer.name} ${out.rammerHp}/${out.rammer.hpMax}` +
+            `${out.rammerWrecked ? ' WRECKED' : ''}` +
+            ` · ${out.target.name} ${out.targetHp}/${out.target.hpMax ?? '?'}` +
+            `${out.targetDown ? (out.target.isPerson ? ' DOWN' : ' WRECKED') : ''}`;
+          if (out.injured.length) {
+            history += ` · ${ram.RAM_INJURY} — ${out.injured.join(', ')} · GM: ROLL THE INJURY TABLE`;
+          }
+          history += out.movementContinues ? ' · movement continues' : ' · your vehicle stops';
+          if (out.ridesAlong) history += ' · they may end up on your vehicle';
+
+          db.run(
+            'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
+            [info.userName, out.damage, JSON.stringify(roll.rolls), '#ff4444', history],
+            () => {
+              io.emit('diceRollBroadcast', {
+                username: info.userName, total: out.damage, results: roll.rolls,
+                color: '#ff4444', historyString: history,
+              });
+              afterSeatingChange([out.rammer.owner, payload.owner, payload.username], system);
+            }
+          );
         });
       });
     });

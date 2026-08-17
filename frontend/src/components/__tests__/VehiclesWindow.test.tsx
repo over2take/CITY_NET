@@ -293,6 +293,66 @@ describe('driven by whatever system supplies the look', () => {
 });
 
 /**
+ * Ramming.
+ *
+ * The server decides who may ram, from the seat rather than from anything sent. These only
+ * cover what the window draws and what it sends.
+ */
+describe('the ram button', () => {
+  const THEIRS = {
+    ...CAR, owner: 'mouse', ownerName: 'Vega', index: 1, name: 'Quartz',
+    occupants: { driver: 'mouse' } as Record<string, string>,
+  };
+  const MINE = { ...CAR, owner: 'cody', index: 2, name: 'Galena', occupants: { driver: 'cody' } };
+
+  const openBoth = () => open({ userName: 'cody', vehicles: [THEIRS, MINE] });
+
+  it('offers a ram when you are driving something else', () => {
+    openBoth();
+    // THEIRS is selected first, so the button rams it with the car you are driving.
+    expect(screen.getByText('RAM WITH GALENA')).toBeInTheDocument();
+  });
+
+  it('takes two clicks, and says both cars take it', async () => {
+    const socket = openBoth();
+    await userEvent.click(screen.getByText('RAM WITH GALENA'));
+    expect(screen.getByText(/BOTH TAKE IT/)).toBeInTheDocument();
+    // Nothing sent on the arming click.
+    expect(lastEmit(socket, 'ramVehicle')).toBeUndefined();
+
+    await userEvent.click(screen.getByText(/BOTH TAKE IT/));
+    expect(lastEmit(socket, 'ramVehicle')).toMatchObject({ owner: 'mouse', vehicleIndex: 1 });
+  });
+
+  it('disarms when the selection moves', async () => {
+    // Otherwise an armed RAM could be pointed at another car by the dropdown and fired by
+    // a click meant for the first one.
+    const socket = openBoth();
+    await userEvent.click(screen.getByText('RAM WITH GALENA'));
+    await userEvent.selectOptions(screen.getByLabelText('Vehicle'), 'cody:2');
+    expect(screen.queryByText(/SURE\?/)).not.toBeInTheDocument();
+    expect(lastEmit(socket, 'ramVehicle')).toBeUndefined();
+  });
+
+  it('will not offer a ram against the car you are driving', async () => {
+    openBoth();
+    await userEvent.selectOptions(screen.getByLabelText('Vehicle'), 'cody:2');
+    expect(screen.queryByText(/^RAM WITH/)).not.toBeInTheDocument();
+  });
+
+  it('says nothing to a passenger', () => {
+    // Riding along is not driving, and the server refuses it either way.
+    open({ userName: 'vega', vehicles: [THEIRS, { ...MINE, occupants: { driver: 'cody', seat2: 'vega' } }] });
+    expect(screen.queryByText(/^RAM WITH/)).not.toBeInTheDocument();
+  });
+
+  it('says nothing when the car you are driving is a wreck', () => {
+    open({ userName: 'cody', vehicles: [THEIRS, { ...MINE, hp: 0, destroyed: true }] });
+    expect(screen.queryByText(/^RAM WITH/)).not.toBeInTheDocument();
+  });
+});
+
+/**
  * The hull bar.
  *
  * The clamping is the server's test — what matters here is that the right sign goes out,

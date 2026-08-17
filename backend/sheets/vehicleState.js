@@ -15,6 +15,7 @@
 
 const attackCwn = require('./attackCwn');
 const vehicleSeats = require('./vehicleSeats');
+const ramModule = require('./ram');
 
 /** The default for the CWN combat path, which is the only caller that is system-specific. */
 const SYSTEM = 'cities_without_number';
@@ -380,7 +381,71 @@ function roster(db, cb, system = SYSTEM) {
   );
 }
 
+/**
+ * Drive into something.
+ *
+ * The rammed vehicle comes from the payload; the ramming one never does. It is whichever
+ * vehicle the actor is sitting in the driver's seat of, read from the roster — because
+ * "the driver may ram" is the whole permission model, and a client that could name its own
+ * vehicle could ram with a car it is not in.
+ *
+ * cb(reason) or cb(null, result). The result carries both crews so the caller can name
+ * everyone the crash injures.
+ */
+function ram(db, { actor, targetOwner, targetVehicleIndex, targetUsername, damage, system = SYSTEM }, cb) {
+  roster(db, ({ vehicles }) => {
+    const crewOf = (v) => Object.values(v.occupants || {});
+    const mine = vehicles.find(v => (v.occupants || {}).driver === actor);
+    if (!mine) return cb('NOT_DRIVING');
+    if (mine.destroyed) return cb('WRECKED');
+
+    const finish = (target, targetIsPerson, writeTarget) => {
+      const out = ramModule.resolveRam({ damage, rammer: mine, target, targetIsPerson });
+      loadSheet(db, mine.owner, (ownerSheet) => {
+        if (!ownerSheet) return cb('NO_SUCH_VEHICLE_OWNER');
+        writeSheet(
+          db,
+          ownerSheet.id,
+          { ...ownerSheet.data, [`vehicle${mine.index}_hp`]: out.rammerHp },
+          () => writeTarget(out.targetHp, () => cb(null, {
+            ...out,
+            rammer: { name: mine.name, owner: mine.owner, index: mine.index, hpMax: mine.hpMax },
+            target: { ...target, isPerson: targetIsPerson },
+            injured: ramModule.whiplashed(crewOf(mine), target.crew || []),
+          }))
+        );
+      }, system);
+    };
+
+    if (targetUsername) {
+      // A pedestrian. Their pool is the token's, the same one every attack writes.
+      return db.get(
+        `SELECT hp_current, hp_max FROM locations WHERE shape = 'rhombus' AND owner = ?`,
+        [targetUsername],
+        (err, row) => {
+          if (err || !row) return cb('NO_SUCH_TARGET');
+          const target = { name: targetUsername, hp: row.hp_current, hpMax: row.hp_max, crew: [targetUsername] };
+          finish(target, true, (hp, done) =>
+            db.run(`UPDATE locations SET hp_current = ? WHERE shape = 'rhombus' AND owner = ?`, [hp, targetUsername], done));
+        }
+      );
+    }
+
+    const index = Number(targetVehicleIndex);
+    const hit = vehicles.find(v => v.owner === targetOwner && v.index === index);
+    if (!hit) return cb('NO_SUCH_TARGET');
+    // Ramming the car you are driving is not a manoeuvre.
+    if (hit.owner === mine.owner && hit.index === mine.index) return cb('SAME_VEHICLE');
+
+    finish({ ...hit, crew: crewOf(hit) }, false, (hp, done) =>
+      loadSheet(db, hit.owner, (sheet) => {
+        if (!sheet) return done();
+        writeSheet(db, sheet.id, { ...sheet.data, [`vehicle${hit.index}_hp`]: hp }, done);
+      }, system));
+  }, system);
+}
+
 module.exports = {
   SYSTEM, resolve, publicState, syncAll, vehicleKey, getRideMounts, getRideWeapon,
-  seatIn, seatOut, setMoving, adjustHp, loadSheet, roster, OCCUPANCY_FIELDS,
+  seatIn, seatOut, setMoving, adjustHp, ram, loadSheet, roster, OCCUPANCY_FIELDS,
 };
