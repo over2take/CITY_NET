@@ -100,6 +100,21 @@ export const getPreset = (id: string | null | undefined): VehiclePreset | null =
   VEHICLE_PRESETS.find(p => p.id === String(id ?? '').trim().toLowerCase()) ?? null;
 
 /**
+ * What the seating window needs in order to draw a CWN vehicle.
+ *
+ * The window itself is system-agnostic — it knows about seats and occupants and nothing
+ * about any ruleset. This is the CWN side of that seam: the book's table answering which
+ * wireframe to use and what the seats are called. A second system supplies its own.
+ *
+ * An unknown type falls back to a car rather than drawing nothing, since a vehicle exists
+ * on the roster the moment it has an HP maximum, type or no type.
+ */
+export const vehicleLook = (type: string): { art: VehicleArt; seatNames?: string[] } => {
+  const preset = getPreset(type);
+  return { art: preset?.art ?? 'car', seatNames: preset?.seatNames };
+};
+
+/**
  * Choices for the TYPE field. Every vehicle is one of the book's — there is no CUSTOM.
  *
  * A custom vehicle was a hole rather than a feature: with no type it had no crew, no

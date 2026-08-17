@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VehiclesWindow, seatAnchor, seatRows, hullColor } from '../VehiclesWindow';
+import { vehicleLook } from '../../sheets/vehiclePresets';
 
 /**
  * The shared seating window.
@@ -57,6 +58,7 @@ const open = (
       isAdmin={opts.isAdmin}
       vehicles={opts.vehicles ?? [CAR]}
       players={opts.players ?? PLAYERS}
+      look={vehicleLook}
     />
   );
   return socket;
@@ -73,6 +75,7 @@ const renderWindow = (opts: { vehicles?: typeof CAR[]; players?: typeof PLAYERS 
       userName="cody"
       vehicles={opts.vehicles ?? [CAR]}
       players={opts.players ?? PLAYERS}
+      look={vehicleLook}
     />
   );
 
@@ -239,6 +242,53 @@ describe('the vehicles window', () => {
     const socket = open();
     socket.deliver('vehicleSeatingError', { message: 'NO_SUCH_SEAT' });
     expect(screen.getByText(/NO SUCH SEAT/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The window holds no game system.
+ *
+ * Seat names and the wireframe are the only two things that vary between rulesets, and both
+ * arrive through `look`. If this suite ever needs CWN to be installed for these to pass,
+ * the seam has leaked and the next system has to fork the component.
+ */
+describe('driven by whatever system supplies the look', () => {
+  const BOAT = {
+    ...CAR, type: 'cabin_cruiser', name: 'Halcyon',
+    crew: 6, seats: ['driver', 'seat2', 'seat3', 'seat4', 'seat5', 'seat6'],
+  };
+
+  const look = () => ({ art: 'heli', seatNames: ['CAPTAIN', 'SKIPPER'] });
+
+  it('takes seat names from the look, not from any book', () => {
+    render(
+      <VehiclesWindow
+        pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()}
+        socket={makeSocket()} userName="cody"
+        vehicles={[BOAT]} players={PLAYERS} look={look}
+      />
+    );
+    expect(screen.getByLabelText('CAPTAIN')).toBeInTheDocument();
+    expect(screen.getByLabelText('SKIPPER')).toBeInTheDocument();
+    // Seats past the supplied names are numbered rather than left blank.
+    expect(screen.getByLabelText('CREW 3')).toBeInTheDocument();
+    expect(screen.getByLabelText('CREW 6')).toBeInTheDocument();
+    // And nothing reached for the CWN table, which calls seat 2 SHOTGUN.
+    expect(screen.queryByLabelText('SHOTGUN')).not.toBeInTheDocument();
+  });
+
+  it('falls back to a car when the look knows nothing about the type', () => {
+    render(
+      <VehiclesWindow
+        pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()}
+        socket={makeSocket()} userName="cody"
+        vehicles={[{ ...CAR, type: 'nonsense' }]} players={PLAYERS}
+        look={vehicleLook}
+      />
+    );
+    // A vehicle counts the moment it has an HP maximum, type or no type, so the diagram
+    // has to draw something rather than nothing.
+    expect(screen.getByLabelText('DRIVER')).toBeInTheDocument();
   });
 });
 

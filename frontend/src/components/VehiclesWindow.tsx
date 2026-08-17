@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { VehicleArt } from './vehicleArt';
-import { getPreset } from '../sheets/vehiclePresets';
 
 /**
  * Who is in which vehicle.
@@ -12,7 +11,20 @@ import { getPreset } from '../sheets/vehiclePresets';
  *
  * Every write goes to the server, which owns the rules — a seat has to exist on the
  * vehicle, and only you or the GM can take you out of one. Nothing here is trusted.
+ *
+ * System-agnostic. What a vehicle type *looks like* and what its seats are *called* are the
+ * only two things that vary between rulesets, and both arrive through `look` — so this file
+ * holds no game system's data and the second system to want a seating diagram does not have
+ * to fork it.
  */
+
+/** What a vehicle type looks like, resolved by whoever owns the game system. */
+export interface VehicleLook {
+  /** Wireframe key, passed straight to `VehicleArt`. */
+  art: string;
+  /** Named positions in order. Seats past the end of this list are numbered. */
+  seatNames?: string[];
+}
 
 export interface RosterVehicle {
   owner: string;
@@ -42,13 +54,14 @@ interface Props {
   vehicles: RosterVehicle[];
   /** Login name and character name: the first is the key, the second is the label. */
   players: { username: string; name: string }[];
+  /** Resolves a vehicle's `type` to its wireframe and seat names. The one seam a game
+   *  system reaches through — without it this component would have to know one. */
+  look: (type: string) => VehicleLook;
 }
 
-/** Seat labels come from the book vehicle; anything past those is numbered. */
-const seatLabel = (vehicle: RosterVehicle, seatId: string, i: number) => {
-  const named = getPreset(vehicle.type)?.seatNames?.[i];
-  return named ?? (seatId === 'driver' ? 'DRIVER' : `CREW ${i + 1}`);
-};
+/** Seat labels come from the vehicle's own list; anything past it is numbered. */
+const seatLabel = (named: string | undefined, seatId: string, i: number) =>
+  named ?? (seatId === 'driver' ? 'DRIVER' : `CREW ${i + 1}`);
 
 /** Rows of seats a vehicle draws: pairs from the front, plus a lone one at the back. */
 export const seatRows = (total: number) => Math.floor(total / 2) + (total % 2);
@@ -88,7 +101,7 @@ export const hullColor = (hp: number, hpMax: number) => {
   return pct > 0.5 ? 'var(--green)' : pct > 0.25 ? '#ffaa00' : '#ff3333';
 };
 
-export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin, vehicles, players }: Props) {
+export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin, vehicles, players, look }: Props) {
   const [selected, setSelected] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState(0);
@@ -121,7 +134,7 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
     act('seatIn', { occupant, owner: vehicle.owner, vehicleIndex: vehicle.index, seat });
   };
 
-  const art = getPreset(current?.type ?? '')?.art ?? 'car';
+  const { art, seatNames } = look(current?.type ?? '');
 
   /**
    * The diagram is sized to the vehicle rather than fixed.
@@ -308,10 +321,10 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                       } as React.CSSProperties}
                     >
                       <span style={{ fontSize: '0.5rem', letterSpacing: '1px', color: 'var(--green)', opacity: 0.7 }}>
-                        {seatLabel(current, seatId, i)}
+                        {seatLabel(seatNames?.[i], seatId, i)}
                       </span>
                       <select
-                        aria-label={seatLabel(current, seatId, i)}
+                        aria-label={seatLabel(seatNames?.[i], seatId, i)}
                         value={sitting}
                         onChange={(e) => setSeat(current, seatId, e.target.value)}
                         style={{
