@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
+import { ImportPreviewWindow, type ImportPreview } from './ImportPreviewWindow';
 
 // Sheet import dialog. Three inputs, one preview, one APPLY:
 //   - a fillable character-sheet PDF (form fields extracted server-side)
@@ -12,17 +13,6 @@ import { DraggableWindow } from './DraggableWindow';
 // source does not linger and a weapon row that no longer exists does not keep its damage.
 // That is destructive, so it goes through a confirmation that names what will be lost by
 // field, and a player can cancel and write those down first.
-
-interface Preview {
-  system: string;
-  source: string;
-  mapped: Record<string, string | number>;
-  unmapped: Record<string, unknown>;
-  skipped: Record<string, unknown>;
-  /** What the source had no way to provide — a Companion export carries no vehicle
-   *  stats, no weapon damage. Shown so a gap does not read as a failure. */
-  missing?: string[];
-}
 
 interface ImportSheetDialogProps {
   pos: { x: number; y: number };
@@ -43,30 +33,18 @@ const label9: React.CSSProperties = { fontFamily: 'monospace', fontSize: 9, lett
 export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, currentData }: ImportSheetDialogProps) {
   const [pasted, setPasted] = useState('');
   const [code, setCode] = useState('');
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [applied, setApplied] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [previewPos, setPreviewPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
 
-  /**
-   * The result renders under three inputs, and the window's content pane scrolls at 300px.
-   * Adding the code box pushed it out of sight — so a perfectly clear error looked exactly
-   * like nothing happening. Bring it into view whenever there is something to see.
-   */
-  const resultRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    // Optional call: jsdom has no scrollIntoView, and an effect that throws takes the
-    // whole dialog down with it.
-    if (preview || error) resultRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
-  }, [preview, error]);
 
   const runPreview = async (body: FormData | string, isForm: boolean) => {
     setBusy(true);
     setError(null);
     setPreview(null);
     setApplied(false);
-    setConfirming(false);
     try {
       const res = await fetch('/api/sheets/import/preview', {
         method: 'POST',
@@ -114,7 +92,6 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
     setError(null);
     setPreview(null);
     setApplied(false);
-    setConfirming(false);
     try {
       const res = await fetch('/api/sheets/import/companion', {
         method: 'POST',
@@ -142,33 +119,15 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
   const handleApply = async () => {
     if (!preview) return;
     setBusy(true);
-    setConfirming(false);
     await onApply(preview.mapped, { replace: true });
     setBusy(false);
     setApplied(true);
   };
 
-  /**
-   * What a replace would erase: anything on the sheet now that this import does not carry.
-   *
-   * The point of the confirmation is that this list is *specific*. "Are you sure?" tells a
-   * player nothing they can act on; "you will lose weapon2_dmg and vehicle1_hp_max" tells
-   * them exactly what to write down first.
-   */
-  const losses = preview && currentData
-    ? Object.entries(currentData)
-        .filter(([k, v]) => v !== null && v !== undefined && String(v).trim() !== '')
-        .filter(([k]) => !(k in preview.mapped))
-        // Occupancy is not character data and survives a replace, so it is not a loss.
-        .filter(([k]) => !['in_vehicle', 'ride_owner', 'ride_vehicle', 'vehicle_seat'].includes(k))
-        .map(([k]) => k)
-    : [];
 
-  const mappedCount = preview ? Object.keys(preview.mapped).length : 0;
-  const unmappedKeys = preview ? Object.keys(preview.unmapped) : [];
-  const skippedKeys = preview ? Object.keys(preview.skipped) : [];
 
   return (
+    <>
     <DraggableWindow
       title="IMPORT_SHEET"
       pos={pos}
@@ -240,81 +199,25 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
           {busy ? 'READING…' : 'PREVIEW'}
         </button>
 
-        <div ref={resultRef} />
         {error && <div style={{ ...label9, color: '#ff3333', border: '1px solid #ff3333', padding: '4px 8px' }}>{error}</div>}
 
-        {preview && (
-          <div style={{ border: '1px solid var(--green)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ ...label9, color: 'var(--green)' }}>
-              {mappedCount} FIELD{mappedCount === 1 ? '' : 'S'} RECOGNIZED ({preview.source.toUpperCase()})
-            </div>
-            <div style={{ ...label9, opacity: 0.8, maxHeight: 90, overflowY: 'auto', wordBreak: 'break-word' }}>
-              {Object.entries(preview.mapped).map(([k, v]) => `${k}=${String(v).slice(0, 24)}`).join(' · ')}
-            </div>
-            {skippedKeys.length > 0 && (
-              <div style={{ ...label9, color: '#ffcc00' }}>
-                SKIPPED (LINKED TO TOKEN/BANK): {skippedKeys.join(', ')}
-              </div>
-            )}
-            {unmappedKeys.length > 0 && (
-              <div style={{ ...label9, opacity: 0.55, maxHeight: 60, overflowY: 'auto' }}>
-                NOT RECOGNIZED: {unmappedKeys.slice(0, 30).join(', ')}{unmappedKeys.length > 30 ? '…' : ''}
-              </div>
-            )}
-            {/* Different from NOT RECOGNIZED: this is what the source never held, not what
-                we failed to read. A Companion export names a car but carries no SDP, and a
-                player who is not told that reads the gap as a broken import. */}
-            {preview.missing && preview.missing.length > 0 && (
-              <div style={{ ...label9, color: '#00ccff' }}>
-                TYPE IN YOURSELF: {preview.missing.join(' · ')}
-              </div>
-            )}
-            {confirming ? (
-              <div style={{ border: '1px solid #ff3333', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ ...label9, color: '#ff3333' }}>
-                  THIS REPLACES THE SHEET — everything not in this import is cleared.
-                </div>
-                {losses.length > 0 ? (
-                  <div style={{ ...label9, opacity: 0.85, maxHeight: 80, overflowY: 'auto', wordBreak: 'break-word' }}>
-                    YOU WILL LOSE: {losses.slice(0, 40).join(', ')}{losses.length > 40 ? `, and ${losses.length - 40} more` : ''}
-                  </div>
-                ) : (
-                  <div style={{ ...label9, opacity: 0.7 }}>Nothing on the sheet would be lost.</div>
-                )}
-                <div style={{ ...label9, opacity: 0.6 }}>
-                  Cancel if you need to write any of it down first.
-                </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    className="upload-btn danger-btn"
-                    style={{ flex: 1, marginTop: 0, padding: '5px' }}
-                    disabled={busy}
-                    onClick={handleApply}
-                  >
-                    REPLACE SHEET
-                  </button>
-                  <button
-                    className="utility-btn"
-                    style={{ flex: 1, padding: '5px' }}
-                    onClick={() => setConfirming(false)}
-                  >
-                    CANCEL
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                className="upload-btn"
-                disabled={busy || mappedCount === 0 || applied}
-                onClick={() => setConfirming(true)}
-                style={{ padding: '6px', backgroundColor: applied ? 'var(--dark-green)' : 'var(--green)', color: applied ? 'var(--green)' : '#000', fontWeight: 'bold' }}
-              >
-                {applied ? '✓ APPLIED' : `APPLY ${mappedCount} FIELDS TO SHEET`}
-              </button>
-            )}
-          </div>
-        )}
       </div>
     </DraggableWindow>
+
+    {/* Its own window rather than a block under three inputs: this is the thing a player
+        has to read before a destructive choice, and it was the thing they could not see. */}
+    {preview && (
+      <ImportPreviewWindow
+        pos={previewPos}
+        setPos={setPreviewPos}
+        preview={preview}
+        currentData={currentData}
+        busy={busy}
+        applied={applied}
+        onApply={handleApply}
+        onCancel={() => { setPreview(null); setApplied(false); }}
+      />
+    )}
+    </>
   );
 }

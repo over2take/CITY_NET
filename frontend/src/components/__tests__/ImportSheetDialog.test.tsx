@@ -42,19 +42,18 @@ describe('ImportSheetDialog', () => {
     expect((global.fetch as any).mock.calls[0][1].body).toContain('"text"');
   });
 
-  it('APPLY passes the mapped fields to onApply, once confirmed', async () => {
-    // Applying replaces the sheet, so it goes through a confirmation. The first click arms
-    // it; the second is the one that writes.
+  it('opens the preview in its own window and applies from there', async () => {
+    // The preview is what a player has to read before a destructive choice, so it gets a
+    // window rather than a block below three inputs in a pane that scrolls.
     mockFetch({ system: 'cyberpunk_red', source: 'json', mapped: { ref: 7 }, unmapped: {}, skipped: {} });
     const onApply = vi.fn();
     render(<ImportSheetDialog pos={basePos} setPos={setPos} onClose={onClose} onApply={onApply} />);
     fireEvent.change(screen.getByPlaceholderText(/ref/i), { target: { value: '{"ref":7}' } });
     fireEvent.click(screen.getByText('PREVIEW'));
-    await waitFor(() => screen.getByText(/APPLY 1 FIELDS/));
-    fireEvent.click(screen.getByText(/APPLY 1 FIELDS/));
-    expect(onApply).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByText('REPLACE SHEET'));
+    await waitFor(() => expect(screen.getAllByTestId('window-title').map(n => n.textContent))
+      .toContain('IMPORT_PREVIEW'));
+    fireEvent.click(screen.getByText(/REPLACE SHEET WITH 1 FIELDS/));
     await waitFor(() => expect(onApply).toHaveBeenCalledWith({ ref: 7 }, { replace: true }));
     await waitFor(() => expect(screen.getByText('✓ APPLIED')).toBeTruthy());
   });
@@ -196,19 +195,18 @@ describe('replacing rather than merging', () => {
     await screen.findByText(/FIELDS RECOGNIZED/);
   };
 
-  it('does not apply on the first click', async () => {
+  it('says plainly that it replaces, before anything is applied', async () => {
     const onApply = openWith({ weapon2_dmg: '3d6' });
     await getPreview();
-    await userEvent.click(screen.getByText(/APPLY 2 FIELDS/));
-    expect(onApply).not.toHaveBeenCalled();
     expect(screen.getByText(/THIS REPLACES THE SHEET/)).toBeInTheDocument();
+    // Reaching the preview is not applying it.
+    expect(onApply).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 
   it('names the fields that would be lost, rather than just warning', async () => {
     openWith({ weapon2_dmg: '3d6', vehicle1_hp_max: 50, int: 4 });
     await getPreview();
-    await userEvent.click(screen.getByText(/APPLY 2 FIELDS/));
 
     const loss = screen.getByText(/YOU WILL LOSE/);
     expect(loss).toHaveTextContent('weapon2_dmg');
@@ -223,29 +221,26 @@ describe('replacing rather than merging', () => {
     // a statement about it. The server keeps it; the warning must not claim otherwise.
     openWith({ in_vehicle: 'own:1', vehicle_seat: 'driver' });
     await getPreview();
-    await userEvent.click(screen.getByText(/APPLY 2 FIELDS/));
     expect(screen.getByText(/Nothing on the sheet would be lost/)).toBeInTheDocument();
     vi.unstubAllGlobals();
   });
 
-  it('cancels without applying', async () => {
+  it('cancels without applying, and closes the window', async () => {
     const onApply = openWith({ weapon2_dmg: '3d6' });
     await getPreview();
-    await userEvent.click(screen.getByText(/APPLY 2 FIELDS/));
     await userEvent.click(screen.getByText('CANCEL'));
 
     expect(onApply).not.toHaveBeenCalled();
     expect(screen.queryByText(/THIS REPLACES THE SHEET/)).not.toBeInTheDocument();
-    // And the way back in is still there.
-    expect(screen.getByText(/APPLY 2 FIELDS/)).toBeInTheDocument();
+    // The import dialog is still there to try again from.
+    expect(screen.getByLabelText('Companion code')).toBeInTheDocument();
     vi.unstubAllGlobals();
   });
 
-  it('replaces once confirmed, and says so', async () => {
+  it('replaces when told to, naming the count on the button', async () => {
     const onApply = openWith({ weapon2_dmg: '3d6' });
     await getPreview();
-    await userEvent.click(screen.getByText(/APPLY 2 FIELDS/));
-    await userEvent.click(screen.getByText('REPLACE SHEET'));
+    await userEvent.click(screen.getByText(/REPLACE SHEET WITH 2 FIELDS/));
 
     expect(onApply).toHaveBeenCalledWith({ name: 'Nyx', int: 8 }, { replace: true });
     vi.unstubAllGlobals();
