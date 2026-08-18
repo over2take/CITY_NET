@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ImportSheetDialog } from '../ImportSheetDialog';
 
 vi.mock('../DraggableWindow', () => ({
@@ -59,5 +60,88 @@ describe('ImportSheetDialog', () => {
     fireEvent.change(screen.getByPlaceholderText(/ref/i), { target: { value: '{"x":1}' } });
     fireEvent.click(screen.getByText('PREVIEW'));
     await waitFor(() => expect(screen.getByText(/No importer/)).toBeTruthy());
+  });
+});
+
+/**
+ * The Companion code.
+ *
+ * Offered only under Cyberpunk RED, because the Companion is a Cyberpunk tool — a button
+ * that could only ever fail is worse than no button. Everything else about it is the same
+ * as the other two sources: a preview, then APPLY, and nothing written before that.
+ */
+describe('the Companion code', () => {
+  const open = (gameSystem?: string) =>
+    render(
+      <ImportSheetDialog
+        pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()}
+        onApply={vi.fn()} gameSystem={gameSystem}
+      />
+    );
+
+  it('is offered under Cyberpunk RED', () => {
+    open('cyberpunk_red');
+    expect(screen.getByLabelText('Companion code')).toBeInTheDocument();
+    expect(screen.getByText(/cyberpunkred\.com/)).toBeInTheDocument();
+  });
+
+  it('is not offered under any other system', () => {
+    open('cities_without_number');
+    expect(screen.queryByLabelText('Companion code')).not.toBeInTheDocument();
+  });
+
+  it('keeps the box to six letters and digits, upper-cased', async () => {
+    open('cyberpunk_red');
+    const box = screen.getByLabelText('Companion code') as HTMLInputElement;
+    await userEvent.type(box, '6lz-kp7xyz');
+    expect(box.value).toBe('6LZKP7');
+  });
+
+  it('will not fetch until there are six characters', async () => {
+    open('cyberpunk_red');
+    expect(screen.getByText('FETCH')).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('Companion code'), '6LZKP7');
+    expect(screen.getByText('FETCH')).toBeEnabled();
+  });
+
+  it('previews what came back, and applies nothing on its own', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        system: 'cyberpunk_red', source: 'companion',
+        mapped: { name: 'Nyx', int: 8 }, unmapped: {}, skipped: {},
+        missing: ['vehicle SDP, SP and seats'],
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onApply = vi.fn();
+    render(
+      <ImportSheetDialog
+        pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()}
+        onApply={onApply} gameSystem="cyberpunk_red"
+      />
+    );
+
+    await userEvent.type(screen.getByLabelText('Companion code'), '6LZKP7');
+    await userEvent.click(screen.getByText('FETCH'));
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/sheets/import/companion', expect.objectContaining({ method: 'POST' }));
+    expect(await screen.findByText(/2 FIELDS RECOGNIZED/)).toBeInTheDocument();
+    // The gap the export could not fill, said plainly rather than left to be noticed.
+    expect(screen.getByText(/TYPE IN YOURSELF/)).toHaveTextContent('vehicle SDP');
+    expect(onApply).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('shows the reason the server gave when a code does not resolve', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      json: async () => ({ error: 'No character for that code. Check it and try exporting again.' }),
+    })));
+    open('cyberpunk_red');
+    await userEvent.type(screen.getByLabelText('Companion code'), 'ZZZZZZ');
+    await userEvent.click(screen.getByText('FETCH'));
+    expect(await screen.findByText(/No character for that code/)).toBeInTheDocument();
+    vi.unstubAllGlobals();
   });
 });

@@ -126,6 +126,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
     </DraggableWindow>
     {isImportOpen && ReactDOM.createPortal(
       <ImportSheetDialog
+        gameSystem={sheet?.system}
         pos={importPos}
         setPos={setImportPos}
         onClose={() => setIsImportOpen(false)}

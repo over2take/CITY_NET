@@ -14,20 +14,27 @@ interface Preview {
   mapped: Record<string, string | number>;
   unmapped: Record<string, unknown>;
   skipped: Record<string, unknown>;
+  /** What the source had no way to provide — a Companion export carries no vehicle
+   *  stats, no weapon damage. Shown so a gap does not read as a failure. */
+  missing?: string[];
 }
 
 interface ImportSheetDialogProps {
   pos: { x: number; y: number };
   setPos: (pos: { x: number; y: number }) => void;
   onClose: () => void;
+  /** The active system. The dialog otherwise only learns it from a preview coming back,
+   *  which is too late to decide what to offer. */
+  gameSystem?: string;
   /** Apply the mapped fields to the target sheet (socket or admin REST). */
   onApply: (fields: Record<string, string | number>) => Promise<void> | void;
 }
 
 const label9: React.CSSProperties = { fontFamily: 'monospace', fontSize: 9, letterSpacing: 0.5 };
 
-export function ImportSheetDialog({ pos, setPos, onClose, onApply }: ImportSheetDialogProps) {
+export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem }: ImportSheetDialogProps) {
   const [pasted, setPasted] = useState('');
+  const [code, setCode] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -71,6 +78,35 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply }: ImportSheet
     }
   };
 
+  /**
+   * A Companion code, fetched server-side and previewed like the other two sources.
+   *
+   * Its own request rather than `runPreview`, because this is the one source that can fail
+   * for reasons outside the app — their service being down is a different thing to say than
+   * "could not read that", and a player can act on the difference.
+   */
+  const handleCode = async () => {
+    const clean = code.trim().toUpperCase();
+    if (clean.length !== 6) return setError('A Companion code is six characters.');
+    setBusy(true);
+    setError(null);
+    setPreview(null);
+    setApplied(false);
+    try {
+      const res = await fetch('/api/sheets/import/companion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: clean }),
+      });
+      const data = await res.json();
+      if (!res.ok) setError(data.error || 'Could not read that code');
+      else setPreview(data);
+    } catch {
+      setError('Could not reach server');
+    }
+    setBusy(false);
+  };
+
   const handleApply = async () => {
     if (!preview) return;
     setBusy(true);
@@ -111,6 +147,39 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply }: ImportSheet
         >
           ↓ DOWNLOAD BLANK FORM
         </a>
+        {/* Cyberpunk only: the Companion is a Cyberpunk tool, and offering this under
+            another system would be a button that could only ever fail. */}
+        {gameSystem === 'cyberpunk_red' && (
+          <>
+            <div style={{ ...label9, opacity: 0.5, textAlign: 'center' }}>— OR ENTER A COMPANION CODE —</div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+              <input
+                aria-label="Companion code"
+                value={code}
+                maxLength={6}
+                placeholder="000000"
+                onChange={(e) => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase())}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCode(); }}
+                style={{
+                  flex: 1, minWidth: 0, boxSizing: 'border-box', textAlign: 'center',
+                  background: '#001a00', border: '1px solid #1a3a1a', color: 'var(--green)',
+                  fontFamily: 'monospace', fontSize: 11, letterSpacing: 3, padding: '0 8px',
+                }}
+              />
+              <button
+                className="upload-btn"
+                style={{ flex: 1, minWidth: 0, marginTop: 0, fontSize: 9 }}
+                disabled={busy || code.trim().length !== 6}
+                onClick={handleCode}
+              >
+                {busy ? 'FETCHING…' : 'FETCH'}
+              </button>
+            </div>
+            <div style={{ ...label9, opacity: 0.4, textAlign: 'center' }}>
+              from cyberpunkred.com — export your character to get a code
+            </div>
+          </>
+        )}
         <div style={{ ...label9, opacity: 0.5, textAlign: 'center' }}>— OR PASTE JSON / STAT BLOCK —</div>
         <textarea
           value={pasted}
@@ -140,6 +209,14 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply }: ImportSheet
             {unmappedKeys.length > 0 && (
               <div style={{ ...label9, opacity: 0.55, maxHeight: 60, overflowY: 'auto' }}>
                 NOT RECOGNIZED: {unmappedKeys.slice(0, 30).join(', ')}{unmappedKeys.length > 30 ? '…' : ''}
+              </div>
+            )}
+            {/* Different from NOT RECOGNIZED: this is what the source never held, not what
+                we failed to read. A Companion export names a car but carries no SDP, and a
+                player who is not told that reads the gap as a broken import. */}
+            {preview.missing && preview.missing.length > 0 && (
+              <div style={{ ...label9, color: '#00ccff' }}>
+                TYPE IN YOURSELF: {preview.missing.join(' · ')}
               </div>
             )}
             <button
