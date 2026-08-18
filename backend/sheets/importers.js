@@ -100,6 +100,10 @@ const buildCprAliases = () => {
     if (plain !== label) alias([plain], id);
   });
 
+  // The Companion writes this one as WardrobeAndStyle, which does not reduce to our
+  // "Wardrobe & Style" — every other stat and skill name it uses already does.
+  alias(['wardrobeandstyle'], 'wardrobe_style');
+
   // Notes / gear
   alias(['weapons', 'weaponsnotes'], 'weapons_notes');
   alias(['ammunition', 'ammo'], 'ammunition');
