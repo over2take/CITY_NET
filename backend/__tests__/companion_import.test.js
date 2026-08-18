@@ -44,6 +44,9 @@ const V2 = {
     personality: str('Quiet until she is not'),
     motivation: str('Owes a fixer'),
     roleAbilities: map({ Netrunner: map({ rank: int(4) }) }),
+    improvementPoints: int(45),
+    reputation: int(3),
+    subSkills: map({ Language: map({ name: str('Streetslang'), points: int(4) }) }),
     lifepath: str('Grew up in the combat zone.'),
     stats: map({
       Intelligence: int(8), Reflexes: int(6), Technique: int(7),
@@ -111,9 +114,23 @@ describe('flattening a v2 export', () => {
     expect(candidates.cyberware).toBe('Neural Link');
   });
 
-  it('takes the role from roleAbilities, which is where it actually lives', () => {
-    // There is no `role` field. The role is the single key of that map.
+  it('takes the role and its rank from roleAbilities, which is where they live', () => {
+    // There is no `role` field. The role is the single key of that map, and the rank is
+    // inside it.
     expect(candidates.role).toBe('Netrunner');
+    expect(candidates.roleabilityrank).toBe(4);
+  });
+
+  it('carries the two numbers the sheet gained for this', () => {
+    // IP and Reputation are currencies a table spends between sessions and had nowhere to
+    // live but prose. They are fields now, so the import fills them.
+    expect(candidates).toMatchObject({ improvementpoints: 45, reputation: 3 });
+  });
+
+  it('names the sub-skills instead of guessing where to put them', () => {
+    // A specialised skill needs a row that can hold its specialisation, and ours are fixed
+    // fields. Reported so a player writes it down rather than wondering where it went.
+    expect(missing.join(' ')).toMatch(/sub-skills/);
   });
 
   it('carries the numbers that sit beside the pools', () => {
@@ -207,6 +224,8 @@ describe('what the importer makes of it', () => {
     expect(mapped.role).toBe('Netrunner');
     expect(mapped.vehicle1_name).toBe('Thorton Galena');
     expect(mapped.weapon1_name).toBe('Militech Avenger');
+    // Numbers arrive as numbers, not the strings Firestore sends.
+    expect(mapped).toMatchObject({ improvement_points: 45, reputation: 3, role_ability_rank: 4 });
   });
 
   it('matches CamelCase names to our own, with no mapping table between', () => {

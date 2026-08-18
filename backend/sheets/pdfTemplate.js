@@ -27,7 +27,7 @@ const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
  */
 const LAYOUTS = {
   cyberpunk_red: [
-    { title: 'IDENTITY', fields: ['Handle', 'Role', 'Description', 'Aliases'] },
+    { title: 'IDENTITY', fields: ['Handle', 'Role', 'IP', 'Reputation', 'Description', 'Aliases'] },
     {
       title: 'STATS',
       fields: ['INT', 'REF', 'DEX', 'TECH', 'COOL', 'WILL', 'MOVE', 'BODY', 'EMP', 'LUCK', 'Humanity'],

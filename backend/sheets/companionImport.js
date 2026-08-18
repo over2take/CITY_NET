@@ -104,9 +104,12 @@ function flattenCompanion(doc) {
 
   // The role is not a field: it is the single key of `roleAbilities`, which is also where
   // its rank lives. `classType` carries it too on some exports.
-  const roleNames = Object.keys(data.roleAbilities || {});
+  const roleAbilities = data.roleAbilities || {};
+  const roleNames = Object.keys(roleAbilities);
   const role = String(data.role ?? roleNames[0] ?? data.classType ?? '').trim();
   if (role) candidates.role = role;
+  const rank = roleAbilities[roleNames[0]]?.rank;
+  if (isNumber(rank)) candidates.roleabilityrank = rank;
 
   // Free-text colour, which our sheet keeps in one description rather than four fields.
   const description = ['personality', 'motivation', 'identifyingFeatures', 'background']
@@ -134,6 +137,8 @@ function flattenCompanion(doc) {
   if (isNumber(data.maxHumanity)) candidates.humanitymax = data.maxHumanity;
   if (isNumber(data.deathSave)) candidates.deathsave = data.deathSave;
   if (isNumber(data.luck)) candidates.luck = data.luck;
+  if (isNumber(data.improvementPoints)) candidates.improvementpoints = data.improvementPoints;
+  if (isNumber(data.reputation)) candidates.reputation = data.reputation;
   // Money is a linked field on our side — it lives in the bank, not the sheet — so the
   // importer reports it as skipped rather than writing it. Sent anyway so the preview can
   // say where it went.
@@ -145,6 +150,12 @@ function flattenCompanion(doc) {
 
   const lifepath = String(data.lifepath ?? '').trim();
   if (lifepath) candidates.lifepath = lifepath;
+
+  // Named here rather than imported: a specialised skill needs a row that can hold its
+  // specialisation, and our skills are fixed fields. Reported so a player knows to write
+  // "Language (Streetslang) 4" somewhere themselves rather than wondering where it went.
+  if (Object.keys(data.subSkills || {}).length) missing.push('specialised sub-skills');
+  if (Object.keys(data.contacts || {}).length) missing.push('contacts');
 
   // Items. Names only — the export carries no stats for them, so a weapon arrives named
   // with its damage left to type. Said plainly rather than filled with a guess.
