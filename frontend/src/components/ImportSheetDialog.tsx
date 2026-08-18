@@ -7,6 +7,11 @@ import { DraggableWindow } from './DraggableWindow';
 //   - pasted plain text (stat-block style: 'REF 7', 'Handgun: 5')
 // The server maps candidates onto the active system's fields and reports
 // what it could not place - nothing is applied until APPLY is clicked.
+//
+// Applying *replaces* the sheet rather than merging into it, so a skill dropped at the
+// source does not linger and a weapon row that no longer exists does not keep its damage.
+// That is destructive, so it goes through a confirmation that names what will be lost by
+// field, and a player can cancel and write those down first.
 
 interface Preview {
   system: string;
@@ -26,25 +31,30 @@ interface ImportSheetDialogProps {
   /** The active system. The dialog otherwise only learns it from a preview coming back,
    *  which is too late to decide what to offer. */
   gameSystem?: string;
+  /** The sheet as it stands. Only read to work out what a replace would erase — the
+   *  dialog cannot warn about losing something it cannot see. */
+  currentData?: Record<string, unknown>;
   /** Apply the mapped fields to the target sheet (socket or admin REST). */
-  onApply: (fields: Record<string, string | number>) => Promise<void> | void;
+  onApply: (fields: Record<string, string | number>, opts?: { replace?: boolean }) => Promise<void> | void;
 }
 
 const label9: React.CSSProperties = { fontFamily: 'monospace', fontSize: 9, letterSpacing: 0.5 };
 
-export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem }: ImportSheetDialogProps) {
+export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, currentData }: ImportSheetDialogProps) {
   const [pasted, setPasted] = useState('');
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const runPreview = async (body: FormData | string, isForm: boolean) => {
     setBusy(true);
     setError(null);
     setPreview(null);
     setApplied(false);
+    setConfirming(false);
     try {
       const res = await fetch('/api/sheets/import/preview', {
         method: 'POST',
@@ -92,6 +102,7 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem }:
     setError(null);
     setPreview(null);
     setApplied(false);
+    setConfirming(false);
     try {
       const res = await fetch('/api/sheets/import/companion', {
         method: 'POST',
@@ -110,10 +121,27 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem }:
   const handleApply = async () => {
     if (!preview) return;
     setBusy(true);
-    await onApply(preview.mapped);
+    setConfirming(false);
+    await onApply(preview.mapped, { replace: true });
     setBusy(false);
     setApplied(true);
   };
+
+  /**
+   * What a replace would erase: anything on the sheet now that this import does not carry.
+   *
+   * The point of the confirmation is that this list is *specific*. "Are you sure?" tells a
+   * player nothing they can act on; "you will lose weapon2_dmg and vehicle1_hp_max" tells
+   * them exactly what to write down first.
+   */
+  const losses = preview && currentData
+    ? Object.entries(currentData)
+        .filter(([k, v]) => v !== null && v !== undefined && String(v).trim() !== '')
+        .filter(([k]) => !(k in preview.mapped))
+        // Occupancy is not character data and survives a replace, so it is not a loss.
+        .filter(([k]) => !['in_vehicle', 'ride_owner', 'ride_vehicle', 'vehicle_seat'].includes(k))
+        .map(([k]) => k)
+    : [];
 
   const mappedCount = preview ? Object.keys(preview.mapped).length : 0;
   const unmappedKeys = preview ? Object.keys(preview.unmapped) : [];
@@ -219,14 +247,49 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem }:
                 TYPE IN YOURSELF: {preview.missing.join(' · ')}
               </div>
             )}
-            <button
-              className="upload-btn"
-              disabled={busy || mappedCount === 0 || applied}
-              onClick={handleApply}
-              style={{ padding: '6px', backgroundColor: applied ? 'var(--dark-green)' : 'var(--green)', color: applied ? 'var(--green)' : '#000', fontWeight: 'bold' }}
-            >
-              {applied ? '✓ APPLIED' : `APPLY ${mappedCount} FIELDS TO SHEET`}
-            </button>
+            {confirming ? (
+              <div style={{ border: '1px solid #ff3333', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ ...label9, color: '#ff3333' }}>
+                  THIS REPLACES THE SHEET — everything not in this import is cleared.
+                </div>
+                {losses.length > 0 ? (
+                  <div style={{ ...label9, opacity: 0.85, maxHeight: 80, overflowY: 'auto', wordBreak: 'break-word' }}>
+                    YOU WILL LOSE: {losses.slice(0, 40).join(', ')}{losses.length > 40 ? `, and ${losses.length - 40} more` : ''}
+                  </div>
+                ) : (
+                  <div style={{ ...label9, opacity: 0.7 }}>Nothing on the sheet would be lost.</div>
+                )}
+                <div style={{ ...label9, opacity: 0.6 }}>
+                  Cancel if you need to write any of it down first.
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="upload-btn danger-btn"
+                    style={{ flex: 1, marginTop: 0, padding: '5px' }}
+                    disabled={busy}
+                    onClick={handleApply}
+                  >
+                    REPLACE SHEET
+                  </button>
+                  <button
+                    className="utility-btn"
+                    style={{ flex: 1, padding: '5px' }}
+                    onClick={() => setConfirming(false)}
+                  >
+                    CANCEL
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                className="upload-btn"
+                disabled={busy || mappedCount === 0 || applied}
+                onClick={() => setConfirming(true)}
+                style={{ padding: '6px', backgroundColor: applied ? 'var(--dark-green)' : 'var(--green)', color: applied ? 'var(--green)' : '#000', fontWeight: 'bold' }}
+              >
+                {applied ? '✓ APPLIED' : `APPLY ${mappedCount} FIELDS TO SHEET`}
+              </button>
+            )}
           </div>
         )}
       </div>

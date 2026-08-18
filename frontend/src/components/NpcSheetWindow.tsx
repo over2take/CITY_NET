@@ -279,6 +279,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
     {isImportOpen && ReactDOM.createPortal(
       <ImportSheetDialog
         gameSystem={sheet?.system}
+        currentData={sheet?.data}
         pos={importPos}
         setPos={setImportPos}
         onClose={() => setIsImportOpen(false)}
