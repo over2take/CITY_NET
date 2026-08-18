@@ -9,6 +9,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.3] - 2026-08-18
+
+Cyberpunk RED characters can arrive from the Companion, by code.
+
+### Added
+
+- **Import a character with a six-digit code.** Build a character on the Cyberpunk RED Companion, export it, and type the code into `IMPORT_SHEET` — stats, skills, humanity, lifepath, and the names of your weapons, cyberware, gear and vehicles all come across. A third source beside the fillable PDF and the paste box, offered under Cyberpunk RED only, since the Companion is a Cyberpunk tool.
+
+  The fetch happens on the server rather than in your browser, so your address never reaches a service you did not choose to contact. It fails into a sentence rather than a hang: a code that does not resolve reads differently from a service that is down, because those are two different things to do next about.
+- **The preview is its own window.** What an import would do is the thing you have to read before agreeing to it, and it was previously a block below three inputs in a pane that scrolls. Now it opens beside the dialog with everything visible at once: what was recognised, what was skipped, and — new — **what the source never had**. An export names your car but carries no SDP, and being told that is the difference between "the import worked" and "the import is broken".
+- **IP and Reputation on the Cyberpunk RED sheet.** Both are currencies a table spends between sessions and neither had anywhere to live but prose in the notes.
+
+### Changed
+
+- **Applying an import replaces the sheet rather than merging into it.** Merging quietly kept the past: a skill you dropped at the source stayed on the sheet, and a weapon row that no longer existed kept its damage.
+
+  Because that is destructive, it goes through a confirmation that **names the fields you will lose** — not a warning, a list — so you can cancel and write them down first. Which vehicle you are riding in survives a replace: that is not character data, and re-importing a sheet should not turn you out of a car mid-session.
+- **The icon rail labels show on hover.** They were browser tooltips, which only appear once the pointer has *rested* — so the label came a beat late and never at all if you kept moving. Every rail button now has one, and they behave the same as each other, which they previously did not.
+
+---
+
 ## [1.9.2] - 2026-08-17
 
 Enemy vehicles for the GM, and friendly NPCs who can ride along.

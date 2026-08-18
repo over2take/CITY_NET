@@ -644,6 +644,32 @@ header {
   overflow: hidden;
 }
 
+/*
+ * Rail button labels.
+ *
+ * These were `title` attributes, which browsers only show once the pointer has *rested* —
+ * so the label appeared a beat after you arrived and never at all if you were moving. This
+ * shows on hover, immediately.
+ *
+ * Fixed rather than absolute, and portalled to the body: `.rail-center` sets
+ * `overflow: hidden`, which would clip anything drawn beside a button.
+ */
+.rail-tip {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  padding: 4px 8px;
+  color: var(--green);
+  background: var(--black);
+  border: 1px solid var(--green);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+  transform: translateY(-50%);
+}
+
 .rail-btn {
   background: none;
   border: 1px solid transparent;

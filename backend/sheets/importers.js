@@ -100,6 +100,13 @@ const buildCprAliases = () => {
     if (plain !== label) alias([plain], id);
   });
 
+  // The Companion writes this one as WardrobeAndStyle, which does not reduce to our
+  // "Wardrobe & Style" — every other stat and skill name it uses already does.
+  alias(['wardrobeandstyle'], 'wardrobe_style');
+
+  alias(['improvementpoints', 'ip'], 'improvement_points');
+  alias(['reputation', 'rep'], 'reputation');
+
   // Notes / gear
   alias(['weapons', 'weaponsnotes'], 'weapons_notes');
   alias(['ammunition', 'ammo'], 'ammunition');
@@ -166,6 +173,7 @@ const CPR_MAX_SEEDS = {
 };
 
 const NUMERIC_CPR_FIELDS = new Set([
+  'improvement_points', 'reputation', 'role_ability_rank',
   ...Array.from({ length: CPR_VEHICLE_ROWS }, (_, i) => i + 1).flatMap(i =>
     [`vehicle${i}_hp`, `vehicle${i}_hp_max`, `vehicle${i}_armor`, `vehicle${i}_crew`]),
   'int', 'ref', 'dex', 'tech', 'cool', 'will', 'move', 'body',

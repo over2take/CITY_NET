@@ -128,6 +128,11 @@ export const cyberpunkRed: SheetTemplate = {
         { id: 'role', label: 'Role', type: 'text', visibility: 'public', placeholder: 'Solo' },
         { id: 'role_ability', label: 'Role Ability', type: 'text', placeholder: 'Combat Awareness' },
         { id: 'role_ability_rank', label: 'Rank', type: 'number' },
+        // Both are real currencies a table spends and tracks between sessions, and neither
+        // had anywhere to live but prose in the notes. Added rather than folded in, because
+        // a number you increment every session should be a field you can edit.
+        { id: 'improvement_points', label: 'IP', type: 'number', hint: 'Improvement Points: spent to raise stats and skills. Banked between sessions.' },
+        { id: 'reputation', label: 'Reputation', type: 'number', hint: 'How widely your name is known — the Facedown rules read from it.' },
         { id: 'description', label: 'Description', type: 'textarea', visibility: 'public', placeholder: 'Chrome arm, mirrored optics, always smoking' },
         { id: 'aliases', label: 'Aliases', type: 'text', placeholder: 'The Ghost of Watson' },
       ],

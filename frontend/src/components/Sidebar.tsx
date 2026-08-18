@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import kofiLogo from '../assets/kofi.png';
 import { CityDataBaseMenu } from './CityDatabase';
 import type { CustomDie, AttackVehicle } from '../types';
@@ -1142,6 +1143,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
+  /** The rail label under the pointer, positioned from the button it belongs to. */
+  const [railTip, setRailTip] = useState<{ label: string; x: number; y: number } | null>(null);
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -1164,10 +1167,31 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
   }
 
   return (
+    <>
+    {railTip && createPortal(
+      <div className="rail-tip" style={{ left: railTip.x, top: railTip.y }}>{railTip.label}</div>,
+      document.body,
+    )}
     <div className={`sidebar ${activeMenu !== 'none' ? 'expanded' : ''}`}>
-      <div className="icon-rail">
+      {/* One listener for the whole rail rather than handlers on fourteen buttons: the
+          label a button wants is on the button, and the rail reads it on the way past. */}
+      <div
+        className="icon-rail"
+        onMouseOver={(e) => {
+          const btn = (e.target as HTMLElement).closest('[data-tip]') as HTMLElement | null;
+          if (!btn) return;
+          const r = btn.getBoundingClientRect();
+          setRailTip({ label: btn.dataset.tip || '', x: r.right + 8, y: r.top + r.height / 2 });
+        }}
+        onMouseOut={(e) => {
+          // Leaving for a child of the same button is not leaving the button.
+          const to = e.relatedTarget as HTMLElement | null;
+          if (to && to.closest?.('[data-tip]')) return;
+          setRailTip(null);
+        }}
+      >
         <div className="rail-top" style={{ borderBottom: '1px solid var(--dark-green)' }}>
-          <button className={`rail-btn system-trigger ${activeMenu === 'system_info' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'system_info' ? 'none' : 'system_info')} title="SYSTEM_INFO">
+          <button className={`rail-btn system-trigger ${activeMenu === 'system_info' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'system_info' ? 'none' : 'system_info')} aria-label="SYSTEM_INFO" data-tip="SYSTEM_INFO">
             <svg width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="system-icon-svg">
               <path d="M3 21h18" />
               <path d="M5 21V9h4v12" />
@@ -1178,7 +1202,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           </button>
         </div>
         <div style={{ padding: '10px 0', display: 'flex', justifyContent: 'center' }}>
-          <button className="rail-btn" onClick={onLogout} title="TERMINATE_SESSION">
+          <button className="rail-btn" onClick={onLogout} aria-label="TERMINATE_SESSION" data-tip="TERMINATE_SESSION">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
               <line x1="12" y1="2" x2="12" y2="12" />
@@ -1186,13 +1210,13 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           </button>
         </div>
         <div className="rail-center">
-          <button className={`rail-btn ${activeMenu === 'quick_access' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'quick_access' ? 'none' : 'quick_access')} title="QUICK_ACCESS">
+          <button className={`rail-btn ${activeMenu === 'quick_access' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'quick_access' ? 'none' : 'quick_access')} aria-label="QUICK_ACCESS" data-tip="QUICK_ACCESS">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
               <circle cx="12" cy="10" r="3"></circle>
             </svg>
           </button>
-          <button className={`rail-btn ${activeMenu === 'nav_controls' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'nav_controls' ? 'none' : 'nav_controls')} title="NAV_CONTROLS">
+          <button className={`rail-btn ${activeMenu === 'nav_controls' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'nav_controls' ? 'none' : 'nav_controls')} aria-label="NAV_CONTROLS" data-tip="NAV_CONTROLS">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="6" r="3" />
               <line x1="12" y1="9" x2="12" y2="14" />
@@ -1200,17 +1224,17 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               <path d="M16.5 17h.01" />
             </svg>
           </button>
-          <button className={`rail-btn ${activeMenu === 'geometry_protocols' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'geometry_protocols' ? 'none' : 'geometry_protocols')} title="TOKEN_PROTOCOLS">
+          <button className={`rail-btn ${activeMenu === 'geometry_protocols' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'geometry_protocols' ? 'none' : 'geometry_protocols')} aria-label="TOKEN_PROTOCOLS" data-tip="TOKEN_PROTOCOLS">
             <svg width="24" height="24" viewBox="0 0 24 24" fill={rhombusState?.color || 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
             </svg>
           </button>
-          <button className={`rail-btn ${isHitPointsOpen ? 'active' : ''}`} onClick={() => setIsHitPointsOpen(!isHitPointsOpen)} title="HIT_POINTS">
+          <button className={`rail-btn ${isHitPointsOpen ? 'active' : ''}`} onClick={() => setIsHitPointsOpen(!isHitPointsOpen)} aria-label="HIT_POINTS" data-tip="HIT_POINTS">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
           </button>
-          <button className={`rail-btn ${activeMenu === 'dice_menu' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'dice_menu' ? 'none' : 'dice_menu')} title="DICE_ROLLER">
+          <button className={`rail-btn ${activeMenu === 'dice_menu' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'dice_menu' ? 'none' : 'dice_menu')} aria-label="DICE_ROLLER" data-tip="DICE_ROLLER">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="12 2 20.5 7 20.5 17 12 22 3.5 17 3.5 7" />
               <polygon points="12 8 16.6 15.2 7.4 15.2" />
@@ -1225,7 +1249,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               <line x1="12" y1="22" x2="16.6" y2="15.2" />
             </svg>
           </button>
-          <button className={`rail-btn ${measureMode ? 'active' : ''}`} onClick={() => setMeasureMode(!measureMode)} title="MEASURE_TAPE">
+          <button className={`rail-btn ${measureMode ? 'active' : ''}`} onClick={() => setMeasureMode(!measureMode)} aria-label="MEASURE_TAPE" data-tip="MEASURE_TAPE">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0Z" />
               <path d="m14.5 12.5 2-2" />
@@ -1235,7 +1259,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
             </svg>
           </button>
           {isPrimaryAdmin && (
-            <button className={`rail-btn ${activeMenu === 'city_data_base' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'city_data_base' ? 'none' : 'city_data_base')} title="CITY_DATA_BASE">
+            <button className={`rail-btn ${activeMenu === 'city_data_base' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'city_data_base' ? 'none' : 'city_data_base')} aria-label="CITY_DATA_BASE" data-tip="CITY_DATA_BASE">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon>
                 <line x1="9" y1="3" x2="9" y2="21"></line>
@@ -1243,20 +1267,20 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               </svg>
             </button>
           )}
-          <button className={`rail-btn ${isChatOpen ? 'active' : ''} ${hasUnreadChat && !isChatOpen ? 'unread-flash' : ''}`} onClick={() => setIsChatOpen(!isChatOpen)} title="GLOBAL_CHAT">
+          <button className={`rail-btn ${isChatOpen ? 'active' : ''} ${hasUnreadChat && !isChatOpen ? 'unread-flash' : ''}`} onClick={() => setIsChatOpen(!isChatOpen)} aria-label="GLOBAL_CHAT" data-tip="GLOBAL_CHAT">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="16" rx="2" />
               <polyline points="7 9 10 12 7 15" />
               <line x1="12" y1="15" x2="16" y2="15" />
             </svg>
           </button>
-          <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} title="CITY_NET // BANK">
+          <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} aria-label="CITY_NET // BANK" data-tip="CITY_NET // BANK">
             <CurrencyIcon icon={currencyIcon} size={24} />
           </button>
           <button
             className={`rail-btn ${isRadioOpen ? 'active' : ''}`}
             onClick={onToggleRadio}
-            title="RADIO_FEED"
+            aria-label="RADIO_FEED" data-tip="RADIO_FEED"
             style={{ position: 'relative' }}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1278,7 +1302,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               onClick={token
                 ? () => { setActiveMenu(activeMenu === 'initiative_tracker' ? 'none' : 'initiative_tracker'); if (activeMenu !== 'initiative_tracker') onListCombats?.(); }
                 : onToggleInitiative}
-              title="INITIATIVE_TRACKER"
+              aria-label="INITIATIVE_TRACKER" data-tip="INITIATIVE_TRACKER"
               style={{ position: 'relative' }}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1324,7 +1348,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
                 </div>
               </div>
             )}
-            <button className={`rail-btn ${!audioEnabled ? 'muted' : ''}`} onClick={() => setAudioEnabled(!audioEnabled)} title={`${audioEnabled ? 'CLICK: MUTE_AUDIO' : 'CLICK: UNMUTE_AUDIO'} // HOVER: MASTER_VOLUME`}>
+            <button className={`rail-btn ${!audioEnabled ? 'muted' : ''}`} onClick={() => setAudioEnabled(!audioEnabled)} aria-label={`${audioEnabled ? 'CLICK: MUTE_AUDIO' : 'CLICK: UNMUTE_AUDIO'} // HOVER: AUDIO_MIXER`} data-tip={`${audioEnabled ? 'CLICK: MUTE_AUDIO' : 'CLICK: UNMUTE_AUDIO'} // HOVER: AUDIO_MIXER`}>
               {audioEnabled ? (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
@@ -1365,5 +1389,6 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -1228,7 +1228,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           [info.userName, system],
           (err2, row) => {
             if (err2 || !row) return;
-            const data = JSON.parse(row.data || '{}');
+            const existing = JSON.parse(row.data || '{}');
+
+            // A replace starts from empty rather than merging, so a skill dropped on the
+            // source does not linger and a weapon row that no longer exists does not keep
+            // its damage. What survives is state that is not character data at all:
+            // occupancy says which car this player is sitting in, and re-importing a sheet
+            // is not a statement about that. Dropping them would turn someone out of a
+            // vehicle mid-session with no message.
+            const data = payload.replace
+              ? Object.fromEntries(
+                  Object.entries(existing).filter(([k]) => vehicleState.OCCUPANCY_FIELDS.includes(k)),
+                )
+              : existing;
             entries.forEach(([k, v]) => { data[k] = v; });
             entries.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
             db.run(
