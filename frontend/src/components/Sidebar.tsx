@@ -1348,7 +1348,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
                 </div>
               </div>
             )}
-            <button className={`rail-btn ${!audioEnabled ? 'muted' : ''}`} onClick={() => setAudioEnabled(!audioEnabled)} aria-label={`${audioEnabled ? 'CLICK: MUTE_AUDIO' : 'CLICK: UNMUTE_AUDIO'} // HOVER: MASTER_VOLUME`} data-tip={`${audioEnabled ? 'CLICK: MUTE_AUDIO' : 'CLICK: UNMUTE_AUDIO'} // HOVER: MASTER_VOLUME`}>
+            <button className={`rail-btn ${!audioEnabled ? 'muted' : ''}`} onClick={() => setAudioEnabled(!audioEnabled)} aria-label={`${audioEnabled ? 'CLICK: MUTE_AUDIO' : 'CLICK: UNMUTE_AUDIO'} // HOVER: AUDIO_MIXER`} data-tip={`${audioEnabled ? 'CLICK: MUTE_AUDIO' : 'CLICK: UNMUTE_AUDIO'} // HOVER: AUDIO_MIXER`}>
               {audioEnabled ? (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
