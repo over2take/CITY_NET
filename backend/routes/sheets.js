@@ -7,6 +7,7 @@ const { authenticate } = require('../middleware/auth');
 const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc } = require('../sheets/templates');
 const sheetImporters = require('../sheets/importers');
 const pdfTemplate = require('../sheets/pdfTemplate');
+const companionFetch = require('../sheets/companionFetch');
 const sheetAttack = require('../sheets/attack');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
@@ -254,6 +255,50 @@ module.exports = (db, io) => {
       } catch (e) {
         res.status(422).json({ error: `Could not read input: ${e.message}` });
       }
+    });
+  });
+
+  // A Cyberpunk RED Companion character, by its six-digit code.
+  //
+  // A third source for the same preview the PDF and the paste box feed, so nothing is
+  // written here either — the player looks at what came back and then applies it.
+  //
+  // Server-side rather than from the browser: it avoids CORS, and it keeps the player's
+  // address out of a request to a third party they did not choose to contact. One code is
+  // one pair of requests, and a bad code is refused before any of it leaves the building.
+  router.post('/import/companion', (req, res) => {
+    getGameSystem(async (err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      // The Companion is a Cyberpunk tool. Offering it under another system would be a
+      // button that could only ever fail.
+      if (system !== 'cyberpunk_red') {
+        return res.status(400).json({ error: 'Companion codes are Cyberpunk RED only' });
+      }
+      const importer = sheetImporters.getImporter(system);
+      if (!importer) return res.status(400).json({ error: `No importer for ${system} yet` });
+
+      const result = await companionFetch.fetchCharacter(req.body && req.body.code);
+      if (result.error) {
+        // 400 for a code the player can fix, 502 for their service failing us.
+        const theirFault = ['TIMEOUT', 'UNREACHABLE', 'SERVICE_ERROR', 'BAD_RESPONSE'].includes(result.error);
+        return res.status(theirFault ? 502 : 400).json({
+          error: companionFetch.REASONS[result.error] || 'Could not read that code',
+          reason: result.error,
+        });
+      }
+
+      const { mapped, unmapped, skipped } = importer.mapFields(result.candidates);
+      res.json({
+        system,
+        source: 'companion',
+        mapped,
+        unmapped,
+        skipped,
+        // What the export could not give up — vehicle stats, weapon damage, an older
+        // format's stats. Shown beside the preview so nobody reads a gap as a failure.
+        missing: result.missing,
+        exportVersion: result.version,
+      });
     });
   });
 
