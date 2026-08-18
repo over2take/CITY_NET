@@ -1,4 +1,6 @@
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -386,5 +388,49 @@ describe('Attack result banner AC visibility', () => {
     render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} attackPending={pending} />);
     expect(screen.queryByText(/AC 18/)).toBeNull();
     expect(screen.queryByText(/rolled/)).toBeNull();
+  });
+});
+
+/**
+ * Rail button labels.
+ *
+ * They were `title` attributes, which browsers only show once the pointer has *rested* — so
+ * the label arrived a beat late, and never at all if you kept moving. The rail draws its own
+ * on hover instead, positioned from the button and portalled clear of `.rail-center`, which
+ * sets `overflow: hidden` and would clip anything drawn beside a button.
+ *
+ * Checked against the source rather than a render, deliberately: several rail buttons only
+ * appear for an admin or in a particular view, so a render test would pass while missing the
+ * very ones most likely to be forgotten. A button with no label is an icon nobody can
+ * identify, and nothing else in the suite would catch it.
+ */
+describe('the icon rail labels every button', () => {
+  // From the project root: `import.meta.url` is not a file URL under the test runner.
+  const source = readFileSync(resolve(process.cwd(), 'src/components/Sidebar.tsx'), 'utf8');
+  const lines = source.split('\n');
+
+  /**
+   * Each rail button, however many lines its JSX is spread over.
+   *
+   * Cut at `</button` rather than at the first `>`: an `onClick` arrow function contains
+   * one, so splitting on it truncates the tag before the attributes we are checking for.
+   */
+  const railButtons = lines
+    .map((ln, i) => (ln.includes('rail-btn')
+      ? lines.slice(i, i + 14).join('\n').split('</button')[0]
+      : null))
+    .filter((tag): tag is string => tag !== null);
+
+  it('finds the rail buttons at all, so an empty pass means something', () => {
+    expect(railButtons.length).toBeGreaterThan(10);
+  });
+
+  it('gives every one a label and an accessible name', () => {
+    expect(railButtons.filter(tag => !tag.includes('data-tip='))).toEqual([]);
+    expect(railButtons.filter(tag => !tag.includes('aria-label='))).toEqual([]);
+  });
+
+  it('leaves none of them on the native tooltip, which is the slow one', () => {
+    expect(railButtons.filter(tag => tag.includes('title='))).toEqual([]);
   });
 });
