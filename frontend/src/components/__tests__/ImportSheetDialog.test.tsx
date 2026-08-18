@@ -138,6 +138,20 @@ describe('the Companion code', () => {
     vi.unstubAllGlobals();
   });
 
+  it('says the backend may need restarting when the reply is not JSON', async () => {
+    // An unknown route falls through to the single-page app and answers with HTML. Calling
+    // that a network problem sends someone hunting the wrong fault entirely.
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      json: async () => { throw new Error('unexpected token <'); },
+    })));
+    open('cyberpunk_red');
+    await userEvent.type(screen.getByLabelText('Companion code'), '6LZKP7');
+    await userEvent.click(screen.getByText('FETCH'));
+    expect(await screen.findByText(/needs restarting/)).toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
   it('shows the reason the server gave when a code does not resolve', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: false,

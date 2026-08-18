@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 
 // Sheet import dialog. Three inputs, one preview, one APPLY:
@@ -48,6 +48,18 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
   const [busy, setBusy] = useState(false);
   const [applied, setApplied] = useState(false);
   const [confirming, setConfirming] = useState(false);
+
+  /**
+   * The result renders under three inputs, and the window's content pane scrolls at 300px.
+   * Adding the code box pushed it out of sight — so a perfectly clear error looked exactly
+   * like nothing happening. Bring it into view whenever there is something to see.
+   */
+  const resultRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    // Optional call: jsdom has no scrollIntoView, and an effect that throws takes the
+    // whole dialog down with it.
+    if (preview || error) resultRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [preview, error]);
 
   const runPreview = async (body: FormData | string, isForm: boolean) => {
     setBusy(true);
@@ -109,7 +121,16 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: clean }),
       });
-      const data = await res.json();
+      // An unknown route falls through to the single-page app, so the body is HTML rather
+      // than JSON. Parsing that throws, and reporting it as "could not reach server" sends
+      // someone hunting a network problem when the real answer is a backend that has not
+      // been restarted since this route was added.
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        return setError('The server did not answer with data. If it was just updated, it needs restarting.');
+      }
       if (!res.ok) setError(data.error || 'Could not read that code');
       else setPreview(data);
     } catch {
@@ -219,6 +240,7 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
           {busy ? 'READING…' : 'PREVIEW'}
         </button>
 
+        <div ref={resultRef} />
         {error && <div style={{ ...label9, color: '#ff3333', border: '1px solid #ff3333', padding: '4px 8px' }}>{error}</div>}
 
         {preview && (
