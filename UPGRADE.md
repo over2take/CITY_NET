@@ -47,6 +47,35 @@ pm2 restart citynet-backend
 
 ## Environment variable changes by version
 
+### [1.9.4]
+
+No new or changed environment variables, and **Docker installs need to do nothing** — the
+one repository file this release touches is `nginx.conf`, which is built into the frontend
+image rather than mounted from disk, so a normal pull or the in-app update carries it.
+
+**If you run behind your own reverse proxy** — a manual install, or Docker with something
+in front of it — add these to the block that proxies `/api/`:
+
+```
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+Without them every request reaches the backend from the proxy's address, so the new
+per-player limit on Companion character imports counts your whole table as one caller.
+Ten imports between everybody rather than ten each — a nuisance on a busy session night,
+not a failure, and nothing else depends on it.
+
+**If the backend is exposed directly, with no proxy at all**, put one in front of it. The
+app now trusts one forwarding hop, which is correct behind a proxy and means a client
+talking to the backend directly can claim to be any address it likes. The shipped
+`docker-compose.yml` never publishes the backend port, so this does not apply to a stock
+install.
+
+One behaviour change worth knowing after you update: if Docker Hub rate-limits your update
+check, you will now see an error saying so. It previously reported **"You're up to date"**
+in that situation, which was indistinguishable from there being no new release.
+
 ### [1.8.1]
 - **`IMAGE_TAG`** — Optional, defaults to `latest`. Selects the release channel: `latest` for stable releases, `dev` for development builds, or a pinned version such as `1.8.1`.
 
