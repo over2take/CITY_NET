@@ -247,15 +247,26 @@ function fetchVersionTags(opts = {}) {
  * caused data loss on in-app updates prior to 1.6.3).
  */
 function buildUpdateHelperArgs(hostWorkingDir, hostConfigFile, projectArgs) {
-  const projectArgsStr = projectArgs.join(' ');
   return [
     'run', '--rm',
     '-v', '/var/run/docker.sock:/var/run/docker.sock',
     '-v', `${hostWorkingDir}:${hostWorkingDir}`,
     '-v', `${hostConfigFile}:${COMPOSE_FILE}:ro`,
     'over2take/citynet-backend:latest',
-    'sh', '-c',
-    `docker compose --project-directory "${hostWorkingDir}" -f ${COMPOSE_FILE} ${projectArgsStr} up -d`,
+    // No `sh -c`. The command used to be assembled into a shell string with the working
+    // directory interpolated in double quotes, which reads safe and is not: double quotes
+    // stop word-splitting, they do not stop `$(...)` or backticks. Both that path and the
+    // project name come from compose labels, so a project directory containing a command
+    // substitution would have run it — inside a container holding the Docker socket.
+    //
+    // Passing argv instead means nothing is ever parsed as shell, which removes the class
+    // rather than guarding one instance of it. Each argument arrives as written, spaces
+    // and all, so it also fixes a working directory with a space in it.
+    'docker', 'compose',
+    '--project-directory', hostWorkingDir,
+    '-f', COMPOSE_FILE,
+    ...projectArgs,
+    'up', '-d',
   ];
 }
 
@@ -329,31 +340,85 @@ function preflight(deps = {}) {
 /** Update progress, so the client can be told rather than left guessing. */
 const state = {
   phase: 'idle',
+  code: null,
   error: null,
   startedAt: null,
   finishedAt: null,
 };
 
+/** Phases in which an update is under way and a second one must not start. */
+const RUNNING_PHASES = ['pulling', 'restarting'];
+
+/**
+ * How long a run may hold the lock before another may take it.
+ *
+ * A pull that hangs would otherwise deaden the update button for the life of the process,
+ * with nothing to clear it — and the phase lives in memory, so the only other way out is
+ * the restart the update was supposed to perform. Fifteen minutes is well past a slow
+ * pull on a slow line and well short of an afternoon.
+ */
+const STALE_RUN_MS = 15 * 60 * 1000;
+
+/**
+ * Whether an update is already under way.
+ *
+ * `runUpdate` used to spawn unconditionally, so a double-click ran two `compose pull`
+ * processes and then two privileged helper containers against the same stack, each
+ * recreating containers the other was also recreating. The second press also cleared the
+ * first run's error, so a failure could be erased before anyone had read it.
+ */
+function isRunning(now = Date.now()) {
+  if (!RUNNING_PHASES.includes(state.phase)) return false;
+  return !(state.startedAt && now - state.startedAt > STALE_RUN_MS);
+}
+
+/**
+ * What the client is told when an update fails.
+ *
+ * A stable code and a sentence of ours. The reason it is not the underlying message: the
+ * status endpoint is public — the client has to keep reading it across the restart, when
+ * nobody is logged in — and `docker compose` writes host paths, image names and absolute
+ * directories into its output. None of that helps someone who can only retry or wait, and
+ * all of it goes to `backend/data/update.log`, which is on the host where it belongs.
+ */
+const FAILURES = {
+  DOCKER_UNAVAILABLE: 'Could not run docker. See backend/data/update.log.',
+  COMPOSE_PULL_FAILED: 'The image pull failed. See backend/data/update.log for the reason.',
+  HELPER_FAILED: 'The update helper could not be started. See backend/data/update.log.',
+};
+
+/**
+ * Public update progress.
+ *
+ * This used to return the last forty lines of the update log alongside the phase, on an
+ * unauthenticated route — and nothing ever displayed them. Forty lines of compose output,
+ * including host paths, published to anyone who asked, for no one.
+ */
 function getState() {
-  let log = '';
-  try {
-    const raw = fs.readFileSync(logPath(), 'utf8');
-    log = raw.split('\n').slice(-40).join('\n');
-  } catch { /* no log yet */ }
-  return { ...state, bootId: BOOT_ID, log };
+  return { ...state, bootId: BOOT_ID };
 }
 
 function resetState() {
   state.phase = 'idle';
+  state.code = null;
   state.error = null;
   state.startedAt = null;
   state.finishedAt = null;
 }
 
-function fail(error) {
+/** Where the detail goes instead of into the response. */
+function note(line) {
+  try {
+    fs.appendFileSync(logPath(), `[${new Date().toISOString()}] ${line}\n`);
+  } catch { /* the log is a convenience, not a dependency */ }
+}
+
+function fail(code, detail) {
   state.phase = 'failed';
-  state.error = error;
+  state.code = code;
+  state.error = FAILURES[code] || 'The update failed. See backend/data/update.log.';
   state.finishedAt = Date.now();
+  if (detail) note(`${code}: ${detail}`);
 }
 
 /**
@@ -364,12 +429,22 @@ function fail(error) {
  * their output, which left nothing to diagnose when an update quietly did nothing.
  */
 function runUpdate(labels, deps = {}) {
+  // One clock for the whole decision. Marking the start with the real time while judging
+  // staleness by an injected one compares two different clocks, which is only ever true
+  // by accident.
+  const nowFn = deps.now || Date.now;
+
+  // Refused here as well as at the route. This spawns privileged containers, and a guard
+  // that lives only in the caller is one refactor away from not being there.
+  if (isRunning(nowFn())) return null;
+
   const spawnFn = deps.spawn || spawn;
   const open = deps.openSync || fs.openSync;
 
   state.phase = 'pulling';
+  state.code = null;
   state.error = null;
-  state.startedAt = Date.now();
+  state.startedAt = nowFn();
   state.finishedAt = null;
 
   let out;
@@ -386,11 +461,11 @@ function runUpdate(labels, deps = {}) {
   const pull = spawnFn('docker', [...composeArgs, 'pull'], { detached: true, stdio });
   pull.unref();
 
-  pull.on('error', (err) => fail(`Could not run docker: ${err.message}`));
+  pull.on('error', (err) => fail('DOCKER_UNAVAILABLE', err.message));
 
   pull.on('close', (code) => {
     if (code !== 0) {
-      return fail(`"docker compose pull" exited with code ${code}. See update.log for the reason.`);
+      return fail('COMPOSE_PULL_FAILED', `"docker compose pull" exited with code ${code}`);
     }
     state.phase = 'restarting';
     const helper = spawnFn(
@@ -399,7 +474,7 @@ function runUpdate(labels, deps = {}) {
       { detached: true, stdio }
     );
     helper.unref();
-    helper.on('error', (err) => fail(`Could not start the update helper: ${err.message}`));
+    helper.on('error', (err) => fail('HELPER_FAILED', err.message));
   });
 
   return pull;
@@ -423,6 +498,9 @@ module.exports = {
   readComposeLabels,
   preflight,
   runUpdate,
+  isRunning,
+  STALE_RUN_MS,
+  FAILURES,
   getState,
   resetState,
   logPath,

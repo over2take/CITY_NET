@@ -256,12 +256,27 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   router.post('/update', authenticate, (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
 
+    // An update already under way is not a queue to join. Two `compose pull` runs and
+    // two privileged helper containers against the same stack, each recreating what the
+    // other is recreating, is not twice an update — so the second press is refused
+    // rather than honoured, and the run in flight is left alone.
+    if (updater.isRunning()) {
+      return res.status(409).json({
+        error: 'An update is already running. Watch the status for it to finish.',
+        phase: updater.getState().phase,
+      });
+    }
+
     // Checked before answering, so a stack that cannot update says why instead of
     // reporting success and leaving the client polling for a restart that never comes.
     const check = updater.preflight();
     if (!check.ok) return res.status(409).json({ error: check.error });
 
-    updater.runUpdate(check.labels);
+    // Refused inside runUpdate as well, which is what actually holds if two requests
+    // arrive close enough together to both pass the check above.
+    if (!updater.runUpdate(check.labels)) {
+      return res.status(409).json({ error: 'An update is already running.' });
+    }
     res.json({ message: 'Update started' });
   });
 

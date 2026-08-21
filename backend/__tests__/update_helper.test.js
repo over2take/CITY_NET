@@ -29,10 +29,12 @@ describe('buildUpdateHelperArgs — volume mounts', () => {
 
   it('passes --project-directory pointing to the host working dir', () => {
     const args = buildUpdateHelperArgs(WORKING_DIR, CONFIG_FILE, NO_PROJECT);
-    const shellCmd = args[args.length - 1];
-    expect(shellCmd).toContain(`--project-directory "${WORKING_DIR}"`);
-    expect(shellCmd).not.toContain('--project-directory "/project"');
-    expect(shellCmd).not.toContain('--project-directory /project');
+    // One argv element, not a substring of a shell command: the value arrives exactly as
+    // written, whatever is in it.
+    const at = args.indexOf('--project-directory');
+    expect(at).toBeGreaterThan(-1);
+    expect(args[at + 1]).toBe(WORKING_DIR);
+    expect(args).not.toContain('/project');
   });
 
   it('mounts the compose file read-only at /tmp/docker-compose.yml', () => {
@@ -47,9 +49,32 @@ describe('buildUpdateHelperArgs — volume mounts', () => {
     expect(vArgs).toContain('/var/run/docker.sock:/var/run/docker.sock');
   });
 
-  it('forwards project name args into the shell command', () => {
+  it('forwards the project name as its own argument', () => {
     const args = buildUpdateHelperArgs(WORKING_DIR, CONFIG_FILE, WITH_PROJECT);
-    const shellCmd = args[args.length - 1];
-    expect(shellCmd).toContain('-p mapsystem');
+    const at = args.indexOf('-p');
+    expect(at).toBeGreaterThan(-1);
+    expect(args[at + 1]).toBe('mapsystem');
+  });
+
+  it('never hands the command to a shell', () => {
+    // The command was assembled into an `sh -c` string with the working directory
+    // interpolated in double quotes, which reads safe and is not — double quotes stop
+    // word-splitting, they do not stop `$(...)` or backticks. The path comes from a
+    // compose label, so a project directory named with a command substitution would have
+    // run it, in a container holding the Docker socket.
+    const nasty = '/srv/$(touch /tmp/pwned)';
+    const args = buildUpdateHelperArgs(nasty, CONFIG_FILE, WITH_PROJECT);
+
+    expect(args).not.toContain('sh');
+    expect(args).not.toContain('-c');
+    // Present, and present whole — carried as data rather than parsed.
+    expect(args).toContain(nasty);
+    expect(args.filter((a) => a.includes('touch /tmp/pwned'))).toHaveLength(2); // the -v mount and the --project-directory
+  });
+
+  it('survives a working directory with a space in it', () => {
+    const spaced = '/srv/my city';
+    const args = buildUpdateHelperArgs(spaced, CONFIG_FILE, NO_PROJECT);
+    expect(args[args.indexOf('--project-directory') + 1]).toBe(spaced);
   });
 });
