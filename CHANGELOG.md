@@ -9,6 +9,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.10.0] - 2026-08-21
+
+Animated battle maps.
+
+### Added
+
+- **A battle map can be a looping video.** Drop in a `.webm`, `.mp4` or `.m4v` and it plays under the tokens — rain on the pavement, a flickering neon sign, water moving under a walkway. The animated map packs people buy work as they are; there is nothing to convert and nothing to configure.
+
+  It loops, and it is silent — every browser refuses to start a video with sound on its own, and a map that will not move until somebody clicks looks broken rather than deliberate. Playback stops while the tab is hidden, so a session left open overnight is not quietly decoding video at your laptop.
+
+  Still maps take exactly the path they always did. Nothing about an existing map changes.
+
+### Fixed
+
+- **The map uploader now offers video in the file picker.** It was images only, so an animated map could not be selected without switching the dialog to show all files — and until now, doing that got you a successful upload and a blank map, because nothing in the app could draw one.
+
+---
+
 ## [1.9.5] - 2026-08-21
 
 The other half of the security pass: the update button, which is the one part of CITY_NET that runs as root on your machine.

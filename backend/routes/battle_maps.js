@@ -19,12 +19,15 @@ const { authenticate } = require('../middleware/auth');
  * where it could — opened directly at its URL — is closed by the sandbox header on the
  * static mount rather than by refusing a format a GM may legitimately have.
  *
- * Video is absent because there is no video path in the renderer, not because it would be
- * unwelcome — animated map loops are a real thing people buy. Adding `.webm`/`.mp4` here
- * without a `VideoTexture` to draw them would only produce a blank map more elaborately.
+ * Video sits alongside the stills rather than in place of them: the scene picks its loader
+ * by extension, so a loop is drawn through a `VideoTexture` and everything else through
+ * `TextureLoader`. Kept to the containers a browser will decode without being told which
+ * codec to expect — an animated map that plays for the GM and not for half the table is
+ * worse than one nobody can use.
  */
 const IMAGE_EXT = new Set([
   '.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.bmp', '.svg',
+  '.webm', '.mp4', '.m4v',
 ]);
 
 module.exports = (db, io, { emitUpdate }) => {

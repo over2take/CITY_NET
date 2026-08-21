@@ -381,10 +381,19 @@ describe('POST battle map — what it accepts', () => {
     }
   });
 
-  it('refuses video, which needs a renderer it does not have yet', async () => {
-    // Animated map loops are a real thing people buy, and this is not a judgement on
-    // them — there is simply no VideoTexture path, so the file would draw as nothing.
-    for (const ext of ['webm', 'mp4']) {
+  it('takes the video containers the scene can play', async () => {
+    // Animated map loops, drawn through a VideoTexture rather than TextureLoader. Kept to
+    // containers a browser decodes without being told which codec to expect.
+    for (const ext of ['webm', 'mp4', 'm4v']) {
+      const res = await send(`map.${ext}`);
+      expect(res.status, ext).toBe(200);
+    }
+  });
+
+  it('still refuses video formats no browser will play', async () => {
+    // The rule did not change: the list is what the scene can draw. A .mov or .avi map
+    // would upload perfectly and then show nothing.
+    for (const ext of ['mov', 'avi', 'mkv', 'wmv']) {
       const res = await send(`map.${ext}`);
       expect(res.status, ext).toBe(400);
     }

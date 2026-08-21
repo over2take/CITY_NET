@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { MAP_ACCEPT } from './battleMapMedia';
 
 interface ConfirmModal { message: string; onConfirm: () => void; }
 
@@ -168,7 +169,7 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
 
         {tab === 'upload' && (
           <div style={{ marginBottom: '16px', borderBottom: '1px solid #333', paddingBottom: '16px' }}>
-            <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+            <input type="file" accept={MAP_ACCEPT} onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
               style={{ display: 'block', marginBottom: '6px', color: 'var(--green)' }} />
             {selectedFile && (() => {
               const mb = selectedFile.size / (1024 * 1024);
