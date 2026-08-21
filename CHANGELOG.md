@@ -13,7 +13,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 A pass over everything the server does that leaves the process.
 
-Nothing here was being exploited, and nothing here changes what the app does. Two features reach services we do not own — the update check and the Companion character import — and they had grown two separate sets of gaps, each easy to get right once and easy to forget twice.
+Nothing here was being exploited. Two features reach services we do not own — the update check and the Companion character import — and they had grown two separate sets of gaps, each easy to get right once and easy to forget twice. Almost nothing here changes what you see; the one exception is an update check that used to lie to you, below.
+
+Docker installs need do nothing. If you run your own reverse proxy in front of CITY_NET, see UPGRADE.md — there are two header lines to add.
 
 ### Security
 
@@ -34,6 +36,10 @@ Nothing here was being exploited, and nothing here changes what the app does. Tw
 - **The server can tell your table apart.** Every request arrives through the frontend's web server, which was not passing along who sent it — so as far as the backend could see, everyone at the table was one caller. Anything counting per person would have counted the whole house together, and the first player to import a character would have used up everyone's allowance.
 
 ### Fixed
+
+- **A throttled update check told you that you were up to date.** Docker Hub rate-limits anonymous requests. When it did, its refusal was read as though it were a list of releases — an empty one — and an empty list is indistinguishable from there being nothing newer to install. So the check reported **"You're up to date"** while never having found out. It now says the registry refused the request, which is a thing you can act on: wait, and ask again.
+
+  Whether you ever hit this depends on how often you press the button and what else shares your address, which is exactly why it was worth fixing rather than leaving to chance.
 
 - **The update tests had been quietly talking to the real Docker Hub.** They stubbed the network at a layer the code stopped using, so the stub silently stopped applying and the suite kept passing — because the real registry happened to agree with what the tests expected. It would have started failing on its own the day a release was published. The suite now refuses any real outbound call and names the address it caught, so this cannot happen a third time.
 
