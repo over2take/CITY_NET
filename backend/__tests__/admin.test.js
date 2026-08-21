@@ -3,7 +3,6 @@ import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import https from 'https';
 import { vi } from 'vitest';
 import { makeTestDb, get, all, run } from './helpers/testDb.js';
 import adminRouteFactory from '../routes/admin.js';
@@ -310,21 +309,21 @@ describe('update routes', () => {
  * always correct in isolation, and it was the route's use of it that shipped broken.
  */
 describe('POST /api/admin/check-update', () => {
-  /** Stand in for the Docker Hub tag listing. */
+  /**
+   * Stand in for the Docker Hub tag listing.
+   *
+   * Stubs `fetch`, which is what the request goes through now that it belongs to
+   * `net/outbound`. This used to stub the `https` module, and when the transport changed
+   * underneath it the stub silently stopped applying — leaving these tests talking to the
+   * real Docker Hub and passing because the real answer happened to agree with them.
+   */
   const withTags = (names) => {
     const body = JSON.stringify({ results: names.map((name) => ({ name })) });
-    return vi.spyOn(https, 'request').mockImplementation((options, cb) => {
-      const handlers = {};
-      const upstream = { on: (evt, fn) => { handlers[evt] = fn; return upstream; } };
-      const req = {
-        on: () => req,
-        end: () => {
-          cb(upstream);
-          process.nextTick(() => { handlers.data?.(body); handlers.end?.(); });
-        },
-      };
-      return req;
-    });
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(async () => ({
+      status: 200,
+      ok: true,
+      text: async () => body,
+    }));
   };
 
   const check = () => request(app)

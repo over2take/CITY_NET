@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
+const outbound = require('./net/outbound');
 
 /**
  * In-app self-update.
@@ -20,6 +21,38 @@ const COMPOSE_FILE = '/tmp/docker-compose.yml';
 
 /** Identifies this process. A restart is what the client is really waiting for. */
 const BOOT_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+/**
+ * Whether this process can reach a Docker daemon — asked once, then remembered.
+ *
+ * `GET /api/version` is unauthenticated by design, and it used to run this probe on every
+ * request. `execSync` blocks the whole event loop until the daemon answers, so anyone who
+ * could reach that endpoint could hold the entire server still simply by asking for it
+ * repeatedly. Nothing about the answer can change while the process lives — the socket is
+ * mounted at container start or it is not — so the probe belongs to the process, not to
+ * the request.
+ *
+ * The timeout is for the other half of the same problem: a socket that is present but
+ * unresponsive would otherwise block for as long as it liked, once.
+ */
+let dockerAvailable = null;
+
+const probeDocker = (exec) => {
+  try {
+    exec('docker info', { stdio: 'ignore', timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+function isDockerAvailable(deps = {}) {
+  if (dockerAvailable === null) dockerAvailable = probeDocker(deps.execSync || execSync);
+  return dockerAvailable;
+}
+
+/** Tests only — the memo is process-lifetime by design. */
+isDockerAvailable.forget = () => { dockerAvailable = null; };
 
 /** Update log, on the data volume so it survives the container being replaced. */
 function logPath() {
@@ -114,6 +147,27 @@ function allowsDevBuilds(env = process.env) {
 }
 
 /** The registry listing the update check reads. */
+/**
+ * What a failed registry read is called.
+ *
+ * The reasons come back from `outbound` as codes; these are the sentences. Deliberately
+ * free of anything the registry said — an upstream message can carry detail we did not
+ * choose to publish, and none of it helps an admin who can only retry or wait.
+ *
+ * `Failed to parse Docker Hub response` is load-bearing: the route matches on it to tell
+ * "their answer was nonsense" (a 500) from "we could not reach them" (a 502).
+ */
+const REGISTRY_FAILURES = {
+  BAD_RESPONSE: 'Failed to parse Docker Hub response',
+  BAD_URL: 'Refused a malformed registry URL',
+  BLOCKED_HOST: 'Refused a registry page pointing off Docker Hub',
+  NOT_FOUND: 'Docker Hub has no tag list for this image',
+  SERVICE_ERROR: 'Docker Hub refused the request',
+  TIMEOUT: 'Docker Hub did not answer in time',
+  TOO_LARGE: 'Docker Hub sent more than we are willing to read',
+  UNREACHABLE: 'Could not reach Docker Hub',
+};
+
 const REGISTRY_HOST = 'hub.docker.com';
 const REGISTRY_PATH = '/v2/repositories/over2take/citynet-frontend/tags?page_size=100';
 
@@ -138,44 +192,40 @@ const MAX_TAG_PAGES = 5;
  * Normally it stops after one request, because the newest release is on the first page.
  */
 function fetchVersionTags(opts = {}) {
-  const httpsMod = opts.https || require('https');
+  const fetchImpl = opts.fetchImpl;
   const allowDev = opts.allowDev ?? false;
   const maxPages = opts.maxPages ?? MAX_TAG_PAGES;
 
-  const readPage = (host, path) => new Promise((resolve, reject) => {
-    const req = httpsMod.request({ hostname: host, path, method: 'GET' }, (upstream) => {
-      let body = '';
-      upstream.on('data', (chunk) => { body += chunk; });
-      upstream.on('end', () => {
-        try {
-          resolve(JSON.parse(body));
-        } catch {
-          reject(new Error('Failed to parse Docker Hub response'));
-        }
-      });
-    });
-    req.on('error', reject);
-    req.end();
-  });
+  const pageUrl = (pathAndQuery) => `https://${REGISTRY_HOST}${pathAndQuery}`;
 
   const walk = async () => {
     const found = [];
-    let host = REGISTRY_HOST;
-    let path = REGISTRY_PATH;
+    let url = pageUrl(REGISTRY_PATH);
 
     for (let page = 0; page < maxPages; page++) {
-      const data = await readPage(host, path);
-      for (const tag of data?.results ?? []) {
+      const { doc, error } = await outbound.getJson(url, {
+        allowHosts: [REGISTRY_HOST],
+        fetchImpl,
+        ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+      });
+      // Rejecting rather than resolving empty: an empty list is indistinguishable from
+      // "no releases published", and the route would report that you are up to date.
+      if (error) throw new Error(REGISTRY_FAILURES[error] || 'Docker Hub request failed');
+
+      for (const tag of doc?.results ?? []) {
         if (isVersionTag(tag.name, allowDev)) found.push(tag.name);
       }
       // Anything on a later page was updated longer ago, so once this channel has
       // something there is nothing to gain by reading on.
-      if (found.length > 0 || !data?.next) break;
+      if (found.length > 0 || !doc?.next) break;
 
       try {
-        const next = new URL(data.next);
-        host = next.hostname;
-        path = `${next.pathname}${next.search}`;
+        // Their payload supplies the path to read next, never the host to read it from.
+        // `next` is a full URL, and taking its hostname — as this used to — lets whoever
+        // answers choose where we knock next. The allowlist would refuse a foreign host
+        // anyway; discarding it here means we never ask.
+        const next = new URL(doc.next);
+        url = pageUrl(`${next.pathname}${next.search}`);
       } catch {
         break;
       }
@@ -358,6 +408,7 @@ function runUpdate(labels, deps = {}) {
 module.exports = {
   COMPOSE_FILE,
   BOOT_ID,
+  isDockerAvailable,
   parseVersion,
   compareVersions,
   isVersionTag,

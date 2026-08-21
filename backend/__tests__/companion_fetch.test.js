@@ -31,21 +31,28 @@ const CHARACTER = {
   },
 };
 
-/** A fetch that answers each URL in turn, and records what it was asked for. */
+/**
+ * A fetch that answers each URL in turn, and records what it was asked for.
+ *
+ * Responses carry `text()` rather than `json()` because that is what a real one does and
+ * what `net/outbound` reads — it measures the body against a cap before parsing it, so a
+ * stub that only offered a parsed document would be exercising a path production never
+ * takes.
+ */
 const stubFetch = (responses) => {
   const calls = [];
   const impl = vi.fn(async (url) => {
     calls.push(url);
     const next = responses.shift();
     if (typeof next === 'function') return next(url);
-    return { ok: true, status: 200, json: async () => next };
+    return ok(next);
   });
   impl.calls = calls;
   return impl;
 };
 
-const ok = (doc) => ({ ok: true, status: 200, json: async () => doc });
-const status = (code) => () => ({ ok: false, status: code, json: async () => ({}) });
+const ok = (doc) => ({ ok: true, status: 200, text: async () => JSON.stringify(doc) });
+const status = (code) => () => ({ ok: false, status: code, text: async () => '{}' });
 const throws = (name) => () => { const e = new Error(name); e.name = name; throw e; };
 
 describe('the code itself', () => {
@@ -110,7 +117,9 @@ describe('when it does not work', () => {
   });
 
   it('reports a body that is not JSON rather than throwing', async () => {
-    const impl = stubFetch([() => ({ ok: true, status: 200, json: async () => { throw new Error('not json'); } })]);
+    // What this actually looks like in the wild: a 200 carrying an error page, or a
+    // proxy's interstitial, where a character was expected.
+    const impl = stubFetch([() => ({ ok: true, status: 200, text: async () => '<html>nope</html>' })]);
     expect(await fetchCharacter('6LZKP7', { fetchImpl: impl })).toEqual({ error: 'BAD_RESPONSE' });
   });
 

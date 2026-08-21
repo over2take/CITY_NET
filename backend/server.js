@@ -28,6 +28,12 @@ const recordAction = (type, payload) => {
 const { elevatedUsers } = require('./middleware/auth');
 const helpers = { emitUpdate, recordAction };
 
+// Every request arrives through the frontend's nginx, so without this `req.ip` is the
+// proxy's address for all of them — and anything counting per caller would really be
+// counting everyone together. One hop, because the backend port is not published: nginx
+// is the only thing that can reach it, so the address it forwards is the client's.
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

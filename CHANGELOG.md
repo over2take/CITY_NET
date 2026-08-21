@@ -9,6 +9,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.4] - 2026-08-21
+
+A pass over everything the server does that leaves the process.
+
+Nothing here was being exploited. Two features reach services we do not own — the update check and the Companion character import — and they had grown two separate sets of gaps, each easy to get right once and easy to forget twice. Almost nothing here changes what you see; the one exception is an update check that used to lie to you, below.
+
+Docker installs need do nothing. If you run your own reverse proxy in front of CITY_NET, see UPGRADE.md — there are two header lines to add.
+
+### Security
+
+- **Anyone could stall the whole server by asking for the version.** `GET /api/version` is open on purpose, so a client can watch for the restart an update causes — and it shelled out to `docker info` every single time it was asked. That call blocks everything else the server is doing until Docker answers, so a loop of requests to an unauthenticated endpoint was enough to hold the entire thing still. Whether a Docker socket is there cannot change while the process is running, so it is now asked once at first use and remembered, with a timeout for a socket that is present but not answering.
+
+- **The Companion import has a ceiling now.** It is the one open route that spends *our* outbound requests on an anonymous caller's word, which made it two things it should not be: a way to point this server's address at a third party as fast as you can send requests, and a way to walk the six-character code space and read back whichever characters answer — other people's characters, not ours to hand out.
+
+  Ten attempts per ten minutes, per caller. Importing your own character is something you do once, and a couple more times if you mistype the code, so this is generous to a person and useless to a script. Requiring a login instead would have closed the same holes and taken the feature away from the people it is for: an open game has no player accounts to check.
+
+- **The update check had no time limit at all.** It stopped after five pages of tags, which bounds pages rather than time — so a registry that accepted the connection and then said nothing left the request hanging with no end to it. It also read the address of the next page out of the reply it had just been given, which let whoever answered choose where this server knocked next. Only the path is taken from the reply now; the destination is ours. And a response can no longer grow without limit while being read.
+
+- **Errors from Docker Hub are no longer repeated back to the browser.** They can carry host paths and internal addresses that were never ours to publish, and an admin can only retry or wait either way.
+
+### Changed
+
+- **Every outbound request now goes through one place.** A named destination, HTTPS, a deadline that covers the whole exchange rather than just the connection, a size limit, and no following of redirects — none of which a caller can opt out of and none of which has to be remembered twice. It means the answer to "what does this app talk to, and under what rules" is one short file rather than a search.
+
+- **The server can tell your table apart.** Every request arrives through the frontend's web server, which was not passing along who sent it — so as far as the backend could see, everyone at the table was one caller. Anything counting per person would have counted the whole house together, and the first player to import a character would have used up everyone's allowance.
+
+### Fixed
+
+- **A throttled update check told you that you were up to date.** Docker Hub rate-limits anonymous requests. When it did, its refusal was read as though it were a list of releases — an empty one — and an empty list is indistinguishable from there being nothing newer to install. So the check reported **"You're up to date"** while never having found out. It now says the registry refused the request, which is a thing you can act on: wait, and ask again.
+
+  Whether you ever hit this depends on how often you press the button and what else shares your address, which is exactly why it was worth fixing rather than leaving to chance.
+
+- **The update tests had been quietly talking to the real Docker Hub.** They stubbed the network at a layer the code stopped using, so the stub silently stopped applying and the suite kept passing — because the real registry happened to agree with what the tests expected. It would have started failing on its own the day a release was published. The suite now refuses any real outbound call and names the address it caught, so this cannot happen a third time.
+
+---
+
 ## [1.9.3] - 2026-08-18
 
 Cyberpunk RED characters can arrive from the Companion, by code.

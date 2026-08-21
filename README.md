@@ -323,9 +323,12 @@ CITY_NET/
 ├── backend/
 │   ├── server.js               # Express entrypoint — mounts routes, starts Socket.IO
 │   ├── db.js                   # SQLite schema and migrations
-│   ├── updater.js              # In-app self-update — paginated registry tag listing so a run of dev builds cannot hide a stable release; release channels selected by IMAGE_TAG alone, the same variable compose pulls with (X.Y.Z-dev tags with an optional counter, ordered so a release supersedes its own dev builds); preflight (compose file mounted, docker socket, compose project labels) so a stack that cannot update says why instead of hanging; upgrade-only semver check; update log on the data volume; boot id so a restart is detectable without a version change
+│   ├── updater.js              # In-app self-update — paginated registry tag listing so a run of dev builds cannot hide a stable release; release channels selected by IMAGE_TAG alone, the same variable compose pulls with (X.Y.Z-dev tags with an optional counter, ordered so a release supersedes its own dev builds); preflight (compose file mounted, docker socket, compose project labels) so a stack that cannot update says why instead of hanging; upgrade-only semver check; update log on the data volume; boot id so a restart is detectable without a version change; the registry read goes through net/outbound, and the docker probe behind GET /api/version is asked once per process rather than once per request — execSync holds the event loop, so a probe on an open route was a way to stall the server
+│   ├── net/
+│   │   └── outbound.js         # Every request to a host we do not own goes through here. A named destination (exact hostname, never a suffix test), HTTPS, a deadline covering the body as well as the connection, a byte cap, and no redirect following — none of which a caller can opt out of. Two callers, one auditable surface
 │   ├── middleware/
-│   │   └── auth.js             # JWT verify middleware (admin + elevated users)
+│   │   ├── auth.js             # JWT verify middleware (admin + elevated users)
+│   │   └── rateLimit.js        # A sliding per-caller ceiling, for the one open route that spends our outbound requests on an anonymous caller's say-so. Bounded in memory, since the key is whoever is asking; evicts the least recently seen, so it forgives rather than blocks
 │   ├── routes/
 │   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs; POST /update preflights and returns 409 naming what is missing, GET /update/status reports phase, error and log tail, POST /check-update offers only genuine upgrades from the deployment's own channel; POST /water marks generated water so a regenerate can clear its own river without touching a lake the GM drew
 │   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only); GET / includes sheet_data for NPC initiative rolls; POST /purge-region clears one region's generated content in a single transaction, keeping GM-named structures, tokens, battle-map content and hand-drawn water
@@ -359,7 +362,7 @@ CITY_NET/
 │   │   ├── ram.js              # Ramming. Symmetric and self-harming, armour does not apply, and everyone aboard both vehicles takes the injury — the three things about the rule that a later refactor would tidy away, so each has a test
 │   │   ├── pdfTemplate.js      # The blank fillable form the importer reads back. Field names are the contract, so the layout lives beside the importer and a test walks every label through mapFields
 │   │   ├── companionImport.js  # Reads a Cyberpunk RED Companion export into importer candidates. Pure, so the whole of the parsing risk is testable without a network — and no mapping table between the two vocabularies, since the alias normaliser already reduces their AirVehicleTech and our Air Vehicle Tech to one key
-│   │   ├── companionFetch.js   # The six-digit code, resolved in two hops. Server-side so a player's address stays out of a third-party request, `fetch` injected so a timeout, a 404 and a changed format are all reachable in tests. The app's first outbound call to a service it does not own
+│   │   ├── companionFetch.js   # The six-digit code, resolved in two hops. Server-side so a player's address stays out of a third-party request; the request itself belongs to net/outbound, so the deadline, the cap and the allowed host are enforced rather than remembered. Rate limited at the route, being open to anyone
 │   │   ├── importers.js        # Modular sheet import — PDF form extraction + data-driven per-system field mappers (makeMapFields)
 │   │   └── npcTiers.js         # Per-system NPC power tiers for GENERATE_SHEET (CP:R: Mook→Elite; CWN: +Spirits; SR6: Ganger→Prime Runner)
 │   ├── sockets/
@@ -374,7 +377,9 @@ CITY_NET/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
 │       ├── admin.test.js               # Admin endpoints (auth, settings, undo access); update routes — 409 with a reason rather than a false success, unauthenticated status, boot id on /version; check-update against a stubbed registry — upgrades only, dev tags per channel, and a prerelease not hiding a stable release
 │       ├── cpr_stats.test.js           # CP:R stat rolls — BODY rollable, MOVE and LUCK not, and every roll button in the template backed by a server-side roll
-│       ├── updater.test.js             # Version ordering including X.Y.Z-dev, tag filtering per channel, preflight refusals, and an update that records its failures instead of returning silently
+│       ├── outbound.test.js            # The one door: a host that is merely a suffix of an allowed one, plain http, a body past the cap abandoned rather than measured, a registry that answers and then stops talking, and a deadline still armed while the body arrives
+│       ├── rate_limit.test.js          # Time injected rather than waited for. Per caller rather than per house, a sliding window so the allowance cannot be spent twice across a boundary, and a bound on how many callers are remembered
+│       ├── updater.test.js             # Version ordering including X.Y.Z-dev, tag filtering per channel, preflight refusals, and an update that records its failures instead of returning silently; the next page is read from Docker Hub even when the payload names another host; the docker probe is asked once and its answer remembered
 │       ├── docker_config.test.js       # Deployment invariants — DB_PATH baked in, data excluded from the image, image tags parameterised by IMAGE_TAG, compose file mounted for the updater, channel shipped pointing at stable
 │       ├── battle_maps.test.js         # Battle map upload/list/delete
 │       ├── locations.test.js           # Location CRUD and classification
@@ -405,6 +410,7 @@ CITY_NET/
 │       ├── cpr_vehicle_seating.test.js # Cyberpunk vehicles on the shared roster, and the system gate: neither system lists, seats into or damages the other's cars
 │       ├── companion_import.test.js    # The wire format and the flattening, against a hand-written fixture shaped from a real export — collections keyed by uuid rather than listed, and a role that lives as the single key of roleAbilities
 │       ├── companion_fetch.test.js     # Every way the fetch can fail, with no network involved: bad code, 404, timeout, a body that is not JSON, and a lookup that answers with no uuid in it
+│       ├── setup/noNetwork.js          # Loaded before every backend test: an unstubbed `fetch` throws and names the address. Twice now a stubbed transport was replaced and the tests quietly carried on against the real service, passing because it agreed with them
 │       ├── enemy_vehicles.test.js      # The enemy roster and its seam: neither roster shows the other's vehicles, the enemy path refuses a player's sheet id, and the seat pickers filter to the map level the GM is looking at
 │       ├── cwn_vehicle_guests.test.js  # Friendly NPCs riding with players: hostiles refused by the server rather than merely hidden, and "one seat, one occupant" holding across both storage mechanisms in both directions
 │       ├── cpr_ram.test.js             # Ramming: symmetric damage, no armour, everyone aboard both vehicles injured, and the driver-seat rule the permission model rests on
