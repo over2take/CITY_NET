@@ -9,6 +9,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.9.5] - 2026-08-21
+
+The other half of the security pass: the update button, which is the one part of CITY_NET that runs as root on your machine.
+
+Where 1.9.4 covered what the server says to the outside world, this covers what it does with the Docker socket. Nothing here changes how you update — the button works exactly as before, right up until you press it twice.
+
+### Security
+
+- **Pressing Update twice started two updates.** Nothing checked whether one was already running, so a double-click — or an impatient second press while the first was still pulling — ran two image pulls and then launched two privileged helper containers against the same stack, each recreating the containers the other was recreating. A second press is now refused with "an update is already running" rather than honoured. It is not a queue: two updates are not twice an update, and the run in flight is left alone to finish.
+
+  A second press also used to wipe the first run's error before you had read it, so a failed update could quietly go back to looking healthy.
+
+- **The update status page was publishing your update log.** That page has no password on it by design — your browser has to keep reading it across the restart, when nobody is logged in — and it was answering with the last forty lines of `update.log`. That is `docker compose` output: image names, absolute paths, the layout of your server's filesystem. Nothing in CITY_NET has ever displayed it. It now returns the phase and a short reason, and the detail stays in `backend/data/update.log` on your machine, where it was already being written.
+
+- **The update helper no longer runs through a shell.** The command that recreates your stack was assembled as a line of shell text with your project's directory pasted into it inside double quotes. Double quotes look like protection and are not — they stop a path with spaces from splitting, but they do not stop a path containing `$(...)` from being *executed*. That path comes from Docker's own labels. The command is now passed as separate arguments with no shell involved at all, which removes the possibility rather than guarding one instance of it. As a side benefit, a project folder with a space in its name now works.
+
+### Changed
+
+- **Running without the Docker socket is now a documented choice rather than a broken install.** That socket is root on your host, so removing it is a sensible posture for a server exposed to the internet — everything keeps working except the update button, which refuses with an explanation. The refusal now offers updating from the host as an equal option instead of only telling you to add the socket back. See UPGRADE.md.
+
+- **UPGRADE.md now states plainly what you are trusting when you press Update.** Images are pulled from Docker Hub and run as root with the host socket, so that account's security is your install's security. That is true of any auto-updater; it should be written down rather than implied, along with the two ways to opt out.
+
+---
+
 ## [1.9.4] - 2026-08-21
 
 A pass over everything the server does that leaves the process.

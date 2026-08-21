@@ -23,6 +23,51 @@ docker compose up -d
 
 The app will be back online in ~30 seconds.
 
+### Running without the Docker socket
+
+The in-app update works by talking to the Docker socket, which is mounted into the backend
+container. **That socket is root on the host.** Anything that can reach it can start a
+privileged container and mount your whole filesystem — so the security boundary of an
+install is: anyone who can reach the update endpoint, or achieve code execution in the
+backend, has root on the machine.
+
+For an install exposed to the internet, **removing that mount is a reasonable choice, and
+a supported one.** Delete this line from the `backend` service in `docker-compose.yml`:
+
+```
+      - /var/run/docker.sock:/var/run/docker.sock
+```
+
+Everything else keeps working — nothing touches Docker at startup, and every Docker call
+lives inside a request handler. The only thing you lose is the update button, which will
+refuse with an explanation rather than failing strangely. Update from the host instead:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+One side effect worth knowing: `GET /api/version` reports `isDocker: false` without the
+socket, so a socket-less install presents as a non-Docker one.
+
+### What you are trusting when you press Update
+
+An update pulls `over2take/citynet-backend` and `over2take/citynet-frontend` from Docker
+Hub and runs them as root with the host socket mounted. **Pressing Update therefore trusts
+that Docker Hub account completely** — if it were compromised, the attacker's code would
+run as root on every install that updated.
+
+This is inherent to any auto-updater, and it is worth stating plainly rather than leaving
+implicit. Images are currently pulled by tag, not by digest, so an update takes whatever
+is published under that tag at the time you press the button.
+
+If that trust is more than you want to extend:
+
+- Remove the socket mount (above) and update from the host, where you can inspect what you
+  are pulling first.
+- Or pin `IMAGE_TAG` to a specific released version, so you move deliberately rather than
+  automatically.
+
 ### After updating
 
 On startup the backend checks for missing required env vars and logs a warning if any are absent. If you see a warning banner on login, compare your `backend/.env` against `backend/.env.example` and add any missing keys.

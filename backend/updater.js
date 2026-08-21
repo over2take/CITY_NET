@@ -320,8 +320,14 @@ function preflight(deps = {}) {
   if (!exists('/var/run/docker.sock')) {
     return {
       ok: false,
-      error: 'The Docker socket is not mounted, so this container cannot manage the stack. '
-        + 'Add /var/run/docker.sock to the backend volumes and recreate it.',
+      // Two ways out, not one. Running without the socket is a deliberate posture for an
+      // install facing the internet — the socket is root on the host, so anything that
+      // reaches it can start a privileged container — and telling those operators only to
+      // add it reads as a fault to be repaired rather than a choice they already made.
+      error: 'The Docker socket is not mounted, so this container cannot update itself. '
+        + 'Either update from the host with "docker compose pull && docker compose up -d", '
+        + 'or add /var/run/docker.sock to the backend volumes and recreate the stack. '
+        + 'Running without it is a supported choice; see UPGRADE.md.',
     };
   }
 
