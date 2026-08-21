@@ -244,7 +244,9 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         if (err.message === 'Failed to parse Docker Hub response') {
           return res.status(500).json({ error: err.message });
         }
-        res.status(502).json({ error: `Could not reach Docker Hub: ${err.message}` });
+        // The message is one of ours, not one of theirs. An upstream error string can
+        // carry detail we did not choose to publish, and none of it helps here.
+        res.status(502).json({ error: err.message });
       });
   });
 

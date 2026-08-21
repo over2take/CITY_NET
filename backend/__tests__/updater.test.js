@@ -142,30 +142,23 @@ describe('dev version ordering', () => {
 });
 
 describe('fetchVersionTags', () => {
-  /** A registry serving the given pages in order. */
+  /**
+   * A registry serving the given pages in order.
+   *
+   * The transport is a `fetch` stub rather than a fake `https` module: the request itself
+   * now belongs to `net/outbound`, which enforces the deadline, the byte cap and the
+   * allowlist. What is left to test here is the walk over pages — which page it asks for
+   * next, and when it stops.
+   */
   const registry = (pages) => {
     const calls = [];
     let n = 0;
     return {
       calls,
-      https: {
-        request(options, cb) {
-          calls.push(`${options.hostname}${options.path}`);
-          const page = pages[n++] ?? { results: [] };
-          const handlers = {};
-          const upstream = { on: (evt, fn) => { handlers[evt] = fn; return upstream; } };
-          const req = {
-            on: () => req,
-            end: () => {
-              cb(upstream);
-              process.nextTick(() => {
-                handlers.data?.(JSON.stringify(page));
-                handlers.end?.();
-              });
-            },
-          };
-          return req;
-        },
+      fetchImpl: async (url) => {
+        calls.push(url);
+        const page = pages[n++] ?? { results: [] };
+        return { status: 200, ok: true, text: async () => JSON.stringify(page) };
       },
     };
   };
@@ -176,7 +169,7 @@ describe('fetchVersionTags', () => {
     // The normal case. Later pages were updated longer ago, so there is nothing on them
     // worth having once this channel has found something.
     const reg = registry([page(['1.8.0', '1.8.1', 'latest'], 'https://hub.docker.com/v2/x?page=2')]);
-    const tags = await updater.fetchVersionTags({ https: reg.https });
+    const tags = await updater.fetchVersionTags({ fetchImpl: reg.fetchImpl });
     expect(tags[0]).toBe('1.8.1');
     expect(reg.calls).toHaveLength(1);
   });
@@ -190,7 +183,7 @@ describe('fetchVersionTags', () => {
       page(devTags, 'https://hub.docker.com/v2/repositories/x/tags?page=2'),
       page(['1.8.1', '1.8.0']),
     ]);
-    const tags = await updater.fetchVersionTags({ https: reg.https, allowDev: false });
+    const tags = await updater.fetchVersionTags({ fetchImpl: reg.fetchImpl, allowDev: false });
     expect(tags[0]).toBe('1.8.1');
     expect(reg.calls).toHaveLength(2);
     expect(reg.calls[1]).toContain('page=2');
@@ -199,7 +192,7 @@ describe('fetchVersionTags', () => {
   it('stops at the first page for a dev deployment, which can use those tags', async () => {
     const devTags = Array.from({ length: 100 }, (_, i) => `1.9.0-dev.${i + 1}`);
     const reg = registry([page(devTags, 'https://hub.docker.com/v2/x?page=2'), page(['1.8.1'])]);
-    const tags = await updater.fetchVersionTags({ https: reg.https, allowDev: true });
+    const tags = await updater.fetchVersionTags({ fetchImpl: reg.fetchImpl, allowDev: true });
     expect(tags[0]).toBe('1.9.0-dev.100');
     expect(reg.calls).toHaveLength(1);
   });
@@ -209,48 +202,68 @@ describe('fetchVersionTags', () => {
     // able to hang the request.
     const endless = page(['latest'], 'https://hub.docker.com/v2/x?page=n');
     const reg = registry([endless, endless, endless, endless, endless, endless, endless]);
-    const tags = await updater.fetchVersionTags({ https: reg.https, maxPages: 3 });
+    const tags = await updater.fetchVersionTags({ fetchImpl: reg.fetchImpl, maxPages: 3 });
     expect(tags).toEqual([]);
     expect(reg.calls).toHaveLength(3);
   });
 
   it('stops when the registry offers no next page', async () => {
     const reg = registry([page(['latest', 'dev'])]);
-    const tags = await updater.fetchVersionTags({ https: reg.https });
+    const tags = await updater.fetchVersionTags({ fetchImpl: reg.fetchImpl });
     expect(tags).toEqual([]);
     expect(reg.calls).toHaveLength(1);
   });
 
   it('returns tags newest first', async () => {
     const reg = registry([page(['1.8.0', '1.10.0', '1.9.0'])]);
-    expect(await updater.fetchVersionTags({ https: reg.https })).toEqual(['1.10.0', '1.9.0', '1.8.0']);
+    expect(await updater.fetchVersionTags({ fetchImpl: reg.fetchImpl })).toEqual(['1.10.0', '1.9.0', '1.8.0']);
+  });
+
+  it('asks Docker Hub for the next page even when the payload names another host', async () => {
+    // `next` is a full URL, and this used to take its hostname — so whoever answered got
+    // to choose where the next request went. Only the path survives now; the host is ours.
+    const reg = registry([
+      page(['latest'], 'https://attacker.example.net/v2/x?page=2'),
+      page(['1.8.1']),
+    ]);
+    const tags = await updater.fetchVersionTags({ fetchImpl: reg.fetchImpl });
+    expect(tags).toEqual(['1.8.1']);
+    expect(reg.calls[1]).toBe('https://hub.docker.com/v2/x?page=2');
+    expect(reg.calls.join(' ')).not.toContain('attacker.example.net');
   });
 
   it('rejects rather than resolving empty when the response is not JSON', async () => {
     // Resolving empty would be indistinguishable from "no releases published", and the
     // route would report you are up to date.
-    const https = {
-      request(options, cb) {
-        const handlers = {};
-        const upstream = { on: (evt, fn) => { handlers[evt] = fn; return upstream; } };
-        const req = {
-          on: () => req,
-          end: () => { cb(upstream); process.nextTick(() => { handlers.data?.('<html>'); handlers.end?.(); }); },
-        };
-        return req;
-      },
-    };
-    await expect(updater.fetchVersionTags({ https })).rejects.toThrow(/parse/i);
+    const fetchImpl = async () => ({ status: 200, ok: true, text: async () => '<html>' });
+    await expect(updater.fetchVersionTags({ fetchImpl })).rejects.toThrow(/parse/i);
   });
 
   it('rejects when the registry cannot be reached', async () => {
-    const https = {
-      request() {
-        const req = { on: (evt, fn) => { if (evt === 'error') process.nextTick(() => fn(new Error('ENOTFOUND'))); return req; }, end: () => {} };
-        return req;
-      },
-    };
-    await expect(updater.fetchVersionTags({ https })).rejects.toThrow(/ENOTFOUND/);
+    const fetchImpl = async () => { throw new Error('ENOTFOUND hub.docker.com'); };
+    await expect(updater.fetchVersionTags({ fetchImpl })).rejects.toThrow(/could not reach/i);
+  });
+
+  it('says so in our own words rather than repeating theirs', async () => {
+    // An upstream message can carry detail we did not choose to publish — a host path, an
+    // internal address. The admin can only retry or wait either way.
+    const fetchImpl = async () => { throw new Error('connect ECONNREFUSED 10.0.0.7:443'); };
+    // Caught by hand rather than with `.rejects.not.toThrow`, which also passes when
+    // nothing is thrown at all — this has to fail if the address ever comes through.
+    let message = null;
+    try {
+      await updater.fetchVersionTags({ fetchImpl });
+    } catch (e) {
+      message = e.message;
+    }
+    expect(message).toBe('Could not reach Docker Hub');
+  });
+
+  it('gives up on a registry that answers and then stops talking', async () => {
+    const fetchImpl = (_url, opts) => new Promise((_resolve, reject) => {
+      opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    });
+    await expect(updater.fetchVersionTags({ fetchImpl, timeoutMs: 30 })).rejects.toThrow(/in time/i);
   });
 });
 
