@@ -25,6 +25,12 @@ Where 1.9.4 covered what the server says to the outside world, this covers what 
 
 - **The update helper no longer runs through a shell.** The command that recreates your stack was assembled as a line of shell text with your project's directory pasted into it inside double quotes. Double quotes look like protection and are not — they stop a path with spaces from splitting, but they do not stop a path containing `$(...)` from being *executed*. That path comes from Docker's own labels. The command is now passed as separate arguments with no shell involved at all, which removes the possibility rather than guarding one instance of it. As a side benefit, a project folder with a space in its name now works.
 
+- **Two upload routes accepted any file type.** Battle map images checked nothing at all, and music checked the `Content-Type` the *uploader* wrote into the request — a claim about the file rather than a reading of it. So a file named `payload.html` could be stored under that name in a folder served without a password, where the extension decides what a browser thinks it is. Both now check the extension, which is the part that actually determines how the file comes back out.
+
+  **The lists are deliberately wider than the upload buttons offer** — every image format including SVG and TIFF, every audio format that plays in a browser including Opus and AAC. A GM with a map as a TIFF should not have to convert it to satisfy us. What makes that safe is the change below, not a short list.
+
+- **Everything under `/uploads` is now served sandboxed.** Files that came from outside are told, at the point they are served, that they may not act as part of this site — no cookies, no stored data, no reaching anything of yours — and browsers are told not to second-guess what type they are. This covers files already sitting on your disk from before, and it is what lets the upload rules stay generous instead of defensive.
+
 ### Changed
 
 - **Running without the Docker socket is now a documented choice rather than a broken install.** That socket is root on your host, so removing it is a sensible posture for a server exposed to the internet — everything keeps working except the update button, which refuses with an explanation. The refusal now offers updating from the host as an equal option instead of only telling you to add the socket back. See UPGRADE.md.

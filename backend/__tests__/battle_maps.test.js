@@ -335,3 +335,48 @@ describe('GET /api/locations/:id/battle_maps/images', () => {
     }
   });
 });
+
+// ─── what may be uploaded ─────────────────────────────────────────────────────
+
+/**
+ * The stored filename is a hash of the content plus the extension from the uploaded name,
+ * and nothing checked that extension — so `map.html` was written as `<sha256>.html` into
+ * a directory served with no auth, where the extension is what sets the Content-Type on
+ * the way back out.
+ */
+describe('POST battle map — what it accepts', () => {
+  const send = (filename) => request(app)
+    .post('/api/locations/1/battle_maps')
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+    .field('designation', 'GROUND')
+    .attach('image', Buffer.from(`bytes for ${filename}`), { filename });
+
+  it('refuses a file that would be served as a web page', async () => {
+    const res = await send('map.html');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/unsupported/i);
+  });
+
+  it('refuses other things that execute where they are served', async () => {
+    for (const name of ['map.htm', 'map.js', 'map.xhtml', 'map']) {
+      expect((await send(name)).status, name).toBe(400);
+    }
+  });
+
+  it('takes every image format the picker offers', async () => {
+    // accept="image/*", so a GM with a TIFF or an AVIF should not have to convert it to
+    // satisfy us. The list is wide on purpose.
+    for (const ext of ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'tif', 'tiff']) {
+      const res = await send(`map.${ext}`);
+      expect(res.status, ext).toBe(200);
+    }
+  });
+
+  it('still takes SVG, which the sandbox header is what makes safe', async () => {
+    // Inside an <img> an SVG cannot run script; the case that could is navigating
+    // straight to the file, and that is closed where the file is served rather than by
+    // refusing a format a GM may legitimately have their map in.
+    const res = await send('map.svg');
+    expect(res.status).toBe(200);
+  });
+});

@@ -5,6 +5,18 @@ const crypto = require('crypto');
 const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
 
+/**
+ * Image formats a battle map may be in.
+ *
+ * Matched to the file picker, which offers `image/*` — a GM who has a map as a TIFF or an
+ * AVIF should not have to convert it to satisfy us. SVG is on the list for the same
+ * reason: inside an `<img>` it cannot run script, and the one case where it could — being
+ * opened directly at its URL — is closed by the sandbox header on the static mount.
+ */
+const IMAGE_EXT = new Set([
+  '.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.bmp', '.tif', '.tiff', '.svg',
+]);
+
 module.exports = (db, io, { emitUpdate }) => {
   const router = express.Router({ mergeParams: true });
 
@@ -59,6 +71,16 @@ module.exports = (db, io, { emitUpdate }) => {
     if (!req.file || !designation) return res.status(400).json({ error: 'Image and designation are required' });
 
     const ext = path.extname(req.file.originalname).toLowerCase();
+    // The extension is what decides how this comes back out: /uploads is served with no
+    // auth and the Content-Type follows the name on disk. Without a list here, a file
+    // called map.html was written as one and served as one, from this app's own origin.
+    //
+    // The list is as wide as the picker, which offers image/*, SVG included — a GM's
+    // choice of map format is not a security decision. What makes that safe is the
+    // sandbox header on the static mount, not a short list here.
+    if (!IMAGE_EXT.has(ext)) {
+      return res.status(400).json({ error: `Unsupported image format. Use ${[...IMAGE_EXT].join(', ')}.` });
+    }
     const hash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
     const filename = hash + ext;
     const filepath = path.join(uploadsDir, filename);
