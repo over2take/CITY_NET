@@ -507,9 +507,10 @@ describe('one update at a time', () => {
     expect(updater.isRunning()).toBe(false);
   });
 
-  it('lets a new run take over from one that hung', () => {
-    // The phase lives in memory, so a pull that never returns would otherwise deaden the
-    // button until the restart the update was supposed to perform.
+  it('lets a new run take over when the process is gone but its events never came', () => {
+    // The child is unreachable here (the fake reports no exit state), which stands in for
+    // a run whose events were lost. Nothing is working and nothing else would ever
+    // release the lock, so the elapsed check is the only way out.
     let clock = 1_000_000;
     const spawn = vi.fn(() => fakeChild());
     updater.runUpdate(labels, { spawn, openSync: noLog, now: () => clock });
@@ -518,6 +519,34 @@ describe('one update at a time', () => {
     clock += updater.STALE_RUN_MS + 1;
     expect(updater.runUpdate(labels, { spawn, openSync: noLog, now: () => clock })).not.toBeNull();
     expect(spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the lock while the pull is still alive, however long it takes', () => {
+    // The hole this closes: releasing on elapsed time alone cannot tell a hung pull from
+    // a slow one. Two images over a poor line can outlast any threshold worth setting,
+    // and releasing would let a second press start a competing update against a stack the
+    // first is still changing — which is the whole thing this guard exists to prevent.
+    let clock = 1_000_000;
+    const alive = { ...fakeChild(), exitCode: null, signalCode: null };
+    const spawn = vi.fn(() => alive);
+    updater.runUpdate(labels, { spawn, openSync: noLog, now: () => clock });
+
+    clock += updater.STALE_RUN_MS * 10;
+    expect(updater.isRunning(clock)).toBe(true);
+    expect(updater.runUpdate(labels, { spawn, openSync: noLog, now: () => clock })).toBeNull();
+    expect(spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases a finished process once the elapsed window has passed as well', () => {
+    // The counterpart: liveness holds the lock, so it must also let go.
+    let clock = 1_000_000;
+    const child = { ...fakeChild(), exitCode: null, signalCode: null };
+    updater.runUpdate(labels, { spawn: () => child, openSync: noLog, now: () => clock });
+    expect(updater.isRunning(clock)).toBe(true);
+
+    child.exitCode = 0;
+    clock += updater.STALE_RUN_MS + 1;
+    expect(updater.isRunning(clock)).toBe(false);
   });
 
   it('is idle again once a run has failed', () => {
@@ -543,5 +572,49 @@ describe('the public status payload', () => {
   it('carries a phase, a boot id and nothing anyone said to us', () => {
     expect(Object.keys(updater.getState()).sort())
       .toEqual(['bootId', 'code', 'error', 'finishedAt', 'phase', 'startedAt']);
+  });
+});
+
+describe('the helper leg reports its own failures', () => {
+  const labels = { projectName: 'citynet', configFile: '/srv/citynet/docker-compose.yml', workingDir: '/srv/citynet' };
+  const fakeChild = () => {
+    const handlers = {};
+    return { unref: vi.fn(), on: (evt, fn) => { handlers[evt] = fn; }, emit: (evt, arg) => handlers[evt]?.(arg) };
+  };
+  const noLog = () => { throw new Error('no log'); };
+
+  beforeEach(() => updater.resetState());
+
+  it('records a helper that exited non-zero instead of waiting for ever', () => {
+    // The pull leg has always recorded a bad exit code. This one did not, so a failed
+    // `compose up` left the phase on 'restarting' and the client polling for a restart
+    // that was never coming.
+    const pull = fakeChild();
+    const helper = fakeChild();
+    updater.runUpdate(labels, {
+      spawn: vi.fn().mockReturnValueOnce(pull).mockReturnValueOnce(helper),
+      openSync: noLog,
+    });
+    pull.emit('close', 0);
+    expect(updater.getState().phase).toBe('restarting');
+
+    helper.emit('close', 1);
+    expect(updater.getState().phase).toBe('failed');
+    expect(updater.getState().code).toBe('HELPER_FAILED');
+  });
+
+  it('says nothing when the helper exits cleanly', () => {
+    // Normally unreachable — `up -d` replaces this container before the helper finishes —
+    // but a clean exit must never be reported as a failure on the paths where it is.
+    const pull = fakeChild();
+    const helper = fakeChild();
+    updater.runUpdate(labels, {
+      spawn: vi.fn().mockReturnValueOnce(pull).mockReturnValueOnce(helper),
+      openSync: noLog,
+    });
+    pull.emit('close', 0);
+    helper.emit('close', 0);
+    expect(updater.getState().phase).toBe('restarting');
+    expect(updater.getState().code).toBeNull();
   });
 });

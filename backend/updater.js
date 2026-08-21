@@ -366,15 +366,35 @@ const RUNNING_PHASES = ['pulling', 'restarting'];
 const STALE_RUN_MS = 15 * 60 * 1000;
 
 /**
+ * The process currently doing the work, while there is one.
+ *
+ * Kept out of `state` deliberately: `getState` is serialised to a public response, and a
+ * ChildProcess has no business anywhere near it.
+ */
+let activeChild = null;
+
+/**
  * Whether an update is already under way.
  *
  * `runUpdate` used to spawn unconditionally, so a double-click ran two `compose pull`
  * processes and then two privileged helper containers against the same stack, each
  * recreating containers the other was also recreating. The second press also cleared the
  * first run's error, so a failure could be erased before anyone had read it.
+ *
+ * **A process we can still see holds the lock, however long it has taken.** The elapsed
+ * check below cannot tell a hung pull from a slow one — two images over a poor line can
+ * take longer than any threshold worth setting — and releasing on time alone would let a
+ * second press start a competing update against a stack the first one is still changing.
+ * That is the exact failure this guards, so it errs towards staying locked.
+ *
+ * The cost is that a pull which truly never returns holds the button until the backend
+ * restarts. That is recoverable from the host, and the phase lives in memory so a restart
+ * clears it. The elapsed check remains for the other case: the child is gone but its
+ * events never arrived, where nothing is running and nothing will release the lock.
  */
 function isRunning(now = Date.now()) {
   if (!RUNNING_PHASES.includes(state.phase)) return false;
+  if (activeChild && activeChild.exitCode === null && activeChild.signalCode === null) return true;
   return !(state.startedAt && now - state.startedAt > STALE_RUN_MS);
 }
 
@@ -405,6 +425,7 @@ function getState() {
 }
 
 function resetState() {
+  activeChild = null;
   state.phase = 'idle';
   state.code = null;
   state.error = null;
@@ -465,6 +486,7 @@ function runUpdate(labels, deps = {}) {
   const composeArgs = ['compose', '-f', COMPOSE_FILE, ...projectArgs];
 
   const pull = spawnFn('docker', [...composeArgs, 'pull'], { detached: true, stdio });
+  activeChild = pull;
   pull.unref();
 
   pull.on('error', (err) => fail('DOCKER_UNAVAILABLE', err.message));
@@ -479,8 +501,22 @@ function runUpdate(labels, deps = {}) {
       buildUpdateHelperArgs(labels.workingDir, labels.configFile, projectArgs),
       { detached: true, stdio }
     );
+    // The lock follows the work: the pull is finished, the helper now holds it.
+    activeChild = helper;
     helper.unref();
     helper.on('error', (err) => fail('HELPER_FAILED', err.message));
+
+    // The pull leg records a non-zero exit; this one did not, so a helper whose
+    // `compose up` failed left the phase on `restarting` for ever and the client waiting
+    // for a restart that was never coming — the exact failure this module was written to
+    // stop, still alive in its second half.
+    //
+    // On success this usually never runs: `up -d` replaces the backend container, so the
+    // process watching is gone before the helper finishes. That is why the helper exists,
+    // and it is why this only ever fires on the path that matters.
+    helper.on('close', (code) => {
+      if (code !== 0) fail('HELPER_FAILED', `the update helper exited with code ${code}`);
+    });
   });
 
   return pull;
