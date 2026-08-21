@@ -363,12 +363,30 @@ describe('POST battle map — what it accepts', () => {
     }
   });
 
-  it('takes every image format the picker offers', async () => {
-    // accept="image/*", so a GM with a TIFF or an AVIF should not have to convert it to
-    // satisfy us. The list is wide on purpose.
-    for (const ext of ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'tif', 'tiff']) {
+  it('takes every image format the renderer can actually draw', async () => {
+    for (const ext of ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp']) {
       const res = await send(`map.${ext}`);
       expect(res.status, ext).toBe(200);
+    }
+  });
+
+  it('refuses formats that would upload cleanly and then render as nothing', async () => {
+    // Maps are drawn with THREE.TextureLoader, which decodes through an <img>. TIFF is
+    // the trap: it is unarguably an image, the picker offers it under image/*, and no
+    // browser will display it — so accepting it buys a GM a successful upload and a blank
+    // battle map instead of a sentence telling them to convert it.
+    for (const ext of ['tif', 'tiff']) {
+      const res = await send(`map.${ext}`);
+      expect(res.status, ext).toBe(400);
+    }
+  });
+
+  it('refuses video, which needs a renderer it does not have yet', async () => {
+    // Animated map loops are a real thing people buy, and this is not a judgement on
+    // them — there is simply no VideoTexture path, so the file would draw as nothing.
+    for (const ext of ['webm', 'mp4']) {
+      const res = await send(`map.${ext}`);
+      expect(res.status, ext).toBe(400);
     }
   });
 

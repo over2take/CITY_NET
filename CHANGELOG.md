@@ -27,7 +27,7 @@ Where 1.9.4 covered what the server says to the outside world, this covers what 
 
 - **Two upload routes accepted any file type.** Battle map images checked nothing at all, and music checked the `Content-Type` the *uploader* wrote into the request — a claim about the file rather than a reading of it. So a file named `payload.html` could be stored under that name in a folder served without a password, where the extension decides what a browser thinks it is. Both now check the extension, which is the part that actually determines how the file comes back out.
 
-  **The lists are deliberately wider than the upload buttons offer** — every image format including SVG and TIFF, every audio format that plays in a browser including Opus and AAC. A GM with a map as a TIFF should not have to convert it to satisfy us. What makes that safe is the change below, not a short list.
+  **The lists are drawn around what actually works, not around what is safe** — every image format the map renderer can draw, SVG included, and every audio format a browser will play, including Opus and AAC that the old check turned away for having an unusual `Content-Type` rather than for being unplayable. What makes a generous list safe is the change below, not a short list.
 
 - **Everything under `/uploads` is now served sandboxed.** Files that came from outside are told, at the point they are served, that they may not act as part of this site — no cookies, no stored data, no reaching anything of yours — and browsers are told not to second-guess what type they are. This covers files already sitting on your disk from before, and it is what lets the upload rules stay generous instead of defensive.
 

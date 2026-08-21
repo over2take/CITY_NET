@@ -8,13 +8,23 @@ const { authenticate } = require('../middleware/auth');
 /**
  * Image formats a battle map may be in.
  *
- * Matched to the file picker, which offers `image/*` — a GM who has a map as a TIFF or an
- * AVIF should not have to convert it to satisfy us. SVG is on the list for the same
- * reason: inside an `<img>` it cannot run script, and the one case where it could — being
- * opened directly at its URL — is closed by the sandbox header on the static mount.
+ * The bound is what the renderer can actually show, not what the picker will let you
+ * choose. Maps are drawn with `THREE.TextureLoader`, which decodes through an `<img>` —
+ * so this is the set a browser will display there. Being generous past that point is not
+ * kindness: a format the loader cannot decode uploads perfectly and then renders as a
+ * blank map, which is a worse answer than being told to convert it. TIFF is the specific
+ * one that looks like it belongs here and does not.
+ *
+ * SVG stays. A browser does render it in an `<img>`, where it cannot run script; the case
+ * where it could — opened directly at its URL — is closed by the sandbox header on the
+ * static mount rather than by refusing a format a GM may legitimately have.
+ *
+ * Video is absent because there is no video path in the renderer, not because it would be
+ * unwelcome — animated map loops are a real thing people buy. Adding `.webm`/`.mp4` here
+ * without a `VideoTexture` to draw them would only produce a blank map more elaborately.
  */
 const IMAGE_EXT = new Set([
-  '.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.bmp', '.tif', '.tiff', '.svg',
+  '.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.bmp', '.svg',
 ]);
 
 module.exports = (db, io, { emitUpdate }) => {
