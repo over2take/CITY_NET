@@ -14,8 +14,12 @@
 //     reason the dialog can show rather than a hang or a stack trace.
 
 const { flattenCompanion } = require('./companionImport');
+const outbound = require('../net/outbound');
 
-const BASE = 'https://firestore.googleapis.com/v1/projects/cyberpunk-red-companion-dae35/databases/(default)/documents';
+/** The only host this feature is allowed to reach. Enforced, not just documented. */
+const HOST = 'firestore.googleapis.com';
+
+const BASE = `https://${HOST}/v1/projects/cyberpunk-red-companion-dae35/databases/(default)/documents`;
 
 /** Codes are six characters. Checked before it goes anywhere near a URL. */
 const CODE_PATTERN = /^[A-Z0-9]{6}$/;
@@ -26,31 +30,15 @@ const normaliseCode = (code) => String(code ?? '').trim().toUpperCase();
 const isValidCode = (code) => CODE_PATTERN.test(normaliseCode(code));
 
 /**
- * One GET, JSON out, with a deadline.
+ * One GET, JSON out, under the constraints in `net/outbound` — a deadline covering the
+ * body as well as the connection, a byte cap, and a host this is allowed to reach.
  *
  * Every outcome that is not a document becomes a reason string. The distinction that
  * matters to a player is "your code is wrong" versus "their service is down", and those
  * are the two they can act on differently.
  */
-async function getJson(url, { fetchImpl, timeoutMs }) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetchImpl(url, { signal: controller.signal, headers: { accept: 'application/json' } });
-    if (res.status === 404) return { error: 'NOT_FOUND' };
-    if (!res.ok) return { error: 'SERVICE_ERROR' };
-    try {
-      return { doc: await res.json() };
-    } catch (e) {
-      return { error: 'BAD_RESPONSE' };
-    }
-  } catch (e) {
-    // An abort and a refused connection are the same thing to a player: it did not answer.
-    return { error: e?.name === 'AbortError' ? 'TIMEOUT' : 'UNREACHABLE' };
-  } finally {
-    clearTimeout(timer);
-  }
-}
+const getJson = (url, { fetchImpl, timeoutMs }) =>
+  outbound.getJson(url, { allowHosts: [HOST], fetchImpl, timeoutMs });
 
 /**
  * Resolve a code to a character, flattened into importer candidates.
@@ -91,6 +79,12 @@ const REASONS = {
   SERVICE_ERROR: 'The character service refused the request.',
   BAD_RESPONSE: 'The character service answered with something unexpected.',
   EMPTY_EXPORT: 'That export had nothing in it we could read.',
+  // From `net/outbound`. A player cannot cause either — they would mean a bug here or a
+  // service answering with far more than a character — but a reason with no sentence
+  // behind it would surface as a blank dialog.
+  TOO_LARGE: 'The character service sent more than we will read.',
+  BLOCKED_HOST: 'Refused a request to somewhere other than the character service.',
+  BAD_URL: 'Could not build a request for that code.',
 };
 
 module.exports = { BASE, CODE_PATTERN, isValidCode, normaliseCode, fetchCharacter, REASONS };
