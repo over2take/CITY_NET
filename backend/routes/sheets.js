@@ -8,6 +8,7 @@ const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived,
 const sheetImporters = require('../sheets/importers');
 const pdfTemplate = require('../sheets/pdfTemplate');
 const companionFetch = require('../sheets/companionFetch');
+const { rateLimit } = require('../middleware/rateLimit');
 const sheetAttack = require('../sheets/attack');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
@@ -24,6 +25,17 @@ const requireAdmin = (req, res, next) => {
   if (!isAdmin) return res.status(403).json({ error: 'Admin only' });
   next();
 };
+
+/**
+ * The ceiling on Companion imports, per caller.
+ *
+ * Ten in ten minutes. Importing your own character is something you do once, and a couple
+ * more if you mistyped the code — so this is generous to a person and useless to a script
+ * walking codes. Module scope rather than per-router: the counters have to outlive any
+ * one request, and the router is built once anyway.
+ */
+const COMPANION_LIMIT = 10;
+const companionLimit = rateLimit({ limit: COMPANION_LIMIT, windowMs: 10 * 60 * 1000 });
 
 module.exports = (db, io) => {
   const router = express.Router();
@@ -266,7 +278,14 @@ module.exports = (db, io) => {
   // Server-side rather than from the browser: it avoids CORS, and it keeps the player's
   // address out of a request to a third party they did not choose to contact. One code is
   // one pair of requests, and a bad code is refused before any of it leaves the building.
-  router.post('/import/companion', (req, res) => {
+  //
+  // Rate limited, and anonymous on purpose. This is the only open route that spends our
+  // outbound requests on a caller's say-so, which makes it two things without a limit: a
+  // way to point our address at someone else's service as fast as you can ask, and an
+  // oracle for walking a six-character keyspace to read back other people's characters.
+  // Requiring a token would close both and take the feature away from open installs,
+  // where players have none — so the ceiling is on the rate instead of on who may knock.
+  router.post('/import/companion', companionLimit, (req, res) => {
     getGameSystem(async (err, system) => {
       if (err) return res.status(500).json({ error: err.message });
       // The Companion is a Cyberpunk tool. Offering it under another system would be a
@@ -813,3 +832,8 @@ module.exports = (db, io) => {
 
   return router;
 };
+
+// The limiter outlives any one router, which is the point of it — and is also why a test
+// has to be able to forget what it has counted between cases.
+module.exports.companionLimit = companionLimit;
+module.exports.COMPANION_LIMIT = COMPANION_LIMIT;

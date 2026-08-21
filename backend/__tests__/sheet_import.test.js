@@ -301,3 +301,52 @@ describe('POST /api/sheets/import/preview', () => {
     expect(res.status).toBe(400);
   });
 });
+
+// ─── the Companion route's ceiling ────────────────────────────────────────────
+
+/**
+ * The limit exists because this is the one open route that spends our outbound requests
+ * on an anonymous caller's say-so. The middleware is tested on its own in
+ * `rate_limit.test.js`; what is tested here is that it is actually attached to the route,
+ * which is the part that would silently stop being true.
+ */
+describe('POST /api/sheets/import/companion — rate limit', () => {
+  const { companionLimit, COMPANION_LIMIT } = sheetsRouteFactory;
+
+  beforeEach(() => {
+    companionLimit.reset();
+    // Answers every code with "no such character". Deterministic, and nothing leaves the
+    // process — a real call here would be someone else's service in our test suite.
+    globalThis.fetch = async () => ({ status: 404, ok: false, text: async () => '{}' });
+  });
+
+  const post = (code) => request(app).post('/api/sheets/import/companion').send({ code });
+
+  it('allows a run of honest attempts', async () => {
+    // A player who mistypes their code a few times must not be locked out.
+    for (let i = 0; i < COMPANION_LIMIT; i++) {
+      const res = await post('6LZKP7');
+      expect(res.status, `attempt ${i + 1}`).not.toBe(429);
+    }
+  });
+
+  it('stops a caller who keeps going, and says when to come back', async () => {
+    for (let i = 0; i < COMPANION_LIMIT; i++) await post('6LZKP7');
+
+    const res = await post('6LZKP7');
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBeGreaterThan(0);
+    expect(res.headers['retry-after']).toBeTruthy();
+  });
+
+  it('counts codes it never sent anywhere', async () => {
+    // A malformed code is refused before any request is made, so it costs us nothing —
+    // but a script walking the keyspace would otherwise get unlimited free guesses at
+    // which shapes are even accepted.
+    for (let i = 0; i < COMPANION_LIMIT; i++) {
+      const res = await post('!!');
+      expect(res.status).toBe(400);
+    }
+    expect((await post('6LZKP7')).status).toBe(429);
+  });
+});
