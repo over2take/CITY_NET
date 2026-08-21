@@ -208,10 +208,13 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   // --- Current version (no auth, no Docker Hub) ---
+  //
+  // Open on purpose, so a client can watch for the restart after an update. That is also
+  // why the Docker probe behind `isDockerAvailable` is asked once per process rather than
+  // once per request: it shells out, and `execSync` holds the event loop while it waits,
+  // so a probe on an unauthenticated route was a way for anyone to stall the server.
   router.get('/version', (req, res) => {
-    const { execSync } = require('child_process');
-    let isDocker = false;
-    try { execSync('docker info', { stdio: 'ignore' }); isDocker = true; } catch {}
+    const isDocker = updater.isDockerAvailable();
     // bootId changes on every process start. The client waits for *that*, not for the
     // version to differ: a build without APP_VERSION reports 'dev' before and after, so
     // waiting on the version hangs even when the update worked.

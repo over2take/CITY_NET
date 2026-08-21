@@ -22,6 +22,38 @@ const COMPOSE_FILE = '/tmp/docker-compose.yml';
 /** Identifies this process. A restart is what the client is really waiting for. */
 const BOOT_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+/**
+ * Whether this process can reach a Docker daemon — asked once, then remembered.
+ *
+ * `GET /api/version` is unauthenticated by design, and it used to run this probe on every
+ * request. `execSync` blocks the whole event loop until the daemon answers, so anyone who
+ * could reach that endpoint could hold the entire server still simply by asking for it
+ * repeatedly. Nothing about the answer can change while the process lives — the socket is
+ * mounted at container start or it is not — so the probe belongs to the process, not to
+ * the request.
+ *
+ * The timeout is for the other half of the same problem: a socket that is present but
+ * unresponsive would otherwise block for as long as it liked, once.
+ */
+let dockerAvailable = null;
+
+const probeDocker = (exec) => {
+  try {
+    exec('docker info', { stdio: 'ignore', timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+function isDockerAvailable(deps = {}) {
+  if (dockerAvailable === null) dockerAvailable = probeDocker(deps.execSync || execSync);
+  return dockerAvailable;
+}
+
+/** Tests only — the memo is process-lifetime by design. */
+isDockerAvailable.forget = () => { dockerAvailable = null; };
+
 /** Update log, on the data volume so it survives the container being replaced. */
 function logPath() {
   const dbPath = process.env.DB_PATH || '/app/data/city.db';
@@ -376,6 +408,7 @@ function runUpdate(labels, deps = {}) {
 module.exports = {
   COMPOSE_FILE,
   BOOT_ID,
+  isDockerAvailable,
   parseVersion,
   compareVersions,
   isVersionTag,

@@ -422,3 +422,32 @@ describe('runUpdate', () => {
     expect(updater.BOOT_ID).toBeTruthy();
   });
 });
+
+describe('isDockerAvailable', () => {
+  beforeEach(() => updater.isDockerAvailable.forget());
+
+  it('asks the daemon once and remembers the answer', async () => {
+    // GET /api/version is unauthenticated, and this used to run on every request.
+    // execSync holds the event loop until the daemon answers, so a probe per request was
+    // a way for anyone who could reach that route to stall the whole server.
+    const execSync = vi.fn(() => '');
+    expect(updater.isDockerAvailable({ execSync })).toBe(true);
+    for (let i = 0; i < 50; i++) updater.isDockerAvailable({ execSync });
+    expect(execSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('remembers a no as firmly as a yes', async () => {
+    // Socket-less is a supported posture, not a transient failure - so retrying it on
+    // every request would be the same stall for the installs most likely to be exposed.
+    const execSync = vi.fn(() => { throw new Error('Cannot connect to the Docker daemon'); });
+    expect(updater.isDockerAvailable({ execSync })).toBe(false);
+    updater.isDockerAvailable({ execSync });
+    expect(execSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not wait on an unresponsive socket for ever', async () => {
+    const execSync = vi.fn(() => '');
+    updater.isDockerAvailable({ execSync });
+    expect(execSync).toHaveBeenCalledWith('docker info', expect.objectContaining({ timeout: 5000 }));
+  });
+});
