@@ -49,6 +49,11 @@ jobs:
       # release lived exactly there — a body limit smaller than the app's own, and a
       # missing X-Forwarded-For — both invisible to a thousand passing unit tests. This
       # runs the real nginx against the repository's real config.
+      #
+      # These steps were run by hand against nginx:alpine before being written down, and
+      # the counterfactual checked too: the same 40MB body against the previous 25M
+      # ceiling returns 413, so the probe fails when the config is wrong rather than
+      # passing regardless.
       - name: Start a stub backend that reports what it received
         run: |
           cat > /tmp/stub.js <<'STUB'
