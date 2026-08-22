@@ -379,6 +379,7 @@ CITY_NET/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
 │       ├── admin.test.js               # Admin endpoints (auth, settings, undo access); update routes — 409 with a reason rather than a false success, unauthenticated status, boot id on /version; check-update against a stubbed registry — upgrades only, dev tags per channel, and a prerelease not hiding a stable release
 │       ├── cpr_stats.test.js           # CP:R stat rolls — BODY rollable, MOVE and LUCK not, and every roll button in the template backed by a server-side roll
+│       ├── nginx_config.test.js        # The assumptions the app makes about the proxy every request arrives through, which no other test here touches — body ceiling at least the largest upload limit, X-Forwarded-For present, the socket able to upgrade, and every mounted path actually proxied. Two faults in one release lived exactly in that gap
 │       ├── upload_constraints.test.js  # The three questions a refusal has to answer, and the oversized upload that used to come back as HTML. Also asserts the frontend's copy of the cap still equals the server's, read from the source rather than restated
 │       ├── upload_headers.test.js      # Served through a real static mount rather than by calling the helper: a stored .html comes back sandboxed, an SVG likewise, and every file gets the headers rather than the ones something guessed were dangerous
 │       ├── outbound.test.js            # The one door: a host that is merely a suffix of an allowed one, plain http, a body past the cap abandoned rather than measured, a registry that answers and then stops talking, and a deadline still armed while the body arrives
@@ -634,7 +635,7 @@ CITY_NET/
 ├── docs/                       # Reference docs (deployment plans, feature notes)
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
-├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev
+├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev. Includes Nginx Proxy Behaviour, which runs the real nginx against the repository config and a stub upstream — a 40MB body through, the caller's address forwarded, the socket upgrading — because every other test mounts a router directly and never sees the proxy
 ├── docker-compose.yml          # Image tags read ${IMAGE_TAG:-latest}, so the release channel is a setting rather than an edit
 ├── nginx.conf                  # Proxies /api and the socket to the backend. Forwards X-Forwarded-For, without which every request reaches the app from this container's address and anything counting per caller counts the whole table as one; and allows a body at least as large as the biggest upload the app accepts, or a large map is refused by the proxy before the app ever sees it. A backend test asserts the second
 └── .env.example
