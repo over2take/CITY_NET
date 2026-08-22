@@ -9,9 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [1.10.0] - 2026-08-21
+## [1.10.0] - 2026-08-22
 
-Animated battle maps.
+Animated battle maps, and the second half of the security pass.
+
+Two pieces of work that ended up in one release because they met in the same place: making animated maps usable meant reworking how uploads are stored and checked, which is where the security pass was already headed. Where 1.9.4 covered what the server says to the outside world, this covers what it does with the Docker socket and with files people give it.
 
 ### Added
 
@@ -22,22 +24,6 @@ Animated battle maps.
   It loops, and it is silent — every browser refuses to start a video with sound on its own, and a map that will not move until somebody clicks looks broken rather than deliberate. Playback stops while the tab is hidden, so a session left open overnight is not quietly decoding video at your laptop.
 
   Still maps take exactly the path they always did. Nothing about an existing map changes.
-
-### Fixed
-
-- **A rejected upload now tells you which file and why.** Every refusal said a different amount and the most common one said nothing at all: a file over the size limit was never handled, so it came back as a web page the app then tried to read as data — what you actually saw for uploading a large map was a syntax error about an unexpected `<`. Refusals now name the file, say what was wrong with it, and list what would have worked, with the size limit included. The selected-file line names the file too, rather than only its size.
-
-- **Animated maps show a preview in SELECT EXISTING.** They are listed there now, and that gallery draws every entry as a still image — so a loop appeared as a broken icon.
-
-- **The map uploader now offers video in the file picker.** It was images only, so an animated map could not be selected without switching the dialog to show all files — and until now, doing that got you a successful upload and a blank map, because nothing in the app could draw one.
-
----
-
-## [1.9.5] - 2026-08-21
-
-The other half of the security pass: the update button, which is the one part of CITY_NET that runs as root on your machine.
-
-Where 1.9.4 covered what the server says to the outside world, this covers what it does with the Docker socket. Nothing here changes how you update — the button works exactly as before, right up until you press it twice.
 
 ### Security
 
@@ -60,6 +46,14 @@ Where 1.9.4 covered what the server says to the outside world, this covers what 
 - **Running without the Docker socket is now a documented choice rather than a broken install.** That socket is root on your host, so removing it is a sensible posture for a server exposed to the internet — everything keeps working except the update button, which refuses with an explanation. The refusal now offers updating from the host as an equal option instead of only telling you to add the socket back. See UPGRADE.md.
 
 - **UPGRADE.md now states plainly what you are trusting when you press Update.** Images are pulled from Docker Hub and run as root with the host socket, so that account's security is your install's security. That is true of any auto-updater; it should be written down rather than implied, along with the two ways to opt out.
+
+### Fixed
+
+- **A rejected upload now tells you which file and why.** Every refusal said a different amount and the most common one said nothing at all: a file over the size limit was never handled, so it came back as a web page the app then tried to read as data — what you actually saw for uploading a large map was a syntax error about an unexpected `<`. Refusals now name the file, say what was wrong with it, and list what would have worked, with the size limit included. The selected-file line names the file too, rather than only its size.
+
+- **Animated maps show a preview in SELECT EXISTING.** They are listed there now, and that gallery draws every entry as a still image — so a loop appeared as a broken icon.
+
+- **The map uploader now offers video in the file picker.** It was images only, so an animated map could not be selected without switching the dialog to show all files — and until now, doing that got you a successful upload and a blank map, because nothing in the app could draw one.
 
 ---
 
