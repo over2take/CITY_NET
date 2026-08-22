@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
+const { LIMITS, rejectFormat, uploadErrors } = require('../middleware/uploadConstraints');
 
 /**
  * Image formats a battle map may be in.
@@ -37,7 +38,19 @@ module.exports = (db, io, { emitUpdate }) => {
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
   // Memory storage so we can hash before writing to disk.
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: LIMITS.battle_map },
+    // Nothing is filtered here — the format check happens in the handler, where the
+    // response can be shaped properly. This exists to record the name, because the size
+    // limit aborts the upload before any handler runs and the error carries only a field
+    // name. Without this, being told a file is too large would not tell you which file.
+    fileFilter: (req, file, cb) => { req.uploadFilename = file.originalname; cb(null, true); },
+  });
+  // Mounted after `upload` on the route so multer's own failures — an oversized file
+  // above all — come back as a sentence rather than as Express's HTML error page, which
+  // the client then tried to parse as JSON.
+  const mapUploadErrors = uploadErrors({ allowed: [...IMAGE_EXT], maxBytes: LIMITS.battle_map });
 
   // List maps for a specific location.
   router.get('/', (req, res) => {
@@ -77,7 +90,7 @@ module.exports = (db, io, { emitUpdate }) => {
   }
 
   // Upload a new image (deduplicates by content hash).
-  router.post('/', authenticate, upload.single('image'), (req, res) => {
+  router.post('/', authenticate, upload.single('image'), mapUploadErrors, (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Only main admin can manage battle maps' });
 
     const { designation } = req.body;
@@ -92,7 +105,7 @@ module.exports = (db, io, { emitUpdate }) => {
     // choice of map format is not a security decision. What makes that safe is the
     // sandbox header on the static mount, not a short list here.
     if (!IMAGE_EXT.has(ext)) {
-      return res.status(400).json({ error: `Unsupported image format. Use ${[...IMAGE_EXT].join(', ')}.` });
+      return rejectFormat(res, { file: req.file, allowed: [...IMAGE_EXT], maxBytes: LIMITS.battle_map });
     }
     const hash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
     const filename = hash + ext;

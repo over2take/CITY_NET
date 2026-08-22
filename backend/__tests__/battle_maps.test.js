@@ -354,7 +354,8 @@ describe('POST battle map — what it accepts', () => {
   it('refuses a file that would be served as a web page', async () => {
     const res = await send('map.html');
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/unsupported/i);
+    expect(res.body.error).toContain('map.html');
+    expect(res.body.reason).toBe('UNSUPPORTED_FORMAT');
   });
 
   it('refuses other things that execute where they are served', async () => {

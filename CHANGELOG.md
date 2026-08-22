@@ -23,6 +23,10 @@ Animated battle maps.
 
 ### Fixed
 
+- **A rejected upload now tells you which file and why.** Every refusal said a different amount and the most common one said nothing at all: a file over the size limit was never handled, so it came back as a web page the app then tried to read as data — what you actually saw for uploading a large map was a syntax error about an unexpected `<`. Refusals now name the file, say what was wrong with it, and list what would have worked, with the size limit included. The selected-file line names the file too, rather than only its size.
+
+- **Animated maps show a preview in SELECT EXISTING.** They are listed there now, and that gallery draws every entry as a still image — so a loop appeared as a broken icon.
+
 - **The map uploader now offers video in the file picker.** It was images only, so an animated map could not be selected without switching the dialog to show all files — and until now, doing that got you a successful upload and a blank map, because nothing in the app could draw one.
 
 ---

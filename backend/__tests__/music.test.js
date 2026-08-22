@@ -210,7 +210,12 @@ describe('POST /api/music/upload', () => {
       .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
       .attach('file', Buffer.from('data'), { filename: 'script.exe', contentType: 'application/octet-stream' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/unsupported/i);
+    // Names the file, what it was, and what would have worked — the three things
+    // somebody staring at a rejected upload actually wants.
+    expect(res.body.error).toContain('script.exe');
+    expect(res.body.error).toContain('.exe');
+    expect(res.body.error).toContain('.mp3');
+    expect(res.body.error).toMatch(/25(\.0)?MB/);
   });
 
   it('uploads a valid mp3, inserts a DB row, and returns metadata', async () => {
@@ -431,7 +436,8 @@ describe('POST /api/music/upload — what it accepts', () => {
     // .html in a directory anyone can read, executing on this app's own origin.
     const res = await send('payload.html', 'audio/mpeg');
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/unsupported/i);
+    expect(res.body.error).toContain('payload.html');
+    expect(res.body.reason).toBe('UNSUPPORTED_FORMAT');
   });
 
   it('refuses a script even when it insists it is audio', async () => {

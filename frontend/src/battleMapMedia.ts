@@ -27,3 +27,15 @@ export const isVideoMap = (url: string): boolean => VIDEO_EXT.includes(extension
 
 /** What the file picker offers. Images plus the loops the scene can actually play. */
 export const MAP_ACCEPT = `image/*,${VIDEO_EXT.map((e) => `video/${e.slice(1)}`).join(',')}`;
+
+/**
+ * The upload ceiling, mirrored from `LIMITS.battle_map` in the backend.
+ *
+ * The server is the one that enforces this; the copy exists so the dialog can grey the
+ * button out and say the number before spending someone's upload on a refusal. It was
+ * previously written out three times in one component — the threshold, the label and the
+ * disabled check — with nothing keeping them in step, which is how you end up telling
+ * someone a file is fine and then rejecting it. A backend test asserts this value matches.
+ */
+export const MAX_MAP_BYTES = 25 * 1024 * 1024;
+export const MAX_MAP_MB = MAX_MAP_BYTES / (1024 * 1024);

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
+const { LIMITS, rejectFormat, uploadErrors } = require('../middleware/uploadConstraints');
 
 /**
  * What a track may be, by extension.
@@ -30,8 +31,12 @@ module.exports = (db, io) => {
 
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 25 * 1024 * 1024 },
+    limits: { fileSize: LIMITS.music },
+    // Records the name so an oversized track can be named in the refusal — multer aborts
+    // before any handler runs, and its error carries only the form field.
+    fileFilter: (req, file, cb) => { req.uploadFilename = file.originalname; cb(null, true); },
   });
+  const trackUploadErrors = uploadErrors({ allowed: [...AUDIO_EXT], maxBytes: LIMITS.music });
 
   // GET /api/music/library — full tree
   router.get('/library', (req, res) => {
@@ -106,13 +111,13 @@ module.exports = (db, io) => {
   });
 
   // POST /api/music/upload — upload audio file (admin only)
-  router.post('/upload', authenticate, upload.single('file'), (req, res) => {
+  router.post('/upload', authenticate, upload.single('file'), trackUploadErrors, (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'no file' });
     const ext = path.extname(req.file.originalname).toLowerCase();
     // The name is what gets written and what decides how it is served, so the name is
     // what is checked. See AUDIO_EXT for what replaced the old mimetype test and why.
     if (!AUDIO_EXT.has(ext)) {
-      return res.status(400).json({ error: `Unsupported file type. Use ${[...AUDIO_EXT].join(', ')}.` });
+      return rejectFormat(res, { file: req.file, allowed: [...AUDIO_EXT], maxBytes: LIMITS.music });
     }
 
     const parent_id = req.body.parent_id ? parseInt(req.body.parent_id, 10) : null;
