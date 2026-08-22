@@ -407,3 +407,30 @@ describe('POST battle map — what it accepts', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('GET /images — SELECT EXISTING', () => {
+  const upload = (filename) => request(app)
+    .post('/api/locations/1/battle_maps')
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+    .field('designation', 'GROUND')
+    .attach('image', Buffer.from(`bytes for ${filename}`), { filename });
+
+  it('offers back everything upload accepts, not a shorter list of its own', async () => {
+    // These were two lists that had to agree and nothing made them. A map in an accepted
+    // format that this filter left out could be uploaded, used on the location it was
+    // uploaded to, and then never found again from anywhere else.
+    for (const name of ['loop.webm', 'clip.mp4', 'map.avif', 'map.svg', 'map.bmp']) {
+      expect((await upload(name)).status, name).toBe(200);
+    }
+
+    const res = await request(app)
+      .get('/api/locations/1/battle_maps/images')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(res.status).toBe(200);
+
+    const listed = res.body.map((f) => f.filename).join(' ');
+    for (const ext of ['.webm', '.mp4', '.avif', '.svg', '.bmp']) {
+      expect(listed, ext).toContain(ext);
+    }
+  });
+});

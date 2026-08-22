@@ -146,9 +146,15 @@ module.exports = (db, io, { emitUpdate }) => {
   });
 
   // List all uploaded battle map image filenames (admin use)
+  // What SELECT EXISTING offers, which must be everything upload accepts.
+  //
+  // This had its own shorter list — png, jpg, webp, gif — so a map in any other accepted
+  // format could be uploaded, used on the location it was uploaded to, and then never
+  // found again from anywhere else. Two lists that had to agree and nothing making them,
+  // which is why this now reads the one the upload route enforces.
   router.get('/images', authenticate, (req, res) => {
     const files = fs.existsSync(uploadsDir)
-      ? fs.readdirSync(uploadsDir).filter(f => /\.(png|jpe?g|webp|gif)$/i.test(f))
+      ? fs.readdirSync(uploadsDir).filter(f => IMAGE_EXT.has(path.extname(f).toLowerCase()))
       : [];
     res.json(files.map(f => ({ filename: f, url: '/uploads/battle_maps/' + f })));
   });
