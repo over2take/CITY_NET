@@ -92,6 +92,25 @@ pm2 restart citynet-backend
 
 ## Environment variable changes by version
 
+### [1.10.0]
+
+No new or changed environment variables. **Docker installs need to do nothing** — a normal
+`docker compose pull` is enough.
+
+**Battle maps can now be up to 250MB**, for animated map loops. The bundled web server
+config allows that already, and it travels inside the frontend image, so pulling both
+containers carries it. Two things follow:
+
+- **Pull the frontend image, not only the backend.** The size ceiling lives in the web
+  server's config. A backend-only update leaves the proxy refusing anything over 25MB, and
+  the upload fails with a bare 413 that names neither the file nor the reason.
+- **If you run your own proxy in front of CITY_NET**, raise its body limit to match, or
+  large maps are refused before they reach the app:
+
+  ```
+  client_max_body_size 250M;
+  ```
+
 ### [1.9.4]
 
 No new or changed environment variables, and **Docker installs need to do nothing** — the

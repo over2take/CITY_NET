@@ -43,6 +43,8 @@ Two pieces of work that ended up in one release because they met in the same pla
 
 ### Changed
 
+- **Update both containers, not just the backend.** The larger upload ceiling lives in the web server's config, which ships inside the frontend image. A normal `docker compose pull` takes care of it; an install that updated only the backend would find large maps refused by the proxy before the app ever saw them.
+
 - **Running without the Docker socket is now a documented choice rather than a broken install.** That socket is root on your host, so removing it is a sensible posture for a server exposed to the internet — everything keeps working except the update button, which refuses with an explanation. The refusal now offers updating from the host as an equal option instead of only telling you to add the socket back. See UPGRADE.md.
 
 - **UPGRADE.md now states plainly what you are trusting when you press Update.** Images are pulled from Docker Hub and run as root with the host socket, so that account's security is your install's security. That is true of any auto-updater; it should be written down rather than implied, along with the two ways to opt out.
@@ -50,6 +52,8 @@ Two pieces of work that ended up in one release because they met in the same pla
 ### Fixed
 
 - **A rejected upload now tells you which file and why.** Every refusal said a different amount and the most common one said nothing at all: a file over the size limit was never handled, so it came back as a web page the app then tried to read as data — what you actually saw for uploading a large map was a syntax error about an unexpected `<`. Refusals now name the file, say what was wrong with it, and list what would have worked, with the size limit included. The selected-file line names the file too, rather than only its size.
+
+- **The web server in front of CITY_NET would have rejected a large map before the app saw it.** It had its own 25MB ceiling on request bodies, separate from the app's, so raising the map limit alone would have achieved nothing in a Docker install — the upload would have failed with a bare "413" from the proxy, naming neither the file nor the reason. Both now agree, and a test checks that they still do.
 
 - **Animated maps show a preview in SELECT EXISTING.** They are listed there now, and that gallery draws every entry as a still image — so a loop appeared as a broken icon.
 

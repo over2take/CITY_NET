@@ -215,3 +215,24 @@ describe('the limit the client shows and the limit the server keeps', () => {
     expect(frontendValue).toBe(LIMITS.battle_map);
   });
 });
+
+describe('the proxy in front of all of this', () => {
+  it('allows a body at least as large as the biggest upload the app accepts', () => {
+    // Everything reaches the backend through nginx in a Docker install, so its
+    // client_max_body_size is the outer bound whatever the routes say. It sat at 25M
+    // while battle maps moved to 250MB — which no test caught, because every test here
+    // talks to Express directly and never sees the proxy. A large map would have been
+    // refused by nginx with a 413 of its own, naming neither the file nor the reason.
+    const conf = fs.readFileSync(
+      new URL('../../nginx.conf', import.meta.url), 'utf8'
+    );
+    const match = /client_max_body_size\s+(\d+)([KMG])?;/i.exec(conf);
+    expect(match, 'client_max_body_size not found in nginx.conf').toBeTruthy();
+
+    const scale = { K: 1024, M: 1024 * 1024, G: 1024 * 1024 * 1024 };
+    const allowed = Number(match[1]) * (scale[(match[2] || '').toUpperCase()] || 1);
+    const biggest = Math.max(...Object.values(LIMITS));
+
+    expect(allowed).toBeGreaterThanOrEqual(biggest);
+  });
+});
