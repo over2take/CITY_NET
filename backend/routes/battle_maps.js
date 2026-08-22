@@ -37,15 +37,45 @@ module.exports = (db, io, { emitUpdate }) => {
   const uploadsDir = path.join(__dirname, '../uploads/battle_maps');
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-  // Memory storage so we can hash before writing to disk.
+  // Uploads land in here first, then get renamed to their content hash.
+  const tmpDir = path.join(uploadsDir, '.tmp');
+  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+  /**
+   * Straight to disk, not through memory.
+   *
+   * This was `memoryStorage`, which holds the entire upload in RAM and made the size cap
+   * a memory budget — fine for a 2MB floor plan, not for an animated map, which is a
+   * video and routinely tens of megabytes. Writing to a temporary file and hashing it as
+   * a stream keeps memory flat whatever the size, so the ceiling costs disk instead.
+   */
   const upload = multer({
-    storage: multer.memoryStorage(),
+    storage: multer.diskStorage({
+      destination: (req, file, cb) => cb(null, tmpDir),
+      // A name nothing depends on: the file is renamed to its hash once it is complete,
+      // and a partial upload must never collide with a finished one.
+      filename: (req, file, cb) => cb(null, `part_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`),
+    }),
     limits: { fileSize: LIMITS.battle_map },
     // Nothing is filtered here — the format check happens in the handler, where the
     // response can be shaped properly. This exists to record the name, because the size
     // limit aborts the upload before any handler runs and the error carries only a field
     // name. Without this, being told a file is too large would not tell you which file.
     fileFilter: (req, file, cb) => { req.uploadFilename = file.originalname; cb(null, true); },
+  });
+
+  /** Whatever is left of an upload that will not be kept. */
+  const discard = (file) => {
+    if (file && file.path) fs.unlink(file.path, () => {});
+  };
+
+  /** The content hash of a file already on disk, read in chunks rather than all at once. */
+  const hashFile = (filepath) => new Promise((resolve, reject) => {
+    const h = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filepath);
+    stream.on('data', (chunk) => h.update(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(h.digest('hex')));
   });
   // Mounted after `upload` on the route so multer's own failures — an oversized file
   // above all — come back as a sentence rather than as Express's HTML error page, which
@@ -90,11 +120,18 @@ module.exports = (db, io, { emitUpdate }) => {
   }
 
   // Upload a new image (deduplicates by content hash).
-  router.post('/', authenticate, upload.single('image'), mapUploadErrors, (req, res) => {
-    if (req.user.isTemporary) return res.status(403).json({ error: 'Only main admin can manage battle maps' });
+  router.post('/', authenticate, upload.single('image'), mapUploadErrors, async (req, res) => {
+    // Every path out of here from now on has a temporary file to clean up behind it.
+    if (req.user.isTemporary) {
+      discard(req.file);
+      return res.status(403).json({ error: 'Only main admin can manage battle maps' });
+    }
 
     const { designation } = req.body;
-    if (!req.file || !designation) return res.status(400).json({ error: 'Image and designation are required' });
+    if (!req.file || !designation) {
+      discard(req.file);
+      return res.status(400).json({ error: 'Image and designation are required' });
+    }
 
     const ext = path.extname(req.file.originalname).toLowerCase();
     // The extension is what decides how this comes back out: /uploads is served with no
@@ -105,15 +142,30 @@ module.exports = (db, io, { emitUpdate }) => {
     // choice of map format is not a security decision. What makes that safe is the
     // sandbox header on the static mount, not a short list here.
     if (!IMAGE_EXT.has(ext)) {
+      discard(req.file);
       return rejectFormat(res, { file: req.file, allowed: [...IMAGE_EXT], maxBytes: LIMITS.battle_map });
     }
-    const hash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
+
+    let hash;
+    try {
+      hash = await hashFile(req.file.path);
+    } catch (e) {
+      discard(req.file);
+      return res.status(500).json({ error: 'Could not read the uploaded file.' });
+    }
+
     const filename = hash + ext;
     const filepath = path.join(uploadsDir, filename);
 
-    // Only write if this exact file isn't already on disk.
-    if (!fs.existsSync(filepath)) {
-      fs.writeFileSync(filepath, req.file.buffer);
+    // Deduplicated by content, so the same map used on a dozen locations is stored once —
+    // which is what keeps a generous size limit from turning into a disk problem. An
+    // upload of something already here is simply dropped.
+    try {
+      if (fs.existsSync(filepath)) discard(req.file);
+      else fs.renameSync(req.file.path, filepath);
+    } catch (e) {
+      discard(req.file);
+      return res.status(500).json({ error: 'Could not store the uploaded file.' });
     }
 
     const imageUrl = '/uploads/battle_maps/' + filename;

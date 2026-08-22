@@ -182,7 +182,7 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
               const tooBig = selectedFile.size > MAX_MAP_BYTES;
               return (
                 <div style={{ fontSize: '0.65rem', marginBottom: '10px', letterSpacing: '1px', color: tooBig ? '#ff3333' : 'var(--green)' }}>
-                  {selectedFile.name} — {mb.toFixed(2)}MB / {MAX_MAP_MB}MB{tooBig ? ' — FILE_TOO_LARGE' : ''}
+                  {selectedFile.name} — {mb.toFixed(1)}MB / {MAX_MAP_MB}MB{tooBig ? ' — FILE_TOO_LARGE' : ''}
                 </div>
               );
             })()}

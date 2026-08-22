@@ -16,11 +16,17 @@ import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { createRequire } from 'module';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { makeTestDb, run } from './helpers/testDb.js';
 import battleMapsFactory from '../routes/battle_maps.js';
 
 const require = createRequire(import.meta.url);
-const { describeRejection, LIMITS, MB } = require('../middleware/uploadConstraints.js');
+const { describeRejection, LIMITS, MB, uploadErrors } = require('../middleware/uploadConstraints.js');
+
+const mapsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../uploads/battle_maps');
 
 process.env.JWT_SECRET = 'test-secret';
 
@@ -34,6 +40,14 @@ let app;
 
 beforeEach(async () => {
   db = await makeTestDb();
+  // The shared helper does not carry this table; battle_maps.test.js creates it the same way.
+  await run(db, `CREATE TABLE IF NOT EXISTS battle_maps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id INTEGER NOT NULL,
+    designation TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    order_index INTEGER NOT NULL
+  )`);
   app = express();
   app.use(express.json());
   app.use('/api/locations/:id/battle_maps', battleMapsFactory(db, { emit: () => {} }, { emitUpdate: () => {} }));
@@ -78,17 +92,36 @@ describe('describeRejection', () => {
 });
 
 describe('an oversized upload', () => {
-  const oversized = () => Buffer.alloc(LIMITS.battle_map + 1024, 1);
+  /**
+   * Exercised against a small stand-in limit rather than the real one.
+   *
+   * The real ceiling is 250MB, and a test that actually sent that would allocate a
+   * quarter of a gigabyte to prove a point about not allocating a quarter of a gigabyte.
+   * The middleware under test is the same instance the route mounts; only the number and
+   * the handler behind it are miniature.
+   */
+  const TINY = 2 * MB;
+  let sizeApp;
+
+  beforeEach(() => {
+    const tiny = multer({ storage: multer.memoryStorage(), limits: { fileSize: TINY },
+      fileFilter: (req, file, cb) => { req.uploadFilename = file.originalname; cb(null, true); } });
+
+    sizeApp = express();
+    sizeApp.post('/upload',
+      tiny.single('image'),
+      uploadErrors({ allowed: ['.png', '.webm'], maxBytes: TINY }),
+      (req, res) => res.json({ ok: true, stored: req.file.originalname }));
+  });
+
+  const send = (filename, bytes) => request(sizeApp)
+    .post('/upload')
+    .attach('image', Buffer.alloc(bytes, 1), { filename });
 
   it('is refused as JSON, not as an HTML error page', async () => {
     // The actual bug: this used to reach Express's default handler. The client did
     // `await res.json()` on HTML and reported a syntax error to the user.
-    const res = await request(app)
-      .post('/api/locations/1/battle_maps')
-      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
-      .field('designation', 'GROUND')
-      .attach('image', oversized(), { filename: 'huge.png' });
-
+    const res = await send('huge.png', TINY + 512);
     expect(res.status).toBe(413);
     expect(res.headers['content-type']).toMatch(/json/);
     expect(res.body.reason).toBe('FILE_TOO_LARGE');
@@ -97,37 +130,69 @@ describe('an oversized upload', () => {
   it('names the file it refused, and the limit it broke', async () => {
     // multer aborts before any handler runs and its error carries only the form field, so
     // the name is recorded on the way in. Without that, "too large" names nothing.
-    const res = await request(app)
-      .post('/api/locations/1/battle_maps')
-      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
-      .field('designation', 'GROUND')
-      .attach('image', oversized(), { filename: 'enormous-map.webm' });
-
+    const res = await send('enormous-map.webm', TINY + 512);
     expect(res.body.error).toContain('enormous-map.webm');
-    expect(res.body.error).toContain('25.0MB');
+    expect(res.body.error).toContain('2.0MB');
+    expect(res.body.error).toMatch(/limit/);
   });
 
   it('tells the client the machine-readable limit too', async () => {
     // So an interface can show the ceiling without restating the number itself.
-    const res = await request(app)
-      .post('/api/locations/1/battle_maps')
-      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
-      .field('designation', 'GROUND')
-      .attach('image', oversized(), { filename: 'huge.png' });
-
-    expect(res.body.maxBytes).toBe(LIMITS.battle_map);
+    const res = await send('huge.png', TINY + 512);
+    expect(res.body.maxBytes).toBe(TINY);
     expect(res.body.allowed).toContain('.png');
   });
 
-  it('writes nothing when it refuses', async () => {
+  it('lets a file under the limit straight through', async () => {
+    const res = await send('fine.png', 512);
+    expect(res.status).toBe(200);
+    expect(res.body.stored).toBe('fine.png');
+  });
+});
+
+describe('a real battle map upload', () => {
+  it('stores a large map without buffering it, and stores it once', async () => {
+    // 40MB is past the old ceiling entirely and is an ordinary size for an animated map.
+    // It also covers the streaming path end to end: written to a temporary file, hashed
+    // in chunks, renamed to its hash.
+    const big = Buffer.alloc(40 * 1024 * 1024, 7);
+
+    const first = await request(app)
+      .post('/api/locations/1/battle_maps')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .field('designation', 'Level 1')
+      .attach('image', big, { filename: 'loop.webm' });
+    expect(first.status).toBe(200);
+
+    // The same file again on another floor is deduplicated to the same stored object,
+    // which is what keeps a generous ceiling from becoming a disk problem.
+    const second = await request(app)
+      .post('/api/locations/1/battle_maps')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .field('designation', 'Level 2')
+      .attach('image', big, { filename: 'loop.webm' });
+    expect(second.status).toBe(200);
+    expect(second.body.imageUrl).toBe(first.body.imageUrl);
+
+    // Deduplicated to one object on disk, and not left there afterwards — this is 40MB.
+    const stored = path.join(mapsDir, path.basename(first.body.imageUrl));
+    expect(fs.existsSync(stored)).toBe(true);
+    fs.unlinkSync(stored);
+  });
+
+  it('leaves no partial files behind when it refuses one', async () => {
+    // The upload is on disk by the time the format is checked, so every way out of the
+    // handler has something to clean up.
+    const tmpDir = path.join(mapsDir, '.tmp');
     await request(app)
       .post('/api/locations/1/battle_maps')
       .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
-      .field('designation', 'GROUND')
-      .attach('image', oversized(), { filename: 'huge.png' });
+      .field('designation', 'Level 3')
+      .attach('image', Buffer.alloc(2048, 3), { filename: 'nope.tiff' });
 
-    const rows = await new Promise((resolve) => db.all('SELECT * FROM battle_maps', (_e, r) => resolve(r || [])));
-    expect(rows).toHaveLength(0);
+    await new Promise((r) => setTimeout(r, 50));
+    const leftovers = fs.existsSync(tmpDir) ? fs.readdirSync(tmpDir) : [];
+    expect(leftovers).toEqual([]);
   });
 });
 

@@ -36,6 +36,11 @@ export const MAP_ACCEPT = `image/*,${VIDEO_EXT.map((e) => `video/${e.slice(1)}`)
  * previously written out three times in one component — the threshold, the label and the
  * disabled check — with nothing keeping them in step, which is how you end up telling
  * someone a file is fine and then rejecting it. A backend test asserts this value matches.
+ *
+ * Large because an animated map is a video: the loops people buy run to tens of megabytes
+ * and sometimes past a hundred, and a ceiling below that made the feature decorative. The
+ * server streams these to disk rather than buffering them, so the number costs storage
+ * rather than memory, and identical maps are stored once however many locations use them.
  */
-export const MAX_MAP_BYTES = 25 * 1024 * 1024;
+export const MAX_MAP_BYTES = 250 * 1024 * 1024;
 export const MAX_MAP_MB = MAX_MAP_BYTES / (1024 * 1024);

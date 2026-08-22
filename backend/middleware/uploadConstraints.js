@@ -19,13 +19,19 @@ const MB = 1024 * 1024;
 /**
  * The ceiling for each kind of upload, in bytes.
  *
- * These are memory figures as much as policy ones: multer buffers the whole file and the
- * routes hash it before writing, so the limit is really how much of a home server's RAM
- * one upload may take. Raising the map ceiling for animated maps means either accepting
- * that cost or streaming to disk while hashing.
+ * For everything that still buffers in memory, these are memory figures as much as policy
+ * ones — multer holds the whole file and the route hashes it before writing, so the limit
+ * is really how much of a home server's RAM one upload may take.
+ *
+ * Battle maps are the exception and the reason the distinction matters. An animated map
+ * is a video: the loops people actually buy run to tens of megabytes and sometimes past a
+ * hundred, so a 25MB ceiling made the feature decorative. That route streams to disk and
+ * hashes as it goes, so its ceiling costs storage rather than RAM — and storage is what a
+ * map library is for. Deduplication by content hash means the same map re-used across a
+ * dozen locations is still stored once.
  */
 const LIMITS = {
-  battle_map: 25 * MB,
+  battle_map: 250 * MB,
   music: 25 * MB,
   portrait: 8 * MB,
   font: 5 * MB,
