@@ -7,6 +7,16 @@ import * as THREE from 'three';
 // browser policy rather than rendering: autoplay is refused unless the video is muted,
 // a paused element stops feeding the texture, and a decoder left running on a tab nobody
 // is looking at is a laptop fan spinning through a session that ended an hour ago.
+//
+// Verified in a real browser against a real VP9 file, since jsdom has neither a media
+// stack nor WebGL and the tests here can only cover the element's configuration: the file
+// decodes, muted autoplay starts without a gesture, `THREE.VideoTexture` uploads frames,
+// and successive rendered frames differ. Worth recording one thing that looked like a
+// fault and was not — a tab the compositor has stopped painting fires neither
+// `requestAnimationFrame` nor `requestVideoFrameCallback`, so the texture never marks
+// itself stale and the plane renders black while the video's `currentTime` keeps
+// advancing. That is the same mechanism this hook leans on to pause on hidden tabs, and
+// it means a map that looks frozen in a background window is behaving correctly.
 
 export interface VideoMapTexture {
   texture: THREE.VideoTexture | null;
