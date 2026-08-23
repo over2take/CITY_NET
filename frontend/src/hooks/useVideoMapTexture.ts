@@ -11,7 +11,8 @@ import * as THREE from 'three';
 // Verified in a real browser against a real VP9 file, since jsdom has neither a media
 // stack nor WebGL and the tests here can only cover the element's configuration: the file
 // decodes, muted autoplay starts without a gesture, `THREE.VideoTexture` uploads frames,
-// and successive rendered frames differ. Worth recording one thing that looked like a
+// successive rendered frames differ, and it wraps from the end back to the start without
+// firing `ended` or pausing — a loop, not a clip that stops. Worth recording one thing that looked like a
 // fault and was not — a tab the compositor has stopped painting fires neither
 // `requestAnimationFrame` nor `requestVideoFrameCallback`, so the texture never marks
 // itself stale and the plane renders black while the video's `currentTime` keeps
