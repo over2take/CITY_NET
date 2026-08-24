@@ -1223,13 +1223,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         const entries = Object.entries(payload.fields)
           .filter(([k, v]) => !linked[k] && (typeof v === 'string' || typeof v === 'number'));
         if (entries.length === 0) return;
-        db.get(
-          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-          [info.userName, system],
-          (err2, row) => {
-            if (err2 || !row) return;
-            const existing = JSON.parse(row.data || '{}');
-
+        // Through the queue: an import replaces the whole sheet, so a concurrent edit
+        // does not merely lose a field, it disappears entirely. The occupancy carried
+        // across a replace has to be read at write time too, or a player seated during
+        // the import is turned out of their car by it.
+        mutateSheetForUser(
+          db,
+          { username: info.userName, system },
+          (existing) => {
             // A replace starts from empty rather than merging, so a skill dropped on the
             // source does not linger and a weapon row that no longer exists does not keep
             // its damage. What survives is state that is not character data at all:
@@ -1243,11 +1244,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               : existing;
             entries.forEach(([k, v]) => { data[k] = v; });
             entries.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
-            db.run(
-              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-              [JSON.stringify(data), row.id],
-              (err3) => {
-                if (err3) return;
+            return data;
+          },
+          (err3, data) => {
+                if (err3 || !data) return;
                 if (entries.some(([k]) => k === identity.nameField(system) || k === 'description')) {
                   identity.syncToken(db, system, info.userName, (changed) => {
                     if (changed) emitUpdate({ isRhombusOnly: true });
@@ -1279,8 +1279,6 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 } else {
                   finish();
                 }
-              }
-            );
           }
         );
       });

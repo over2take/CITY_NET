@@ -100,6 +100,23 @@ function mutateSheetForUser(db, { username, system }, mutate, cb = () => {}) {
   );
 }
 
+/**
+ * Apply a handful of fields to a sheet, leaving the rest as it is.
+ *
+ * The overwhelmingly common shape: a caller loads a sheet, spreads it, sets one or two
+ * keys and writes the whole thing back — which is what discards a concurrent edit to some
+ * *other* field. Spreading over a fresh read instead means only the fields being patched
+ * are contested, and everything else survives.
+ *
+ * `patch` may be an object or a function of the current sheet, for values that depend on
+ * what is actually there rather than on what was read a moment ago.
+ */
+const patchSheet = (db, sheetId, patch, cb) =>
+  mutateSheet(db, sheetId, (data) => ({
+    ...data,
+    ...(typeof patch === 'function' ? patch(data) : patch),
+  }), cb);
+
 /** Promise-shaped, for callers that would rather await than nest. */
 const mutateSheetAsync = (db, sheetId, mutate) => new Promise((resolve, reject) => {
   mutateSheet(db, sheetId, mutate, (err, data) => (err ? reject(err) : resolve(data)));
@@ -108,4 +125,4 @@ const mutateSheetAsync = (db, sheetId, mutate) => new Promise((resolve, reject) 
 /** Tests only: how many sheets currently have a write queued. */
 const pendingSheets = () => chains.size;
 
-module.exports = { mutateSheet, mutateSheetForUser, mutateSheetAsync, pendingSheets };
+module.exports = { mutateSheet, mutateSheetForUser, patchSheet, mutateSheetAsync, pendingSheets };

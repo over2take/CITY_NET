@@ -190,3 +190,26 @@ describe('mutateSheetForUser', () => {
     });
   });
 });
+
+describe('patchSheet', () => {
+  const { patchSheet } = require('../sheets/mutate.js');
+
+  it('leaves fields it was not given alone, even under a concurrent write', async () => {
+    // The shape most call sites had: load, spread, set one key, write it all back. The
+    // spread is what quietly carried a stale copy of every other field.
+    await Promise.all([
+      new Promise((r) => patchSheet(db, sheetId, { hp: 1 }, r)),
+      new Promise((r) => patchSheet(db, sheetId, { luck: 2 }, r)),
+    ]);
+    const after = await readSheet();
+    expect(after.hp).toBe(1);
+    expect(after.luck).toBe(2);
+    expect(after.handle).toBe('Nyx');
+  });
+
+  it('takes a function when the new value depends on the current one', async () => {
+    await Promise.all(Array.from({ length: 5 }, () =>
+      new Promise((r) => patchSheet(db, sheetId, (d) => ({ hp: (d.hp || 0) + 2 }), r))));
+    expect((await readSheet()).hp).toBe(20);
+  });
+});
