@@ -79,6 +79,11 @@ module.exports = (db, io, { emitUpdate }) => {
    *
    * Swept once at startup rather than on a timer: uploads are rare, orphans rarer, and a
    * background interval is a thing to reason about forever in exchange for nothing.
+   *
+   * It reads `tmpDir` and only `tmpDir`. Stored maps live one directory up and are never
+   * enumerated here, whatever their age — this deletes files automatically, next door to
+   * everyone's maps, so that boundary is pinned by a test rather than left to a careful
+   * reading of the loop.
    */
   const sweepAbandonedUploads = (olderThanMs = 60 * 60 * 1000, now = Date.now()) => {
     let removed = 0;

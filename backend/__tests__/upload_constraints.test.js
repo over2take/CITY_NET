@@ -263,6 +263,24 @@ describe('uploads a dead process left behind', () => {
     fs.unlinkSync(fresh);
   });
 
+  it('never touches a map that is already stored, however old', () => {
+    // The question anyone upgrading actually has. The sweep deletes files, it runs
+    // automatically at startup, and it runs beside a directory of everybody's maps — so
+    // the boundary between "abandoned fragment" and "someone's battle map" is worth a
+    // test rather than a careful reading. A map from a year ago is still a map.
+    fs.mkdirSync(mapsDir, { recursive: true });
+    const stored = path.join(mapsDir, 'deadbeefcafe0000000000000000000000000000000000000000000000000000.png');
+    fs.writeFileSync(stored, 'a treasured map');
+    const longAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+    fs.utimesSync(stored, longAgo, longAgo);
+
+    const router = battleMapsFactory(db, { emit: () => {} }, { emitUpdate: () => {} });
+    router.sweepAbandonedUploads(0);   // as aggressive as it can possibly be
+
+    expect(fs.existsSync(stored)).toBe(true);
+    fs.unlinkSync(stored);
+  });
+
   it('does not offer partial uploads in SELECT EXISTING', async () => {
     // The temp directory lives inside the uploads directory the gallery reads.
     fs.mkdirSync(tmpDir, { recursive: true });
