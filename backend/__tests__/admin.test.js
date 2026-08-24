@@ -6,6 +6,11 @@ import bcrypt from 'bcrypt';
 import { vi } from 'vitest';
 import { makeTestDb, get, all, run } from './helpers/testDb.js';
 import adminRouteFactory from '../routes/admin.js';
+import { createRequire } from 'module';
+
+// The same object the route holds. An ESM default import of a CJS module is not
+// necessarily that object, so a spy on it would attach to a copy and never fire.
+const updater = createRequire(import.meta.url)('../updater.js');
 
 process.env.JWT_SECRET = 'test-secret';
 
@@ -264,6 +269,46 @@ describe('update routes', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('phase');
     expect(res.body).toHaveProperty('bootId');
+  });
+
+  it('GET /update/status publishes no log to the open internet', async () => {
+    // It used to answer with the last forty lines of update.log - compose output, host
+    // paths, absolute directories - on a route with no auth, and nothing displayed them.
+    const res = await request(app).get('/api/admin/update/status');
+    expect(res.body).not.toHaveProperty('log');
+  });
+
+  it('POST /update refuses a second press while one is already running', async () => {
+    // Two presses used to mean two `compose pull` runs and two privileged helper
+    // containers against the same stack.
+    vi.spyOn(updater, 'isRunning').mockReturnValue(true);
+    const spawnIt = vi.spyOn(updater, 'runUpdate');
+
+    const res = await request(app)
+      .post('/api/admin/update')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/already running/i);
+    expect(spawnIt).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it('POST /update refuses when the run starts between the check and the spawn', async () => {
+    // The route's check and runUpdate's own guard are not one atomic step. The guard
+    // inside runUpdate is the one that actually holds, and the route has to honour it
+    // rather than reporting a success that never started.
+    vi.spyOn(updater, 'isRunning').mockReturnValue(false);
+    vi.spyOn(updater, 'preflight').mockReturnValue({ ok: true, labels: { workingDir: '/x', configFile: '/x/y.yml' } });
+    vi.spyOn(updater, 'runUpdate').mockReturnValue(null);
+
+    const res = await request(app)
+      .post('/api/admin/update')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBeUndefined();
+    vi.restoreAllMocks();
   });
 
   it('POST /update refuses with a reason instead of reporting success', async () => {

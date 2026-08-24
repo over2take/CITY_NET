@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { MAP_ACCEPT, MAX_MAP_BYTES, MAX_MAP_MB, isVideoMap } from './battleMapMedia';
 
 interface ConfirmModal { message: string; onConfirm: () => void; }
 
@@ -62,7 +63,13 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
         body: formData,
       });
       if (res.ok) { setSelectedFile(null); fetchMaps(); onMapsChanged?.(); }
-      else { const d = await res.json(); setError(d.error || 'Upload failed'); }
+      else {
+        // The server names the file and the constraint when it refuses. If it answered
+        // with something that is not JSON at all, say that rather than surfacing a parse
+        // error — "Unexpected token '<'" is what an oversized upload used to report.
+        const d = await res.json().catch(() => null);
+        setError(d?.error || `Upload failed (${res.status})`);
+      }
     } catch (err: any) { setError(err.message); }
     setLoading(false);
   };
@@ -168,19 +175,19 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
 
         {tab === 'upload' && (
           <div style={{ marginBottom: '16px', borderBottom: '1px solid #333', paddingBottom: '16px' }}>
-            <input type="file" accept="image/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+            <input type="file" accept={MAP_ACCEPT} onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
               style={{ display: 'block', marginBottom: '6px', color: 'var(--green)' }} />
             {selectedFile && (() => {
               const mb = selectedFile.size / (1024 * 1024);
-              const tooBig = mb > 25;
+              const tooBig = selectedFile.size > MAX_MAP_BYTES;
               return (
                 <div style={{ fontSize: '0.65rem', marginBottom: '10px', letterSpacing: '1px', color: tooBig ? '#ff3333' : 'var(--green)' }}>
-                  {mb.toFixed(2)}MB / 25MB{tooBig ? ' — FILE_TOO_LARGE' : ''}
+                  {selectedFile.name} — {mb.toFixed(1)}MB / {MAX_MAP_MB}MB{tooBig ? ' — FILE_TOO_LARGE' : ''}
                 </div>
               );
             })()}
             {designationControls}
-            <button className="upload-btn" onClick={handleUpload} disabled={loading || (!!selectedFile && selectedFile.size > 25 * 1024 * 1024)}>
+            <button className="upload-btn" onClick={handleUpload} disabled={loading || (!!selectedFile && selectedFile.size > MAX_MAP_BYTES)}>
               {loading ? 'UPLOADING...' : 'UPLOAD MAP'}
             </button>
           </div>
@@ -197,7 +204,16 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
                     cursor: 'pointer', border: `2px solid ${selectedExistingUrl === img.url ? 'var(--green)' : '#333'}`,
                     padding: '2px', background: selectedExistingUrl === img.url ? '#001a00' : '#000',
                   }}>
-                    <img src={img.url} alt={img.filename} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
+                    {/* Animated maps appear in this list too, and an <img> cannot show
+                        one — it renders as a broken icon. Muted and loopless here: a wall
+                        of autoplaying loops in a picker is noise, so the first frame is
+                        enough to recognise it by. */}
+                    {isVideoMap(img.url) ? (
+                      <video src={img.url} muted playsInline preload="metadata"
+                        style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
+                    ) : (
+                      <img src={img.url} alt={img.filename} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
+                    )}
                     <div style={{ fontSize: '9px', color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '2px' }}>
                       {img.filename.slice(0, 16)}…
                     </div>

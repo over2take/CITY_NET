@@ -210,7 +210,12 @@ describe('POST /api/music/upload', () => {
       .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
       .attach('file', Buffer.from('data'), { filename: 'script.exe', contentType: 'application/octet-stream' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/unsupported/i);
+    // Names the file, what it was, and what would have worked — the three things
+    // somebody staring at a rejected upload actually wants.
+    expect(res.body.error).toContain('script.exe');
+    expect(res.body.error).toContain('.exe');
+    expect(res.body.error).toContain('.mp3');
+    expect(res.body.error).toMatch(/25(\.0)?MB/);
   });
 
   it('uploads a valid mp3, inserts a DB row, and returns metadata', async () => {
@@ -409,5 +414,64 @@ describe('PATCH /api/music/item/:id (rename)', () => {
       .send({ name: 'Done' });
 
     expect(io.emit).toHaveBeenCalledWith('musicLibraryUpdated');
+  });
+});
+
+// ─── what may be uploaded ─────────────────────────────────────────────────────
+
+/**
+ * The name a file is stored under is the name it is served under, and `/uploads` is
+ * served with no auth — so the extension decides the Content-Type a browser gets back.
+ * That made the extension the security-relevant field, and it was the one field nothing
+ * looked at: the check was on `req.file.mimetype`, which the uploader writes.
+ */
+describe('POST /api/music/upload — what it accepts', () => {
+  const send = (filename, contentType) => request(app)
+    .post('/api/music/upload')
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+    .attach('file', Buffer.from('not really audio'), { filename, contentType });
+
+  it('refuses a file that would be served as a web page', async () => {
+    // The whole point. Claiming to be audio used to be enough, and the file landed as
+    // .html in a directory anyone can read, executing on this app's own origin.
+    const res = await send('payload.html', 'audio/mpeg');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('payload.html');
+    expect(res.body.reason).toBe('UNSUPPORTED_FORMAT');
+  });
+
+  it('refuses a script even when it insists it is audio', async () => {
+    expect((await send('x.js', 'audio/mpeg')).status).toBe(400);
+    expect((await send('x.svg', 'audio/mpeg')).status).toBe(400);
+    expect((await send('x', 'audio/mpeg')).status).toBe(400);
+  });
+
+  it('writes nothing to disk when it refuses', async () => {
+    await send('payload.html', 'audio/mpeg');
+    const rows = await all(db, `SELECT * FROM music_items WHERE type = 'file'`);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('accepts the formats the picker offers', async () => {
+    for (const ext of ['mp3', 'm4a', 'mp4', 'wav', 'ogg', 'flac']) {
+      const res = await send(`track.${ext}`, 'audio/mpeg');
+      expect(res.status, ext).toBe(200);
+    }
+  });
+
+  it('accepts formats the old mimetype list would have turned away', async () => {
+    // opus, aac and webm audio all play in a browser. They were refused for carrying an
+    // unusual Content-Type rather than for being unplayable, which is not a reason.
+    for (const ext of ['opus', 'aac', 'webm', 'oga', 'weba']) {
+      const res = await send(`track.${ext}`, 'application/octet-stream');
+      expect(res.status, ext).toBe(200);
+    }
+  });
+
+  it('does not care what Content-Type the uploader claims for a real track', async () => {
+    // It is a claim, not a reading. A correctly-named mp3 arriving with a generic type is
+    // a browser being unhelpful, not an attack.
+    const res = await send('track.mp3', 'application/octet-stream');
+    expect(res.status).toBe(200);
   });
 });

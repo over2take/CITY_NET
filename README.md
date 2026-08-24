@@ -321,20 +321,22 @@ Click `ADMIN_LOGIN` in the top bar once you're on the map. Enter your `.env` `AD
 ```
 CITY_NET/
 ├── backend/
-│   ├── server.js               # Express entrypoint — mounts routes, starts Socket.IO
+│   ├── server.js               # Express entrypoint — mounts routes, starts Socket.IO; trusts one proxy hop so `req.ip` is the caller rather than nginx, and serves /uploads through the sandbox headers
 │   ├── db.js                   # SQLite schema and migrations
-│   ├── updater.js              # In-app self-update — paginated registry tag listing so a run of dev builds cannot hide a stable release; release channels selected by IMAGE_TAG alone, the same variable compose pulls with (X.Y.Z-dev tags with an optional counter, ordered so a release supersedes its own dev builds); preflight (compose file mounted, docker socket, compose project labels) so a stack that cannot update says why instead of hanging; upgrade-only semver check; update log on the data volume; boot id so a restart is detectable without a version change; the registry read goes through net/outbound, and the docker probe behind GET /api/version is asked once per process rather than once per request — execSync holds the event loop, so a probe on an open route was a way to stall the server
+│   ├── updater.js              # In-app self-update — paginated registry tag listing so a run of dev builds cannot hide a stable release; release channels selected by IMAGE_TAG alone, the same variable compose pulls with (X.Y.Z-dev tags with an optional counter, ordered so a release supersedes its own dev builds); preflight (compose file mounted, docker socket, compose project labels) so a stack that cannot update says why instead of hanging, and offers updating from the host as an equal option since running without the socket is a supported posture; one update at a time, refused rather than queued, with a stale-run release so a hung pull does not deaden the button; the helper command passed as argv rather than through `sh -c`, so a compose label containing a command substitution is data and not code; upgrade-only semver check; update log on the data volume; boot id so a restart is detectable without a version change; the registry read goes through net/outbound, and the docker probe behind GET /api/version is asked once per process rather than once per request — execSync holds the event loop, so a probe on an open route was a way to stall the server
 │   ├── net/
 │   │   └── outbound.js         # Every request to a host we do not own goes through here. A named destination (exact hostname, never a suffix test), HTTPS, a deadline covering the body as well as the connection, a byte cap, and no redirect following — none of which a caller can opt out of. Two callers, one auditable surface
 │   ├── middleware/
 │   │   ├── auth.js             # JWT verify middleware (admin + elevated users)
+│   │   ├── uploadConstraints.js # What an upload may be and how to say so when it is not. One message shape naming the file, what was wrong and what would have worked — plus a handler for multer's own failures, since an oversized file previously reached Express's HTML error page and the client reported a JSON syntax error to the user
+│   │   ├── uploadHeaders.js    # What a browser may do with a file somebody uploaded. `/uploads` is served with no auth, so a sandbox CSP puts anything opened from it in an opaque origin and nosniff stops it being re-read as HTML — which is what lets the upload allowlists stay as wide as the file pickers
 │   │   └── rateLimit.js        # A sliding per-caller ceiling, for the one open route that spends our outbound requests on an anonymous caller's say-so. Bounded in memory, since the key is whoever is asking; evicts the least recently seen, so it forgives rather than blocks
 │   ├── routes/
-│   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs; POST /update preflights and returns 409 naming what is missing, GET /update/status reports phase, error and log tail, POST /check-update offers only genuine upgrades from the deployment's own channel; POST /water marks generated water so a regenerate can clear its own river without touching a lake the GM drew
+│   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs; POST /update preflights and returns 409 naming what is missing, GET /update/status reports phase and a stable failure code and nothing anyone said to us — it is unauthenticated by necessity, so the compose output that used to ride along on it now stays in the log file, POST /check-update offers only genuine upgrades from the deployment's own channel; POST /water marks generated water so a regenerate can clear its own river without touching a lake the GM drew
 │   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only); GET / includes sheet_data for NPC initiative rolls; POST /purge-region clears one region's generated content in a single transaction, keeping GM-named structures, tokens, battle-map content and hand-drawn water
-│   │   ├── battle_maps.js      # Battle map image upload/management
+│   │   ├── battle_maps.js      # Battle map upload and management. Streams to a temporary file and hashes in chunks rather than buffering, so a 250MB animated map costs disk rather than RAM, then renames to the content hash — the same map on a dozen locations is one file. Sweeps partial uploads left by a process that died mid-transfer, since those are the one case the handler's own cleanup cannot reach. Accepts what the scene can actually draw, stills and loops alike, since a format the renderer cannot decode uploads perfectly and then shows nothing
 │   │   ├── maps.js             # Saved map snapshots (locations, districts, roads, overpasses, water bodies); preserves only rhombus tokens on load/clear; records active_map_name in global_settings so exports can name their files
-│   │   ├── music.js            # Radio Feed — library CRUD + file upload
+│   │   ├── music.js            # Radio Feed — library CRUD + file upload, checked by extension rather than by the Content-Type the uploader claims, since the name is what gets written and what decides how it is served back
 │   │   ├── roads.js            # Road CRUD; DELETE /:id removes a single segment
 │   │   ├── custom_dice.js      # GM-authored dice CRUD; GET is public so players see them, writes are admin-only; broadcasts customDiceUpdated after each change
 │   │   ├── system_dice.js      # Read-only dice that ship with a game system; no write routes exist by design
@@ -377,6 +379,9 @@ CITY_NET/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
 │       ├── admin.test.js               # Admin endpoints (auth, settings, undo access); update routes — 409 with a reason rather than a false success, unauthenticated status, boot id on /version; check-update against a stubbed registry — upgrades only, dev tags per channel, and a prerelease not hiding a stable release
 │       ├── cpr_stats.test.js           # CP:R stat rolls — BODY rollable, MOVE and LUCK not, and every roll button in the template backed by a server-side roll
+│       ├── nginx_config.test.js        # The assumptions the app makes about the proxy every request arrives through, which no other test here touches — body ceiling at least the largest upload limit, X-Forwarded-For present, the socket able to upgrade, and every mounted path actually proxied. Two faults in one release lived exactly in that gap
+│       ├── upload_constraints.test.js  # The three questions a refusal has to answer, and the oversized upload that used to come back as HTML. Also asserts the frontend's copy of the cap still equals the server's, read from the source rather than restated
+│       ├── upload_headers.test.js      # Served through a real static mount rather than by calling the helper: a stored .html comes back sandboxed, an SVG likewise, and every file gets the headers rather than the ones something guessed were dangerous
 │       ├── outbound.test.js            # The one door: a host that is merely a suffix of an allowed one, plain http, a body past the cap abandoned rather than measured, a registry that answers and then stops talking, and a deadline still armed while the body arrives
 │       ├── rate_limit.test.js          # Time injected rather than waited for. Per caller rather than per house, a sliding window so the allowance cannot be spent twice across a boundary, and a bound on how many callers are remembered
 │       ├── updater.test.js             # Version ordering including X.Y.Z-dev, tag filtering per channel, preflight refusals, and an update that records its failures instead of returning silently; the next page is read from Docker Hub even when the payload names another host; the docker probe is asked once and its answer remembered
@@ -564,6 +569,7 @@ CITY_NET/
 │   │   ├── context/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
 │   │   ├── hooks/
+│   │   │   ├── useVideoMapTexture.ts  # A looping battle map as a texture. All browser policy rather than rendering: muted because no browser autoplays sound, playsInline because iOS would otherwise take it full-screen, paused on a hidden tab because decoding for nobody is real battery, and the source released on unmount because pausing alone keeps the buffers
 │   │   │   ├── useSocket.ts        # Socket.IO connection and all event listeners
 │   │   │   ├── useApi.ts           # Fetch helpers
 │   │   │   ├── useMapExport.ts     # PNG/WebM city export — one cached off-screen renderer for the session, shared ortho camera, GPU size clamp, per-frame render loop for video, MediaRecorder with codec fallback; never touches the live camera
@@ -577,6 +583,7 @@ CITY_NET/
 │   │   │       ├── useMapExport.test.ts                  # Recorder codec fallback (vp9 → vp8 → webm → default), export camera framing, grid fade restore, countdown drift under starved timers
 │   │   │       ├── useCustomDice.test.ts                 # Loading, system/GM merge order, locked flag, broadcast handling, mutation auth and errors
 │   │   │       ├── useVehicleRoster.test.tsx             # Binds when the socket turns up, empties on a system switch, re-asks on a sheet save
+│   │   │       ├── useVideoMapTexture.test.ts            # Every assertion is a silent failure: an unmuted video never starts, a hidden tab keeps decoding, a released map keeps its buffers, and a browser that refuses autoplay leaves a still frame with no explanation
 │   │   │       └── useSocket.pendingRequests.test.ts     # Pending edit-request state; regression for stale requests on newly-promoted temp admins
 │   │   ├── sheets/
 │   │   │   ├── types.ts            # Sheet template type system (fields, sections, header, death saves, NPC tiers)
@@ -599,6 +606,11 @@ CITY_NET/
 │   │   │       ├── vehicleFittings.test.ts      # The 24 fittings, and a budget where a Power System raises the pool rather than un-spending
 │   │   │       └── cprVehicles.test.ts          # The CP:R vehicle section: one archetype picker that fills the block, names an unnamed vehicle but never a named one, and carries no book numbers
 │   │   ├── streamerMode.ts     # IS_SPECTATOR constant — detects ?streamer=true URL param
+│   │   ├── __tests__/
+│   │   │   ├── BattleMapScene.test.tsx  # Which loader a map goes to — the whole of the animated-map change, and previously uncovered since the app smoke test mocks the scene away. A loop must not reach `useLoader`, which suspends with nothing above it to catch that
+│   │   │   └── battleMapMedia.test.ts   # Still or loop, including the trap where the last dot is in the query string rather than the filename
+│   │   ├── battleMapMedia.ts   # Whether a battle map is a still or a loop, mirrored from the backend allowlist. Decides which loader the scene reaches for, never what the server accepts; an unrecognised name falls through to the image path every existing map already takes
+│   │   ├── BattleMapScene.tsx  # The battle map plane. Two components rather than one with a branch, because `useLoader` suspends and there is no Suspense boundary above it — so an animated map goes to a VideoTexture instead, and a still one takes exactly the path it always did
 │   │   └── utils/
 │   │       ├── updateClient.ts     # One implementation of the in-app update flow, shared by the update modal and the nav panel — stale-container probe, server refusal passed through verbatim, restart detected by boot id, bounded wait. Two copies is how one of them stayed unhardened
 │   │       ├── locationHelpers.ts  # Location geometry utilities; exports ZONE_TYPE_NAMES and isUserDefinedName
@@ -623,9 +635,9 @@ CITY_NET/
 ├── docs/                       # Reference docs (deployment plans, feature notes)
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
-├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev
+├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev. Includes Nginx Proxy Behaviour, which runs the real nginx against the repository config and a stub upstream — a 40MB body through, the caller's address forwarded, the socket upgrading — because every other test mounts a router directly and never sees the proxy
 ├── docker-compose.yml          # Image tags read ${IMAGE_TAG:-latest}, so the release channel is a setting rather than an edit
-├── nginx.conf
+├── nginx.conf                  # Proxies /api and the socket to the backend. Forwards X-Forwarded-For, without which every request reaches the app from this container's address and anything counting per caller counts the whole table as one; and allows a body at least as large as the biggest upload the app accepts, or a large map is refused by the proxy before the app ever sees it. A backend test asserts the second
 └── .env.example
 ```
 

@@ -37,6 +37,79 @@ jobs:
       - name: .dockerignore excludes backend/uploads/
         run: grep -q "backend/uploads" .dockerignore
 
+  validate-nginx-behaviour:
+    name: Nginx Proxy Behaviour
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Every other test in this repository mounts an Express router directly, so nothing
+      # exercises the proxy that all of it actually arrives through. Two faults in one
+      # release lived exactly there — a body limit smaller than the app's own, and a
+      # missing X-Forwarded-For — both invisible to a thousand passing unit tests. This
+      # runs the real nginx against the repository's real config.
+      #
+      # These steps were run by hand against nginx:alpine before being written down, and
+      # the counterfactual checked too: the same 40MB body against the previous 25M
+      # ceiling returns 413, so the probe fails when the config is wrong rather than
+      # passing regardless.
+      - name: Start a stub backend that reports what it received
+        run: |
+          cat > /tmp/stub.js <<'STUB'
+          const http = require('http');
+          http.createServer((req, res) => {
+            let bytes = 0;
+            req.on('data', (c) => { bytes += c.length; });
+            req.on('end', () => {
+              res.setHeader('content-type', 'application/json');
+              res.end(JSON.stringify({
+                path: req.url,
+                bytes,
+                xff: req.headers['x-forwarded-for'] || null,
+                upgrade: req.headers['upgrade'] || null,
+                connection: req.headers['connection'] || null,
+              }));
+            });
+          }).listen(5000, '0.0.0.0');
+          STUB
+          node /tmp/stub.js &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:5000/ >/dev/null && break; sleep 0.5; done
+
+      - name: Run nginx with the repository config
+        run: |
+          # host-gateway is the documented way for a bridged container to reach the
+          # host, which is where the stub is listening. The config names the upstream
+          # "backend", exactly as it does in compose, so the file under test is unmodified.
+          docker run -d --name proxy -p 8080:80             --add-host backend:host-gateway             -v "$PWD/nginx.conf:/etc/nginx/conf.d/default.conf:ro"             nginx:alpine
+          for i in $(seq 1 20); do curl -sf -o /dev/null http://127.0.0.1:8080/api/ping && break; sleep 0.5; done
+          docker logs proxy
+
+      - name: A large battle map passes through the proxy
+        run: |
+          # 40MB — an ordinary animated map, and well past the old 25M ceiling.
+          head -c 40000000 /dev/zero > /tmp/big.webm
+          code=$(curl -s -o /tmp/out.json -w '%{http_code}' -X POST             --data-binary @/tmp/big.webm http://127.0.0.1:8080/api/upload-probe)
+          echo "status $code"; cat /tmp/out.json
+          test "$code" = "200" || { echo "proxy refused a large body"; exit 1; }
+          grep -q '"bytes":40000000' /tmp/out.json || { echo "body did not arrive whole"; exit 1; }
+
+      - name: The caller's address reaches the backend
+        run: |
+          curl -s http://127.0.0.1:8080/api/who > /tmp/who.json
+          cat /tmp/who.json
+          grep -q '"xff":"' /tmp/who.json || { echo "X-Forwarded-For was not forwarded"; exit 1; }
+
+      - name: The socket path offers an upgrade
+        run: |
+          curl -s -o /tmp/ws.json             -H 'Upgrade: websocket' -H 'Connection: Upgrade'             http://127.0.0.1:8080/socket.io/probe
+          cat /tmp/ws.json
+          grep -q '"upgrade":"websocket"' /tmp/ws.json || { echo "Upgrade header was dropped"; exit 1; }
+
+      - name: Stop nginx
+        if: always()
+        run: docker rm -f proxy || true
+
   test-backend:
     name: Backend Tests
     runs-on: ubuntu-latest

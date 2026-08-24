@@ -9,6 +9,62 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.10.0] - 2026-08-22
+
+Animated battle maps, and the second half of the security pass.
+
+Two pieces of work that ended up in one release because they met in the same place: making animated maps usable meant reworking how uploads are stored and checked, which is where the security pass was already headed. Where 1.9.4 covered what the server says to the outside world, this covers what it does with the Docker socket and with files people give it.
+
+### Added
+
+- **A battle map can be a looping video.** Drop in a `.webm`, `.mp4` or `.m4v` and it plays under the tokens — rain on the pavement, a flickering neon sign, water moving under a walkway. The animated map packs people buy work as they are; there is nothing to convert and nothing to configure.
+
+  **Maps can be up to 250MB now, raised from 25MB.** An animated map is a video, and the loops people buy routinely run past the old ceiling — which would have made this feature something you could only use with files small enough not to be worth animating. The server writes uploads straight to disk rather than holding them in memory while it works, so a large map costs storage rather than a chunk of your server's RAM, and identical maps are stored once however many locations use them.
+
+  It loops, and it is silent — every browser refuses to start a video with sound on its own, and a map that will not move until somebody clicks looks broken rather than deliberate. Playback stops while the tab is hidden, so a session left open overnight is not quietly decoding video at your laptop.
+
+  Still maps take exactly the path they always did. Nothing about an existing map changes.
+
+### Security
+
+- **Pressing Update twice started two updates.** Nothing checked whether one was already running, so a double-click — or an impatient second press while the first was still pulling — ran two image pulls and then launched two privileged helper containers against the same stack, each recreating the containers the other was recreating. A second press is now refused with "an update is already running" rather than honoured. It is not a queue: two updates are not twice an update, and the run in flight is left alone to finish.
+
+  A second press also used to wipe the first run's error before you had read it, so a failed update could quietly go back to looking healthy.
+
+- **The update status page was publishing your update log.** That page has no password on it by design — your browser has to keep reading it across the restart, when nobody is logged in — and it was answering with the last forty lines of `update.log`. That is `docker compose` output: image names, absolute paths, the layout of your server's filesystem. Nothing in CITY_NET has ever displayed it. It now returns the phase and a short reason, and the detail stays in `backend/data/update.log` on your machine, where it was already being written.
+
+- **The update helper no longer runs through a shell.** The command that recreates your stack was assembled as a line of shell text with your project's directory pasted into it inside double quotes. Double quotes look like protection and are not — they stop a path with spaces from splitting, but they do not stop a path containing `$(...)` from being *executed*. That path comes from Docker's own labels. The command is now passed as separate arguments with no shell involved at all, which removes the possibility rather than guarding one instance of it. As a side benefit, a project folder with a space in its name now works.
+
+- **Two upload routes accepted any file type.** Battle map images checked nothing at all, and music checked the `Content-Type` the *uploader* wrote into the request — a claim about the file rather than a reading of it. So a file named `payload.html` could be stored under that name in a folder served without a password, where the extension decides what a browser thinks it is. Both now check the extension, which is the part that actually determines how the file comes back out.
+
+  **The lists are drawn around what actually works, not around what is safe** — every image format the map renderer can draw, SVG included, and every audio format a browser will play, including Opus and AAC that the old check turned away for having an unusual `Content-Type` rather than for being unplayable. What makes a generous list safe is the change below, not a short list.
+
+- **Everything under `/uploads` is now served sandboxed.** Files that came from outside are told, at the point they are served, that they may not act as part of this site — no cookies, no stored data, no reaching anything of yours — and browsers are told not to second-guess what type they are. This covers files already sitting on your disk from before, and it is what lets the upload rules stay generous instead of defensive.
+
+### Changed
+
+- **Update both containers, not just the backend.** The larger upload ceiling lives in the web server's config, which ships inside the frontend image. A normal `docker compose pull` takes care of it; an install that updated only the backend would find large maps refused by the proxy before the app ever saw them.
+
+- **Running without the Docker socket is now a documented choice rather than a broken install.** That socket is root on your host, so removing it is a sensible posture for a server exposed to the internet — everything keeps working except the update button, which refuses with an explanation. The refusal now offers updating from the host as an equal option instead of only telling you to add the socket back. See UPGRADE.md.
+
+- **UPGRADE.md now states plainly what you are trusting when you press Update.** Images are pulled from Docker Hub and run as root with the host socket, so that account's security is your install's security. That is true of any auto-updater; it should be written down rather than implied, along with the two ways to opt out.
+
+### Fixed
+
+- **A rejected upload now tells you which file and why.** Every refusal said a different amount and the most common one said nothing at all: a file over the size limit was never handled, so it came back as a web page the app then tried to read as data — what you actually saw for uploading a large map was a syntax error about an unexpected `<`. Refusals now name the file, say what was wrong with it, and list what would have worked, with the size limit included. The selected-file line names the file too, rather than only its size.
+
+- **The web server in front of CITY_NET would have rejected a large map before the app saw it.** It had its own 25MB ceiling on request bodies, separate from the app's, so raising the map limit alone would have achieved nothing in a Docker install — the upload would have failed with a bare "413" from the proxy, naming neither the file nor the reason. Both now agree, and a test checks that they still do.
+
+- **A failed update could leave the app waiting for a restart that was never coming.** The image pull already reported a bad exit, but the step after it — the helper that recreates your containers — did not, so if that failed the progress display sat on "restarting" indefinitely. It now says so. (On a successful update this never fires, because the helper replaces the very container watching it, which is the whole reason it exists.)
+
+- **An upload interrupted halfway no longer leaves a file behind for ever.** Uploads are written to a temporary file while they arrive; every normal outcome cleans up after itself, but a server killed mid-transfer cannot. Those leftovers — up to the full size limit each — are now swept at startup. Nothing that reached the map library is touched, and an upload in progress is left alone.
+
+- **Animated maps show a preview in SELECT EXISTING.** They are listed there now, and that gallery draws every entry as a still image — so a loop appeared as a broken icon.
+
+- **The map uploader now offers video in the file picker.** It was images only, so an animated map could not be selected without switching the dialog to show all files — and until now, doing that got you a successful upload and a blank map, because nothing in the app could draw one.
+
+---
+
 ## [1.9.4] - 2026-08-21
 
 A pass over everything the server does that leaves the process.

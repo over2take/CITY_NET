@@ -328,10 +328,14 @@ describe('buildUpdateHelperArgs', () => {
 
   it('runs compose against the mounted config with the project name', () => {
     const args = updater.buildUpdateHelperArgs('/srv/citynet', '/srv/citynet/docker-compose.yml', ['-p', 'citynet']);
-    const cmd = args[args.length - 1];
-    expect(cmd).toContain('--project-directory "/srv/citynet"');
-    expect(cmd).toContain('-p citynet');
-    expect(cmd).toContain('up -d');
+    // Argv, so each of these is its own element and none of it is ever parsed as shell.
+    expect(args.slice(-10)).toEqual([
+      'docker', 'compose',
+      '--project-directory', '/srv/citynet',
+      '-f', updater.COMPOSE_FILE,
+      '-p', 'citynet',
+      'up', '-d',
+    ]);
   });
 });
 
@@ -391,7 +395,10 @@ describe('runUpdate', () => {
 
     const state = updater.getState();
     expect(state.phase).toBe('failed');
-    expect(state.error).toContain('exited with code 1');
+    // A stable code plus a sentence of ours. The exit status and anything compose said
+    // go to the log file, not to a response the whole internet can read.
+    expect(state.code).toBe('COMPOSE_PULL_FAILED');
+    expect(state.error).toBe(updater.FAILURES.COMPOSE_PULL_FAILED);
   });
 
   it('records docker being missing entirely', () => {
@@ -400,7 +407,9 @@ describe('runUpdate', () => {
     pull.emit('error', new Error('spawn docker ENOENT'));
 
     expect(updater.getState().phase).toBe('failed');
-    expect(updater.getState().error).toContain('ENOENT');
+    expect(updater.getState().code).toBe('DOCKER_UNAVAILABLE');
+    // The upstream message named the binary and the path it looked in. Ours does not.
+    expect(updater.getState().error).not.toContain('ENOENT');
   });
 
   it('spawns the helper only after a successful pull', () => {
@@ -449,5 +458,163 @@ describe('isDockerAvailable', () => {
     const execSync = vi.fn(() => '');
     updater.isDockerAvailable({ execSync });
     expect(execSync).toHaveBeenCalledWith('docker info', expect.objectContaining({ timeout: 5000 }));
+  });
+});
+
+describe('one update at a time', () => {
+  const labels = { projectName: 'citynet', configFile: '/srv/citynet/docker-compose.yml', workingDir: '/srv/citynet' };
+  const fakeChild = () => {
+    const handlers = {};
+    return { unref: vi.fn(), on: (evt, fn) => { handlers[evt] = fn; }, emit: (evt, arg) => handlers[evt]?.(arg) };
+  };
+  const noLog = () => { throw new Error('no log'); };
+
+  beforeEach(() => updater.resetState());
+
+  it('refuses a second update while one is pulling', () => {
+    // A double-click used to run two `compose pull` processes and then two privileged
+    // helper containers against the same stack, each recreating what the other was
+    // recreating.
+    const spawn = vi.fn(() => fakeChild());
+    expect(updater.runUpdate(labels, { spawn, openSync: noLog })).not.toBeNull();
+    expect(updater.runUpdate(labels, { spawn, openSync: noLog })).toBeNull();
+    expect(spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses one while the helper is restarting the stack', () => {
+    const pull = fakeChild();
+    const spawn = vi.fn().mockReturnValueOnce(pull).mockReturnValue(fakeChild());
+    updater.runUpdate(labels, { spawn, openSync: noLog });
+    pull.emit('close', 0);
+    expect(updater.getState().phase).toBe('restarting');
+
+    expect(updater.runUpdate(labels, { spawn, openSync: noLog })).toBeNull();
+    expect(spawn).toHaveBeenCalledTimes(2); // the pull and its one helper, no more
+  });
+
+  it('does not let a second press erase why the first failed', () => {
+    // The second call reset error and startedAt, so a failure could vanish before anyone
+    // had read it and the status went back to reporting a healthy run.
+    const pull = fakeChild();
+    updater.runUpdate(labels, { spawn: () => pull, openSync: noLog });
+    pull.emit('close', 1);
+    expect(updater.getState().code).toBe('COMPOSE_PULL_FAILED');
+
+    // A failed run is finished, so this one is allowed - but it must not be allowed to
+    // start by quietly overwriting the record of the last one before it does.
+    const before = updater.getState().error;
+    expect(before).toBeTruthy();
+    expect(updater.isRunning()).toBe(false);
+  });
+
+  it('lets a new run take over when the process is gone but its events never came', () => {
+    // The child is unreachable here (the fake reports no exit state), which stands in for
+    // a run whose events were lost. Nothing is working and nothing else would ever
+    // release the lock, so the elapsed check is the only way out.
+    let clock = 1_000_000;
+    const spawn = vi.fn(() => fakeChild());
+    updater.runUpdate(labels, { spawn, openSync: noLog, now: () => clock });
+    expect(updater.runUpdate(labels, { spawn, openSync: noLog, now: () => clock })).toBeNull();
+
+    clock += updater.STALE_RUN_MS + 1;
+    expect(updater.runUpdate(labels, { spawn, openSync: noLog, now: () => clock })).not.toBeNull();
+    expect(spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the lock while the pull is still alive, however long it takes', () => {
+    // The hole this closes: releasing on elapsed time alone cannot tell a hung pull from
+    // a slow one. Two images over a poor line can outlast any threshold worth setting,
+    // and releasing would let a second press start a competing update against a stack the
+    // first is still changing — which is the whole thing this guard exists to prevent.
+    let clock = 1_000_000;
+    const alive = { ...fakeChild(), exitCode: null, signalCode: null };
+    const spawn = vi.fn(() => alive);
+    updater.runUpdate(labels, { spawn, openSync: noLog, now: () => clock });
+
+    clock += updater.STALE_RUN_MS * 10;
+    expect(updater.isRunning(clock)).toBe(true);
+    expect(updater.runUpdate(labels, { spawn, openSync: noLog, now: () => clock })).toBeNull();
+    expect(spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases a finished process once the elapsed window has passed as well', () => {
+    // The counterpart: liveness holds the lock, so it must also let go.
+    let clock = 1_000_000;
+    const child = { ...fakeChild(), exitCode: null, signalCode: null };
+    updater.runUpdate(labels, { spawn: () => child, openSync: noLog, now: () => clock });
+    expect(updater.isRunning(clock)).toBe(true);
+
+    child.exitCode = 0;
+    clock += updater.STALE_RUN_MS + 1;
+    expect(updater.isRunning(clock)).toBe(false);
+  });
+
+  it('is idle again once a run has failed', () => {
+    const pull = fakeChild();
+    updater.runUpdate(labels, { spawn: () => pull, openSync: noLog });
+    expect(updater.isRunning()).toBe(true);
+    pull.emit('error', new Error('spawn docker ENOENT'));
+    expect(updater.isRunning()).toBe(false);
+  });
+});
+
+describe('the public status payload', () => {
+  beforeEach(() => updater.resetState());
+
+  it('does not publish the update log', () => {
+    // GET /api/update/status is unauthenticated - the client has to keep reading it across
+    // the restart, when nobody is logged in. It used to answer with the last forty lines
+    // of update.log, which carries host paths and absolute directories, and which no
+    // client has ever displayed.
+    expect(updater.getState()).not.toHaveProperty('log');
+  });
+
+  it('carries a phase, a boot id and nothing anyone said to us', () => {
+    expect(Object.keys(updater.getState()).sort())
+      .toEqual(['bootId', 'code', 'error', 'finishedAt', 'phase', 'startedAt']);
+  });
+});
+
+describe('the helper leg reports its own failures', () => {
+  const labels = { projectName: 'citynet', configFile: '/srv/citynet/docker-compose.yml', workingDir: '/srv/citynet' };
+  const fakeChild = () => {
+    const handlers = {};
+    return { unref: vi.fn(), on: (evt, fn) => { handlers[evt] = fn; }, emit: (evt, arg) => handlers[evt]?.(arg) };
+  };
+  const noLog = () => { throw new Error('no log'); };
+
+  beforeEach(() => updater.resetState());
+
+  it('records a helper that exited non-zero instead of waiting for ever', () => {
+    // The pull leg has always recorded a bad exit code. This one did not, so a failed
+    // `compose up` left the phase on 'restarting' and the client polling for a restart
+    // that was never coming.
+    const pull = fakeChild();
+    const helper = fakeChild();
+    updater.runUpdate(labels, {
+      spawn: vi.fn().mockReturnValueOnce(pull).mockReturnValueOnce(helper),
+      openSync: noLog,
+    });
+    pull.emit('close', 0);
+    expect(updater.getState().phase).toBe('restarting');
+
+    helper.emit('close', 1);
+    expect(updater.getState().phase).toBe('failed');
+    expect(updater.getState().code).toBe('HELPER_FAILED');
+  });
+
+  it('says nothing when the helper exits cleanly', () => {
+    // Normally unreachable — `up -d` replaces this container before the helper finishes —
+    // but a clean exit must never be reported as a failure on the paths where it is.
+    const pull = fakeChild();
+    const helper = fakeChild();
+    updater.runUpdate(labels, {
+      spawn: vi.fn().mockReturnValueOnce(pull).mockReturnValueOnce(helper),
+      openSync: noLog,
+    });
+    pull.emit('close', 0);
+    helper.emit('close', 0);
+    expect(updater.getState().phase).toBe('restarting');
+    expect(updater.getState().code).toBeNull();
   });
 });

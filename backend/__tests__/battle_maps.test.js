@@ -335,3 +335,103 @@ describe('GET /api/locations/:id/battle_maps/images', () => {
     }
   });
 });
+
+// ─── what may be uploaded ─────────────────────────────────────────────────────
+
+/**
+ * The stored filename is a hash of the content plus the extension from the uploaded name,
+ * and nothing checked that extension — so `map.html` was written as `<sha256>.html` into
+ * a directory served with no auth, where the extension is what sets the Content-Type on
+ * the way back out.
+ */
+describe('POST battle map — what it accepts', () => {
+  const send = (filename) => request(app)
+    .post('/api/locations/1/battle_maps')
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+    .field('designation', 'GROUND')
+    .attach('image', Buffer.from(`bytes for ${filename}`), { filename });
+
+  it('refuses a file that would be served as a web page', async () => {
+    const res = await send('map.html');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('map.html');
+    expect(res.body.reason).toBe('UNSUPPORTED_FORMAT');
+  });
+
+  it('refuses other things that execute where they are served', async () => {
+    for (const name of ['map.htm', 'map.js', 'map.xhtml', 'map']) {
+      expect((await send(name)).status, name).toBe(400);
+    }
+  });
+
+  it('takes every image format the renderer can actually draw', async () => {
+    for (const ext of ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp']) {
+      const res = await send(`map.${ext}`);
+      expect(res.status, ext).toBe(200);
+    }
+  });
+
+  it('refuses formats that would upload cleanly and then render as nothing', async () => {
+    // Maps are drawn with THREE.TextureLoader, which decodes through an <img>. TIFF is
+    // the trap: it is unarguably an image, the picker offers it under image/*, and no
+    // browser will display it — so accepting it buys a GM a successful upload and a blank
+    // battle map instead of a sentence telling them to convert it.
+    for (const ext of ['tif', 'tiff']) {
+      const res = await send(`map.${ext}`);
+      expect(res.status, ext).toBe(400);
+    }
+  });
+
+  it('takes the video containers the scene can play', async () => {
+    // Animated map loops, drawn through a VideoTexture rather than TextureLoader. Kept to
+    // containers a browser decodes without being told which codec to expect.
+    for (const ext of ['webm', 'mp4', 'm4v']) {
+      const res = await send(`map.${ext}`);
+      expect(res.status, ext).toBe(200);
+    }
+  });
+
+  it('still refuses video formats no browser will play', async () => {
+    // The rule did not change: the list is what the scene can draw. A .mov or .avi map
+    // would upload perfectly and then show nothing.
+    for (const ext of ['mov', 'avi', 'mkv', 'wmv']) {
+      const res = await send(`map.${ext}`);
+      expect(res.status, ext).toBe(400);
+    }
+  });
+
+  it('still takes SVG, which the sandbox header is what makes safe', async () => {
+    // Inside an <img> an SVG cannot run script; the case that could is navigating
+    // straight to the file, and that is closed where the file is served rather than by
+    // refusing a format a GM may legitimately have their map in.
+    const res = await send('map.svg');
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('GET /images — SELECT EXISTING', () => {
+  const upload = (filename) => request(app)
+    .post('/api/locations/1/battle_maps')
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+    .field('designation', 'GROUND')
+    .attach('image', Buffer.from(`bytes for ${filename}`), { filename });
+
+  it('offers back everything upload accepts, not a shorter list of its own', async () => {
+    // These were two lists that had to agree and nothing made them. A map in an accepted
+    // format that this filter left out could be uploaded, used on the location it was
+    // uploaded to, and then never found again from anywhere else.
+    for (const name of ['loop.webm', 'clip.mp4', 'map.avif', 'map.svg', 'map.bmp']) {
+      expect((await upload(name)).status, name).toBe(200);
+    }
+
+    const res = await request(app)
+      .get('/api/locations/1/battle_maps/images')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(res.status).toBe(200);
+
+    const listed = res.body.map((f) => f.filename).join(' ');
+    for (const ext of ['.webm', '.mp4', '.avif', '.svg', '.bmp']) {
+      expect(listed, ext).toContain(ext);
+    }
+  });
+});

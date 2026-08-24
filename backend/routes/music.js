@@ -3,11 +3,24 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
+const { LIMITS, rejectFormat, uploadErrors } = require('../middleware/uploadConstraints');
 
-const ALLOWED_MIME = new Set([
-  'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg',
-  'audio/flac', 'audio/x-flac', 'audio/m4a', 'audio/x-m4a',
-  'video/mp4',
+/**
+ * What a track may be, by extension.
+ *
+ * This replaces a check on `req.file.mimetype`, which is the Content-Type the uploader
+ * wrote into the multipart body — a claim about the file, not a reading of it. A file
+ * named x.html sent as audio/mpeg satisfied it and was written as x.html into a directory
+ * served with no auth, where the extension is what decides the Content-Type on the way
+ * back out. So the name was the thing that mattered and the name was the thing unchecked.
+ *
+ * Wider than the file picker offers, deliberately: opus, aac and webm audio all play in
+ * the browsers this runs in, and the old MIME list would have turned them away for having
+ * an unusual Content-Type rather than for being unplayable. The check is on what the file
+ * will be served as, which is the only part that is a security question at all.
+ */
+const AUDIO_EXT = new Set([
+  '.mp3', '.m4a', '.mp4', '.wav', '.ogg', '.oga', '.opus', '.flac', '.aac', '.weba', '.webm',
 ]);
 
 module.exports = (db, io) => {
@@ -18,8 +31,12 @@ module.exports = (db, io) => {
 
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 25 * 1024 * 1024 },
+    limits: { fileSize: LIMITS.music },
+    // Records the name so an oversized track can be named in the refusal — multer aborts
+    // before any handler runs, and its error carries only the form field.
+    fileFilter: (req, file, cb) => { req.uploadFilename = file.originalname; cb(null, true); },
   });
+  const trackUploadErrors = uploadErrors({ allowed: [...AUDIO_EXT], maxBytes: LIMITS.music });
 
   // GET /api/music/library — full tree
   router.get('/library', (req, res) => {
@@ -94,15 +111,17 @@ module.exports = (db, io) => {
   });
 
   // POST /api/music/upload — upload audio file (admin only)
-  router.post('/upload', authenticate, upload.single('file'), (req, res) => {
+  router.post('/upload', authenticate, upload.single('file'), trackUploadErrors, (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'no file' });
-    if (!ALLOWED_MIME.has(req.file.mimetype)) {
-      return res.status(400).json({ error: 'unsupported file type' });
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    // The name is what gets written and what decides how it is served, so the name is
+    // what is checked. See AUDIO_EXT for what replaced the old mimetype test and why.
+    if (!AUDIO_EXT.has(ext)) {
+      return rejectFormat(res, { file: req.file, allowed: [...AUDIO_EXT], maxBytes: LIMITS.music });
     }
 
     const parent_id = req.body.parent_id ? parseInt(req.body.parent_id, 10) : null;
     const name = req.body.name || req.file.originalname;
-    const ext = path.extname(req.file.originalname).toLowerCase();
     const filename = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
     const dest = path.join(uploadsDir, filename);
 

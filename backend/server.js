@@ -36,8 +36,14 @@ app.set('trust proxy', 1);
 
 // Middleware
 app.use(cors());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/uploads/music', express.static(path.join(__dirname, 'uploads/music')));
+
+// Everything under /uploads is served with no auth and all of it came from outside.
+// See middleware/uploadHeaders.js for what these headers stop and why the upload
+// allowlists can stay as wide as the file pickers because of them.
+const uploadHeaders = require('./middleware/uploadHeaders').setUploadHeaders;
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { setHeaders: uploadHeaders }));
+app.use('/uploads/music', express.static(path.join(__dirname, 'uploads/music'), { setHeaders: uploadHeaders }));
 app.use(express.json({ limit: '2mb' }));
 
 // Routes
@@ -51,7 +57,7 @@ app.use('/api/signs', require('./routes/signs')(db, io, helpers));
 app.use('/api/custom_dice', require('./routes/custom_dice')(db, io, helpers));
 app.use('/api/system_dice', require('./routes/system_dice')());
 app.use('/api/fonts', require('./routes/fonts')(db, io));
-app.use('/uploads/fonts', express.static(path.join(__dirname, 'uploads/fonts')));
+app.use('/uploads/fonts', express.static(path.join(__dirname, 'uploads/fonts'), { setHeaders: uploadHeaders }));
 app.use('/api/player', require('./routes/player')(db, io));
 app.use('/api', require('./routes/admin')(db, io, helpers));
 app.use('/api/music', require('./routes/music')(db, io));
