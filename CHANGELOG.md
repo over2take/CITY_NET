@@ -55,6 +55,10 @@ Two pieces of work that ended up in one release because they met in the same pla
 
 - **The web server in front of CITY_NET would have rejected a large map before the app saw it.** It had its own 25MB ceiling on request bodies, separate from the app's, so raising the map limit alone would have achieved nothing in a Docker install — the upload would have failed with a bare "413" from the proxy, naming neither the file nor the reason. Both now agree, and a test checks that they still do.
 
+- **A failed update could leave the app waiting for a restart that was never coming.** The image pull already reported a bad exit, but the step after it — the helper that recreates your containers — did not, so if that failed the progress display sat on "restarting" indefinitely. It now says so. (On a successful update this never fires, because the helper replaces the very container watching it, which is the whole reason it exists.)
+
+- **An upload interrupted halfway no longer leaves a file behind for ever.** Uploads are written to a temporary file while they arrive; every normal outcome cleans up after itself, but a server killed mid-transfer cannot. Those leftovers — up to the full size limit each — are now swept at startup. Nothing that reached the map library is touched, and an upload in progress is left alone.
+
 - **Animated maps show a preview in SELECT EXISTING.** They are listed there now, and that gallery draws every entry as a still image — so a loop appeared as a broken icon.
 
 - **The map uploader now offers video in the file picker.** It was images only, so an animated map could not be selected without switching the dialog to show all files — and until now, doing that got you a successful upload and a blank map, because nothing in the app could draw one.
