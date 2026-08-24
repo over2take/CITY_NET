@@ -2257,11 +2257,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
                     const sheetChanged = defender && ((ablated && shield.remaining > 0) || shield.absorbed > 0);
                     if (sheetChanged) {
-                      if (ablated && shield.remaining > 0) defenderData[spField] = Math.max(0, sp - 1);
-                      if (shield.absorbed > 0) defenderData.sp_shield = shield.newShield;
-                      db.run(
-                        `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                        [JSON.stringify(defenderData), defender.id],
+                      // Through the queue, and applied to a fresh read rather than to the
+                      // copy parsed before the roll was resolved. The defender is very
+                      // likely looking at this sheet while it is being shot at, and the
+                      // old form wrote back a whole blob captured several steps earlier —
+                      // so an edit made in between was simply erased.
+                      mutateSheet(
+                        db,
+                        defender.id,
+                        (data) => {
+                          if (ablated && shield.remaining > 0) data[spField] = Math.max(0, sp - 1);
+                          if (shield.absorbed > 0) data.sp_shield = shield.newShield;
+                          return data;
+                        },
                         () => {
                           if (!defender.is_npc) io.emit('sheetUpdated', { username: defender.username, system });
                           finish();
@@ -2305,7 +2313,6 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const data = JSON.parse(row.data || '{}');
                 const body = Number(data.body) || 0;
                 const save = sheetAttack.rollDeathSave(body, data.death_save_penalty);
-                data.death_save_penalty = save.penalty + 1;
                 const penTag = save.penalty > 0 ? `+${save.penalty} ` : '';
                 const historyString =
                   `${identity.displayName(info.userName)} DEATH SAVE [${save.die} ${penTag}= ${save.total} vs BODY ${body}] — ` +
@@ -2316,9 +2323,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const outcome = { rolls: { 10: [save.die] }, modTotal: save.penalty, total: save.total };
                 broadcastRoll(info.userName, outcome, historyString, '#ff3333', () => {
                   setTimeout(() => {
-                    db.run(
-                      `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                      [JSON.stringify(data), row.id],
+                    // Only the penalty changes, and it is applied to a fresh read. The old
+                    // form wrote back the blob parsed *before* the five-second dice
+                    // animation, so anything edited while the dice were rolling was
+                    // erased — and a death save is exactly when a table is busiest.
+                    mutateSheet(
+                      db,
+                      row.id,
+                      (fresh) => ({ ...fresh, death_save_penalty: save.penalty + 1 }),
                       () => {
                         io.emit('sheetUpdated', { username: info.userName, system });
                         io.emit('deathSaveResult', {
