@@ -17,6 +17,7 @@ const attackCwn = require('./attackCwn');
 const vehicleSeats = require('./vehicleSeats');
 const vehicleTokens = require('./vehicleTokens');
 const ramModule = require('./ram');
+const { mutateSheet, patchSheet } = require('./mutate');
 
 /** The default for the CWN combat path, which is the only caller that is system-specific. */
 const SYSTEM = 'cities_without_number';
@@ -214,8 +215,16 @@ function loadSheet(db, username, cb, system = SYSTEM) {
   );
 }
 
-const writeSheet = (db, id, data, cb) =>
-  db.run(`UPDATE character_sheets SET data = ? WHERE id = ?`, [JSON.stringify(data), id], () => cb());
+// Through the queue, and applied to a fresh read. Seating and hull damage happen during
+// a fight, when the people whose sheets these are are also editing them — and the old form
+// wrote back every other field as it stood when the sheet was loaded. See sheets/mutate.js.
+//
+// `patch` is the change only, never a whole spread-out sheet: spreading at the call site
+// is what carried the stale copy.
+const writeSheet = (db, id, patch, cb) => patchSheet(db, id, patch, () => cb());
+
+/** Emptying a seat is a removal rather than a patch, so it needs the whole sheet. */
+const clearOccupancyOn = (db, id, cb) => mutateSheet(db, id, clearOccupancy, () => cb());
 
 /**
  * Put someone in a seat.
@@ -275,11 +284,11 @@ function seatIn(db, { occupant, owner, vehicleIndex, seat, guestId, system = SYS
             const occ = attackCwn.readOccupancy(d);
             if (!occ || occ.seat !== seatId) continue;
             if ((occ.owner || r.username) !== ownerSheet.username || occ.vehicleIndex !== index) continue;
-            evictions.push({ id: r.id, data: clearOccupancy(d) });
+            evictions.push({ id: r.id });
           }
           let left = evictions.length + 1;
           const done = () => { if (--left === 0) cb(null); };
-          evictions.forEach(e => writeSheet(db, e.id, e.data, done));
+          evictions.forEach(e => clearOccupancyOn(db, e.id, done));
           // A person taking a seat turns out any NPC sitting in it, the same way it turns
           // out another person. One seat, one occupant, whichever mechanism holds it.
           vehicleTokens.evictSeat(db, ownerSheet.id, index, seatId, () =>
@@ -308,11 +317,11 @@ function evictPlayerFromSeat(db, ownerSheet, index, seatId, system, cb) {
         const occ = attackCwn.readOccupancy(d);
         if (!occ || occ.seat !== seatId) continue;
         if ((occ.owner || r.username) !== ownerSheet.username || occ.vehicleIndex !== index) continue;
-        writes.push({ id: r.id, data: clearOccupancy(d) });
+        writes.push({ id: r.id });
       }
       if (!writes.length) return cb();
       let left = writes.length;
-      writes.forEach(w => writeSheet(db, w.id, w.data, () => { if (--left === 0) cb(); }));
+      writes.forEach(w => clearOccupancyOn(db, w.id, () => { if (--left === 0) cb(); }));
     },
   );
 }
@@ -321,7 +330,7 @@ function evictPlayerFromSeat(db, ownerSheet, index, seatId, system, cb) {
 function seatOut(db, occupant, cb, system = SYSTEM) {
   loadSheet(db, occupant, (sheet) => {
     if (!sheet) return cb('NO_SUCH_PLAYER');
-    writeSheet(db, sheet.id, clearOccupancy(sheet.data), () => cb(null));
+    clearOccupancyOn(db, sheet.id, () => cb(null));
   }, system);
 }
 
@@ -347,7 +356,7 @@ function adjustHp(db, { owner, vehicleIndex, delta, system = SYSTEM }, cb) {
     if (!vehicle) return cb('NO_SUCH_VEHICLE');
     const next = Math.max(0, Math.min(vehicle.hpMax, vehicle.hp + amount));
     if (next === vehicle.hp) return cb(null);
-    writeSheet(db, ownerSheet.id, { ...ownerSheet.data, [vehicle.hpField]: next }, () => cb(null));
+    writeSheet(db, ownerSheet.id, { [vehicle.hpField]: next }, () => cb(null));
   }, system);
 }
 
@@ -357,8 +366,7 @@ function setMoving(db, { owner, vehicleIndex, moving, system = SYSTEM }, cb) {
   loadSheet(db, owner, (ownerSheet) => {
     if (!ownerSheet) return cb('NO_SUCH_VEHICLE_OWNER');
     if (!attackCwn.getVehicle(ownerSheet.data, index)) return cb('NO_SUCH_VEHICLE');
-    const data = { ...ownerSheet.data, [`vehicle${index}_moving`]: moving ? 1 : 0 };
-    writeSheet(db, ownerSheet.id, data, () => cb(null));
+    writeSheet(db, ownerSheet.id, { [`vehicle${index}_moving`]: moving ? 1 : 0 }, () => cb(null));
   }, system);
 }
 
@@ -466,7 +474,7 @@ function ram(db, { actor, targetOwner, targetVehicleIndex, targetUsername, damag
         writeSheet(
           db,
           ownerSheet.id,
-          { ...ownerSheet.data, [`vehicle${mine.index}_hp`]: out.rammerHp },
+          { [`vehicle${mine.index}_hp`]: out.rammerHp },
           () => writeTarget(out.targetHp, () => cb(null, {
             ...out,
             rammer: { name: mine.name, owner: mine.owner, index: mine.index, hpMax: mine.hpMax },
@@ -480,7 +488,7 @@ function ram(db, { actor, targetOwner, targetVehicleIndex, targetUsername, damag
     const asVehicle = (v) => finish({ ...v, crew: crewOf(v) }, false, (hp, done) =>
       loadSheet(db, v.owner, (sheet) => {
         if (!sheet) return done();
-        writeSheet(db, sheet.id, { ...sheet.data, [`vehicle${v.index}_hp`]: hp }, done);
+        writeSheet(db, sheet.id, { [`vehicle${v.index}_hp`]: hp }, done);
       }, system));
 
     if (targetUsername) {
