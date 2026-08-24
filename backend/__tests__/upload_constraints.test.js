@@ -11,7 +11,7 @@
  * A refusal has to answer three questions: which file, what was wrong, what would work.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
@@ -213,5 +213,69 @@ describe('the limit the client shows and the limit the server keeps', () => {
     // eslint-disable-next-line no-eval
     const frontendValue = eval(match[1]);
     expect(frontendValue).toBe(LIMITS.battle_map);
+  });
+});
+
+describe('uploads a dead process left behind', () => {
+  const tmpDir = path.join(mapsDir, '.tmp');
+
+  // These write real files into the real temp directory, and a failing assertion must not
+  // leave one behind for the next test to trip over — which is exactly what happened the
+  // first time this was written.
+  afterEach(() => {
+    try {
+      for (const f of fs.readdirSync(tmpDir)) {
+        if (f.startsWith('part_') && (f.includes('test') || f.includes('again'))) {
+          fs.unlinkSync(path.join(tmpDir, f));
+        }
+      }
+    } catch { /* nothing to clean */ }
+  });
+
+  it('sweeps partial files older than an hour, and leaves fresh ones alone', () => {
+    // Every path out of the handler cleans up after itself, but a process killed
+    // mid-upload gets no say — and what it leaves is a partial file of up to the size
+    // limit that nothing else will ever look at again.
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const stale = path.join(tmpDir, 'part_stale_test');
+    const fresh = path.join(tmpDir, 'part_fresh_test');
+    fs.writeFileSync(stale, 'abandoned');
+    fs.writeFileSync(fresh, 'in flight');
+
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    fs.utimesSync(stale, twoHoursAgo, twoHoursAgo);
+
+    // Constructing the router is the sweep: it runs once at startup, which is the only
+    // moment an orphan can be told apart from an upload happening right now.
+    const router = battleMapsFactory(db, { emit: () => {} }, { emitUpdate: () => {} });
+
+    expect(fs.existsSync(stale)).toBe(false);
+    // An upload in progress must survive it.
+    expect(fs.existsSync(fresh)).toBe(true);
+
+    // And it reports what it removed, for a later run with its own orphan.
+    const another = path.join(tmpDir, 'part_stale_again');
+    fs.writeFileSync(another, 'also abandoned');
+    fs.utimesSync(another, twoHoursAgo, twoHoursAgo);
+    expect(router.sweepAbandonedUploads()).toBe(1);
+    expect(fs.existsSync(another)).toBe(false);
+
+    fs.unlinkSync(fresh);
+  });
+
+  it('does not offer partial uploads in SELECT EXISTING', async () => {
+    // The temp directory lives inside the uploads directory the gallery reads.
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const partial = path.join(tmpDir, 'part_listing_test');
+    fs.writeFileSync(partial, 'half a map');
+
+    const res = await request(app)
+      .get('/api/locations/1/battle_maps/images')
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+    const names = res.body.map((f) => f.filename);
+    expect(names).not.toContain('.tmp');
+    expect(names.join(' ')).not.toContain('part_');
+    fs.unlinkSync(partial);
   });
 });

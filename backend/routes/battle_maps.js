@@ -69,6 +69,31 @@ module.exports = (db, io, { emitUpdate }) => {
     if (file && file.path) fs.unlink(file.path, () => {});
   };
 
+  /**
+   * Anything a previous run left behind.
+   *
+   * Every path out of the handler cleans up after itself, but a process killed mid-upload
+   * gets no say — and what it leaves is a partial file of up to the size limit, which
+   * nothing else will ever look at again. An hour is far longer than any upload this
+   * accepts can legitimately take, so anything older is certainly abandoned.
+   *
+   * Swept once at startup rather than on a timer: uploads are rare, orphans rarer, and a
+   * background interval is a thing to reason about forever in exchange for nothing.
+   */
+  const sweepAbandonedUploads = (olderThanMs = 60 * 60 * 1000, now = Date.now()) => {
+    let removed = 0;
+    try {
+      for (const name of fs.readdirSync(tmpDir)) {
+        const p = path.join(tmpDir, name);
+        try {
+          if (now - fs.statSync(p).mtimeMs > olderThanMs) { fs.unlinkSync(p); removed++; }
+        } catch { /* vanished under us, which is the outcome we wanted */ }
+      }
+    } catch { /* no temp directory yet */ }
+    return removed;
+  };
+  sweepAbandonedUploads();
+
   /** The content hash of a file already on disk, read in chunks rather than all at once. */
   const hashFile = (filepath) => new Promise((resolve, reject) => {
     const h = crypto.createHash('sha256');
@@ -224,5 +249,6 @@ module.exports = (db, io, { emitUpdate }) => {
     res.json(files.map(f => ({ filename: f, url: '/uploads/battle_maps/' + f })));
   });
 
+  router.sweepAbandonedUploads = sweepAbandonedUploads;
   return router;
 };

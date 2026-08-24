@@ -12,8 +12,10 @@ import * as THREE from 'three';
 // stack nor WebGL and the tests here can only cover the element's configuration: the file
 // decodes, muted autoplay starts without a gesture, `THREE.VideoTexture` uploads frames,
 // successive rendered frames differ, and it wraps from the end back to the start without
-// firing `ended` or pausing — a loop, not a clip that stops. Worth recording one thing that looked like a
-// fault and was not — a tab the compositor has stopped painting fires neither
+// firing `ended` or pausing — a loop, not a clip that stops.
+//
+// Worth recording one thing that looked like a fault and was not: a tab the compositor
+// has stopped painting fires neither
 // `requestAnimationFrame` nor `requestVideoFrameCallback`, so the texture never marks
 // itself stale and the plane renders black while the video's `currentTime` keeps
 // advancing. That is the same mechanism this hook leans on to pause on hidden tabs, and
