@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const { cryptoRng } = require('../utils/random');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
+const { mutateSheet, mutateSheetForUser } = require('../sheets/mutate');
 const sheetRolls = require('../sheets/rolls');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
@@ -1135,12 +1136,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           return;
         }
         if (linkSource) return;
-        db.get(
-          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-          [info.userName, system],
-          (err2, row) => {
-            if (err2 || !row) return;
-            const data = JSON.parse(row.data || '{}');
+        // Through the queue rather than a bare read-then-write: a GM applying damage to
+        // this same sheet while the player types would otherwise build its new blob from
+        // data this edit had already replaced, and one of the two changes would vanish
+        // with nothing reported. See sheets/mutate.js.
+        let stunOverflow = 0;
+        mutateSheetForUser(
+          db,
+          { username: info.userName, system },
+          (data) => {
             data[payload.fieldId] = payload.value;
             // If the changed field is a max, clamp the paired current field.
             const curField = sheetTemplates.getMaxPairs(system)[payload.fieldId];
@@ -1152,7 +1156,6 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             sheetTemplates.applyDerived(system, data, payload.fieldId);
             // SR6: stun past the Stun Monitor overflows into Physical damage
             // (token HP). Clamp the track and carry the excess.
-            let stunOverflow = 0;
             if (system === 'shadowrun_6e' && payload.fieldId === 'stun_current') {
               const mon = Number(data.stun_monitor) || 0;
               const val = Number(data.stun_current) || 0;
@@ -1161,11 +1164,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 data.stun_current = mon;
               }
             }
-            db.run(
-              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-              [JSON.stringify(data), row.id],
-              (err3) => {
-                if (err3) return;
+            return data;
+          },
+          (err3, data) => {
+                if (err3 || !data) return;
                 // Sheet name/description are the single source of truth for
                 // the player's token label and info window - mirror them.
                 if (payload.fieldId === identity.nameField(system) || payload.fieldId === 'description') {
@@ -1203,8 +1205,6 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 } else {
                   io.emit('sheetUpdated', { username: info.userName, system });
                 }
-              }
-            );
           }
         );
       });
