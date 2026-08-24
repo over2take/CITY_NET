@@ -213,3 +213,34 @@ describe('patchSheet', () => {
     expect((await readSheet()).hp).toBe(20);
   });
 });
+
+describe('every writer goes through the queue', () => {
+  const fs = require('fs');
+  const path = require('path');
+
+  it('leaves no direct sheet write outside sheets/mutate.js', () => {
+    // The guarantee only holds if *both* sides of a collision take the queue, so one
+    // forgotten call site quietly reopens the hole for every writer it can meet. That is
+    // not something to rediscover by hand later.
+    const root = path.join(path.dirname(new URL(import.meta.url).pathname.slice(1)), '..');
+    const found = [];
+
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === 'node_modules' || entry.name === '__tests__' || entry.name === 'uploads') continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) { walk(full); continue; }
+        if (!entry.name.endsWith('.js')) continue;
+        // mutate.js is the queue itself; db.js holds a boot-time migration that runs
+        // before the server listens, documented in place.
+        if (full.endsWith(path.join('sheets', 'mutate.js')) || full.endsWith(path.join('backend', 'db.js'))) continue;
+        if (/UPDATE\s+character_sheets\s+SET\s+data/i.test(fs.readFileSync(full, 'utf8'))) {
+          found.push(path.relative(root, full));
+        }
+      }
+    };
+    walk(root);
+
+    expect(found, `these write a sheet directly: ${found.join(', ')}`).toEqual([]);
+  });
+});

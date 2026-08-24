@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 const identity = require('../sheets/identity');
+const { mutateSheet, patchSheet } = require('../sheets/mutate');
 const { DEFAULT_SYSTEM } = require('../sheets/templates');
 
 const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY', 'LANDMARK', 'MARKETS', 'CUSTOM']);
@@ -452,13 +453,12 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         if ((nameChanged || descChanged) && (oldRow.shape === 'enemy_rhombus' || oldRow.shape === 'friendly_rhombus')) {
           db.get(`SELECT sheet_id FROM npc_sheet_links WHERE location_id = ? LIMIT 1`, [req.params.id], (le, link) => {
             if (le || !link) return;
-            db.get(`SELECT id, data FROM character_sheets WHERE id = ? AND is_npc = 1`, [link.sheet_id], (se, sheet) => {
+            db.get(`SELECT id FROM character_sheets WHERE id = ? AND is_npc = 1`, [link.sheet_id], (se, sheet) => {
               if (se || !sheet) return;
-              const data = { ...JSON.parse(sheet.data || '{}') };
-              if (nameChanged) data.name = name;
-              if (descChanged) data.description = description;
-              db.run(`UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [JSON.stringify(data), sheet.id]);
+              patchSheet(db, sheet.id, {
+                ...(nameChanged ? { name } : {}),
+                ...(descChanged ? { description } : {}),
+              });
             });
           });
         }
@@ -541,11 +541,21 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
                   // CP:R death-save penalty and CWN mortal-wound round count
                   // both reset above 0 HP. CWN's frail flag deliberately
                   // persists - it clears via care, not healing.
-                  let changed = false;
-                  if (Number(data.death_save_penalty) > 0) { data.death_save_penalty = 0; changed = true; }
-                  if (Number(data.rounds_since_downed) > 0) { data.rounds_since_downed = 0; changed = true; }
-                  if (changed) {
-                    db.run('UPDATE character_sheets SET data = ? WHERE id = ?', [JSON.stringify(data), s.id]);
+                  const needsClearing = Number(data.death_save_penalty) > 0 || Number(data.rounds_since_downed) > 0;
+                  if (needsClearing) {
+                    // Re-checked at write time: healing lands while the sheet is being
+                    // written from several other directions, this being the moment
+                    // somebody was on the floor.
+                    mutateSheet(db, s.id, (d) => {
+                      const pen = Number(d.death_save_penalty) > 0;
+                      const rounds = Number(d.rounds_since_downed) > 0;
+                      if (!pen && !rounds) return undefined;
+                      return {
+                        ...d,
+                        ...(pen ? { death_save_penalty: 0 } : {}),
+                        ...(rounds ? { rounds_since_downed: 0 } : {}),
+                      };
+                    });
                   }
                 } catch (e) { /* bad JSON - leave it */ }
               });
@@ -574,10 +584,10 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           if (strainMax > 0 && strain >= strainMax) {
             return res.status(409).json({ error: 'STRAIN MAXED — NO STIM BENEFIT' });
           }
-          data.system_strain = strain + 1;
-          db.run(
-            `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [JSON.stringify(data), sheet.id],
+          patchSheet(
+            db,
+            sheet.id,
+            (d) => ({ system_strain: (Number(d.system_strain) || 0) + 1 }),
             () => {
               if (!sheet.is_npc) io.emit('sheetUpdated', { username: sheet.username });
               runHealth('heal');
