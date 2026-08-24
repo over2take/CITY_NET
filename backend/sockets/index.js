@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const { cryptoRng } = require('../utils/random');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
-const { mutateSheet, mutateSheetForUser } = require('../sheets/mutate');
+const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
 const sheetRolls = require('../sheets/rolls');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
@@ -1347,10 +1347,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               `${identity.displayName(info.userName)} rolled ${rollDef.label} [${outcome.breakdown} = ${outcome.total}]${luckTag}${woundTag}${critTag}`;
             // Spend the declared LUCK
             if (luck > 0) {
-              data.luck = Math.max(0, (Number(data.luck) || 0) - luck);
-              db.run(
-                `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [JSON.stringify(data), row.id],
+              // A subtraction, so it is computed against what the sheet says now rather
+              // than against the copy this roll was resolved from.
+              patchSheet(
+                db,
+                row.id,
+                (d) => ({ luck: Math.max(0, (Number(d.luck) || 0) - luck) }),
                 () => io.emit('sheetUpdated', { username: info.userName, system })
               );
             }
@@ -1481,9 +1483,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               glitch: outcome.glitch ?? false,
               criticalGlitch: !!(outcome.glitch && outcome.critical === 'failure'),
             };
-            db.run(
-              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-              [JSON.stringify(data), row.id],
+            patchSheet(
+              db,
+              row.id,
+              { stun_current: data.stun_current },
               (err3) => {
                 if (err3) return;
                 db.run(
@@ -1808,14 +1811,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       // Re-read rather than writing back the copy the attack resolved against: the sheet
       // blob is stored whole, so a stale copy would silently undo any other edit made
       // between the roll and the damage landing.
-      db.get(`SELECT username, data FROM character_sheets WHERE id = ?`, [ride.sheetId], (err, row) => {
+      db.get(`SELECT username FROM character_sheets WHERE id = ?`, [ride.sheetId], (err, row) => {
         if (err || !row) return cb(newHp);
-        let data;
-        try { data = JSON.parse(row.data || '{}'); } catch (e) { return cb(newHp); }
-        data[ride.vehicle.hpField] = newHp;
-        db.run(
-          `UPDATE character_sheets SET data = ? WHERE id = ?`,
-          [JSON.stringify(data), ride.sheetId],
+        // The re-read this comment already asked for, now with nothing able to slip
+        // between it and the write.
+        patchSheet(
+          db,
+          ride.sheetId,
+          { [ride.vehicle.hpField]: newHp },
           () => {
             io.emit('sheetUpdated', { username: row.username });
             // The badge carries the vehicle's HP, so a wreck has to stop showing as cover.
@@ -2166,11 +2169,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   `[${toHit.breakdown} = ${toHit.total} vs DV ${dv}] — ${hit ? 'HIT' : 'MISS'}${critTag}`;
                 // Spend the declared LUCK
                 if (luck > 0) {
-                  attackerData.luck = Math.max(0, (Number(attackerData.luck) || 0) - luck);
-                  db.run(
-                    `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP
-                     WHERE username = ? AND system = ? AND is_npc = 0`,
-                    [JSON.stringify(attackerData), info.userName, system],
+                  // Subtracted from what the sheet holds now, not from the copy this
+                  // attack was resolved against several callbacks ago.
+                  mutateSheetForUser(
+                    db,
+                    { username: info.userName, system },
+                    (d) => ({ ...d, luck: Math.max(0, (Number(d.luck) || 0) - luck) }),
                     () => io.emit('sheetUpdated', { username: info.userName, system })
                   );
                 }
@@ -2403,11 +2407,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         success: check.success,
                       });
                       if (check.success) {
-                        targetData.frail = 1;
-                        targetData.rounds_since_downed = 0;
-                        db.run(
-                          `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                          [JSON.stringify(targetData), targetRow.id],
+                        // Someone else's sheet, being written while they are very likely
+                        // looking at it - this is the moment they are on the floor.
+                        patchSheet(
+                          db,
+                          targetRow.id,
+                          { frail: 1, rounds_since_downed: 0 },
                           () => {
                             db.run(
                               `UPDATE locations SET hp_current = 1 WHERE shape = 'rhombus' AND owner = ?`,
@@ -2420,9 +2425,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                           }
                         );
                       } else {
-                        db.run(
-                          `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                          [JSON.stringify(targetData), targetRow.id],
+                        patchSheet(
+                          db,
+                          targetRow.id,
+                          { rounds_since_downed: targetData.rounds_since_downed },
                           () => io.emit('sheetUpdated', { username: targetUsername, system })
                         );
                       }
@@ -2506,10 +2512,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               };
 
               if (cost > 0) {
-                data.mage_effort = Math.max(0, effort - cost);
-                db.run(
-                  `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                  [JSON.stringify(data), row.id],
+                patchSheet(
+                  db,
+                  row.id,
+                  (d) => ({ mage_effort: Math.max(0, (Number(d.mage_effort) || 0) - cost) }),
                   () => {
                     io.emit('sheetUpdated', { username: info.userName, system });
                     finish();
