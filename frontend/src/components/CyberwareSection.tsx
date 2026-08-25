@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SheetSection, SheetTemplate, SheetFieldValue } from '../sheets/types';
-import { readRows, totalHumanityLoss, totalCost, needsPlacing } from '../sheets/cyberwareRows';
+import { readRows, totalHumanityLoss, needsPlacing } from '../sheets/cyberwareRows';
 import { CyberwareWindow } from './CyberwareWindow';
 import { themeRoot } from '../utils/themeRoot';
 
@@ -40,7 +40,9 @@ export function CyberwareSection({ data, template, readOnly, onFieldChange, who 
   const rows = useMemo(() => readRows(data), [data]);
 
   const hl = totalHumanityLoss(rows);
-  const spent = totalCost(rows);
+  // No eddies total here. What the chrome cost is money already spent — it changes nothing
+  // and answers no question this line is for, whereas humanity loss is live and drives EMP.
+  // The price stays in the window, where the table has a column for it and can sort by it.
   // The same question the window and the body diagram ask. Counting a row as placed
   // because it has a type read "8 INSTALLED" over a body with nothing on it — a Cyberleg
   // that is in neither leg is owned, not installed.
@@ -53,7 +55,7 @@ export function CyberwareSection({ data, template, readOnly, onFieldChange, who 
         <span style={{ ...mono, color: 'var(--cyan)' }}>
           {rows.length === 0
             ? 'NO CYBERWARE'
-            : `${installed} INSTALLED · HUMANITY LOSS ${hl}${spent > 0 ? ` · ${spent.toLocaleString()}eb` : ''}`}
+            : `${installed} INSTALLED · HUMANITY LOSS ${hl}`}
         </span>
         <button type="button" className="utility-btn" onClick={() => setOpen(true)}>
           {readOnly ? 'VIEW' : 'OPEN'} AUGMENTATION
