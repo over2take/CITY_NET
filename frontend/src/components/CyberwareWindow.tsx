@@ -7,7 +7,7 @@ import {
 } from '../sheets/cyberwareLocations';
 import {
   CYBERWARE_FIELD, readRows, normaliseRow, totalHumanityLoss, totalCost,
-  rowLocation, rowsForPanel, describeMod, isSetKind, MOD_KINDS, MOD_KIND_LABEL,
+  rowLocation, rowsForPanel, needsPlacing, describeMod, isSetKind, MOD_KINDS, MOD_KIND_LABEL,
   type CyberRow, type CyberMod, type ModKind,
 } from '../sheets/cyberwareRows';
 import type { SheetFieldValue } from '../sheets/types';
@@ -279,7 +279,9 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
 
   const hl = totalHumanityLoss(rows);
   const spent = totalCost(rows);
-  const unfiledRows = rows.filter((r) => !r.type);
+  // Includes a paired type nobody has picked a side for: a Cybereye that is not in an eye
+  // yet appears in neither panel, so it has to read as unplaced or it vanishes.
+  const unfiledRows = rows.filter(needsPlacing);
 
   const panelBox = (panel: Panel) => {
     const mine = rowsForPanel(rows, panel.typeId, panel.side);
@@ -519,7 +521,7 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
 
       {!readOnly && (draft ? (
         <div style={{ marginTop: 8, border: '1px solid var(--dark-green)', padding: 7 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.6fr 0.6fr 0.7fr', gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.6fr 0.7fr', gap: 6 }}>
             <input
               autoFocus style={inputStyle} placeholder="Name" aria-label="Cyberware name"
               value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -530,20 +532,11 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
                 const t = typeById(e.target.value);
                 // Drop a side the new type cannot have, rather than leaving a Fashionware
                 // marked R because it used to be an arm.
-                setDraft({ ...draft, type: e.target.value, side: t?.paired ? (draft.side ?? 'r') : null });
+                setDraft({ ...draft, type: e.target.value, side: t?.paired ? draft.side : null });
               }}
             >
               <option value="">Unfiled</option>
               {CYBER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-            </select>
-            <select
-              style={{ ...inputStyle, opacity: typeById(draft.type)?.paired ? 1 : 0.35 }}
-              aria-label="Side" disabled={!typeById(draft.type)?.paired}
-              value={draft.side ?? ''}
-              onChange={(e) => setDraft({ ...draft, side: (e.target.value || null) as Side })}
-            >
-              <option value="r">R</option>
-              <option value="l">L</option>
             </select>
             <input
               style={inputStyle} type="number" placeholder="HL" aria-label="Humanity loss"

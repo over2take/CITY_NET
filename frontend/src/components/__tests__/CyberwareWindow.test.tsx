@@ -155,6 +155,28 @@ describe('editing', () => {
     expect(left).toHaveLength(ROWS.length - 1);
   });
 
+  it('leaves a paired piece waiting to be placed rather than guessing a side', async () => {
+    // The form does not ask which side, because the same eye fits either socket. A
+    // Cybereye added from the generic form is therefore in neither eye yet, and has to
+    // read as unplaced — otherwise it is in the table but nowhere on the body.
+    const onFieldChange = show([]);
+    await userEvent.click(screen.getByRole('button', { name: /ADD CYBERWARE/ }));
+    await userEvent.type(screen.getByLabelText('Cyberware name'), 'Low Light');
+    await userEvent.selectOptions(screen.getByLabelText('Install type'), 'cybereye');
+    await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
+
+    const added = onFieldChange.mock.calls[0][1].at(-1);
+    expect(added.type).toBe('cybereye');
+    expect(added.side).toBeNull();
+  });
+
+  it('shows a sided piece with no side as still needing a place', () => {
+    show([{ name: 'Low Light', type: 'cybereye', side: null, hl: 0, cost: null, data: '' }]);
+    expect(screen.getByText(/use \+ on a body part/)).toBeInTheDocument();
+    expect(screen.getByText(/CYBEREYE R · EMPTY/)).toBeInTheDocument();
+    expect(screen.getByText(/CYBEREYE L · EMPTY/)).toBeInTheDocument();
+  });
+
   it('offers nothing to edit when the sheet is read-only', () => {
     show(ROWS, { readOnly: true });
     expect(screen.queryByRole('button', { name: /ADD CYBERWARE/ })).not.toBeInTheDocument();
@@ -224,14 +246,21 @@ describe('filing chrome that is already on the sheet', () => {
     expect(value).toHaveLength(UNFILED.length);
   });
 
-  it('still offers a new piece from the chooser', async () => {
-    show(UNFILED);
+  it('still offers a new piece from the chooser, on the leg you asked for', async () => {
+    // The side is never asked for — the same leg fits either hip, so which one it goes on
+    // is a fact about the panel you pressed + on, and is checked on what gets written
+    // rather than on a control.
+    const onFieldChange = show(UNFILED);
     await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberleg L' }));
     await userEvent.click(screen.getByRole('button', { name: 'NEW PIECE' }));
 
     expect(screen.getByLabelText('Cyberware name')).toBeInTheDocument();
     expect(screen.getByLabelText('Install type')).toHaveValue('cyberleg');
-    expect(screen.getByLabelText('Side')).toHaveValue('l');
+    expect(screen.queryByLabelText('Side')).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Cyberware name'), 'Jump Booster');
+    await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
+    expect(onFieldChange.mock.calls[0][1].at(-1).side).toBe('l');
   });
 
   it('goes straight to the form when nothing is waiting to be placed', async () => {

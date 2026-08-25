@@ -23,7 +23,9 @@ Cyberware, as something you can actually see.
 
 - **Taking a piece out again.** Each entry in a body part has a − beside it that unplaces the piece without deleting it, so it goes back to the unplaced list and can be filed somewhere else. Deleting it outright is the × in the table — uninstalling chrome and never having owned it are different things.
 
-- **Cyberware you can add by hand.** Name, install type, side, humanity loss, price in eddies, and what it does. The type is a dropdown; the side appears only for the types that have one, so a Fashionware cannot be marked "left". Adding from a panel fills the location in for you.
+- **Cyberware you can add by hand.** Name, install type, humanity loss, price in eddies, and what it does. Adding from a panel fills the location in for you.
+
+  It never asks which side. The same cybereye fits either socket, so left or right is a fact about where you install it rather than about the piece — you answer it by pressing + on the arm you mean. A paired piece added from the general form waits in the unplaced list until you put it somewhere.
 
 - **What a piece actually does, in numbers.** A modifier is a stat, a skill or a roll type, and an amount — `+6 Business`, `+2 Initiative Roll` — and a piece can carry as many as it needs. Setting a value is kept separate from adjusting one, since `+3 Cool` and `Cool = 3` are different claims, and the table shows them differently.
 

@@ -155,5 +155,19 @@ export function rowsForPanel(rows: CyberRow[], typeId: string, side: Side): Cybe
   return rows.filter((r) => r.type === typeId && (!t?.paired || r.side === side));
 }
 
+/**
+ * Whether a row still needs somewhere to go.
+ *
+ * Two ways to not have a place, and both have to count. A row with no type at all is the
+ * obvious one, and is how every import arrives. The other is a paired type with no side:
+ * a Cybereye that has not been put in an eye yet is in neither panel, and if that did not
+ * read as unplaced it would simply disappear off the diagram.
+ *
+ * Which side a piece is on is a fact about the socket, not about the piece — the same eye
+ * fits either one — so it is answered by where you install it rather than on the form.
+ */
+export const needsPlacing = (row: CyberRow): boolean =>
+  !row.type || Boolean(typeById(row.type)?.paired && !row.side);
+
 /** Everything that has not been given a place yet, which is how every import arrives. */
-export const unfiledRows = (rows: CyberRow[]): CyberRow[] => rows.filter((r) => !r.type);
+export const unfiledRows = (rows: CyberRow[]): CyberRow[] => rows.filter(needsPlacing);
