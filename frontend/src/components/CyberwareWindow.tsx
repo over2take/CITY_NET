@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import bodySvg from '../assets/body.svg?raw';
 import {
-  CYBER_TYPES, typeById, wiredPanels, unwiredPanels, drawnFigureBox,
+  CYBER_TYPES, typeById, wiredPanels, unwiredPanels, drawnFigureBox, describe as describeType,
   type Side, type Panel,
 } from '../sheets/cyberwareLocations';
 import {
@@ -339,6 +339,24 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
     write(next);
   };
 
+  /**
+   * Say what a piece is, without saying where it goes.
+   *
+   * The two are separate decisions and only the second one needs the body diagram. An
+   * import knows neither, so leaving typing to placement meant nothing in the list could
+   * ever describe itself — every piece read Unfiled until someone dropped it on a limb.
+   *
+   * A side that the new type cannot have is dropped, and a paired type keeps the side it
+   * had: retyping a Cyberarm R to a Cyberleg leaves it on the right.
+   */
+  const retype = (row: CyberRow, typeId: string) => {
+    const i = rows.indexOf(row);
+    if (i < 0) return;
+    const next = [...rows];
+    next[i] = { ...row, type: typeId, side: typeById(typeId)?.paired ? row.side : null };
+    write(next);
+  };
+
   /** Move a piece already on the sheet into the panel that asked for it. */
   const fileInto = (row: CyberRow, panel: Panel) => {
     const i = rows.indexOf(row);
@@ -430,7 +448,13 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
       contentStyle={{ maxHeight: '80vh', overflowY: 'auto' }}
     >
       <div style={{ ...mono(10), color: 'var(--cyan)', display: 'flex', justifyContent: 'space-between', paddingBottom: 6 }}>
-        <span>{rows.length} INSTALLED{unfiledRows.length ? ` · ${unfiledRows.length} UNFILED` : ''}</span>
+        {/* Installed means installed *somewhere*, so it counts the placed pieces rather
+            than every row. Counting all of them read "9 INSTALLED · 9 UNFILED", which says
+            two contradictory things about the same nine pieces. */}
+        <span>
+          {rows.length - unfiledRows.length} INSTALLED
+          {unfiledRows.length ? ` · ${unfiledRows.length} UNFILED` : ''}
+        </span>
         <span>HUMANITY LOSS {hl}{spent > 0 ? ` · ${spent.toLocaleString()}eb` : ''}</span>
       </div>
 
@@ -563,15 +587,47 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                 {sorted.map((r, i) => (
                   <tr key={`${r.name}-${i}`}>
                     <td
-                      title={r.type ? rowLocation(r) : 'Not yet placed — use + on a body part'}
+                      /* Placed, not merely typed: a Cyberleg not yet put in a leg is still
+                         waiting, and a filled dot beside it claims otherwise. */
+                      title={needsPlacing(r) ? 'Not yet placed — use + on a body part' : rowLocation(r)}
                       style={{ padding: '3px 4px 3px 6px', textAlign: 'center', ...mono(12) }}
                     >
-                      <span style={{ color: r.type ? 'var(--green)' : 'color-mix(in srgb, var(--green) 75%, transparent)' }}>
-                        {r.type ? '●' : '◌'}
+                      <span style={{ color: needsPlacing(r) ? 'color-mix(in srgb, var(--green) 75%, transparent)' : 'var(--green)' }}>
+                        {needsPlacing(r) ? '◌' : '●'}
                       </span>
                     </td>
                     <td style={{ ...mono(11), color: 'var(--cyan)', padding: '3px 6px', letterSpacing: 0 }}>{r.name}</td>
-                    <td style={{ ...mono(11), color: r.type ? 'var(--green)' : 'color-mix(in srgb, var(--green) 55%, transparent)', padding: '3px 6px', letterSpacing: 0 }}>{rowLocation(r)}</td>
+                    <td style={{ ...mono(11), padding: '3px 6px', letterSpacing: 0 }}>
+                      {readOnly ? (
+                        <span style={{ color: r.type ? 'var(--green)' : 'color-mix(in srgb, var(--green) 55%, transparent)' }}>
+                          {rowLocation(r)}
+                        </span>
+                      ) : (
+                        // Editable here, not only by placing the piece on the body. An
+                        // import carries no install location, so every piece arrives
+                        // Unfiled — and if placing were the only way to set a type, then
+                        // nothing in the list could ever say what it was before it was
+                        // placed. Saying "this is a Cyberleg" and choosing which leg are
+                        // two decisions, and this is the first one.
+                        <select
+                          aria-label={`Install type for ${r.name}`}
+                          value={r.type}
+                          onChange={(e) => retype(r, e.target.value)}
+                          style={{
+                            ...mono(11), letterSpacing: 0, padding: 0, width: '100%',
+                            background: 'transparent', border: 'none', cursor: 'pointer',
+                            color: r.type ? 'var(--green)' : 'color-mix(in srgb, var(--green) 55%, transparent)',
+                          }}
+                        >
+                          <option value="">Unfiled</option>
+                          {CYBER_TYPES.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.paired && r.side ? describeType(t.id, r.side) : t.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </td>
                     <td style={{ ...mono(11), color: 'var(--cyan)', padding: '3px 6px', textAlign: 'right' }}>{r.hl}</td>
                     <td style={{ ...mono(11), color: r.cost === null ? 'var(--dark-green)' : 'var(--cyan)', padding: '3px 6px', textAlign: 'right' }}>
                       {r.cost === null ? '—' : r.cost.toLocaleString()}

@@ -64,6 +64,25 @@ describe('what goes where', () => {
     expect(screen.queryByText(/use \+ on a body part/)).not.toBeInTheDocument();
   });
 
+  it('counts as installed only what is actually placed somewhere', () => {
+    // ROWS has three placed pieces and one unfiled. Counting every row read
+    // "4 INSTALLED · 1 UNFILED", which says two different things about the same four.
+    show();
+    expect(screen.getByText(/3 INSTALLED · 1 UNFILED/)).toBeInTheDocument();
+  });
+
+  it('does not call a freshly typed piece installed before it has a place', async () => {
+    // The reported bug: a custom piece read as installed the moment it was created.
+    show([{ name: 'my stuff', type: 'cyberleg', side: null, hl: 1, cost: 500, data: '' }]);
+    expect(screen.getByText(/0 INSTALLED · 1 UNFILED/)).toBeInTheDocument();
+  });
+
+  it('marks a typed-but-unplaced row as still waiting in the table', async () => {
+    show([{ name: 'my stuff', type: 'cyberleg', side: null, hl: 1, cost: 500, data: '' }]);
+    // The table's own wording, since the unfiled panel says something similar.
+    expect(screen.getByTitle('Not yet placed — use + on a body part')).toBeInTheDocument();
+  });
+
   it('totals humanity loss and money separately', () => {
     show();
     expect(screen.getByText(/HUMANITY LOSS 9/)).toBeInTheDocument();
@@ -384,6 +403,71 @@ describe('choosing what to put in a panel', () => {
     expect(button).toBeDefined();
     // Present, because it still needs a side — but not marked as fitting this panel.
     expect(button).toHaveStyle({ color: 'var(--grid-section)' });
+  });
+});
+
+describe('saying what a piece is, in the list', () => {
+  // Every imported piece arrives Unfiled, because the export carries no install location.
+  // If placing were the only way to set a type, nothing in the list could ever describe
+  // itself before it was placed — and the chooser would have only the name to go on.
+  const IMPORTED = [
+    { name: 'Self ICE', type: '', side: null, hl: 3, cost: null, data: '' },
+    { name: 'my stuff', type: '', side: null, hl: 3, cost: 500, data: '' },
+  ];
+
+  it('lets a piece be typed without placing it on the body', async () => {
+    const onFieldChange = show(IMPORTED);
+    await userEvent.selectOptions(screen.getByLabelText('Install type for my stuff'), 'cyberleg');
+
+    const written = onFieldChange.mock.calls[0][1];
+    expect(written.find((r: CyberRow) => r.name === 'my stuff').type).toBe('cyberleg');
+    // A leg still needs to know which leg, so it is typed but not yet placed.
+    expect(written.find((r: CyberRow) => r.name === 'my stuff').side).toBeNull();
+  });
+
+  it('then offers it first for the matching panel', async () => {
+    // The whole point of typing it in the list: the chooser stops guessing from the name.
+    show([
+      { name: 'Self ICE', type: '', side: null, hl: 3, cost: null, data: '' },
+      { name: 'my stuff', type: 'cyberleg', side: null, hl: 3, cost: 500, data: '' },
+    ]);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberleg L' }));
+    const offered = screen.getAllByRole('button')
+      .map((b) => b.textContent?.trim())
+      .filter((t) => t?.startsWith('my stuff') || t?.startsWith('Self ICE'));
+    expect(offered[0]).toMatch(/^my stuff/);
+  });
+
+  it('files an unpaired type straight away, since there is only one place for it', async () => {
+    const onFieldChange = show(IMPORTED);
+    await userEvent.selectOptions(screen.getByLabelText('Install type for Self ICE'), 'fashionware');
+
+    const written = onFieldChange.mock.calls[0][1];
+    expect(written.find((r: CyberRow) => r.name === 'Self ICE')).toMatchObject({
+      type: 'fashionware', side: null,
+    });
+  });
+
+  it('drops a side the new type cannot have', async () => {
+    const onFieldChange = show([
+      { name: 'Arm Thing', type: 'cyberarm', side: 'r', hl: 0, cost: null, data: '' },
+    ]);
+    await userEvent.selectOptions(screen.getByLabelText('Install type for Arm Thing'), 'borgware');
+    expect(onFieldChange.mock.calls[0][1][0].side).toBeNull();
+  });
+
+  it('keeps the side when retyping between paired types', async () => {
+    // Retyping a right arm to a leg leaves it on the right; the limb changed, not the side.
+    const onFieldChange = show([
+      { name: 'Arm Thing', type: 'cyberarm', side: 'r', hl: 0, cost: null, data: '' },
+    ]);
+    await userEvent.selectOptions(screen.getByLabelText('Install type for Arm Thing'), 'cyberleg');
+    expect(onFieldChange.mock.calls[0][1][0]).toMatchObject({ type: 'cyberleg', side: 'r' });
+  });
+
+  it('offers no type picker on a read-only sheet', () => {
+    show(IMPORTED, { readOnly: true });
+    expect(screen.queryByLabelText('Install type for my stuff')).not.toBeInTheDocument();
   });
 });
 

@@ -19,6 +19,10 @@ Cyberware, as something you can actually see.
 
   Underneath is the same list as a table you can sort by name, type, humanity loss or price. Two views because the questions differ: what is in my left arm is a diagram question, and what am I running and what did it cost is a table question. No single ordering answers both.
 
+- **Say what a piece is without saying where it goes.** The TYPE column in the table is a picker, so an imported piece can be marked a Cyberleg while you decide which leg. Those are two decisions and only the second one needs the diagram — and since an import carries no install location, every piece arrived Unfiled with no way to describe itself until someone dropped it on a limb.
+
+  Once typed, it is offered first when you press + on a matching body part, instead of the list guessing from its name.
+
 - **Put chrome you already have into a place on the body.** Pressing + on an arm asks what to put there before offering a blank form, listing everything not yet placed — with the pieces whose names read like a match for that spot first, and marked. It is a suggestion rather than a decision: an imported piece knows only its name, so nothing files itself into the wrong arm on the strength of a word.
 
 - **Taking a piece out again.** Each entry in a body part has a − beside it that unplaces the piece without deleting it, so it goes back to the unplaced list and can be filed somewhere else. Deleting it outright is the × in the table — uninstalling chrome and never having owned it are different things.
