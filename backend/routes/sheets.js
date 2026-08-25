@@ -322,6 +322,9 @@ module.exports = (db, io) => {
         // What the export could not give up — vehicle stats, weapon damage, an older
         // format's stats. Shown beside the preview so nobody reads a gap as a failure.
         missing: result.missing,
+        // Rows rather than fields, so they travel beside `mapped` rather than in it —
+        // `mapFields` maps names to sheet fields and cyberware is a list under one.
+        cyberware: result.cyberware || [],
         exportVersion: result.version,
       });
     });

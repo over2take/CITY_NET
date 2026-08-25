@@ -14,10 +14,17 @@ import { DraggableWindow } from './DraggableWindow';
  * rather than a warning stacked under a form.
  */
 
+import type { CyberRow } from '../sheets/cyberwareRows';
+
 export interface ImportPreview {
   system: string;
   source: string;
   mapped: Record<string, string | number>;
+  /**
+   * Cyberware, which arrives as rows rather than fields because it lives in one array.
+   * Carried beside `mapped` for the same reason it is not in it.
+   */
+  cyberware?: CyberRow[];
   unmapped: Record<string, unknown>;
   skipped: Record<string, unknown>;
   /** What the source had no way to provide — an export names a car but carries no SDP. */

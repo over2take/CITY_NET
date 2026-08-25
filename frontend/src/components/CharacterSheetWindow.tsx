@@ -132,7 +132,9 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
         setPos={setImportPos}
         onClose={() => setIsImportOpen(false)}
         onApply={(fields, opts) => {
-          socket?.emit('importSheetFields', { fields, replace: opts?.replace });
+          socket?.emit('importSheetFields', {
+            fields, replace: opts?.replace, cyberware: opts?.cyberware,
+          });
         }}
       />,
       document.body

@@ -3,6 +3,7 @@ const { cryptoRng } = require('../utils/random');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
 const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
+const cyberware = require('../sheets/cyberware');
 const sheetRolls = require('../sheets/rolls');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
@@ -1217,12 +1218,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
       if (!payload || typeof payload.fields !== 'object' || payload.fields === null) return;
+      // Cyberware arrives as rows beside the fields, because it lives in one array rather
+      // than a field per piece. An import of nothing but chrome is still an import.
+      const cyber = Array.isArray(payload.cyberware) ? payload.cyberware.map(cyberware.normaliseRow) : null;
       getGameSystem((err, system) => {
         if (err) return;
         const linked = sheetTemplates.getLinkedFields(system);
         const entries = Object.entries(payload.fields)
           .filter(([k, v]) => !linked[k] && (typeof v === 'string' || typeof v === 'number'));
-        if (entries.length === 0) return;
+        if (entries.length === 0 && !cyber) return;
         // Through the queue: an import replaces the whole sheet, so a concurrent edit
         // does not merely lose a field, it disappears entirely. The occupancy carried
         // across a replace has to be read at write time too, or a player seated during
@@ -1244,6 +1248,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               : existing;
             entries.forEach(([k, v]) => { data[k] = v; });
             entries.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
+            if (cyber) data[cyberware.FIELD] = cyber;
             return data;
           },
           (err3, data) => {
