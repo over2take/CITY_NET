@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet } from '../sheets';
+import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet, type SheetFieldValue } from '../sheets';
 
 // Shared client logic for the player's own character sheet, used by both
 // surfaces that render it: the in-game floating window

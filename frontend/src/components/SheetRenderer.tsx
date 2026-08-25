@@ -1,6 +1,6 @@
 import { CyberwareSection } from './CyberwareSection';
 import React, { useState, useEffect } from 'react';
-import type { SheetTemplate, SheetSection, SheetField, SheetData } from '../sheets';
+import type { SheetTemplate, SheetSection, SheetField, SheetData, SheetFieldValue } from '../sheets';
 import { TvPortrait } from './TvPortrait';
 
 function DiceIcon({ size = 14 }: { size?: number }) {

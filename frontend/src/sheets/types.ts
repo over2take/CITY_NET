@@ -196,7 +196,13 @@ export interface SheetTemplate {
 }
 
 export interface SheetData {
-  [fieldId: string]: string | number | null | undefined;
+  /**
+   * Scalars for everything the generic renderer draws, plus arrays for the sections that
+   * keep a list under one field — cyberware, where the number of pieces belongs to the
+   * character rather than to the storage. Widened here as well as on the change callback,
+   * or a sheet cannot hold what the callback is allowed to write to it.
+   */
+  [fieldId: string]: SheetFieldValue | null | undefined;
 }
 
 export interface CharacterSheet {
