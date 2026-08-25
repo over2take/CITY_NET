@@ -432,3 +432,18 @@ describe('POST /api/sheets/import/companion — cyberware', () => {
     expect(res.body.cyberware).toEqual([]);
   });
 });
+
+describe('the cyberware line from a form or a paste', () => {
+  it('becomes rows rather than a field the template no longer has', () => {
+    // A paper form cannot hold rows, so it offers one line. The import reads it into rows
+    // on the way to the sheet; keeping the line would store it where nothing looks.
+    const { getImporter } = require('../sheets/importers.js');
+    const { mapped } = getImporter('cyberpunk_red').mapFields({
+      cyberware: 'Cybereye (Low Light), Neural Link',
+    });
+    expect(mapped.cyberware_notes).toBe('Cybereye (Low Light), Neural Link');
+
+    const rows = require('../sheets/cyberware.js').fromNotes(mapped.cyberware_notes);
+    expect(rows.map((r) => r.name)).toEqual(['Cybereye (Low Light)', 'Neural Link']);
+  });
+});

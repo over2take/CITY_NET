@@ -141,3 +141,28 @@ describe('rows', () => {
     expect(cyberware.humanityLoss(out)).toBe(5);
   });
 });
+
+describe('fromNotes', () => {
+  it('gets the pieces back out of the line this replaced', () => {
+    const out = cyberware.fromNotes('Cybereye (Low Light), Neural Link, Subdermal Grip');
+    expect(out.map((r) => r.name)).toEqual(['Cybereye (Low Light)', 'Neural Link', 'Subdermal Grip']);
+  });
+
+  it('keeps a parenthetical with its piece', () => {
+    // "Cybereye (Low Light)" is one thing somebody wrote. Reading it as two loses which
+    // eye the low light was in, and invents a piece they never had.
+    const out = cyberware.fromNotes('Cybereye (Low Light)');
+    expect(out).toHaveLength(1);
+  });
+
+  it('leaves everything unfiled and unpriced, because the line said nothing else', () => {
+    const out = cyberware.fromNotes('Neural Link');
+    expect(out[0]).toEqual({ name: 'Neural Link', type: '', side: null, hl: 0, cost: null, data: '' });
+  });
+
+  it('ignores empty gaps rather than making blank rows', () => {
+    expect(cyberware.fromNotes('A,, ,B')).toHaveLength(2);
+    expect(cyberware.fromNotes('')).toEqual([]);
+    expect(cyberware.fromNotes(undefined)).toEqual([]);
+  });
+});

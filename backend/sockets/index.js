@@ -1249,6 +1249,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             entries.forEach(([k, v]) => { data[k] = v; });
             entries.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
             if (cyber) data[cyberware.FIELD] = cyber;
+            // A PDF or a pasted block offers one line of cyberware, since a paper form
+            // cannot hold rows. Read it into rows here rather than keeping a field the
+            // template no longer has — and never over rows that already arrived, which
+            // the Companion path fills in with costs this line cannot carry.
+            if (system === 'cyberpunk_red' && typeof data.cyberware_notes === 'string') {
+              const fromLine = cyberware.fromNotes(data.cyberware_notes);
+              if (fromLine.length && !Array.isArray(data[cyberware.FIELD])) {
+                data[cyberware.FIELD] = fromLine;
+              }
+              delete data.cyberware_notes;
+            }
             return data;
           },
           (err3, data) => {

@@ -104,4 +104,22 @@ function fromCompanion(collection) {
     });
 }
 
-module.exports = { FIELD, humanise, normaliseRow, rows, humanityLoss, fromCompanion };
+/**
+ * Rows from the free-text field this replaced.
+ *
+ * Sheets written before the table hold a line like `Cybereye (Low Light), Neural Link`.
+ * Splitting on commas gets the pieces back; nothing else in the line is recoverable, so
+ * each arrives unfiled with no cost, exactly as an import does.
+ *
+ * A parenthetical stays with its piece — `Cybereye (Low Light)` is one entry someone
+ * wrote, and guessing that it is two loses which eye it was in.
+ */
+function fromNotes(text) {
+  return String(text || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((name) => normaliseRow({ name }));
+}
+
+module.exports = { FIELD, humanise, normaliseRow, rows, humanityLoss, fromCompanion, fromNotes };
