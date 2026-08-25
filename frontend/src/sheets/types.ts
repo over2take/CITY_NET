@@ -36,6 +36,10 @@ export interface SheetField {
   maxField?: string;
   /** Short helper text shown as a tooltip on the field. */
   hint?: string;
+  /** Recomputed by the server on every save, so anything written here is overwritten.
+   *  The hints have always said so in prose; this says it in a form code can read —
+   *  a cyberware modifier pointed at a derived field could never hold. */
+  derived?: true;
   /** Example value shown as ghost text inside an empty field (input placeholder). */
   placeholder?: string;
   /** Give this field a row of its own spanning the whole grid, with its label above it.

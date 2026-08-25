@@ -219,17 +219,17 @@ export const citiesWithoutNumber: SheetTemplate = {
       columns: 4,
       fields: [
         { id: 'str', label: 'STR', type: 'number', placeholder: '10' },
-        { id: 'str_mod', label: 'STR MOD', type: 'number', hint: 'Derived: recomputed from STR on every save.' },
+        { id: 'str_mod', label: 'STR MOD', type: 'number', derived: true, hint: 'Derived: recomputed from STR on every save.' },
         { id: 'dex', label: 'DEX', type: 'number', placeholder: '10' },
-        { id: 'dex_mod', label: 'DEX MOD', type: 'number', hint: 'Derived: recomputed from DEX on every save.' },
+        { id: 'dex_mod', label: 'DEX MOD', type: 'number', derived: true, hint: 'Derived: recomputed from DEX on every save.' },
         { id: 'con', label: 'CON', type: 'number', placeholder: '10' },
-        { id: 'con_mod', label: 'CON MOD', type: 'number', hint: 'Derived: recomputed from CON on every save.' },
+        { id: 'con_mod', label: 'CON MOD', type: 'number', derived: true, hint: 'Derived: recomputed from CON on every save.' },
         { id: 'int', label: 'INT', type: 'number', placeholder: '10' },
-        { id: 'int_mod', label: 'INT MOD', type: 'number', hint: 'Derived: recomputed from INT on every save.' },
+        { id: 'int_mod', label: 'INT MOD', type: 'number', derived: true, hint: 'Derived: recomputed from INT on every save.' },
         { id: 'wis', label: 'WIS', type: 'number', placeholder: '10' },
-        { id: 'wis_mod', label: 'WIS MOD', type: 'number', hint: 'Derived: recomputed from WIS on every save.' },
+        { id: 'wis_mod', label: 'WIS MOD', type: 'number', derived: true, hint: 'Derived: recomputed from WIS on every save.' },
         { id: 'cha', label: 'CHA', type: 'number', placeholder: '10' },
-        { id: 'cha_mod', label: 'CHA MOD', type: 'number', hint: 'Derived: recomputed from CHA on every save.' },
+        { id: 'cha_mod', label: 'CHA MOD', type: 'number', derived: true, hint: 'Derived: recomputed from CHA on every save.' },
       ],
     },
     {
@@ -242,7 +242,7 @@ export const citiesWithoutNumber: SheetTemplate = {
         { id: 'ac', label: 'AC', type: 'number', sensitivity: 'combat', source: 'token_ac', sourceWritable: true, hint: 'Armor Class - attacks hit at or above this. Linked to your token: editing here updates the token and vice versa.' },
         { id: 'base_hit_bonus', label: 'BHB', type: 'number', hint: 'Base hit bonus from class and level; added to every attack roll.' },
         { id: 'system_strain', label: 'STRAIN', type: 'number', maxField: 'system_strain_max', hint: 'System Strain from cyberware, drugs and rapid healing. Max equals your CON score; recovers 1 per full rest.' },
-        { id: 'system_strain_max', label: 'STRAIN MAX', type: 'number', hint: 'Derived: equals CON score, recomputed on every save.' },
+        { id: 'system_strain_max', label: 'STRAIN MAX', type: 'number', derived: true, hint: 'Derived: equals CON score, recomputed on every save.' },
         { id: 'trauma_target', label: 'TRAUMA TGT', type: 'number', placeholder: '6', hint: 'Trauma Target: enemy trauma dice at or above this multiply their damage. Default 6; certain cyberware and armor raise it. Only used when the GRITTY COMBAT house rule is on.' },
       ],
     },
@@ -253,10 +253,10 @@ export const citiesWithoutNumber: SheetTemplate = {
       tab: 'STATS',
       columns: 4,
       fields: [
-        { id: 'save_physical', label: 'PHYSICAL', type: 'number', roll: { formula: '1d20', label: 'Physical Save' }, hint: 'Derived: 16 - (level + best of STR/CON mod). Roll 1d20; meet or beat this to save. 1 always fails, 20 always saves.' },
-        { id: 'save_evasion', label: 'EVASION', type: 'number', roll: { formula: '1d20', label: 'Evasion Save' }, hint: 'Derived: 16 - (level + best of DEX/INT mod). Roll 1d20; meet or beat this to save.' },
-        { id: 'save_mental', label: 'MENTAL', type: 'number', roll: { formula: '1d20', label: 'Mental Save' }, hint: 'Derived: 16 - (level + best of WIS/CHA mod). Roll 1d20; meet or beat this to save.' },
-        { id: 'save_luck', label: 'LUCK', type: 'number', roll: { formula: '1d20', label: 'Luck Save' }, hint: 'Derived: 16 - level. Roll 1d20; meet or beat this to save.' },
+        { id: 'save_physical', label: 'PHYSICAL', type: 'number', roll: { formula: '1d20', label: 'Physical Save' }, derived: true, hint: 'Derived: 16 - (level + best of STR/CON mod). Roll 1d20; meet or beat this to save. 1 always fails, 20 always saves.' },
+        { id: 'save_evasion', label: 'EVASION', type: 'number', roll: { formula: '1d20', label: 'Evasion Save' }, derived: true, hint: 'Derived: 16 - (level + best of DEX/INT mod). Roll 1d20; meet or beat this to save.' },
+        { id: 'save_mental', label: 'MENTAL', type: 'number', roll: { formula: '1d20', label: 'Mental Save' }, derived: true, hint: 'Derived: 16 - (level + best of WIS/CHA mod). Roll 1d20; meet or beat this to save.' },
+        { id: 'save_luck', label: 'LUCK', type: 'number', roll: { formula: '1d20', label: 'Luck Save' }, derived: true, hint: 'Derived: 16 - level. Roll 1d20; meet or beat this to save.' },
       ],
     },
     {
@@ -377,8 +377,8 @@ export const citiesWithoutNumber: SheetTemplate = {
       fields: [
         { id: 'cast_skill', label: 'CAST', type: 'number', roll: { formula: '2d6 + @cast_skill + @int_mod', label: 'Cast' }, hint: 'Cast skill level (Deluxe edition).' },
         { id: 'mage_effort', label: 'EFFORT', type: 'number', maxField: 'mage_effort_max', hint: 'Mage Effort: spend to power spells. Max derived: best of INT/WIS mod + Cast skill, minimum 1.' },
-        { id: 'mage_effort_max', label: 'EFFORT MAX', type: 'number', hint: 'Derived: recomputed on every save.' },
-        { id: 'spells_prepared_max', label: 'PREPARED', type: 'number', hint: 'Derived: half level rounded up + Cast skill.' },
+        { id: 'mage_effort_max', label: 'EFFORT MAX', type: 'number', derived: true, hint: 'Derived: recomputed on every save.' },
+        { id: 'spells_prepared_max', label: 'PREPARED', type: 'number', derived: true, hint: 'Derived: half level rounded up + Cast skill.' },
       ],
     },
     {
@@ -406,7 +406,7 @@ export const citiesWithoutNumber: SheetTemplate = {
       fields: [
         { id: 'summon_skill', label: 'SUMMON', type: 'number', roll: { formula: '2d6 + @summon_skill + @cha_mod', label: 'Summon' }, hint: 'Summon skill level (Deluxe edition).' },
         { id: 'summoner_effort', label: 'EFFORT', type: 'number', maxField: 'summoner_effort_max', hint: 'Summoner Effort: committed to bound spirits. Max derived: best of CON/CHA mod + Summon skill, minimum 1.' },
-        { id: 'summoner_effort_max', label: 'EFFORT MAX', type: 'number', hint: 'Derived: recomputed on every save.' },
+        { id: 'summoner_effort_max', label: 'EFFORT MAX', type: 'number', derived: true, hint: 'Derived: recomputed on every save.' },
       ],
     },
     {

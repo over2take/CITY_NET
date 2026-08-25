@@ -10,7 +10,8 @@ import {
   rowLocation, rowsForPanel, needsPlacing, describeMod, isSetKind, MOD_KINDS, MOD_KIND_LABEL,
   type CyberRow, type CyberMod, type ModKind,
 } from '../sheets/cyberwareRows';
-import type { SheetFieldValue } from '../sheets/types';
+import type { SheetFieldValue, SheetTemplate } from '../sheets/types';
+import { targetOptions } from '../sheets/modTargets';
 
 // The augmentation window: a body with what is installed where, and the table underneath.
 //
@@ -24,6 +25,8 @@ import type { SheetFieldValue } from '../sheets/types';
 
 interface Props {
   data: Record<string, unknown>;
+  /** The system's sheet, which is where the modifier pickers get their stats and skills. */
+  template?: SheetTemplate;
   readOnly?: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onClose: () => void;
@@ -114,12 +117,28 @@ function ModChips({ mods }: { mods: CyberMod[] }) {
  * the choices are what to change, which thing, and by how much, and three controls on a
  * line shows all three at once — including what you already added, which a modal hides.
  *
- * The target is free text because the stat and skill lists differ per system, and a fixed
- * dropdown would be wrong on two of the three this app supports.
+ * The target is a picker built from the sheet template, so it offers this system's stats
+ * and this system's skills — see sheets/modTargets. A typed name could be a typo or a
+ * skill from a different game; a chosen one is neither.
  */
-function ModEditor({ mods, onChange }: { mods: CyberMod[]; onChange: (next: CyberMod[]) => void }) {
+function ModEditor({ mods, template, onChange }: {
+  mods: CyberMod[];
+  template?: SheetTemplate;
+  onChange: (next: CyberMod[]) => void;
+}) {
   const patch = (i: number, change: Partial<CyberMod>) =>
     onChange(mods.map((m, n) => (n === i ? { ...m, ...change } : m)));
+
+  /**
+   * Switching what a modifier changes clears what it pointed at, unless the new list
+   * still has it. A skill named Business and a stat named Business are not the same
+   * target, and keeping the old text would leave a modifier aimed at nothing.
+   */
+  const changeKind = (i: number, kind: ModKind) => {
+    const target = mods[i].target;
+    const kept = targetOptions(kind, template).some((o) => o.value === target);
+    patch(i, { kind, target: kept ? target : '' });
+  };
 
   const cols = '1.2fr 1.3fr 0.5fr 20px';
 
@@ -132,7 +151,15 @@ function ModEditor({ mods, onChange }: { mods: CyberMod[]; onChange: (next: Cybe
           display: 'grid', gridTemplateColumns: cols, gap: 6, marginBottom: 2,
           ...mono(9), color: 'var(--grid-section)',
         }}>
-          <span>MODIFIES</span><span>WHAT</span><span style={{ textAlign: 'right' }}>BY</span><span />
+          <span>MODIFIES</span><span>WHAT</span>
+          {/* BY for an adjustment, TO for a replacement — the column means a different
+              thing in each case, and one heading for both reads as a lie in one of them.
+              A list holding both says so rather than picking a side. */}
+          <span style={{ textAlign: 'right' }}>
+            {mods.every((m) => isSetKind(m.kind)) ? 'TO'
+              : mods.some((m) => isSetKind(m.kind)) ? 'BY / TO' : 'BY'}
+          </span>
+          <span />
         </div>
       )}
       {mods.map((m, i) => (
@@ -142,15 +169,18 @@ function ModEditor({ mods, onChange }: { mods: CyberMod[]; onChange: (next: Cybe
         >
           <select
             style={inputStyle} aria-label={`Modifier ${i + 1} kind`} value={m.kind}
-            onChange={(e) => patch(i, { kind: e.target.value as ModKind })}
+            onChange={(e) => changeKind(i, e.target.value as ModKind)}
           >
             {MOD_KINDS.map((k) => <option key={k} value={k}>{MOD_KIND_LABEL[k]}</option>)}
           </select>
-          <input
-            style={inputStyle} placeholder="Stat, skill or roll"
-            aria-label={`Modifier ${i + 1} target`} value={m.target}
+          <select
+            style={inputStyle} aria-label={`Modifier ${i + 1} target`} value={m.target}
             onChange={(e) => patch(i, { target: e.target.value })}
-          />
+          >
+            <option value="">—</option>
+            {targetOptions(m.kind, template, m.target)
+              .map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
           <input
             style={{ ...inputStyle, textAlign: 'right' }} type="number"
             aria-label={`Modifier ${i + 1} value`} value={m.value}
@@ -171,7 +201,7 @@ function ModEditor({ mods, onChange }: { mods: CyberMod[]; onChange: (next: Cybe
   );
 }
 
-export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }: Props) {
+export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClose, who }: Props) {
   const [pos, setPos] = useState({ x: 90, y: 60 });
   const rows = useMemo(() => readRows(data), [data]);
 
@@ -613,7 +643,7 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
               />
             </Field>
           </div>
-          <ModEditor mods={draft.mods} onChange={(mods) => setDraft({ ...draft, mods })} />
+          <ModEditor mods={draft.mods} template={template} onChange={(mods) => setDraft({ ...draft, mods })} />
           <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
             <button type="button" className="utility-btn" onClick={() => setDraft(null)}>CANCEL</button>
             <button type="button" className="upload-btn" onClick={commitDraft} disabled={!draft.name.trim()}>ADD</button>

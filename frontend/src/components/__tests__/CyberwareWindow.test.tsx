@@ -13,6 +13,10 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CyberwareWindow } from '../CyberwareWindow';
 import type { CyberRow } from '../../sheets/cyberwareRows';
+import { getTemplate } from '../../sheets';
+
+// The modifier pickers read this system's stats and skills off the template.
+const CPR = getTemplate('cyberpunk_red');
 
 const ROWS = [
   { name: 'Cybereye', type: 'cybereye', side: 'r', hl: 2, cost: 100, data: 'Foundation' },
@@ -26,6 +30,7 @@ const show = (rows = ROWS, extra = {}) => {
   render(
     <CyberwareWindow
       data={{ cyberware: rows }}
+      template={CPR}
       onFieldChange={onFieldChange}
       onClose={vi.fn()}
       who="nyx"
@@ -381,30 +386,31 @@ describe('modifiers', () => {
   it('shows what a piece actually does, sign and all', () => {
     // The sign is explicit because -2 and +2 differ only by that character, and a bare
     // "2" reads as neither.
-    render(<CyberwareWindow data={withMods} onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    render(<CyberwareWindow data={withMods} template={CPR} onFieldChange={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByText('+6 Business')).toBeInTheDocument();
   });
 
   it('shows a set value as a value rather than as an adjustment', () => {
-    render(<CyberwareWindow data={withMods} onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    render(<CyberwareWindow data={withMods} template={CPR} onFieldChange={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByText('Cool = 3')).toBeInTheDocument();
     expect(screen.queryByText('+3 Cool')).not.toBeInTheDocument();
   });
 
   it('lets a player add one by hand', async () => {
     const onFieldChange = vi.fn();
-    render(<CyberwareWindow data={{}} onFieldChange={onFieldChange} onClose={vi.fn()} />);
+    render(<CyberwareWindow data={{}} template={CPR} onFieldChange={onFieldChange} onClose={vi.fn()} />);
     await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
     await userEvent.type(screen.getByLabelText('Cyberware name'), 'Sandevistan');
     await userEvent.click(screen.getByText('+ MODIFIER'));
-    await userEvent.type(screen.getByLabelText('Modifier 1 target'), 'Reflexes');
+    // Picked from this system's stats rather than typed: a typo is not a stat.
+      await userEvent.selectOptions(screen.getByLabelText('Modifier 1 target'), 'REF');
     await userEvent.clear(screen.getByLabelText('Modifier 1 value'));
     await userEvent.type(screen.getByLabelText('Modifier 1 value'), '2');
     await userEvent.click(screen.getByText('ADD'));
 
     const [, written] = onFieldChange.mock.calls.at(-1)!;
     expect((written as CyberRow[])[0].mods).toEqual([
-      { kind: 'stat', target: 'Reflexes', value: 2 },
+      { kind: 'stat', target: 'REF', value: 2 },
     ]);
   });
 
@@ -412,7 +418,7 @@ describe('modifiers', () => {
     // Pressing + MODIFIER and then thinking better of it should not leave the row
     // claiming to do something.
     const onFieldChange = vi.fn();
-    render(<CyberwareWindow data={{}} onFieldChange={onFieldChange} onClose={vi.fn()} />);
+    render(<CyberwareWindow data={{}} template={CPR} onFieldChange={onFieldChange} onClose={vi.fn()} />);
     await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
     await userEvent.type(screen.getByLabelText('Cyberware name'), 'Plain');
     await userEvent.click(screen.getByText('+ MODIFIER'));
@@ -422,9 +428,57 @@ describe('modifiers', () => {
     expect((written as CyberRow[])[0].mods).toEqual([]);
   });
 
+  it('clears the target when it cannot survive the new kind', async () => {
+    // Business is a skill, not a stat. Switching a skill modifier to a stat one while
+    // keeping the word would leave the piece pointed at something that does not exist.
+    render(<CyberwareWindow data={{}} template={CPR} onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 kind'), 'skill');
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 target'), 'Business');
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 kind'), 'stat');
+
+    expect(screen.getByLabelText('Modifier 1 target')).toHaveValue('');
+  });
+
+  it('keeps a target that exists under both kinds', async () => {
+    // Setting a skill and adjusting one choose from the same list, so switching between
+    // them should not make anyone pick the skill again.
+    render(<CyberwareWindow data={{}} template={CPR} onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 kind'), 'skill');
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 target'), 'Business');
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 kind'), 'skillSet');
+
+    expect(screen.getByLabelText('Modifier 1 target')).toHaveValue('Business');
+  });
+
+  it('heads the amount column BY for an adjustment and TO for a set', async () => {
+    render(<CyberwareWindow data={{}} template={CPR} onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    expect(screen.getByText('BY')).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 kind'), 'statSet');
+    expect(screen.getByText('TO')).toBeInTheDocument();
+    expect(screen.queryByText('BY')).not.toBeInTheDocument();
+  });
+
+  it('says both when the list holds one of each', async () => {
+    // One heading over a mixed list has to be true of both rows or it is wrong about one.
+    render(<CyberwareWindow data={{}} template={CPR} onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 2 kind'), 'statSet');
+
+    expect(screen.getByText('BY / TO')).toBeInTheDocument();
+  });
+
   it('lets one be taken back off', async () => {
     const onFieldChange = vi.fn();
-    render(<CyberwareWindow data={{}} onFieldChange={onFieldChange} onClose={vi.fn()} />);
+    render(<CyberwareWindow data={{}} template={CPR} onFieldChange={onFieldChange} onClose={vi.fn()} />);
     await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
     await userEvent.click(screen.getByText('+ MODIFIER'));
     expect(screen.getByLabelText('Modifier 1 target')).toBeInTheDocument();

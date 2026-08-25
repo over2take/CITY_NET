@@ -139,11 +139,11 @@ export const shadowrun6e: SheetTemplate = {
       tab: 'CORE',
       columns: 4,
       fields: [
-        { id: 'physical_monitor', label: 'PHYS MON', type: 'number', hint: 'Derived: 8 + ceil(BOD/2). Your token HP max mirrors this.' },
-        { id: 'stun_monitor', label: 'STUN MON', type: 'number', hint: 'Derived: 8 + ceil(WIL/2). Stun track maximum.' },
+        { id: 'physical_monitor', label: 'PHYS MON', type: 'number', derived: true, hint: 'Derived: 8 + ceil(BOD/2). Your token HP max mirrors this.' },
+        { id: 'stun_monitor', label: 'STUN MON', type: 'number', derived: true, hint: 'Derived: 8 + ceil(WIL/2). Stun track maximum.' },
         { id: 'stun_current', label: 'STUN DMG', type: 'number', maxField: 'stun_monitor', placeholder: '0', hint: 'Stun damage taken. Overflow past the monitor rolls into Physical damage.' },
-        { id: 'initiative_score', label: 'INITIATIVE', type: 'number', roll: { formula: '1d6 + @initiative_score', label: 'Initiative' }, hint: 'Derived: REA + INT. Roll adds 1d6.' },
-        { id: 'composure', label: 'COMPOSURE', type: 'number', roll: { formula: 'pool:@composure', label: 'Composure' }, hint: 'Derived: WIL + CHA, rolled as a pool.' },
+        { id: 'initiative_score', label: 'INITIATIVE', type: 'number', roll: { formula: '1d6 + @initiative_score', label: 'Initiative' }, derived: true, hint: 'Derived: REA + INT. Roll adds 1d6.' },
+        { id: 'composure', label: 'COMPOSURE', type: 'number', roll: { formula: 'pool:@composure', label: 'Composure' }, derived: true, hint: 'Derived: WIL + CHA, rolled as a pool.' },
         { id: 'armor_rating', label: 'ARMOR', type: 'number', sensitivity: 'combat', source: 'token_ac', sourceWritable: true, hint: 'Defense Rating from armor. Linked to your token: attacks compare their AR against this for the DV modifier.' },
       ],
     },
@@ -239,7 +239,7 @@ export const shadowrun6e: SheetTemplate = {
       columns: 2,
       fields: [
         { id: 'power_points_spent', label: 'PP SPENT', type: 'number', hint: 'Auto-summed from adept power costs below. Recalculated on save.' },
-        { id: 'power_points_remaining', label: 'PP LEFT', type: 'number', hint: 'Derived: MAGIC − PP spent.' },
+        { id: 'power_points_remaining', label: 'PP LEFT', type: 'number', derived: true, hint: 'Derived: MAGIC − PP spent.' },
       ],
     },
     {

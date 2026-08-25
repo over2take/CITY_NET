@@ -27,7 +27,9 @@ Cyberware, as something you can actually see.
 
   It never asks which side. The same cybereye fits either socket, so left or right is a fact about where you install it rather than about the piece — you answer it by pressing + on the arm you mean. A paired piece added from the general form waits in the unplaced list until you put it somewhere.
 
-- **What a piece actually does, in numbers.** A modifier is a stat, a skill or a roll type, and an amount — `+6 Business`, `+2 Initiative Roll` — and a piece can carry as many as it needs. Setting a value is kept separate from adjusting one, since `+3 Cool` and `Cool = 3` are different claims, and the table shows them differently.
+- **What a piece actually does, in numbers.** A modifier is a stat, a skill or a roll type, and an amount — `+6 Business`, `+2 Initiative` — and a piece can carry as many as it needs. Setting a value is kept separate from adjusting one, since `+3 Cool` and `Cool = 3` are different claims, and the table shows them differently.
+
+  You pick what it changes and then pick the thing itself from a list of **your system's** stats and skills, read off the character sheet rather than typed in. A Cyberpunk character is offered Cyberpunk skills and a Shadowrun character Shadowrun ones, and the amount column says BY or TO depending on which you chose.
 
   **These come across from a Companion import.** They are the one mechanically real thing an export carries: the descriptions arrive blank because the Companion draws its flavour text from its own catalogue, but a modifier is something you typed into your own character, so it is really there and it comes with you.
 

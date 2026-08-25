@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { SheetSection, SheetFieldValue } from '../sheets/types';
+import type { SheetSection, SheetTemplate, SheetFieldValue } from '../sheets/types';
 import { readRows, totalHumanityLoss, totalCost } from '../sheets/cyberwareRows';
 import { CyberwareWindow } from './CyberwareWindow';
 import { themeRoot } from '../utils/themeRoot';
@@ -24,6 +24,8 @@ import { themeRoot } from '../utils/themeRoot';
 
 interface Props {
   section: SheetSection;
+  /** The system's sheet, which is where the modifier pickers get their stats and skills. */
+  template?: SheetTemplate;
   data: Record<string, unknown>;
   readOnly?: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
@@ -33,7 +35,7 @@ interface Props {
 
 const mono: React.CSSProperties = { fontFamily: 'monospace', fontSize: 9, letterSpacing: 1 };
 
-export function CyberwareSection({ data, readOnly, onFieldChange, who }: Props) {
+export function CyberwareSection({ data, template, readOnly, onFieldChange, who }: Props) {
   const [open, setOpen] = useState(false);
   const rows = useMemo(() => readRows(data), [data]);
 
@@ -72,6 +74,7 @@ export function CyberwareSection({ data, readOnly, onFieldChange, who }: Props) 
       {open && createPortal(
         <CyberwareWindow
           data={data}
+          template={template}
           readOnly={readOnly}
           onFieldChange={onFieldChange}
           onClose={() => setOpen(false)}
