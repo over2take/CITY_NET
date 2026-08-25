@@ -27,6 +27,14 @@ Cyberware, as something you can actually see.
 
   It never asks which side. The same cybereye fits either socket, so left or right is a fact about where you install it rather than about the piece — you answer it by pressing + on the arm you mean. A paired piece added from the general form waits in the unplaced list until you put it somewhere.
 
+- **Your chrome reaches your numbers.** A Cyberpunk RED sheet counts its equipped cyberware: a skill of 3 with a +2 augment reads 5 on the page, with a badge saying so and a tooltip naming the piece responsible. The same total is what the dice use — the server applies it when it resolves the roll, and it appears in the breakdown as its own line rather than hiding inside a stat.
+
+  The number you typed is still the number stored. Nothing is written back into your stats: take the chrome out and the stat is what it always was, and no amount of saving compounds the bonus.
+
+  Two things worth knowing. A piece that sets a value is applied before pieces that adjust one, so setting COOL to 3 and adding 2 leaves 5 — the other order would let an augment do nothing at all. And an augment naming something this sheet has no field for is reported rather than silently ignored; the Companion's "Combat #" is the one that comes up.
+
+  Cyberpunk RED only for now. The other systems record modifiers but do not apply them.
+
 - **What a piece actually does, in numbers.** A modifier is a stat, a skill or a roll type, and an amount — `+6 Business`, `+2 Initiative` — and a piece can carry as many as it needs. Setting a value is kept separate from adjusting one, since `+3 Cool` and `Cool = 3` are different claims, and the table shows them differently.
 
   You pick what it changes and then pick the thing itself from a list of **your system's** stats and skills, read off the character sheet rather than typed in. A Cyberpunk character is offered Cyberpunk skills and a Shadowrun character Shadowrun ones, and the amount column says BY or TO depending on which you chose.

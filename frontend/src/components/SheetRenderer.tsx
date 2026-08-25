@@ -1,5 +1,9 @@
 import { CyberwareSection } from './CyberwareSection';
-import React, { useState, useEffect } from 'react';
+import {
+  sheetEffects, effectiveValue, describeSources,
+  type SheetEffects, type FieldEffect,
+} from '../sheets/cyberwareEffects';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { SheetTemplate, SheetSection, SheetField, SheetData, SheetFieldValue } from '../sheets';
 import { TvPortrait } from './TvPortrait';
 
@@ -624,10 +628,11 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
   );
 }
 
-function GridSection({ section, data, readOnly, onFieldChange, onRoll }: {
+function GridSection({ section, data, readOnly, onFieldChange, onRoll, effects }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onRoll?: (fieldId: string) => void;
+  effects: SheetEffects;
 }) {
   // maxField pairs render inside their base field's cell as CUR / MAX
   const maxIds = new Set(section.fields.filter(f => f.maxField).map(f => f.maxField as string));
@@ -639,7 +644,10 @@ function GridSection({ section, data, readOnly, onFieldChange, onRoll }: {
         const maxField = field.maxField ? section.fields.find(f => f.id === field.maxField) : undefined;
         return (
           <div key={field.id} title={field.hint} style={{ border: '1px solid var(--green)', background: 'rgba(0, 20, 0, 0.35)', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '4px 2px 0' }}>{field.label}</div>
+            <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '4px 2px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
+              {field.label}
+              {effects.fields[field.id]?.delta ? <ChromeBadge effect={effects.fields[field.id]} /> : null}
+            </div>
             {maxField ? (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', padding: '0 2px' }}>
@@ -679,21 +687,49 @@ function GridSection({ section, data, readOnly, onFieldChange, onRoll }: {
   );
 }
 
-function SkillsSection({ section, data, readOnly, onFieldChange, onRoll }: {
+/**
+ * What a field reads as once the chrome is counted.
+ *
+ * The input beside it keeps showing what the player typed, because that is what it edits
+ * and what gets stored — an input reading 5 that saves 3 is a bug waiting to be reported.
+ * So the augmented number is shown next to it instead, with what produced it in the
+ * tooltip, and the BASE the row rolls at already includes it.
+ */
+function ChromeBadge({ effect }: { effect: FieldEffect }) {
+  return (
+    <span
+      title={`${effect.base} → ${effect.value} (${describeSources(effect)})`}
+      style={{
+        fontSize: '0.6rem', padding: '0 3px', whiteSpace: 'nowrap',
+        color: 'var(--cyan)', border: '1px solid var(--dark-green)',
+      }}
+    >
+      {effect.value}
+    </span>
+  );
+}
+
+function SkillsSection({ section, data, readOnly, onFieldChange, onRoll, effects }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onRoll?: (fieldId: string) => void;
+  effects: SheetEffects;
 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2px 12px' }}>
       {section.fields.map((field) => {
-        const lvl = num(data[field.id]);
-        const base = lvl + (field.stat ? num(data[field.stat]) : 0);
+        // The chrome's level and stat, not the typed ones: this is the number you roll
+        // with, and the server resolves the roll the same way. A skill that reads 3 here
+        // and rolls at 9 is worse than showing nothing.
+        const lvl = effectiveValue(effects, field.id, data[field.id]);
+        const base = lvl + (field.stat ? effectiveValue(effects, field.stat, data[field.stat]) : 0);
+        const boost = effects.fields[field.id];
         return (
           <div key={field.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '1px 4px', background: lvl > 0 ? 'rgba(0, 40, 0, 0.45)' : 'transparent' }}>
             <span style={{ flex: 1, fontSize: '0.68rem', opacity: lvl > 0 ? 1 : 0.6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {field.label}{lvl > 0 ? ' ●' : ''}
             </span>
+            {boost && boost.delta !== 0 && <ChromeBadge effect={boost} />}
             <input
               aria-label={field.label}
               type="number"
@@ -1148,6 +1184,10 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
 export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
+  // What the character's chrome is doing to their numbers. Computed once for the whole
+  // sheet rather than per field: it reads the cyberware list, which every stat and skill
+  // would otherwise re-read and re-scan for itself.
+  const effects = useMemo(() => sheetEffects(data, template), [data, template]);
   // If the active tab gets hidden (house rule toggled off), fall back to the
   // first visible one.
   useEffect(() => {
@@ -1227,8 +1267,8 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
               </div>
               {open && (
                 <div style={{ padding: '4px 0 6px' }}>
-                  {section.layout === 'grid' && <GridSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
-                  {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} />}
+                  {section.layout === 'grid' && <GridSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} effects={effects} />}
+                  {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} effects={effects} />}
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
