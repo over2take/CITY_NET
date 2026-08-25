@@ -177,6 +177,47 @@ describe('editing', () => {
     expect(screen.getByText(/CYBEREYE L · EMPTY/)).toBeInTheDocument();
   });
 
+  it('starts the humanity box empty rather than showing a 0 nobody typed', async () => {
+    // A 0 sitting in the box reads as a value that was entered, and hides the heading a
+    // placeholder would have shown. Empty until someone means to put a number in it.
+    show([]);
+    await userEvent.click(screen.getByRole('button', { name: /ADD CYBERWARE/ }));
+    expect(screen.getByLabelText('Humanity loss')).toHaveValue(null);
+    expect(screen.getByLabelText('Price in eddies')).toHaveValue(null);
+  });
+
+  it('stores an untouched humanity box as 0, not as missing', async () => {
+    // Humanity loss and price differ here: an unpriced piece stays unpriced, because
+    // nobody knows what it cost, but a piece with no humanity loss cost you nothing.
+    const onFieldChange = show([]);
+    await userEvent.click(screen.getByRole('button', { name: /ADD CYBERWARE/ }));
+    await userEvent.type(screen.getByLabelText('Cyberware name'), 'Light Tattoo');
+    await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
+
+    const added = onFieldChange.mock.calls[0][1].at(-1);
+    expect(added.hl).toBe(0);
+    expect(added.cost).toBeNull();
+  });
+
+  it('labels every box with a heading that survives typing', async () => {
+    // Scoped to each control's own label rather than the whole window, because the table
+    // underneath has columns by the same names.
+    show([]);
+    await userEvent.click(screen.getByRole('button', { name: /ADD CYBERWARE/ }));
+    const headingOver = (field: string) =>
+      screen.getByLabelText(field).closest('label');
+
+    expect(headingOver('Cyberware name')).toHaveTextContent('NAME');
+    expect(headingOver('Install type')).toHaveTextContent('LOCATION');
+    expect(headingOver('Humanity loss')).toHaveTextContent('HUMANITY');
+    expect(headingOver('Price in eddies')).toHaveTextContent('EDDIES');
+    expect(headingOver('Effect')).toHaveTextContent('EFFECT');
+
+    // The point of a heading over a placeholder: it is still there once there is a value.
+    await userEvent.type(screen.getByLabelText('Humanity loss'), '7');
+    expect(headingOver('Humanity loss')).toHaveTextContent('HUMANITY');
+  });
+
   it('offers nothing to edit when the sheet is read-only', () => {
     show(ROWS, { readOnly: true });
     expect(screen.queryByRole('button', { name: /ADD CYBERWARE/ })).not.toBeInTheDocument();

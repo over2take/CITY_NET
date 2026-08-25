@@ -43,6 +43,43 @@ const inputStyle: React.CSSProperties = {
 type SortKey = 'name' | 'location' | 'hl' | 'cost';
 
 /**
+ * A row being typed in, where the humanity loss box is allowed to be empty.
+ *
+ * A stored row's `hl` is always a number, because an import states it and 0 there means
+ * zero. A box being filled in is a different thing: starting it at 0 shows a value nobody
+ * entered, and — since a placeholder only appears when a field is empty — leaves the
+ * narrow box unlabelled next to one that does say "eb". Empty until typed in, and
+ * normaliseRow turns it back into 0 on the way to storage.
+ */
+type Draft = Omit<CyberRow, 'hl'> & { hl: number | '' };
+
+/** A blank form, optionally knowing where it is going to be installed. */
+const newDraft = (partial: Partial<CyberRow> = {}): Draft =>
+  ({ ...normaliseRow(partial), hl: '' });
+
+/**
+ * A form control with a heading over it.
+ *
+ * A heading rather than a placeholder, because a placeholder is gone the moment you type
+ * into the box — which is exactly when you might want to check what the box was for. It
+ * also cannot appear at all on a field that starts with a value in it, which is what left
+ * the humanity box reading as a bare 0 with nothing to say it was humanity.
+ *
+ * The `aria-label` on the control stays: it is the accessible name, and these headings are
+ * abbreviated for a narrow column.
+ */
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: 'block' }}>
+      <span style={{ ...mono(9), color: 'var(--grid-section)', display: 'block', marginBottom: 2 }}>
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+/**
  * A row's modifiers, as chips beside its effect text.
  *
  * Chips rather than a sentence because these are the mechanically real part of a row and
@@ -84,12 +121,24 @@ function ModEditor({ mods, onChange }: { mods: CyberMod[]; onChange: (next: Cybe
   const patch = (i: number, change: Partial<CyberMod>) =>
     onChange(mods.map((m, n) => (n === i ? { ...m, ...change } : m)));
 
+  const cols = '1.2fr 1.3fr 0.5fr 20px';
+
   return (
     <div style={{ marginTop: 6 }}>
+      {/* Once above the list rather than per line: the columns do not change meaning as
+          modifiers are added, and repeating them would read as three separate forms. */}
+      {mods.length > 0 && (
+        <div style={{
+          display: 'grid', gridTemplateColumns: cols, gap: 6, marginBottom: 2,
+          ...mono(9), color: 'var(--grid-section)',
+        }}>
+          <span>MODIFIES</span><span>WHAT</span><span style={{ textAlign: 'right' }}>BY</span><span />
+        </div>
+      )}
       {mods.map((m, i) => (
         <div
           key={i}
-          style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.3fr 0.5fr 20px', gap: 6, marginBottom: 4 }}
+          style={{ display: 'grid', gridTemplateColumns: cols, gap: 6, marginBottom: 4 }}
         >
           <select
             style={inputStyle} aria-label={`Modifier ${i + 1} kind`} value={m.kind}
@@ -134,7 +183,7 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
   const [sortKey, setSortKey] = useState<SortKey>('location');
   const [asc, setAsc] = useState(true);
   const [listOpen, setListOpen] = useState(true);
-  const [draft, setDraft] = useState<CyberRow | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
   /** The panel whose + was pressed, while it is asking what to put there. */
   const [placing, setPlacing] = useState<Panel | null>(null);
   const placingRef = useRef<HTMLDivElement>(null);
@@ -242,7 +291,7 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
   const addInto = (panel: Panel) => {
     setDraft(null);
     if (unfiledRows.length) setPlacing(panel);
-    else setDraft(normaliseRow({ type: panel.typeId, side: panel.side }));
+    else setDraft(newDraft({ type: panel.typeId, side: panel.side }));
   };
 
   /**
@@ -390,7 +439,7 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
               type="button"
               className="upload-btn"
               onClick={() => {
-                setDraft(normaliseRow({ type: placing.typeId, side: placing.side }));
+                setDraft(newDraft({ type: placing.typeId, side: placing.side }));
                 setPlacing(null);
               }}
             >NEW PIECE</button>
@@ -522,36 +571,48 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
       {!readOnly && (draft ? (
         <div style={{ marginTop: 8, border: '1px solid var(--dark-green)', padding: 7 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.6fr 0.7fr', gap: 6 }}>
-            <input
-              autoFocus style={inputStyle} placeholder="Name" aria-label="Cyberware name"
-              value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            />
-            <select
-              style={inputStyle} aria-label="Install type" value={draft.type}
-              onChange={(e) => {
-                const t = typeById(e.target.value);
-                // Drop a side the new type cannot have, rather than leaving a Fashionware
-                // marked R because it used to be an arm.
-                setDraft({ ...draft, type: e.target.value, side: t?.paired ? draft.side : null });
-              }}
-            >
-              <option value="">Unfiled</option>
-              {CYBER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-            </select>
-            <input
-              style={inputStyle} type="number" placeholder="HL" aria-label="Humanity loss"
-              value={draft.hl} onChange={(e) => setDraft({ ...draft, hl: Number(e.target.value) || 0 })}
-            />
-            <input
-              style={inputStyle} type="number" placeholder="eb" aria-label="Price in eddies"
-              value={draft.cost ?? ''}
-              onChange={(e) => setDraft({ ...draft, cost: e.target.value === '' ? null : Number(e.target.value) })}
-            />
+            <Field label="NAME">
+              <input
+                autoFocus style={inputStyle} aria-label="Cyberware name"
+                value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              />
+            </Field>
+            <Field label="LOCATION">
+              <select
+                style={inputStyle} aria-label="Install type" value={draft.type}
+                onChange={(e) => {
+                  const t = typeById(e.target.value);
+                  // Drop a side the new type cannot have, rather than leaving a Fashionware
+                  // marked R because it used to be an arm.
+                  setDraft({ ...draft, type: e.target.value, side: t?.paired ? draft.side : null });
+                }}
+              >
+                <option value="">Unfiled</option>
+                {CYBER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+            </Field>
+            <Field label="HUMANITY">
+              <input
+                style={inputStyle} type="number" aria-label="Humanity loss" value={draft.hl}
+                onChange={(e) => setDraft({ ...draft, hl: e.target.value === '' ? '' : Number(e.target.value) || 0 })}
+              />
+            </Field>
+            <Field label="EDDIES">
+              <input
+                style={inputStyle} type="number" aria-label="Price in eddies"
+                value={draft.cost ?? ''}
+                onChange={(e) => setDraft({ ...draft, cost: e.target.value === '' ? null : Number(e.target.value) })}
+              />
+            </Field>
           </div>
-          <input
-            style={{ ...inputStyle, marginTop: 6 }} placeholder="Effect" aria-label="Effect"
-            value={draft.data} onChange={(e) => setDraft({ ...draft, data: e.target.value })}
-          />
+          <div style={{ marginTop: 6 }}>
+            <Field label="EFFECT">
+              <input
+                style={inputStyle} aria-label="Effect"
+                value={draft.data} onChange={(e) => setDraft({ ...draft, data: e.target.value })}
+              />
+            </Field>
+          </div>
           <ModEditor mods={draft.mods} onChange={(mods) => setDraft({ ...draft, mods })} />
           <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
             <button type="button" className="utility-btn" onClick={() => setDraft(null)}>CANCEL</button>
@@ -559,7 +620,7 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
           </div>
         </div>
       ) : (
-        <button type="button" className="utility-btn" style={{ marginTop: 8 }} onClick={() => setDraft(normaliseRow({}))}>
+        <button type="button" className="utility-btn" style={{ marginTop: 8 }} onClick={() => setDraft(newDraft())}>
           + ADD CYBERWARE
         </button>
       ))}
