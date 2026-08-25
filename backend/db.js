@@ -425,6 +425,12 @@ db.serialize(() => {
       if (data.handle !== undefined && (data.name === undefined || data.name === '')) {
         data.name = data.handle;
         delete data.handle;
+        // The one sheet write that deliberately does not go through sheets/mutate.js.
+        // This is a migration in the schema-setup block: it runs once while the module is
+        // being loaded, before the server is listening and before any socket exists, so
+        // there is nothing for it to race with. Routing it through a queue would also
+        // mean db.js reaching for a helper that takes `db` as an argument while `db` is
+        // still being built.
         db.run(`UPDATE character_sheets SET data = ? WHERE id = ?`, [JSON.stringify(data), row.id]);
       }
     });

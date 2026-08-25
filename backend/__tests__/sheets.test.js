@@ -421,3 +421,68 @@ describe('GET /api/sheets/stun/:location_id (SR6 stun track)', () => {
     expect((await request(app).get(`/api/sheets/stun/${loc.lastID}`)).body).toEqual({});
   });
 });
+
+// ─── concurrent writes at a real call site ────────────────────────────────────
+
+/**
+ * The helper's own tests prove the queue works. These prove a converted route uses it.
+ *
+ * Twenty-two writers were changed, and a passing suite only showed none of them broke —
+ * not that any of them actually serialises now. That is the part worth pinning at the
+ * level people meet it: two requests, arriving together, both landing.
+ */
+describe('two writers, one sheet, through the routes', () => {
+  const patchAs = (fields) => request(app)
+    .put('/api/sheets/user/GHOST')
+    .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+    .send({ fields });
+
+  beforeEach(async () => {
+    await setSystem(db, 'cyberpunk_red');
+    await insertSheet(db, {
+      username: 'GHOST',
+      data: JSON.stringify({ name: 'Ghost', luck: 5, body: 6, notes: 'keep me' }),
+    });
+  });
+
+  it('keeps both edits when two admin patches land together', async () => {
+    // The GM editing two fields from two places at once - or, in the real case, a GM
+    // editing one field while the player edits another.
+    await Promise.all([patchAs({ luck: 1 }), patchAs({ body: 9 })]);
+
+    const row = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    const data = JSON.parse(row.data);
+    expect(data.luck).toBe(1);
+    expect(data.body).toBe(9);
+    // And nothing either of them mentioned survives untouched.
+    expect(data.notes).toBe('keep me');
+    expect(data.name).toBe('Ghost');
+  });
+
+  it('does not lose an edit to a burst of them', async () => {
+    const fields = ['a', 'b', 'c', 'd', 'e', 'f'];
+    await Promise.all(fields.map((f, i) => patchAs({ [f]: i })));
+
+    const row = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    const data = JSON.parse(row.data);
+    fields.forEach((f, i) => expect(data[f], f).toBe(i));
+    expect(data.notes).toBe('keep me');
+  });
+
+  it('resets LUCK table-wide without discarding an edit made at the same moment', async () => {
+    // The bulk reset scans every sheet, so it is the writer most likely to be holding a
+    // stale copy by the time it reaches the last player.
+    await run(db, `UPDATE character_sheets SET data = ? WHERE username = 'GHOST'`,
+      [JSON.stringify({ name: 'Ghost', luck: 0, luck_max: 7, notes: 'keep me' })]);
+
+    await Promise.all([
+      request(app).post('/api/sheets/reset-luck').set('Authorization', `Bearer ${ADMIN_TOKEN}`),
+      patchAs({ notes: 'edited mid-reset' }),
+    ]);
+
+    const row = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    const data = JSON.parse(row.data);
+    expect(data.luck).toBe(7);
+    expect(data.notes).toBe('edited mid-reset');
+  });
+});

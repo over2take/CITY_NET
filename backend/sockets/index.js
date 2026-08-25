@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const { cryptoRng } = require('../utils/random');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
+const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
 const sheetRolls = require('../sheets/rolls');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
@@ -1135,12 +1136,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           return;
         }
         if (linkSource) return;
-        db.get(
-          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-          [info.userName, system],
-          (err2, row) => {
-            if (err2 || !row) return;
-            const data = JSON.parse(row.data || '{}');
+        // Through the queue rather than a bare read-then-write: a GM applying damage to
+        // this same sheet while the player types would otherwise build its new blob from
+        // data this edit had already replaced, and one of the two changes would vanish
+        // with nothing reported. See sheets/mutate.js.
+        let stunOverflow = 0;
+        mutateSheetForUser(
+          db,
+          { username: info.userName, system },
+          (data) => {
             data[payload.fieldId] = payload.value;
             // If the changed field is a max, clamp the paired current field.
             const curField = sheetTemplates.getMaxPairs(system)[payload.fieldId];
@@ -1152,7 +1156,6 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             sheetTemplates.applyDerived(system, data, payload.fieldId);
             // SR6: stun past the Stun Monitor overflows into Physical damage
             // (token HP). Clamp the track and carry the excess.
-            let stunOverflow = 0;
             if (system === 'shadowrun_6e' && payload.fieldId === 'stun_current') {
               const mon = Number(data.stun_monitor) || 0;
               const val = Number(data.stun_current) || 0;
@@ -1161,11 +1164,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 data.stun_current = mon;
               }
             }
-            db.run(
-              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-              [JSON.stringify(data), row.id],
-              (err3) => {
-                if (err3) return;
+            return data;
+          },
+          (err3, data) => {
+                if (err3 || !data) return;
                 // Sheet name/description are the single source of truth for
                 // the player's token label and info window - mirror them.
                 if (payload.fieldId === identity.nameField(system) || payload.fieldId === 'description') {
@@ -1203,8 +1205,6 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 } else {
                   io.emit('sheetUpdated', { username: info.userName, system });
                 }
-              }
-            );
           }
         );
       });
@@ -1223,13 +1223,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         const entries = Object.entries(payload.fields)
           .filter(([k, v]) => !linked[k] && (typeof v === 'string' || typeof v === 'number'));
         if (entries.length === 0) return;
-        db.get(
-          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-          [info.userName, system],
-          (err2, row) => {
-            if (err2 || !row) return;
-            const existing = JSON.parse(row.data || '{}');
-
+        // Through the queue: an import replaces the whole sheet, so a concurrent edit
+        // does not merely lose a field, it disappears entirely. The occupancy carried
+        // across a replace has to be read at write time too, or a player seated during
+        // the import is turned out of their car by it.
+        mutateSheetForUser(
+          db,
+          { username: info.userName, system },
+          (existing) => {
             // A replace starts from empty rather than merging, so a skill dropped on the
             // source does not linger and a weapon row that no longer exists does not keep
             // its damage. What survives is state that is not character data at all:
@@ -1243,11 +1244,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               : existing;
             entries.forEach(([k, v]) => { data[k] = v; });
             entries.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
-            db.run(
-              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-              [JSON.stringify(data), row.id],
-              (err3) => {
-                if (err3) return;
+            return data;
+          },
+          (err3, data) => {
+                if (err3 || !data) return;
                 if (entries.some(([k]) => k === identity.nameField(system) || k === 'description')) {
                   identity.syncToken(db, system, info.userName, (changed) => {
                     if (changed) emitUpdate({ isRhombusOnly: true });
@@ -1279,8 +1279,6 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 } else {
                   finish();
                 }
-              }
-            );
           }
         );
       });
@@ -1349,10 +1347,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               `${identity.displayName(info.userName)} rolled ${rollDef.label} [${outcome.breakdown} = ${outcome.total}]${luckTag}${woundTag}${critTag}`;
             // Spend the declared LUCK
             if (luck > 0) {
-              data.luck = Math.max(0, (Number(data.luck) || 0) - luck);
-              db.run(
-                `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [JSON.stringify(data), row.id],
+              // A subtraction, so it is computed against what the sheet says now rather
+              // than against the copy this roll was resolved from.
+              patchSheet(
+                db,
+                row.id,
+                (d) => ({ luck: Math.max(0, (Number(d.luck) || 0) - luck) }),
                 () => io.emit('sheetUpdated', { username: info.userName, system })
               );
             }
@@ -1483,9 +1483,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               glitch: outcome.glitch ?? false,
               criticalGlitch: !!(outcome.glitch && outcome.critical === 'failure'),
             };
-            db.run(
-              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-              [JSON.stringify(data), row.id],
+            patchSheet(
+              db,
+              row.id,
+              // Drain is damage taken, so it accumulates against the current track rather
+              // than replacing it with a figure worked out before the roll resolved.
+              (d) => ({
+                stun_current: Math.min(
+                  Number(d.stun_monitor) || stunMax,
+                  Math.max(0, (Number(d.stun_current) || 0) + netDrain),
+                ),
+              }),
               (err3) => {
                 if (err3) return;
                 db.run(
@@ -1810,14 +1818,20 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       // Re-read rather than writing back the copy the attack resolved against: the sheet
       // blob is stored whole, so a stale copy would silently undo any other edit made
       // between the roll and the damage landing.
-      db.get(`SELECT username, data FROM character_sheets WHERE id = ?`, [ride.sheetId], (err, row) => {
+      db.get(`SELECT username FROM character_sheets WHERE id = ?`, [ride.sheetId], (err, row) => {
         if (err || !row) return cb(newHp);
-        let data;
-        try { data = JSON.parse(row.data || '{}'); } catch (e) { return cb(newHp); }
-        data[ride.vehicle.hpField] = newHp;
-        db.run(
-          `UPDATE character_sheets SET data = ? WHERE id = ?`,
-          [JSON.stringify(data), ride.sheetId],
+        // The re-read this comment already asked for, now with nothing able to slip
+        // between it and the write.
+        patchSheet(
+          db,
+          ride.sheetId,
+          // Subtracted from the hull as it stands, so two shots arriving together do not
+          // both take it from the same starting value and lose one of them.
+          (d) => {
+            const now = Number(d[ride.vehicle.hpField]);
+            const from = Number.isFinite(now) ? now : ride.vehicle.hp;
+            return { [ride.vehicle.hpField]: Math.max(0, from - Math.max(0, amount)) };
+          },
           () => {
             io.emit('sheetUpdated', { username: row.username });
             // The badge carries the vehicle's HP, so a wreck has to stop showing as cover.
@@ -2168,11 +2182,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   `[${toHit.breakdown} = ${toHit.total} vs DV ${dv}] — ${hit ? 'HIT' : 'MISS'}${critTag}`;
                 // Spend the declared LUCK
                 if (luck > 0) {
-                  attackerData.luck = Math.max(0, (Number(attackerData.luck) || 0) - luck);
-                  db.run(
-                    `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP
-                     WHERE username = ? AND system = ? AND is_npc = 0`,
-                    [JSON.stringify(attackerData), info.userName, system],
+                  // Subtracted from what the sheet holds now, not from the copy this
+                  // attack was resolved against several callbacks ago.
+                  mutateSheetForUser(
+                    db,
+                    { username: info.userName, system },
+                    (d) => ({ ...d, luck: Math.max(0, (Number(d.luck) || 0) - luck) }),
                     () => io.emit('sheetUpdated', { username: info.userName, system })
                   );
                 }
@@ -2257,11 +2272,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
                     const sheetChanged = defender && ((ablated && shield.remaining > 0) || shield.absorbed > 0);
                     if (sheetChanged) {
-                      if (ablated && shield.remaining > 0) defenderData[spField] = Math.max(0, sp - 1);
-                      if (shield.absorbed > 0) defenderData.sp_shield = shield.newShield;
-                      db.run(
-                        `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                        [JSON.stringify(defenderData), defender.id],
+                      // Through the queue, and applied to a fresh read rather than to the
+                      // copy parsed before the roll was resolved. The defender is very
+                      // likely looking at this sheet while it is being shot at, and the
+                      // old form wrote back a whole blob captured several steps earlier —
+                      // so an edit made in between was simply erased.
+                      mutateSheet(
+                        db,
+                        defender.id,
+                        (data) => {
+                          if (ablated && shield.remaining > 0) data[spField] = Math.max(0, sp - 1);
+                          if (shield.absorbed > 0) data.sp_shield = shield.newShield;
+                          return data;
+                        },
                         () => {
                           if (!defender.is_npc) io.emit('sheetUpdated', { username: defender.username, system });
                           finish();
@@ -2305,7 +2328,6 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const data = JSON.parse(row.data || '{}');
                 const body = Number(data.body) || 0;
                 const save = sheetAttack.rollDeathSave(body, data.death_save_penalty);
-                data.death_save_penalty = save.penalty + 1;
                 const penTag = save.penalty > 0 ? `+${save.penalty} ` : '';
                 const historyString =
                   `${identity.displayName(info.userName)} DEATH SAVE [${save.die} ${penTag}= ${save.total} vs BODY ${body}] — ` +
@@ -2316,9 +2338,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const outcome = { rolls: { 10: [save.die] }, modTotal: save.penalty, total: save.total };
                 broadcastRoll(info.userName, outcome, historyString, '#ff3333', () => {
                   setTimeout(() => {
-                    db.run(
-                      `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                      [JSON.stringify(data), row.id],
+                    // Only the penalty changes, and it is applied to a fresh read. The old
+                    // form wrote back the blob parsed *before* the five-second dice
+                    // animation, so anything edited while the dice were rolling was
+                    // erased — and a death save is exactly when a table is busiest.
+                    mutateSheet(
+                      db,
+                      row.id,
+                      (fresh) => ({ ...fresh, death_save_penalty: save.penalty + 1 }),
                       () => {
                         io.emit('sheetUpdated', { username: info.userName, system });
                         io.emit('deathSaveResult', {
@@ -2393,11 +2420,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         success: check.success,
                       });
                       if (check.success) {
-                        targetData.frail = 1;
-                        targetData.rounds_since_downed = 0;
-                        db.run(
-                          `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                          [JSON.stringify(targetData), targetRow.id],
+                        // Someone else's sheet, being written while they are very likely
+                        // looking at it - this is the moment they are on the floor.
+                        patchSheet(
+                          db,
+                          targetRow.id,
+                          { frail: 1, rounds_since_downed: 0 },
                           () => {
                             db.run(
                               `UPDATE locations SET hp_current = 1 WHERE shape = 'rhombus' AND owner = ?`,
@@ -2410,9 +2438,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                           }
                         );
                       } else {
-                        db.run(
-                          `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                          [JSON.stringify(targetData), targetRow.id],
+                        patchSheet(
+                          db,
+                          targetRow.id,
+                          { rounds_since_downed: targetData.rounds_since_downed },
                           () => io.emit('sheetUpdated', { username: targetUsername, system })
                         );
                       }
@@ -2496,10 +2525,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               };
 
               if (cost > 0) {
-                data.mage_effort = Math.max(0, effort - cost);
-                db.run(
-                  `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                  [JSON.stringify(data), row.id],
+                patchSheet(
+                  db,
+                  row.id,
+                  (d) => ({ mage_effort: Math.max(0, (Number(d.mage_effort) || 0) - cost) }),
                   () => {
                     io.emit('sheetUpdated', { username: info.userName, system });
                     finish();

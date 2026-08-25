@@ -25,6 +25,8 @@ const attackCwn = require('./attackCwn');
 const vehicleSeats = require('./vehicleSeats');
 const vehicleTokens = require('./vehicleTokens');
 
+const { patchSheet } = require('./mutate');
+
 const SYSTEM = 'cities_without_number';
 
 /**
@@ -112,8 +114,10 @@ function loadSheet(db, sheetId, cb, system = SYSTEM) {
   );
 }
 
-const writeSheet = (db, id, data, cb) =>
-  db.run(`UPDATE character_sheets SET data = ? WHERE id = ?`, [JSON.stringify(data), id], () => cb());
+// Through the queue, and spread over a fresh read rather than over the copy loaded a
+// moment ago: hull damage arrives while a GM may be editing the same NPC sheet, and the
+// old form wrote back every other field as it stood at load time. See sheets/mutate.js.
+const writeSheet = (db, id, patch, cb) => patchSheet(db, id, patch, () => cb());
 
 /**
  * Damage or repair an enemy hull.
@@ -132,7 +136,14 @@ function adjustHp(db, { sheetId, vehicleIndex, delta, system = SYSTEM }, cb) {
     if (!vehicle) return cb('NO_SUCH_VEHICLE');
     const next = Math.max(0, Math.min(vehicle.hpMax, vehicle.hp + amount));
     if (next === vehicle.hp) return cb(null);
-    writeSheet(db, sheet.id, { ...sheet.data, [vehicle.hpField]: next }, () => cb(null));
+    // Computed at write time, not from the hull read a moment ago: two hits landing
+    // together must both count. The earlier read still decides whether there is anything
+    // to do at all, which is a question about the vehicle rather than about the number.
+    writeSheet(db, sheet.id, (d) => {
+      const now = Number(d[vehicle.hpField]);
+      const from = Number.isFinite(now) ? now : vehicle.hp;
+      return { [vehicle.hpField]: Math.max(0, Math.min(vehicle.hpMax, from + amount)) };
+    }, () => cb(null));
   }, system);
 }
 
@@ -142,7 +153,7 @@ function setMoving(db, { sheetId, vehicleIndex, moving, system = SYSTEM }, cb) {
   loadSheet(db, sheetId, (sheet) => {
     if (!sheet) return cb('NO_SUCH_SHEET');
     if (!attackCwn.getVehicle(sheet.data, index)) return cb('NO_SUCH_VEHICLE');
-    writeSheet(db, sheet.id, { ...sheet.data, [`vehicle${index}_moving`]: moving ? 1 : 0 }, () => cb(null));
+    writeSheet(db, sheet.id, { [`vehicle${index}_moving`]: moving ? 1 : 0 }, () => cb(null));
   }, system);
 }
 

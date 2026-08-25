@@ -9,6 +9,7 @@ const sheetImporters = require('../sheets/importers');
 const pdfTemplate = require('../sheets/pdfTemplate');
 const companionFetch = require('../sheets/companionFetch');
 const { rateLimit } = require('../middleware/rateLimit');
+const { mutateSheet, patchSheet } = require('../sheets/mutate');
 const sheetAttack = require('../sheets/attack');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
@@ -176,12 +177,17 @@ module.exports = (db, io) => {
               () => { io.emit('dataUpdated', { isRhombusOnly: true }); done(); }
             );
           };
-          const data = { ...JSON.parse(row.data || '{}'), ...patch };
-          Object.keys(patch).forEach((f) => applyDerived(system, data, f));
-          db.run(
-            `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [JSON.stringify(data), row.id],
-            (err3) => {
+          // Through the queue. This is the GM editing a player's sheet, which is the
+          // pairing most likely to collide with that player editing it themselves.
+          mutateSheet(
+            db,
+            row.id,
+            (current) => {
+              const next = { ...current, ...patch };
+              Object.keys(patch).forEach((f) => applyDerived(system, next, f));
+              return next;
+            },
+            (err3, data) => {
               if (err3) return res.status(500).json({ error: err3.message });
               // Armor fields drive the token AC when set (overrides a direct
               // ac patch - armor is authoritative while equipped).
@@ -694,21 +700,18 @@ module.exports = (db, io) => {
             try { data = JSON.parse(row.data || '{}'); } catch { data = {}; }
             const max = data[luckMaxField];
             if (max === undefined || max === null) continue;
-            data[luckField] = Number(max);
-            updates.push({ id: row.id, username: row.username, data: JSON.stringify(data) });
+            updates.push({ id: row.id, username: row.username });
           }
           if (updates.length === 0) return res.json({ reset: 0 });
           let done = 0;
           for (const u of updates) {
-            db.run(
-              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-              [u.data, u.id],
-              () => {
-                io.emit('sheetUpdated', { username: u.username });
-                done++;
-                if (done === updates.length) res.json({ reset: updates.length });
-              }
-            );
+            // The scan decides who is reset; the value is read again at write time, so a
+            // player editing their sheet during a table-wide reset does not lose it.
+            patchSheet(db, u.id, (d) => ({ [luckField]: Number(d[luckMaxField]) }), () => {
+              io.emit('sheetUpdated', { username: u.username });
+              done++;
+              if (done === updates.length) res.json({ reset: updates.length });
+            });
           }
         }
       );
@@ -734,15 +737,12 @@ module.exports = (db, io) => {
             try { data = JSON.parse(row.data || '{}'); } catch { data = {}; }
             const strain = Number(data.system_strain) || 0;
             if (strain <= 0) continue;
-            data.system_strain = strain - 1;
-            updates.push({ id: row.id, username: row.username, isNpc: row.is_npc, data: JSON.stringify(data) });
+            updates.push({ id: row.id, username: row.username, isNpc: row.is_npc });
           }
           if (updates.length === 0) return res.json({ rested: 0 });
           let done = 0;
           for (const u of updates) {
-            db.run(
-              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-              [u.data, u.id],
+            patchSheet(db, u.id, (d) => ({ edge: Number(d['edge_max']) }),
               () => {
                 if (!u.isNpc) io.emit('sheetUpdated', { username: u.username });
                 done++;
@@ -773,21 +773,17 @@ module.exports = (db, io) => {
             try { data = JSON.parse(row.data || '{}'); } catch { data = {}; }
             const max = data['edge_max'];
             if (max === undefined || max === null) continue;
-            data['edge'] = Number(max);
-            updates.push({ id: row.id, username: row.username, data: JSON.stringify(data) });
+            updates.push({ id: row.id, username: row.username });
           }
           if (updates.length === 0) return res.json({ reset: 0 });
           let done = 0;
           for (const u of updates) {
-            db.run(
-              `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-              [u.data, u.id],
-              () => {
-                io.emit('sheetUpdated', { username: u.username });
-                done++;
-                if (done === updates.length) res.json({ reset: updates.length });
-              }
-            );
+            // As with LUCK: the scan chooses who, the write reads the maximum again.
+            patchSheet(db, u.id, (d) => ({ edge: Number(d['edge_max']) }), () => {
+              io.emit('sheetUpdated', { username: u.username });
+              done++;
+              if (done === updates.length) res.json({ reset: updates.length });
+            });
           }
         }
       );
@@ -815,14 +811,15 @@ module.exports = (db, io) => {
           const max = Number(data['edge_max']) || 0;
           const cur = Number(data['edge']) || 0;
           if (cur >= max) return res.json({ granted: false, reason: 'Already at maximum Edge', edge: cur, edge_max: max });
-          data['edge'] = cur + 1;
-          db.run(
-            `UPDATE character_sheets SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [JSON.stringify(data), row.id],
-            (err3) => {
+          patchSheet(
+            db,
+            row.id,
+            // Recomputed at write time: two grants landing together must be +2, not +1.
+            (d) => ({ edge: Math.min(Number(d['edge_max']) || 0, (Number(d['edge']) || 0) + 1) }),
+            (err3, next) => {
               if (err3) return res.status(500).json({ error: err3.message });
               io.emit('sheetUpdated', { username });
-              res.json({ granted: true, edge: data['edge'], edge_max: max });
+              res.json({ granted: true, edge: next['edge'], edge_max: max });
             }
           );
         }

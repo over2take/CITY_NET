@@ -190,9 +190,17 @@ describe('a real battle map upload', () => {
       .field('designation', 'Level 3')
       .attach('image', Buffer.alloc(2048, 3), { filename: 'nope.tiff' });
 
-    await new Promise((r) => setTimeout(r, 50));
-    const leftovers = fs.existsSync(tmpDir) ? fs.readdirSync(tmpDir) : [];
-    expect(leftovers).toEqual([]);
+    // The cleanup is an async unlink, so this waits for it rather than guessing at how
+    // long it takes — a fixed sleep passed alone and failed under a full suite.
+    const gone = async () => {
+      for (let i = 0; i < 100; i++) {
+        const left = fs.existsSync(tmpDir) ? fs.readdirSync(tmpDir) : [];
+        if (left.length === 0) return left;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      return fs.readdirSync(tmpDir);
+    };
+    expect(await gone()).toEqual([]);
   });
 });
 

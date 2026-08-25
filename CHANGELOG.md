@@ -9,6 +9,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.10.1] - 2026-08-22
+
+One sheet, two people writing to it.
+
+### Fixed
+
+- **A change to a character sheet could be silently undone by another change landing at the same moment.** A sheet is stored as one block of data, so altering a single field means reading the whole sheet, changing that field, and writing the whole sheet back. Twenty-two places did that, and nothing stopped two of them overlapping — so the second one wrote a version of the sheet built before the first one's change existed, and that change simply vanished. No error, no warning: the hit points come back.
+
+  Two different players were never at risk, since each write only ever touched that player's own row. The problem was **one sheet with two writers**, which is an ordinary moment at a table: a GM applying damage while that player edits their gear, an automatic effect landing mid-edit, someone with their sheet open in two tabs.
+
+  Every writer now takes a turn per sheet. Nothing is rejected and nothing needs retrying — the second one simply reads after the first has finished, so both changes survive. Writers to *different* sheets never wait on each other.
+
+- **Anything counted relative to its current value could come out wrong, not just missing.** Spending LUCK, mage effort, system strain, the stun track and Edge grants were all computed from a copy of the sheet read earlier, so spending three LUCK while something else wrote the sheet could hand it back. These are now worked out against what the sheet actually says at the moment of the write. Two Edge grants arriving together are +2.
+
+- **Damage to a vehicle could stop counting when two hits landed together.** Both worked out the new hull value from the figure they read before writing, so both subtracted from the same starting number and one of them did nothing. Hull damage, stun drain and vehicle HP are now worked out as the write happens, so simultaneous hits add up.
+
+- **A death save discarded five seconds of edits.** The sheet was read, then the write waited out the client's dice animation before writing the whole sheet back — so anything changed while the dice were rolling was thrown away, at exactly the moment a table is busiest. Only the penalty is written now.
+
+- **Importing a sheet could turn a player out of their vehicle.** An import deliberately carries your seat across a replace, but it carried the version read before the import started — so being seated during the import undid it. Read at write time now.
+
+- **A table-wide LUCK or Edge reset, or a CWN rest, could wipe an edit made while it ran.** These scan every sheet and then write them all, so on a table of six the last write was built from a scan that had already gone stale. The scan now decides only who is affected; each value is worked out as its sheet is written.
+
+---
+
 ## [1.10.0] - 2026-08-22
 
 Animated battle maps, and the second half of the security pass.
