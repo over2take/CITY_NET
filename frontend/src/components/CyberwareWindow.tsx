@@ -56,6 +56,7 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
   const [draft, setDraft] = useState<CyberRow | null>(null);
   /** The panel whose + was pressed, while it is asking what to put there. */
   const [placing, setPlacing] = useState<Panel | null>(null);
+  const placingRef = useRef<HTMLDivElement>(null);
 
   const write = (next: CyberRow[]) => onFieldChange(CYBERWARE_FIELD, next);
 
@@ -171,6 +172,13 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
     setPlacing(null);
   };
 
+  useEffect(() => {
+    if (!placing) return;
+    // Opened from a panel that may be a screenful above it. Guarded because jsdom has no
+    // scrollIntoView and an unguarded call takes the whole window down under test.
+    placingRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [placing]);
+
   const hl = totalHumanityLoss(rows);
   const spent = totalCost(rows);
   const unfiledRows = rows.filter((r) => !r.type);
@@ -229,6 +237,49 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
         <span>HUMANITY LOSS {hl}{spent > 0 ? ` · ${spent.toLocaleString()}eb` : ''}</span>
       </div>
 
+      {!readOnly && placing && (
+        <div ref={placingRef} style={{ marginBottom: 8, border: '1px solid var(--cyan)', padding: 7 }}>
+          <div style={{ ...mono(9), color: 'var(--cyan)', paddingBottom: 4 }}>
+            PUT SOMETHING IN {placing.label.toUpperCase()}
+          </div>
+          {[...unfiledRows]
+            // Likely matches first, by name. Only an ordering — the export never says
+            // where a piece went, so nothing here decides for you.
+            .sort((a, b) => Number(looksLike(placing.typeId, b.name)) - Number(looksLike(placing.typeId, a.name)))
+            .map((r, i) => {
+              const fits = looksLike(placing.typeId, r.name);
+              return (
+                <button
+                  key={`${r.name}-${i}`}
+                  type="button"
+                  onClick={() => fileInto(r, placing)}
+                  style={{
+                    ...mono(11), letterSpacing: 0, display: 'block', width: '100%',
+                    textAlign: 'left', background: 'none', cursor: 'pointer', padding: '3px 4px',
+                    border: '1px solid transparent',
+                    color: fits ? 'var(--cyan)' : '#007700',
+                  }}
+                >
+                  {r.name}
+                  <span style={{ color: '#006600' }}> HL {r.hl}</span>
+                  {fits && <span style={{ color: 'var(--cyan)' }}> · fits</span>}
+                </button>
+              );
+            })}
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+            <button type="button" className="utility-btn" onClick={() => setPlacing(null)}>CANCEL</button>
+            <button
+              type="button"
+              className="upload-btn"
+              onClick={() => {
+                setDraft(normaliseRow({ type: placing.typeId, side: placing.side }));
+                setPlacing(null);
+              }}
+            >NEW PIECE</button>
+          </div>
+        </div>
+      )}
+
       <div
         ref={stageRef}
         style={{
@@ -262,15 +313,17 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
       </div>
 
       {unfiledRows.length > 0 && (
+        // One line rather than one line per piece: an eight-piece import made this taller
+        // than the diagram it sits under. Its job is to say there is filing to do and to
+        // name what is waiting — the table below lists them properly, and the + on a panel
+        // is where they get placed.
         <div style={{ marginTop: 8, border: '1px dashed #886600', padding: '4px 7px' }}>
           <div style={{ ...mono(9), color: '#bb9900' }}>
-            UNFILED · {unfiledRows.length} — imported chrome knows what it is, not where it went
+            {unfiledRows.length} NOT YET PLACED — use + on a body part
           </div>
-          {unfiledRows.map((r, i) => (
-            <div key={`${r.name}-${i}`} style={{ ...mono(11), color: 'var(--cyan)', paddingTop: 2, letterSpacing: 0 }}>
-              {r.name} <span style={{ color: '#006600' }}>HL {r.hl}</span>
-            </div>
-          ))}
+          <div style={{ ...mono(11), color: 'var(--cyan)', letterSpacing: 0, paddingTop: 2 }}>
+            {unfiledRows.map((r) => r.name).join(', ')}
+          </div>
         </div>
       )}
 
@@ -337,49 +390,6 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
           </div>
         )}
       </div>
-
-      {!readOnly && placing && (
-        <div style={{ marginTop: 8, border: '1px solid var(--cyan)', padding: 7 }}>
-          <div style={{ ...mono(9), color: 'var(--cyan)', paddingBottom: 4 }}>
-            PUT SOMETHING IN {placing.label.toUpperCase()}
-          </div>
-          {[...unfiledRows]
-            // Likely matches first, by name. Only an ordering — the export never says
-            // where a piece went, so nothing here decides for you.
-            .sort((a, b) => Number(looksLike(placing.typeId, b.name)) - Number(looksLike(placing.typeId, a.name)))
-            .map((r, i) => {
-              const fits = looksLike(placing.typeId, r.name);
-              return (
-                <button
-                  key={`${r.name}-${i}`}
-                  type="button"
-                  onClick={() => fileInto(r, placing)}
-                  style={{
-                    ...mono(11), letterSpacing: 0, display: 'block', width: '100%',
-                    textAlign: 'left', background: 'none', cursor: 'pointer', padding: '3px 4px',
-                    border: '1px solid transparent',
-                    color: fits ? 'var(--cyan)' : '#007700',
-                  }}
-                >
-                  {r.name}
-                  <span style={{ color: '#006600' }}> HL {r.hl}</span>
-                  {fits && <span style={{ color: 'var(--cyan)' }}> · fits</span>}
-                </button>
-              );
-            })}
-          <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
-            <button type="button" className="utility-btn" onClick={() => setPlacing(null)}>CANCEL</button>
-            <button
-              type="button"
-              className="upload-btn"
-              onClick={() => {
-                setDraft(normaliseRow({ type: placing.typeId, side: placing.side }));
-                setPlacing(null);
-              }}
-            >NEW PIECE</button>
-          </div>
-        </div>
-      )}
 
       {!readOnly && (draft ? (
         <div style={{ marginTop: 8, border: '1px solid var(--dark-green)', padding: 7 }}>

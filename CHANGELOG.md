@@ -31,7 +31,9 @@ Cyberware, as something you can actually see.
 
 - **Importing a character brought back none of its cyberware.** A character with eight pieces of chrome imported zero. Every entry in a Companion export leaves the name blank and puts the identity in a `type` field, and the import read the name — so it found eight blanks and dropped them all.
 
-  It now reads what the pieces actually are, **and brings the humanity cost across with them**, which was going to be typed in by hand. What the export has never carried is where anything is installed, so imported pieces arrive marked as not yet placed on the body, and say so rather than guessing an arm.
+  It now reads what the pieces actually are, **and brings the humanity cost across with them**, which was going to be typed in by hand.
+
+  Two things the export has never carried, so neither can come across: where a piece is installed, and its description. The Companion shows that flavour text from its own catalogue rather than storing it on your character, so the fields arrive empty. Anything you typed there yourself does come through. Imported pieces are marked as not yet placed rather than being guessed into an arm.
 
 ### Changed
 

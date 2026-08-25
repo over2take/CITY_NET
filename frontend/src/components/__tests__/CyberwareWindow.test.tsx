@@ -50,12 +50,12 @@ describe('what goes where', () => {
     // Every imported piece arrives unfiled, because the export says nothing about where it
     // was installed. Somewhere visible or it may as well not have imported.
     show();
-    expect(screen.getByText(/UNFILED · 1/)).toBeInTheDocument();
+    expect(screen.getByText(/1 NOT YET PLACED/)).toBeInTheDocument();
   });
 
   it('says nothing about unfiled when everything is placed', () => {
     show(ROWS.slice(0, 3));
-    expect(screen.queryByText(/UNFILED/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/NOT YET PLACED/)).not.toBeInTheDocument();
   });
 
   it('totals humanity loss and money separately', () => {
@@ -240,5 +240,26 @@ describe('filing chrome that is already on the sheet', () => {
 
     expect(screen.queryByText(/PUT SOMETHING IN/)).not.toBeInTheDocument();
     expect(screen.getByLabelText('Cyberware name')).toBeInTheDocument();
+  });
+});
+
+describe('where the chooser appears', () => {
+  it('opens above the diagram rather than below the table', async () => {
+    // It is opened from a panel beside the figure. Below the table it is a screenful away
+    // from the thing that opened it, which is what made it look like nothing happened.
+    show([{ name: 'Neuroport', type: '', side: null, hl: 0, cost: null, data: '' }]);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberarm R' }));
+
+    const chooser = screen.getByText(/PUT SOMETHING IN/);
+    const table = screen.getByText(/ALL CYBERWARE/);
+    // compareDocumentPosition: 4 means the table follows the chooser in the document.
+    expect(chooser.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('does not fall over where scrollIntoView is missing', async () => {
+    // jsdom has no scrollIntoView. An unguarded call takes the window down on open.
+    show([{ name: 'Neuroport', type: '', side: null, hl: 0, cost: null, data: '' }]);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberleg L' }));
+    expect(screen.getByText(/PUT SOMETHING IN CYBERLEG L/)).toBeInTheDocument();
   });
 });
