@@ -121,6 +121,16 @@ describe('rows', () => {
     expect(out.map((r) => r.cost)).toEqual([null, 0, 500]);
   });
 
+  it('does not turn an unpriced piece into a free one', () => {
+    // Number(null) is 0 and Number('') is 0, so checking finiteness after the conversion
+    // silently prices everything nobody priced at nothing — and then sorts it as the
+    // cheapest thing on the sheet.
+    const out = cyberware.rows({
+      cyberware: [{ cost: null }, { cost: undefined }, { cost: '' }, { cost: 0 }, { cost: '500' }],
+    });
+    expect(out.map((r) => r.cost)).toEqual([null, null, null, 0, 500]);
+  });
+
   it('only accepts a side it knows', () => {
     const out = cyberware.rows({ cyberware: [{ side: 'l' }, { side: 'r' }, { side: 'up' }] });
     expect(out.map((r) => r.side)).toEqual(['l', 'r', null]);

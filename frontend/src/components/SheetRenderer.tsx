@@ -1,3 +1,4 @@
+import { CyberwareSection } from './CyberwareSection';
 import React, { useState, useEffect } from 'react';
 import type { SheetTemplate, SheetSection, SheetField, SheetData } from '../sheets';
 import { TvPortrait } from './TvPortrait';
@@ -33,7 +34,7 @@ interface SheetRendererProps {
   template: SheetTemplate;
   data: SheetData;
   readOnly?: boolean;
-  onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   portraitUrl?: string | null;
   /** Called with the selected File when the player wants to change their portrait. */
   onPortraitUpload?: (file: File) => void;
@@ -108,7 +109,7 @@ const parseTagList = (raw: unknown): string[] => {
 
 function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, style, onOpenLink }: {
   field: SheetField; data: SheetData; readOnly: boolean;
-  onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onFieldsChange?: (fields: Record<string, string | number>) => void;
   style?: React.CSSProperties;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
@@ -344,7 +345,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
   portraitShadow?: boolean;
   onTogglePortraitShadow?: () => void;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
-  onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onDeathSave?: () => void;
   onStabilize?: () => void;
   /** LUCK armed for the next roll (declared before rolling, per CP:R). */
@@ -625,7 +626,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
 
 function GridSection({ section, data, readOnly, onFieldChange, onRoll }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
-  onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onRoll?: (fieldId: string) => void;
 }) {
   // maxField pairs render inside their base field's cell as CUR / MAX
@@ -680,7 +681,7 @@ function GridSection({ section, data, readOnly, onFieldChange, onRoll }: {
 
 function SkillsSection({ section, data, readOnly, onFieldChange, onRoll }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
-  onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onRoll?: (fieldId: string) => void;
 }) {
   return (
@@ -729,7 +730,7 @@ function SkillsSection({ section, data, readOnly, onFieldChange, onRoll }: {
 // from the first row's field labels.
 function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
-  onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onFieldsChange?: (fields: Record<string, string | number>) => void;
 }) {
   // Two clicks to clear an entry: the first arms it, the second does it. A stray click
@@ -926,7 +927,7 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
 // server rolls the row's damage dice (if any) and spends its Effort cost.
 function SpellsSection({ section, data, readOnly, onFieldChange, onCastSpell }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
-  onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onCastSpell?: (index: number) => void;
 }) {
   const perRow = section.columns ?? 4;
@@ -984,7 +985,7 @@ interface AbilityItem {
 
 function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbility, onResistDrain }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
-  onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onRollAbility?: (formula: string, label: string) => void;
   onResistDrain?: (drainValue: number, attr: string, label: string) => void;
 }) {
@@ -1129,7 +1130,7 @@ function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbil
 
 function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   section: SheetSection; data: SheetData; readOnly: boolean;
-  onFieldChange: (fieldId: string, value: string | number) => void;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
 }) {
   return (
@@ -1231,6 +1232,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
+                  {section.layout === 'cyberware' && <CyberwareSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
               )}

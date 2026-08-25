@@ -6,6 +6,16 @@
 
 export type SheetFieldType = 'number' | 'text' | 'textarea' | 'select' | 'tag_list';
 
+/**
+ * What a field can hold.
+ *
+ * Scalars for everything the generic renderer draws, plus an array for the sections that
+ * keep a list under one field rather than numbered ones — cyberware, where the number of
+ * pieces is a property of the character rather than a limit chosen by the storage. The
+ * socket handler that receives these never restricted the value; only the types did.
+ */
+export type SheetFieldValue = string | number | unknown[];
+
 export interface SheetOption { value: string; label: string }
 
 export interface SheetField {
@@ -71,7 +81,7 @@ export interface SheetField {
  *  row (one-click: rolls the row's damage dice and spends its Effort cost).
  *  'ability_list' is a dynamic add/remove list stored as JSON in a single
  *  field; each item has name, cost, attr (dropdown), die, and effect. */
-export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list';
+export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware';
 
 /** Configuration for the 'ability_list' section layout. */
 export interface AbilityListConfig {

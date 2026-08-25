@@ -109,7 +109,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
     });
   }, [apiPath, token]);
 
-  const handleFieldChange = useCallback((fieldId: string, value: string | number) => {
+  const handleFieldChange = useCallback((fieldId: string, value: SheetFieldValue) => {
     let clampedCur: { fieldId: string; value: number } | null = null;
     setSheet(prev => {
       if (!prev) return prev;

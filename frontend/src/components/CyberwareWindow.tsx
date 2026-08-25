@@ -1,0 +1,372 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { DraggableWindow } from './DraggableWindow';
+import bodySvg from '../assets/body.svg?raw';
+import {
+  CYBER_TYPES, typeById, wiredPanels, unwiredPanels, drawnFigureBox, type Side, type Panel,
+} from '../sheets/cyberwareLocations';
+import {
+  CYBERWARE_FIELD, readRows, normaliseRow, totalHumanityLoss, totalCost,
+  rowLocation, rowsForPanel, type CyberRow,
+} from '../sheets/cyberwareRows';
+import type { SheetFieldValue } from '../sheets/types';
+
+// The augmentation window: a body with what is installed where, and the table underneath.
+//
+// Two views of one list because the questions differ. What is in my left arm is answered
+// by the diagram; what am I running, and what did it cost, is answered by the table — and
+// no single ordering answers both.
+//
+// The wires are drawn from measured positions on the figure rather than guessed. See
+// sheets/cyberwareLocations for why the anchors are fractions of the *drawing* rather than
+// of the box it sits in, and why the figure's centreline is not 0.5.
+
+interface Props {
+  data: Record<string, unknown>;
+  readOnly?: boolean;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
+  onClose: () => void;
+  /** Whose chrome this is, for the title bar. */
+  who?: string;
+}
+
+const mono = (size: number): React.CSSProperties => ({
+  fontFamily: 'monospace', fontSize: size, letterSpacing: 1,
+});
+
+const inputStyle: React.CSSProperties = {
+  background: '#000', border: '1px solid var(--dark-green)', color: 'var(--green)',
+  fontFamily: 'monospace', fontSize: 11, padding: '3px 5px', width: '100%',
+};
+
+type SortKey = 'name' | 'location' | 'hl' | 'cost';
+
+export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }: Props) {
+  const [pos, setPos] = useState({ x: 90, y: 60 });
+  const rows = useMemo(() => readRows(data), [data]);
+
+  const stageRef = useRef<HTMLDivElement>(null);
+  const figureRef = useRef<HTMLDivElement>(null);
+  const panelRefs = useRef(new Map<string, HTMLDivElement>());
+  const [wires, setWires] = useState<React.ReactNode[]>([]);
+
+  const [sortKey, setSortKey] = useState<SortKey>('location');
+  const [asc, setAsc] = useState(true);
+  const [listOpen, setListOpen] = useState(true);
+  const [draft, setDraft] = useState<CyberRow | null>(null);
+
+  const write = (next: CyberRow[]) => onFieldChange(CYBERWARE_FIELD, next);
+
+  /**
+   * Draw a wire from each panel to its point on the figure.
+   *
+   * Measured from the live layout rather than computed from constants: the panels grow as
+   * chrome is added, so where a wire starts is only knowable once the browser has laid it
+   * out. Re-run whenever the rows change, since that is what changes panel heights.
+   */
+  useEffect(() => {
+    const stage = stageRef.current;
+    const box = figureRef.current;
+    if (!stage || !box) return undefined;
+
+    const paint = () => {
+      const sb = stage.getBoundingClientRect();
+      const cb = box.getBoundingClientRect();
+      const fig = drawnFigureBox(cb.width, cb.height);
+      const out: React.ReactNode[] = [];
+
+      wiredPanels().forEach((panel) => {
+        const el = panelRefs.current.get(panel.key);
+        if (!el || !panel.anchor) return;
+        const r = el.getBoundingClientRect();
+        const onLeft = r.left - sb.left < sb.width / 2;
+        const x1 = (onLeft ? r.right : r.left) - sb.left;
+        const y1 = r.top - sb.top + r.height / 2;
+        const x2 = cb.left - sb.left + fig.left + fig.width * panel.anchor[0];
+        const y2 = cb.top - sb.top + fig.top + fig.height * panel.anchor[1];
+        const stub = onLeft ? x1 + 14 : x1 - 14;
+        const filled = rowsForPanel(rows, panel.typeId, panel.side).length > 0;
+        const stroke = filled ? 'var(--cyan)' : '#004400';
+        out.push(
+          <g key={panel.key}>
+            <path d={`M${x1} ${y1} H${stub} L${x2} ${y2}`} fill="none" stroke={stroke} strokeWidth={1} />
+            <circle cx={x2} cy={y2} r={3} fill={filled ? 'var(--cyan)' : 'none'} stroke={filled ? 'var(--cyan)' : '#006600'} />
+          </g>,
+        );
+      });
+      setWires(out);
+    };
+
+    paint();
+    // Guarded rather than assumed: jsdom has no ResizeObserver, and a window that throws
+    // where it is missing is worse than one whose wires simply do not follow a resize.
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(paint);
+    ro.observe(stage);
+    return () => ro.disconnect();
+  }, [rows]);
+
+  const sorted = useMemo(() => {
+    const dir = asc ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      if (sortKey === 'hl') return (a.hl - b.hl) * dir;
+      if (sortKey === 'cost') {
+        // Unpriced sorts last either way: missing information, not a low price.
+        if (a.cost === null && b.cost === null) return 0;
+        if (a.cost === null) return 1;
+        if (b.cost === null) return -1;
+        return (a.cost - b.cost) * dir;
+      }
+      const x = sortKey === 'location' ? rowLocation(a) : a.name;
+      const y = sortKey === 'location' ? rowLocation(b) : b.name;
+      return x.localeCompare(y) * dir;
+    });
+  }, [rows, sortKey, asc]);
+
+  const sortBy = (k: SortKey) => {
+    if (k === sortKey) setAsc(!asc);
+    else { setSortKey(k); setAsc(true); }
+  };
+  const arrow = (k: SortKey) => (k === sortKey ? (asc ? ' ▲' : ' ▼') : '');
+
+  const removeRow = (row: CyberRow) => {
+    // By identity, not by index: the table is sorted, so the row on screen is not the row
+    // at that position in the stored array.
+    const i = rows.indexOf(row);
+    if (i >= 0) write([...rows.slice(0, i), ...rows.slice(i + 1)]);
+  };
+
+  const commitDraft = () => {
+    if (!draft) return;
+    const name = draft.name.trim();
+    if (!name) return;
+    write([...rows, { ...draft, name }]);
+    setDraft(null);
+  };
+
+  /** Add straight into a location, so a panel's + does not need refiling afterwards. */
+  const addInto = (panel: Panel) => setDraft(
+    normaliseRow({ type: panel.typeId, side: panel.side }),
+  );
+
+  const hl = totalHumanityLoss(rows);
+  const spent = totalCost(rows);
+  const unfiled = rows.filter((r) => !r.type);
+
+  const panelBox = (panel: Panel) => {
+    const mine = rowsForPanel(rows, panel.typeId, panel.side);
+    const filled = mine.length > 0;
+    return (
+      <div
+        key={panel.key}
+        ref={(el) => { if (el) panelRefs.current.set(panel.key, el); }}
+        style={{
+          border: `1px ${filled ? 'solid var(--green)' : 'dashed #006600'}`,
+          padding: '4px 7px', background: '#000', position: 'relative', zIndex: 2,
+        }}
+      >
+        <div style={{
+          ...mono(9), color: filled ? 'var(--green)' : '#006600',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          borderBottom: filled ? '1px solid var(--dark-green)' : 'none',
+          paddingBottom: filled ? 2 : 0,
+        }}>
+          <span>{panel.label.toUpperCase()}{filled ? ` · ${mine.length}` : ' · EMPTY'}</span>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => addInto(panel)}
+              aria-label={`Add to ${panel.label}`}
+              style={{ ...mono(11), background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', padding: 0 }}
+            >+</button>
+          )}
+        </div>
+        {mine.map((r, i) => (
+          <div key={`${r.name}-${i}`} style={{ ...mono(11), color: 'var(--cyan)', paddingTop: 2, letterSpacing: 0 }}>
+            {r.name} <span style={{ color: '#006600' }}>HL {r.hl}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const left = wiredPanels().filter((p) => CYBER_TYPES.find((t) => t.id === p.typeId) && (p.side === 'r' || (p.side === null && p.typeId === 'cyberaudio')));
+  const right = wiredPanels().filter((p) => !left.includes(p));
+
+  return (
+    <DraggableWindow
+      title={who ? `AUGMENTATION — ${who.toUpperCase()}` : 'AUGMENTATION'}
+      pos={pos}
+      setPos={setPos}
+      onClose={onClose}
+      windowStyle={{ width: 760, maxWidth: '95vw' }}
+      contentStyle={{ maxHeight: '80vh', overflowY: 'auto' }}
+    >
+      <div style={{ ...mono(10), color: 'var(--cyan)', display: 'flex', justifyContent: 'space-between', paddingBottom: 6 }}>
+        <span>{rows.length} INSTALLED{unfiled.length ? ` · ${unfiled.length} UNFILED` : ''}</span>
+        <span>HUMANITY LOSS {hl}{spent > 0 ? ` · ${spent.toLocaleString()}eb` : ''}</span>
+      </div>
+
+      <div
+        ref={stageRef}
+        style={{
+          position: 'relative', display: 'grid',
+          gridTemplateColumns: '1fr 210px 1fr', gap: 12, minHeight: 340,
+        }}
+      >
+        <svg style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', width: '100%', height: '100%' }}>
+          {wires}
+        </svg>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative', zIndex: 2 }}>
+          {left.map(panelBox)}
+        </div>
+
+        <div ref={figureRef} style={{ position: 'relative' }}>
+          <div
+            aria-hidden
+            style={{ position: 'absolute', inset: 0, color: 'var(--green)', opacity: 0.35 }}
+            dangerouslySetInnerHTML={{ __html: bodySvg }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative', zIndex: 2 }}>
+          {right.map(panelBox)}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
+        {unwiredPanels().map(panelBox)}
+      </div>
+
+      {unfiled.length > 0 && (
+        <div style={{ marginTop: 8, border: '1px dashed #886600', padding: '4px 7px' }}>
+          <div style={{ ...mono(9), color: '#bb9900' }}>
+            UNFILED · {unfiled.length} — imported chrome knows what it is, not where it went
+          </div>
+          {unfiled.map((r, i) => (
+            <div key={`${r.name}-${i}`} style={{ ...mono(11), color: 'var(--cyan)', paddingTop: 2, letterSpacing: 0 }}>
+              {r.name} <span style={{ color: '#006600' }}>HL {r.hl}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ marginTop: 10, borderTop: '1px solid var(--dark-green)' }}>
+        <button
+          type="button"
+          onClick={() => setListOpen(!listOpen)}
+          style={{ ...mono(9), background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', padding: '6px 0' }}
+        >
+          {listOpen ? '▼' : '▶'} ALL CYBERWARE
+        </button>
+
+        {listOpen && (
+          <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--dark-green)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {([['name', 'NAME'], ['location', 'TYPE'], ['hl', 'HL'], ['cost', 'EB']] as [SortKey, string][])
+                    .map(([k, lbl]) => (
+                      <th
+                        key={k}
+                        onClick={() => sortBy(k)}
+                        style={{
+                          ...mono(9), color: 'var(--green)', cursor: 'pointer', padding: '4px 6px',
+                          textAlign: k === 'hl' || k === 'cost' ? 'right' : 'left',
+                          position: 'sticky', top: 0, background: '#001400',
+                          borderBottom: '1px solid var(--dark-green)', whiteSpace: 'nowrap',
+                        }}
+                      >{lbl}{arrow(k)}</th>
+                    ))}
+                  <th style={{ ...mono(9), color: 'var(--green)', padding: '4px 6px', textAlign: 'left', position: 'sticky', top: 0, background: '#001400', borderBottom: '1px solid var(--dark-green)' }}>EFFECT</th>
+                  {!readOnly && <th style={{ position: 'sticky', top: 0, background: '#001400', borderBottom: '1px solid var(--dark-green)', width: 22 }} aria-label="Remove" />}
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.length === 0 && (
+                  <tr><td colSpan={readOnly ? 5 : 6} style={{ ...mono(11), color: '#006600', padding: '4px 6px', letterSpacing: 0 }}>
+                    Nothing installed. Add a piece, or import a character.
+                  </td></tr>
+                )}
+                {sorted.map((r, i) => (
+                  <tr key={`${r.name}-${i}`}>
+                    <td style={{ ...mono(11), color: 'var(--cyan)', padding: '3px 6px', letterSpacing: 0 }}>{r.name}</td>
+                    <td style={{ ...mono(11), color: r.type ? 'var(--green)' : '#886600', padding: '3px 6px', letterSpacing: 0 }}>{rowLocation(r)}</td>
+                    <td style={{ ...mono(11), color: 'var(--cyan)', padding: '3px 6px', textAlign: 'right' }}>{r.hl}</td>
+                    <td style={{ ...mono(11), color: r.cost === null ? '#004400' : 'var(--cyan)', padding: '3px 6px', textAlign: 'right' }}>
+                      {r.cost === null ? '—' : r.cost.toLocaleString()}
+                    </td>
+                    <td style={{ ...mono(11), color: '#008800', padding: '3px 6px', letterSpacing: 0 }}>{r.data}</td>
+                    {!readOnly && (
+                      <td style={{ padding: '3px 6px', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => removeRow(r)}
+                          aria-label={`Remove ${r.name}`}
+                          style={{ ...mono(11), background: 'none', border: 'none', color: '#aa3333', cursor: 'pointer', padding: 0 }}
+                        >×</button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {!readOnly && (draft ? (
+        <div style={{ marginTop: 8, border: '1px solid var(--dark-green)', padding: 7 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.6fr 0.6fr 0.7fr', gap: 6 }}>
+            <input
+              autoFocus style={inputStyle} placeholder="Name" aria-label="Cyberware name"
+              value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            />
+            <select
+              style={inputStyle} aria-label="Install type" value={draft.type}
+              onChange={(e) => {
+                const t = typeById(e.target.value);
+                // Drop a side the new type cannot have, rather than leaving a Fashionware
+                // marked R because it used to be an arm.
+                setDraft({ ...draft, type: e.target.value, side: t?.paired ? (draft.side ?? 'r') : null });
+              }}
+            >
+              <option value="">Unfiled</option>
+              {CYBER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+            <select
+              style={{ ...inputStyle, opacity: typeById(draft.type)?.paired ? 1 : 0.35 }}
+              aria-label="Side" disabled={!typeById(draft.type)?.paired}
+              value={draft.side ?? ''}
+              onChange={(e) => setDraft({ ...draft, side: (e.target.value || null) as Side })}
+            >
+              <option value="r">R</option>
+              <option value="l">L</option>
+            </select>
+            <input
+              style={inputStyle} type="number" placeholder="HL" aria-label="Humanity loss"
+              value={draft.hl} onChange={(e) => setDraft({ ...draft, hl: Number(e.target.value) || 0 })}
+            />
+            <input
+              style={inputStyle} type="number" placeholder="eb" aria-label="Price in eddies"
+              value={draft.cost ?? ''}
+              onChange={(e) => setDraft({ ...draft, cost: e.target.value === '' ? null : Number(e.target.value) })}
+            />
+          </div>
+          <input
+            style={{ ...inputStyle, marginTop: 6 }} placeholder="Effect" aria-label="Effect"
+            value={draft.data} onChange={(e) => setDraft({ ...draft, data: e.target.value })}
+          />
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+            <button type="button" className="utility-btn" onClick={() => setDraft(null)}>CANCEL</button>
+            <button type="button" className="upload-btn" onClick={commitDraft} disabled={!draft.name.trim()}>ADD</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="utility-btn" style={{ marginTop: 8 }} onClick={() => setDraft(normaliseRow({}))}>
+          + ADD CYBERWARE
+        </button>
+      ))}
+    </DraggableWindow>
+  );
+}

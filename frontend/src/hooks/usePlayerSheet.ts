@@ -116,7 +116,7 @@ export function usePlayerSheet(
     pendingSaves.current.clear();
   }, []);
 
-  const handleFieldChange = useCallback((fieldId: string, value: string | number) => {
+  const handleFieldChange = useCallback((fieldId: string, value: SheetFieldValue) => {
     setSheet(prev => {
       if (!prev) return prev;
       const template = getTemplate(prev.system);

@@ -37,7 +37,12 @@ function humanise(key) {
 function normaliseRow(raw) {
   const r = raw && typeof raw === 'object' ? raw : {};
   const hl = Number(r.hl);
-  const cost = Number(r.cost);
+  // Number(null) is 0 and Number('') is 0, so an unpriced piece would arrive costing
+  // nothing — and then sort as the cheapest thing on the sheet. Absent has to be checked
+  // before the conversion, not after it.
+  const cost = r.cost === null || r.cost === undefined || r.cost === ''
+    ? null
+    : Number(r.cost);
   return {
     name: typeof r.name === 'string' ? r.name : '',
     // '' rather than a guess: an imported piece knows what it is and what it cost, but the
@@ -47,7 +52,7 @@ function normaliseRow(raw) {
     hl: Number.isFinite(hl) ? hl : 0,
     // Blank rather than zero when it was never given: a piece nobody priced is not a
     // piece that was free, and a column of zeroes hides which is which.
-    cost: Number.isFinite(cost) ? cost : null,
+    cost: cost !== null && Number.isFinite(cost) ? cost : null,
     data: typeof r.data === 'string' ? r.data : '',
   };
 }
