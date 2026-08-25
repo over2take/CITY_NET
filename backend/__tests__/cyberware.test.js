@@ -93,15 +93,15 @@ describe('fromCompanion', () => {
 
 describe('rows', () => {
   it('reads what a sheet holds', () => {
-    const data = { cyberware: [{ name: 'Kerenzikov', type: 'neural', hl: 7, data: '+2 init' }] };
+    const data = { cyberware: [{ name: 'Kerenzikov', type: 'neural', hl: 7, cost: 500, data: '+2 init' }] };
     expect(cyberware.rows(data)).toEqual([
-      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, data: '+2 init' },
+      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, data: '+2 init' },
     ]);
   });
 
   it('fills in every field, so nothing downstream has to check', () => {
     expect(cyberware.rows({ cyberware: [{ name: 'Bare' }] })).toEqual([
-      { name: 'Bare', type: '', side: null, hl: 0, data: '' },
+      { name: 'Bare', type: '', side: null, hl: 0, cost: null, data: '' },
     ]);
   });
 
@@ -112,6 +112,13 @@ describe('rows', () => {
       expect(cyberware.rows(bad), JSON.stringify(bad)).toEqual([]);
     }
     expect(cyberware.rows({ cyberware: [null, 'x', { name: 'Real' }] })).toHaveLength(1);
+  });
+
+  it('leaves an unpriced piece blank rather than calling it free', () => {
+    // Humanity loss defaults to 0 because an import always states it. Eddies are never in
+    // an export and are often not known, and a column of zeroes hides which is which.
+    const out = cyberware.rows({ cyberware: [{ name: 'A' }, { name: 'B', cost: 0 }, { name: 'C', cost: 500 }] });
+    expect(out.map((r) => r.cost)).toEqual([null, 0, 500]);
   });
 
   it('only accepts a side it knows', () => {

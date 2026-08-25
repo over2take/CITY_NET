@@ -27,10 +27,17 @@ function humanise(key) {
     .trim();
 }
 
-/** A row with every field present, whatever it was handed. */
+/**
+ * A row with every field present, whatever it was handed.
+ *
+ * `hl` and `cost` are different things and both are kept: humanity loss is what the chrome
+ * costs you as a person and comes across from an import, while the price in eddies is
+ * money and appears nowhere in the export, so it is only ever typed in.
+ */
 function normaliseRow(raw) {
   const r = raw && typeof raw === 'object' ? raw : {};
   const hl = Number(r.hl);
+  const cost = Number(r.cost);
   return {
     name: typeof r.name === 'string' ? r.name : '',
     // '' rather than a guess: an imported piece knows what it is and what it cost, but the
@@ -38,6 +45,9 @@ function normaliseRow(raw) {
     type: typeof r.type === 'string' ? r.type : '',
     side: r.side === 'l' || r.side === 'r' ? r.side : null,
     hl: Number.isFinite(hl) ? hl : 0,
+    // Blank rather than zero when it was never given: a piece nobody priced is not a
+    // piece that was free, and a column of zeroes hides which is which.
+    cost: Number.isFinite(cost) ? cost : null,
     data: typeof r.data === 'string' ? r.data : '',
   };
 }
