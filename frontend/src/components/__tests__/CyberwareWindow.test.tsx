@@ -12,6 +12,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CyberwareWindow } from '../CyberwareWindow';
+import type { CyberRow } from '../../sheets/cyberwareRows';
 
 const ROWS = [
   { name: 'Cybereye', type: 'cybereye', side: 'r', hl: 2, cost: 100, data: 'Foundation' },
@@ -292,5 +293,72 @@ describe('taking chrome out again', () => {
   it('offers no way out on a read-only sheet', () => {
     show(ROWS, { readOnly: true });
     expect(screen.queryByRole('button', { name: /^Take / })).not.toBeInTheDocument();
+  });
+
+});
+
+describe('modifiers', () => {
+  const withMods = {
+    cyberware: [{
+      name: 'EMP Threading', type: 'fashionware', hl: 0, cost: null, data: '',
+      mods: [
+        { kind: 'skill', target: 'Business', value: 6 },
+        { kind: 'statSet', target: 'Cool', value: 3 },
+      ],
+    }],
+  };
+
+  it('shows what a piece actually does, sign and all', () => {
+    // The sign is explicit because -2 and +2 differ only by that character, and a bare
+    // "2" reads as neither.
+    render(<CyberwareWindow data={withMods} onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText('+6 Business')).toBeInTheDocument();
+  });
+
+  it('shows a set value as a value rather than as an adjustment', () => {
+    render(<CyberwareWindow data={withMods} onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText('Cool = 3')).toBeInTheDocument();
+    expect(screen.queryByText('+3 Cool')).not.toBeInTheDocument();
+  });
+
+  it('lets a player add one by hand', async () => {
+    const onFieldChange = vi.fn();
+    render(<CyberwareWindow data={{}} onFieldChange={onFieldChange} onClose={vi.fn()} />);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.type(screen.getByLabelText('Cyberware name'), 'Sandevistan');
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.type(screen.getByLabelText('Modifier 1 target'), 'Reflexes');
+    await userEvent.clear(screen.getByLabelText('Modifier 1 value'));
+    await userEvent.type(screen.getByLabelText('Modifier 1 value'), '2');
+    await userEvent.click(screen.getByText('ADD'));
+
+    const [, written] = onFieldChange.mock.calls.at(-1)!;
+    expect((written as CyberRow[])[0].mods).toEqual([
+      { kind: 'stat', target: 'Reflexes', value: 2 },
+    ]);
+  });
+
+  it('does not store a modifier line left blank', async () => {
+    // Pressing + MODIFIER and then thinking better of it should not leave the row
+    // claiming to do something.
+    const onFieldChange = vi.fn();
+    render(<CyberwareWindow data={{}} onFieldChange={onFieldChange} onClose={vi.fn()} />);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.type(screen.getByLabelText('Cyberware name'), 'Plain');
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.click(screen.getByText('ADD'));
+
+    const [, written] = onFieldChange.mock.calls.at(-1)!;
+    expect((written as CyberRow[])[0].mods).toEqual([]);
+  });
+
+  it('lets one be taken back off', async () => {
+    const onFieldChange = vi.fn();
+    render(<CyberwareWindow data={{}} onFieldChange={onFieldChange} onClose={vi.fn()} />);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    expect(screen.getByLabelText('Modifier 1 target')).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('Remove modifier 1'));
+    expect(screen.queryByLabelText('Modifier 1 target')).not.toBeInTheDocument();
   });
 });

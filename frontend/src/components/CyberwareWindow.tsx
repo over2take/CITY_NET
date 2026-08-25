@@ -7,7 +7,8 @@ import {
 } from '../sheets/cyberwareLocations';
 import {
   CYBERWARE_FIELD, readRows, normaliseRow, totalHumanityLoss, totalCost,
-  rowLocation, rowsForPanel, type CyberRow,
+  rowLocation, rowsForPanel, describeMod, isSetKind, MOD_KINDS, MOD_KIND_LABEL,
+  type CyberRow, type CyberMod, type ModKind,
 } from '../sheets/cyberwareRows';
 import type { SheetFieldValue } from '../sheets/types';
 
@@ -40,6 +41,86 @@ const inputStyle: React.CSSProperties = {
 };
 
 type SortKey = 'name' | 'location' | 'hl' | 'cost';
+
+/**
+ * A row's modifiers, as chips beside its effect text.
+ *
+ * Chips rather than a sentence because these are the mechanically real part of a row and
+ * the description often is not: an imported piece arrives with blank flavour text but its
+ * modifiers intact, so `+6 Business` is frequently the only thing in the cell.
+ */
+function ModChips({ mods }: { mods: CyberMod[] }) {
+  if (!mods.length) return null;
+  return (
+    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4, verticalAlign: 'middle' }}>
+      {mods.map((m, i) => (
+        <span
+          key={`${m.kind}-${m.target}-${i}`}
+          title={MOD_KIND_LABEL[m.kind]}
+          style={{
+            ...mono(10), letterSpacing: 0, padding: '0 4px', whiteSpace: 'nowrap',
+            border: '1px solid var(--dark-green)', color: 'var(--cyan)',
+            // A set reads as a claim about the final value, so it is marked out from the
+            // adjustments rather than sitting in the same run of +2s.
+            background: isSetKind(m.kind) ? 'var(--dark-green)' : 'transparent',
+          }}
+        >{describeMod(m)}</span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * The modifier list on the add form.
+ *
+ * One line per modifier rather than the stack of pickers the Companion walks you through:
+ * the choices are what to change, which thing, and by how much, and three controls on a
+ * line shows all three at once — including what you already added, which a modal hides.
+ *
+ * The target is free text because the stat and skill lists differ per system, and a fixed
+ * dropdown would be wrong on two of the three this app supports.
+ */
+function ModEditor({ mods, onChange }: { mods: CyberMod[]; onChange: (next: CyberMod[]) => void }) {
+  const patch = (i: number, change: Partial<CyberMod>) =>
+    onChange(mods.map((m, n) => (n === i ? { ...m, ...change } : m)));
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      {mods.map((m, i) => (
+        <div
+          key={i}
+          style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.3fr 0.5fr 20px', gap: 6, marginBottom: 4 }}
+        >
+          <select
+            style={inputStyle} aria-label={`Modifier ${i + 1} kind`} value={m.kind}
+            onChange={(e) => patch(i, { kind: e.target.value as ModKind })}
+          >
+            {MOD_KINDS.map((k) => <option key={k} value={k}>{MOD_KIND_LABEL[k]}</option>)}
+          </select>
+          <input
+            style={inputStyle} placeholder="Stat, skill or roll"
+            aria-label={`Modifier ${i + 1} target`} value={m.target}
+            onChange={(e) => patch(i, { target: e.target.value })}
+          />
+          <input
+            style={{ ...inputStyle, textAlign: 'right' }} type="number"
+            aria-label={`Modifier ${i + 1} value`} value={m.value}
+            onChange={(e) => patch(i, { value: Number(e.target.value) || 0 })}
+          />
+          <button
+            type="button" aria-label={`Remove modifier ${i + 1}`}
+            onClick={() => onChange(mods.filter((_, n) => n !== i))}
+            style={{ ...mono(11), background: 'none', border: 'none', color: 'var(--danger, #aa3333)', cursor: 'pointer', padding: 0 }}
+          >×</button>
+        </div>
+      ))}
+      <button
+        type="button" className="utility-btn" style={{ ...mono(9), padding: '2px 6px' }}
+        onClick={() => onChange([...mods, { kind: 'stat', target: '', value: 0 }])}
+      >+ MODIFIER</button>
+    </div>
+  );
+}
 
 export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }: Props) {
   const [pos, setPos] = useState({ x: 90, y: 60 });
@@ -143,7 +224,9 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
     if (!draft) return;
     const name = draft.name.trim();
     if (!name) return;
-    write([...rows, { ...draft, name }]);
+    // Through the normaliser rather than stored as typed: a "+ MODIFIER" line the player
+    // added and then left blank is not a modifier, and normaliseRow already drops those.
+    write([...rows, normaliseRow({ ...draft, name })]);
     setDraft(null);
   };
 
@@ -412,7 +495,10 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
                     <td style={{ ...mono(11), color: r.cost === null ? 'var(--dark-green)' : 'var(--cyan)', padding: '3px 6px', textAlign: 'right' }}>
                       {r.cost === null ? '—' : r.cost.toLocaleString()}
                     </td>
-                    <td style={{ ...mono(11), color: 'var(--grid-section)', padding: '3px 6px', letterSpacing: 0 }}>{r.data}</td>
+                    <td style={{ ...mono(11), color: 'var(--grid-section)', padding: '3px 6px', letterSpacing: 0 }}>
+                      {r.data && <span style={{ marginRight: r.mods.length ? 6 : 0 }}>{r.data}</span>}
+                      <ModChips mods={r.mods} />
+                    </td>
                     {!readOnly && (
                       <td style={{ padding: '3px 6px', textAlign: 'center' }}>
                         <button
@@ -473,6 +559,7 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
             style={{ ...inputStyle, marginTop: 6 }} placeholder="Effect" aria-label="Effect"
             value={draft.data} onChange={(e) => setDraft({ ...draft, data: e.target.value })}
           />
+          <ModEditor mods={draft.mods} onChange={(mods) => setDraft({ ...draft, mods })} />
           <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
             <button type="button" className="utility-btn" onClick={() => setDraft(null)}>CANCEL</button>
             <button type="button" className="upload-btn" onClick={commitDraft} disabled={!draft.name.trim()}>ADD</button>

@@ -12,6 +12,48 @@ import { typeById, describe as describeType, type Side } from './cyberwareLocati
 /** The sheet field holding the array. */
 export const CYBERWARE_FIELD = 'cyberware';
 
+/**
+ * What a modifier changes, and whether it adjusts the value or replaces it.
+ *
+ * The Companion holds these in five buckets — `modifyStatsBy`, `setStatsTo`,
+ * `modifySkillsBy`, `setSkillTo`, `modifyRollTypesBy` — flattened on import. Adjusting and
+ * setting stay apart: +3 Cool and "Cool becomes 3" are different claims.
+ */
+export type ModKind = 'stat' | 'statSet' | 'skill' | 'skillSet' | 'roll';
+
+export const MOD_KINDS: ModKind[] = ['stat', 'statSet', 'skill', 'skillSet', 'roll'];
+
+/** What each kind is called where a player picks one. */
+export const MOD_KIND_LABEL: Record<ModKind, string> = {
+  stat: 'Modify Stat By',
+  statSet: 'Set Stat To',
+  skill: 'Modify Skill By',
+  skillSet: 'Set Skill To',
+  roll: 'Modify Roll Type By',
+};
+
+/** Whether a kind adjusts the existing value or replaces it, which is how it is shown. */
+export const isSetKind = (kind: ModKind): boolean => kind === 'statSet' || kind === 'skillSet';
+
+export interface CyberMod {
+  kind: ModKind;
+  /** A stat, skill or roll-type name — free text, since the lists differ per system. */
+  target: string;
+  value: number;
+}
+
+/**
+ * A modifier as a short label: `+6 Business`, or `Cool = 3` when it sets rather than adds.
+ *
+ * The sign is explicit on adjustments because a modifier of -2 and one of +2 differ only
+ * by that character, and a bare `2` reads as neither.
+ */
+export const describeMod = (mod: CyberMod): string => (
+  isSetKind(mod.kind)
+    ? `${mod.target} = ${mod.value}`
+    : `${mod.value >= 0 ? '+' : ''}${mod.value} ${mod.target}`
+);
+
 export interface CyberRow {
   name: string;
   /** A type id, or '' for a piece nobody has filed yet. */
@@ -29,12 +71,38 @@ export interface CyberRow {
   cost: number | null;
   /** What it does. */
   data: string;
+  /**
+   * The mechanical effects, when there are any.
+   *
+   * The one part of an import that carries real mechanics: descriptions arrive blank
+   * because the Companion renders flavour text from its own catalogue, but a modifier is
+   * something the player typed, so it comes across intact.
+   */
+  mods: CyberMod[];
 }
 
 const num = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
+
+/**
+ * Whatever was handed over, as well-formed modifiers.
+ *
+ * A modifier with no target is dropped — it can be neither shown nor applied — but a
+ * value of 0 is kept, since a player can park one at zero while they decide.
+ */
+export function normaliseMods(raw: unknown): CyberMod[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((m): m is Record<string, unknown> => Boolean(m) && typeof m === 'object')
+    .map((m) => ({
+      kind: MOD_KINDS.includes(m.kind as ModKind) ? (m.kind as ModKind) : 'stat',
+      target: String(m.target ?? '').trim(),
+      value: num(m.value),
+    }))
+    .filter((m) => m.target);
+}
 
 /** A row with every field present, whatever it was handed. */
 export function normaliseRow(raw: unknown): CyberRow {
@@ -52,6 +120,7 @@ export function normaliseRow(raw: unknown): CyberRow {
     hl: num(r.hl),
     cost: cost !== null && Number.isFinite(cost) ? cost : null,
     data: typeof r.data === 'string' ? r.data : '',
+    mods: normaliseMods(r.mods),
   };
 }
 

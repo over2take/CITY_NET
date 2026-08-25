@@ -28,6 +28,70 @@ function humanise(key) {
 }
 
 /**
+ * The five kinds of modifier a piece can carry, keyed by what the export calls them.
+ *
+ * Adjusting a value and setting one are kept apart deliberately: +3 Cool and "Cool becomes
+ * 3" are different claims, and collapsing them would silently change what a piece does.
+ */
+const MOD_KINDS = {
+  modifyStatsBy: 'stat',
+  setStatsTo: 'statSet',
+  modifySkillsBy: 'skill',
+  setSkillTo: 'skillSet',
+  modifyRollTypesBy: 'roll',
+};
+
+const MOD_KIND_VALUES = Object.values(MOD_KINDS);
+
+/**
+ * Whatever was handed over, as a list of well-formed modifiers.
+ *
+ * A flat list rather than five buckets because that is how it is read and shown — "+6
+ * Business" is one thing — and because a piece with no modifiers should carry an empty
+ * list rather than five empty objects.
+ *
+ * A modifier with no target is dropped: it cannot be shown, and it cannot be applied.
+ */
+function normaliseMods(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((m) => m && typeof m === 'object')
+    .map((m) => {
+      const value = Number(m.value);
+      return {
+        kind: MOD_KIND_VALUES.includes(m.kind) ? m.kind : 'stat',
+        target: String(m.target || '').trim(),
+        // Unlike cost, zero is a real answer here — a player can park a modifier at 0
+        // while they decide — so an unreadable value becomes 0 rather than dropping.
+        value: Number.isFinite(value) ? value : 0,
+      };
+    })
+    .filter((m) => m.target);
+}
+
+/**
+ * A Companion `modifier` object, flattened into rows.
+ *
+ * Only pieces that carry modifiers have the key at all; on those, every bucket is present
+ * and the unused ones are empty objects. So this reads what is there and ignores the rest
+ * rather than expecting any particular bucket to exist.
+ */
+function modsFromCompanion(modifier) {
+  if (!modifier || typeof modifier !== 'object') return [];
+  const out = [];
+  for (const [bucket, kind] of Object.entries(MOD_KINDS)) {
+    const entries = modifier[bucket];
+    if (!entries || typeof entries !== 'object') continue;
+    for (const [target, raw] of Object.entries(entries)) {
+      const value = Number(raw);
+      if (!target || !Number.isFinite(value)) continue;
+      out.push({ kind, target, value });
+    }
+  }
+  return out;
+}
+
+/**
  * A row with every field present, whatever it was handed.
  *
  * `hl` and `cost` are different things and both are kept: humanity loss is what the chrome
@@ -54,6 +118,7 @@ function normaliseRow(raw) {
     // piece that was free, and a column of zeroes hides which is which.
     cost: cost !== null && Number.isFinite(cost) ? cost : null,
     data: typeof r.data === 'string' ? r.data : '',
+    mods: normaliseMods(r.mods),
   };
 }
 
@@ -85,6 +150,10 @@ const humanityLoss = (list) => list.reduce((sum, r) => sum + (Number(r.hl) || 0)
  *   - `humanityLoss` is a real number, so the cost comes across rather than being typed in.
  *   - There is no install location anywhere in the export, so every imported row arrives
  *     unfiled and the window has to have somewhere to put it.
+ *
+ * `modifier` is the exception to the export being mechanically empty. The descriptions come
+ * across blank because the Companion renders flavour text from its own catalogue, but a
+ * modifier is something the player typed, so it is really there and worth reading.
  */
 function fromCompanion(collection) {
   const entries = collection && typeof collection === 'object' ? Object.values(collection) : [];
@@ -100,6 +169,7 @@ function fromCompanion(collection) {
         name: named,
         hl: Number.isFinite(cost) ? cost : 0,
         data: String(e.description || e.longDescription || '').trim(),
+        mods: modsFromCompanion(e.modifier),
       });
     });
 }
@@ -152,5 +222,6 @@ const isFormField = (key) => /^cyber\d+_(name|type|hl|cost|data)$/.test(key);
 
 module.exports = {
   FIELD, humanise, normaliseRow, rows, humanityLoss,
+  MOD_KINDS, normaliseMods, modsFromCompanion,
   fromCompanion, fromNotes, fromFormFields, isFormField,
 };

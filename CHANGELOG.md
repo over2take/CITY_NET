@@ -25,6 +25,10 @@ Cyberware, as something you can actually see.
 
 - **Cyberware you can add by hand.** Name, install type, side, humanity loss, price in eddies, and what it does. The type is a dropdown; the side appears only for the types that have one, so a Fashionware cannot be marked "left". Adding from a panel fills the location in for you.
 
+- **What a piece actually does, in numbers.** A modifier is a stat, a skill or a roll type, and an amount — `+6 Business`, `+2 Initiative Roll` — and a piece can carry as many as it needs. Setting a value is kept separate from adjusting one, since `+3 Cool` and `Cool = 3` are different claims, and the table shows them differently.
+
+  **These come across from a Companion import.** They are the one mechanically real thing an export carries: the descriptions arrive blank because the Companion draws its flavour text from its own catalogue, but a modifier is something you typed into your own character, so it is really there and it comes with you.
+
 - **Your chrome is on the sheet properly now.** It was a single line of free text. It is a list, and the number of pieces is a property of your character rather than a number chosen in advance — a full borg does not run out of rows.
 
 - **The printed import form has a cyberware table**, twelve lines with the same columns. Paper has to stop somewhere; the app does not.

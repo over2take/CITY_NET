@@ -95,13 +95,13 @@ describe('rows', () => {
   it('reads what a sheet holds', () => {
     const data = { cyberware: [{ name: 'Kerenzikov', type: 'neural', hl: 7, cost: 500, data: '+2 init' }] };
     expect(cyberware.rows(data)).toEqual([
-      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, data: '+2 init' },
+      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, data: '+2 init', mods: [] },
     ]);
   });
 
   it('fills in every field, so nothing downstream has to check', () => {
     expect(cyberware.rows({ cyberware: [{ name: 'Bare' }] })).toEqual([
-      { name: 'Bare', type: '', side: null, hl: 0, cost: null, data: '' },
+      { name: 'Bare', type: '', side: null, hl: 0, cost: null, data: '', mods: [] },
     ]);
   });
 
@@ -157,7 +157,7 @@ describe('fromNotes', () => {
 
   it('leaves everything unfiled and unpriced, because the line said nothing else', () => {
     const out = cyberware.fromNotes('Neural Link');
-    expect(out[0]).toEqual({ name: 'Neural Link', type: '', side: null, hl: 0, cost: null, data: '' });
+    expect(out[0]).toEqual({ name: 'Neural Link', type: '', side: null, hl: 0, cost: null, data: '', mods: [] });
   });
 
   it('ignores empty gaps rather than making blank rows', () => {
@@ -174,7 +174,7 @@ describe('fromFormFields', () => {
       cyber1_cost: '500', cyber1_data: '+2 init',
     });
     expect(out).toEqual([
-      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, data: '+2 init' },
+      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, data: '+2 init', mods: [] },
     ]);
   });
 
@@ -197,5 +197,70 @@ describe('fromFormFields', () => {
     expect(cyberware.isFormField('cyberware')).toBe(false);
     expect(cyberware.isFormField('cyberware_notes')).toBe(false);
     expect(cyberware.isFormField('cyberdeck_name')).toBe(false);
+  });
+
+  describe('modifiers', () => {
+    // The one mechanically real thing an export carries. Descriptions arrive blank because
+    // the Companion renders flavour text from its own catalogue, but a modifier is
+    // something the player typed into their own character, so it is really there.
+    const modifier = {
+      modifyStatsBy: { Cool: 3 },
+      setStatsTo: {},
+      setSkillTo: {},
+      modifyRollTypesBy: {},
+      modifySkillsBy: { Business: 6 },
+    };
+
+    it('flattens the five buckets into one list', () => {
+      expect(cyberware.modsFromCompanion(modifier)).toEqual([
+        { kind: 'stat', target: 'Cool', value: 3 },
+        { kind: 'skill', target: 'Business', value: 6 },
+      ]);
+    });
+
+    it('keeps setting a value apart from adjusting one', () => {
+      // +3 Cool and "Cool becomes 3" are different claims about the character, and a piece
+      // that did one when the player meant the other is wrong in a way nobody would notice.
+      const out = cyberware.modsFromCompanion({ setStatsTo: { Cool: 3 }, modifyStatsBy: { Cool: 3 } });
+      expect(out.map((m) => m.kind).sort()).toEqual(['stat', 'statSet']);
+    });
+
+    it('reads a piece that has none, which is most of them', () => {
+      expect(cyberware.modsFromCompanion(undefined)).toEqual([]);
+      expect(cyberware.modsFromCompanion({ modifyStatsBy: {}, setStatsTo: {} })).toEqual([]);
+    });
+
+    it('carries them through an import onto the row', () => {
+      const out = cyberware.fromCompanion({
+        a: { type: 'EMPThreading', name: '', humanityLoss: 0, modifier },
+        b: { type: 'SelfICE', name: '', humanityLoss: 3 },
+      });
+      expect(out[0].mods).toHaveLength(2);
+      expect(out[1].mods).toEqual([]);
+    });
+
+    it('drops a modifier with nothing to modify', () => {
+      // A blank line somebody added and never filled in. It can be neither shown nor
+      // applied, so storing it only makes the row look like it does something.
+      expect(cyberware.normaliseMods([{ kind: 'stat', target: '  ', value: 2 }])).toEqual([]);
+    });
+
+    it('keeps a modifier parked at zero', () => {
+      // Unlike an unpriced piece, 0 here is a real answer: a player can leave one at zero
+      // while they decide what it should be.
+      expect(cyberware.normaliseMods([{ kind: 'skill', target: 'Brawling', value: 0 }]))
+        .toEqual([{ kind: 'skill', target: 'Brawling', value: 0 }]);
+    });
+
+    it('survives being stored and read back', () => {
+      const rows = cyberware.fromCompanion({ a: { type: 'EMPThreading', modifier } });
+      const reread = cyberware.rows(JSON.parse(JSON.stringify({ cyberware: rows })));
+      expect(reread).toEqual(rows);
+    });
+
+    it('refuses a kind it does not know rather than storing it', () => {
+      const out = cyberware.normaliseMods([{ kind: 'setEverything', target: 'Cool', value: 9 }]);
+      expect(out[0].kind).toBe('stat');
+    });
   });
 });
