@@ -76,6 +76,8 @@ const isNumber = (n) => typeof n === 'number' && Number.isFinite(n);
  * not mention. Arrays are accepted too, because an older export or a future change may use
  * one and the difference is not worth failing over.
  */
+const { fromCompanion: cyberwareRows } = require('./cyberware');
+
 const namesOf = (data, key) => {
   const collection = data?.[key];
   if (!collection || typeof collection !== 'object') return [];
@@ -170,8 +172,15 @@ function flattenCompanion(doc) {
   vehicles.slice(0, VEHICLE_ROWS).forEach((name, i) => { candidates[`vehicle${i + 1}name`] = name; });
   if (vehicles.length) missing.push('vehicle SDP, SP and seats');
 
+  // Cyberware is rows rather than a line of text, and it is the one collection the export
+  // gives us more than a name for — `humanityLoss` is a real number. It also has to be
+  // read from `type` rather than `name`: real exports leave `name` empty, which is why
+  // this imported nothing at all before. See sheets/cyberware.js.
+  const cyber = cyberwareRows(data.cyberware);
+  if (cyber.length) missing.push('where each piece of cyberware is installed');
+
   // The rest of the kit is free text on our sheet, so the names go in as a list.
-  const intoNotes = { gear: ['gear', 'clothing', 'programs'], cyberware: ['cyberware'], ammunition: ['ammunition'] };
+  const intoNotes = { gear: ['gear', 'clothing', 'programs'], ammunition: ['ammunition'] };
   for (const [field, keys] of Object.entries(intoNotes)) {
     const names = keys.flatMap(k => namesOf(data, k));
     if (names.length) candidates[field] = names.join(', ');
@@ -182,7 +191,7 @@ function flattenCompanion(doc) {
     missing.push('armour SP');
   }
 
-  return { candidates, version, missing };
+  return { candidates, version, missing, cyberware: cyber };
 }
 
 module.exports = { parseFirestore, documentFields, exportVersion, flattenCompanion, WEAPON_ROWS, VEHICLE_ROWS };

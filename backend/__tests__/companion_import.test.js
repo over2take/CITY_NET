@@ -59,7 +59,14 @@ const V2 = {
       'b1f839d6-94d5-426a-ad86-91438ef62f59': map({ name: str('Monoblade') }),
     }),
     vehicles: map({ 'c1d2e3f4-0000-0000-0000-000000000001': map({ name: str('Thorton Galena') }) }),
-    cyberware: map({ 'ff0b11e8-55fd-4729-8046-fbef5ce33861': map({ name: str('Neural Link') }) }),
+    // Shaped from a real export: `name` is empty and the identity is in `type`. The
+    // earlier fixture had a name filled in, so the test passed against a shape that does
+    // not occur and the import brought back nothing from an actual character.
+    cyberware: map({
+      'ff0b11e8-55fd-4729-8046-fbef5ce33861': map({
+        name: str(''), type: str('NeuroportCyberdeckPort'), humanityLoss: int(3),
+      }),
+    }),
     gear: map({ '18973d26-a784-48f3-a229-28ac732e6bc6': map({ name: str('Agent') }) }),
     armor: map({ 'dc6390bf-8e33-460f-b0c1-7e4c4367391b': map({ name: str('Light Armorjack') }) }),
   },
@@ -111,7 +118,7 @@ describe('flattening a v2 export', () => {
     // The description this was built from said arrays. A real export uses maps, and the
     // first version of this adapter silently found no items at all.
     expect(candidates.weapon1name).toBe('Militech Avenger');
-    expect(candidates.cyberware).toBe('Neural Link');
+    expect(candidates.cyberware).toBeUndefined();
   });
 
   it('takes the role and its rank from roleAbilities, which is where they live', () => {
@@ -163,7 +170,7 @@ describe('flattening a v2 export', () => {
   });
 
   it('gathers loose kit into the free-text fields', () => {
-    expect(candidates.cyberware).toBe('Neural Link');
+    expect(candidates.cyberware).toBeUndefined();
     expect(candidates.gear).toContain('Agent');
     expect(candidates.gear).toContain('Light Armorjack');
   });
@@ -243,5 +250,31 @@ describe('what the importer makes of it', () => {
     // preview can say where it went rather than looking as though it vanished.
     const { skipped } = getImporter('cyberpunk_red').mapFields(candidates);
     expect(skipped.cash).toBe(1200);
+  });
+});
+
+describe('cyberware arrives as rows, not a line of text', () => {
+  it('reads the identity from type and the cost from humanityLoss', () => {
+    // The whole reason this changed: a real character with chrome imported nothing,
+    // because every piece has an empty `name` and the importer read `name`.
+    const { cyberware } = flattenCompanion(V2);
+    expect(cyberware).toHaveLength(1);
+    expect(cyberware[0].name).toBe('Neuroport Cyberdeck Port');
+    expect(cyberware[0].hl).toBe(3);
+  });
+
+  it('says that the export does not know where anything is installed', () => {
+    const { cyberware, missing } = flattenCompanion(V2);
+    expect(cyberware[0].type).toBe('');
+    expect(cyberware[0].side).toBeNull();
+    expect(missing.join(' ')).toMatch(/where each piece of cyberware is installed/);
+  });
+
+  it('mentions nothing about install locations when there is no cyberware', () => {
+    const bare = { fields: { ...V2.fields } };
+    delete bare.fields.cyberware;
+    const { cyberware, missing } = flattenCompanion(bare);
+    expect(cyberware).toEqual([]);
+    expect(missing.join(' ')).not.toMatch(/installed/);
   });
 });
