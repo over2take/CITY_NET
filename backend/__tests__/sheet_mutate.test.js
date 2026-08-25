@@ -222,7 +222,11 @@ describe('every writer goes through the queue', () => {
     // The guarantee only holds if *both* sides of a collision take the queue, so one
     // forgotten call site quietly reopens the hole for every writer it can meet. That is
     // not something to rediscover by hand later.
-    const root = path.join(path.dirname(new URL(import.meta.url).pathname.slice(1)), '..');
+    // fileURLToPath rather than picking apart the URL by hand: a file URL's pathname is
+    // `/F:/x` on Windows and `/home/x` on Linux, so the `.slice(1)` that made the first
+    // one usable turned the second into a relative path. Passed locally, failed in CI.
+    const { fileURLToPath } = require('url');
+    const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
     const found = [];
 
     const walk = (dir) => {
