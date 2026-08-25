@@ -1253,6 +1253,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             // cannot hold rows. Read it into rows here rather than keeping a field the
             // template no longer has — and never over rows that already arrived, which
             // the Companion path fills in with costs this line cannot carry.
+            if (system === 'cyberpunk_red') {
+              // The printed form's numbered boxes, gathered into rows and then dropped.
+              const fromForm = cyberware.fromFormFields(data);
+              Object.keys(data).filter(cyberware.isFormField).forEach((k) => { delete data[k]; });
+              if (fromForm.length && !Array.isArray(data[cyberware.FIELD])) {
+                data[cyberware.FIELD] = fromForm;
+              }
+            }
             if (system === 'cyberpunk_red' && typeof data.cyberware_notes === 'string') {
               const fromLine = cyberware.fromNotes(data.cyberware_notes);
               if (fromLine.length && !Array.isArray(data[cyberware.FIELD])) {

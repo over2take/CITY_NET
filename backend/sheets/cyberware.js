@@ -122,4 +122,35 @@ function fromNotes(text) {
     .map((name) => normaliseRow({ name }));
 }
 
-module.exports = { FIELD, humanise, normaliseRow, rows, humanityLoss, fromCompanion, fromNotes };
+/**
+ * Rows out of the printed form's numbered boxes.
+ *
+ * A paper form needs a fixed number of lines; the sheet does not. These arrive as
+ * `cyber1_name`, `cyber1_hl` and so on, get gathered here, and the transport fields are
+ * dropped rather than stored — nothing reads them once they are rows.
+ *
+ * A line with no name is an empty line on a form somebody printed, not a piece of chrome.
+ */
+function fromFormFields(data, max = 12) {
+  const out = [];
+  for (let n = 1; n <= max; n += 1) {
+    const name = String(data[`cyber${n}_name`] ?? '').trim();
+    if (!name) continue;
+    out.push(normaliseRow({
+      name,
+      type: String(data[`cyber${n}_type`] ?? '').trim().toLowerCase(),
+      hl: data[`cyber${n}_hl`],
+      cost: data[`cyber${n}_cost`],
+      data: String(data[`cyber${n}_data`] ?? '').trim(),
+    }));
+  }
+  return out;
+}
+
+/** Whether a field is one of the form's transport boxes rather than sheet data. */
+const isFormField = (key) => /^cyber\d+_(name|type|hl|cost|data)$/.test(key);
+
+module.exports = {
+  FIELD, humanise, normaliseRow, rows, humanityLoss,
+  fromCompanion, fromNotes, fromFormFields, isFormField,
+};

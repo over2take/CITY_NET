@@ -166,3 +166,36 @@ describe('fromNotes', () => {
     expect(cyberware.fromNotes(undefined)).toEqual([]);
   });
 });
+
+describe('fromFormFields', () => {
+  it('gathers the printed form\'s numbered boxes into rows', () => {
+    const out = cyberware.fromFormFields({
+      cyber1_name: 'Kerenzikov', cyber1_type: 'neural', cyber1_hl: '7',
+      cyber1_cost: '500', cyber1_data: '+2 init',
+    });
+    expect(out).toEqual([
+      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, data: '+2 init' },
+    ]);
+  });
+
+  it('skips the lines nobody filled in', () => {
+    // A form is printed with every line on it. An empty line is not a piece of chrome.
+    const out = cyberware.fromFormFields({ cyber1_name: 'A', cyber4_name: 'B', cyber2_hl: '3' });
+    expect(out.map((r) => r.name)).toEqual(['A', 'B']);
+  });
+
+  it('leaves a piece unpriced rather than free when the box is blank', () => {
+    const out = cyberware.fromFormFields({ cyber1_name: 'A' });
+    expect(out[0].cost).toBeNull();
+    expect(out[0].hl).toBe(0);
+  });
+
+  it('knows its own transport fields from real sheet data', () => {
+    // These are dropped after gathering. Matching too widely would delete sheet data.
+    expect(cyberware.isFormField('cyber1_name')).toBe(true);
+    expect(cyberware.isFormField('cyber12_cost')).toBe(true);
+    expect(cyberware.isFormField('cyberware')).toBe(false);
+    expect(cyberware.isFormField('cyberware_notes')).toBe(false);
+    expect(cyberware.isFormField('cyberdeck_name')).toBe(false);
+  });
+});
