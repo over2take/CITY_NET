@@ -9,6 +9,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.11.0] - 2026-08-24
+
+Cyberware, as something you can actually see.
+
+### Added
+
+- **An augmentation window.** A body diagram with your chrome arranged around it, wired to where each piece is installed: eyes, ears, neural link, arms, legs, and the categories that are not a place — Internal, External, Fashionware, Borgware. Open it from the CYBERWARE section of the GEAR tab.
+
+  Underneath is the same list as a table you can sort by name, type, humanity loss or price. Two views because the questions differ: what is in my left arm is a diagram question, and what am I running and what did it cost is a table question. No single ordering answers both.
+
+- **Cyberware you can add by hand.** Name, install type, side, humanity loss, price in eddies, and what it does. The type is a dropdown; the side appears only for the types that have one, so a Fashionware cannot be marked "left". Adding from a panel fills the location in for you.
+
+- **Your chrome is on the sheet properly now.** It was a single line of free text. It is a list, and the number of pieces is a property of your character rather than a number chosen in advance — a full borg does not run out of rows.
+
+- **The printed import form has a cyberware table**, twelve lines with the same columns. Paper has to stop somewhere; the app does not.
+
+### Fixed
+
+- **Importing a character brought back none of its cyberware.** A character with eight pieces of chrome imported zero. Every entry in a Companion export leaves the name blank and puts the identity in a `type` field, and the import read the name — so it found eight blanks and dropped them all.
+
+  It now reads what the pieces actually are, **and brings the humanity cost across with them**, which was going to be typed in by hand. What the export has never carried is where anything is installed, so imported pieces arrive marked as not yet placed on the body, and say so rather than guessing an arm.
+
+### Changed
+
+- **Existing cyberware text becomes rows.** Anything already written in the old box is read into the list on first start, one piece per comma. A parenthetical stays with its piece, so "Cybereye (Low Light)" is one entry rather than two. The original text is kept rather than deleted, in case the split read your notes badly.
+
+---
+
 ## [1.10.1] - 2026-08-22
 
 One sheet, two people writing to it.
