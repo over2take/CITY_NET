@@ -1486,7 +1486,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             patchSheet(
               db,
               row.id,
-              { stun_current: data.stun_current },
+              // Drain is damage taken, so it accumulates against the current track rather
+              // than replacing it with a figure worked out before the roll resolved.
+              (d) => ({
+                stun_current: Math.min(
+                  Number(d.stun_monitor) || stunMax,
+                  Math.max(0, (Number(d.stun_current) || 0) + netDrain),
+                ),
+              }),
               (err3) => {
                 if (err3) return;
                 db.run(
@@ -1818,7 +1825,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         patchSheet(
           db,
           ride.sheetId,
-          { [ride.vehicle.hpField]: newHp },
+          // Subtracted from the hull as it stands, so two shots arriving together do not
+          // both take it from the same starting value and lose one of them.
+          (d) => {
+            const now = Number(d[ride.vehicle.hpField]);
+            const from = Number.isFinite(now) ? now : ride.vehicle.hp;
+            return { [ride.vehicle.hpField]: Math.max(0, from - Math.max(0, amount)) };
+          },
           () => {
             io.emit('sheetUpdated', { username: row.username });
             // The badge carries the vehicle's HP, so a wreck has to stop showing as cover.

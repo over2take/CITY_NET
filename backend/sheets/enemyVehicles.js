@@ -136,7 +136,14 @@ function adjustHp(db, { sheetId, vehicleIndex, delta, system = SYSTEM }, cb) {
     if (!vehicle) return cb('NO_SUCH_VEHICLE');
     const next = Math.max(0, Math.min(vehicle.hpMax, vehicle.hp + amount));
     if (next === vehicle.hp) return cb(null);
-    writeSheet(db, sheet.id, { [vehicle.hpField]: next }, () => cb(null));
+    // Computed at write time, not from the hull read a moment ago: two hits landing
+    // together must both count. The earlier read still decides whether there is anything
+    // to do at all, which is a question about the vehicle rather than about the number.
+    writeSheet(db, sheet.id, (d) => {
+      const now = Number(d[vehicle.hpField]);
+      const from = Number.isFinite(now) ? now : vehicle.hp;
+      return { [vehicle.hpField]: Math.max(0, Math.min(vehicle.hpMax, from + amount)) };
+    }, () => cb(null));
   }, system);
 }
 

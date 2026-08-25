@@ -356,6 +356,7 @@ CITY_NET/
 │   │   ├── attackSr6.js        # SR6 combat resolution — attack pool (hits/glitch), AR vs Armor Rating DV modifier, potential damage (soak manual)
 │   │   ├── identity.js         # Sheet = source of truth for player identity: mirrors name/description to tokens, display-name cache for rolls; also drives the vehicle mirror, so every caller that saves a sheet refreshes it
 │   │   ├── vehicleSeats.js     # Seats derived from the book's Crew number — ids are positional (driver, seat2..seatN) so the server needs only the count to validate one. Guns are deliberately not seats: a Tank is crew 3 with 3 hardpoints and can never man every gun and drive at once
+│   │   ├── mutate.js           # One writer at a time, per sheet. A sheet is a single JSON blob, so changing one field rewrites all of them — and with nothing held across the gap between the read and the write, two writers to the same sheet each built from the same stale copy and the second silently discarded the first. Queued per sheet id rather than globally, since writes to different sheets are genuinely independent and during a fight they are constant
 │   │   ├── vehicleState.js     # CWN vehicles, resolved against the DB: a rider points at another player's sheet by name, so it takes a query. Shared by the attack path and the token mirror so the badge cannot claim what the damage does not do. Mirrors only the derived combat numbers plus who is aboard onto tokens, never the sheet — whole-table, since boarding changes the driver's badge too. Also lends a gunner the mounts of the car they are in, seats and unseats people, and builds the roster the VEHICLES window reads — occupants live on their own sheets, so one pass turns that inside out
 │   │   ├── headshots.js        # Stock NPC headshot pools (enemy/friendly), random assignment, URL validation
 │   │   ├── vehicleSystems.js   # Which game systems have vehicles, and the field-id contract the shared machinery assumes. Small because the templates agree on ids: SDP is a damage pool and SP is armour, whatever a system calls them on screen
@@ -402,6 +403,7 @@ CITY_NET/
 │       ├── npc_sheets.test.js          # NPC library routes (CRUD, links, folders, LUCK reset, HP overlay)
 │       ├── cpr_attack.test.js          # CP:R attack module (to-hit, armor, shield, crits, death saves)
 │       ├── npc_tiers.test.js           # NPC tier packages (escalation, weapon validity)
+│       ├── sheet_mutate.test.js        # The race pinned as it stands — two unguarded writes, one change lost — so the queue's tests are measured against a demonstrated fault. Plus a guard that walks the backend and fails if any file writes a sheet directly, because the guarantee only holds when both sides of a collision take the queue
 │       ├── sheet_import.test.js        # Import pipeline (PDF form extraction, alias mapping, preview route)
 │       ├── rollEngine.test.js          # Roll formula engine
 │       ├── random.test.js              # cryptoRng range/uniqueness; roll engine and attack modules exercised without an injected rng

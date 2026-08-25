@@ -244,3 +244,38 @@ describe('every writer goes through the queue', () => {
     expect(found, `these write a sheet directly: ${found.join(', ')}`).toEqual([]);
   });
 });
+
+describe('values that accumulate', () => {
+  const { patchSheet } = require('../sheets/mutate.js');
+
+  it('adds up when two hits land in the same instant', async () => {
+    // The subtler half of the bug, and the one a queue alone does not fix. Serialising
+    // the writes stops them clobbering each other's *other* fields, but if both worked
+    // out the new hull from the value they read before queueing, they both subtract from
+    // the same starting number and one hit does nothing. The patch has to be computed
+    // inside the write, not before it.
+    await run(db, `UPDATE character_sheets SET data = ? WHERE id = ?`,
+      [JSON.stringify({ vehicle0_hp: 20, vehicle0_hp_max: 20 }), sheetId]);
+
+    const hit = (dmg) => new Promise((r) => patchSheet(db, sheetId,
+      (d) => ({ vehicle0_hp: Math.max(0, (Number(d.vehicle0_hp) || 0) - dmg) }), r));
+
+    await Promise.all([hit(5), hit(3), hit(2)]);
+    expect((await readSheet()).vehicle0_hp).toBe(10);
+  });
+
+  it('does not add up when the value is worked out before queueing', async () => {
+    // The same three hits, computed the way the call sites used to. Pinned so the
+    // difference between the two forms is visible rather than asserted.
+    await run(db, `UPDATE character_sheets SET data = ? WHERE id = ?`,
+      [JSON.stringify({ vehicle0_hp: 20 }), sheetId]);
+
+    const stale = await readSheet();
+    const hit = (dmg) => new Promise((r) => patchSheet(db, sheetId,
+      { vehicle0_hp: Math.max(0, Number(stale.vehicle0_hp) - dmg) }, r));
+
+    await Promise.all([hit(5), hit(3), hit(2)]);
+    // Whichever wrote last wins outright: 15, 17 or 18 — never 10.
+    expect((await readSheet()).vehicle0_hp).not.toBe(10);
+  });
+});
