@@ -1170,7 +1170,10 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
     <>
     {railTip && createPortal(
       <div className="rail-tip" style={{ left: railTip.x, top: railTip.y }}>{railTip.label}</div>,
-      document.body,
+      // The themed container, not the body: the themes are variables set by a class on
+      // `.crt-container`, and anything mounted outside it renders in Classic green
+      // whatever the rest of the app is wearing. See utils/themeRoot.
+      themeRoot(),
     )}
     <div className={`sidebar ${activeMenu !== 'none' ? 'expanded' : ''}`}>
       {/* One listener for the whole rail rather than handlers on fourteen buttons: the

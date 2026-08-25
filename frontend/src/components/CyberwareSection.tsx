@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { SheetSection, SheetFieldValue } from '../sheets/types';
 import { readRows, totalHumanityLoss, totalCost } from '../sheets/cyberwareRows';
 import { CyberwareWindow } from './CyberwareWindow';
+import { themeRoot } from '../utils/themeRoot';
 
 // The cyberware section of the sheet: a summary, and the way in.
 //
@@ -14,8 +15,12 @@ import { CyberwareWindow } from './CyberwareWindow';
 //
 // The window is owned here rather than plumbed down from the app: it is a view onto one
 // sheet field, and every caller that renders a sheet would otherwise have to carry a prop
-// through for it. It is portalled to the body, though — rendered in place it inherits the
-// character sheet's bounds and is clipped by them, which hides half the diagram.
+// through for it. It is portalled, though — rendered in place it inherits the character
+// sheet's bounds and is clipped by them, which hides half the diagram.
+//
+// Into the themed container rather than the body: the themes are variables set by a class
+// on `.crt-container`, so a window mounted outside it renders in Classic green whatever
+// the rest of the app is wearing. See utils/themeRoot.
 
 interface Props {
   section: SheetSection;
@@ -52,13 +57,13 @@ export function CyberwareSection({ data, readOnly, onFieldChange, who }: Props) 
       {unfiled > 0 && (
         // Worth saying on the sheet rather than only inside the window: an import lands
         // everything unfiled, and nothing else would tell you there is filing to do.
-        <div style={{ ...mono, color: '#bb9900', paddingTop: 4 }}>
+        <div style={{ ...mono, color: 'var(--cyan)', paddingTop: 4 }}>
           {unfiled} PIECE{unfiled === 1 ? '' : 'S'} NOT YET PLACED ON THE BODY
         </div>
       )}
 
       {rows.length > 0 && (
-        <div style={{ ...mono, color: '#006600', paddingTop: 4, letterSpacing: 0, fontSize: 10 }}>
+        <div style={{ ...mono, color: 'var(--grid-section)', paddingTop: 4, letterSpacing: 0, fontSize: 10 }}>
           {rows.slice(0, 6).map((r) => r.name).join(', ')}
           {rows.length > 6 ? `, and ${rows.length - 6} more` : ''}
         </div>
@@ -72,7 +77,7 @@ export function CyberwareSection({ data, readOnly, onFieldChange, who }: Props) 
           onClose={() => setOpen(false)}
           who={who}
         />,
-        document.body,
+        themeRoot(),
       )}
     </div>
   );

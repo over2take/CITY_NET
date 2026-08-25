@@ -50,12 +50,12 @@ describe('what goes where', () => {
     // Every imported piece arrives unfiled, because the export says nothing about where it
     // was installed. Somewhere visible or it may as well not have imported.
     show();
-    expect(screen.getByText(/1 NOT YET PLACED/)).toBeInTheDocument();
+    expect(screen.getByText(/use \+ on a body part/)).toBeInTheDocument();
   });
 
   it('says nothing about unfiled when everything is placed', () => {
     show(ROWS.slice(0, 3));
-    expect(screen.queryByText(/NOT YET PLACED/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/use \+ on a body part/)).not.toBeInTheDocument();
   });
 
   it('totals humanity loss and money separately', () => {
@@ -66,8 +66,9 @@ describe('what goes where', () => {
 });
 
 describe('the table', () => {
+  // Cell 1, not 0: the first column is the placed/unplaced dot.
   const names = () => screen.getAllByRole('row').slice(1)
-    .map((r) => within(r).getAllByRole('cell')[0]?.textContent)
+    .map((r) => within(r).getAllByRole('cell')[1]?.textContent)
     .filter(Boolean);
 
   it('sorts by cost with unpriced last, not as if it were free', async () => {

@@ -35,7 +35,7 @@ const mono = (size: number): React.CSSProperties => ({
 });
 
 const inputStyle: React.CSSProperties = {
-  background: '#000', border: '1px solid var(--dark-green)', color: 'var(--green)',
+  background: 'var(--black)', border: '1px solid var(--dark-green)', color: 'var(--green)',
   fontFamily: 'monospace', fontSize: 11, padding: '3px 5px', width: '100%',
 };
 
@@ -89,11 +89,11 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
         const y2 = cb.top - sb.top + fig.top + fig.height * panel.anchor[1];
         const stub = onLeft ? x1 + 14 : x1 - 14;
         const filled = rowsForPanel(rows, panel.typeId, panel.side).length > 0;
-        const stroke = filled ? 'var(--cyan)' : '#004400';
+        const stroke = filled ? 'var(--cyan)' : 'var(--dark-green)';
         out.push(
           <g key={panel.key}>
             <path d={`M${x1} ${y1} H${stub} L${x2} ${y2}`} fill="none" stroke={stroke} strokeWidth={1} />
-            <circle cx={x2} cy={y2} r={3} fill={filled ? 'var(--cyan)' : 'none'} stroke={filled ? 'var(--cyan)' : '#006600'} />
+            <circle cx={x2} cy={y2} r={3} fill={filled ? 'var(--cyan)' : 'none'} stroke={filled ? 'var(--cyan)' : 'var(--grid-section)'} />
           </g>,
         );
       });
@@ -206,12 +206,12 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
         key={panel.key}
         ref={(el) => { if (el) panelRefs.current.set(panel.key, el); }}
         style={{
-          border: `1px ${filled ? 'solid var(--green)' : 'dashed #006600'}`,
-          padding: '4px 7px', background: '#000', position: 'relative', zIndex: 2,
+          border: `1px ${filled ? 'solid var(--green)' : 'dashed var(--grid-section)'}`,
+          padding: '4px 7px', background: 'var(--black)', position: 'relative', zIndex: 2,
         }}
       >
         <div style={{
-          ...mono(9), color: filled ? 'var(--green)' : '#006600',
+          ...mono(9), color: filled ? 'var(--green)' : 'var(--grid-section)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           borderBottom: filled ? '1px solid var(--dark-green)' : 'none',
           paddingBottom: filled ? 2 : 0,
@@ -234,7 +234,7 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
               display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6,
             }}
           >
-            <span>{r.name} <span style={{ color: '#006600' }}>HL {r.hl}</span></span>
+            <span>{r.name} <span style={{ color: 'var(--grid-section)' }}>HL {r.hl}</span></span>
             {!readOnly && (
               <button
                 type="button"
@@ -242,7 +242,7 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
                 aria-label={`Take ${r.name} out of ${panel.label}`}
                 title="Take out — keeps the piece, unplaces it"
                 style={{
-                  ...mono(11), background: 'none', border: 'none', color: '#886600',
+                  ...mono(11), background: 'none', border: 'none', color: 'color-mix(in srgb, var(--green) 55%, transparent)',
                   cursor: 'pointer', padding: 0, lineHeight: 1,
                 }}
               >−</button>
@@ -290,11 +290,11 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
                     ...mono(11), letterSpacing: 0, display: 'block', width: '100%',
                     textAlign: 'left', background: 'none', cursor: 'pointer', padding: '3px 4px',
                     border: '1px solid transparent',
-                    color: fits ? 'var(--cyan)' : '#007700',
+                    color: fits ? 'var(--cyan)' : 'var(--grid-section)',
                   }}
                 >
                   {r.name}
-                  <span style={{ color: '#006600' }}> HL {r.hl}</span>
+                  <span style={{ color: 'var(--grid-section)' }}> HL {r.hl}</span>
                   {fits && <span style={{ color: 'var(--cyan)' }}> · fits</span>}
                 </button>
               );
@@ -346,17 +346,8 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
       </div>
 
       {unfiledRows.length > 0 && (
-        // One line rather than one line per piece: an eight-piece import made this taller
-        // than the diagram it sits under. Its job is to say there is filing to do and to
-        // name what is waiting — the table below lists them properly, and the + on a panel
-        // is where they get placed.
-        <div style={{ marginTop: 8, border: '1px dashed #886600', padding: '4px 7px' }}>
-          <div style={{ ...mono(9), color: '#bb9900' }}>
-            {unfiledRows.length} NOT YET PLACED — use + on a body part
-          </div>
-          <div style={{ ...mono(11), color: 'var(--cyan)', letterSpacing: 0, paddingTop: 2 }}>
-            {unfiledRows.map((r) => r.name).join(', ')}
-          </div>
+        <div style={{ ...mono(9), color: 'color-mix(in srgb, var(--green) 55%, transparent)', marginTop: 6 }}>
+          ◌ use + on a body part to place unfiled pieces
         </div>
       )}
 
@@ -374,6 +365,14 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
+                  <th
+                    title="Not yet placed on a body part"
+                    style={{
+                      position: 'sticky', top: 0, background: 'var(--black)',
+                      borderBottom: '1px solid var(--dark-green)', width: 18, padding: '4px 4px 4px 6px',
+                      ...mono(10), color: 'var(--dark-green)',
+                    }}
+                  >◌</th>
                   {([['name', 'NAME'], ['location', 'TYPE'], ['hl', 'HL'], ['cost', 'EB']] as [SortKey, string][])
                     .map(([k, lbl]) => (
                       <th
@@ -382,37 +381,45 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
                         style={{
                           ...mono(9), color: 'var(--green)', cursor: 'pointer', padding: '4px 6px',
                           textAlign: k === 'hl' || k === 'cost' ? 'right' : 'left',
-                          position: 'sticky', top: 0, background: '#001400',
+                          position: 'sticky', top: 0, background: 'var(--black)',
                           borderBottom: '1px solid var(--dark-green)', whiteSpace: 'nowrap',
                         }}
                       >{lbl}{arrow(k)}</th>
                     ))}
-                  <th style={{ ...mono(9), color: 'var(--green)', padding: '4px 6px', textAlign: 'left', position: 'sticky', top: 0, background: '#001400', borderBottom: '1px solid var(--dark-green)' }}>EFFECT</th>
-                  {!readOnly && <th style={{ position: 'sticky', top: 0, background: '#001400', borderBottom: '1px solid var(--dark-green)', width: 22 }} aria-label="Remove" />}
+                  <th style={{ ...mono(9), color: 'var(--green)', padding: '4px 6px', textAlign: 'left', position: 'sticky', top: 0, background: 'var(--black)', borderBottom: '1px solid var(--dark-green)' }}>EFFECT</th>
+                  {!readOnly && <th style={{ position: 'sticky', top: 0, background: 'var(--black)', borderBottom: '1px solid var(--dark-green)', width: 22 }} aria-label="Remove" />}
                 </tr>
               </thead>
               <tbody>
                 {sorted.length === 0 && (
-                  <tr><td colSpan={readOnly ? 5 : 6} style={{ ...mono(11), color: '#006600', padding: '4px 6px', letterSpacing: 0 }}>
+                  <tr><td colSpan={readOnly ? 6 : 7} style={{ ...mono(11), color: 'var(--grid-section)', padding: '4px 6px', letterSpacing: 0 }}>
                     Nothing installed. Add a piece, or import a character.
                   </td></tr>
                 )}
                 {sorted.map((r, i) => (
                   <tr key={`${r.name}-${i}`}>
+                    <td
+                      title={r.type ? rowLocation(r) : 'Not yet placed — use + on a body part'}
+                      style={{ padding: '3px 4px 3px 6px', textAlign: 'center', ...mono(12) }}
+                    >
+                      <span style={{ color: r.type ? 'var(--green)' : 'color-mix(in srgb, var(--green) 75%, transparent)' }}>
+                        {r.type ? '●' : '◌'}
+                      </span>
+                    </td>
                     <td style={{ ...mono(11), color: 'var(--cyan)', padding: '3px 6px', letterSpacing: 0 }}>{r.name}</td>
-                    <td style={{ ...mono(11), color: r.type ? 'var(--green)' : '#886600', padding: '3px 6px', letterSpacing: 0 }}>{rowLocation(r)}</td>
+                    <td style={{ ...mono(11), color: r.type ? 'var(--green)' : 'color-mix(in srgb, var(--green) 55%, transparent)', padding: '3px 6px', letterSpacing: 0 }}>{rowLocation(r)}</td>
                     <td style={{ ...mono(11), color: 'var(--cyan)', padding: '3px 6px', textAlign: 'right' }}>{r.hl}</td>
-                    <td style={{ ...mono(11), color: r.cost === null ? '#004400' : 'var(--cyan)', padding: '3px 6px', textAlign: 'right' }}>
+                    <td style={{ ...mono(11), color: r.cost === null ? 'var(--dark-green)' : 'var(--cyan)', padding: '3px 6px', textAlign: 'right' }}>
                       {r.cost === null ? '—' : r.cost.toLocaleString()}
                     </td>
-                    <td style={{ ...mono(11), color: '#008800', padding: '3px 6px', letterSpacing: 0 }}>{r.data}</td>
+                    <td style={{ ...mono(11), color: 'var(--grid-section)', padding: '3px 6px', letterSpacing: 0 }}>{r.data}</td>
                     {!readOnly && (
                       <td style={{ padding: '3px 6px', textAlign: 'center' }}>
                         <button
                           type="button"
                           onClick={() => removeRow(r)}
                           aria-label={`Remove ${r.name}`}
-                          style={{ ...mono(11), background: 'none', border: 'none', color: '#aa3333', cursor: 'pointer', padding: 0 }}
+                          style={{ ...mono(11), background: 'none', border: 'none', color: 'var(--danger, #aa3333)', cursor: 'pointer', padding: 0 }}
                         >×</button>
                       </td>
                     )}
