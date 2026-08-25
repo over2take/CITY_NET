@@ -14,7 +14,7 @@
 
 import type { SheetTemplate } from './types';
 import { statFields, skillFields } from './modTargets';
-import { readRows, isSetKind, type CyberMod } from './cyberwareRows';
+import { readRows, isSetKind, needsPlacing, type CyberMod } from './cyberwareRows';
 
 export const EFFECTS_SYSTEM = 'cyberpunk_red';
 
@@ -105,7 +105,10 @@ const num = (v: unknown): number => {
  * pieces both setting is a real conflict with no right answer, so the highest wins and
  * both are named.
  *
- * Only equipped chrome counts, or the flag would mean nothing.
+ * Only chrome that is both equipped and actually placed counts. Switched off is obvious;
+ * unplaced matters because every import arrives that way, and eight pieces silently
+ * rewriting a character's stats before anyone said where they went is not an import, it is
+ * a surprise.
  */
 export function sheetEffects(
   data: Record<string, unknown> | undefined | null,
@@ -113,7 +116,10 @@ export function sheetEffects(
 ): SheetEffects {
   if (!template || template.id !== EFFECTS_SYSTEM || !data) return EMPTY;
 
-  const rows = readRows(data).filter((r) => r.equipped);
+  // Installed, not merely owned. A piece still waiting for somewhere to go is in a list
+  // on a sheet, not in anybody's body — a sheet reading "0 INSTALLED" beside a stat that
+  // piece claims to set is the same fact contradicting itself.
+  const rows = readRows(data).filter((r) => r.equipped && !needsPlacing(r));
   if (!rows.length) return EMPTY;
 
   const index = buildIndex(template);

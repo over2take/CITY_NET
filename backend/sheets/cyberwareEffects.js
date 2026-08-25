@@ -110,14 +110,19 @@ const numeric = (v) => {
  * reads as a bug every time. Two pieces both setting is a genuine conflict with no right
  * answer, so the highest wins and both are named in `sources`.
  *
- * Only equipped chrome counts. A piece switched off that still changed your stats would
- * make the flag meaningless.
+ * Only chrome that is both equipped and actually placed counts. Switched off is obvious;
+ * unplaced matters because every import arrives that way, and eight pieces silently
+ * rewriting a character's stats before anyone said where they went is a surprise, not an
+ * import.
  */
 function effects(data, system = SYSTEM) {
   const empty = { fields: {}, rolls: {}, unmatched: [] };
   if (system !== SYSTEM) return empty;
 
-  const rows = cyberware.rows(data).filter((r) => r.equipped);
+  // Installed, not merely owned. A piece waiting to be placed is in a list on a sheet,
+  // not in anybody's body, and a stat it claims to set is not set yet — the sheet reading
+  // "0 INSTALLED" beside a modified stat is the same fact contradicting itself.
+  const rows = cyberware.rows(data).filter((r) => r.equipped && cyberware.isPlaced(r));
   const fields = {};
   const rolls = {};
   const unmatched = [];

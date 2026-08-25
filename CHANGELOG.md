@@ -9,6 +9,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Cyberware only changes your numbers once it is actually installed.** A piece you own but have not placed on the body no longer modifies a stat or a skill. The sheet was reading "0 INSTALLED" beside a stat one of those pieces had rewritten, which is the same fact contradicting itself — and since every import arrives unplaced, importing a character used to change their stats before anyone had said where anything went.
+
+  Placed means placed: a piece typed as a Cyberleg but in neither leg is owned, not installed.
+
+- **The sheet's cyberware summary counts what is installed**, not everything on the list. It read "8 INSTALLED" over a body diagram with nothing on it.
+
 - **An edit made just before closing a sheet is no longer lost.** Every change waits 400ms before being sent, so that typing is one save rather than one per keystroke. Closing the sheet inside that window used to discard whatever was waiting — the change was on screen and in local state and never reached the server, so it came back on the next load.
 
   It showed up as removing a piece of cyberware not sticking while adding one did: adding means typing, which always outlasts the delay, but removing is a single click and people close the window straight after. It applied to any field, not just cyberware.

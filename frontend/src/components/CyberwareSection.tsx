@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SheetSection, SheetTemplate, SheetFieldValue } from '../sheets/types';
-import { readRows, totalHumanityLoss, totalCost } from '../sheets/cyberwareRows';
+import { readRows, totalHumanityLoss, totalCost, needsPlacing } from '../sheets/cyberwareRows';
 import { CyberwareWindow } from './CyberwareWindow';
 import { themeRoot } from '../utils/themeRoot';
 
@@ -41,7 +41,11 @@ export function CyberwareSection({ data, template, readOnly, onFieldChange, who 
 
   const hl = totalHumanityLoss(rows);
   const spent = totalCost(rows);
-  const unfiled = rows.filter((r) => !r.type).length;
+  // The same question the window and the body diagram ask. Counting a row as placed
+  // because it has a type read "8 INSTALLED" over a body with nothing on it — a Cyberleg
+  // that is in neither leg is owned, not installed.
+  const unfiled = rows.filter(needsPlacing).length;
+  const installed = rows.length - unfiled;
 
   return (
     <div style={{ padding: '4px 0' }}>
@@ -49,7 +53,7 @@ export function CyberwareSection({ data, template, readOnly, onFieldChange, who 
         <span style={{ ...mono, color: 'var(--cyan)' }}>
           {rows.length === 0
             ? 'NO CYBERWARE'
-            : `${rows.length} INSTALLED · HUMANITY LOSS ${hl}${spent > 0 ? ` · ${spent.toLocaleString()}eb` : ''}`}
+            : `${installed} INSTALLED · HUMANITY LOSS ${hl}${spent > 0 ? ` · ${spent.toLocaleString()}eb` : ''}`}
         </span>
         <button type="button" className="utility-btn" onClick={() => setOpen(true)}>
           {readOnly ? 'VIEW' : 'OPEN'} AUGMENTATION

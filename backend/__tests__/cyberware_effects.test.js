@@ -14,7 +14,10 @@ const require = createRequire(import.meta.url);
 const fx = require('../sheets/cyberwareEffects');
 
 const withChrome = (rows, sheet = {}) => ({ ...sheet, cyberware: rows });
-const piece = (name, mods, extra = {}) => ({ name, equipped: true, mods, ...extra });
+// Placed by default: an unplaced piece is installed nowhere and changes no numbers, so a
+// fixture without a type would be testing that nothing happens. Placement has its own tests.
+const piece = (name, mods, extra = {}) =>
+  ({ name, equipped: true, type: 'fashionware', side: null, mods, ...extra });
 
 describe('finding the field a modifier means', () => {
   it('matches the sheet\'s own label, which is what our picker stores', () => {
@@ -94,6 +97,24 @@ describe('what the chrome adds up to', () => {
   it('treats a missing stat as 0 rather than throwing', () => {
     const data = withChrome([piece('A', [{ kind: 'stat', target: 'Cool', value: 2 }])]);
     expect(fx.effects(data).fields.cool.value).toBe(2);
+  });
+
+  it('ignores a piece nobody has placed on the body yet', () => {
+    // Owning chrome is not running it. Every import arrives unplaced, so without this a
+    // character's stats change the moment they import, before anyone says where anything
+    // went.
+    const data = withChrome([piece('my stuff', [{ kind: 'statSet', target: 'INT', value: 300 }], { type: '' })], { int: 6 });
+    expect(fx.effects(data).fields.int).toBeUndefined();
+  });
+
+  it('ignores a paired piece with a type but no side', () => {
+    const data = withChrome([piece('leg', [{ kind: 'stat', target: 'Cool', value: 9 }], { type: 'cyberleg', side: null })], { cool: 5 });
+    expect(fx.effects(data).fields.cool).toBeUndefined();
+  });
+
+  it('counts it once it is in a specific leg', () => {
+    const data = withChrome([piece('leg', [{ kind: 'stat', target: 'Cool', value: 9 }], { type: 'cyberleg', side: 'l' })], { cool: 5 });
+    expect(fx.effects(data).fields.cool.value).toBe(14);
   });
 
   it('ignores chrome that is switched off', () => {

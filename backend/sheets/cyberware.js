@@ -126,6 +126,28 @@ function normaliseRow(raw) {
 }
 
 /**
+ * Types that exist on both sides of the body.
+ *
+ * Mirrored from `frontend/src/sheets/cyberwareLocations.ts`, which owns the full list and
+ * where each one sits on the figure. Only the pairing is needed here, and only to answer
+ * one question: a Cybereye that is in neither eye has not been installed yet.
+ */
+const PAIRED_TYPES = new Set(['cybereye', 'cyberarm', 'cyberleg']);
+
+/**
+ * Whether a piece is actually in the body, as opposed to merely owned.
+ *
+ * Two ways to not be installed. A row with no type at all is where every import starts,
+ * since the export says nothing about location. A paired type with no side is the subtler
+ * one: it knows it is a Cyberleg but not which leg, so it is in neither.
+ *
+ * This is what "installed" has to mean everywhere, or the sheet says a character has eight
+ * pieces installed while the body diagram shows an empty figure.
+ */
+const isPlaced = (row) =>
+  Boolean(row && row.type) && (!PAIRED_TYPES.has(row.type) || Boolean(row.side));
+
+/**
  * Whatever the sheet holds, as an array of rows.
  *
  * Defensive because the field is free-form JSON on a sheet people import into, paste into
@@ -228,7 +250,7 @@ function fromFormFields(data, max = 12) {
 const isFormField = (key) => /^cyber\d+_(name|type|hl|cost|data)$/.test(key);
 
 module.exports = {
-  FIELD, humanise, normaliseRow, rows, humanityLoss,
+  FIELD, humanise, normaliseRow, rows, humanityLoss, PAIRED_TYPES, isPlaced,
   MOD_KINDS, normaliseMods, modsFromCompanion,
   fromCompanion, fromNotes, fromFormFields, isFormField,
 };

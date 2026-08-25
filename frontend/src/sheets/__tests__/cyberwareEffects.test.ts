@@ -12,7 +12,10 @@ import { getTemplate } from '../index';
 import { sheetEffects, effectiveValue, describeSources, norm, normRoll } from '../cyberwareEffects';
 
 const CPR = getTemplate('cyberpunk_red');
-const piece = (name: string, mods: unknown[], extra = {}) => ({ name, equipped: true, mods, ...extra });
+// Placed by default: an unplaced piece is not installed and changes no numbers, so a
+// fixture without a type would test nothing. Tests about placement pass their own.
+const piece = (name: string, mods: unknown[], extra = {}) =>
+  ({ name, equipped: true, type: 'fashionware', side: null, mods, ...extra });
 const sheet = (rows: unknown[], fields = {}) => ({ ...fields, cyberware: rows });
 
 describe('matching a name to a field', () => {
@@ -59,6 +62,30 @@ describe('what the sheet should show', () => {
     expect(effect.base).toBe(5);
     expect(effect.value).toBe(8);
     expect(effect.delta).toBe(3);
+  });
+
+  it('ignores a piece nobody has placed on the body yet', () => {
+    // Reported: a sheet reading "0 INSTALLED" while a stat sat at 300 from a piece that
+    // was owned but in no limb. Owning chrome is not the same as running it.
+    const data = sheet([piece('my stuff', [{ kind: 'statSet', target: 'INT', value: 300 }], { type: '' })], { int: 6 });
+    expect(sheetEffects(data, CPR).fields.int).toBeUndefined();
+  });
+
+  it('ignores a paired piece that has a type but no side', () => {
+    // It knows it is a Cyberleg but is in neither leg, so it is installed nowhere.
+    const data = sheet([piece('my stuff', [{ kind: 'statSet', target: 'INT', value: 300 }], { type: 'cyberleg', side: null })], { int: 6 });
+    expect(sheetEffects(data, CPR).fields.int).toBeUndefined();
+  });
+
+  it('counts it once it is actually in a leg', () => {
+    const data = sheet([piece('my stuff', [{ kind: 'statSet', target: 'INT', value: 300 }], { type: 'cyberleg', side: 'r' })], { int: 6 });
+    expect(sheetEffects(data, CPR).fields.int.value).toBe(300);
+  });
+
+  it('counts an unpaired type as placed the moment it has one', () => {
+    // Fashionware has no left or right, so naming the type is the whole answer.
+    const data = sheet([piece('Tattoo', [{ kind: 'stat', target: 'Cool', value: 3 }], { type: 'fashionware' })], { cool: 5 });
+    expect(sheetEffects(data, CPR).fields.cool.value).toBe(8);
   });
 
   it('ignores chrome that is switched off', () => {
