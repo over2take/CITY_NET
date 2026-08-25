@@ -21,6 +21,8 @@ Cyberware, as something you can actually see.
 
 - **Put chrome you already have into a place on the body.** Pressing + on an arm asks what to put there before offering a blank form, listing everything not yet placed — with the pieces whose names read like a match for that spot first, and marked. It is a suggestion rather than a decision: an imported piece knows only its name, so nothing files itself into the wrong arm on the strength of a word.
 
+- **Taking a piece out again.** Each entry in a body part has a − beside it that unplaces the piece without deleting it, so it goes back to the unplaced list and can be filed somewhere else. Deleting it outright is the × in the table — uninstalling chrome and never having owned it are different things.
+
 - **Cyberware you can add by hand.** Name, install type, side, humanity loss, price in eddies, and what it does. The type is a dropdown; the side appears only for the types that have one, so a Fashionware cannot be marked "left". Adding from a panel fills the location in for you.
 
 - **Your chrome is on the sheet properly now.** It was a single line of free text. It is a list, and the number of pieces is a property of your character rather than a number chosen in advance — a full borg does not run out of rows.

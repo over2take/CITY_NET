@@ -263,3 +263,33 @@ describe('where the chooser appears', () => {
     expect(screen.getByText(/PUT SOMETHING IN CYBERLEG L/)).toBeInTheDocument();
   });
 });
+
+describe('taking chrome out again', () => {
+  it('unplaces a piece without throwing it away', async () => {
+    // Uninstalling and never having owned it are different things. The table's × does the
+    // second; a panel needs the first, or the only way out of an arm is deletion.
+    const onFieldChange = show();
+    await userEvent.click(screen.getByRole('button', { name: 'Take Cyberarm out of Cyberarm L' }));
+
+    const [, value] = onFieldChange.mock.calls[0];
+    expect(value).toHaveLength(ROWS.length);
+    const moved = value.find((r: { name: string }) => r.name === 'Cyberarm');
+    expect(moved.type).toBe('');
+    expect(moved.side).toBeNull();
+  });
+
+  it('leaves everything else where it was', async () => {
+    const onFieldChange = show();
+    await userEvent.click(screen.getByRole('button', { name: 'Take Low Light out of Cybereye R' }));
+
+    const [, value] = onFieldChange.mock.calls[0];
+    const eye = value.find((r: { name: string }) => r.name === 'Cybereye');
+    expect(eye.type).toBe('cybereye');
+    expect(eye.side).toBe('r');
+  });
+
+  it('offers no way out on a read-only sheet', () => {
+    show(ROWS, { readOnly: true });
+    expect(screen.queryByRole('button', { name: /^Take / })).not.toBeInTheDocument();
+  });
+});

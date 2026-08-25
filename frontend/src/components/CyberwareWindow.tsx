@@ -162,6 +162,21 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
     else setDraft(normaliseRow({ type: panel.typeId, side: panel.side }));
   };
 
+  /**
+   * Take a piece out of the body part it is in, without throwing it away.
+   *
+   * Distinct from removing it: uninstalling chrome and never having owned it are different
+   * things, and the table's × does the second. This puts it back among the unplaced, where
+   * it can be filed somewhere else.
+   */
+  const unfile = (row: CyberRow) => {
+    const i = rows.indexOf(row);
+    if (i < 0) return;
+    const next = [...rows];
+    next[i] = { ...row, type: '', side: null };
+    write(next);
+  };
+
   /** Move a piece already on the sheet into the panel that asked for it. */
   const fileInto = (row: CyberRow, panel: Panel) => {
     const i = rows.indexOf(row);
@@ -212,8 +227,26 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
           )}
         </div>
         {mine.map((r, i) => (
-          <div key={`${r.name}-${i}`} style={{ ...mono(11), color: 'var(--cyan)', paddingTop: 2, letterSpacing: 0 }}>
-            {r.name} <span style={{ color: '#006600' }}>HL {r.hl}</span>
+          <div
+            key={`${r.name}-${i}`}
+            style={{
+              ...mono(11), color: 'var(--cyan)', paddingTop: 2, letterSpacing: 0,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6,
+            }}
+          >
+            <span>{r.name} <span style={{ color: '#006600' }}>HL {r.hl}</span></span>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => unfile(r)}
+                aria-label={`Take ${r.name} out of ${panel.label}`}
+                title="Take out — keeps the piece, unplaces it"
+                style={{
+                  ...mono(11), background: 'none', border: 'none', color: '#886600',
+                  cursor: 'pointer', padding: 0, lineHeight: 1,
+                }}
+              >−</button>
+            )}
           </div>
         ))}
       </div>
