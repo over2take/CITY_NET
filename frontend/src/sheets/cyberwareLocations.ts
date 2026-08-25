@@ -75,6 +75,31 @@ export const describe = (typeId: string, side: Side): string => {
   return t.paired && side ? `${t.label} ${side.toUpperCase()}` : t.label;
 };
 
+/**
+ * Words that hint a piece belongs to a type, for ordering a list of candidates.
+ *
+ * A suggestion, never a decision. An imported piece knows only its name — the export
+ * carries no install location — so this reads the name and puts the likely matches first
+ * when you are filing chrome into an arm. Guessing outright would put a Cyberaudio Suite
+ * in somebody's leg and never tell them.
+ *
+ * Plain anatomy rather than a catalogue: eye, arm, leg, ear. Nothing here is a list of
+ * products.
+ */
+const HINTS: Record<string, RegExp> = {
+  cyberaudio: /(audio|ear|radio|amplif|sound)/i,
+  cybereye: /(eye|optic|ocular|vision|sight)/i,
+  neural: /(neur|chip|interface|link|processor|boost)/i,
+  cyberarm: /(arm|hand|finger|grip|wrist|elbow)/i,
+  cyberleg: /(leg|foot|feet|knee|ankle|jump)/i,
+  fashionware: /(tattoo|hair|skinwatch|shift|light\s?tat)/i,
+  borgware: /(borg|frame|implant\s?frame)/i,
+};
+
+/** Whether a name reads as though it belongs to this type. Ordering only. */
+export const looksLike = (typeId: string, name: string): boolean =>
+  Boolean(HINTS[typeId]?.test(String(name || '')));
+
 export interface Panel {
   /** Unique per panel, so a paired type yields two. */
   key: string;

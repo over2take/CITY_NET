@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import bodySvg from '../assets/body.svg?raw';
 import {
-  CYBER_TYPES, typeById, wiredPanels, unwiredPanels, drawnFigureBox, type Side, type Panel,
+  CYBER_TYPES, typeById, wiredPanels, unwiredPanels, drawnFigureBox, looksLike,
+  type Side, type Panel,
 } from '../sheets/cyberwareLocations';
 import {
   CYBERWARE_FIELD, readRows, normaliseRow, totalHumanityLoss, totalCost,
@@ -53,6 +54,8 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
   const [asc, setAsc] = useState(true);
   const [listOpen, setListOpen] = useState(true);
   const [draft, setDraft] = useState<CyberRow | null>(null);
+  /** The panel whose + was pressed, while it is asking what to put there. */
+  const [placing, setPlacing] = useState<Panel | null>(null);
 
   const write = (next: CyberRow[]) => onFieldChange(CYBERWARE_FIELD, next);
 
@@ -143,14 +146,34 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
     setDraft(null);
   };
 
-  /** Add straight into a location, so a panel's + does not need refiling afterwards. */
-  const addInto = (panel: Panel) => setDraft(
-    normaliseRow({ type: panel.typeId, side: panel.side }),
-  );
+  /**
+   * What a panel's + does.
+   *
+   * Going straight to a blank form was wrong after an import: every imported piece arrives
+   * unfiled, so the commonest reason to press + on an arm is to put something already on
+   * the sheet into it. Asking first costs one click and saves retyping a piece you have.
+   *
+   * With nothing waiting to be placed there is nothing to ask about, so it opens the form.
+   */
+  const addInto = (panel: Panel) => {
+    setDraft(null);
+    if (unfiledRows.length) setPlacing(panel);
+    else setDraft(normaliseRow({ type: panel.typeId, side: panel.side }));
+  };
+
+  /** Move a piece already on the sheet into the panel that asked for it. */
+  const fileInto = (row: CyberRow, panel: Panel) => {
+    const i = rows.indexOf(row);
+    if (i < 0) return;
+    const next = [...rows];
+    next[i] = { ...row, type: panel.typeId, side: panel.side };
+    write(next);
+    setPlacing(null);
+  };
 
   const hl = totalHumanityLoss(rows);
   const spent = totalCost(rows);
-  const unfiled = rows.filter((r) => !r.type);
+  const unfiledRows = rows.filter((r) => !r.type);
 
   const panelBox = (panel: Panel) => {
     const mine = rowsForPanel(rows, panel.typeId, panel.side);
@@ -202,7 +225,7 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
       contentStyle={{ maxHeight: '80vh', overflowY: 'auto' }}
     >
       <div style={{ ...mono(10), color: 'var(--cyan)', display: 'flex', justifyContent: 'space-between', paddingBottom: 6 }}>
-        <span>{rows.length} INSTALLED{unfiled.length ? ` · ${unfiled.length} UNFILED` : ''}</span>
+        <span>{rows.length} INSTALLED{unfiledRows.length ? ` · ${unfiledRows.length} UNFILED` : ''}</span>
         <span>HUMANITY LOSS {hl}{spent > 0 ? ` · ${spent.toLocaleString()}eb` : ''}</span>
       </div>
 
@@ -238,12 +261,12 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
         {unwiredPanels().map(panelBox)}
       </div>
 
-      {unfiled.length > 0 && (
+      {unfiledRows.length > 0 && (
         <div style={{ marginTop: 8, border: '1px dashed #886600', padding: '4px 7px' }}>
           <div style={{ ...mono(9), color: '#bb9900' }}>
-            UNFILED · {unfiled.length} — imported chrome knows what it is, not where it went
+            UNFILED · {unfiledRows.length} — imported chrome knows what it is, not where it went
           </div>
-          {unfiled.map((r, i) => (
+          {unfiledRows.map((r, i) => (
             <div key={`${r.name}-${i}`} style={{ ...mono(11), color: 'var(--cyan)', paddingTop: 2, letterSpacing: 0 }}>
               {r.name} <span style={{ color: '#006600' }}>HL {r.hl}</span>
             </div>
@@ -314,6 +337,49 @@ export function CyberwareWindow({ data, readOnly, onFieldChange, onClose, who }:
           </div>
         )}
       </div>
+
+      {!readOnly && placing && (
+        <div style={{ marginTop: 8, border: '1px solid var(--cyan)', padding: 7 }}>
+          <div style={{ ...mono(9), color: 'var(--cyan)', paddingBottom: 4 }}>
+            PUT SOMETHING IN {placing.label.toUpperCase()}
+          </div>
+          {[...unfiledRows]
+            // Likely matches first, by name. Only an ordering — the export never says
+            // where a piece went, so nothing here decides for you.
+            .sort((a, b) => Number(looksLike(placing.typeId, b.name)) - Number(looksLike(placing.typeId, a.name)))
+            .map((r, i) => {
+              const fits = looksLike(placing.typeId, r.name);
+              return (
+                <button
+                  key={`${r.name}-${i}`}
+                  type="button"
+                  onClick={() => fileInto(r, placing)}
+                  style={{
+                    ...mono(11), letterSpacing: 0, display: 'block', width: '100%',
+                    textAlign: 'left', background: 'none', cursor: 'pointer', padding: '3px 4px',
+                    border: '1px solid transparent',
+                    color: fits ? 'var(--cyan)' : '#007700',
+                  }}
+                >
+                  {r.name}
+                  <span style={{ color: '#006600' }}> HL {r.hl}</span>
+                  {fits && <span style={{ color: 'var(--cyan)' }}> · fits</span>}
+                </button>
+              );
+            })}
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+            <button type="button" className="utility-btn" onClick={() => setPlacing(null)}>CANCEL</button>
+            <button
+              type="button"
+              className="upload-btn"
+              onClick={() => {
+                setDraft(normaliseRow({ type: placing.typeId, side: placing.side }));
+                setPlacing(null);
+              }}
+            >NEW PIECE</button>
+          </div>
+        </div>
+      )}
 
       {!readOnly && (draft ? (
         <div style={{ marginTop: 8, border: '1px solid var(--dark-green)', padding: 7 }}>

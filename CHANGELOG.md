@@ -19,6 +19,8 @@ Cyberware, as something you can actually see.
 
   Underneath is the same list as a table you can sort by name, type, humanity loss or price. Two views because the questions differ: what is in my left arm is a diagram question, and what am I running and what did it cost is a table question. No single ordering answers both.
 
+- **Put chrome you already have into a place on the body.** Pressing + on an arm asks what to put there before offering a blank form, listing everything not yet placed — with the pieces whose names read like a match for that spot first, and marked. It is a suggestion rather than a decision: an imported piece knows only its name, so nothing files itself into the wrong arm on the strength of a word.
+
 - **Cyberware you can add by hand.** Name, install type, side, humanity loss, price in eddies, and what it does. The type is a dropdown; the side appears only for the types that have one, so a Fashionware cannot be marked "left". Adding from a panel fills the location in for you.
 
 - **Your chrome is on the sheet properly now.** It was a single line of free text. It is a list, and the number of pieces is a property of your character rather than a number chosen in advance — a full borg does not run out of rows.

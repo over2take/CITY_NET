@@ -116,6 +116,9 @@ describe('editing', () => {
   it('fills in the location when adding from a panel', async () => {
     const onFieldChange = show();
     await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberleg R' }));
+    // ROWS has an unfiled piece, so the panel asks what to put there before offering a
+    // blank form. Filing something you already have is the commoner answer.
+    await userEvent.click(screen.getByRole('button', { name: 'NEW PIECE' }));
     await userEvent.type(screen.getByLabelText('Cyberware name'), 'Jump Booster');
     await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
 
@@ -128,6 +131,7 @@ describe('editing', () => {
     // Otherwise a Fashionware stays marked R because it was an arm a moment ago.
     const onFieldChange = show();
     await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberarm R' }));
+    await userEvent.click(screen.getByRole('button', { name: 'NEW PIECE' }));
     await userEvent.type(screen.getByLabelText('Cyberware name'), 'Light Tattoo');
     await userEvent.selectOptions(screen.getByLabelText('Install type'), 'fashionware');
     await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
@@ -167,5 +171,74 @@ describe('a sheet that holds something unexpected', () => {
       expect(screen.getAllByText(/0 INSTALLED|Nothing installed/).length).toBeGreaterThan(0);
       unmount();
     }
+  });
+});
+
+describe('filing chrome that is already on the sheet', () => {
+  const UNFILED = [
+    { name: 'Cybereye', type: '', side: null, hl: 2, cost: null, data: '' },
+    { name: 'Grafted Muscle', type: '', side: null, hl: 14, cost: null, data: '' },
+    { name: 'Cyberarm', type: '', side: null, hl: 7, cost: null, data: '' },
+  ];
+
+  it('offers what you already have rather than a blank form', async () => {
+    // The flow straight after an import: everything arrives unfiled, so pressing + on an
+    // arm almost always means "put one of those here", not "let me retype one".
+    show(UNFILED);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberarm R' }));
+
+    expect(screen.getByText(/PUT SOMETHING IN CYBERARM R/)).toBeInTheDocument();
+    // A name predicate rather than a regex: the offered buttons carry a "fits" marker and
+    // an interpunct, and matching the whole label is brittle for no gain.
+    const offers = (needle: string) => screen.getAllByRole('button')
+      .filter((b) => (b.textContent || '').startsWith(needle));
+    expect(offers('Cyberarm HL 7')).toHaveLength(1);
+    expect(offers('Grafted Muscle')).toHaveLength(1);
+  });
+
+  it('puts the pieces that read like a match first', async () => {
+    show(UNFILED);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberarm R' }));
+
+    const offered = screen.getAllByRole('button')
+      .map((b) => b.textContent || '')
+      .filter((t) => /HL \d/.test(t));
+    expect(offered[0]).toMatch(/Cyberarm/);
+    expect(offered[0]).toMatch(/fits/);
+  });
+
+  it('files the piece into the panel that asked', async () => {
+    const onFieldChange = show(UNFILED);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberarm R' }));
+    const offer = screen.getAllByRole('button')
+      .find((b) => (b.textContent || '').startsWith('Cyberarm HL 7'));
+    await userEvent.click(offer!);
+
+    const [, value] = onFieldChange.mock.calls[0];
+    const moved = value.find((r: { name: string }) => r.name === 'Cyberarm');
+    expect(moved.type).toBe('cyberarm');
+    expect(moved.side).toBe('r');
+    // Filing moves a piece; it must not add one.
+    expect(value).toHaveLength(UNFILED.length);
+  });
+
+  it('still offers a new piece from the chooser', async () => {
+    show(UNFILED);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberleg L' }));
+    await userEvent.click(screen.getByRole('button', { name: 'NEW PIECE' }));
+
+    expect(screen.getByLabelText('Cyberware name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Install type')).toHaveValue('cyberleg');
+    expect(screen.getByLabelText('Side')).toHaveValue('l');
+  });
+
+  it('goes straight to the form when nothing is waiting to be placed', async () => {
+    // With nothing unfiled there is nothing to ask about, and a chooser showing an empty
+    // list is a click that buys nothing.
+    show(ROWS.slice(0, 3));
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberleg R' }));
+
+    expect(screen.queryByText(/PUT SOMETHING IN/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Cyberware name')).toBeInTheDocument();
   });
 });
