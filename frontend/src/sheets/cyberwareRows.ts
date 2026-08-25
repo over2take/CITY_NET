@@ -7,7 +7,7 @@
 // One array under one field rather than numbered fields. Numbered fields need a maximum
 // decided up front, which is a limit invented for the storage rather than for the game.
 
-import { typeById, describe as describeType, type Side } from './cyberwareLocations';
+import { typeById, describe as describeType, looksLike, type Side } from './cyberwareLocations';
 
 /** The sheet field holding the array. */
 export const CYBERWARE_FIELD = 'cyberware';
@@ -179,6 +179,22 @@ export function rowsForPanel(rows: CyberRow[], typeId: string, side: Side): Cybe
  */
 export const needsPlacing = (row: CyberRow): boolean =>
   !row.type || Boolean(typeById(row.type)?.paired && !row.side);
+
+/**
+ * How well a piece suits a panel, for ordering the chooser: 2 says so, 1 hints, 0 neither.
+ *
+ * Two signals of very different strength. A row that already carries the panel's type has
+ * been *told* what it is — by an import, or by someone filling in the form — and only
+ * wants a side; that is not a guess and it ranks above everything. A row with no type at
+ * all falls back to reading its name, which is a hint and nothing more.
+ *
+ * A row typed as something else scores nothing, whatever it is called: the type is the
+ * answer, so a Cyberarm named "Leg Booster" does not belong in a leg.
+ */
+export const panelRank = (row: CyberRow, typeId: string): number => {
+  if (row.type) return row.type === typeId ? 2 : 0;
+  return looksLike(typeId, row.name) ? 1 : 0;
+};
 
 /** Everything that has not been given a place yet, which is how every import arrives. */
 export const unfiledRows = (rows: CyberRow[]): CyberRow[] => rows.filter(needsPlacing);

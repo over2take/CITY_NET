@@ -2,12 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import bodySvg from '../assets/body.svg?raw';
 import {
-  CYBER_TYPES, typeById, wiredPanels, unwiredPanels, drawnFigureBox, looksLike,
+  CYBER_TYPES, typeById, wiredPanels, unwiredPanels, drawnFigureBox,
   type Side, type Panel,
 } from '../sheets/cyberwareLocations';
 import {
   CYBERWARE_FIELD, readRows, normaliseRow, totalHumanityLoss, totalCost,
-  rowLocation, rowsForPanel, needsPlacing, describeMod, isSetKind, MOD_KINDS, MOD_KIND_LABEL,
+  rowLocation, rowsForPanel, needsPlacing, panelRank, describeMod, isSetKind, MOD_KINDS, MOD_KIND_LABEL,
   type CyberRow, type CyberMod, type ModKind,
 } from '../sheets/cyberwareRows';
 import type { SheetFieldValue, SheetTemplate } from '../sheets/types';
@@ -442,9 +442,9 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
           {[...unfiledRows]
             // Likely matches first, by name. Only an ordering — the export never says
             // where a piece went, so nothing here decides for you.
-            .sort((a, b) => Number(looksLike(placing.typeId, b.name)) - Number(looksLike(placing.typeId, a.name)))
+            .sort((a, b) => panelRank(b, placing.typeId) - panelRank(a, placing.typeId))
             .map((r, i) => {
-              const fits = looksLike(placing.typeId, r.name);
+              const fits = panelRank(r, placing.typeId) > 0;
               return (
                 <button
                   key={`${r.name}-${i}`}

@@ -341,6 +341,52 @@ describe('where the chooser appears', () => {
   });
 });
 
+describe('choosing what to put in a panel', () => {
+  // A piece can reach this list already knowing what it is: a paired type with no side
+  // yet, from the form or an import. That is not a guess and it outranks the name.
+  // The typed piece is stored LAST on purpose. Put it first and the assertion passes
+  // whatever the ranking does, because a stable sort simply leaves it there.
+  const WAITING = [
+    { name: 'Self ICE', type: '', side: null, hl: 3, cost: null, data: '' },
+    { name: 'Neuroport', type: '', side: null, hl: 0, cost: null, data: '' },
+    { name: 'my stuff', type: 'cyberleg', side: null, hl: 3, cost: 500, data: '' },
+  ];
+
+  const offered = () => screen.getAllByRole('button')
+    .map((b) => b.textContent?.trim())
+    .filter((t) => t && WAITING.some((r) => t.startsWith(r.name)));
+
+  it('puts a piece already typed for this panel at the top', async () => {
+    // The reported bug: a custom piece marked Cyberleg sat at the bottom of the list when
+    // placing into a leg, because only its name was being read.
+    show(WAITING);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberleg L' }));
+    expect(offered()[0]).toMatch(/^my stuff/);
+  });
+
+  it('still reads the name of a piece with no type at all', async () => {
+    show([
+      { name: 'Plain', type: '', side: null, hl: 0, cost: null, data: '' },
+      { name: 'Cyberleg Booster', type: '', side: null, hl: 0, cost: null, data: '' },
+    ]);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberleg R' }));
+    const names = screen.getAllByRole('button').map((b) => b.textContent?.trim());
+    expect(names.findIndex((n) => n?.startsWith('Cyberleg Booster')))
+      .toBeLessThan(names.findIndex((n) => n?.startsWith('Plain')));
+  });
+
+  it('does not offer a piece typed as something else, whatever it is called', async () => {
+    // The type is the answer. A Cyberarm named "Leg Booster" does not belong in a leg, and
+    // ranking it as a match would invite filing it there.
+    show([{ name: 'Leg Booster', type: 'cyberarm', side: null, hl: 0, cost: null, data: '' }]);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cyberleg R' }));
+    const button = screen.getAllByRole('button').find((b) => b.textContent?.startsWith('Leg Booster'));
+    expect(button).toBeDefined();
+    // Present, because it still needs a side — but not marked as fitting this panel.
+    expect(button).toHaveStyle({ color: 'var(--grid-section)' });
+  });
+});
+
 describe('taking chrome out again', () => {
   it('unplaces a piece without throwing it away', async () => {
     // Uninstalling and never having owned it are different things. The table's × does the
