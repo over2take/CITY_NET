@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **An edit made just before closing a sheet is no longer lost.** Every change waits 400ms before being sent, so that typing is one save rather than one per keystroke. Closing the sheet inside that window used to discard whatever was waiting — the change was on screen and in local state and never reached the server, so it came back on the next load.
+
+  It showed up as removing a piece of cyberware not sticking while adding one did: adding means typing, which always outlasts the delay, but removing is a single click and people close the window straight after. It applied to any field, not just cyberware.
+
 ---
 
 ## [1.11.0] - 2026-08-24
