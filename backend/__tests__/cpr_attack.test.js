@@ -81,7 +81,7 @@ describe('rollToHit', () => {
 describe('rollDamage', () => {
   it('rolls the weapon dice as a plain sum (no explosion)', () => {
     const weapon = getWeapon(sheet, 2); // 3d6
-    const out = rollDamage(weapon, dieRng(6, 6, 6, 6));
+    const out = rollDamage(sheet, weapon, dieRng(6, 6, 6, 6));
     expect(out.total).toBe(18);
     expect(out.critical).toBeNull();
   });

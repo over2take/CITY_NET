@@ -72,6 +72,14 @@ export interface CyberRow {
   /** What it does. */
   data: string;
   /**
+   * Whether it is currently installed and working.
+   *
+   * A piece can be owned but switched off, and the Companion export says which. Only an
+   * equipped piece's modifiers reach the sheet — otherwise taking chrome offline would
+   * change nothing, which is the opposite of what the flag means.
+   */
+  equipped: boolean;
+  /**
    * The mechanical effects, when there are any.
    *
    * The one part of an import that carries real mechanics: descriptions arrive blank
@@ -120,6 +128,9 @@ export function normaliseRow(raw: unknown): CyberRow {
     hl: num(r.hl),
     cost: cost !== null && Number.isFinite(cost) ? cost : null,
     data: typeof r.data === 'string' ? r.data : '',
+    // Installed unless it says otherwise, so rows stored before this field existed do not
+    // all switch themselves off.
+    equipped: r.equipped !== false,
     mods: normaliseMods(r.mods),
   };
 }

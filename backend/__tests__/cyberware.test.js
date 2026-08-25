@@ -95,13 +95,13 @@ describe('rows', () => {
   it('reads what a sheet holds', () => {
     const data = { cyberware: [{ name: 'Kerenzikov', type: 'neural', hl: 7, cost: 500, data: '+2 init' }] };
     expect(cyberware.rows(data)).toEqual([
-      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, data: '+2 init', mods: [] },
+      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, data: '+2 init', equipped: true, mods: [] },
     ]);
   });
 
   it('fills in every field, so nothing downstream has to check', () => {
     expect(cyberware.rows({ cyberware: [{ name: 'Bare' }] })).toEqual([
-      { name: 'Bare', type: '', side: null, hl: 0, cost: null, data: '', mods: [] },
+      { name: 'Bare', type: '', side: null, hl: 0, cost: null, data: '', equipped: true, mods: [] },
     ]);
   });
 
@@ -157,7 +157,7 @@ describe('fromNotes', () => {
 
   it('leaves everything unfiled and unpriced, because the line said nothing else', () => {
     const out = cyberware.fromNotes('Neural Link');
-    expect(out[0]).toEqual({ name: 'Neural Link', type: '', side: null, hl: 0, cost: null, data: '', mods: [] });
+    expect(out[0]).toEqual({ name: 'Neural Link', type: '', side: null, hl: 0, cost: null, data: '', equipped: true, mods: [] });
   });
 
   it('ignores empty gaps rather than making blank rows', () => {
@@ -174,7 +174,7 @@ describe('fromFormFields', () => {
       cyber1_cost: '500', cyber1_data: '+2 init',
     });
     expect(out).toEqual([
-      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, data: '+2 init', mods: [] },
+      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, data: '+2 init', equipped: true, mods: [] },
     ]);
   });
 

@@ -15,6 +15,7 @@ const { cryptoRng } = require('../utils/random');
 //   attempt until the character is stabilized/healed above 0 HP.
 
 const rollEngine = require('./rollEngine');
+const cyberEffects = require('./cyberwareEffects');
 const { CPR_SKILLS } = require('./rolls');
 
 const AIMED_PENALTY = 8;
@@ -81,6 +82,11 @@ const rollToHit = (data, weapon, aimed, rng = cryptoRng, opts = {}) => {
   const luck = Math.max(0, num(opts.luck));
   if (luck > 0) resolved.modifiers.push({ label: 'luck', value: luck });
   resolved.modifiers.push(...checkPenalties(data, stat, opts.hp));
+  // Chrome twice over: whatever it does to the governing stat or the weapon skill, and
+  // whatever it does to attack rolls as such.
+  resolved.modifiers.push(...cyberEffects.formulaModifiers(data, formula));
+  const attackBonus = cyberEffects.rollBonus(data, 'Attack');
+  if (attackBonus) resolved.modifiers.push({ label: 'cyberware', value: attackBonus });
   return rollEngine.executeRoll(resolved, 'explode10', rng, { noFumble: !!opts.noFumble });
 };
 
@@ -95,8 +101,14 @@ const resolveLuckSpend = (pool, wantBonus, wantNegate) => {
 };
 
 // Roll weapon damage (plain sum, no explosion).
-const rollDamage = (weapon, rng = cryptoRng) => {
+//
+// Takes the sheet, like the CWN version does, because cyberware can modify damage rolls.
+// The formula itself still resolves against nothing: a weapon's damage is its own dice and
+// never references a sheet field.
+const rollDamage = (data, weapon, rng = cryptoRng) => {
   const resolved = rollEngine.resolveFormula(weapon.dmg, {});
+  const bonus = cyberEffects.rollBonus(data, 'Damage');
+  if (bonus) resolved.modifiers.push({ label: 'cyberware', value: bonus });
   return rollEngine.executeRoll(resolved, 'sum', rng);
 };
 

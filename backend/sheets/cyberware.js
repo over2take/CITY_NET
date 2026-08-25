@@ -118,6 +118,9 @@ function normaliseRow(raw) {
     // piece that was free, and a column of zeroes hides which is which.
     cost: cost !== null && Number.isFinite(cost) ? cost : null,
     data: typeof r.data === 'string' ? r.data : '',
+    // Installed unless it says otherwise. Rows stored before this field existed have no
+    // opinion, and defaulting those to false would switch off chrome nobody touched.
+    equipped: r.equipped !== false,
     mods: normaliseMods(r.mods),
   };
 }
@@ -169,6 +172,10 @@ function fromCompanion(collection) {
         name: named,
         hl: Number.isFinite(cost) ? cost : 0,
         data: String(e.description || e.longDescription || '').trim(),
+        // A piece can be owned but not currently installed. Ignoring this imported
+        // unequipped chrome as though it were wired in, which matters now that a
+        // modifier on it would reach the sheet.
+        equipped: e.equipped !== false,
         mods: modsFromCompanion(e.modifier),
       });
     });

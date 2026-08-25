@@ -7,6 +7,7 @@ const cyberware = require('../sheets/cyberware');
 const sheetRolls = require('../sheets/rolls');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
+const cyberEffects = require('../sheets/cyberwareEffects');
 const attackCwn = require('../sheets/attackCwn');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
@@ -1356,6 +1357,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               statField = firstField ? firstField.field : null;
               if (spend.bonus > 0) resolved.modifiers.push({ label: 'luck', value: spend.bonus });
               resolved.modifiers.push(...sheetAttack.checkPenalties(data, statField, hp));
+              // Chrome, as its own labelled term rather than folded into the stat, so the
+              // breakdown says where the bonus came from.
+              resolved.modifiers.push(...cyberEffects.formulaModifiers(data, rollDef.formula, system));
               outcome = rollEngine.executeRoll(resolved, rollDef.shape, Math.random, { noFumble });
             } catch (e) {
               return;
@@ -2249,7 +2253,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 // Hit: damage, SP soak, ablation, HP write-through.
                 broadcastRoll(info.userName, toHit, hitHistory, color, () => {
                   let dmg;
-                  try { dmg = sheetAttack.rollDamage(weapon); } catch (e) { return emitResult({}); }
+                  try { dmg = sheetAttack.rollDamage(attackerData, weapon); } catch (e) { return emitResult({}); }
                   getDefenderSheet(target, system, (defender) => {
                     const defenderData = defender ? JSON.parse(defender.data || '{}') : {};
                     const spField = aimed ? 'sp_head' : 'sp_body';
