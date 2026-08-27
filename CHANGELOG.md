@@ -7,43 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Fixed
-
-- **A note modifier, for what the app cannot work out for you.** Some chrome does something the sheet has no field for and no dice to roll. Written into the effect paragraph it gets missed at the table; as a modifier it is a chip everyone can see — `Quickhack DV 10`.
-
-  You type both the label and the number, and the app never applies either. It is marked out from the modifiers that do change your rolls: dashed border, plain colour, and a tooltip saying so.
-
-- **Edit anything on the cyberware list.** A pencil beside each piece opens it in the form with everything filled in — name, type, humanity, price, effect and modifiers — so a mistyped name or a wrong effect can be corrected without deleting the piece and building it again. It keeps its place in the list and stays installed where it was.
-
-- **TOKEN_PROTOCOLS is now CHARACTER_CONTROLS.** The panel stopped being about the token a while ago: alongside placing and colouring it, it holds the character sheet, vehicles, enemy vehicles, health and armour. The name now says what it governs.
-
-- **Setting a type no longer installs the piece.** Naming something a Cyberleg in the list says what it is; it does not fit it. It stays in the unplaced list and is offered first when you press + on a matching body part, which is what naming the type is for. Fitting still happens on the diagram, which is the only place that knows where things go.
-
-  This was most visible on the types with no left or right — marking something Fashionware installed it on the spot, and there was no way to own a piece you had not fitted yet.
-
-- **Taking a piece out no longer forgets what it is.** Unplacing a Cybereye left it with no type at all, so putting it back meant saying it was a Cybereye a second time. It now keeps its type and gives up only its side, which is the state a piece is in before anyone has chosen a socket.
-
-- **The TYPE column shows the type, not the placement.** Installing a Cybereye in the left eye made that column read "Cybereye L", which looked like installing it had rewritten the type you set. Which eye it is in is a fact about the body, and the diagram is where the body is.
-
-- **Cyberware reaches your initiative.** A cyberarm that raises REF now raises what you roll for turn order, and a piece whose modifier targets Initiative adds to it directly. Both previously showed on the sheet and reached every other roll while initiative alone read the unmodified stat. The chrome is named in the breakdown rather than folded into REF, so the number is explainable.
-
-- **A modifier on Language (Streetslang) no longer lands on Language (Other).** The two skills differ only inside the brackets, and the name matching stripped every bracket in order to cope with the "(x2)" that marks a double-cost skill. Only the cost marker comes off now.
-
-  Found by testing every stat and skill the picker offers rather than one of each — the two Language skills were the only pair that collided, and nothing about the symptom would have pointed at the cause.
-
-- **Cyberware only changes your numbers once it is actually installed.** A piece you own but have not placed on the body no longer modifies a stat or a skill. The sheet was reading "0 INSTALLED" beside a stat one of those pieces had rewritten, which is the same fact contradicting itself — and since every import arrives unplaced, importing a character used to change their stats before anyone had said where anything went.
-
-  Placed means placed: a piece typed as a Cyberleg but in neither leg is owned, not installed.
-
-- **The sheet's cyberware summary counts what is installed**, not everything on the list. It read "8 INSTALLED" over a body diagram with nothing on it.
-
-- **An edit made just before closing a sheet is no longer lost.** Every change waits 400ms before being sent, so that typing is one save rather than one per keystroke. Closing the sheet inside that window used to discard whatever was waiting — the change was on screen and in local state and never reached the server, so it came back on the next load.
-
-  It showed up as removing a piece of cyberware not sticking while adding one did: adding means typing, which always outlasts the delay, but removing is a single click and people close the window straight after. It applied to any field, not just cyberware.
-
 ---
 
-## [1.11.0] - 2026-08-24
+## [1.11.0] - 2026-08-26
 
 Cyberware, as something you can actually see.
 
@@ -90,6 +56,38 @@ Cyberware, as something you can actually see.
   It now reads what the pieces actually are, **and brings the humanity cost across with them**, which was going to be typed in by hand.
 
   Two things the export has never carried, so neither can come across: where a piece is installed, and its description. The Companion shows that flavour text from its own catalogue rather than storing it on your character, so the fields arrive empty. Anything you typed there yourself does come through. Imported pieces are marked as not yet placed rather than being guessed into an arm.
+
+- **A note modifier, for what the app cannot work out for you.** Some chrome does something the sheet has no field for and no dice to roll. Written into the effect paragraph it gets missed at the table; as a modifier it is a chip everyone can see — `Quickhack DV 10`.
+
+  You type both the label and the number, and the app never applies either. It is marked out from the modifiers that do change your rolls: dashed border, plain colour, and a tooltip saying so.
+
+- **Edit anything on the cyberware list.** A pencil beside each piece opens it in the form with everything filled in — name, type, humanity, price, effect and modifiers — so a mistyped name or a wrong effect can be corrected without deleting the piece and building it again. It keeps its place in the list and stays installed where it was.
+
+- **TOKEN_PROTOCOLS is now CHARACTER_CONTROLS.** The panel stopped being about the token a while ago: alongside placing and colouring it, it holds the character sheet, vehicles, enemy vehicles, health and armour. The name now says what it governs.
+
+- **Setting a type no longer installs the piece.** Naming something a Cyberleg in the list says what it is; it does not fit it. It stays in the unplaced list and is offered first when you press + on a matching body part, which is what naming the type is for. Fitting still happens on the diagram, which is the only place that knows where things go.
+
+  This was most visible on the types with no left or right — marking something Fashionware installed it on the spot, and there was no way to own a piece you had not fitted yet.
+
+- **Taking a piece out no longer forgets what it is.** Unplacing a Cybereye left it with no type at all, so putting it back meant saying it was a Cybereye a second time. It now keeps its type and gives up only its side, which is the state a piece is in before anyone has chosen a socket.
+
+- **The TYPE column shows the type, not the placement.** Installing a Cybereye in the left eye made that column read "Cybereye L", which looked like installing it had rewritten the type you set. Which eye it is in is a fact about the body, and the diagram is where the body is.
+
+- **Cyberware reaches your initiative.** A cyberarm that raises REF now raises what you roll for turn order, and a piece whose modifier targets Initiative adds to it directly. Both previously showed on the sheet and reached every other roll while initiative alone read the unmodified stat. The chrome is named in the breakdown rather than folded into REF, so the number is explainable.
+
+- **A modifier on Language (Streetslang) no longer lands on Language (Other).** The two skills differ only inside the brackets, and the name matching stripped every bracket in order to cope with the "(x2)" that marks a double-cost skill. Only the cost marker comes off now.
+
+  Found by testing every stat and skill the picker offers rather than one of each — the two Language skills were the only pair that collided, and nothing about the symptom would have pointed at the cause.
+
+- **Cyberware only changes your numbers once it is actually installed.** A piece you own but have not placed on the body no longer modifies a stat or a skill. The sheet was reading "0 INSTALLED" beside a stat one of those pieces had rewritten, which is the same fact contradicting itself — and since every import arrives unplaced, importing a character used to change their stats before anyone had said where anything went.
+
+  Placed means placed: a piece typed as a Cyberleg but in neither leg is owned, not installed.
+
+- **The sheet's cyberware summary counts what is installed**, not everything on the list. It read "8 INSTALLED" over a body diagram with nothing on it.
+
+- **An edit made just before closing a sheet is no longer lost.** Every change waits 400ms before being sent, so that typing is one save rather than one per keystroke. Closing the sheet inside that window used to discard whatever was waiting — the change was on screen and in local state and never reached the server, so it came back on the next load.
+
+  It showed up as removing a piece of cyberware not sticking while adding one did: adding means typing, which always outlasts the delay, but removing is a single click and people close the window straight after. It applied to any field, not just cyberware.
 
 ### Changed
 
