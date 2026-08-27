@@ -99,14 +99,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
         minWidth: '360px', maxWidth: '520px', minHeight: '320px', maxHeight: '92vh',
         resize: 'both', overflow: 'hidden', display: 'flex', flexDirection: 'column',
       }}
-      contentStyle={{
-        flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column',
-        // Room on the right for the scrollbar to live in without sitting on top of
-        // anything. A stat box whose edge reaches the bar is a box you cannot click the
-        // edge of, and the gutter is reserved whether it is scrolling or not so the
-        // layout does not jump the moment the sheet grows past its height.
-        padding: '4px 20px 0 10px', scrollbarGutter: 'stable',
-      }}
+      contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
     >
       {sheet && template ? (
         <SheetRenderer

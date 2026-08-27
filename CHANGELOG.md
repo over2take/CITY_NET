@@ -89,7 +89,9 @@ Cyberware, as something you can actually see.
 
 - **The sheet's cyberware summary counts what is installed**, not everything on the list. It read "8 INSTALLED" over a body diagram with nothing on it.
 
-- **The character sheet's scrollbar has its own lane.** It sat close enough to the right-hand column that reaching for the edge of a box could catch the bar instead. The gutter is reserved whether the sheet is scrolling or not, so the layout no longer shifts the moment it grows past its height either. Same on the GM's NPC sheets.
+- **The character sheet's scrollbar stops covering the corner of a text box.** The resize grip on a description or notes field sat four pixels from the bar, so reaching for it caught the bar instead. There is proper room now, and the gutter is reserved whether the sheet is scrolling or not, so the layout no longer shifts the moment a tab grows past the window.
+
+  The sheet body scrolls itself rather than through the window around it, which is also why it had been drawing the browser's own scrollbar instead of the thin green one everything else uses. It matches now.
 
 - **An edit made just before closing a sheet is no longer lost.** Every change waits 400ms before being sent, so that typing is one save rather than one per keystroke. Closing the sheet inside that window used to discard whatever was waiting — the change was on screen and in local state and never reached the server, so it came back on the next load.
 

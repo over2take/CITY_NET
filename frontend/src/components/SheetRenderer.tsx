@@ -1224,12 +1224,28 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         .sheet-input::-webkit-outer-spin-button, .sheet-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .sheet-input[type=number] { -moz-appearance: textfield; appearance: textfield; }
         .sheet-input:focus { outline: 1px solid var(--green); }
+        /* The sheet body scrolls itself rather than through the window's content box, so
+           it never picked up the themed scrollbar the windows use and was drawing the
+           browser's default 15px one. Same bar as everywhere else, and narrower. */
+        .sheet-scroll { scrollbar-width: thin; scrollbar-color: var(--dark-green) var(--black); }
+        .sheet-scroll::-webkit-scrollbar { width: 8px; }
+        .sheet-scroll::-webkit-scrollbar-track { background: var(--black); }
+        .sheet-scroll::-webkit-scrollbar-thumb { background: var(--dark-green); border: 1px solid var(--green); }
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
       `}</style>
 
       <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} canRoll={!!onRoll} />
 
-      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
+      {/* The sheet body, and the thing that actually scrolls — not the window's own
+          content box, which sits outside it. The right padding is what keeps the
+          scrollbar off whatever is beside it: at 4px the resize grip of a full-width
+          textarea ended up close enough to the bar that reaching for it caught the
+          bar instead. The gutter is reserved whether or not it is scrolling, so the
+          layout does not jump the moment a tab grows past the window. */}
+      <div className="sheet-scroll" style={{
+        flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column',
+        gap: '6px', paddingRight: '18px', scrollbarGutter: 'stable',
+      }}>
         {tabHasRolls && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px', fontSize: '0.6rem', opacity: 0.55, letterSpacing: '1px' }}>
             {onRoll ? <>click <DiceIcon size={11} /> to roll</> : <>rolls land in the dice tray</>}
