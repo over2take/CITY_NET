@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Themes reach the text that was only inheriting a colour.** Labels, headings and the readouts beside sliders stayed green on every theme while the values next to them changed. The base text colour was set on `body`, which sits outside the element the theme class is on, so it always resolved to the default green. Anything that set its own colour was already fine, which is why half of each line themed and half did not.
+
+- **Checkboxes and sliders take the theme's colour.** All thirty-nine of them drew in the browser's own blue, which belonged to no theme.
+
+- **Danger and warning are real colours now, tuned per theme.** The palette had neither, while the code asked for `--danger` and fell through to a hardcoded red every time.
+
+  Two themes needed them moved rather than merely defined. Crimson's own text colour is the exact red the code used for danger, and Solar's is the exact amber it used for warning — so on those themes a warning has been rendering the same colour as ordinary text, invisible as a warning rather than merely off-theme.
+
 ---
 
 ## [1.11.0] - 2026-08-27

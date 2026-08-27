@@ -2830,7 +2830,7 @@ function App() {
                     {editorGenType === 'SLUMS' && (
                       <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                         <circleGeometry args={[Math.max(editData.width, editData.depth) * 0.8, 32]} />
-                        <meshBasicMaterial color="#00ff00" transparent opacity={0.3} wireframe />
+                        <meshBasicMaterial color={THEMES[currentTheme].primary} transparent opacity={0.3} wireframe />
                       </mesh>
                     )}
                     {editorGenParts.map((b, i) => {
@@ -2856,7 +2856,7 @@ function App() {
                 ) : (
                   <mesh position={[0, editData.height / 2, 0]} scale={[editData.width, editData.height, editData.depth]}>
                     {renderBaseGeometry(editData.shape, editData.polyCount || 5)}
-                    <meshBasicMaterial color="#00ff00" wireframe />
+                    <meshBasicMaterial color={THEMES[currentTheme].primary} wireframe />
                   </mesh>
                 )}
               </group>
