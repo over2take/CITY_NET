@@ -27,6 +27,9 @@ const show = (data: Record<string, unknown>) => render(
 /** Skills live on their own tab, so every skill assertion has to open it first. */
 const openSkills = () => userEvent.click(screen.getByRole('button', { name: 'SKILLS' }));
 
+/** Cyberware sits under GEAR, likewise. */
+const openGear = () => userEvent.click(screen.getByRole('button', { name: 'GEAR' }));
+
 /** The row for one skill, found by the input carrying its label. */
 const skillRow = (label: string) => screen.getByLabelText(label).closest('div') as HTMLElement;
 
@@ -164,5 +167,39 @@ describe('a whole loadout on the sheet', () => {
       piece('Tattoo', [{ kind: 'stat', target: 'Cool', value: 3 }]),
     ] });
     expect(screen.getByTitle(/5 → 8/)).toBeInTheDocument();
+  });
+});
+
+describe('an NPC sheet gets the same treatment', () => {
+  // NPCs render through the same SheetRenderer with the same template, so this should all
+  // work — but "should" is how the socket wiring went untested for a week. A GM's NPCs
+  // carry chrome too, and generated CP:R NPCs now arrive with some.
+  const chromed = {
+    int: 4, perception: 3, cool: 5,
+    cyberware: [{
+      name: 'Cybereye', equipped: true, type: 'cybereye', side: 'r', placed: true,
+      hl: 2, cost: null, data: '',
+      mods: [{ kind: 'skill', target: 'Perception', value: 2 }],
+    }],
+  };
+
+  it('offers the cyberware section and the way into the window', async () => {
+    show(chromed);
+    await openGear();
+    expect(screen.getByRole('button', { name: /AUGMENTATION/ })).toBeInTheDocument();
+  });
+
+  it('counts the chrome as installed', async () => {
+    show(chromed);
+    await openGear();
+    expect(screen.getByText(/1 INSTALLED/)).toBeInTheDocument();
+  });
+
+  it('rolls the modified skill, as a player sheet would', async () => {
+    show(chromed);
+    await openSkills();
+    const row = skillRow('Perception');
+    // 1d10 + INT(4) + Perception(3 + 2 from the chrome)
+    expect(within(row).getByRole('button', { name: 'Roll Perception' })).toHaveTextContent('+9');
   });
 });

@@ -57,6 +57,10 @@ Cyberware, as something you can actually see.
 
   Two things the export has never carried, so neither can come across: where a piece is installed, and its description. The Companion shows that flavour text from its own catalogue rather than storing it on your character, so the fields arrive empty. Anything you typed there yourself does come through. Imported pieces are marked as not yet placed rather than being guessed into an arm.
 
+- **Generated Cyberpunk RED NPCs come with chrome.** GENERATE_SHEET fits cyberware to the tier — nothing on a mook, a piece or two on a skilled, a full set on an elite — already installed on the body rather than waiting to be placed. It is this app's kit, like the weapon rows, not a catalogue.
+
+  Humanity pays for it, and current EMP follows from Humanity the way it does on every save, so a generated sheet does not claim full Humanity beside four implants.
+
 - **A note modifier, for what the app cannot work out for you.** Some chrome does something the sheet has no field for and no dice to roll. Written into the effect paragraph it gets missed at the table; as a modifier it is a chip everyone can see — `Quickhack DV 10`.
 
   You type both the label and the number, and the app never applies either. It is marked out from the modifiers that do change your rolls: dashed border, plain colour, and a tooltip saying so.
