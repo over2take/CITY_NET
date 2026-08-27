@@ -249,6 +249,119 @@ describe('editing', () => {
   });
 });
 
+describe('editing a piece already on the list', () => {
+  // Anything here can be wrong: a name mistyped, a price guessed, an effect that turned
+  // out to do something else. Deleting and re-adding loses the placement and the position.
+  const ONE = [
+    { name: 'eye thing', type: 'cybereye', side: 'l', hl: 3, cost: 150, data: 'Sees',
+      mods: [{ kind: 'stat', target: 'COOL', value: 2 }] },
+  ];
+
+  it('opens the form already filled in', async () => {
+    show(ONE);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit eye thing' }));
+
+    expect(screen.getByLabelText('Cyberware name')).toHaveValue('eye thing');
+    expect(screen.getByLabelText('Install type')).toHaveValue('cybereye');
+    expect(screen.getByLabelText('Humanity loss')).toHaveValue(3);
+    expect(screen.getByLabelText('Price in eddies')).toHaveValue(150);
+    expect(screen.getByLabelText('Effect')).toHaveValue('Sees');
+    expect(screen.getByLabelText('Modifier 1 target')).toHaveValue('COOL');
+  });
+
+  it('offers SAVE rather than ADD', async () => {
+    show(ONE);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit eye thing' }));
+    expect(screen.getByRole('button', { name: 'SAVE' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ADD' })).not.toBeInTheDocument();
+  });
+
+  it('replaces the piece rather than adding a second one', async () => {
+    const onFieldChange = show(ONE);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit eye thing' }));
+    await userEvent.clear(screen.getByLabelText('Cyberware name'));
+    await userEvent.type(screen.getByLabelText('Cyberware name'), 'Kiroshi');
+    await userEvent.click(screen.getByRole('button', { name: 'SAVE' }));
+
+    const value = onFieldChange.mock.calls.at(-1)![1];
+    expect(value).toHaveLength(1);
+    expect(value[0].name).toBe('Kiroshi');
+  });
+
+  it('keeps the piece where it is installed', async () => {
+    // Editing a name should not tip a piece out of the eye it is in.
+    const onFieldChange = show(ONE);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit eye thing' }));
+    await userEvent.type(screen.getByLabelText('Cyberware name'), '!');
+    await userEvent.click(screen.getByRole('button', { name: 'SAVE' }));
+
+    expect(onFieldChange.mock.calls.at(-1)![1][0]).toMatchObject({ type: 'cybereye', side: 'l' });
+  });
+
+  it('lets the effects be changed', async () => {
+    const onFieldChange = show(ONE);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit eye thing' }));
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 target'), 'REF');
+    await userEvent.click(screen.getByRole('button', { name: 'SAVE' }));
+
+    expect(onFieldChange.mock.calls.at(-1)![1][0].mods).toEqual([
+      { kind: 'stat', target: 'REF', value: 2 },
+    ]);
+  });
+
+  it('lets a modifier be removed entirely', async () => {
+    const onFieldChange = show(ONE);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit eye thing' }));
+    await userEvent.click(screen.getByLabelText('Remove modifier 1'));
+    await userEvent.click(screen.getByRole('button', { name: 'SAVE' }));
+
+    expect(onFieldChange.mock.calls.at(-1)![1][0].mods).toEqual([]);
+  });
+
+  it('keeps its position in the list rather than moving to the end', async () => {
+    const onFieldChange = show([
+      { name: 'First', type: 'neural', side: null, hl: 0, cost: null, data: '' },
+      ...ONE,
+      { name: 'Last', type: 'neural', side: null, hl: 0, cost: null, data: '' },
+    ]);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit eye thing' }));
+    await userEvent.type(screen.getByLabelText('Cyberware name'), '!');
+    await userEvent.click(screen.getByRole('button', { name: 'SAVE' }));
+
+    expect(onFieldChange.mock.calls.at(-1)![1].map((r: CyberRow) => r.name))
+      .toEqual(['First', 'eye thing!', 'Last']);
+  });
+
+  it('changes nothing when the edit is cancelled', async () => {
+    const onFieldChange = show(ONE);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit eye thing' }));
+    await userEvent.type(screen.getByLabelText('Cyberware name'), 'XXX');
+    await userEvent.click(screen.getByRole('button', { name: 'CANCEL' }));
+
+    expect(onFieldChange).not.toHaveBeenCalled();
+  });
+
+  it('goes back to adding after an edit is cancelled', async () => {
+    // The form is shared, so a stale editing target would turn the next add into an
+    // overwrite of whatever was last edited.
+    const onFieldChange = show(ONE);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit eye thing' }));
+    await userEvent.click(screen.getByRole('button', { name: 'CANCEL' }));
+    await userEvent.click(screen.getByRole('button', { name: /ADD CYBERWARE/ }));
+    await userEvent.type(screen.getByLabelText('Cyberware name'), 'Second');
+    await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
+
+    const value = onFieldChange.mock.calls.at(-1)![1];
+    expect(value).toHaveLength(2);
+    expect(value.map((r: CyberRow) => r.name)).toEqual(['eye thing', 'Second']);
+  });
+
+  it('offers no edit button on a read-only sheet', () => {
+    show(ONE, { readOnly: true });
+    expect(screen.queryByRole('button', { name: 'Edit eye thing' })).not.toBeInTheDocument();
+  });
+});
+
 describe('a sheet that holds something unexpected', () => {
   it('opens empty rather than throwing', () => {
     // The field is free-form JSON on a sheet people import into and edit by hand.
@@ -481,8 +594,36 @@ describe('taking chrome out again', () => {
     const [, value] = onFieldChange.mock.calls[0];
     expect(value).toHaveLength(ROWS.length);
     const moved = value.find((r: { name: string }) => r.name === 'Cyberarm');
-    expect(moved.type).toBe('');
+    // Still a Cyberarm — taking it out of an arm does not make it stop being one, and the
+    // type is something the player set in the list rather than something placing decided.
+    expect(moved.type).toBe('cyberarm');
     expect(moved.side).toBeNull();
+  });
+
+  it('leaves an unpaired piece with no type, since that is its only placement', async () => {
+    // Fashionware has no side to give up. Keeping its type would leave it counted as
+    // installed, so there would be no way to take it out at all.
+    const onFieldChange = show([
+      { name: 'Light Tattoo', type: 'fashionware', side: null, hl: 0, cost: null, data: '' },
+    ]);
+    await userEvent.click(screen.getByRole('button', { name: /^Take Light Tattoo out of/ }));
+
+    const [, value] = onFieldChange.mock.calls[0];
+    expect(value[0].type).toBe('');
+  });
+
+  it('puts an unplaced piece back without asking what it is again', async () => {
+    // The round trip the change is for: take a Cybereye out, and it is still a Cybereye
+    // waiting for an eye rather than an unknown piece to be typed from scratch.
+    const onFieldChange = show([
+      { name: 'eye thing', type: 'cybereye', side: 'l', hl: 3, cost: 150, data: '' },
+    ]);
+    await userEvent.click(screen.getByRole('button', { name: 'Take eye thing out of Cybereye L' }));
+
+    const after = onFieldChange.mock.calls[0][1][0];
+    expect(after).toMatchObject({ type: 'cybereye', side: null });
+    // And it reads as needing a place, so it shows up in the chooser for either eye.
+    expect(after.name).toBe('eye thing');
   });
 
   it('leaves everything else where it was', async () => {

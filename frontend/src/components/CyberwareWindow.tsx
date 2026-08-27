@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import bodySvg from '../assets/body.svg?raw';
 import {
-  CYBER_TYPES, typeById, wiredPanels, unwiredPanels, drawnFigureBox, describe as describeType,
+  CYBER_TYPES, typeById, wiredPanels, unwiredPanels, drawnFigureBox,
   type Side, type Panel,
 } from '../sheets/cyberwareLocations';
 import {
@@ -214,6 +214,13 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
   const [asc, setAsc] = useState(true);
   const [listOpen, setListOpen] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
+  /**
+   * The row the form is editing, or null when it is adding a new one.
+   *
+   * Held by identity rather than index, like every other row operation here: the table is
+   * sorted, so a position on screen is not a position in the stored array.
+   */
+  const [editing, setEditing] = useState<CyberRow | null>(null);
   /** The panel whose + was pressed, while it is asking what to put there. */
   const [placing, setPlacing] = useState<Panel | null>(null);
   const placingRef = useRef<HTMLDivElement>(null);
@@ -299,14 +306,32 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
     if (i >= 0) write([...rows.slice(0, i), ...rows.slice(i + 1)]);
   };
 
+  const closeForm = () => { setDraft(null); setEditing(null); };
+
+  /** Open the form on a piece that already exists, rather than on a blank one. */
+  const editRow = (row: CyberRow) => {
+    setPlacing(null);
+    setEditing(row);
+    setDraft({ ...row });
+  };
+
   const commitDraft = () => {
     if (!draft) return;
     const name = draft.name.trim();
     if (!name) return;
     // Through the normaliser rather than stored as typed: a "+ MODIFIER" line the player
     // added and then left blank is not a modifier, and normaliseRow already drops those.
-    write([...rows, normaliseRow({ ...draft, name })]);
-    setDraft(null);
+    const row = normaliseRow({ ...draft, name });
+
+    if (editing) {
+      // Replaced in place, so an edit keeps the piece where it is in the list rather than
+      // moving it to the end as a delete-and-re-add would.
+      const i = rows.indexOf(editing);
+      if (i >= 0) write([...rows.slice(0, i), row, ...rows.slice(i + 1)]);
+    } else {
+      write([...rows, row]);
+    }
+    closeForm();
   };
 
   /**
@@ -331,11 +356,24 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
    * things, and the table's × does the second. This puts it back among the unplaced, where
    * it can be filed somewhere else.
    */
+  /**
+   * Take a piece out of the body without forgetting what it is.
+   *
+   * What a piece *is* was answered in the list, and taking it out of an eye does not make
+   * it stop being a Cybereye — clearing the type threw away something the player had
+   * typed, and they had to say it again to put it back.
+   *
+   * A paired type keeps its type and loses only its side, which is exactly the state a
+   * piece is in before anyone has chosen a socket. An unpaired type has no side to lose:
+   * for those the type *is* the placement, so it has to go or the piece could never leave.
+   */
   const unfile = (row: CyberRow) => {
     const i = rows.indexOf(row);
     if (i < 0) return;
     const next = [...rows];
-    next[i] = { ...row, type: '', side: null };
+    next[i] = typeById(row.type)?.paired
+      ? { ...row, side: null }
+      : { ...row, type: '', side: null };
     write(next);
   };
 
@@ -620,10 +658,13 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                           }}
                         >
                           <option value="">Unfiled</option>
+                          {/* The type, never the placement. This column is what the piece
+                              *is*, which the player set and installing does not change;
+                              showing "Cybereye L" here read as the type having been
+                              rewritten by putting it in an eye. Which eye is a fact about
+                              the body, and the diagram is where the body is. */}
                           {CYBER_TYPES.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.paired && r.side ? describeType(t.id, r.side) : t.label}
-                            </option>
+                            <option key={t.id} value={t.id}>{t.label}</option>
                           ))}
                         </select>
                       )}
@@ -637,7 +678,16 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                       <ModChips mods={r.mods} />
                     </td>
                     {!readOnly && (
-                      <td style={{ padding: '3px 6px', textAlign: 'center' }}>
+                      <td style={{ padding: '3px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        {/* Anything on this list can be wrong: a name mistyped, a cost
+                            guessed, an effect that turned out to do something else. */}
+                        <button
+                          type="button"
+                          onClick={() => editRow(r)}
+                          aria-label={`Edit ${r.name}`}
+                          title="Edit this piece"
+                          style={{ ...mono(10), background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', padding: '0 4px 0 0' }}
+                        >✎</button>
                         <button
                           type="button"
                           onClick={() => removeRow(r)}
@@ -701,12 +751,14 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
           </div>
           <ModEditor mods={draft.mods} template={template} onChange={(mods) => setDraft({ ...draft, mods })} />
           <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
-            <button type="button" className="utility-btn" onClick={() => setDraft(null)}>CANCEL</button>
-            <button type="button" className="upload-btn" onClick={commitDraft} disabled={!draft.name.trim()}>ADD</button>
+            <button type="button" className="utility-btn" onClick={closeForm}>CANCEL</button>
+            <button type="button" className="upload-btn" onClick={commitDraft} disabled={!draft.name.trim()}>
+              {editing ? 'SAVE' : 'ADD'}
+            </button>
           </div>
         </div>
       ) : (
-        <button type="button" className="utility-btn" style={{ marginTop: 8 }} onClick={() => setDraft(newDraft())}>
+        <button type="button" className="utility-btn" style={{ marginTop: 8 }} onClick={() => { setEditing(null); setDraft(newDraft()); }}>
           + ADD CYBERWARE
         </button>
       ))}

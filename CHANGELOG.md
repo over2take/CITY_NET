@@ -9,6 +9,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Edit anything on the cyberware list.** A pencil beside each piece opens it in the form with everything filled in — name, type, humanity, price, effect and modifiers — so a mistyped name or a wrong effect can be corrected without deleting the piece and building it again. It keeps its place in the list and stays installed where it was.
+
+- **Taking a piece out no longer forgets what it is.** Unplacing a Cybereye left it with no type at all, so putting it back meant saying it was a Cybereye a second time. It now keeps its type and gives up only its side, which is the state a piece is in before anyone has chosen a socket.
+
+- **The TYPE column shows the type, not the placement.** Installing a Cybereye in the left eye made that column read "Cybereye L", which looked like installing it had rewritten the type you set. Which eye it is in is a fact about the body, and the diagram is where the body is.
+
 - **Cyberware reaches your initiative.** A cyberarm that raises REF now raises what you roll for turn order, and a piece whose modifier targets Initiative adds to it directly. Both previously showed on the sheet and reached every other roll while initiative alone read the unmodified stat. The chrome is named in the breakdown rather than folded into REF, so the number is explainable.
 
 - **A modifier on Language (Streetslang) no longer lands on Language (Other).** The two skills differ only inside the brackets, and the name matching stripped every bracket in order to cope with the "(x2)" that marks a double-cost skill. Only the cost marker comes off now.
