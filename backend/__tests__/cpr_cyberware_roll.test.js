@@ -112,6 +112,21 @@ describe('cyberware in a sheet roll', () => {
     expect(roll.data.modifiers).toEqual([PLAIN_MODS - 2]);
   });
 
+  it('applies a stat set as the difference it makes', async () => {
+    // The fourth kind through this path. INT is 4 and the chrome sets it to 6, so +2.
+    await seedSheet(chrome([{ kind: 'statSet', target: 'INT', value: 6 }]));
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS + 2]);
+  });
+
+  it('leaves a sheet roll alone for a roll-type modifier', async () => {
+    // The fifth kind, and the one that should NOT land here: an Attack modifier belongs to
+    // an attack, not to every skill check. It is applied in the combat path instead.
+    await seedSheet(chrome([{ kind: 'roll', target: 'Attack', value: 9 }]));
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS]);
+  });
+
   it('ignores chrome that modifies something this roll does not use', async () => {
     await seedSheet(chrome([{ kind: 'stat', target: 'Cool', value: 9 }]));
     const roll = await rollBusiness();

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { getInitiativeSystem } from '../systems';
 import { generic } from '../systems/generic';
 import { sr6 } from '../systems/sr6';
@@ -250,5 +250,90 @@ describe('cwn system', () => {
     expect(diceResults).toHaveProperty('8');
     expect(Array.isArray(diceResults['8'])).toBe(true);
     expect(diceResults['8']).toHaveLength(1);
+  });
+});
+
+describe('CP:R initiative and cyberware', () => {
+  // Initiative is rolled on the client, so the chrome has to be applied here too. Without
+  // it a cyberarm raising REF shows on the sheet and reaches every other roll, but not the
+  // one that decides who goes first.
+  const d10 = (face: number) => vi.spyOn(random, 'cryptoRng').mockReturnValue((face - 0.5) / 10);
+
+  const chromed = (mods: unknown[], extra = {}) => ({
+    ref: 5,
+    cyberware: [{ name: 'Kerenzikov', equipped: true, type: 'neural', side: null, mods, ...extra }],
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('rolls REF + 1d10 with no chrome', () => {
+    d10(6);
+    expect(cpr.rollPlayer({ ref: 5 }).score).toBe(11);
+  });
+
+  it('uses the REF the chrome gives you', () => {
+    d10(6);
+    const out = cpr.rollPlayer(chromed([{ kind: 'stat', target: 'REF', value: 3 }]));
+    expect(out.score).toBe(8 + 6);
+    expect(out.breakdown).toContain('REF(8)');
+  });
+
+  it('honours a set on REF as the value it sets', () => {
+    d10(6);
+    expect(cpr.rollPlayer(chromed([{ kind: 'statSet', target: 'Reflexes', value: 2 }])).score)
+      .toBe(2 + 6);
+  });
+
+  it('adds an Initiative roll modifier, which is not a stat', () => {
+    d10(6);
+    const out = cpr.rollPlayer(chromed([{ kind: 'roll', target: 'Initiative', value: 2 }]));
+    expect(out.score).toBe(5 + 6 + 2);
+    // Named rather than folded into REF, so a player can see where it came from.
+    expect(out.breakdown).toContain('CHROME(+2)');
+    expect(out.breakdown).toContain('REF(5)');
+  });
+
+  it('reads the Companion spelling of the roll type', () => {
+    d10(6);
+    expect(cpr.rollPlayer(chromed([{ kind: 'roll', target: 'Initiative Roll', value: 2 }])).score)
+      .toBe(5 + 6 + 2);
+  });
+
+  it('stacks a REF modifier and an Initiative modifier', () => {
+    d10(6);
+    expect(cpr.rollPlayer(chromed([
+      { kind: 'stat', target: 'REF', value: 3 },
+      { kind: 'roll', target: 'Initiative', value: 2 },
+    ])).score).toBe(8 + 6 + 2);
+  });
+
+  it('ignores a roll modifier aimed at some other kind of roll', () => {
+    d10(6);
+    expect(cpr.rollPlayer(chromed([{ kind: 'roll', target: 'Damage', value: 9 }])).score)
+      .toBe(5 + 6);
+  });
+
+  it('ignores chrome that is not installed', () => {
+    d10(6);
+    expect(cpr.rollPlayer(chromed([{ kind: 'stat', target: 'REF', value: 9 }], { type: '' })).score)
+      .toBe(5 + 6);
+  });
+
+  it('ignores chrome that is switched off', () => {
+    d10(6);
+    expect(cpr.rollPlayer(chromed([{ kind: 'roll', target: 'Initiative', value: 9 }], { equipped: false })).score)
+      .toBe(5 + 6);
+  });
+
+  it('applies the same rules to an NPC roll', () => {
+    d10(6);
+    expect(cpr.rollNpc(chromed([{ kind: 'roll', target: 'Initiative', value: 2 }])).score)
+      .toBe(5 + 6 + 2);
+  });
+
+  it('reads a sheet passed as { data } as well as a bare one', () => {
+    d10(6);
+    const bare = chromed([{ kind: 'stat', target: 'REF', value: 3 }]);
+    expect(cpr.rollPlayer({ data: bare }).score).toBe(cpr.rollPlayer(bare).score);
   });
 });

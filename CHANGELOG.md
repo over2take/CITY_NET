@@ -9,6 +9,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Cyberware reaches your initiative.** A cyberarm that raises REF now raises what you roll for turn order, and a piece whose modifier targets Initiative adds to it directly. Both previously showed on the sheet and reached every other roll while initiative alone read the unmodified stat. The chrome is named in the breakdown rather than folded into REF, so the number is explainable.
+
 - **A modifier on Language (Streetslang) no longer lands on Language (Other).** The two skills differ only inside the brackets, and the name matching stripped every bracket in order to cope with the "(x2)" that marks a double-cost skill. Only the cost marker comes off now.
 
   Found by testing every stat and skill the picker offers rather than one of each — the two Language skills were the only pair that collided, and nothing about the symptom would have pointed at the cause.

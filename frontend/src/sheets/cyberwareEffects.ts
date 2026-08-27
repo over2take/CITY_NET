@@ -122,7 +122,7 @@ export function sheetEffects(
   // Installed, not merely owned. A piece still waiting for somewhere to go is in a list
   // on a sheet, not in anybody's body — a sheet reading "0 INSTALLED" beside a stat that
   // piece claims to set is the same fact contradicting itself.
-  const rows = readRows(data).filter((r) => r.equipped && !needsPlacing(r));
+  const rows = installedRows(data);
   if (!rows.length) return EMPTY;
 
   const index = buildIndex(template);
@@ -163,6 +163,38 @@ export function sheetEffects(
     entry.delta = entry.value - entry.base;
   }
   return { fields, unmatched };
+}
+
+/**
+ * The chrome that is actually installed and running.
+ *
+ * Equipped and placed, which is what "installed" means everywhere else. Shared so the
+ * field effects and the roll bonuses cannot drift into answering it differently.
+ */
+const installedRows = (data: Record<string, unknown> | undefined | null) =>
+  readRows(data).filter((r) => r.equipped && !needsPlacing(r));
+
+/**
+ * What a roll type is modified by — Initiative, Attack, Damage.
+ *
+ * Separate from the field effects because a roll type is not a field: no number on the
+ * sheet holds it, so it can only be applied where that roll is actually made.
+ *
+ * Matches however it was spelled, so an imported "Initiative Roll" answers to Initiative.
+ */
+export function rollBonus(
+  data: Record<string, unknown> | undefined | null,
+  rollType: string,
+  template: SheetTemplate | undefined,
+): number {
+  if (!template || template.id !== EFFECTS_SYSTEM) return 0;
+  const wanted = normRoll(rollType);
+  if (!wanted) return 0;
+
+  return installedRows(data).reduce((sum, row) => sum + row.mods.reduce(
+    (n, m) => (m.kind === 'roll' && normRoll(m.target) === wanted ? n + m.value : n),
+    0,
+  ), 0);
 }
 
 /** The effective value of one field, or its stored value when no chrome touches it. */
