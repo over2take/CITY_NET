@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [1.11.1] - 2026-08-27
+
+The themes, reaching the parts they were missing.
+
 ### Fixed
 
 - **Themes reach the text that was only inheriting a colour.** Labels, headings and the readouts beside sliders stayed green on every theme while the values next to them changed. The base text colour was set on `body`, which sits outside the element the theme class is on, so it always resolved to the default green. Anything that set its own colour was already fine, which is why half of each line themed and half did not.
