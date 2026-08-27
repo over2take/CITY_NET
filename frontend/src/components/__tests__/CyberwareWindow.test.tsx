@@ -249,6 +249,98 @@ describe('editing', () => {
   });
 });
 
+describe('naming a type is not installing the piece', () => {
+  // Saying what a piece is and putting it in a body part are two decisions. Placement used
+  // to be inferred from the type, which made choosing "Fashionware" in the list install the
+  // piece on the spot — there was no way to own something you had not fitted yet.
+  const UNTYPED = [{ name: 'eye thing', type: '', side: null, hl: 3, cost: 150, data: '' }];
+
+  const setType = (name: string, type: string) =>
+    userEvent.selectOptions(screen.getByLabelText(`Install type for ${name}`), type);
+
+  it('leaves a piece unplaced after its type is set', async () => {
+    const onFieldChange = show(UNTYPED);
+    await setType('eye thing', 'cybereye');
+
+    const written = onFieldChange.mock.calls[0][1][0];
+    expect(written.type).toBe('cybereye');
+    expect(written.placed).toBe(false);
+  });
+
+  it('leaves an unpaired type unplaced too, which is the case that used to install', async () => {
+    // Fashionware has no side, so the old rule counted it as placed the instant it was
+    // typed. This is the exact regression to guard.
+    const onFieldChange = show(UNTYPED);
+    await setType('eye thing', 'fashionware');
+
+    const written = onFieldChange.mock.calls[0][1][0];
+    expect(written.type).toBe('fashionware');
+    expect(written.placed).toBe(false);
+  });
+
+  it('still counts nothing as installed after typing everything', () => {
+    show([
+      { name: 'A', type: 'fashionware', side: null, hl: 0, cost: null, data: '', placed: false },
+      { name: 'B', type: 'cybereye', side: null, hl: 0, cost: null, data: '', placed: false },
+    ]);
+    expect(screen.getByText(/0 INSTALLED · 2 UNFILED/)).toBeInTheDocument();
+  });
+
+  it('leaves the body diagram empty until something is placed', () => {
+    show([{ name: 'Tattoo', type: 'fashionware', side: null, hl: 0, cost: null, data: '', placed: false }]);
+    expect(screen.getByText(/FASHIONWARE · EMPTY/)).toBeInTheDocument();
+  });
+
+  it('offers the typed piece first when placing into the matching part', async () => {
+    // What setting a type IS for: it makes the piece read as a match, nothing more.
+    show([
+      { name: 'other', type: '', side: null, hl: 0, cost: null, data: '' },
+      { name: 'eye thing', type: 'cybereye', side: null, hl: 0, cost: null, data: '', placed: false },
+    ]);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cybereye L' }));
+    const offered = screen.getAllByRole('button')
+      .map((b) => b.textContent?.trim())
+      .filter((t) => t?.startsWith('eye thing') || t?.startsWith('other'));
+    expect(offered[0]).toMatch(/^eye thing/);
+  });
+
+  it('installs it only when it is placed on a body part', async () => {
+    const onFieldChange = show([
+      { name: 'eye thing', type: 'cybereye', side: null, hl: 0, cost: null, data: '', placed: false },
+    ]);
+    await userEvent.click(screen.getByRole('button', { name: 'Add to Cybereye L' }));
+    await userEvent.click(screen.getByRole('button', { name: /^eye thing/ }));
+
+    expect(onFieldChange.mock.calls[0][1][0]).toMatchObject({
+      type: 'cybereye', side: 'l', placed: true,
+    });
+  });
+
+  it('survives the whole round trip without forgetting anything', async () => {
+    // Type it, place it, take it out: still a Cybereye, still owned, just not fitted.
+    const onFieldChange = show([
+      { name: 'eye thing', type: 'cybereye', side: 'l', hl: 3, cost: 150, data: '', placed: true },
+    ]);
+    await userEvent.click(screen.getByRole('button', { name: 'Take eye thing out of Cybereye L' }));
+
+    expect(onFieldChange.mock.calls[0][1][0]).toMatchObject({
+      name: 'eye thing', type: 'cybereye', side: null, placed: false, hl: 3, cost: 150,
+    });
+  });
+
+  it('does not change placement when a placed piece is retyped', async () => {
+    // Correcting a type on something already fitted should not tip it out of the body.
+    const onFieldChange = show([
+      { name: 'thing', type: 'cyberarm', side: 'r', hl: 0, cost: null, data: '', placed: true },
+    ]);
+    await setType('thing', 'cyberleg');
+
+    expect(onFieldChange.mock.calls[0][1][0]).toMatchObject({
+      type: 'cyberleg', side: 'r', placed: true,
+    });
+  });
+});
+
 describe('editing a piece already on the list', () => {
   // Anything here can be wrong: a name mistyped, a price guessed, an effect that turned
   // out to do something else. Deleting and re-adding loses the placement and the position.
@@ -600,16 +692,17 @@ describe('taking chrome out again', () => {
     expect(moved.side).toBeNull();
   });
 
-  it('leaves an unpaired piece with no type, since that is its only placement', async () => {
-    // Fashionware has no side to give up. Keeping its type would leave it counted as
-    // installed, so there would be no way to take it out at all.
+  it('keeps the type of an unpaired piece too, since placement is its own fact', async () => {
+    // Fashionware has no side to give up, and it does not need one: the piece is unplaced
+    // because `placed` says so. Taking a Light Tattoo off does not stop it being
+    // Fashionware, so it goes back to the waiting list still knowing what it is.
     const onFieldChange = show([
-      { name: 'Light Tattoo', type: 'fashionware', side: null, hl: 0, cost: null, data: '' },
+      { name: 'Light Tattoo', type: 'fashionware', side: null, hl: 0, cost: null, data: '', placed: true },
     ]);
     await userEvent.click(screen.getByRole('button', { name: /^Take Light Tattoo out of/ }));
 
     const [, value] = onFieldChange.mock.calls[0];
-    expect(value[0].type).toBe('');
+    expect(value[0]).toMatchObject({ type: 'fashionware', placed: false });
   });
 
   it('puts an unplaced piece back without asking what it is again', async () => {

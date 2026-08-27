@@ -346,7 +346,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
   const addInto = (panel: Panel) => {
     setDraft(null);
     if (unfiledRows.length) setPlacing(panel);
-    else setDraft(newDraft({ type: panel.typeId, side: panel.side }));
+    else setDraft(newDraft({ type: panel.typeId, side: panel.side, placed: true }));
   };
 
   /**
@@ -371,9 +371,10 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
     const i = rows.indexOf(row);
     if (i < 0) return;
     const next = [...rows];
-    next[i] = typeById(row.type)?.paired
-      ? { ...row, side: null }
-      : { ...row, type: '', side: null };
+    // The type survives, whatever it is. Taking a Light Tattoo off does not make it stop
+    // being Fashionware any more than taking an eye out stops it being a Cybereye — and
+    // the piece is unplaced because `placed` says so, not because the type went missing.
+    next[i] = { ...row, side: null, placed: false };
     write(next);
   };
 
@@ -391,6 +392,8 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
     const i = rows.indexOf(row);
     if (i < 0) return;
     const next = [...rows];
+    // Placement is left exactly as it was. Naming a type says what a piece is; the body
+    // diagram is what puts it somewhere, and one should never quietly do the other's job.
     next[i] = { ...row, type: typeId, side: typeById(typeId)?.paired ? row.side : null };
     write(next);
   };
@@ -400,7 +403,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
     const i = rows.indexOf(row);
     if (i < 0) return;
     const next = [...rows];
-    next[i] = { ...row, type: panel.typeId, side: panel.side };
+    next[i] = { ...row, type: panel.typeId, side: panel.side, placed: true };
     write(next);
     setPlacing(null);
   };
@@ -531,7 +534,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
               type="button"
               className="upload-btn"
               onClick={() => {
-                setDraft(newDraft({ type: placing.typeId, side: placing.side }));
+                setDraft(newDraft({ type: placing.typeId, side: placing.side, placed: true }));
                 setPlacing(null);
               }}
             >NEW PIECE</button>

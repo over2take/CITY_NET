@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **Edit anything on the cyberware list.** A pencil beside each piece opens it in the form with everything filled in — name, type, humanity, price, effect and modifiers — so a mistyped name or a wrong effect can be corrected without deleting the piece and building it again. It keeps its place in the list and stays installed where it was.
 
+- **Setting a type no longer installs the piece.** Naming something a Cyberleg in the list says what it is; it does not fit it. It stays in the unplaced list and is offered first when you press + on a matching body part, which is what naming the type is for. Fitting still happens on the diagram, which is the only place that knows where things go.
+
+  This was most visible on the types with no left or right — marking something Fashionware installed it on the spot, and there was no way to own a piece you had not fitted yet.
+
 - **Taking a piece out no longer forgets what it is.** Unplacing a Cybereye left it with no type at all, so putting it back meant saying it was a Cybereye a second time. It now keeps its type and gives up only its side, which is the state a piece is in before anyone has chosen a socket.
 
 - **The TYPE column shows the type, not the placement.** Installing a Cybereye in the left eye made that column read "Cybereye L", which looked like installing it had rewritten the type you set. Which eye it is in is a fact about the body, and the diagram is where the body is.

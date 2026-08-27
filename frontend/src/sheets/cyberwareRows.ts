@@ -80,6 +80,14 @@ export interface CyberRow {
    */
   equipped: boolean;
   /**
+   * Whether it has been put in the body, as opposed to merely owned.
+   *
+   * Its own fact rather than something read off the type. Saying a piece is a Cybereye and
+   * putting it in an eye are two decisions, and inferring the second from the first made
+   * naming a type install the piece on the spot.
+   */
+  placed: boolean;
+  /**
    * The mechanical effects, when there are any.
    *
    * The one part of an import that carries real mechanics: descriptions arrive blank
@@ -131,6 +139,12 @@ export function normaliseRow(raw: unknown): CyberRow {
     // Installed unless it says otherwise, so rows stored before this field existed do not
     // all switch themselves off.
     equipped: r.equipped !== false,
+    // Rows written before placement was recorded have no opinion, and defaulting those to
+    // false would uninstall chrome nobody touched. Placement used to be inferred exactly
+    // the old way, so that rule is kept for exactly the rows stored under it.
+    placed: typeof r.placed === 'boolean'
+      ? r.placed
+      : Boolean(r.type) && (!typeById(String(r.type))?.paired || Boolean(r.side)),
     mods: normaliseMods(r.mods),
   };
 }
@@ -163,22 +177,19 @@ export const rowLocation = (row: CyberRow): string =>
 /** Rows for one panel of the diagram: same type, and same side when the type is paired. */
 export function rowsForPanel(rows: CyberRow[], typeId: string, side: Side): CyberRow[] {
   const t = typeById(typeId);
-  return rows.filter((r) => r.type === typeId && (!t?.paired || r.side === side));
+  // Placed, not merely typed: a piece marked Fashionware that nobody has fitted belongs in
+  // the waiting list, not hanging off the diagram.
+  return rows.filter((r) => r.placed && r.type === typeId && (!t?.paired || r.side === side));
 }
 
 /**
  * Whether a row still needs somewhere to go.
  *
- * Two ways to not have a place, and both have to count. A row with no type at all is the
- * obvious one, and is how every import arrives. The other is a paired type with no side:
- * a Cybereye that has not been put in an eye yet is in neither panel, and if that did not
- * read as unplaced it would simply disappear off the diagram.
- *
- * Which side a piece is on is a fact about the socket, not about the piece — the same eye
- * fits either one — so it is answered by where you install it rather than on the form.
+ * Placement is stored, not deduced. Naming a type says what a piece is and makes it rank
+ * as a match when you press + on a matching body part; it does not fit the piece. That
+ * only happens on the diagram, which is the one place that knows where things go.
  */
-export const needsPlacing = (row: CyberRow): boolean =>
-  !row.type || Boolean(typeById(row.type)?.paired && !row.side);
+export const needsPlacing = (row: CyberRow): boolean => !row.placed;
 
 /**
  * How well a piece suits a panel, for ordering the chooser: 2 says so, 1 hints, 0 neither.

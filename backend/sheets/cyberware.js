@@ -121,6 +121,9 @@ function normaliseRow(raw) {
     // Installed unless it says otherwise. Rows stored before this field existed have no
     // opinion, and defaulting those to false would switch off chrome nobody touched.
     equipped: r.equipped !== false,
+    // Whether it is in the body. Naming a type does not put it there — that is what the
+    // body diagram is for — so this is stored rather than inferred.
+    placed: typeof r.placed === 'boolean' ? r.placed : inferPlaced(r),
     mods: normaliseMods(r.mods),
   };
 }
@@ -135,17 +138,27 @@ function normaliseRow(raw) {
 const PAIRED_TYPES = new Set(['cybereye', 'cyberarm', 'cyberleg']);
 
 /**
- * Whether a piece is actually in the body, as opposed to merely owned.
+ * Whether a piece has been put in the body, as opposed to merely owned.
  *
- * Two ways to not be installed. A row with no type at all is where every import starts,
- * since the export says nothing about location. A paired type with no side is the subtler
- * one: it knows it is a Cyberleg but not which leg, so it is in neither.
+ * Its own stored fact rather than something read off the type, because saying what a piece
+ * *is* and putting it in a body part are two decisions. Inferring placement from the type
+ * made them one: choosing "Fashionware" in the list installed the piece on the spot, with
+ * no way to describe something you owned but had not fitted.
  *
- * This is what "installed" has to mean everywhere, or the sheet says a character has eight
- * pieces installed while the body diagram shows an empty figure.
+ * This is what "installed" has to mean everywhere, or the sheet claims a character has
+ * eight pieces installed while the body diagram shows an empty figure.
  */
-const isPlaced = (row) =>
-  Boolean(row && row.type) && (!PAIRED_TYPES.has(row.type) || Boolean(row.side));
+const isPlaced = (row) => Boolean(row && row.placed);
+
+/**
+ * What placement a row stored before it was recorded explicitly.
+ *
+ * Rows written earlier have no `placed` field, and defaulting those to false would
+ * uninstall chrome nobody touched. Placement used to be inferred exactly this way, so the
+ * old rule is kept for exactly the rows that were stored under it.
+ */
+const inferPlaced = (r) =>
+  Boolean(r.type) && (!PAIRED_TYPES.has(r.type) || Boolean(r.side));
 
 /**
  * Whatever the sheet holds, as an array of rows.
@@ -241,6 +254,10 @@ function fromFormFields(data, max = 12) {
       hl: data[`cyber${n}_hl`],
       cost: data[`cyber${n}_cost`],
       data: String(data[`cyber${n}_data`] ?? '').trim(),
+      // Typed but not fitted, like every other import. The form names what a piece is; it
+      // has no column for which arm, so a Cyberarm off a form is in neither one until
+      // somebody places it on the diagram.
+      placed: false,
     }));
   }
   return out;
@@ -250,7 +267,7 @@ function fromFormFields(data, max = 12) {
 const isFormField = (key) => /^cyber\d+_(name|type|hl|cost|data)$/.test(key);
 
 module.exports = {
-  FIELD, humanise, normaliseRow, rows, humanityLoss, PAIRED_TYPES, isPlaced,
+  FIELD, humanise, normaliseRow, rows, humanityLoss, PAIRED_TYPES, isPlaced, inferPlaced,
   MOD_KINDS, normaliseMods, modsFromCompanion,
   fromCompanion, fromNotes, fromFormFields, isFormField,
 };
