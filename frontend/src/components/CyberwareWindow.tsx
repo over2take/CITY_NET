@@ -505,6 +505,16 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
   const right = wiredPanels().filter((p) => !left.includes(p));
 
   return (
+    <>
+      <style>{`
+        /* Scoped here because this list scrolls itself: a container inside a window does
+           not inherit the window's scrollbar styling, so without this it draws the
+           browser's own, which is wider and sits over the row buttons. */
+        .cyber-scroll { scrollbar-width: thin; scrollbar-color: var(--dark-green) var(--black); }
+        .cyber-scroll::-webkit-scrollbar { width: 8px; }
+        .cyber-scroll::-webkit-scrollbar-track { background: var(--black); }
+        .cyber-scroll::-webkit-scrollbar-thumb { background: var(--dark-green); border: 1px solid var(--green); }
+      `}</style>
     <DraggableWindow
       title={who ? `AUGMENTATION — ${who.toUpperCase()}` : 'AUGMENTATION'}
       pos={pos}
@@ -615,7 +625,10 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
         </button>
 
         {listOpen && (
-          <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--dark-green)' }}>
+          // The table scrolls itself rather than through the window, so it never picked
+          // up the themed scrollbar and was drawing the browser's default 17px one over
+          // the last column, which is where the edit and remove buttons live.
+          <div className="cyber-scroll" style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--dark-green)', paddingRight: 6 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
@@ -791,5 +804,6 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
         </button>
       ))}
     </DraggableWindow>
+    </>
   );
 }

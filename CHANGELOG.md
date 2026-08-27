@@ -89,6 +89,8 @@ Cyberware, as something you can actually see.
 
 - **The sheet's cyberware summary counts what is installed**, not everything on the list. It read "8 INSTALLED" over a body diagram with nothing on it.
 
+- **The cyberware table's scrollbar matches the app, and keeps off the row buttons.** That list scrolls itself rather than through the window around it, so it was drawing the browser's own scrollbar over the column holding the edit and remove buttons.
+
 - **The character sheet's scrollbar stops covering the corner of a text box.** The resize grip on a description or notes field sat four pixels from the bar, so reaching for it caught the bar instead. There is proper room now, and the gutter is reserved whether the sheet is scrolling or not, so the layout no longer shifts the moment a tab grows past the window.
 
   The sheet body scrolls itself rather than through the window around it, which is also why it had been drawing the browser's own scrollbar instead of the thin green one everything else uses. It matches now.
