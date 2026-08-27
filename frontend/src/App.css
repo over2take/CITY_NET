@@ -180,6 +180,10 @@ body, html, #root {
   /* Inside the theme class, so this resolves to the active theme rather than the default,
      and everything that inherits a colour follows the theme with it. */
   color: var(--green);
+  /* Checkboxes and range sliders draw themselves, and without this they draw in the
+     browser's own blue — the one thing on screen that belongs to no theme at all. It
+     inherits, so the whole tree is covered from here rather than per control. */
+  accent-color: var(--green);
 }
 
 .scanlines {
