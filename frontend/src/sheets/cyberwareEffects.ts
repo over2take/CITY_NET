@@ -50,7 +50,10 @@ const COMPANION_STAT_NAMES: Record<string, string> = {
  */
 export const norm = (s: string): string => String(s || '')
   .toLowerCase()
-  .replace(/\([^)]*\)/g, ' ')
+  // Only the cost marker, not every bracket. Stripping all of them collapsed
+  // "Language (Streetslang)" and "Language (Other)" onto the same skill, so a modifier on
+  // one silently landed on the other — there the bracket is the whole distinction.
+  .replace(/\(\s*x\s*\d+\s*\)/gi, ' ')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim();
 

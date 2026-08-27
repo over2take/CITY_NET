@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A modifier on Language (Streetslang) no longer lands on Language (Other).** The two skills differ only inside the brackets, and the name matching stripped every bracket in order to cope with the "(x2)" that marks a double-cost skill. Only the cost marker comes off now.
+
+  Found by testing every stat and skill the picker offers rather than one of each — the two Language skills were the only pair that collided, and nothing about the symptom would have pointed at the cause.
+
 - **Cyberware only changes your numbers once it is actually installed.** A piece you own but have not placed on the body no longer modifies a stat or a skill. The sheet was reading "0 INSTALLED" beside a stat one of those pieces had rewritten, which is the same fact contradicting itself — and since every import arrives unplaced, importing a character used to change their stats before anyone had said where anything went.
 
   Placed means placed: a piece typed as a Cyberleg but in neither leg is owned, not installed.

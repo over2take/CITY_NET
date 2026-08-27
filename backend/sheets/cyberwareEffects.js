@@ -52,10 +52,16 @@ const CPR_STAT_ALIASES = {
  * "Conceal & Reveal Object" where the sheet says "Conceal/Reveal Object", and it drops the
  * "(x2)" that marks a double-cost skill. Both differences are spelling, not meaning, so
  * they are normalised away rather than aliased one at a time.
+ *
+ * A bracket is not always noise, though. "Language (Streetslang)" and "Language (Other)"
+ * are two skills that differ only inside the brackets, so only the cost marker comes off.
  */
 const norm = (s) => String(s || '')
   .toLowerCase()
-  .replace(/\([^)]*\)/g, ' ')
+  // Only the cost marker, not every bracket. Stripping all of them collapsed
+  // "Language (Streetslang)" and "Language (Other)" onto the same skill, so a modifier on
+  // one silently landed on the other — there the bracket is the whole distinction.
+  .replace(/\(\s*x\s*\d+\s*\)/gi, ' ')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim();
 

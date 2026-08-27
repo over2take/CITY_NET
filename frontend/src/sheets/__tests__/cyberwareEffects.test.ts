@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { getTemplate } from '../index';
 import { sheetEffects, effectiveValue, describeSources, norm, normRoll } from '../cyberwareEffects';
 import { MOD_KINDS } from '../cyberwareRows';
+import { targetOptions } from '../modTargets';
 
 const CPR = getTemplate('cyberpunk_red');
 // Placed by default: an unplaced piece is not installed and changes no numbers, so a
@@ -143,6 +144,67 @@ describe('every kind of modifier reaches the sheet', () => {
   it('covers every kind the row model declares', () => {
     const covered = [...KINDS.map((k) => k.kind), 'roll'].sort();
     expect([...MOD_KINDS].sort()).toEqual(covered);
+  });
+});
+
+describe('everything the picker offers actually works', () => {
+  // The point of these is completeness rather than any single case. The add form offers a
+  // list of stats and skills; anything on that list that the effects layer cannot match
+  // is a modifier a player can build which silently does nothing — and it looks identical
+  // to a piece with no effect. One representative target per kind would never catch it.
+  const STATS = targetOptions('stat', CPR).map((o) => o.value);
+  const SKILLS = targetOptions('skill', CPR).map((o) => o.value);
+
+  it('offers a list worth checking', () => {
+    // Guards the guard: if targetOptions returned nothing, every test below would pass.
+    expect(STATS.length).toBeGreaterThanOrEqual(10);
+    expect(SKILLS.length).toBeGreaterThanOrEqual(60);
+  });
+
+  it.each(STATS)('a modifier on %s changes that stat', (label) => {
+    const data = sheet([piece('P', [{ kind: 'stat', target: label, value: 2 }])]);
+    const out = sheetEffects(data, CPR);
+    expect(out.unmatched).toEqual([]);
+    expect(Object.values(out.fields).map((f) => f.delta)).toEqual([2]);
+  });
+
+  it.each(STATS)('setting %s replaces that stat', (label) => {
+    const data = sheet([piece('P', [{ kind: 'statSet', target: label, value: 4 }])]);
+    const out = sheetEffects(data, CPR);
+    expect(out.unmatched).toEqual([]);
+    expect(Object.values(out.fields).map((f) => f.value)).toEqual([4]);
+  });
+
+  it.each(SKILLS)('a modifier on %s changes that skill', (label) => {
+    const data = sheet([piece('P', [{ kind: 'skill', target: label, value: 3 }])]);
+    const out = sheetEffects(data, CPR);
+    expect(out.unmatched).toEqual([]);
+    expect(Object.values(out.fields).map((f) => f.delta)).toEqual([3]);
+  });
+
+  it.each(SKILLS)('setting %s replaces that skill', (label) => {
+    const data = sheet([piece('P', [{ kind: 'skillSet', target: label, value: 5 }])]);
+    const out = sheetEffects(data, CPR);
+    expect(out.unmatched).toEqual([]);
+    expect(Object.values(out.fields).map((f) => f.value)).toEqual([5]);
+  });
+
+  it('lands each stat on its own field rather than collapsing them', () => {
+    // A matching rule loose enough to resolve everything would pass every test above by
+    // sending them all to the same place.
+    const ids = new Set(STATS.map((label) => {
+      const data = sheet([piece('P', [{ kind: 'stat', target: label, value: 1 }])]);
+      return Object.keys(sheetEffects(data, CPR).fields)[0];
+    }));
+    expect(ids.size).toBe(STATS.length);
+  });
+
+  it('lands each skill on its own field rather than collapsing them', () => {
+    const ids = new Set(SKILLS.map((label) => {
+      const data = sheet([piece('P', [{ kind: 'skill', target: label, value: 1 }])]);
+      return Object.keys(sheetEffects(data, CPR).fields)[0];
+    }));
+    expect(ids.size).toBe(SKILLS.length);
   });
 });
 

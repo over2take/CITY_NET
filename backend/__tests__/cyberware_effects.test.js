@@ -187,6 +187,66 @@ describe('every kind of modifier, end to end', () => {
   });
 });
 
+describe('every stat, skill and roll type the app offers', () => {
+  // Completeness, not representative cases. A name the picker offers but the index cannot
+  // match is a modifier a player can build that silently does nothing, and it looks
+  // exactly like a piece with no effect. One target per kind would never find it.
+  const { CPR_SKILLS } = require('../sheets/rolls');
+  const STAT_NAMES = Object.values(fx.CPR_STAT_ALIASES).flat();
+  const SKILL_LABELS = Object.values(CPR_SKILLS).map(([label]) => label);
+  const ROLL_TYPES = ['Initiative', 'Attack', 'Damage', 'Aimed Shot', 'Autofire'];
+
+  it('has lists worth checking', () => {
+    // Guards the guard: an empty list would make every case below pass for free.
+    expect(STAT_NAMES.length).toBe(20);      // ten stats, two vocabularies each
+    expect(SKILL_LABELS.length).toBeGreaterThanOrEqual(60);
+  });
+
+  it.each(STAT_NAMES)('%s resolves to a stat and moves it', (name) => {
+    const data = withChrome([piece('P', [{ kind: 'stat', target: name, value: 2 }])]);
+    const out = fx.effects(data);
+    expect(out.unmatched).toEqual([]);
+    expect(Object.values(out.fields).map((f) => f.value)).toEqual([2]);
+  });
+
+  it.each(SKILL_LABELS)('%s resolves to a skill and moves it', (label) => {
+    const data = withChrome([piece('P', [{ kind: 'skill', target: label, value: 3 }])]);
+    const out = fx.effects(data);
+    expect(out.unmatched).toEqual([]);
+    expect(Object.values(out.fields).map((f) => f.value)).toEqual([3]);
+  });
+
+  it('gives every skill its own field rather than collapsing any together', () => {
+    // Found "Language (Streetslang)" and "Language (Other)" landing on the same field,
+    // because the normaliser stripped every bracket to cope with "(x2)".
+    const ids = SKILL_LABELS.map((label) => fx.fieldFor(label));
+    expect(new Set(ids).size).toBe(SKILL_LABELS.length);
+  });
+
+  it('gives every stat its own field', () => {
+    const ids = Object.keys(fx.CPR_STAT_ALIASES);
+    expect(new Set(ids.map((id) => fx.fieldFor(id.toUpperCase()))).size).toBe(ids.length);
+  });
+
+  it.each(ROLL_TYPES)('%s is reachable as a roll modifier', (type) => {
+    const data = withChrome([piece('P', [{ kind: 'roll', target: type, value: 2 }])]);
+    expect(fx.rollBonus(data, type)).toBe(2);
+  });
+
+  it.each(ROLL_TYPES)('%s is reachable when spelled the Companion way', (type) => {
+    // They append "Roll" to most of these.
+    const data = withChrome([piece('P', [{ kind: 'roll', target: `${type} Roll`, value: 2 }])]);
+    expect(fx.rollBonus(data, type)).toBe(2);
+  });
+
+  it('keeps roll types apart from one another', () => {
+    const data = withChrome([piece('P', [{ kind: 'roll', target: 'Attack', value: 2 }])]);
+    for (const other of ROLL_TYPES.filter((t) => t !== 'Attack')) {
+      expect(fx.rollBonus(data, other)).toBe(0);
+    }
+  });
+});
+
 describe('never writing to the sheet', () => {
   it('leaves the stored value exactly as the player typed it', () => {
     // The whole design rests on this: write the total back and the next recompute adds the
