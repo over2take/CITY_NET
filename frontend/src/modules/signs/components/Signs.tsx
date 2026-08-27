@@ -1,8 +1,8 @@
 import React, { useMemo, useContext, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { ThemeContext } from '../theme/themes';
-import { loadFont, type RemoteFont } from '../utils/fontLoader';
+import { ThemeContext } from '../../../theme/themes';
+import { loadFont, type RemoteFont } from '../../../utils/fontLoader';
 
 export interface SignLine {
   text: string;

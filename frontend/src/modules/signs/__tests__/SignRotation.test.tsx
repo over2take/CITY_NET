@@ -3,12 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-vi.mock('../../utils/locationHelpers', () => ({
+vi.mock('../../../utils/locationHelpers', () => ({
   isUserDefinedName: (name: string) => !!name && name.trim() !== '',
   getStructLabel: (loc: any) => `STRUCT_${loc.id}`,
 }));
 
-import { AdminPanel } from '../AdminPanel';
+import { AdminPanel } from '../../../components/AdminPanel';
 
 /**
  * Signs originally persisted yaw only, so one pitched flat to serve as a ground

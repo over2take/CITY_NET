@@ -14,7 +14,7 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
 import { render } from '@testing-library/react';
-import { Signs } from '../Signs';
+import { Signs } from '../index';
 
 /**
  * jsdom has no 2D canvas, and a sign paints its text onto one to build its texture. That

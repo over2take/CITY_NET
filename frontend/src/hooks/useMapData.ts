@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Location, District, Road, WaterBody } from '../types';
-import type { SignData } from '../components/Signs';
+import type { SignData } from '../modules/signs';
 
 export function useMapData() {
   const [locations, setLocations] = useState<Location[]>([]);

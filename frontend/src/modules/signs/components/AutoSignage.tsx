@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useContext } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { ThemeContext } from '../theme/themes';
+import { ThemeContext } from '../../../theme/themes';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

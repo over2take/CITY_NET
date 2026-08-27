@@ -28,7 +28,7 @@ const WATER_OPTIONS: { value: WaterType; label: string }[] = [
 ];
 import type { BankSoundKey } from './BankWindows';
 import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
-import type { SignData, SignLine } from './Signs';
+import type { SignData, SignLine } from '../modules/signs';
 import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 // ─── Custom Signs view ───────────────────────────────────────────────────────

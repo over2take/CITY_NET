@@ -64,8 +64,7 @@ import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic, RoadEraser } from './components/MapElements';
 import { Overpasses, OverpassPreview } from './components/Overpasses';
 import { Sidewalks } from './components/Sidewalks';
-import { AutoSignage } from './components/AutoSignage';
-import { Signs, type SignData } from './components/Signs';
+import { Signs, AutoSignage, type SignData } from './modules/signs';
 import { type RemoteFont } from './utils/fontLoader';
 import type { LayoutType, WaterType, RoundaboutDensity } from './cityGen';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
