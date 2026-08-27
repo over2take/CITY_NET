@@ -1,0 +1,142 @@
+/**
+ * Cyberware reaching a sheet roll, through the real socket handler.
+ *
+ * The effects layer is tested directly and the combat path has its own tests, but the
+ * wiring between them — the line in `requestSheetRoll` that pushes cyberware terms onto a
+ * resolved formula — had nothing exercising it. That is the failure this file exists for:
+ * every piece working, and the roll never asking for any of it.
+ *
+ * Boots the real sockets module against an in-memory DB, the same way the CWN and SR6
+ * socket tests do.
+ */
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { makeTestDb, run } from './helpers/testDb.js';
+
+process.env.JWT_SECRET = 'test-secret';
+process.env.DICE_ANIM_MS = '0';
+
+const socketsFactory = (await import('../sockets/index.js')).default;
+
+const flush = (ms = 25) => new Promise((r) => setTimeout(r, ms));
+const waitFor = async (cond, timeout = 2000) => {
+  const start = Date.now();
+  while (!cond()) {
+    if (Date.now() - start > timeout) return;
+    await flush(10);
+  }
+};
+
+function boot(db) {
+  const emitted = [];
+  let connectionCb;
+  const io = {
+    on: (event, cb) => { if (event === 'connection') connectionCb = cb; },
+    emit: (event, data) => emitted.push({ event, data }),
+    to: () => ({ emit: (event, data) => emitted.push({ event, data }) }),
+  };
+  socketsFactory(io, db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
+
+  const handlers = {};
+  const socket = {
+    id: 'sock-1',
+    on: (event, fn) => { handlers[event] = fn; },
+    emit: (event, data) => emitted.push({ event, data, direct: true }),
+    use: () => {},
+    join: () => {},
+  };
+  connectionCb(socket);
+  return { handlers, emitted };
+}
+
+let db;
+beforeEach(async () => {
+  db = await makeTestDb();
+  await run(db, `CREATE TABLE dice_rolls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, total INTEGER,
+    results TEXT, color TEXT, historyString TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await run(db, `CREATE TABLE IF NOT EXISTS player_banks (username TEXT PRIMARY KEY, balance REAL, debt REAL)`);
+  await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', 'cyberpunk_red')`);
+});
+
+/** A chromed character. `int` and `business` are what the Business roll is built from. */
+const seedSheet = (cyberware = []) =>
+  run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cyberpunk_red', ?, 0)`,
+    [JSON.stringify({ int: 4, business: 3, cool: 5, cyberware })]);
+
+const chrome = (mods, extra = {}) => ([{
+  name: 'EMP Threading', equipped: true, type: 'fashionware', side: null, mods, ...extra,
+}]);
+
+/** Roll `business` and hand back what the tray was told. */
+async function rollBusiness() {
+  const { handlers, emitted } = boot(db);
+  handlers['identify']('GHOST');
+  await flush(50);
+
+  handlers['requestSheetRoll']({ fieldId: 'business' });
+  await waitFor(() => emitted.some((e) => e.event === 'diceRollBroadcast'));
+  return emitted.find((e) => e.event === 'diceRollBroadcast');
+}
+
+describe('cyberware in a sheet roll', () => {
+  // 1d10 + @int(4) + @business(3), so the modifier total is 7 before any chrome.
+  const PLAIN_MODS = 7;
+
+  it('rolls without chrome at stat + skill', async () => {
+    await seedSheet();
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS]);
+  });
+
+  it('adds a skill modifier to the roll the player actually made', async () => {
+    // The wiring this file exists for: the same +6 that shows on the sheet has to reach
+    // the dice, and the server is what decides the number.
+    await seedSheet(chrome([{ kind: 'skill', target: 'Business', value: 6 }]));
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS + 6]);
+  });
+
+  it('adds a stat modifier when the formula uses that stat', async () => {
+    await seedSheet(chrome([{ kind: 'stat', target: 'Intelligence', value: 2 }]));
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS + 2]);
+  });
+
+  it('applies a set as the difference it makes, not as a bonus', async () => {
+    // Business is 3 and the chrome sets it to 1, so the roll is two lower.
+    await seedSheet(chrome([{ kind: 'skillSet', target: 'Business', value: 1 }]));
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS - 2]);
+  });
+
+  it('ignores chrome that modifies something this roll does not use', async () => {
+    await seedSheet(chrome([{ kind: 'stat', target: 'Cool', value: 9 }]));
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS]);
+  });
+
+  it('ignores chrome that is not installed anywhere', async () => {
+    await seedSheet(chrome([{ kind: 'skill', target: 'Business', value: 6 }], { type: '' }));
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS]);
+  });
+
+  it('ignores chrome that is switched off', async () => {
+    await seedSheet(chrome([{ kind: 'skill', target: 'Business', value: 6 }], { equipped: false }));
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS]);
+  });
+
+  it('never writes the bonus back onto the stored sheet', async () => {
+    // The overlay only exists on the way out. If a roll wrote the total back, every
+    // subsequent roll would add the bonus again.
+    await seedSheet(chrome([{ kind: 'skill', target: 'Business', value: 6 }]));
+    await rollBusiness();
+    const { get } = await import('./helpers/testDb.js');
+    const row = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    expect(JSON.parse(row.data).business).toBe(3);
+  });
+});
