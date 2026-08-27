@@ -64,7 +64,7 @@ import { Building, InstancedBuildings, generateThemedBuildingsForPlot } from './
 import { DistrictInteractions, WaterBody, WaterBodies, Roads, GhostTraffic, RoadEraser } from './components/MapElements';
 import { Overpasses, OverpassPreview } from './components/Overpasses';
 import { Sidewalks } from './components/Sidewalks';
-import { Signs, AutoSignage, type SignData } from './modules/signs';
+import { Signs, AutoSignage, useSignEditing, type SignData } from './modules/signs';
 import { type RemoteFont } from './utils/fontLoader';
 import type { LayoutType, WaterType, RoundaboutDensity } from './cityGen';
 import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan } from './components/Camera';
@@ -395,12 +395,16 @@ function App() {
   const [cityParkPonds, setCityParkPonds] = useState(false);
   const [cityRoundabouts, setCityRoundabouts] = useState<RoundaboutDensity>('off');
   const [mapExportApi, setMapExportApi] = useState<MapExportApi | null>(null);
-  const [isPlacingSign, setIsPlacingSign] = useState(false);
-  const [pendingSignPos, setPendingSignPos] = useState<{ x: number; z: number } | null>(null);
-  const [selectedSignId, setSelectedSignId] = useState<number | null>(null);
-  const [signMesh, setSignMesh] = useState<THREE.Mesh | null>(null);
-  const [signTransformMode, setSignTransformMode] = useState<'translate' | 'rotate'>('translate');
-  const [signTransformActive, setSignTransformActive] = useState(false);
+  const {
+    isPlacingSign, setIsPlacingSign,
+    pendingSignPos, setPendingSignPos,
+    selectedSignId, setSelectedSignId,
+    signMesh, setSignMesh,
+    signTransformMode, setSignTransformMode,
+    signTransformActive, setSignTransformActive,
+    placeAt: placeSignAt,
+    saveFromGizmo: handleUpdateSign,
+  } = useSignEditing({ token, fetchSigns });
   const [remoteFonts, setRemoteFonts] = useState<RemoteFont[]>([]);
   const [overpassHeight, setOverpassHeight] = useState(8);
   const [overpassRampLength, setOverpassRampLength] = useState(20);
@@ -1185,8 +1189,6 @@ function App() {
     return () => window.removeEventListener('pointerup', handleGlobalPointerUp);
   }, []);
 
-  // Deactivate TransformControls when selection changes
-  useEffect(() => { setSignTransformActive(false); }, [selectedSignId]);
   const [editData, setEditData] = useState({ name: '', description: '', npcs: '', x: 0, y: 0, z: 0, width: 8, height: 16, depth: 8, baseWidth: 8, baseHeight: 16, baseDepth: 8, shape: 'box', color: '#00ff00', isFavorite: false, isDanger: false, owner: '', polyCount: 5 });
   const [editorGenParts, setEditorGenParts] = useState<any[]>([]);
   const [editorGenType, setEditorGenType] = useState<string>('');
@@ -1201,30 +1203,9 @@ function App() {
   const handleSignPlaceClick = (e: any) => {
     if (!isPlacingSign || !isAdmin) return;
     e.stopPropagation();
-    setPendingSignPos({ x: e.point.x, z: e.point.z });
-    setIsPlacingSign(false);
+    placeSignAt(e.point);
   };
 
-  const handleUpdateSign = useCallback(() => {
-    if (!signMesh || !selectedSignId) return;
-    signMesh.geometry.computeBoundingBox();
-    const bb = signMesh.geometry.boundingBox;
-    const halfH = bb ? (bb.max.y - bb.min.y) / 2 : 0;
-    const x = signMesh.position.x;
-    const y = signMesh.position.y - halfH;
-    const z = signMesh.position.z;
-    // All three axes: a sign pitched flat to act as a ground label used to lose that
-    // rotation on save and spring back upright on reload.
-    const { x: rotX, y: rotY, z: rotZ } = signMesh.rotation;
-    fetch(`/api/signs/${selectedSignId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ x, y, z, rotation_x: rotX, rotation_y: rotY, rotation_z: rotZ }),
-    }).then(r => { if (!r.ok) console.error('Sign save failed:', r.status); fetchSigns(); });
-    setSignTransformActive(false);
-    setSelectedSignId(null);
-    setSignMesh(null);
-  }, [signMesh, selectedSignId, token, fetchSigns]);
 
   const handleTreePlantClick = async (e: any) => {
       if (!isPlantingTrees || !isAdmin) return;

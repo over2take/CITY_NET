@@ -9,4 +9,5 @@
 export { Signs } from './components/Signs';
 export { AutoSignage } from './components/AutoSignage';
 export { SignEditor } from './components/SignEditor';
+export { useSignEditing } from './hooks/useSignEditing';
 export type { SignData, SignLine } from './components/Signs';
