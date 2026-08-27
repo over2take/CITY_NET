@@ -41,7 +41,20 @@ const MOD_KINDS = {
   modifyRollTypesBy: 'roll',
 };
 
-const MOD_KIND_VALUES = Object.values(MOD_KINDS);
+/**
+ * Kinds of our own, with no bucket in the export because the Companion has no equivalent.
+ *
+ * `note` is a labelled number the app never applies: "Quickhack DV 10". Some chrome does
+ * something the sheet has no field for and no dice to roll — it hardens you against a kind
+ * of attack, or changes a value that lives in the fiction. Written into the effect text it
+ * gets lost in a paragraph; as a modifier it is a chip everyone can see at a glance.
+ *
+ * Deliberately its own kind rather than a stat modifier with an odd target. A stat modifier
+ * that matches no field is a mistake worth reporting; a note is not meant to match one.
+ */
+const LOCAL_KINDS = ['note'];
+
+const MOD_KIND_VALUES = [...Object.values(MOD_KINDS), ...LOCAL_KINDS];
 
 /**
  * Whatever was handed over, as a list of well-formed modifiers.
@@ -268,6 +281,7 @@ const isFormField = (key) => /^cyber\d+_(name|type|hl|cost|data)$/.test(key);
 
 module.exports = {
   FIELD, humanise, normaliseRow, rows, humanityLoss, PAIRED_TYPES, isPlaced, inferPlaced,
+  LOCAL_KINDS,
   MOD_KINDS, normaliseMods, modsFromCompanion,
   fromCompanion, fromNotes, fromFormFields, isFormField,
 };

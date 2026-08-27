@@ -7,7 +7,8 @@ import {
 } from '../sheets/cyberwareLocations';
 import {
   CYBERWARE_FIELD, readRows, normaliseRow, totalHumanityLoss, totalCost,
-  rowLocation, rowsForPanel, needsPlacing, panelRank, describeMod, isSetKind, MOD_KINDS, MOD_KIND_LABEL,
+  rowLocation, rowsForPanel, needsPlacing, panelRank, describeMod, isSetKind, isNoteKind,
+  MOD_KINDS, MOD_KIND_LABEL,
   type CyberRow, type CyberMod, type ModKind,
 } from '../sheets/cyberwareRows';
 import type { SheetFieldValue, SheetTemplate } from '../sheets/types';
@@ -44,6 +45,12 @@ const inputStyle: React.CSSProperties = {
 };
 
 type SortKey = 'name' | 'location' | 'hl' | 'cost';
+
+/** What the amount column is asking for, which depends on what the modifier does. */
+const amountHeading = (mod: CyberMod): string => {
+  if (isNoteKind(mod.kind)) return 'VALUE';
+  return isSetKind(mod.kind) ? 'TO' : 'BY';
+};
 
 /**
  * A row being typed in, where the humanity loss box is allowed to be empty.
@@ -96,10 +103,16 @@ function ModChips({ mods }: { mods: CyberMod[] }) {
       {mods.map((m, i) => (
         <span
           key={`${m.kind}-${m.target}-${i}`}
-          title={MOD_KIND_LABEL[m.kind]}
+          title={isNoteKind(m.kind)
+            ? 'Shown for reference — the app does not apply this'
+            : MOD_KIND_LABEL[m.kind]}
           style={{
             ...mono(10), letterSpacing: 0, padding: '0 4px', whiteSpace: 'nowrap',
-            border: '1px solid var(--dark-green)', color: 'var(--cyan)',
+            border: '1px solid var(--dark-green)',
+            // A note is there to be read, not applied, so it does not wear the colour the
+            // numbers that change your rolls wear.
+            color: isNoteKind(m.kind) ? 'var(--green)' : 'var(--cyan)',
+            borderStyle: isNoteKind(m.kind) ? 'dashed' : 'solid',
             // A set reads as a claim about the final value, so it is marked out from the
             // adjustments rather than sitting in the same run of +2s.
             background: isSetKind(m.kind) ? 'var(--dark-green)' : 'transparent',
@@ -155,9 +168,11 @@ function ModEditor({ mods, template, onChange }: {
           {/* BY for an adjustment, TO for a replacement — the column means a different
               thing in each case, and one heading for both reads as a lie in one of them.
               A list holding both says so rather than picking a side. */}
+          {/* The column means a different thing per kind — adjust by, replace with, or
+              simply a value to read — so a mixed list names every meaning in it rather
+              than picking one and being wrong about the others. */}
           <span style={{ textAlign: 'right' }}>
-            {mods.every((m) => isSetKind(m.kind)) ? 'TO'
-              : mods.some((m) => isSetKind(m.kind)) ? 'BY / TO' : 'BY'}
+            {[...new Set(mods.map(amountHeading))].join(' / ')}
           </span>
           <span />
         </div>
@@ -173,14 +188,24 @@ function ModEditor({ mods, template, onChange }: {
           >
             {MOD_KINDS.map((k) => <option key={k} value={k}>{MOD_KIND_LABEL[k]}</option>)}
           </select>
-          <select
-            style={inputStyle} aria-label={`Modifier ${i + 1} target`} value={m.target}
-            onChange={(e) => patch(i, { target: e.target.value })}
-          >
-            <option value="">—</option>
-            {targetOptions(m.kind, template, m.target)
-              .map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          {isNoteKind(m.kind) ? (
+            // Typed rather than chosen: a note names whatever the table needs to see, and
+            // there is no list of those.
+            <input
+              style={inputStyle} placeholder="Quickhack DV"
+              aria-label={`Modifier ${i + 1} target`} value={m.target}
+              onChange={(e) => patch(i, { target: e.target.value })}
+            />
+          ) : (
+            <select
+              style={inputStyle} aria-label={`Modifier ${i + 1} target`} value={m.target}
+              onChange={(e) => patch(i, { target: e.target.value })}
+            >
+              <option value="">—</option>
+              {targetOptions(m.kind, template, m.target)
+                .map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          )}
           <input
             style={{ ...inputStyle, textAlign: 'right' }} type="number"
             aria-label={`Modifier ${i + 1} value`} value={m.value}

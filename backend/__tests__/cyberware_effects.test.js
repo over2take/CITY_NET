@@ -179,10 +179,29 @@ describe('every kind of modifier, end to end', () => {
     expect(fx.rollBonus(data, 'Attack')).toBe(2);
   });
 
+  it('note is read, not applied, and is not an unmatched target', () => {
+    // A note names something the sheet has never heard of on purpose — "Quickhack DV" is
+    // not a stat. Reporting it as unmatched would file a deliberate choice as a mistake.
+    const data = withChrome([piece('P', [{ kind: 'note', target: 'Quickhack DV', value: 10 }])], { cool: 5 });
+    const out = fx.effects(data);
+    expect(out.fields).toEqual({});
+    expect(out.unmatched).toEqual([]);
+    expect(fx.rollBonus(data, 'Quickhack DV')).toBe(0);
+  });
+
+  it('a note reaches no roll either', () => {
+    const data = withChrome([piece('P', [{ kind: 'note', target: 'Quickhack DV', value: 10 }])], { cool: 5 });
+    expect(fx.formulaModifiers(data, '1d10 + @cool')).toEqual([]);
+  });
+
   it('covers every kind the row model can hold', () => {
-    // If a sixth kind is added, this fails until it is given a case above.
-    const covered = new Set([...KINDS.map((k) => k.kind), 'roll']);
-    const declared = new Set(Object.values(require('../sheets/cyberware').MOD_KINDS));
+    // If another kind is added, this fails until it is given a case above.
+    const cyberware = require('../sheets/cyberware');
+    const covered = new Set([...KINDS.map((k) => k.kind), 'roll', 'note']);
+    const declared = new Set([
+      ...Object.values(cyberware.MOD_KINDS),
+      ...cyberware.LOCAL_KINDS,
+    ]);
     expect([...declared].sort()).toEqual([...covered].sort());
   });
 });

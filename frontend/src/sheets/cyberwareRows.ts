@@ -19,9 +19,19 @@ export const CYBERWARE_FIELD = 'cyberware';
  * `modifySkillsBy`, `setSkillTo`, `modifyRollTypesBy` — flattened on import. Adjusting and
  * setting stay apart: +3 Cool and "Cool becomes 3" are different claims.
  */
-export type ModKind = 'stat' | 'statSet' | 'skill' | 'skillSet' | 'roll';
+export type ModKind = 'stat' | 'statSet' | 'skill' | 'skillSet' | 'roll' | 'note';
 
-export const MOD_KINDS: ModKind[] = ['stat', 'statSet', 'skill', 'skillSet', 'roll'];
+export const MOD_KINDS: ModKind[] = ['stat', 'statSet', 'skill', 'skillSet', 'roll', 'note'];
+
+/**
+ * A note is a labelled number the app never applies — "Quickhack DV 10".
+ *
+ * Some chrome does something the sheet has no field for and no dice to roll. Buried in the
+ * effect text it gets missed; as a modifier it is a chip the GM and the table can see.
+ * Kept apart from the mechanical kinds so nothing tries to apply it and nothing reports it
+ * as a target that failed to match.
+ */
+export const isNoteKind = (kind: ModKind): boolean => kind === 'note';
 
 /** What each kind is called where a player picks one. */
 export const MOD_KIND_LABEL: Record<ModKind, string> = {
@@ -30,6 +40,7 @@ export const MOD_KIND_LABEL: Record<ModKind, string> = {
   skill: 'Modify Skill By',
   skillSet: 'Set Skill To',
   roll: 'Modify Roll Type By',
+  note: 'Note (not applied)',
 };
 
 /** Whether a kind adjusts the existing value or replaces it, which is how it is shown. */
@@ -48,11 +59,14 @@ export interface CyberMod {
  * The sign is explicit on adjustments because a modifier of -2 and one of +2 differ only
  * by that character, and a bare `2` reads as neither.
  */
-export const describeMod = (mod: CyberMod): string => (
-  isSetKind(mod.kind)
+export const describeMod = (mod: CyberMod): string => {
+  // A note is neither an adjustment nor a replacement, so it gets no sign and no equals:
+  // "Quickhack DV 10" is the whole statement.
+  if (isNoteKind(mod.kind)) return `${mod.target} ${mod.value}`;
+  return isSetKind(mod.kind)
     ? `${mod.target} = ${mod.value}`
-    : `${mod.value >= 0 ? '+' : ''}${mod.value} ${mod.target}`
-);
+    : `${mod.value >= 0 ? '+' : ''}${mod.value} ${mod.target}`;
+};
 
 export interface CyberRow {
   name: string;

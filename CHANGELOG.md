@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A note modifier, for what the app cannot work out for you.** Some chrome does something the sheet has no field for and no dice to roll. Written into the effect paragraph it gets missed at the table; as a modifier it is a chip everyone can see — `Quickhack DV 10`.
+
+  You type both the label and the number, and the app never applies either. It is marked out from the modifiers that do change your rolls: dashed border, plain colour, and a tooltip saying so.
+
 - **Edit anything on the cyberware list.** A pencil beside each piece opens it in the form with everything filled in — name, type, humanity, price, effect and modifiers — so a mistyped name or a wrong effect can be corrected without deleting the piece and building it again. It keeps its place in the list and stays installed where it was.
 
 - **TOKEN_PROTOCOLS is now CHARACTER_CONTROLS.** The panel stopped being about the token a while ago: alongside placing and colouring it, it holds the character sheet, vehicles, enemy vehicles, health and armour. The name now says what it governs.

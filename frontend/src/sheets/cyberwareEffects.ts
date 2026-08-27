@@ -136,8 +136,10 @@ export function sheetEffects(
   for (const row of rows) {
     for (const mod of row.mods) {
       // Roll types are not fields, so they change no number on the page. The augmentation
-      // window shows them; the sheet has nowhere to put them.
-      if (mod.kind === 'roll') continue;
+      // window shows them; the sheet has nowhere to put them. A note is the same, on
+      // purpose: it is a number to be read rather than applied, so it is not a target that
+      // failed to match and must not be reported as one.
+      if (mod.kind === 'roll' || mod.kind === 'note') continue;
 
       const id = index.get(norm(mod.target));
       if (!id) {

@@ -135,6 +135,10 @@ function effects(data, system = SYSTEM) {
 
   for (const row of rows) {
     for (const mod of row.mods) {
+      // A note is a number to be read, not applied. It names nothing the sheet has, so
+      // reporting it as unmatched would file a deliberate choice as a mistake.
+      if (mod.kind === 'note') continue;
+
       if (mod.kind === 'roll') {
         const key = normRoll(mod.target);
         if (!key) continue;

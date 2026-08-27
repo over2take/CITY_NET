@@ -78,6 +78,10 @@ export function targetOptions(
   template: SheetTemplate | undefined,
   current = '',
 ): SheetOption[] {
+  // A note names whatever the player needs it to — "Quickhack DV" is not a stat, a skill
+  // or a roll, and offering a list would be offering the wrong list.
+  if (kind === 'note') return [];
+
   const base: SheetOption[] = !template
     ? []
     : kind === 'skill' || kind === 'skillSet'

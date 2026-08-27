@@ -141,8 +141,17 @@ describe('every kind of modifier reaches the sheet', () => {
     expect(sheetEffects(data, CPR).fields).toEqual({});
   });
 
+  it('notes change no field, and are not a target that failed to match', () => {
+    // The distinction that matters: an unmatched target is a mistake worth reporting, and
+    // a note naming something the sheet has never heard of is the entire point of it.
+    const data = sheet([piece('P', [{ kind: 'note', target: 'Quickhack DV', value: 10 }])], { cool: 5 });
+    const out = sheetEffects(data, CPR);
+    expect(out.fields).toEqual({});
+    expect(out.unmatched).toEqual([]);
+  });
+
   it('covers every kind the row model declares', () => {
-    const covered = [...KINDS.map((k) => k.kind), 'roll'].sort();
+    const covered = [...KINDS.map((k) => k.kind), 'roll', 'note'].sort();
     expect([...MOD_KINDS].sort()).toEqual(covered);
   });
 });

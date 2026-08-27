@@ -249,6 +249,84 @@ describe('editing', () => {
   });
 });
 
+describe('a note, for what the app cannot apply', () => {
+  // Some chrome does something the sheet has no field for and no dice to roll. Written
+  // into the effect paragraph it gets missed; as a chip the table can see it.
+  const NOTED = [{
+    name: 'Self ICE', type: 'neural', side: null, hl: 3, cost: null, data: '', placed: true,
+    mods: [{ kind: 'note', target: 'Quickhack DV', value: 10 }],
+  }];
+
+  it('shows it as a chip, with no sign and no equals', () => {
+    // It is neither an adjustment nor a replacement: the label and the number are the
+    // whole statement.
+    show(NOTED);
+    expect(screen.getByText('Quickhack DV 10')).toBeInTheDocument();
+  });
+
+  it('says it is not applied, so nobody expects it to be', () => {
+    show(NOTED);
+    expect(screen.getByTitle(/does not apply this/)).toBeInTheDocument();
+  });
+
+  it('takes a typed label rather than a picker', async () => {
+    // "Quickhack DV" is not a stat, a skill or a roll type, so there is no list to choose
+    // from — offering one would be offering the wrong one.
+    show([]);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 kind'), 'note');
+
+    const target = screen.getByLabelText('Modifier 1 target');
+    expect(target.tagName).toBe('INPUT');
+  });
+
+  it('stores what was typed', async () => {
+    const onFieldChange = show([]);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.type(screen.getByLabelText('Cyberware name'), 'Self ICE');
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 kind'), 'note');
+    await userEvent.type(screen.getByLabelText('Modifier 1 target'), 'Quickhack DV');
+    await userEvent.clear(screen.getByLabelText('Modifier 1 value'));
+    await userEvent.type(screen.getByLabelText('Modifier 1 value'), '10');
+    await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
+
+    expect(onFieldChange.mock.calls.at(-1)![1][0].mods).toEqual([
+      { kind: 'note', target: 'Quickhack DV', value: 10 },
+    ]);
+  });
+
+  it('heads the amount column VALUE rather than BY', async () => {
+    show([]);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 kind'), 'note');
+    expect(screen.getByText('VALUE')).toBeInTheDocument();
+    expect(screen.queryByText('BY')).not.toBeInTheDocument();
+  });
+
+  it('names every meaning when a piece mixes notes with real modifiers', async () => {
+    show([]);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 2 kind'), 'note');
+    expect(screen.getByText('BY / VALUE')).toBeInTheDocument();
+  });
+
+  it('keeps a typed label when switching back and forth loses its list', async () => {
+    // Switching kind clears a target the new list cannot hold. A note has no list, so a
+    // stat target should not survive into it.
+    show([]);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.click(screen.getByText('+ MODIFIER'));
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 target'), 'COOL');
+    await userEvent.selectOptions(screen.getByLabelText('Modifier 1 kind'), 'note');
+    expect(screen.getByLabelText('Modifier 1 target')).toHaveValue('');
+  });
+});
+
 describe('naming a type is not installing the piece', () => {
   // Saying what a piece is and putting it in a body part are two decisions. Placement used
   // to be inferred from the type, which made choosing "Fashionware" in the list install the
