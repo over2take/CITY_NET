@@ -1534,7 +1534,7 @@ function App() {
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 2000 }}>
           <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'auto' }}>
             <h2 style={{ margin: 0, textShadow: 'var(--glow)', fontSize: '2em' }}>{activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation?.toUpperCase() || 'UNKNOWN FLOOR'}</h2>
-            <button onClick={exitBattleMap} style={{ padding: '10px 30px', marginTop: '10px', backgroundColor: '#ff0000', color: 'white', border: '1px solid #ff0000', cursor: 'pointer', fontWeight: 'bold' }}>EXIT</button>
+            <button onClick={exitBattleMap} style={{ padding: '10px 30px', marginTop: '10px', backgroundColor: 'var(--danger)', color: 'white', border: '1px solid var(--danger)', cursor: 'pointer', fontWeight: 'bold' }}>EXIT</button>
           </div>
           {isAdmin && isPrimaryAdmin && (
             <div style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'auto' }}>
@@ -1571,7 +1571,7 @@ function App() {
           )}
         </div>
       )}
-            {notification && <div className="modal-overlay" onClick={() => setNotification(null)} style={{cursor: 'pointer'}}><div className="panel" style={{color: '#ff0000', borderColor: '#ff0000'}}><h2 style={{fontSize: '2rem'}}>{notification}</h2></div></div>}
+            {notification && <div className="modal-overlay" onClick={() => setNotification(null)} style={{cursor: 'pointer'}}><div className="panel" style={{color: 'var(--danger)', borderColor: 'var(--danger)'}}><h2 style={{fontSize: '2rem'}}>{notification}</h2></div></div>}
             {isEditModalOpen && activeEditLocation && (
               <div className="modal-overlay"><div className="panel"><h2>EDIT_DATA_POINT</h2><form onSubmit={async (e) => { e.preventDefault(); const res = await fetch(`/api/locations/${activeEditLocation.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(editData) }); if (res.ok) { setNotification("DATA_POINT_UPDATED"); cleanupEditModal(); } }} style={{display: 'flex', flexDirection: 'column', gap: '10px'}}><label>NAME</label><input placeholder="Name" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} style={{width: '100%'}} /><div style={{display: 'flex', gap: '10px', width: '100%'}}><div style={{flex: 1}}><label>DESCRIPTION</label><textarea placeholder="Description" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} style={{width: '100%', height: '100px'}} /></div><div style={{flex: 1}}><label>RESIDENTS</label><textarea placeholder="NPCs" value={editData.npcs} onChange={e => setEditData({...editData, npcs: e.target.value})} style={{width: '100%', height: '100px'}} /></div></div><div style={{display: 'flex', gap: '10px', marginTop: '10px'}}><button type="button" className={`utility-btn star-btn ${editData.isFavorite ? 'active' : ''}`} onClick={() => setEditData({...editData, isFavorite: !editData.isFavorite, isDanger: false})}><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg></button><button type="button" className={`utility-btn priority-danger-btn ${editData.isDanger ? 'active' : ''}`} onClick={() => setEditData({...editData, isDanger: !editData.isDanger, isFavorite: false})}>!</button></div>{isAdmin && isPrimaryAdmin && editData.shape !== 'enemy_rhombus' && <button type="button" className="upload-btn" style={{backgroundColor: '#5500ff'}} onClick={() => setShowBattleMapManager(true)}>BATTLE MAPS</button>}<button type="submit" className="upload-btn">SAVE</button><button type="button" className="utility-btn" onClick={() => { cleanupEditModal(); }}>CLOSE</button></form></div></div>
             )}
@@ -1699,7 +1699,7 @@ function App() {
                 {view === 'city_gen' && !roadSelectionBounds && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: LEFT-CLICK + DRAG TO SELECT GENERATION AREA`}</div>}
                 {view === 'draw_roads' && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', textShadow: 'var(--glow)', padding: '5px 15px', background: 'rgba(0, 20, 0, 0.4)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300 }}>{`SYSTEM_PROMPT: HOLD LEFT-CLICK + DRAG TO DRAW PATH`}</div>}
                 {view === 'purge_roads' && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '20px', color: '#ff3300', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 8px #ff3300', padding: '5px 15px', background: 'rgba(20, 0, 0, 0.6)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300, border: '1px solid #ff3300' }}>{roadEraseMode === 'segment' ? 'ERASER MODE: CLICK SEGMENT TO DELETE' : 'SELECTOR MODE: CLICK SEGMENT TO DELETE PATH'}</div>}
-                {measureMode && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: view === 'battle_map' ? '140px' : '20px', color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 5px #ff0000', padding: '5px 15px', background: 'rgba(20, 0, 0, 0.6)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300, border: '1px solid #ff4444' }}>{`SYSTEM_ALERT: MAP CAMERA LOCKED // MEASUREMENT ACTIVE`}</div>}
+                {measureMode && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: view === 'battle_map' ? '140px' : '20px', color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', textShadow: '0 0 5px var(--danger)', padding: '5px 15px', background: 'rgba(20, 0, 0, 0.6)', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '10px', zIndex: 300, border: '1px solid #ff4444' }}>{`SYSTEM_ALERT: MAP CAMERA LOCKED // MEASUREMENT ACTIVE`}</div>}
                 <div style={{display: 'flex', gap: '10px'}}>
                   {token && <button className={`admin-toggle ${spectatorCount > 0 && !showDirectorPanel ? 'unread-flash' : ''}`} onClick={() => setShowDirectorPanel(p => !p)}>{spectatorCount > 0 ? '● BROADCAST' : 'BROADCAST'}</button>}
                   {token && <button className={`admin-toggle ${pendingRequests.length > 0 && !showAdminPanel ? 'unread-flash' : ''}`} onClick={() => setShowAdminPanel(!showAdminPanel)}>{showAdminPanel ? 'HIDE_DASHBOARD' : 'SHOW_DASHBOARD'}</button>}
@@ -1729,7 +1729,7 @@ function App() {
                       </div>
                       <div style={{ display: 'flex', gap: '6px' }}>
                         <button className="upload-btn" style={{ fontSize: '0.65rem', padding: '4px 8px' }} onClick={() => handleApprovePlayer(p.username)}>APPROVE</button>
-                        <button className="utility-btn" style={{ fontSize: '0.65rem', padding: '4px 8px', color: '#ff3333', borderColor: '#ff3333' }} onClick={() => handleDenyPlayer(p.username)}>DENY</button>
+                        <button className="utility-btn" style={{ fontSize: '0.65rem', padding: '4px 8px', color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDenyPlayer(p.username)}>DENY</button>
                       </div>
                     </div>
                   ))
@@ -1737,12 +1737,12 @@ function App() {
               </div>
             )}
             {token && pendingResets.map((r, i) => (
-              <div key={r.requestId} className="panel" style={{ position: 'absolute', top: `${70 + i * 120}px`, right: '10px', zIndex: 501, minWidth: '280px', border: '1px solid #ffaa00' }}>
-                <div style={{ fontSize: '0.65rem', letterSpacing: '3px', marginBottom: '8px', color: '#ffaa00' }}>PASSWORD_RESET_REQUESTED</div>
+              <div key={r.requestId} className="panel" style={{ position: 'absolute', top: `${70 + i * 120}px`, right: '10px', zIndex: 501, minWidth: '280px', border: '1px solid var(--warning)' }}>
+                <div style={{ fontSize: '0.65rem', letterSpacing: '3px', marginBottom: '8px', color: 'var(--warning)' }}>PASSWORD_RESET_REQUESTED</div>
                 <div style={{ fontSize: '0.8rem', marginBottom: '10px' }}>{r.username}</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button className="upload-btn" style={{ flex: 1, fontSize: '0.65rem', padding: '4px 8px' }} onClick={() => handleApproveReset(r.requestId)}>APPROVE</button>
-                  <button className="utility-btn" style={{ flex: 1, fontSize: '0.65rem', padding: '4px 8px', color: '#ff3333', borderColor: '#ff3333' }} onClick={() => handleDenyReset(r.requestId)}>DENY</button>
+                  <button className="utility-btn" style={{ flex: 1, fontSize: '0.65rem', padding: '4px 8px', color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleDenyReset(r.requestId)}>DENY</button>
                 </div>
               </div>
             ))}
@@ -2613,7 +2613,7 @@ function App() {
                           x: pos.x, y: 0.1, z: pos.z,
                           width: 4, height: 4, depth: 4,
                           shape: 'enemy_rhombus',
-                          color: '#ff0000',
+                          color: 'var(--danger)',
                           owner: userName,
                           isDanger: false,
                           isFavorite: false,
@@ -2846,7 +2846,7 @@ function App() {
                 ) : editData.shape === 'enemy_rhombus' ? (
                   <mesh position={[0, editData.height / 4, 0]} scale={[editData.width, editData.height, editData.depth]}>
                     <octahedronGeometry args={[0.5]} />
-                    <meshBasicMaterial color="#ff0000" wireframe />
+                    <meshBasicMaterial color="var(--danger)" wireframe />
                   </mesh>
                 ) : editData.shape === 'friendly_rhombus' ? (
                   <mesh position={[0, editData.height / 4, 0]} scale={[editData.width, editData.height, editData.depth]}>

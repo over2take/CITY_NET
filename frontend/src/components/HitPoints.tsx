@@ -55,8 +55,8 @@ const baseBtn: React.CSSProperties = {
   transition: 'all 0.15s', userSelect: 'none',
 };
 const injuredBtn: React.CSSProperties = {
-  ...baseBtn, background: '#3a0000', border: '1px solid #ff3333',
-  color: '#ff3333', textShadow: '0 0 6px #ff3333',
+  ...baseBtn, background: '#3a0000', border: '1px solid var(--danger)',
+  color: 'var(--danger)', textShadow: '0 0 6px var(--danger)',
 };
 const iconBtn = (active: boolean): React.CSSProperties => ({
   fontFamily: 'monospace', fontSize: '9px', cursor: 'pointer',
@@ -64,9 +64,9 @@ const iconBtn = (active: boolean): React.CSSProperties => ({
   display: 'flex', flexDirection: 'column', alignItems: 'center',
   gap: '4px', padding: '6px 10px',
   background: active ? '#3a0000' : '#001a00',
-  border: active ? '1px solid #ff3333' : '1px solid var(--green)',
-  color: active ? '#ff3333' : 'var(--green)',
-  textShadow: active ? '0 0 6px #ff3333' : '0 0 4px var(--green)',
+  border: active ? '1px solid var(--danger)' : '1px solid var(--green)',
+  color: active ? 'var(--danger)' : 'var(--green)',
+  textShadow: active ? '0 0 6px var(--danger)' : '0 0 4px var(--green)',
 });
 
 const hitZone = (injured: boolean | undefined): React.CSSProperties => ({
@@ -184,8 +184,8 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
                 disabled={!!healMsg}
                 style={{
                   width: '100%',
-                  color: healMsg?.includes('MAXED') ? '#ff3333' : '#ffcc00',
-                  borderColor: healMsg?.includes('MAXED') ? '#ff3333' : '#ffcc00',
+                  color: healMsg?.includes('MAXED') ? 'var(--danger)' : 'var(--warning)',
+                  borderColor: healMsg?.includes('MAXED') ? 'var(--danger)' : 'var(--warning)',
                 }}
               >
                 {healMsg ?? 'STIM_HEAL (+1 STRAIN)'}
@@ -252,11 +252,11 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
 
         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginTop: '2px' }}>
           <button style={iconBtn(!!injuries.blind)} onClick={() => toggleInjury('blind')} title="BLIND">
-            <EyeSVG color={injuries.blind ? '#ff3333' : 'var(--green)'} />
+            <EyeSVG color={injuries.blind ? 'var(--danger)' : 'var(--green)'} />
             <span style={{ fontSize: '8px' }}>BLIND</span>
           </button>
           <button style={iconBtn(!!injuries.bleeding)} onClick={() => toggleInjury('bleeding')} title="BLEEDING">
-            <BloodSVG color={injuries.bleeding ? '#ff3333' : 'var(--green)'} />
+            <BloodSVG color={injuries.bleeding ? 'var(--danger)' : 'var(--green)'} />
             <span style={{ fontSize: '8px' }}>BLEED</span>
           </button>
         </div>
@@ -367,7 +367,7 @@ export function HealthReviewWindow({ location, pos, setPos, onClose, socket, gam
   const hpTemp = location.hp_temp ?? 0;
   const hpPct = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
   const isDead = hpCurrent <= 0;
-  const hpColor = isDead ? '#ff3333' : hpPct > 0.5 ? 'var(--green)' : hpPct > 0.25 ? '#ffaa00' : '#ff3333';
+  const hpColor = isDead ? 'var(--danger)' : hpPct > 0.5 ? 'var(--green)' : hpPct > 0.25 ? 'var(--warning)' : 'var(--danger)';
 
   return (
     <DraggableWindow
@@ -401,7 +401,7 @@ export function HealthReviewWindow({ location, pos, setPos, onClose, socket, gam
         {stun && (() => {
           const stunPct = Math.max(0, Math.min(1, stun.stun_current / stun.stun_monitor));
           const full = stun.stun_current >= stun.stun_monitor;
-          const stunColor = full ? '#ff3333' : '#00ccff';
+          const stunColor = full ? 'var(--danger)' : '#00ccff';
           return (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontFamily: 'monospace', letterSpacing: '1px', color: stunColor, marginBottom: '2px' }}>
@@ -425,7 +425,7 @@ export function HealthReviewWindow({ location, pos, setPos, onClose, socket, gam
             }}
             title="An ally's Main Action: 2d6 + YOUR Heal + INT mod vs 8 + rounds down. Success: they recover to 1 HP with the Frail condition."
             style={{
-              alignSelf: 'center', background: 'none', border: '1px solid #ff3333', color: '#ff3333',
+              alignSelf: 'center', background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)',
               fontFamily: 'monospace', fontSize: '0.7rem', letterSpacing: '1px', padding: '4px 14px',
               cursor: 'pointer', animation: 'death-pulse 1.2s ease-in-out infinite',
             }}
@@ -476,14 +476,14 @@ export function HealthReviewWindow({ location, pos, setPos, onClose, socket, gam
                     <div key={cond} style={{
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
                       padding: '6px 10px',
-                      border: `1px solid ${active ? '#ff3333' : 'var(--green)'}`,
+                      border: `1px solid ${active ? 'var(--danger)' : 'var(--green)'}`,
                       background: active ? '#3a0000' : '#001a00',
                       borderRadius: '3px',
                     }}>
                       {cond === 'blind'
-                        ? <EyeSVG color={active ? '#ff3333' : 'var(--green)'} />
-                        : <BloodSVG color={active ? '#ff3333' : 'var(--green)'} />}
-                      <span style={{ fontSize: '8px', color: active ? '#ff3333' : 'var(--green)', fontFamily: 'monospace' }}>
+                        ? <EyeSVG color={active ? 'var(--danger)' : 'var(--green)'} />
+                        : <BloodSVG color={active ? 'var(--danger)' : 'var(--green)'} />}
+                      <span style={{ fontSize: '8px', color: active ? 'var(--danger)' : 'var(--green)', fontFamily: 'monospace' }}>
                         {cond === 'blind' ? 'BLIND' : 'BLEED'}
                       </span>
                     </div>

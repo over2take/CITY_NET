@@ -33,7 +33,7 @@ const btn: React.CSSProperties = {
   borderRadius: 2,
 };
 const btnGreen: React.CSSProperties = { ...btn, border: '1px solid var(--green)', color: 'var(--green)' };
-const btnRed: React.CSSProperties = { ...btn, border: '1px solid #ff3333', color: '#ff3333' };
+const btnRed: React.CSSProperties = { ...btn, border: '1px solid var(--danger)', color: 'var(--danger)' };
 
 function NpcRow({
   npc,

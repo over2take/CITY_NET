@@ -113,9 +113,9 @@ export const seatAnchor = (i: number, total: number) => {
  * windows use, so a car at a quarter reads as urgently as a person at a quarter.
  */
 export const hullColor = (hp: number, hpMax: number) => {
-  if (hp <= 0) return '#ff3333';
+  if (hp <= 0) return 'var(--danger)';
   const pct = hpMax > 0 ? hp / hpMax : 0;
-  return pct > 0.5 ? 'var(--green)' : pct > 0.25 ? '#ffaa00' : '#ff3333';
+  return pct > 0.5 ? 'var(--green)' : pct > 0.25 ? 'var(--warning)' : 'var(--danger)';
 };
 
 export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin, vehicles, players, look, guestTokens = [] }: Props) {

@@ -214,7 +214,7 @@ function ModEditor({ mods, template, onChange }: {
           <button
             type="button" aria-label={`Remove modifier ${i + 1}`}
             onClick={() => onChange(mods.filter((_, n) => n !== i))}
-            style={{ ...mono(11), background: 'none', border: 'none', color: 'var(--danger, #aa3333)', cursor: 'pointer', padding: 0 }}
+            style={{ ...mono(11), background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: 0 }}
           >×</button>
         </div>
       ))}
@@ -733,7 +733,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                           type="button"
                           onClick={() => removeRow(r)}
                           aria-label={`Remove ${r.name}`}
-                          style={{ ...mono(11), background: 'none', border: 'none', color: 'var(--danger, #aa3333)', cursor: 'pointer', padding: 0 }}
+                          style={{ ...mono(11), background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: 0 }}
                         >×</button>
                       </td>
                     )}

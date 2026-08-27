@@ -119,7 +119,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                 const hpMax = selectedLocation.hp_max ?? 0;
                 const isDead = hpCurrent <= 0;
                 const hpPct = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
-                const hpColor = isDead ? '#ff3333' : hpPct > 0.5 ? 'var(--green)' : hpPct > 0.25 ? '#ffaa00' : '#ff3333';
+                const hpColor = isDead ? 'var(--danger)' : hpPct > 0.5 ? 'var(--green)' : hpPct > 0.25 ? 'var(--warning)' : 'var(--danger)';
                 const injuries: Record<string, boolean> = (() => {
                   try { return JSON.parse((selectedLocation as any).injuries || '{}'); } catch { return {}; }
                 })();
@@ -148,7 +148,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                           </div>
                         </div>
                         {(['blind', 'bleeding'] as const).filter(c => injuries[c]).map(cond => (
-                          <div key={cond} style={{ textAlign: 'center', color: '#ff3333', fontSize: '10px', letterSpacing: '1px', marginTop: '4px' }}>
+                          <div key={cond} style={{ textAlign: 'center', color: 'var(--danger)', fontSize: '10px', letterSpacing: '1px', marginTop: '4px' }}>
                             ⚠ {cond.toUpperCase()}
                           </div>
                         ))}

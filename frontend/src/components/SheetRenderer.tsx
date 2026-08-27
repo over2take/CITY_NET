@@ -387,7 +387,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
           const max = hpMax ?? 0;
           const cur = Math.max(0, Math.min(hp ?? 0, max));
           const ratio = max > 0 ? cur / max : 0;
-          const hpColor = ratio > 0.5 ? 'var(--green)' : ratio > 0.25 ? '#ffcc00' : '#ff3333';
+          const hpColor = ratio > 0.5 ? 'var(--green)' : ratio > 0.25 ? 'var(--warning)' : 'var(--danger)';
           return (
             <div
               role={onOpenLink ? 'button' : undefined}
@@ -420,13 +420,13 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
           const penalty = num(data[ds.penaltyField]);
           return (
             <div style={{
-              marginTop: '6px', border: '1px solid #ff3333', background: 'rgba(60, 0, 0, 0.45)',
+              marginTop: '6px', border: '1px solid var(--danger)', background: 'rgba(60, 0, 0, 0.45)',
               padding: '5px 8px', display: 'flex', flexDirection: 'column', gap: '4px',
             }}>
-              <span style={{ color: '#ff3333', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'death-pulse 1.2s ease-in-out infinite' }}>
+              <span style={{ color: 'var(--danger)', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'death-pulse 1.2s ease-in-out infinite' }}>
                 ⚠ MORTALLY WOUNDED
               </span>
-              <span style={{ color: '#ff3333', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
+              <span style={{ color: 'var(--danger)', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
                 1d10{penalty > 0 ? ` +${penalty}` : ''} vs BODY {body} — roll every turn until stabilized
               </span>
               <button
@@ -434,7 +434,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
                 disabled={!onDeathSave}
                 title="First Aid or Paramedic check (DV15) stabilizes; healing above 0 HP clears this."
                 style={{
-                  alignSelf: 'center', background: 'none', border: '1px solid #ff3333', color: '#ff3333',
+                  alignSelf: 'center', background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)',
                   fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 10px',
                   cursor: onDeathSave ? 'pointer' : 'default', opacity: onDeathSave ? 1 : 0.5,
                   display: 'flex', alignItems: 'center', gap: '4px',
@@ -450,15 +450,15 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
           const frail = num(data.frail) === 1;
           return (
             <div style={{
-              marginTop: '6px', border: '1px solid #ff3333', background: 'rgba(60, 0, 0, 0.45)',
+              marginTop: '6px', border: '1px solid var(--danger)', background: 'rgba(60, 0, 0, 0.45)',
               padding: '5px 8px', display: 'flex', flexDirection: 'column', gap: '4px',
             }}>
-              <span style={{ color: '#ff3333', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'death-pulse 1.2s ease-in-out infinite' }}>
+              <span style={{ color: 'var(--danger)', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'death-pulse 1.2s ease-in-out infinite' }}>
                 ⚠ {frail ? 'FRAIL — DEAD AT 0 HP' : 'MORTALLY WOUNDED'}
               </span>
               {!frail && (
                 <>
-                  <span style={{ color: '#ff3333', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
+                  <span style={{ color: 'var(--danger)', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
                     Dead in {Math.max(0, 6 - rounds)} rounds — 2d6 + Heal + INT vs DC {8 + rounds}, rising each round
                   </span>
                   <button
@@ -466,7 +466,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
                     disabled={!onStabilize}
                     title="An ally's Main Action: Heal check vs 8 + rounds down (+2 without tools). Success: 1 HP and the Frail condition."
                     style={{
-                      alignSelf: 'center', background: 'none', border: '1px solid #ff3333', color: '#ff3333',
+                      alignSelf: 'center', background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)',
                       fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 10px',
                       cursor: onStabilize ? 'pointer' : 'default', opacity: onStabilize ? 1 : 0.5,
                       display: 'flex', alignItems: 'center', gap: '4px',
@@ -481,13 +481,13 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
         })()}
         {template.stabilize && h.hpField && (hp ?? 0) > 0 && num(data.frail) === 1 && (
           <div style={{
-            marginTop: '6px', border: '1px solid #ffcc00', background: 'rgba(60, 45, 0, 0.4)',
+            marginTop: '6px', border: '1px solid var(--warning)', background: 'rgba(60, 45, 0, 0.4)',
             padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: '4px',
           }}>
-            <span style={{ color: '#ffcc00', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'wound-pulse 1.6s ease-in-out infinite' }}>
+            <span style={{ color: 'var(--warning)', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'wound-pulse 1.6s ease-in-out infinite' }}>
               ⚠ FRAIL
             </span>
-            <span style={{ color: '#ffcc00', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
+            <span style={{ color: 'var(--warning)', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
               Hitting 0 HP again is instant death — cleared by a week of care or medical treatment
             </span>
             <button
@@ -495,7 +495,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
               disabled={false}
               title="Click when the GM confirms the recovery conditions are met (a week of bedrest and care, or successful medical treatment)."
               style={{
-                alignSelf: 'center', background: 'none', border: '1px solid #ffcc00', color: '#ffcc00',
+                alignSelf: 'center', background: 'none', border: '1px solid var(--warning)', color: 'var(--warning)',
                 fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 10px',
                 cursor: 'pointer',
               }}
@@ -506,13 +506,13 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
         )}
         {template.deathSave && h.hpField && (hp ?? 0) > 0 && num(data.seriously_wounded) > 0 && (hp ?? 0) <= num(data.seriously_wounded) && (
           <div style={{
-            marginTop: '6px', border: '1px solid #ffcc00', background: 'rgba(60, 45, 0, 0.4)',
+            marginTop: '6px', border: '1px solid var(--warning)', background: 'rgba(60, 45, 0, 0.4)',
             padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: '2px',
           }}>
-            <span style={{ color: '#ffcc00', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'wound-pulse 1.6s ease-in-out infinite' }}>
+            <span style={{ color: 'var(--warning)', fontSize: '0.7rem', letterSpacing: '2px', fontWeight: 600, animation: 'wound-pulse 1.6s ease-in-out infinite' }}>
               ⚠ SERIOUSLY WOUNDED
             </span>
-            <span style={{ color: '#ffcc00', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
+            <span style={{ color: 'var(--warning)', fontSize: '0.6rem', opacity: 0.85, letterSpacing: '1px' }}>
               −2 to all checks (applied automatically)
             </span>
           </div>
@@ -551,7 +551,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
                     const filled = i < luckCur;
                     // The last `armed` filled pips light up amber: committed to the next roll
                     const isArmed = filled && i >= luckCur - committed;
-                    const color = isArmed ? '#ffcc00' : 'var(--green)';
+                    const color = isArmed ? 'var(--warning)' : 'var(--green)';
                     return (
                       <button
                         key={i}
@@ -584,8 +584,8 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
                       onClick={() => setArmedNegate!(!negate)}
                       title={`Burn 1 ${h.luckLabel ?? 'LUCK'} so a natural 1 on the next roll is not a critical fumble. No bonus to the roll.`}
                       style={{
-                        background: negate ? '#ffcc00' : 'none', border: '1px solid #ffcc00',
-                        color: negate ? '#000' : '#ffcc00', fontFamily: 'inherit',
+                        background: negate ? 'var(--warning)' : 'none', border: '1px solid var(--warning)',
+                        color: negate ? '#000' : 'var(--warning)', fontFamily: 'inherit',
                         fontSize: '0.55rem', letterSpacing: '1px', padding: '1px 6px', cursor: 'pointer',
                       }}
                     >
@@ -597,7 +597,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
                       onClick={() => onFieldChange(h.luckField!, Math.max(0, luckCur - 1))}
                       title={`Spend 1 ${h.luckLabel ?? 'LUCK'} for a non-roll effect (reroll, push the limit, etc.)`}
                       style={{
-                        background: 'none', border: '1px solid #ffcc00', color: '#ffcc00',
+                        background: 'none', border: '1px solid var(--warning)', color: 'var(--warning)',
                         fontFamily: 'inherit', fontSize: '0.55rem', letterSpacing: '1px',
                         padding: '1px 6px', cursor: 'pointer',
                       }}
@@ -607,12 +607,12 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
                   )}
                   {committed > 0 && (
                     <>
-                      <span style={{ fontSize: '0.62rem', color: '#ffcc00', letterSpacing: '1px' }}>
+                      <span style={{ fontSize: '0.62rem', color: 'var(--warning)', letterSpacing: '1px' }}>
                         NEXT ROLL{armed > 0 ? ` +${armed}` : ''}{negate ? ' · NAT-1 NEGATED' : ''} · COST {committed} {h.luckLabel ?? 'LUCK'}
                       </span>
                       <button
                         onClick={() => { setArmedLuck!(0); setArmedNegate?.(false); }}
-                        style={{ background: 'none', border: '1px solid #ffcc00', color: '#ffcc00', fontFamily: 'inherit', fontSize: '0.55rem', padding: '1px 6px', cursor: 'pointer' }}
+                        style={{ background: 'none', border: '1px solid var(--warning)', color: 'var(--warning)', fontFamily: 'inherit', fontSize: '0.55rem', padding: '1px 6px', cursor: 'pointer' }}
                       >
                         CLEAR
                       </button>
@@ -1133,7 +1133,7 @@ function AbilityListSection({ section, data, readOnly, onFieldChange, onRollAbil
                 disabled={!canResist}
                 title={canResist ? `Resist ${item.name} Drain (DV ${drainValue}): WIL + attr pool` : 'Set attr and numeric drain to enable'}
                 style={{
-                  background: 'none', border: '1px solid #ffcc00', color: '#ffcc00',
+                  background: 'none', border: '1px solid var(--warning)', color: 'var(--warning)',
                   fontFamily: 'inherit', fontSize: '0.5rem', letterSpacing: '0.5px', padding: '2px 1px',
                   cursor: canResist ? 'pointer' : 'default', opacity: canResist ? 1 : 0.3,
                 }}

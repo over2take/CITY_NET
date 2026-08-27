@@ -38,7 +38,7 @@ export function StreamerDirectorPanel({ pos, setPos, onClose, directorState, upd
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', padding: '10px', textAlign: 'left' }}>
 
         <div style={{ ...row, justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: isLive ? '#ff3333' : '#666', textShadow: isLive ? '0 0 8px #ff0000' : 'none', letterSpacing: '2px' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: isLive ? 'var(--danger)' : '#666', textShadow: isLive ? '0 0 8px var(--danger)' : 'none', letterSpacing: '2px' }}>
             {isLive ? `● LIVE — ${spectatorCount} FEED${spectatorCount > 1 ? 'S' : ''}` : '○ NO_FEEDS'}
           </span>
           <button className="utility-btn" style={{ margin: 0 }} onClick={() => window.open(streamerUrl, 'citynet_streamer', 'width=1280,height=720')}>

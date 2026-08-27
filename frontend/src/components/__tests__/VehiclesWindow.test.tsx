@@ -380,11 +380,11 @@ describe('the hull', () => {
     // Same thresholds as the character health windows, so a car at a quarter reads as
     // urgently as a person at a quarter.
     expect(hullColor(30, 30)).toBe('var(--green)');
-    expect(hullColor(10, 30)).toBe('#ffaa00');
-    expect(hullColor(4, 30)).toBe('#ff3333');
-    expect(hullColor(0, 30)).toBe('#ff3333');
+    expect(hullColor(10, 30)).toBe('var(--warning)');
+    expect(hullColor(4, 30)).toBe('var(--danger)');
+    expect(hullColor(0, 30)).toBe('var(--danger)');
     // A hull with no maximum is not a divide-by-zero.
-    expect(hullColor(0, 0)).toBe('#ff3333');
+    expect(hullColor(0, 0)).toBe('var(--danger)');
   });
 
   it('sends damage negative and a repair positive', async () => {
