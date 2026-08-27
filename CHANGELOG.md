@@ -89,6 +89,8 @@ Cyberware, as something you can actually see.
 
 - **The sheet's cyberware summary counts what is installed**, not everything on the list. It read "8 INSTALLED" over a body diagram with nothing on it.
 
+- **The character sheet's scrollbar has its own lane.** It sat close enough to the right-hand column that reaching for the edge of a box could catch the bar instead. The gutter is reserved whether the sheet is scrolling or not, so the layout no longer shifts the moment it grows past its height either. Same on the GM's NPC sheets.
+
 - **An edit made just before closing a sheet is no longer lost.** Every change waits 400ms before being sent, so that typing is one save rather than one per keystroke. Closing the sheet inside that window used to discard whatever was waiting — the change was on screen and in local state and never reached the server, so it came back on the next load.
 
   It showed up as removing a piece of cyberware not sticking while adding one did: adding means typing, which always outlasts the delay, but removing is a single click and people close the window straight after. It applied to any field, not just cyberware.
