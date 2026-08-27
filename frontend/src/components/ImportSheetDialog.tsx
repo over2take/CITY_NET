@@ -25,7 +25,10 @@ interface ImportSheetDialogProps {
    *  dialog cannot warn about losing something it cannot see. */
   currentData?: Record<string, unknown>;
   /** Apply the mapped fields to the target sheet (socket or admin REST). */
-  onApply: (fields: Record<string, string | number>, opts?: { replace?: boolean }) => Promise<void> | void;
+  onApply: (
+    fields: Record<string, string | number>,
+    opts?: { replace?: boolean; cyberware?: unknown[] },
+  ) => Promise<void> | void;
 }
 
 const label9: React.CSSProperties = { fontFamily: 'monospace', fontSize: 9, letterSpacing: 0.5 };
@@ -119,7 +122,7 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
   const handleApply = async () => {
     if (!preview) return;
     setBusy(true);
-    await onApply(preview.mapped, { replace: true });
+    await onApply(preview.mapped, { replace: true, cyberware: preview.cyberware });
     setBusy(false);
     setApplied(true);
   };

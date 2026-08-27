@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { NavControlsMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, GeometryMenu } from '../Sidebar';
+import { NavControlsMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, CharacterControlsMenu } from '../Sidebar';
 
 vi.mock('../../assets/Credits.png', () => ({ default: 'credits.png' }));
 vi.mock('../CityDatabase', () => ({
@@ -251,21 +251,21 @@ describe('QuickAccessMenu', () => {
   });
 });
 
-// ─── GeometryMenu ─────────────────────────────────────────────────────────────
+// ─── CharacterControlsMenu ───────────────────────────────────────────────────
 
 const baseRhombus = { active: false, color: '#00ff00', name: '', description: '', hp_max: 0 };
 
-describe('GeometryMenu', () => {
-  it('renders TOKEN_PROTOCOLS header', () => {
+describe('CharacterControlsMenu', () => {
+  it('renders CHARACTER_CONTROLS header', () => {
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
-    expect(screen.getByText('TOKEN_PROTOCOLS')).toBeInTheDocument();
+    expect(screen.getByText('CHARACTER_CONTROLS')).toBeInTheDocument();
   });
 
   it('shows PLACE_MY_TOKEN when no active rhombus', () => {
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
     expect(screen.getByText('PLACE_MY_TOKEN')).toBeInTheDocument();
   });
@@ -273,7 +273,7 @@ describe('GeometryMenu', () => {
   it('shows TOKEN_PLACED when user has deployed rhombus', () => {
     const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
     expect(screen.getByText('TOKEN_PLACED')).toBeInTheDocument();
   });
@@ -281,7 +281,7 @@ describe('GeometryMenu', () => {
   it('shows REMOVE_MY_TOKEN button when rhombus is active', () => {
     const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
     expect(screen.getByText('REMOVE_MY_TOKEN')).toBeInTheDocument();
   });
@@ -290,7 +290,7 @@ describe('GeometryMenu', () => {
     const socketRef = makeSocketRef();
     const locations = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={socketRef} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={locations} socketRef={socketRef} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
     await userEvent.click(screen.getByText('REMOVE_MY_TOKEN'));
     expect(socketRef.current.emit).toHaveBeenCalledWith('requestRhombusPurge', expect.objectContaining({ id: 10 }));
@@ -298,7 +298,7 @@ describe('GeometryMenu', () => {
 
   it('shows SAVE_STATS and no identity fields (name/notes live on the sheet)', () => {
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
     expect(screen.getByText('SAVE_STATS')).toBeInTheDocument();
     expect(screen.queryByText('TOKEN_NAME')).not.toBeInTheDocument();
@@ -307,14 +307,14 @@ describe('GeometryMenu', () => {
 
   it('shows ARMOR_CLASS label', () => {
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
     expect(screen.getByText('ARMOR_CLASS')).toBeInTheDocument();
   });
 
   it('shows MELEE and RANGED AC inputs', () => {
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
     expect(screen.getByText('MELEE')).toBeInTheDocument();
     expect(screen.getByText('RANGED')).toBeInTheDocument();
@@ -322,7 +322,7 @@ describe('GeometryMenu', () => {
 
   it('AC fields are visible even with no deployed rhombus', () => {
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
     expect(screen.getByText('ARMOR_CLASS')).toBeInTheDocument();
     expect(screen.getByText('MELEE')).toBeInTheDocument();
@@ -331,7 +331,7 @@ describe('GeometryMenu', () => {
   it('CP:R mode replaces the AC editor with a sheet pointer', () => {
     const setIsSheetOpen = vi.fn();
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} isSheetOpen={false} setIsSheetOpen={setIsSheetOpen} gameSystem="cyberpunk_red" />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} isSheetOpen={false} setIsSheetOpen={setIsSheetOpen} gameSystem="cyberpunk_red" />
     );
     expect(screen.queryByText('ARMOR_CLASS')).not.toBeInTheDocument();
     expect(screen.queryByText('MELEE')).not.toBeInTheDocument();
@@ -341,7 +341,7 @@ describe('GeometryMenu', () => {
   it('CP:R mode armor button opens the character sheet', async () => {
     const setIsSheetOpen = vi.fn();
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} isSheetOpen={false} setIsSheetOpen={setIsSheetOpen} gameSystem="cyberpunk_red" />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} isSheetOpen={false} setIsSheetOpen={setIsSheetOpen} gameSystem="cyberpunk_red" />
     );
     await userEvent.click(screen.getByText(/ARMOR \(SP\) IS MANAGED/));
     expect(setIsSheetOpen).toHaveBeenCalledWith(true);
@@ -349,14 +349,14 @@ describe('GeometryMenu', () => {
 
   it('generic system keeps the AC editor', () => {
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} isSheetOpen={false} setIsSheetOpen={vi.fn()} gameSystem="generic" />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} isSheetOpen={false} setIsSheetOpen={vi.fn()} gameSystem="generic" />
     );
     expect(screen.getByText('ARMOR_CLASS')).toBeInTheDocument();
   });
 
   it('shows CLICK MAP TO PLACE label when rhombus is in active/scanning state', () => {
     render(
-      <GeometryMenu rhombusState={{ ...baseRhombus, active: true }} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <CharacterControlsMenu rhombusState={{ ...baseRhombus, active: true }} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
     expect(screen.getByText('CLICK MAP TO PLACE')).toBeInTheDocument();
     expect(screen.getByText('place user token')).toBeInTheDocument();
@@ -364,7 +364,7 @@ describe('GeometryMenu', () => {
 
   it('shows PLACE_MY_TOKEN when inactive and no deployed rhombus', () => {
     render(
-      <GeometryMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
     );
     expect(screen.getByText('PLACE_MY_TOKEN')).toBeInTheDocument();
   });

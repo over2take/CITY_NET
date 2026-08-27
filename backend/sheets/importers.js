@@ -111,7 +111,21 @@ const buildCprAliases = () => {
   alias(['weapons', 'weaponsnotes'], 'weapons_notes');
   alias(['ammunition', 'ammo'], 'ammunition');
   alias(['gear', 'gearnotes', 'equipment'], 'gear_notes');
+  // Cyberpunk RED keeps chrome as rows rather than a line of text, but a printed form and
+  // a pasted stat block still offer one line for it. So this stays as the way in, and the
+  // import turns it into rows on the way to the sheet rather than storing the line — see
+  // `importSheetFields`. The field itself is no longer on the template.
   alias(['cyberware', 'cyberwarenotes'], 'cyberware_notes');
+  // The printed form's cyberware table. These are transport rather than sheet fields:
+  // `importSheetFields` gathers them into rows and drops them, the same as the single
+  // line above. A paper form needs a fixed number of boxes; the sheet does not.
+  for (let n = 1; n <= 12; n += 1) {
+    alias([`cyber${n}name`], `cyber${n}_name`);
+    alias([`cyber${n}type`], `cyber${n}_type`);
+    alias([`cyber${n}hl`], `cyber${n}_hl`);
+    alias([`cyber${n}eddies`], `cyber${n}_cost`);
+    alias([`cyber${n}effect`], `cyber${n}_data`);
+  }
   alias(['lifepath', 'lifepathnotes'], 'lifepath_notes');
   alias(['criticalinjuries', 'injuries'], 'critical_injuries');
   alias(['addictions'], 'addictions');

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet } from '../sheets';
+import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet, type SheetFieldValue } from '../sheets';
 
 // Shared client logic for the player's own character sheet, used by both
 // surfaces that render it: the in-game floating window
@@ -26,9 +26,14 @@ export function usePlayerSheet(
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [allowFumbleShield, setAllowFumbleShield] = useState(false);
   const [ruleSettings, setRuleSettings] = useState<{ key: string; value: string }[]>([]);
-  const pendingSaves = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // The value is held alongside the timer so an unmount can still send it. Holding only
+  // the timer meant a pending edit could be cancelled but never completed.
+  const pendingSaves = useRef<Map<string, { value: SheetFieldValue; timer: ReturnType<typeof setTimeout> }>>(new Map());
   const onRolledRef = useRef(opts.onRolled);
   onRolledRef.current = opts.onRolled;
+  // The unmount handler runs once and would otherwise close over the first socket it saw.
+  const socketRef = useRef(socket);
+  socketRef.current = socket;
 
   useEffect(() => {
     if (!socket || !userName) return;
@@ -104,19 +109,30 @@ export function usePlayerSheet(
     // A pending single-field save for any of these would land after the batch and
     // reinstate the old value.
     entries.forEach(([fieldId]) => {
-      const t = pendingSaves.current.get(fieldId);
-      if (t) { clearTimeout(t); pendingSaves.current.delete(fieldId); }
+      const pending = pendingSaves.current.get(fieldId);
+      if (pending) { clearTimeout(pending.timer); pendingSaves.current.delete(fieldId); }
     });
     socket?.emit('importSheetFields', { fields });
   }, [socket]);
 
-  // Cancel outstanding debounce timers on unmount
+  /**
+   * Send anything still waiting when the sheet goes away, rather than dropping it.
+   *
+   * An edit is held for 400ms before being sent, so closing the sheet inside that window
+   * used to discard it silently — the change was on screen, in local state, and never
+   * reached the server. It showed up as removing a piece of cyberware not sticking while
+   * adding one did: adding means typing, which always outlasts the delay, but removing is
+   * a single click and people close the window straight after.
+   */
   useEffect(() => () => {
-    pendingSaves.current.forEach(t => clearTimeout(t));
+    pendingSaves.current.forEach(({ value, timer }, fieldId) => {
+      clearTimeout(timer);
+      socketRef.current?.emit('updateSheetField', { fieldId, value });
+    });
     pendingSaves.current.clear();
   }, []);
 
-  const handleFieldChange = useCallback((fieldId: string, value: string | number) => {
+  const handleFieldChange = useCallback((fieldId: string, value: SheetFieldValue) => {
     setSheet(prev => {
       if (!prev) return prev;
       const template = getTemplate(prev.system);
@@ -131,11 +147,14 @@ export function usePlayerSheet(
     });
     const timers = pendingSaves.current;
     const existing = timers.get(fieldId);
-    if (existing) clearTimeout(existing);
-    timers.set(fieldId, setTimeout(() => {
-      timers.delete(fieldId);
-      socket?.emit('updateSheetField', { fieldId, value });
-    }, 400));
+    if (existing) clearTimeout(existing.timer);
+    timers.set(fieldId, {
+      value,
+      timer: setTimeout(() => {
+        timers.delete(fieldId);
+        socket?.emit('updateSheetField', { fieldId, value });
+      }, 400),
+    });
   }, [socket]);
 
   const rolled = () => onRolledRef.current?.();

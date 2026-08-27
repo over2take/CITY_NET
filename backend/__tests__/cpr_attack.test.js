@@ -81,7 +81,7 @@ describe('rollToHit', () => {
 describe('rollDamage', () => {
   it('rolls the weapon dice as a plain sum (no explosion)', () => {
     const weapon = getWeapon(sheet, 2); // 3d6
-    const out = rollDamage(weapon, dieRng(6, 6, 6, 6));
+    const out = rollDamage(sheet, weapon, dieRng(6, 6, 6, 6));
     expect(out.total).toBe(18);
     expect(out.critical).toBeNull();
   });
@@ -248,5 +248,170 @@ describe('resolveLuckSpend', () => {
 
   it('no pool means no shield and no bonus', () => {
     expect(resolveLuckSpend(0, 3, true)).toEqual({ bonus: 0, negate: false, total: 0 });
+  });
+});
+
+describe('cyberware in a fight', () => {
+  // The hooks in rollToHit and rollDamage had no tests at all, so a chrome bonus could
+  // have stopped reaching combat without anything failing. The sheet showing a bonus the
+  // dice never apply is the failure worth guarding against.
+  const chromed = (mods, extra = {}) => ({
+    ...sheet, ...extra,
+    cyberware: [{ name: 'Chrome', equipped: true, type: 'cyberarm', side: 'r', mods }],
+  });
+
+  // 1d10 + @ref(7) + @handgun(5) = 12 + the die.
+  const BASE_TO_HIT = 12;
+
+  it('adds a stat modifier to the to-hit roll', () => {
+    const data = chromed([{ kind: 'stat', target: 'REF', value: 2 }]);
+    const out = rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5));
+    expect(out.total).toBe(5 + BASE_TO_HIT + 2);
+  });
+
+  it('adds a skill modifier for the weapon skill being used', () => {
+    const data = chromed([{ kind: 'skill', target: 'Handgun', value: 3 }]);
+    const out = rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5));
+    expect(out.total).toBe(5 + BASE_TO_HIT + 3);
+  });
+
+  it('ignores a skill modifier for a skill this weapon does not use', () => {
+    // Chrome that helps you shoot should do nothing for a sword.
+    const data = chromed([{ kind: 'skill', target: 'Handgun', value: 3 }]);
+    const out = rollToHit(data, getWeapon(data, 2), false, dieRng(10, 5));
+    // 1d10 + @dex(6) + @melee_weapon(3)
+    expect(out.total).toBe(5 + 9);
+  });
+
+  it('applies a set as the difference it actually makes', () => {
+    // REF is 7 and the chrome sets it to 4, so the roll is three lower, not four higher.
+    const data = chromed([{ kind: 'statSet', target: 'REF', value: 4 }]);
+    const out = rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5));
+    expect(out.total).toBe(5 + BASE_TO_HIT - 3);
+  });
+
+  it('adds an Attack roll-type modifier to any attack', () => {
+    // Not a field: this one lands on the roll itself, whatever weapon is in hand.
+    const data = chromed([{ kind: 'roll', target: 'Attack Roll', value: 2 }]);
+    const gun = rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5));
+    const sword = rollToHit(data, getWeapon(data, 2), false, dieRng(10, 5));
+    expect(gun.total).toBe(5 + BASE_TO_HIT + 2);
+    expect(sword.total).toBe(5 + 9 + 2);
+  });
+
+  it('adds a Damage roll-type modifier to damage', () => {
+    const data = chromed([{ kind: 'roll', target: 'Damage', value: 3 }]);
+    const out = rollDamage(data, getWeapon(data, 1), dieRng(6, 4, 4));
+    expect(out.total).toBe(8 + 3);
+  });
+
+  it('leaves damage alone when the chrome only helps you hit', () => {
+    const data = chromed([{ kind: 'roll', target: 'Attack', value: 5 }]);
+    const out = rollDamage(data, getWeapon(data, 1), dieRng(6, 4, 4));
+    expect(out.total).toBe(8);
+  });
+
+  it('ignores chrome that is not installed anywhere', () => {
+    // Same rule as the sheet: owned is not installed.
+    const data = {
+      ...sheet,
+      cyberware: [{ name: 'Loose', equipped: true, type: '', side: null,
+        mods: [{ kind: 'stat', target: 'REF', value: 99 }] }],
+    };
+    const out = rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5));
+    expect(out.total).toBe(5 + BASE_TO_HIT);
+  });
+
+  it('changes nothing for a character with no chrome', () => {
+    const out = rollToHit(sheet, getWeapon(sheet, 1), false, dieRng(10, 5));
+    expect(out.total).toBe(5 + BASE_TO_HIT);
+  });
+});
+
+describe('a whole loadout in a fight', () => {
+  // Combat has the same question as everywhere else: one piece is the easy case, several
+  // interacting is where it goes wrong.
+  const piece = (name, mods, extra = {}) =>
+    ({ name, equipped: true, type: 'cyberarm', side: 'r', mods, ...extra });
+
+  const loaded = (...pieces) => ({ ...sheet, cyberware: pieces });
+
+  // 1d10 + @ref(7) + @handgun(5)
+  const BASE_TO_HIT = 12;
+
+  it('stacks REF across two pieces', () => {
+    const data = loaded(
+      piece('A', [{ kind: 'stat', target: 'REF', value: 2 }]),
+      piece('B', [{ kind: 'stat', target: 'Reflexes', value: 1 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT + 3);
+  });
+
+  it('adds a stat bonus, a skill bonus and an Attack bonus together', () => {
+    // Three different mechanisms, three different pieces, one roll.
+    const data = loaded(
+      piece('Arm', [{ kind: 'stat', target: 'REF', value: 2 }]),
+      piece('Smartgun', [{ kind: 'skill', target: 'Handgun', value: 1 }]),
+      piece('Targeting', [{ kind: 'roll', target: 'Attack Roll', value: 3 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT + 6);
+  });
+
+  it('applies a set before an adjustment across pieces', () => {
+    // REF 7 set to 4, then +2, is 6 — one lower than the sheet's own 7.
+    const data = loaded(
+      piece('Sets', [{ kind: 'statSet', target: 'REF', value: 4 }]),
+      piece('Adds', [{ kind: 'stat', target: 'REF', value: 2 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT - 1);
+  });
+
+  it('stacks Attack bonuses from separate pieces', () => {
+    const data = loaded(
+      piece('A', [{ kind: 'roll', target: 'Attack', value: 2 }]),
+      piece('B', [{ kind: 'roll', target: 'Attack Roll', value: 1 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT + 3);
+  });
+
+  it('stacks Damage bonuses from separate pieces', () => {
+    const data = loaded(
+      piece('A', [{ kind: 'roll', target: 'Damage', value: 2 }]),
+      piece('B', [{ kind: 'roll', target: 'Damage Roll', value: 1 }]),
+    );
+    expect(rollDamage(data, getWeapon(data, 1), dieRng(6, 4, 4)).total).toBe(8 + 3);
+  });
+
+  it('counts only installed pieces out of a mixed loadout', () => {
+    const data = loaded(
+      piece('Installed', [{ kind: 'stat', target: 'REF', value: 2 }]),
+      piece('Unplaced', [{ kind: 'stat', target: 'REF', value: 40 }], { type: '' }),
+      piece('Off', [{ kind: 'roll', target: 'Attack', value: 90 }], { equipped: false }),
+      piece('No side', [{ kind: 'stat', target: 'REF', value: 70 }], { type: 'cyberleg', side: null }),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT + 2);
+  });
+
+  it('keeps a loadout that helps you shoot out of a sword swing', () => {
+    // 1d10 + @dex(6) + @melee_weapon(3), untouched by handgun chrome.
+    const data = loaded(
+      piece('Smartgun', [{ kind: 'skill', target: 'Handgun', value: 4 }]),
+      piece('Scope', [{ kind: 'stat', target: 'REF', value: 3 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 2), false, dieRng(10, 5)).total).toBe(5 + 9);
+  });
+
+  it('lets a penalty piece cancel a bonus piece', () => {
+    const data = loaded(
+      piece('Good', [{ kind: 'roll', target: 'Attack', value: 3 }]),
+      piece('Bad', [{ kind: 'roll', target: 'Attack', value: -3 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT);
   });
 });

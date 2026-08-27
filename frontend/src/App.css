@@ -887,8 +887,9 @@ header {
 }
 
 .win95-title-bar {
-  background: var(--green);
-  color: var(--black);
+  background: var(--black);
+  color: var(--green);
+  border-bottom: 1px solid var(--green);
   padding: 3px 5px;
   display: flex;
   justify-content: space-between;
@@ -911,7 +912,7 @@ header {
 
 .win95-close-btn {
   background: var(--black);
-  border: 1px solid var(--black);
+  border: 1px solid var(--green);
   color: var(--green);
   width: 18px;
   height: 18px;

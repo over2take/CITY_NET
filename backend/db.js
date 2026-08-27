@@ -435,6 +435,30 @@ db.serialize(() => {
       }
     });
   });
+
+  // Migration: CP:R cyberware was a line of free text and is now rows, so that the
+  // augmentation window and the Companion import have something to read. The line is all
+  // there is to go on — names, and nothing about cost or where anything was installed —
+  // so each piece arrives unfiled, which is also how an import arrives.
+  //
+  // Only when there are no rows yet: re-running this over a sheet somebody has already
+  // filled in would duplicate every piece.
+  db.all(`SELECT id, data FROM character_sheets WHERE system = 'cyberpunk_red'`, (err, rows) => {
+    if (err || !rows) return;
+    const cyberware = require('./sheets/cyberware');
+    rows.forEach((row) => {
+      let data;
+      try { data = JSON.parse(row.data || '{}'); } catch { return; }
+      const notes = data.cyberware_notes;
+      if (!notes || Array.isArray(data[cyberware.FIELD])) return;
+      const converted = cyberware.fromNotes(notes);
+      if (!converted.length) return;
+      data[cyberware.FIELD] = converted;
+      // Kept rather than deleted: the parse is a comma split, and if it read somebody's
+      // line badly the original is the only way to see what it should have said.
+      db.run(`UPDATE character_sheets SET data = ? WHERE id = ?`, [JSON.stringify(data), row.id]);
+    });
+  });
 });
 
 module.exports = db;

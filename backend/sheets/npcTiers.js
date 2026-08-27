@@ -5,13 +5,50 @@
 // complete seed package: sheet fields, token HP, and token DV/AC values.
 // Numbers here are original tuning for this app, not book stat blocks.
 
-const cprTier = ({ stats, combatSkills, utilitySkills, sp, hp, dv, weapons }) => {
+const cyberware = require('./cyberware');
+
+/**
+ * Chrome for a generated CP:R NPC, per tier.
+ *
+ * Our own kit, the same way the weapon rows are: a "Pistol 2d6" is this app's approximation
+ * rather than a stat block, and so is a Cybereye that helps you spot things. The names are
+ * the install locations the app already ships as labels, and the bonuses are small enough
+ * to read as flavour on a mook and to matter on an elite.
+ *
+ * Everything generated arrives placed. A generated NPC is a finished character — a GM who
+ * has to fit four pieces per mook on the body diagram would stop using the button.
+ */
+const CPR_CHROME = {
+  mook: [],
+  skilled: [
+    { name: 'Cyberaudio', type: 'cyberaudio', hl: 2,
+      mods: [{ kind: 'skill', target: 'Perception', value: 1 }] },
+  ],
+  pro: [
+    { name: 'Cyberaudio', type: 'cyberaudio', hl: 2,
+      mods: [{ kind: 'skill', target: 'Perception', value: 1 }] },
+    { name: 'Cybereye', type: 'cybereye', side: 'r', hl: 2,
+      mods: [{ kind: 'skill', target: 'Perception', value: 1 }] },
+    { name: 'Neural Link', type: 'neural', hl: 3,
+      mods: [{ kind: 'roll', target: 'Initiative', value: 1 }] },
+  ],
+  elite: [
+    { name: 'Cyberaudio', type: 'cyberaudio', hl: 2,
+      mods: [{ kind: 'skill', target: 'Perception', value: 1 }] },
+    { name: 'Cybereye', type: 'cybereye', side: 'r', hl: 2,
+      mods: [{ kind: 'skill', target: 'Perception', value: 1 }] },
+    { name: 'Neural Link', type: 'neural', hl: 3,
+      mods: [{ kind: 'roll', target: 'Initiative', value: 2 }] },
+    { name: 'Cyberarm', type: 'cyberarm', side: 'r', hl: 5,
+      mods: [{ kind: 'skill', target: 'Brawling', value: 2 }] },
+  ],
+};
+
+const cprTier = ({ stats, combatSkills, utilitySkills, sp, hp, dv, weapons, chrome = [] }) => {
   const data = {
     int: stats, ref: stats, dex: stats, tech: Math.max(2, stats - 2),
     cool: stats, will: stats, move: 4, body: stats,
     luck: 0, luck_max: 0,
-    emp: Math.max(2, stats - 2), emp_max: Math.max(2, stats - 2),
-    humanity: Math.max(2, stats - 2) * 10, humanity_max: Math.max(2, stats - 2) * 10,
     sp_head: sp.head, sp_head_max: sp.head,
     sp_body: sp.body, sp_body_max: sp.body,
     seriously_wounded: Math.ceil(hp / 2),
@@ -30,6 +67,18 @@ const cprTier = ({ stats, combatSkills, utilitySkills, sp, hp, dv, weapons }) =>
     data[`weapon${i + 1}_skill`] = w.skill;
     data[`weapon${i + 1}_rof`] = w.rof ?? 2;
   });
+  // Chrome, and what it costs to have it. Humanity pays for the cyberware and current EMP
+  // follows from Humanity — the same rule the sheet applies on every save — so a generated
+  // sheet is internally consistent instead of claiming full Humanity beside four implants.
+  const rows = chrome.map((c) => cyberware.normaliseRow({ ...c, placed: true }));
+  const humanityMax = Math.max(2, stats - 2) * 10;
+  const humanity = Math.max(0, humanityMax - cyberware.humanityLoss(rows));
+  data.humanity = humanity;
+  data.humanity_max = humanityMax;
+  data.emp_max = Math.max(2, stats - 2);
+  data.emp = Math.floor(humanity / 10);
+  if (rows.length) data[cyberware.FIELD] = rows;
+
   return { data, hp, dv };
 };
 
@@ -117,11 +166,13 @@ const TIERS = {
     ],
     build: {
       mook: () => cprTier({
+        chrome: CPR_CHROME.mook,
         stats: 4, combatSkills: 2, utilitySkills: 2,
         sp: { head: 0, body: 4 }, hp: 20, dv: { melee: 10, ranged: 10 },
         weapons: [{ name: 'Pistol', dmg: '2d6', skill: 'handgun' }],
       }),
       skilled: () => cprTier({
+        chrome: CPR_CHROME.skilled,
         stats: 5, combatSkills: 3, utilitySkills: 2,
         sp: { head: 4, body: 7 }, hp: 30, dv: { melee: 12, ranged: 12 },
         weapons: [
@@ -130,6 +181,7 @@ const TIERS = {
         ],
       }),
       pro: () => cprTier({
+        chrome: CPR_CHROME.pro,
         stats: 6, combatSkills: 4, utilitySkills: 3,
         sp: { head: 7, body: 11 }, hp: 35, dv: { melee: 13, ranged: 13 },
         weapons: [
@@ -138,6 +190,7 @@ const TIERS = {
         ],
       }),
       elite: () => cprTier({
+        chrome: CPR_CHROME.elite,
         stats: 8, combatSkills: 6, utilitySkills: 4,
         sp: { head: 11, body: 12 }, hp: 45, dv: { melee: 15, ranged: 15 },
         weapons: [

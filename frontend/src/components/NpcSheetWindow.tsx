@@ -5,6 +5,7 @@ import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet } from '../sheets';
+import type { SheetFieldValue } from '../sheets/types';
 
 // Admin view/edit of an NPC or player sheet. Unlike the player window
 // (socket-based, self-only), this goes through the admin REST routes:
@@ -101,7 +102,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
     pendingSaves.current.clear();
   }, []);
 
-  const saveFields = useCallback(async (fields: Record<string, string | number>) => {
+  const saveFields = useCallback(async (fields: Record<string, SheetFieldValue>) => {
     await fetch(apiPath, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -109,7 +110,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
     });
   }, [apiPath, token]);
 
-  const handleFieldChange = useCallback((fieldId: string, value: string | number) => {
+  const handleFieldChange = useCallback((fieldId: string, value: SheetFieldValue) => {
     let clampedCur: { fieldId: string; value: number } | null = null;
     setSheet(prev => {
       if (!prev) return prev;
@@ -131,7 +132,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
     if (existing) clearTimeout(existing);
     timers.set(fieldId, setTimeout(() => {
       timers.delete(fieldId);
-      const fields: Record<string, string | number> = { [fieldId]: value };
+      const fields: Record<string, SheetFieldValue> = { [fieldId]: value };
       if (clampedCur) fields[clampedCur.fieldId] = clampedCur.value;
       saveFields(fields);
     }, 400));

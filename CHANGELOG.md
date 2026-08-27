@@ -9,6 +9,102 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.11.0] - 2026-08-27
+
+Cyberware, as something you can actually see.
+
+### Added
+
+- **An augmentation window.** A body diagram with your chrome arranged around it, wired to where each piece is installed: eyes, ears, neural link, arms, legs, and the categories that are not a place — Internal, External, Fashionware, Borgware. Open it from the CYBERWARE section of the GEAR tab.
+
+  Underneath is the same list as a table you can sort by name, type, humanity loss or price. Two views because the questions differ: what is in my left arm is a diagram question, and what am I running and what did it cost is a table question. No single ordering answers both.
+
+- **Say what a piece is without saying where it goes.** The TYPE column in the table is a picker, so an imported piece can be marked a Cyberleg while you decide which leg. Those are two decisions and only the second one needs the diagram — and since an import carries no install location, every piece arrived Unfiled with no way to describe itself until someone dropped it on a limb.
+
+  Once typed, it is offered first when you press + on a matching body part, instead of the list guessing from its name.
+
+- **Put chrome you already have into a place on the body.** Pressing + on an arm asks what to put there before offering a blank form, listing everything not yet placed — with the pieces whose names read like a match for that spot first, and marked. It is a suggestion rather than a decision: an imported piece knows only its name, so nothing files itself into the wrong arm on the strength of a word.
+
+- **Taking a piece out again.** Each entry in a body part has a − beside it that unplaces the piece without deleting it, so it goes back to the unplaced list and can be filed somewhere else. Deleting it outright is the × in the table — uninstalling chrome and never having owned it are different things.
+
+- **Cyberware you can add by hand.** Name, install type, humanity loss, price in eddies, and what it does. Adding from a panel fills the location in for you.
+
+  It never asks which side. The same cybereye fits either socket, so left or right is a fact about where you install it rather than about the piece — you answer it by pressing + on the arm you mean. A paired piece added from the general form waits in the unplaced list until you put it somewhere.
+
+- **Your chrome reaches your numbers.** A Cyberpunk RED sheet counts its equipped cyberware: a skill of 3 with a +2 augment reads 5 on the page, with a badge saying so and a tooltip naming the piece responsible. The same total is what the dice use — the server applies it when it resolves the roll, and it appears in the breakdown as its own line rather than hiding inside a stat.
+
+  The number you typed is still the number stored. Nothing is written back into your stats: take the chrome out and the stat is what it always was, and no amount of saving compounds the bonus.
+
+  Two things worth knowing. A piece that sets a value is applied before pieces that adjust one, so setting COOL to 3 and adding 2 leaves 5 — the other order would let an augment do nothing at all. And an augment naming something this sheet has no field for is reported rather than silently ignored; the Companion's "Combat #" is the one that comes up.
+
+  Cyberpunk RED only for now. The other systems record modifiers but do not apply them.
+
+- **What a piece actually does, in numbers.** A modifier is a stat, a skill or a roll type, and an amount — `+6 Business`, `+2 Initiative` — and a piece can carry as many as it needs. Setting a value is kept separate from adjusting one, since `+3 Cool` and `Cool = 3` are different claims, and the table shows them differently.
+
+  You pick what it changes and then pick the thing itself from a list of **your system's** stats and skills, read off the character sheet rather than typed in. A Cyberpunk character is offered Cyberpunk skills and a Shadowrun character Shadowrun ones, and the amount column says BY or TO depending on which you chose.
+
+  **These come across from a Companion import.** They are the one mechanically real thing an export carries: the descriptions arrive blank because the Companion draws its flavour text from its own catalogue, but a modifier is something you typed into your own character, so it is really there and it comes with you.
+
+- **Your chrome is on the sheet properly now.** It was a single line of free text. It is a list, and the number of pieces is a property of your character rather than a number chosen in advance — a full borg does not run out of rows.
+
+- **The printed import form has a cyberware table**, twelve lines with the same columns. Paper has to stop somewhere; the app does not.
+
+### Fixed
+
+- **Importing a character brought back none of its cyberware.** A character with eight pieces of chrome imported zero. Every entry in a Companion export leaves the name blank and puts the identity in a `type` field, and the import read the name — so it found eight blanks and dropped them all.
+
+  It now reads what the pieces actually are, **and brings the humanity cost across with them**, which was going to be typed in by hand.
+
+  Two things the export has never carried, so neither can come across: where a piece is installed, and its description. The Companion shows that flavour text from its own catalogue rather than storing it on your character, so the fields arrive empty. Anything you typed there yourself does come through. Imported pieces are marked as not yet placed rather than being guessed into an arm.
+
+- **Generated Cyberpunk RED NPCs come with chrome.** GENERATE_SHEET fits cyberware to the tier — nothing on a mook, a piece or two on a skilled, a full set on an elite — already installed on the body rather than waiting to be placed. It is this app's kit, like the weapon rows, not a catalogue.
+
+  Humanity pays for it, and current EMP follows from Humanity the way it does on every save, so a generated sheet does not claim full Humanity beside four implants.
+
+- **A note modifier, for what the app cannot work out for you.** Some chrome does something the sheet has no field for and no dice to roll. Written into the effect paragraph it gets missed at the table; as a modifier it is a chip everyone can see — `Quickhack DV 10`.
+
+  You type both the label and the number, and the app never applies either. It is marked out from the modifiers that do change your rolls: dashed border, plain colour, and a tooltip saying so.
+
+- **Edit anything on the cyberware list.** A pencil beside each piece opens it in the form with everything filled in — name, type, humanity, price, effect and modifiers — so a mistyped name or a wrong effect can be corrected without deleting the piece and building it again. It keeps its place in the list and stays installed where it was.
+
+- **TOKEN_PROTOCOLS is now CHARACTER_CONTROLS.** The panel stopped being about the token a while ago: alongside placing and colouring it, it holds the character sheet, vehicles, enemy vehicles, health and armour. The name now says what it governs.
+
+- **Setting a type no longer installs the piece.** Naming something a Cyberleg in the list says what it is; it does not fit it. It stays in the unplaced list and is offered first when you press + on a matching body part, which is what naming the type is for. Fitting still happens on the diagram, which is the only place that knows where things go.
+
+  This was most visible on the types with no left or right — marking something Fashionware installed it on the spot, and there was no way to own a piece you had not fitted yet.
+
+- **Taking a piece out no longer forgets what it is.** Unplacing a Cybereye left it with no type at all, so putting it back meant saying it was a Cybereye a second time. It now keeps its type and gives up only its side, which is the state a piece is in before anyone has chosen a socket.
+
+- **The TYPE column shows the type, not the placement.** Installing a Cybereye in the left eye made that column read "Cybereye L", which looked like installing it had rewritten the type you set. Which eye it is in is a fact about the body, and the diagram is where the body is.
+
+- **Cyberware reaches your initiative.** A cyberarm that raises REF now raises what you roll for turn order, and a piece whose modifier targets Initiative adds to it directly. Both previously showed on the sheet and reached every other roll while initiative alone read the unmodified stat. The chrome is named in the breakdown rather than folded into REF, so the number is explainable.
+
+- **A modifier on Language (Streetslang) no longer lands on Language (Other).** The two skills differ only inside the brackets, and the name matching stripped every bracket in order to cope with the "(x2)" that marks a double-cost skill. Only the cost marker comes off now.
+
+  Found by testing every stat and skill the picker offers rather than one of each — the two Language skills were the only pair that collided, and nothing about the symptom would have pointed at the cause.
+
+- **Cyberware only changes your numbers once it is actually installed.** A piece you own but have not placed on the body no longer modifies a stat or a skill. The sheet was reading "0 INSTALLED" beside a stat one of those pieces had rewritten, which is the same fact contradicting itself — and since every import arrives unplaced, importing a character used to change their stats before anyone had said where anything went.
+
+  Placed means placed: a piece typed as a Cyberleg but in neither leg is owned, not installed.
+
+- **The sheet's cyberware summary counts what is installed**, not everything on the list. It read "8 INSTALLED" over a body diagram with nothing on it.
+
+- **The cyberware table's scrollbar matches the app, and keeps off the row buttons.** That list scrolls itself rather than through the window around it, so it was drawing the browser's own scrollbar over the column holding the edit and remove buttons.
+
+- **The character sheet's scrollbar stops covering the corner of a text box.** The resize grip on a description or notes field sat four pixels from the bar, so reaching for it caught the bar instead. There is proper room now, and the gutter is reserved whether the sheet is scrolling or not, so the layout no longer shifts the moment a tab grows past the window.
+
+  The sheet body scrolls itself rather than through the window around it, which is also why it had been drawing the browser's own scrollbar instead of the thin green one everything else uses. It matches now.
+
+- **An edit made just before closing a sheet is no longer lost.** Every change waits 400ms before being sent, so that typing is one save rather than one per keystroke. Closing the sheet inside that window used to discard whatever was waiting — the change was on screen and in local state and never reached the server, so it came back on the next load.
+
+  It showed up as removing a piece of cyberware not sticking while adding one did: adding means typing, which always outlasts the delay, but removing is a single click and people close the window straight after. It applied to any field, not just cyberware.
+
+### Changed
+
+- **Existing cyberware text becomes rows.** Anything already written in the old box is read into the list on first start, one piece per comma. A parenthetical stays with its piece, so "Cybereye (Low Light)" is one entry rather than two. The original text is kept rather than deleted, in case the split read your notes badly.
+
+---
+
 ## [1.10.1] - 2026-08-22
 
 One sheet, two people writing to it.

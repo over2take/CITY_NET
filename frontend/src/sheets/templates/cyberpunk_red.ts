@@ -392,13 +392,15 @@ export const cyberpunkRed: SheetTemplate = {
       ],
     },
     {
+      // Rows rather than the single textarea this used to be. The line of names was all we
+      // could offer while the Companion import brought nothing back; it now carries a name
+      // and a humanity cost per piece, so the honest shape is a table. `fields` is empty
+      // because the whole section lives under one array field — see sheets/cyberwareRows.
       id: 'cyberware',
       label: 'CYBERWARE',
-      layout: 'notes',
+      layout: 'cyberware',
       tab: 'GEAR',
-      fields: [
-        { id: 'cyberware_notes', label: 'Cyberware', type: 'textarea', placeholder: 'Cybereye (Low Light), Neural Link, Subdermal Grip' },
-      ],
+      fields: [],
     },
     {
       id: 'lifepath',

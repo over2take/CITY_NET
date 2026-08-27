@@ -350,3 +350,100 @@ describe('POST /api/sheets/import/companion — rate limit', () => {
     expect((await post('6LZKP7')).status).toBe(429);
   });
 });
+
+// ─── cyberware travels as rows ────────────────────────────────────────────────
+
+/**
+ * The rows were computed and then dropped.
+ *
+ * `flattenCompanion` learned to read cyberware, but the route answered with `mapped`,
+ * `unmapped` and `skipped` only — so a re-import still put no chrome on the sheet, which
+ * is exactly what it looked like from the outside.
+ */
+describe('POST /api/sheets/import/companion — cyberware', () => {
+  const companionDoc = (cyber) => ({
+    fields: {
+      handle: { stringValue: 'Nyx' },
+      stats: { mapValue: { fields: { Reflexes: { integerValue: '6' } } } },
+      cyberware: { mapValue: { fields: cyber } },
+    },
+  });
+
+  const piece = (type, hl) => ({
+    mapValue: {
+      fields: {
+        name: { stringValue: '' },
+        type: { stringValue: type },
+        humanityLoss: { integerValue: String(hl) },
+      },
+    },
+  });
+
+  beforeEach(() => {
+    sheetsRouteFactory.companionLimit.reset();
+    globalThis.fetch = async (url) => ({
+      status: 200,
+      ok: true,
+      text: async () => JSON.stringify(
+        String(url).includes('code_to_character')
+          ? { fields: { character_uuid: { stringValue: 'uuid-1' } } }
+          : companionDoc({
+              a: piece('NeuroportCyberdeckPort', 3),
+              b: piece('LightTattoo', 0),
+            }),
+      ),
+    });
+  });
+
+  it('hands the rows back beside the mapped fields', async () => {
+    const res = await request(app)
+      .post('/api/sheets/import/companion')
+      .send({ code: '6LZKP7' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.cyberware).toHaveLength(2);
+    expect(res.body.cyberware[0].name).toBe('Neuroport Cyberdeck Port');
+    expect(res.body.cyberware[0].hl).toBe(3);
+  });
+
+  it('says the export does not know where any of it is installed', async () => {
+    const res = await request(app)
+      .post('/api/sheets/import/companion')
+      .send({ code: '6LZKP7' });
+
+    expect(res.body.cyberware.every((r) => r.type === '')).toBe(true);
+    expect(res.body.missing.join(' ')).toMatch(/where each piece of cyberware is installed/);
+  });
+
+  it('answers with an empty list rather than nothing when there is no chrome', async () => {
+    globalThis.fetch = async (url) => ({
+      status: 200,
+      ok: true,
+      text: async () => JSON.stringify(
+        String(url).includes('code_to_character')
+          ? { fields: { character_uuid: { stringValue: 'uuid-1' } } }
+          : companionDoc({}),
+      ),
+    });
+    const res = await request(app)
+      .post('/api/sheets/import/companion')
+      .send({ code: '6LZKP7' });
+
+    expect(res.body.cyberware).toEqual([]);
+  });
+});
+
+describe('the cyberware line from a form or a paste', () => {
+  it('becomes rows rather than a field the template no longer has', () => {
+    // A paper form cannot hold rows, so it offers one line. The import reads it into rows
+    // on the way to the sheet; keeping the line would store it where nothing looks.
+    const { getImporter } = require('../sheets/importers.js');
+    const { mapped } = getImporter('cyberpunk_red').mapFields({
+      cyberware: 'Cybereye (Low Light), Neural Link',
+    });
+    expect(mapped.cyberware_notes).toBe('Cybereye (Low Light), Neural Link');
+
+    const rows = require('../sheets/cyberware.js').fromNotes(mapped.cyberware_notes);
+    expect(rows.map((r) => r.name)).toEqual(['Cybereye (Low Light)', 'Neural Link']);
+  });
+});

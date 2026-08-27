@@ -3,9 +3,11 @@ const { cryptoRng } = require('../utils/random');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
 const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
+const cyberware = require('../sheets/cyberware');
 const sheetRolls = require('../sheets/rolls');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
+const cyberEffects = require('../sheets/cyberwareEffects');
 const attackCwn = require('../sheets/attackCwn');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
@@ -1217,12 +1219,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
       if (!payload || typeof payload.fields !== 'object' || payload.fields === null) return;
+      // Cyberware arrives as rows beside the fields, because it lives in one array rather
+      // than a field per piece. An import of nothing but chrome is still an import.
+      const cyber = Array.isArray(payload.cyberware) ? payload.cyberware.map(cyberware.normaliseRow) : null;
       getGameSystem((err, system) => {
         if (err) return;
         const linked = sheetTemplates.getLinkedFields(system);
         const entries = Object.entries(payload.fields)
           .filter(([k, v]) => !linked[k] && (typeof v === 'string' || typeof v === 'number'));
-        if (entries.length === 0) return;
+        if (entries.length === 0 && !cyber) return;
         // Through the queue: an import replaces the whole sheet, so a concurrent edit
         // does not merely lose a field, it disappears entirely. The occupancy carried
         // across a replace has to be read at write time too, or a player seated during
@@ -1244,6 +1249,26 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               : existing;
             entries.forEach(([k, v]) => { data[k] = v; });
             entries.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
+            if (cyber) data[cyberware.FIELD] = cyber;
+            // A PDF or a pasted block offers one line of cyberware, since a paper form
+            // cannot hold rows. Read it into rows here rather than keeping a field the
+            // template no longer has — and never over rows that already arrived, which
+            // the Companion path fills in with costs this line cannot carry.
+            if (system === 'cyberpunk_red') {
+              // The printed form's numbered boxes, gathered into rows and then dropped.
+              const fromForm = cyberware.fromFormFields(data);
+              Object.keys(data).filter(cyberware.isFormField).forEach((k) => { delete data[k]; });
+              if (fromForm.length && !Array.isArray(data[cyberware.FIELD])) {
+                data[cyberware.FIELD] = fromForm;
+              }
+            }
+            if (system === 'cyberpunk_red' && typeof data.cyberware_notes === 'string') {
+              const fromLine = cyberware.fromNotes(data.cyberware_notes);
+              if (fromLine.length && !Array.isArray(data[cyberware.FIELD])) {
+                data[cyberware.FIELD] = fromLine;
+              }
+              delete data.cyberware_notes;
+            }
             return data;
           },
           (err3, data) => {
@@ -1332,6 +1357,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               statField = firstField ? firstField.field : null;
               if (spend.bonus > 0) resolved.modifiers.push({ label: 'luck', value: spend.bonus });
               resolved.modifiers.push(...sheetAttack.checkPenalties(data, statField, hp));
+              // Chrome, as its own labelled term rather than folded into the stat, so the
+              // breakdown says where the bonus came from.
+              resolved.modifiers.push(...cyberEffects.formulaModifiers(data, rollDef.formula, system));
               outcome = rollEngine.executeRoll(resolved, rollDef.shape, Math.random, { noFumble });
             } catch (e) {
               return;
@@ -2225,7 +2253,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 // Hit: damage, SP soak, ablation, HP write-through.
                 broadcastRoll(info.userName, toHit, hitHistory, color, () => {
                   let dmg;
-                  try { dmg = sheetAttack.rollDamage(weapon); } catch (e) { return emitResult({}); }
+                  try { dmg = sheetAttack.rollDamage(attackerData, weapon); } catch (e) { return emitResult({}); }
                   getDefenderSheet(target, system, (defender) => {
                     const defenderData = defender ? JSON.parse(defender.data || '{}') : {};
                     const spField = aimed ? 'sp_head' : 'sp_body';

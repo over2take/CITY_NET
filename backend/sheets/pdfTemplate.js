@@ -25,6 +25,9 @@ const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
  * writes SDP where we store a damage pool — the label is the system's, since that is what
  * the player is copying from.
  */
+/** How many cyberware lines the printed form offers. The app has no such limit. */
+const CYBER_ROWS = Array.from({ length: 12 }, (_, i) => i + 1);
+
 const LAYOUTS = {
   cyberpunk_red: [
     { title: 'IDENTITY', fields: ['Handle', 'Role', 'IP', 'Reputation', 'Description', 'Aliases'] },
@@ -44,6 +47,19 @@ const LAYOUTS = {
         'Weapon3Name', 'Weapon3Dmg', 'Weapon3Skill', 'Weapon3Rof',
         'Weapon4Name', 'Weapon4Dmg', 'Weapon4Skill', 'Weapon4Rof',
       ],
+    },
+    {
+      // Columns chosen from what the Companion export actually carries — a name, a
+      // humanity cost and an effect — plus the two things it never carries: where the
+      // piece is installed, and what it cost in eddies.
+      //
+      // Twelve rows because paper has to stop somewhere, which the app does not: chrome
+      // is stored as a list whose length is a property of the character. A form with more
+      // pieces than lines is a form, not a limit.
+      title: 'CYBERWARE',
+      fields: CYBER_ROWS.flatMap((n) => [
+        `Cyber${n}Name`, `Cyber${n}Type`, `Cyber${n}HL`, `Cyber${n}Eddies`, `Cyber${n}Effect`,
+      ]),
     },
     {
       // The section with no preset picker behind it, so the one players most want to
