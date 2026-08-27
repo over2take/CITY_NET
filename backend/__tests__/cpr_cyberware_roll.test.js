@@ -155,3 +155,83 @@ describe('cyberware in a sheet roll', () => {
     expect(JSON.parse(row.data).business).toBe(3);
   });
 });
+
+describe('a whole loadout in a sheet roll', () => {
+  // Every case above carries one piece. A real character carries several, and how they
+  // combine is where the interesting failures are.
+  const PLAIN_MODS = 7;   // 1d10 + @int(4) + @business(3)
+
+  const piece = (name, mods, extra = {}) =>
+    ({ name, equipped: true, type: 'fashionware', side: null, mods, ...extra });
+
+  it('stacks the same skill across two pieces', async () => {
+    await seedSheet([
+      piece('A', [{ kind: 'skill', target: 'Business', value: 6 }]),
+      piece('B', [{ kind: 'skill', target: 'Business', value: 2 }]),
+    ]);
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS + 8]);
+  });
+
+  it('adds a stat bonus and a skill bonus from different pieces', async () => {
+    // Both are in this formula, so both land: 1d10 + @int + @business.
+    await seedSheet([
+      piece('Brain', [{ kind: 'stat', target: 'Intelligence', value: 2 }]),
+      piece('Threading', [{ kind: 'skill', target: 'Business', value: 6 }]),
+    ]);
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS + 8]);
+  });
+
+  it('applies a set from one piece before an adjustment from another', async () => {
+    // Business is 3; one piece sets it to 1 and another adds 2, leaving 3 — no change.
+    await seedSheet([
+      piece('Sets', [{ kind: 'skillSet', target: 'Business', value: 1 }]),
+      piece('Adds', [{ kind: 'skill', target: 'Business', value: 2 }]),
+    ]);
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS]);
+  });
+
+  it('takes the higher of two competing sets', async () => {
+    await seedSheet([
+      piece('Low', [{ kind: 'skillSet', target: 'Business', value: 1 }]),
+      piece('High', [{ kind: 'skillSet', target: 'Business', value: 8 }]),
+    ]);
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS + 5]);
+  });
+
+  it('lets a penalty piece cancel a bonus piece', async () => {
+    await seedSheet([
+      piece('Good', [{ kind: 'skill', target: 'Business', value: 4 }]),
+      piece('Bad', [{ kind: 'skill', target: 'Business', value: -4 }]),
+    ]);
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS]);
+  });
+
+  it('counts only the installed pieces out of a mixed loadout', async () => {
+    await seedSheet([
+      piece('Installed', [{ kind: 'skill', target: 'Business', value: 2 }]),
+      piece('Unplaced', [{ kind: 'skill', target: 'Business', value: 40 }], { type: '' }),
+      piece('Off', [{ kind: 'skill', target: 'Business', value: 90 }], { equipped: false }),
+      piece('No side', [{ kind: 'skill', target: 'Business', value: 70 }], { type: 'cyberarm', side: null }),
+    ]);
+    const roll = await rollBusiness();
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS + 2]);
+  });
+
+  it('handles an imported loadout where most pieces do nothing', async () => {
+    // Shaped like a real Companion import: eleven pieces, two carrying modifiers.
+    const filler = Array.from({ length: 9 }, (_, i) => piece(`Filler ${i}`, []));
+    await seedSheet([
+      ...filler,
+      piece('Threading', [{ kind: 'skill', target: 'Business', value: 6 }]),
+      piece('Tattoo', [{ kind: 'stat', target: 'Cool', value: 3 }]),
+    ]);
+    const roll = await rollBusiness();
+    // Only the Business one is in this formula; COOL is not.
+    expect(roll.data.modifiers).toEqual([PLAIN_MODS + 6]);
+  });
+});

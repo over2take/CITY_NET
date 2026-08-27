@@ -92,3 +92,77 @@ describe('a skill the chrome changes', () => {
     expect(within(row).getByRole('button', { name: 'Roll Business' })).toHaveTextContent('+9');
   });
 });
+
+describe('a whole loadout on the sheet', () => {
+  const piece = (name: string, mods: unknown[], extra = {}) => ({
+    name, equipped: true, type: 'neural', side: null, hl: 0, cost: null, data: '', mods, ...extra,
+  });
+
+  it('shows the combined total from two pieces, and names both', () => {
+    show({ cool: 5, cyberware: [
+      piece('Kerenzikov', [{ kind: 'stat', target: 'COOL', value: 2 }]),
+      piece('Tattoo', [{ kind: 'stat', target: 'Cool', value: 1 }]),
+    ] });
+    const badge = screen.getByTitle(/5 → 8/);
+    expect(badge).toHaveTextContent('8');
+    expect(badge.title).toContain('Kerenzikov +2');
+    expect(badge.title).toContain('Tattoo +1');
+  });
+
+  it('applies a set from one piece before an adjustment from another', () => {
+    show({ cool: 9, cyberware: [
+      piece('Sets', [{ kind: 'statSet', target: 'COOL', value: 3 }]),
+      piece('Adds', [{ kind: 'stat', target: 'COOL', value: 2 }]),
+    ] });
+    expect(screen.getByTitle(/9 → 5/)).toBeInTheDocument();
+  });
+
+  it('badges each stat separately when pieces touch different ones', () => {
+    show({ cool: 5, ref: 6, cyberware: [
+      piece('A', [{ kind: 'stat', target: 'COOL', value: 2 }]),
+      piece('B', [{ kind: 'stat', target: 'REF', value: 3 }]),
+    ] });
+    expect(screen.getByTitle(/5 → 7/)).toBeInTheDocument();
+    expect(screen.getByTitle(/6 → 9/)).toBeInTheDocument();
+    expect(screen.getAllByTitle(/→/)).toHaveLength(2);
+  });
+
+  it('lets one piece carry modifiers for several different things', () => {
+    show({ cool: 5, ref: 6, cyberware: [
+      piece('Multi', [
+        { kind: 'stat', target: 'COOL', value: 2 },
+        { kind: 'stat', target: 'REF', value: 1 },
+      ]),
+    ] });
+    expect(screen.getAllByTitle(/→/)).toHaveLength(2);
+  });
+
+  it('counts only the installed pieces out of a mixed loadout', () => {
+    show({ cool: 5, cyberware: [
+      piece('Installed', [{ kind: 'stat', target: 'COOL', value: 2 }]),
+      piece('Unplaced', [{ kind: 'stat', target: 'COOL', value: 40 }], { type: '' }),
+      piece('Off', [{ kind: 'stat', target: 'COOL', value: 90 }], { equipped: false }),
+      piece('No side', [{ kind: 'stat', target: 'COOL', value: 70 }], { type: 'cyberarm', side: null }),
+    ] });
+    expect(screen.getByTitle(/5 → 7/)).toBeInTheDocument();
+    expect(screen.getAllByTitle(/→/)).toHaveLength(1);
+  });
+
+  it('shows nothing when two pieces cancel each other out', () => {
+    // Net zero is not a change, and a badge reading "5" beside a 5 is noise.
+    show({ cool: 5, cyberware: [
+      piece('Good', [{ kind: 'stat', target: 'COOL', value: 3 }]),
+      piece('Bad', [{ kind: 'stat', target: 'COOL', value: -3 }]),
+    ] });
+    expect(screen.queryByTitle(/→/)).not.toBeInTheDocument();
+  });
+
+  it('survives an imported loadout where most pieces do nothing', () => {
+    const filler = Array.from({ length: 9 }, (_, i) => piece(`Filler ${i}`, []));
+    show({ cool: 5, cyberware: [
+      ...filler,
+      piece('Tattoo', [{ kind: 'stat', target: 'Cool', value: 3 }]),
+    ] });
+    expect(screen.getByTitle(/5 → 8/)).toBeInTheDocument();
+  });
+});

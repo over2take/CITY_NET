@@ -327,3 +327,91 @@ describe('cyberware in a fight', () => {
     expect(out.total).toBe(5 + BASE_TO_HIT);
   });
 });
+
+describe('a whole loadout in a fight', () => {
+  // Combat has the same question as everywhere else: one piece is the easy case, several
+  // interacting is where it goes wrong.
+  const piece = (name, mods, extra = {}) =>
+    ({ name, equipped: true, type: 'cyberarm', side: 'r', mods, ...extra });
+
+  const loaded = (...pieces) => ({ ...sheet, cyberware: pieces });
+
+  // 1d10 + @ref(7) + @handgun(5)
+  const BASE_TO_HIT = 12;
+
+  it('stacks REF across two pieces', () => {
+    const data = loaded(
+      piece('A', [{ kind: 'stat', target: 'REF', value: 2 }]),
+      piece('B', [{ kind: 'stat', target: 'Reflexes', value: 1 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT + 3);
+  });
+
+  it('adds a stat bonus, a skill bonus and an Attack bonus together', () => {
+    // Three different mechanisms, three different pieces, one roll.
+    const data = loaded(
+      piece('Arm', [{ kind: 'stat', target: 'REF', value: 2 }]),
+      piece('Smartgun', [{ kind: 'skill', target: 'Handgun', value: 1 }]),
+      piece('Targeting', [{ kind: 'roll', target: 'Attack Roll', value: 3 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT + 6);
+  });
+
+  it('applies a set before an adjustment across pieces', () => {
+    // REF 7 set to 4, then +2, is 6 — one lower than the sheet's own 7.
+    const data = loaded(
+      piece('Sets', [{ kind: 'statSet', target: 'REF', value: 4 }]),
+      piece('Adds', [{ kind: 'stat', target: 'REF', value: 2 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT - 1);
+  });
+
+  it('stacks Attack bonuses from separate pieces', () => {
+    const data = loaded(
+      piece('A', [{ kind: 'roll', target: 'Attack', value: 2 }]),
+      piece('B', [{ kind: 'roll', target: 'Attack Roll', value: 1 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT + 3);
+  });
+
+  it('stacks Damage bonuses from separate pieces', () => {
+    const data = loaded(
+      piece('A', [{ kind: 'roll', target: 'Damage', value: 2 }]),
+      piece('B', [{ kind: 'roll', target: 'Damage Roll', value: 1 }]),
+    );
+    expect(rollDamage(data, getWeapon(data, 1), dieRng(6, 4, 4)).total).toBe(8 + 3);
+  });
+
+  it('counts only installed pieces out of a mixed loadout', () => {
+    const data = loaded(
+      piece('Installed', [{ kind: 'stat', target: 'REF', value: 2 }]),
+      piece('Unplaced', [{ kind: 'stat', target: 'REF', value: 40 }], { type: '' }),
+      piece('Off', [{ kind: 'roll', target: 'Attack', value: 90 }], { equipped: false }),
+      piece('No side', [{ kind: 'stat', target: 'REF', value: 70 }], { type: 'cyberleg', side: null }),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT + 2);
+  });
+
+  it('keeps a loadout that helps you shoot out of a sword swing', () => {
+    // 1d10 + @dex(6) + @melee_weapon(3), untouched by handgun chrome.
+    const data = loaded(
+      piece('Smartgun', [{ kind: 'skill', target: 'Handgun', value: 4 }]),
+      piece('Scope', [{ kind: 'stat', target: 'REF', value: 3 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 2), false, dieRng(10, 5)).total).toBe(5 + 9);
+  });
+
+  it('lets a penalty piece cancel a bonus piece', () => {
+    const data = loaded(
+      piece('Good', [{ kind: 'roll', target: 'Attack', value: 3 }]),
+      piece('Bad', [{ kind: 'roll', target: 'Attack', value: -3 }]),
+    );
+    expect(rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5)).total)
+      .toBe(5 + BASE_TO_HIT);
+  });
+});

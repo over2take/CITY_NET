@@ -337,3 +337,125 @@ describe('CP:R initiative and cyberware', () => {
     expect(cpr.rollPlayer({ data: bare }).score).toBe(cpr.rollPlayer(bare).score);
   });
 });
+
+describe('CP:R initiative with a whole loadout', () => {
+  // The tests above each use one piece. A real character carries several, and the
+  // interesting failures live in how they combine rather than in any one of them.
+  const d10 = (face: number) => vi.spyOn(random, 'cryptoRng').mockReturnValue((face - 0.5) / 10);
+
+  const piece = (name: string, mods: unknown[], extra = {}) =>
+    ({ name, equipped: true, type: 'neural', side: null, mods, ...extra });
+
+  const withPieces = (...pieces: unknown[]) => ({ ref: 5, cyberware: pieces });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('stacks a REF bonus across two separate pieces', () => {
+    d10(6);
+    const sheet = withPieces(
+      piece('Kerenzikov', [{ kind: 'stat', target: 'REF', value: 2 }]),
+      piece('Sandevistan', [{ kind: 'stat', target: 'Reflexes', value: 1 }]),
+    );
+    // Both vocabularies, both counted: 5 + 2 + 1.
+    expect(cpr.rollPlayer(sheet).score).toBe(8 + 6);
+  });
+
+  it('stacks Initiative bonuses across separate pieces', () => {
+    d10(6);
+    const sheet = withPieces(
+      piece('A', [{ kind: 'roll', target: 'Initiative', value: 2 }]),
+      piece('B', [{ kind: 'roll', target: 'Initiative Roll', value: 3 }]),
+    );
+    const out = cpr.rollPlayer(sheet);
+    expect(out.score).toBe(5 + 6 + 5);
+    expect(out.breakdown).toContain('CHROME(+5)');
+  });
+
+  it('applies a set from one piece before an adjustment from another', () => {
+    d10(6);
+    const sheet = withPieces(
+      piece('Sets', [{ kind: 'statSet', target: 'REF', value: 3 }]),
+      piece('Adds', [{ kind: 'stat', target: 'REF', value: 2 }]),
+    );
+    // REF becomes 3, then +2 — the same order the sheet and the server use.
+    expect(cpr.rollPlayer(sheet).score).toBe(5 + 6);
+    expect(cpr.rollPlayer(sheet).breakdown).toContain('REF(5)');
+  });
+
+  it('takes the higher of two competing sets', () => {
+    d10(6);
+    const sheet = withPieces(
+      piece('Low', [{ kind: 'statSet', target: 'REF', value: 2 }]),
+      piece('High', [{ kind: 'statSet', target: 'REF', value: 7 }]),
+    );
+    expect(cpr.rollPlayer(sheet).score).toBe(7 + 6);
+  });
+
+  it('lets a penalty piece pull the total back down', () => {
+    d10(6);
+    const sheet = withPieces(
+      piece('Good', [{ kind: 'stat', target: 'REF', value: 3 }]),
+      piece('Bad', [{ kind: 'roll', target: 'Initiative', value: -2 }]),
+    );
+    const out = cpr.rollPlayer(sheet);
+    expect(out.score).toBe(8 + 6 - 2);
+    expect(out.breakdown).toContain('CHROME(-2)');
+  });
+
+  it('combines a REF bonus and an Initiative bonus from different pieces', () => {
+    d10(6);
+    const sheet = withPieces(
+      piece('Arm', [{ kind: 'stat', target: 'REF', value: 2 }]),
+      piece('Sandy', [{ kind: 'roll', target: 'Initiative', value: 3 }]),
+    );
+    const out = cpr.rollPlayer(sheet);
+    expect(out.score).toBe(7 + 6 + 3);
+    // Kept apart in the breakdown: one changed the stat, the other did not.
+    expect(out.breakdown).toContain('REF(7)');
+    expect(out.breakdown).toContain('CHROME(+3)');
+  });
+
+  it('counts only the installed pieces out of a mixed loadout', () => {
+    d10(6);
+    const sheet = withPieces(
+      piece('Installed', [{ kind: 'stat', target: 'REF', value: 2 }]),
+      piece('Unplaced', [{ kind: 'stat', target: 'REF', value: 40 }], { type: '' }),
+      piece('Off', [{ kind: 'roll', target: 'Initiative', value: 90 }], { equipped: false }),
+      piece('No side yet', [{ kind: 'stat', target: 'REF', value: 70 }], { type: 'cyberarm', side: null }),
+    );
+    expect(cpr.rollPlayer(sheet).score).toBe(7 + 6);
+  });
+
+  it('adds the chrome once, not once per exploding die', () => {
+    // Initiative can explode; the bonus is a property of the character, not of each die.
+    vi.spyOn(random, 'cryptoRng')
+      .mockReturnValueOnce(9.5 / 10)   // 10, explodes
+      .mockReturnValueOnce(3.5 / 10);  // 4
+    const sheet = withPieces(piece('Sandy', [{ kind: 'roll', target: 'Initiative', value: 2 }]));
+    const out = cpr.rollPlayer(sheet, { explodingInitiative: true });
+    expect(out.exploded).toBe(true);
+    expect(out.score).toBe(5 + 14 + 2);
+  });
+
+  it('ignores pieces whose modifiers have nothing to do with initiative', () => {
+    d10(6);
+    const sheet = withPieces(
+      piece('Business', [{ kind: 'skill', target: 'Business', value: 6 }]),
+      piece('Cool', [{ kind: 'stat', target: 'Cool', value: 4 }]),
+      piece('Attack', [{ kind: 'roll', target: 'Attack', value: 5 }]),
+    );
+    expect(cpr.rollPlayer(sheet).score).toBe(5 + 6);
+  });
+
+  it('handles a full imported loadout where most pieces do nothing', () => {
+    // Shaped like a real Companion import: eleven pieces, two carrying modifiers.
+    const many = Array.from({ length: 9 }, (_, i) => piece(`Filler ${i}`, []));
+    const sheet = withPieces(
+      ...many,
+      piece('Threading', [{ kind: 'skill', target: 'Business', value: 6 }]),
+      piece('Tattoo', [{ kind: 'stat', target: 'Reflexes', value: 3 }]),
+    );
+    d10(6);
+    expect(cpr.rollPlayer(sheet).score).toBe(8 + 6);
+  });
+});
