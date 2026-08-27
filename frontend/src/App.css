@@ -164,7 +164,10 @@ body, html, #root {
   width: 100%;
   height: 100%;
   background: var(--black);
-  color: var(--green);
+  /* No colour here. These are ancestors of .crt-container, which is where the theme class
+     sits, so a var() resolved at this level always reads the :root defaults — green — and
+     every element that inherits its colour rather than setting one stays green whatever
+     theme is chosen. The colour belongs inside the themed element; see below. */
   font-family: 'Courier New', Courier, monospace;
   overflow: hidden;
 }
@@ -174,6 +177,9 @@ body, html, #root {
   height: 100vh;
   position: relative;
   background: var(--bg-gradient);
+  /* Inside the theme class, so this resolves to the active theme rather than the default,
+     and everything that inherits a colour follows the theme with it. */
+  color: var(--green);
 }
 
 .scanlines {
