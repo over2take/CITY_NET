@@ -26,7 +26,7 @@ const SIGN_PRESETS = [
   { label: 'KEEP OUT', url: '/signs/danger-zone.svg' },
 ];
 
-const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: '#010a01', color: 'var(--green)', border: '1px solid var(--green)', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
+const INPUT_STYLE: React.CSSProperties = { width: '100%', marginTop: '2px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--green)', padding: '3px 6px', fontFamily: 'monospace', fontSize: '0.75rem' };
 
 export function SignEditor({ token, signs, fetchSigns, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, remoteFonts, setRemoteFonts, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, controlsRef, signMesh, onClose }: {
   token: string;
