@@ -161,9 +161,9 @@ export function NavControlsMenu({ onToggleHelp }: NavControlsMenuProps) {
   );
 }
 
-// ─── GeometryMenu ─────────────────────────────────────────────────────────────
+// ─── CharacterControlsMenu ───────────────────────────────────────────────────
 
-interface GeometryMenuProps {
+interface CharacterControlsMenuProps {
   rhombusState: any;
   setRhombusState: (s: any) => void;
   selectedLocation: any;
@@ -187,7 +187,7 @@ interface GeometryMenuProps {
   gameSystem?: string;
 }
 
-export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, isEnemyVehiclesOpen, setIsEnemyVehiclesOpen, gameSystem }: GeometryMenuProps) {
+export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, isEnemyVehiclesOpen, setIsEnemyVehiclesOpen, gameSystem }: CharacterControlsMenuProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -269,7 +269,7 @@ export function GeometryMenu({ rhombusState, setRhombusState, selectedLocation, 
     <div className="panel sidebar-panel">
       <style>{`@keyframes rainbowHue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }`}</style>
       <header style={{ marginBottom: '20px' }}>
-        <h3 style={{ margin: 0 }}>TOKEN_PROTOCOLS</h3>
+        <h3 style={{ margin: 0 }}>CHARACTER_CONTROLS</h3>
       </header>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
 
@@ -1228,7 +1228,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               <path d="M16.5 17h.01" />
             </svg>
           </button>
-          <button className={`rail-btn ${activeMenu === 'geometry_protocols' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'geometry_protocols' ? 'none' : 'geometry_protocols')} aria-label="TOKEN_PROTOCOLS" data-tip="TOKEN_PROTOCOLS">
+          <button className={`rail-btn ${activeMenu === 'character_controls' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'character_controls' ? 'none' : 'character_controls')} aria-label="CHARACTER_CONTROLS" data-tip="CHARACTER_CONTROLS">
             <svg width="24" height="24" viewBox="0 0 24 24" fill={rhombusState?.color || 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
             </svg>
@@ -1375,7 +1375,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'system_info' && <SystemInfoMenu userName={userName} token={token} currentTheme={currentTheme} onThemeChange={onThemeChange} />}
           {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} view={view} activeUsers={activeUsers} />}
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
-          {activeMenu === 'geometry_protocols' && <GeometryMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
+          {activeMenu === 'character_controls' && <CharacterControlsMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
           {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} />}
           {activeMenu === 'initiative_tracker' && (

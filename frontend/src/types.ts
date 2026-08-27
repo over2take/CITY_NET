@@ -202,7 +202,7 @@ export type SidebarMenu =
   | 'quick_access'
   | 'nav_controls'
   | 'system_info'
-  | 'geometry_protocols'
+  | 'character_controls'
   | 'city_data_base'
   | 'dice_menu'
   | 'initiative_tracker';

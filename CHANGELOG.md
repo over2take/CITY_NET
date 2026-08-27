@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **Edit anything on the cyberware list.** A pencil beside each piece opens it in the form with everything filled in — name, type, humanity, price, effect and modifiers — so a mistyped name or a wrong effect can be corrected without deleting the piece and building it again. It keeps its place in the list and stays installed where it was.
 
+- **TOKEN_PROTOCOLS is now CHARACTER_CONTROLS.** The panel stopped being about the token a while ago: alongside placing and colouring it, it holds the character sheet, vehicles, enemy vehicles, health and armour. The name now says what it governs.
+
 - **Setting a type no longer installs the piece.** Naming something a Cyberleg in the list says what it is; it does not fit it. It stays in the unplaced list and is offered first when you press + on a matching body part, which is what naming the type is for. Fitting still happens on the diagram, which is the only place that knows where things go.
 
   This was most visible on the types with no left or right — marking something Fashionware installed it on the spot, and there was no way to own a piece you had not fitted yet.
