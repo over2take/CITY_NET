@@ -195,7 +195,11 @@ export type ViewMode =
   | 'purge_roads'
   | 'draw_water'
   | 'city_gen'
-  | 'battle_map';
+  | 'battle_map'
+  // The signs editor has always been one of these; the type never said so, because
+  // AdminPanel's props are untyped and set it as a bare string. Anything guarding on it
+  // from a typed file compiled to a comparison that could never be true.
+  | 'signs';
 
 export type SidebarMenu =
   | 'none'

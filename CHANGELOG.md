@@ -15,6 +15,8 @@ The themes, reaching the parts they were missing.
 
 ### Fixed
 
+- **Structures stay put while you are editing signs.** Clicking near a sign no longer selects the building behind it and swaps the panel out mid-edit. Signs hang flat against whatever is behind them, so aiming at one and hitting the structure underneath was easy.
+
 - **The move and rotate gizmo works on every sign, not just the last one added.** Selecting an earlier sign left it with no gizmo at all, so the only sign you could reposition was the newest. Every sign was reporting itself to the same slot on each selection change, and the ones later in the list overwrote the one you had actually picked.
 
 - **Themes reach the text that was only inheriting a colour.** Labels, headings and the readouts beside sliders stayed green on every theme while the values next to them changed. The base text colour was set on `body`, which sits outside the element the theme class is on, so it always resolved to the default green. Anything that set its own colour was already fine, which is why half of each line themed and half did not.

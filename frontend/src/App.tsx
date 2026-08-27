@@ -559,6 +559,13 @@ function App() {
 
   const handleBuildingClick = (loc: any) => {
     if (measureMode) return;
+    // While the signs editor is open, only signs are selectable. The two share the scene
+    // and a sign sits flat against whatever is behind it, so aiming at one and hitting the
+    // structure underneath was easy — and it swapped the panel out from under you.
+    if (view === 'signs') return;
+    // While the signs editor is open, only signs are selectable. The two share the scene
+    // and a sign sits flat against whatever is behind it, so aiming at one and hitting the
+    // structure underneath was easy — and it swapped the panel out from under you.
     if (isCopyingSize) {
         const rootId = loc.parent_id || loc.id;
         
