@@ -138,6 +138,55 @@ describe('what the chrome adds up to', () => {
   });
 });
 
+describe('every kind of modifier, end to end', () => {
+  // One case per kind, so none of the five can quietly stop working. Written as a table
+  // because the interesting thing is that the set is complete, not any single row.
+  const KINDS = [
+    {
+      kind: 'stat', target: 'Cool', value: 3,
+      field: 'cool', base: 5, expected: 8, why: 'adds to a stat',
+    },
+    {
+      kind: 'statSet', target: 'Cool', value: 3,
+      field: 'cool', base: 5, expected: 3, why: 'replaces a stat',
+    },
+    {
+      kind: 'skill', target: 'Business', value: 6,
+      field: 'business', base: 3, expected: 9, why: 'adds to a skill',
+    },
+    {
+      kind: 'skillSet', target: 'Business', value: 6,
+      field: 'business', base: 9, expected: 6, why: 'replaces a skill',
+    },
+  ];
+
+  it.each(KINDS)('$kind $why', ({ kind, target, value, field, base, expected }) => {
+    const data = withChrome([piece('P', [{ kind, target, value }])], { [field]: base });
+    expect(fx.effects(data).fields[field].value).toBe(expected);
+  });
+
+  it.each(KINDS)('$kind reaches a roll built on that field', ({ kind, target, value, field, base, expected }) => {
+    // The sheet showing a number the dice do not use would be the worst of both.
+    const data = withChrome([piece('P', [{ kind, target, value }])], { [field]: base });
+    expect(fx.formulaModifiers(data, `1d10 + @${field}`))
+      .toEqual([{ label: 'cyberware', value: expected - base }]);
+  });
+
+  it('roll changes a roll type rather than any field', () => {
+    // The fifth kind. It has no field to land on, which is exactly what distinguishes it.
+    const data = withChrome([piece('P', [{ kind: 'roll', target: 'Attack', value: 2 }])], { cool: 5 });
+    expect(fx.effects(data).fields).toEqual({});
+    expect(fx.rollBonus(data, 'Attack')).toBe(2);
+  });
+
+  it('covers every kind the row model can hold', () => {
+    // If a sixth kind is added, this fails until it is given a case above.
+    const covered = new Set([...KINDS.map((k) => k.kind), 'roll']);
+    const declared = new Set(Object.values(require('../sheets/cyberware').MOD_KINDS));
+    expect([...declared].sort()).toEqual([...covered].sort());
+  });
+});
+
 describe('never writing to the sheet', () => {
   it('leaves the stored value exactly as the player typed it', () => {
     // The whole design rests on this: write the total back and the next recompute adds the

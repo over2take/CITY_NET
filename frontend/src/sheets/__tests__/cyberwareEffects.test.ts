@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { getTemplate } from '../index';
 import { sheetEffects, effectiveValue, describeSources, norm, normRoll } from '../cyberwareEffects';
+import { MOD_KINDS } from '../cyberwareRows';
 
 const CPR = getTemplate('cyberpunk_red');
 // Placed by default: an unplaced piece is not installed and changes no numbers, so a
@@ -114,6 +115,34 @@ describe('what the sheet should show', () => {
     const data = sheet([piece('A', [{ kind: 'stat', target: 'Cool', value: 3 }])], { cool: 5 });
     sheetEffects(data, CPR);
     expect(data.cool).toBe(5);
+  });
+});
+
+describe('every kind of modifier reaches the sheet', () => {
+  // One case per kind so none can quietly stop working, and so a sixth kind cannot be
+  // added without someone deciding what it does here.
+  const KINDS = [
+    { kind: 'stat', target: 'Cool', value: 3, field: 'cool', base: 5, expected: 8, why: 'adds to a stat' },
+    { kind: 'statSet', target: 'Cool', value: 3, field: 'cool', base: 5, expected: 3, why: 'replaces a stat' },
+    { kind: 'skill', target: 'Business', value: 6, field: 'business', base: 3, expected: 9, why: 'adds to a skill' },
+    { kind: 'skillSet', target: 'Business', value: 6, field: 'business', base: 9, expected: 6, why: 'replaces a skill' },
+  ];
+
+  it.each(KINDS)('$kind $why', ({ kind, target, value, field, base, expected }) => {
+    const data = sheet([piece('P', [{ kind, target, value }])], { [field]: base });
+    const effect = sheetEffects(data, CPR).fields[field];
+    expect(effect.value).toBe(expected);
+    expect(effect.delta).toBe(expected - base);
+  });
+
+  it('roll modifiers change no field, which is what makes them different', () => {
+    const data = sheet([piece('P', [{ kind: 'roll', target: 'Attack', value: 2 }])], { cool: 5 });
+    expect(sheetEffects(data, CPR).fields).toEqual({});
+  });
+
+  it('covers every kind the row model declares', () => {
+    const covered = [...KINDS.map((k) => k.kind), 'roll'].sort();
+    expect([...MOD_KINDS].sort()).toEqual(covered);
   });
 });
 

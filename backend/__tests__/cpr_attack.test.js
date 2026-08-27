@@ -250,3 +250,80 @@ describe('resolveLuckSpend', () => {
     expect(resolveLuckSpend(0, 3, true)).toEqual({ bonus: 0, negate: false, total: 0 });
   });
 });
+
+describe('cyberware in a fight', () => {
+  // The hooks in rollToHit and rollDamage had no tests at all, so a chrome bonus could
+  // have stopped reaching combat without anything failing. The sheet showing a bonus the
+  // dice never apply is the failure worth guarding against.
+  const chromed = (mods, extra = {}) => ({
+    ...sheet, ...extra,
+    cyberware: [{ name: 'Chrome', equipped: true, type: 'cyberarm', side: 'r', mods }],
+  });
+
+  // 1d10 + @ref(7) + @handgun(5) = 12 + the die.
+  const BASE_TO_HIT = 12;
+
+  it('adds a stat modifier to the to-hit roll', () => {
+    const data = chromed([{ kind: 'stat', target: 'REF', value: 2 }]);
+    const out = rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5));
+    expect(out.total).toBe(5 + BASE_TO_HIT + 2);
+  });
+
+  it('adds a skill modifier for the weapon skill being used', () => {
+    const data = chromed([{ kind: 'skill', target: 'Handgun', value: 3 }]);
+    const out = rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5));
+    expect(out.total).toBe(5 + BASE_TO_HIT + 3);
+  });
+
+  it('ignores a skill modifier for a skill this weapon does not use', () => {
+    // Chrome that helps you shoot should do nothing for a sword.
+    const data = chromed([{ kind: 'skill', target: 'Handgun', value: 3 }]);
+    const out = rollToHit(data, getWeapon(data, 2), false, dieRng(10, 5));
+    // 1d10 + @dex(6) + @melee_weapon(3)
+    expect(out.total).toBe(5 + 9);
+  });
+
+  it('applies a set as the difference it actually makes', () => {
+    // REF is 7 and the chrome sets it to 4, so the roll is three lower, not four higher.
+    const data = chromed([{ kind: 'statSet', target: 'REF', value: 4 }]);
+    const out = rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5));
+    expect(out.total).toBe(5 + BASE_TO_HIT - 3);
+  });
+
+  it('adds an Attack roll-type modifier to any attack', () => {
+    // Not a field: this one lands on the roll itself, whatever weapon is in hand.
+    const data = chromed([{ kind: 'roll', target: 'Attack Roll', value: 2 }]);
+    const gun = rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5));
+    const sword = rollToHit(data, getWeapon(data, 2), false, dieRng(10, 5));
+    expect(gun.total).toBe(5 + BASE_TO_HIT + 2);
+    expect(sword.total).toBe(5 + 9 + 2);
+  });
+
+  it('adds a Damage roll-type modifier to damage', () => {
+    const data = chromed([{ kind: 'roll', target: 'Damage', value: 3 }]);
+    const out = rollDamage(data, getWeapon(data, 1), dieRng(6, 4, 4));
+    expect(out.total).toBe(8 + 3);
+  });
+
+  it('leaves damage alone when the chrome only helps you hit', () => {
+    const data = chromed([{ kind: 'roll', target: 'Attack', value: 5 }]);
+    const out = rollDamage(data, getWeapon(data, 1), dieRng(6, 4, 4));
+    expect(out.total).toBe(8);
+  });
+
+  it('ignores chrome that is not installed anywhere', () => {
+    // Same rule as the sheet: owned is not installed.
+    const data = {
+      ...sheet,
+      cyberware: [{ name: 'Loose', equipped: true, type: '', side: null,
+        mods: [{ kind: 'stat', target: 'REF', value: 99 }] }],
+    };
+    const out = rollToHit(data, getWeapon(data, 1), false, dieRng(10, 5));
+    expect(out.total).toBe(5 + BASE_TO_HIT);
+  });
+
+  it('changes nothing for a character with no chrome', () => {
+    const out = rollToHit(sheet, getWeapon(sheet, 1), false, dieRng(10, 5));
+    expect(out.total).toBe(5 + BASE_TO_HIT);
+  });
+});
