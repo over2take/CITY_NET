@@ -483,8 +483,6 @@ CITY_NET/
 │   │   │   ├── CustomDieBuilder.tsx    # CUSTOM_DIE.EXE — draggable build/edit window (name, side count, per-face values); App keys it on the die being edited so switching targets reloads the form
 │   │   │   ├── Buildings.tsx           # 3D building meshes
 │   │   │   ├── Sidewalks.tsx           # Road-flanking pavement strips (mitered quad ribbons, no geometry under roads) + neon curb line overlays
-│   │   │   ├── AutoSignage.tsx         # Procedural signs on building faces (seeded RNG, weighted type pool: text, preset SVG images, vertical neon; overlap check)
-│   │   │   ├── Signs.tsx               # Custom sign meshes — canvas-texture renderer (text, image, multi-line), TV/CRT shader filter, free-transform gizmo; rotation on all three axes so signs can lie flat as ground labels
 │   │   │   ├── MapExportController.tsx # R3F bridge — renders null, lifts the export API out of the Canvas so AdminPanel buttons can drive it
 │   │   │   ├── Rhombuses.tsx           # Player token meshes; carries the vehicle badge, drawn always rather than on hover — cover you have to hover to discover is cover nobody accounts for
 │   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
@@ -555,6 +553,15 @@ CITY_NET/
 │   │   │       ├── Sidebar.test.tsx
 │   │   │       └── UpdateModal.test.tsx  # Rendering, docker/non-docker branching, button callbacks, update flow
 │   │   ├── modules/
+│   │   │   ├── signs/
+│   │   │   │   ├── hooks/
+│   │   │   │   │   └── useSignEditing.ts       # Placing, selecting and repositioning: the six pieces of state that only make sense together, the effect that disarms the gizmo when the selection moves, and the save that converts the mesh centre back to the sign's base. Fetching signs is deliberately NOT here — that stays in useMapData beside the five other map resources it loads with
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── Signs.tsx               # Custom sign meshes — canvas-texture renderer (text, image, multi-line), TV/CRT shader filter, free-transform gizmo; rotation on all three axes so signs can lie flat as ground labels. Only the selected sign reports its mesh: every sign used to write to the same slot and the last in the list won, so the gizmo only ever reached the newest
+│   │   │   │   │   ├── AutoSignage.tsx         # Procedural signs on building faces (seeded RNG, weighted type pool: text, preset SVG images, vertical neon; overlap check). Shares the module because it draws the same kind of object, not because it is the same feature — it is generated from where the buildings are and stored nowhere
+│   │   │   │   │   └── SignEditor.tsx          # The editor: list, form, presets, placement and transform controls. Lifted out of AdminPanel unchanged, so App still owns the state and the API calls still go to the same routes
+│   │   │   │   ├── index.ts                    # Signs, AutoSignage, SignEditor, useSignEditing, and the SignData/SignLine types
+│   │   │   │   └── __tests__/                  # Gizmo selection (which sign it attaches to), rotation on all three axes, the editing-mode guard, and the hook
 │   │   │   └── initiative/
 │   │   │       ├── hooks/
 │   │   │       │   └── useInitiative.ts        # Socket-backed initiative state (start, roll, join, next, remove, reorder, end); Side interface; side mode support

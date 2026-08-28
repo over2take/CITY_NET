@@ -1,8 +1,8 @@
 import React, { useMemo, useContext, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { ThemeContext } from '../theme/themes';
-import { loadFont, type RemoteFont } from '../utils/fontLoader';
+import { ThemeContext } from '../../../theme/themes';
+import { loadFont, type RemoteFont } from '../../../utils/fontLoader';
 
 export interface SignLine {
   text: string;
@@ -279,9 +279,24 @@ const SignMesh = React.memo(({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedImage, lines, family, primaryColor, fontReady]);
 
-  // Notify parent when this sign becomes selected/deselected
+  /**
+   * Hand the parent this mesh while it is the selected one, so the gizmo can attach to it.
+   *
+   * Only the selected sign reports. Every sign used to write on every selection change —
+   * the mesh when it was selected, null when it was not — and they all write to the same
+   * slot. React runs sibling effects in list order, so the last sign in the list wrote
+   * last: selecting the newest worked because the others cleared the slot before it filled
+   * it, and selecting the first did not, because every sign after it then wrote null over
+   * the top. The gizmo only ever appeared on the newest sign.
+   *
+   * Clearing on deselect is the cleanup rather than another write, and React runs every
+   * cleanup before any effect in the same commit, so moving the selection cannot end with
+   * the outgoing sign erasing the incoming one.
+   */
   useEffect(() => {
-    onMeshRef?.(isSelected ? meshRef.current : null);
+    if (!isSelected) return undefined;
+    onMeshRef?.(meshRef.current);
+    return () => onMeshRef?.(null);
   }, [isSelected, onMeshRef]);
 
   return (

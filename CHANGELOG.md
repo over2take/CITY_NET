@@ -9,11 +9,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.11.2] - 2026-08-27
+
+Custom signs.
+
+### Fixed
+
+- **The move and rotate gizmo works on every sign, not just the last one added.** Selecting an earlier sign left it with no gizmo at all, so the only sign you could reposition was the newest one. Every sign was reporting itself to the same slot on each selection change, and the ones later in the list overwrote the one you had actually picked.
+
+- **Structures stay put while you are editing signs.** Clicking near a sign no longer selects the building behind it and swaps the panel out mid-edit. Signs hang flat against whatever is behind them, so aiming at one and catching the structure underneath was easy.
+
+### Changed
+
+- **Signs live in their own module.** The meshes, the procedural signage, the editor and the state behind placing them were spread across three files including a 2500-line one; they are together now, in the same shape the initiative tracker uses. Nothing about how signs are stored or loaded changed, so signs already placed are exactly where they were.
+
+---
+
 ## [1.11.1] - 2026-08-27
 
 The themes, reaching the parts they were missing.
 
 ### Fixed
+
+- **Structures stay put while you are editing signs.** Clicking near a sign no longer selects the building behind it and swaps the panel out mid-edit. Signs hang flat against whatever is behind them, so aiming at one and hitting the structure underneath was easy.
+
+- **The move and rotate gizmo works on every sign, not just the last one added.** Selecting an earlier sign left it with no gizmo at all, so the only sign you could reposition was the newest. Every sign was reporting itself to the same slot on each selection change, and the ones later in the list overwrote the one you had actually picked.
 
 - **Themes reach the text that was only inheriting a colour.** Labels, headings and the readouts beside sliders stayed green on every theme while the values next to them changed. The base text colour was set on `body`, which sits outside the element the theme class is on, so it always resolved to the default green. Anything that set its own colour was already fine, which is why half of each line themed and half did not.
 
