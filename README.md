@@ -441,7 +441,7 @@ CITY_NET/
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx             # Root component — state, routing, socket wiring
-│   │   ├── App.css / index.css # Global styles and CSS variables
+│   │   ├── App.css / index.css # Global styles, and the seven themes. Each is a block of CSS variables on `.crt-container` — primary, ground, grid, glow, plus `--danger` and `--warning`, which are per-theme rather than shared because two themes' own text colours were the reds and ambers the code had hardcoded. The base text colour lives on the container rather than `body`: `body` is outside the element the theme class sits on, so a var() resolved there reads the defaults and every inheriting element stays green whatever theme is chosen
 │   │   ├── cityGen/            # Pure city generator — bounds + options + world state in, blocks/roads/buildings/overpasses out. No React, no network; AdminPanel persists the result
 │   │   │   ├── index.ts        # generateCity orchestrator; selects a layout, caps buildings under decks; injected rng and fillPlot make it testable
 │   │   │   ├── types.ts        # Bounds, Block, RawBuilding, Obstacle, options/context/result shapes
