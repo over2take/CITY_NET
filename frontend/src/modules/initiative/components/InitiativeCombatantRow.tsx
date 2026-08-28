@@ -30,7 +30,7 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
     gap: '8px',
     padding: '5px 6px',
     borderBottom: '1px solid var(--dark-green)',
-    background: isActive ? 'rgba(0,255,0,0.08)' : 'transparent',
+    background: isActive ? 'color-mix(in srgb, var(--green) 8%, transparent)' : 'transparent',
     borderLeft: isActive ? '2px solid var(--green)' : '2px solid transparent',
     cursor: isAdmin ? 'grab' : 'default',
     userSelect: 'none',
@@ -56,7 +56,7 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
       onDrop={() => isAdmin && onDrop()}
     >
       {/* Portrait */}
-      <div style={{ width: 28, height: 28, borderRadius: 2, overflow: 'hidden', flexShrink: 0, background: 'rgba(0,40,0,0.6)', border: '1px solid var(--dark-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 28, height: 28, borderRadius: 2, overflow: 'hidden', flexShrink: 0, background: 'color-mix(in srgb, var(--black) 60%, transparent)', border: '1px solid var(--dark-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {combatant.portraitUrl
           ? <img src={combatant.portraitUrl} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
           : <span style={{ fontSize: '0.6rem', color: 'var(--dark-green)' }}>{combatant.isNpc ? '◆' : '◈'}</span>

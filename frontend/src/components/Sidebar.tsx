@@ -691,7 +691,7 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
         aria-label="Weapon"
         value={selected ?? ''}
         onChange={(e) => setSelected(e.target.value)}
-        style={{ width: '100%', background: 'rgba(0,10,0,0.7)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px', marginBottom: '5px' }}
+        style={{ width: '100%', background: 'color-mix(in srgb, var(--black) 70%, transparent)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px', marginBottom: '5px' }}
       >
         {weapons.map(w => (
           <option key={w.key} value={w.key}>
@@ -713,7 +713,7 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
             aria-label="Spend LUCK"
             value={luckSpend}
             onChange={(e) => setLuckSpend(Number(e.target.value))}
-            style={{ background: 'rgba(0,10,0,0.7)', color: 'inherit', border: '1px solid currentColor', fontFamily: 'inherit', fontSize: '0.7rem', padding: '1px 3px' }}
+            style={{ background: 'color-mix(in srgb, var(--black) 70%, transparent)', color: 'inherit', border: '1px solid currentColor', fontFamily: 'inherit', fontSize: '0.7rem', padding: '1px 3px' }}
           >
             {Array.from({ length: luckAvailable + 1 }, (_, n) => (
               <option key={n} value={n}>{n === 0 ? 'NONE' : `+${n}`}</option>
@@ -867,7 +867,7 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
 
       <div style={{ flex: '0 1 auto', overflowY: 'auto', marginBottom: '10px', paddingRight: '5px' }}>
         {diceTypes.map(sides => (
-          <div key={sides} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,10,0,0.5)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid var(--dark-green)' }}>
+          <div key={sides} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'color-mix(in srgb, var(--black) 50%, transparent)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid var(--dark-green)' }}>
             <span style={{ fontWeight: 'bold', color: 'var(--cyan)', width: '40px' }}>d{sides}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleSubDice(sides)}>-</button>
@@ -881,7 +881,7 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
         {customDice.length > 0 && (
           <div style={{ borderTop: '1px solid #1a3a1a', marginTop: '6px', paddingTop: '6px' }}>
             {customDice.map(die => (
-              <div key={die.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,10,0,0.5)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid #1a4a2a' }}>
+              <div key={die.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'color-mix(in srgb, var(--black) 50%, transparent)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid #1a4a2a' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                   <span style={{ fontWeight: 'bold', color: 'var(--cyan)', whiteSpace: 'nowrap' }}>{die.name}</span>
                   {isAdmin && !die.locked && (

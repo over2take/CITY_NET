@@ -242,7 +242,7 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                 </div>
               ))}
             </div>
-            <form onSubmit={handleSubmit} style={{ padding: '10px', display: 'flex', gap: '5px', background: 'rgba(0,25,0,0.5)', borderTop: '2px solid var(--dark-green)', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+            <form onSubmit={handleSubmit} style={{ padding: '10px', display: 'flex', gap: '5px', background: 'color-mix(in srgb, var(--black) 50%, transparent)', borderTop: '2px solid var(--dark-green)', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
               {showSendAs && (
                 <select
                   value={sendAs}
@@ -259,13 +259,13 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                 value={inputText}
                 onChange={e => setInputText(e.target.value)}
                 placeholder={activeTab === 'GLOBAL' ? "TYPE_GLOBAL_BROADCAST..." : `ENCRYPTED_MESSAGE_TO_${activeTab}...`}
-                style={{ flex: 1, background: 'rgba(0,40,0,0.6)', border: '1px solid var(--green)', color: 'var(--green)', padding: '10px', fontSize: '0.9rem' }}
+                style={{ flex: 1, background: 'color-mix(in srgb, var(--black) 60%, transparent)', border: '1px solid var(--green)', color: 'var(--green)', padding: '10px', fontSize: '0.9rem' }}
               />
               <button type="submit" className="upload-btn" style={{ width: '100px', margin: 0 }}>SEND</button>
             </form>
           </div>
 
-          <div style={{ width: '160px', display: 'flex', flexDirection: 'column', background: 'rgba(0,10,0,0.3)', flexShrink: 0 }}>
+          <div style={{ width: '160px', display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--black) 30%, transparent)', flexShrink: 0 }}>
             <div style={{ padding: '8px', fontSize: '0.7rem', fontWeight: 'bold', borderBottom: '2px solid var(--dark-green)', color: 'var(--green)', textShadow: 'var(--glow)', textAlign: 'center' }}>OPERATORS_ONLINE</div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '10px', position: 'relative' }}>

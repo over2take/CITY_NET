@@ -17,6 +17,10 @@ The themes, reaching the parts they were missing.
 
 - **Themes reach the text that was only inheriting a colour.** Labels, headings and the readouts beside sliders stayed green on every theme while the values next to them changed. The base text colour was set on `body`, which sits outside the element the theme class is on, so it always resolved to the default green. Anything that set its own colour was already fine, which is why half of each line themed and half did not.
 
+- **Input boxes, panels and tabs stop being green-tinted.** Every translucent surface in the app was a fixed green wash, so a text box on Crimson sat on a green ground and the selected tab glowed green whatever theme was on. They take the theme's own dark ground now: red on Crimson, purple on Vaporwave, blue on Ocean.
+
+  Modal backdrops are untouched. Those are a neutral black scrim by design rather than a tint that got missed.
+
 - **Checkboxes and sliders take the theme's colour.** All thirty-nine of them drew in the browser's own blue, which belonged to no theme.
 
 - **Danger and warning are real colours now, tuned per theme.** The palette had neither, while the code asked for `--danger` and fell through to a hardcoded red every time.

@@ -1995,7 +1995,7 @@ export function AdminPanel({
                         <select 
                             value={editData.shape} 
                             onChange={e => setEditData({...editData, shape: e.target.value})} 
-                            style={{width: '100%', padding: '5px', background: 'rgba(0,40,0,0.6)', border: '1px solid var(--green)', color: 'var(--green)', outline: 'none'}}
+                            style={{width: '100%', padding: '5px', background: 'color-mix(in srgb, var(--black) 60%, transparent)', border: '1px solid var(--green)', color: 'var(--green)', outline: 'none'}}
                         >
                             <option value="box">Box</option>
                             <option value="cylinder">Cylinder</option>

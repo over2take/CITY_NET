@@ -95,7 +95,7 @@ export function EnemyVehiclesWindow({ pos, setPos, onClose, socket, vehicles, to
             aria-label="Enemy vehicle"
             value={current ? key(current) : ''}
             onChange={(e) => setSelected(e.target.value)}
-            style={{ background: 'rgba(0,10,0,0.7)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px' }}
+            style={{ background: 'color-mix(in srgb, var(--black) 70%, transparent)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px' }}
           >
             {[...new Set(vehicles.map(groupLabel))].map(folder => (
               <optgroup key={folder} label={folder}>
@@ -162,7 +162,7 @@ export function EnemyVehiclesWindow({ pos, setPos, onClose, socket, vehicles, to
                         onChange={(e) => setAmount(Number(e.target.value.replace(/\D/g, '').slice(0, 4)) || 0)}
                         style={{
                           flex: 1, minWidth: 0, boxSizing: 'border-box',
-                          background: 'rgba(0,10,0,0.7)', color: 'var(--green)',
+                          background: 'color-mix(in srgb, var(--black) 70%, transparent)', color: 'var(--green)',
                           border: '1px solid var(--green)', fontFamily: 'inherit',
                           fontSize: '0.75rem', padding: '0 8px', textAlign: 'center',
                         }}
@@ -229,7 +229,7 @@ export function EnemyVehiclesWindow({ pos, setPos, onClose, socket, vehicles, to
                           seat: seatId,
                         })}
                         style={{
-                          background: 'rgba(0,10,0,0.85)', color: colour,
+                          background: 'color-mix(in srgb, var(--black) 85%, transparent)', color: colour,
                           border: `1px solid ${sitting ? colour : 'var(--dark-green)'}`,
                           fontFamily: 'inherit', fontSize: '0.6rem', padding: '1px 2px', maxWidth: '110px',
                         }}

@@ -92,7 +92,7 @@ const num = (v: unknown): number => {
 };
 
 const inputStyle: React.CSSProperties = {
-  background: 'rgba(0, 20, 0, 0.5)',
+  background: 'color-mix(in srgb, var(--black) 50%, transparent)',
   border: '1px solid var(--green)',
   color: 'var(--green)',
   fontFamily: 'inherit',
@@ -289,7 +289,7 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilt
     position: 'absolute', width: `${b}px`, height: `${b}px`, ...pos,
   });
   const frame = (
-    <div style={{ position: 'relative', width: `${size}px`, height: `${size}px`, background: 'rgba(0, 20, 0, 0.6)', flex: '0 0 auto', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', width: `${size}px`, height: `${size}px`, background: 'color-mix(in srgb, var(--black) 60%, transparent)', flex: '0 0 auto', overflow: 'hidden' }}>
       {portraitUrl ? (
         <TvPortrait src={portraitUrl} silhouette={shadowFilter} />
       ) : (
@@ -329,7 +329,7 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilt
             onClick={onToggleShadow}
             title={shadowFilter ? 'Reveal portrait' : 'Shadow silhouette — hide reused stock art'}
             style={{
-              cursor: 'pointer', background: shadowFilter ? 'rgba(0,255,0,0.08)' : 'rgba(0,0,0,0.85)',
+              cursor: 'pointer', background: shadowFilter ? 'color-mix(in srgb, var(--green) 8%, transparent)' : 'rgba(0,0,0,0.85)',
               border: '1px solid var(--green)', borderTop: 'none', borderLeft: onUpload ? 'none' : '1px solid var(--green)',
               padding: '4px 6px', color: 'var(--green)', fontSize: '9px',
               letterSpacing: '1px', fontWeight: 600, whiteSpace: 'nowrap',
@@ -396,7 +396,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
               style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', cursor: onOpenLink ? 'pointer' : 'default' }}
             >
               <span style={{ fontSize: '0.6rem', opacity: 0.65 }}>HP</span>
-              <div style={{ flex: 1, display: 'flex', gap: max > 40 ? '1px' : '2px', height: '12px', border: `1px solid ${hpColor}`, background: 'rgba(0, 20, 0, 0.6)', padding: '1px', transition: 'border-color 0.3s' }}>
+              <div style={{ flex: 1, display: 'flex', gap: max > 40 ? '1px' : '2px', height: '12px', border: `1px solid ${hpColor}`, background: 'color-mix(in srgb, var(--black) 60%, transparent)', padding: '1px', transition: 'border-color 0.3s' }}>
                 {max > 0 ? Array.from({ length: max }, (_, i) => (
                   <div
                     key={i}
@@ -643,7 +643,7 @@ function GridSection({ section, data, readOnly, onFieldChange, onRoll, effects }
       {visible.map((field) => {
         const maxField = field.maxField ? section.fields.find(f => f.id === field.maxField) : undefined;
         return (
-          <div key={field.id} title={field.hint} style={{ border: '1px solid var(--green)', background: 'rgba(0, 20, 0, 0.35)', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
+          <div key={field.id} title={field.hint} style={{ border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 35%, transparent)', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '4px 2px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
               {field.label}
               {effects.fields[field.id]?.delta ? <ChromeBadge effect={effects.fields[field.id]} /> : null}
@@ -725,7 +725,7 @@ function SkillsSection({ section, data, readOnly, onFieldChange, onRoll, effects
         const base = lvl + (field.stat ? effectiveValue(effects, field.stat, data[field.stat]) : 0);
         const boost = effects.fields[field.id];
         return (
-          <div key={field.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '1px 4px', background: lvl > 0 ? 'rgba(0, 40, 0, 0.45)' : 'transparent' }}>
+          <div key={field.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '1px 4px', background: lvl > 0 ? 'color-mix(in srgb, var(--black) 45%, transparent)' : 'transparent' }}>
             <span style={{ flex: 1, fontSize: '0.68rem', opacity: lvl > 0 ? 1 : 0.6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {field.label}{lvl > 0 ? ' ●' : ''}
             </span>
@@ -1304,7 +1304,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
               key={tab}
               onClick={() => setActiveTab(tab)}
               style={{
-                flex: 1, padding: '7px 4px', background: activeTab === tab ? 'rgba(0, 60, 0, 0.5)' : 'none',
+                flex: 1, padding: '7px 4px', background: activeTab === tab ? 'color-mix(in srgb, var(--black) 50%, transparent)' : 'none',
                 border: 'none',
                 borderRight: i < tabs.length - 1 ? '1px solid var(--green)' : 'none',
                 color: 'var(--green)',

@@ -4,8 +4,8 @@
   --vehicle: #00ffaa;
   --dark-green: #003300;
   --black: #000000;
-  --glow: 0 0 10px rgba(0, 255, 0, 0.7);
-  --panel-bg: rgba(0, 20, 0, 0.85);
+  --glow: 0 0 10px color-mix(in srgb, var(--green) 70%, transparent);
+  --panel-bg: color-mix(in srgb, var(--black) 85%, transparent);
   --text: #00ff00;
   --cyan: #00ffaa;
   /* An alert has to stay legible as an alert on every theme, so these are tuned per
@@ -26,8 +26,8 @@
   --vehicle: #00ffaa;
   --dark-green: #004400;
   --black: #0a1a0f;
-  --glow: 0 0 10px rgba(0, 255, 0, 0.7);
-  --panel-bg: rgba(0, 20, 0, 0.85);
+  --glow: 0 0 10px color-mix(in srgb, var(--green) 70%, transparent);
+  --panel-bg: color-mix(in srgb, var(--black) 85%, transparent);
   --text: #00cc00;
   --cyan: #00ffaa;
   --danger: #ff4444;
@@ -201,7 +201,7 @@ body, html, #root {
     repeating-linear-gradient(
       90deg,
       rgba(255, 0, 0, 0.025) 0px,
-      rgba(0, 255, 0, 0.015) 1px,
+      color-mix(in srgb, var(--green) 1.5%, transparent) 1px,
       rgba(0, 0, 255, 0.025) 2px,
       rgba(255, 0, 0, 0.025) 3px
     );

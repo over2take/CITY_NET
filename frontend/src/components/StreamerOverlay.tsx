@@ -71,7 +71,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
         <div style={{
           position: 'absolute', top: directorState.letterbox ? 'calc(10vh + 16px)' : '24px', left: '24px',
           animation: 'streamer-chyron-in 0.5s ease-out both',
-          background: 'rgba(0, 10, 0, 0.82)', border: '1px solid var(--green)',
+          background: 'color-mix(in srgb, var(--black) 82%, transparent)', border: '1px solid var(--green)',
           borderLeft: '4px solid var(--green)', padding: '8px 18px',
           color: 'var(--green)', letterSpacing: '3px', fontSize: '15px',
           textTransform: 'uppercase', textShadow: 'var(--glow)',
@@ -91,7 +91,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
           <div style={{
             position: 'absolute', top: directorState.letterbox ? 'calc(10vh + 16px)' : '24px', right: '24px',
             animation: 'streamer-chyron-in 0.4s ease-out both',
-            width: '300px', border: '1px solid var(--green)', background: 'rgba(0, 5, 0, 0.9)',
+            width: '300px', border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 90%, transparent)',
             boxShadow: '0 0 15px color-mix(in srgb, var(--green) 25%, transparent)',
           }}>
             <div style={{ background: 'var(--green)', color: '#000', fontWeight: 'bold', padding: '6px 12px', fontSize: '13px', letterSpacing: '2px', textTransform: 'uppercase' }}>
@@ -171,7 +171,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
           <div key={e.id} style={{
             animation: 'streamer-slide-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both',
             display: 'flex', alignItems: 'center', gap: '14px',
-            background: 'rgba(0, 10, 0, 0.85)', border: `1px solid ${e.color}`,
+            background: 'color-mix(in srgb, var(--black) 85%, transparent)', border: `1px solid ${e.color}`,
             borderLeft: `4px solid ${e.color}`, padding: '10px 18px', minWidth: '260px',
           }}>
             <div style={{ fontSize: '30px', fontWeight: 'bold', color: e.color, textShadow: `0 0 10px ${e.color}` }}>
