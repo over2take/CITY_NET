@@ -415,7 +415,7 @@ describe('SheetRenderer segmented HP bar', () => {
       />
     );
     const readout = screen.getByText('4/20');
-    expect(readout.style.color).toBe('rgb(255, 51, 51)');
+    expect(readout.style.color).toBe('var(--danger)');
   });
 
   it('shows yellow between 25% and 50% health', () => {
@@ -427,7 +427,7 @@ describe('SheetRenderer segmented HP bar', () => {
       />
     );
     const readout = screen.getByText('8/20');
-    expect(readout.style.color).toBe('rgb(255, 204, 0)');
+    expect(readout.style.color).toBe('var(--warning)');
   });
 });
 

@@ -209,7 +209,7 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
           <div
             className={unreadTabs.has('GLOBAL') ? 'unread-blink' : ''}
             onClick={() => { setActiveTab('GLOBAL'); setSendAs(userName); setUnreadTabs(prev => { const next = new Set(prev); next.delete('GLOBAL'); return next; }); }}
-            style={{ padding: '8px 15px', background: activeTab === 'GLOBAL' ? 'var(--black)' : 'transparent', color: activeTab === 'GLOBAL' ? 'var(--green)' : (unreadTabs.has('GLOBAL') ? '#ffaa00' : '#888'), borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ padding: '8px 15px', background: activeTab === 'GLOBAL' ? 'var(--black)' : 'transparent', color: activeTab === 'GLOBAL' ? 'var(--green)' : (unreadTabs.has('GLOBAL') ? 'var(--warning)' : '#888'), borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
           >
             [ GLOBAL ] {unreadTabs.has('GLOBAL') && '*'}
           </div>
@@ -218,10 +218,10 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
               key={tab}
               className={unreadTabs.has(tab) ? 'unread-blink' : ''}
               onClick={() => openTab(tab)}
-              style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 15px', background: activeTab === tab ? 'var(--black)' : 'transparent', color: activeTab === tab ? 'var(--cyan)' : (unreadTabs.has(tab) ? '#ffaa00' : '#888'), borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 15px', background: activeTab === tab ? 'var(--black)' : 'transparent', color: activeTab === tab ? 'var(--cyan)' : (unreadTabs.has(tab) ? 'var(--warning)' : '#888'), borderTopLeftRadius: '5px', borderTopRightRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
             >
               {tab} {unreadTabs.has(tab) && '*'}
-              <span onClick={(e) => closeTab(e, tab)} style={{ color: '#ff0000', marginLeft: '5px', cursor: 'pointer' }}>×</span>
+              <span onClick={(e) => closeTab(e, tab)} style={{ color: 'var(--danger)', marginLeft: '5px', cursor: 'pointer' }}>×</span>
             </div>
           ))}
         </div>
@@ -235,14 +235,14 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
               {displayMessages.map((msg: any) => (
                 <div key={msg.id || Math.random()} style={{ marginBottom: '10px', opacity: msg.sender === 'SYSTEM' ? 0.6 : 1 }}>
                   <span style={{ color: 'var(--green)', fontSize: '0.65rem', marginRight: '8px', fontFamily: 'monospace' }}>[{msg.timestamp}]</span>
-                  <span style={{ color: msg.sender === userName ? 'var(--cyan)' : (msg.sender === 'SYSTEM' ? '#ff0000' : (myNPCs.includes(msg.sender) ? '#ffaa00' : 'var(--green)')), fontWeight: 'bold' }}>
+                  <span style={{ color: msg.sender === userName ? 'var(--cyan)' : (msg.sender === 'SYSTEM' ? 'var(--danger)' : (myNPCs.includes(msg.sender) ? 'var(--warning)' : 'var(--green)')), fontWeight: 'bold' }}>
                     {msg.sender}:
                   </span>
                   <span style={{ marginLeft: '8px', wordBreak: 'break-all', color: activeTab === 'GLOBAL' ? '#fff' : '#aaa' }}>{msg.text}</span>
                 </div>
               ))}
             </div>
-            <form onSubmit={handleSubmit} style={{ padding: '10px', display: 'flex', gap: '5px', background: 'rgba(0,25,0,0.5)', borderTop: '2px solid var(--dark-green)', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+            <form onSubmit={handleSubmit} style={{ padding: '10px', display: 'flex', gap: '5px', background: 'color-mix(in srgb, var(--black) 50%, transparent)', borderTop: '2px solid var(--dark-green)', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
               {showSendAs && (
                 <select
                   value={sendAs}
@@ -259,18 +259,18 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                 value={inputText}
                 onChange={e => setInputText(e.target.value)}
                 placeholder={activeTab === 'GLOBAL' ? "TYPE_GLOBAL_BROADCAST..." : `ENCRYPTED_MESSAGE_TO_${activeTab}...`}
-                style={{ flex: 1, background: 'rgba(0,40,0,0.6)', border: '1px solid var(--green)', color: 'var(--green)', padding: '10px', fontSize: '0.9rem' }}
+                style={{ flex: 1, background: 'color-mix(in srgb, var(--black) 60%, transparent)', border: '1px solid var(--green)', color: 'var(--green)', padding: '10px', fontSize: '0.9rem' }}
               />
               <button type="submit" className="upload-btn" style={{ width: '100px', margin: 0 }}>SEND</button>
             </form>
           </div>
 
-          <div style={{ width: '160px', display: 'flex', flexDirection: 'column', background: 'rgba(0,10,0,0.3)', flexShrink: 0 }}>
+          <div style={{ width: '160px', display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--black) 30%, transparent)', flexShrink: 0 }}>
             <div style={{ padding: '8px', fontSize: '0.7rem', fontWeight: 'bold', borderBottom: '2px solid var(--dark-green)', color: 'var(--green)', textShadow: 'var(--glow)', textAlign: 'center' }}>OPERATORS_ONLINE</div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '10px', position: 'relative' }}>
               {activeUsers.map((user: any) => {
-                const dotColor = user.isAdmin ? '#ff0000' : (user.isTemporaryAdmin ? '#ffaa00' : (user.isNPC ? (user.isActive === false ? '#555' : '#aa00ff') : 'var(--green)'));
+                const dotColor = user.isAdmin ? 'var(--danger)' : (user.isTemporaryAdmin ? 'var(--warning)' : (user.isNPC ? (user.isActive === false ? '#555' : '#aa00ff') : 'var(--green)'));
                 const dotShadow = (user.isNPC && user.isActive === false) ? 'none' : `0 0 5px ${dotColor}`;
                 return (
                   <div key={user.userName} style={{ position: 'relative' }}>
@@ -298,7 +298,7 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
                       <span style={{ color: user.userName === userName ? 'var(--cyan)' : '#888', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
                         {user.userName}
                         {user.isAdmin && <span title="Primary Admin"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="#ff7b00" style={{verticalAlign:'middle'}}><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg></span>}
-                        {user.isTemporaryAdmin && <span title="Temporary Admin"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="#ffaa00" style={{verticalAlign:'middle'}}><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg></span>}
+                        {user.isTemporaryAdmin && <span title="Temporary Admin"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="var(--warning)" style={{verticalAlign:'middle'}}><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg></span>}
                         {user.isNPC && <span title="NPC" style={{ color: user.isActive === false ? '#555' : '#aa00ff' }}>[NPC]</span>}
                       </span>
                     </div>

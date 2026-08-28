@@ -134,7 +134,7 @@ export function InitiativeWindow({
         <>
           {/* SR6: new round banner */}
           {state.newRound && (
-            <div style={{ marginBottom: '8px', padding: '4px 8px', border: '1px solid #ffcc00', color: '#ffcc00', fontSize: '0.65rem', letterSpacing: '1px', textAlign: 'center' }}>
+            <div style={{ marginBottom: '8px', padding: '4px 8px', border: '1px solid var(--warning)', color: 'var(--warning)', fontSize: '0.65rem', letterSpacing: '1px', textAlign: 'center' }}>
               NEW ROUND — REROLL INITIATIVE
             </div>
           )}

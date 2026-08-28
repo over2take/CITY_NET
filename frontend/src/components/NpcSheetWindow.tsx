@@ -203,7 +203,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
             <button
               title="Choose a stock NPC headshot"
               className="win95-close-btn"
-              style={{ fontSize: '9px', width: 'auto', padding: '0 5px', background: pickerOpen ? 'rgba(0,255,0,0.12)' : undefined }}
+              style={{ fontSize: '9px', width: 'auto', padding: '0 5px', background: pickerOpen ? 'color-mix(in srgb, var(--green) 12%, transparent)' : undefined }}
               onClick={() => {
                 if (!pickerOpen && sheet?.portrait_url) {
                   const idx = headshots.indexOf(sheet.portrait_url);
@@ -249,7 +249,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
             </span>
             <button
               onClick={() => { handleSetStockPortrait(headshots[pickerIndex]); setPickerOpen(false); }}
-              style={{ background: 'rgba(0,255,0,0.08)', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '4px 10px', fontSize: '0.65rem', letterSpacing: '1px', fontWeight: 600 }}
+              style={{ background: 'color-mix(in srgb, var(--green) 8%, transparent)', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '4px 10px', fontSize: '0.65rem', letterSpacing: '1px', fontWeight: 600 }}
             >
               USE THIS
             </button>

@@ -4,10 +4,16 @@
   --vehicle: #00ffaa;
   --dark-green: #003300;
   --black: #000000;
-  --glow: 0 0 10px rgba(0, 255, 0, 0.7);
-  --panel-bg: rgba(0, 20, 0, 0.85);
+  --glow: 0 0 10px color-mix(in srgb, var(--green) 70%, transparent);
+  --panel-bg: color-mix(in srgb, var(--black) 85%, transparent);
   --text: #00ff00;
   --cyan: #00ffaa;
+  /* An alert has to stay legible as an alert on every theme, so these are tuned per
+     theme rather than shared. Two of them had to move: Crimson's own text colour is
+     #ff3333 and Solar's is #ffaa00, which is what the code used for danger and warning
+     — on those themes the warnings were the same colour as everything else. */
+  --danger: #ff4444;
+  --warning: #ffcc00;
   --grid-section: #006600;
   --grid-cell: #003300;
   --bg-gradient: radial-gradient(circle, #001a00 0%, #000000 100%);
@@ -20,10 +26,12 @@
   --vehicle: #00ffaa;
   --dark-green: #004400;
   --black: #0a1a0f;
-  --glow: 0 0 10px rgba(0, 255, 0, 0.7);
-  --panel-bg: rgba(0, 20, 0, 0.85);
+  --glow: 0 0 10px color-mix(in srgb, var(--green) 70%, transparent);
+  --panel-bg: color-mix(in srgb, var(--black) 85%, transparent);
   --text: #00cc00;
   --cyan: #00ffaa;
+  --danger: #ff4444;
+  --warning: #ffcc00;
   --grid-section: #006600;
   --grid-cell: #003300;
   --bg-gradient: radial-gradient(circle, #06240e 0%, #020a05 100%);
@@ -32,19 +40,29 @@
 }
 
 .theme-vaporwave {
-  --green: #ff71ce;
+  /* Given: #FBF5A7 cream, #FF97D0 light pink, #FF62BB hot pink, #B331F1 purple.
+     All four are light, so the dark end is derived rather than supplied — a four-step
+     value ramp off the purple's hue, drifting toward indigo as it darkens (281deg down to
+     255deg). Scaling the purple straight down keeps it magenta and the pinks sink into it;
+     letting the ground go cool makes them read warm against it. */
+  --green: #ff62bb;
   /* Marks an occupied seat. Each theme's own secondary, so no foreign hue. */
-  --vehicle: #05ffa1;
-  --dark-green: #4a154b;
-  --black: #1a0b2e;
-  --glow: 0 0 10px rgba(255, 113, 206, 0.7);
-  --panel-bg: rgba(26, 11, 46, 0.85);
-  --text: #b967ff;
-  --cyan: #05ffa1;
-  --grid-section: #7b2d8b;
-  --grid-cell: #4a154b;
-  --bg-gradient: linear-gradient(160deg, #2b1250 0%, #1a0b2e 45%, #3d0a3f 100%);
-  --scanline-tint: rgba(255, 113, 206, 0.05);
+  --vehicle: #fbf5a7;
+  --dark-green: #301c4a;
+  --black: #0e091e;
+  --glow: 0 0 10px rgba(255, 98, 187, 0.7);
+  --panel-bg: rgba(27, 16, 48, 0.85);
+  --text: #ff97d0;
+  --cyan: #fbf5a7;
+  /* The cream is a yellow, so an amber warning would read as ordinary text the way Solar's
+     did. Both alerts clear all four palette colours and stay legible on the ground: the
+     obvious deep red fell to 4.1 against it, which is why this one is brighter. */
+  --danger: #ff3b30;
+  --warning: #ff8c1a;
+  --grid-section: #562b75;
+  --grid-cell: #2c1a42;
+  --bg-gradient: linear-gradient(160deg, #241340 0%, #0e091e 48%, #35124a 100%);
+  --scanline-tint: rgba(255, 98, 187, 0.05);
   background-color: var(--black);
 }
 
@@ -58,6 +76,9 @@
   --panel-bg: rgba(13, 13, 13, 0.85);
   --text: #00f0ff;
   --cyan: #d100d1;
+  /* orange, because the primary is already yellow */
+  --danger: #ff2b2b;
+  --warning: #ff8f1f;
   --grid-section: #4a4500;
   --grid-cell: #2a2600;
   --bg-gradient: linear-gradient(180deg, #16161d 0%, #0d0d0d 55%, #1c1500 100%);
@@ -75,6 +96,9 @@
   --panel-bg: rgba(20, 0, 0, 0.85);
   --text: #ff8888;
   --cyan: #ff5555;
+  /* the primary IS red, so danger goes hotter and warning goes amber */
+  --danger: #ff1744;
+  --warning: #ffb300;
   --grid-section: #880000;
   --grid-cell: #440000;
   --bg-gradient: radial-gradient(circle, #2a0505 0%, #0a0000 100%);
@@ -92,6 +116,8 @@
   --panel-bg: rgba(0, 17, 34, 0.85);
   --text: #88ccff;
   --cyan: #00aaff;
+  --danger: #ff5252;
+  --warning: #ffc400;
   --grid-section: #005588;
   --grid-cell: #003366;
   --bg-gradient: linear-gradient(180deg, #002944 0%, #001122 60%, #000a14 100%);
@@ -109,6 +135,9 @@
   --panel-bg: rgba(34, 17, 0, 0.85);
   --text: #ffdd88;
   --cyan: #ffcc00;
+  /* the primary IS amber, so warning goes pale and danger goes red */
+  --danger: #ff3d00;
+  --warning: #fff176;
   --grid-section: #884400;
   --grid-cell: #552200;
   --bg-gradient: linear-gradient(200deg, #3a2000 0%, #221100 55%, #140a00 100%);
@@ -126,6 +155,9 @@
   --panel-bg: rgba(10, 10, 10, 0.90);
   --text: #cccccc;
   --cyan: #aaaaaa;
+  /* the only colour in the theme, which is the point: an alert should break the grey */
+  --danger: #ff5555;
+  --warning: #ffcc00;
   --grid-section: #444444;
   --grid-cell: #222222;
   --bg-gradient: radial-gradient(circle, #141414 0%, #000000 100%);
@@ -139,7 +171,10 @@ body, html, #root {
   width: 100%;
   height: 100%;
   background: var(--black);
-  color: var(--green);
+  /* No colour here. These are ancestors of .crt-container, which is where the theme class
+     sits, so a var() resolved at this level always reads the :root defaults — green — and
+     every element that inherits its colour rather than setting one stays green whatever
+     theme is chosen. The colour belongs inside the themed element; see below. */
   font-family: 'Courier New', Courier, monospace;
   overflow: hidden;
 }
@@ -149,6 +184,13 @@ body, html, #root {
   height: 100vh;
   position: relative;
   background: var(--bg-gradient);
+  /* Inside the theme class, so this resolves to the active theme rather than the default,
+     and everything that inherits a colour follows the theme with it. */
+  color: var(--green);
+  /* Checkboxes and range sliders draw themselves, and without this they draw in the
+     browser's own blue — the one thing on screen that belongs to no theme at all. It
+     inherits, so the whole tree is covered from here rather than per control. */
+  accent-color: var(--green);
 }
 
 .scanlines {
@@ -166,7 +208,7 @@ body, html, #root {
     repeating-linear-gradient(
       90deg,
       rgba(255, 0, 0, 0.025) 0px,
-      rgba(0, 255, 0, 0.015) 1px,
+      color-mix(in srgb, var(--green) 1.5%, transparent) 1px,
       rgba(0, 0, 255, 0.025) 2px,
       rgba(255, 0, 0, 0.025) 3px
     );

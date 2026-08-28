@@ -726,7 +726,7 @@ export function AdminPanel({
         name: '', description: '', npcs: '', x: tx, y: 0, z: tz,
         width: 1.875, height: 1.875, depth: 1.875,
         baseWidth: 1.875, baseHeight: 1.875, baseDepth: 1.875,
-        shape: 'enemy_rhombus', color: '#ff0000', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5,
+        shape: 'enemy_rhombus', color: 'var(--danger)', isFavorite: false, isDanger: false, owner: 'SYSTEM', polyCount: 5,
         battle_map_id: activeBattleMapData?.locationId ?? null,
         floor_index: activeBattleMapData?.currentFloorIndex ?? null,
     });
@@ -1476,7 +1476,7 @@ export function AdminPanel({
                 </div>
               ))}
               {activeUserEditing && (
-                <div className="panel" style={{marginBottom: '10px', borderColor: '#ff0000'}}>
+                <div className="panel" style={{marginBottom: '10px', borderColor: 'var(--danger)'}}>
                   <h4>EDITING_NOW: {activeUserEditing.userName || activeUserEditing.userId}</h4>
                   <button className="upload-btn danger-btn" onClick={() => socketRef.current.emit('revokeEditing', { userId: activeUserEditing.userId })}>KICK_EDITOR</button>
                 </div>
@@ -1502,7 +1502,7 @@ export function AdminPanel({
                         <div key={u.userName} style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '4px 4px 4px 16px'}}>
                           <div style={{display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden'}}>
                             <span style={{fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{u.userName}</span>
-                            {u.isTemporaryAdmin && <span style={{fontSize: '0.55rem', color: '#ffaa00', opacity: 0.8}}>TEMP_ADMIN</span>}
+                            {u.isTemporaryAdmin && <span style={{fontSize: '0.55rem', color: 'var(--warning)', opacity: 0.8}}>TEMP_ADMIN</span>}
                           </div>
                           <button
                             className={`utility-btn ${u.isTemporaryAdmin ? 'danger-btn' : ''}`}
@@ -1995,7 +1995,7 @@ export function AdminPanel({
                         <select 
                             value={editData.shape} 
                             onChange={e => setEditData({...editData, shape: e.target.value})} 
-                            style={{width: '100%', padding: '5px', background: 'rgba(0,40,0,0.6)', border: '1px solid var(--green)', color: 'var(--green)', outline: 'none'}}
+                            style={{width: '100%', padding: '5px', background: 'color-mix(in srgb, var(--black) 60%, transparent)', border: '1px solid var(--green)', color: 'var(--green)', outline: 'none'}}
                         >
                             <option value="box">Box</option>
                             <option value="cylinder">Cylinder</option>
@@ -2261,7 +2261,7 @@ function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] 
             <span style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.8, letterSpacing: '1px' }}>{msg}</span>
           )}
           {dirty && !msg && (
-            <span style={{ fontSize: '0.6rem', color: '#ffcc00', opacity: 0.8, letterSpacing: '1px' }}>UNSAVED CHANGES</span>
+            <span style={{ fontSize: '0.6rem', color: 'var(--warning)', opacity: 0.8, letterSpacing: '1px' }}>UNSAVED CHANGES</span>
           )}
         </div>
       </>}

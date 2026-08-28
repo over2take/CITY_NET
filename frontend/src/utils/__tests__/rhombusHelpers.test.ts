@@ -6,7 +6,7 @@ const prev = { color: '#00ff00', name: 'GHOST', description: 'desc', hp_max: 100
 describe('mergeRhombusHealthFromLocation', () => {
   it('restores damaged hp_current from DB on server restart', () => {
     // Simulate: player took damage (DB has 45), client prev had full health
-    const existing = { color: '#ff0000', name: 'VIPER', description: '', hp_max: 100, hp_current: 45, hp_temp: 0 };
+    const existing = { color: 'var(--danger)', name: 'VIPER', description: '', hp_max: 100, hp_current: 45, hp_temp: 0 };
     const result = mergeRhombusHealthFromLocation(existing, prev);
     expect(result.hp_current).toBe(45);
   });

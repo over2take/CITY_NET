@@ -255,7 +255,7 @@ export function SecureLogin({
           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--green)', textShadow: 'var(--glow)', letterSpacing: '4px', marginBottom: '15px', marginTop: '10px' }}>NAV_OS_v{__APP_VERSION__}</div>
 
           {loginError && (
-            <div style={{ fontSize: '0.7rem', color: loginError.includes('updated') ? 'var(--green)' : '#ff3333', marginBottom: '10px', letterSpacing: '1px' }}>
+            <div style={{ fontSize: '0.7rem', color: loginError.includes('updated') ? 'var(--green)' : 'var(--danger)', marginBottom: '10px', letterSpacing: '1px' }}>
               {loginError}
             </div>
           )}
@@ -335,7 +335,7 @@ export function SecureLogin({
           {/* ── Awaiting admin approval for reset ── */}
           {secureModeEnabled && loginView === 'forgot_awaiting' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
-              <div style={{ fontSize: '0.75rem', letterSpacing: '2px', color: '#ffaa00' }}>RESET_REQUEST_SUBMITTED</div>
+              <div style={{ fontSize: '0.75rem', letterSpacing: '2px', color: 'var(--warning)' }}>RESET_REQUEST_SUBMITTED</div>
               <div style={{ fontSize: '0.65rem', opacity: 0.6, textAlign: 'center', lineHeight: '1.6' }}>
                 Waiting for admin approval.<br />Your GM will need to approve this request.
               </div>

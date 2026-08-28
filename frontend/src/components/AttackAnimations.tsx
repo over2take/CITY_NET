@@ -113,7 +113,7 @@ function RangedProjectile({ entry, onDone }: { entry: AttackAnimationEntry; onDo
   return (
     <mesh ref={meshRef} position={[from.x, 3, from.z]}>
       <sphereGeometry args={[radius, 12, 12]} />
-      <meshBasicMaterial color="#ffaa00" />
+      <meshBasicMaterial color="var(--warning)" />
     </mesh>
   );
 }

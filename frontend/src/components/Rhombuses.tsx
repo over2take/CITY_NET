@@ -313,7 +313,7 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
           onPointerOut={(e) => { e.stopPropagation(); setIsHovered(false); }}
       >
         <octahedronGeometry args={[0.5]} />
-        <meshBasicMaterial color="#ff0000" transparent opacity={0.9} />
+        <meshBasicMaterial color="var(--danger)" transparent opacity={0.9} />
       </mesh>
       
       
@@ -332,14 +332,14 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
 
       {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && streamerHovered)) && (
           <Html position={[0, isBattleMap ? 0.1 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude={!isBattleMap} style={{ pointerEvents: 'none', userSelect: 'none' }}>
-            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid #ff0000`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px', transform: isBattleMap ? 'translateY(-40px)' : undefined }}>
+            <div style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid var(--danger)`, padding: '2px 6px', fontSize: '10px', color: '#fff', whiteSpace: 'nowrap', textTransform: 'uppercase', fontFamily: 'monospace', letterSpacing: '1px', transform: isBattleMap ? 'translateY(-40px)' : undefined }}>
                 {location.name}
             </div>
           </Html>
       )}
 
       {/* Red Alert Light */}
-      <pointLight ref={lightRef as any} color="#ff0000" intensity={3} distance={15} decay={2} />
+      <pointLight ref={lightRef as any} color="var(--danger)" intensity={3} distance={15} decay={2} />
     </group>
   );
 });

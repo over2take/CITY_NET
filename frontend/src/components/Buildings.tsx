@@ -59,7 +59,7 @@ export const Building = React.memo(({ location, children, onClick, isSelected, i
           <Html position={[0, maxY - minY + 2, 0]} center wrapperClass="battle-indicator" style={{ pointerEvents: 'none' }}>
             <div style={{
                 fontSize: '24px', 
-                filter: 'drop-shadow(0 0 10px #ff0000)',
+                filter: 'drop-shadow(0 0 10px var(--danger))',
                 animation: 'pulse 1.5s infinite',
                 pointerEvents: 'none'
             }}>
@@ -515,7 +515,7 @@ export const generateThemedBuildingsForPlot = (
       const tankR = Math.min(bw, bd) * 0.15; const tankH = 6.0;
       rawBuildings.push({ name: '', x: bx + bw * 0.25, y: 1.2, z: bz - bd * 0.2, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       for(let i=0; i<3; i++) {
-        rawBuildings.push({ name: '', x: bx - bw*0.1 + i*1.5, y: 1.2, z: bz + bd*0.3, width: 1.2, depth: 1.2, height: 1.2, color: ['#aa3333','#3355aa'][i%2], shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx - bw*0.1 + i*1.5, y: 1.2, z: bz + bd*0.3, width: 1.2, depth: 1.2, height: 1.2, color: ['var(--danger)','#3355aa'][i%2], shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (industrialStyle === 5) {
@@ -550,7 +550,7 @@ export const generateThemedBuildingsForPlot = (
       rawBuildings.push({ name: '', x: bx - bw * 0.3, y: 1.2, z: bz - bd * 0.3, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       rawBuildings.push({ name: '', x: bx + bw * 0.3, y: 1.2, z: bz + bd * 0.3, width: tankR * 2, depth: tankR * 2, height: tankH, color, shape: 'cylinder', polyCount: 5, parent_name: 'ROOT' });
       for(let i=0; i<3; i++) {
-        rawBuildings.push({ name: '', x: bx + bw*0.3, y: 1.2 + i*1.0, z: bz - bd*0.3, width: 1.0, depth: 1.0, height: 1.0, color: '#aa3333', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
+        rawBuildings.push({ name: '', x: bx + bw*0.3, y: 1.2 + i*1.0, z: bz - bd*0.3, width: 1.0, depth: 1.0, height: 1.0, color: 'var(--danger)', shape: 'box', polyCount: 5, parent_name: 'ROOT' });
       }
     }
     else if (industrialStyle === 8) {

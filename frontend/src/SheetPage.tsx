@@ -111,7 +111,7 @@ export default function SheetPage() {
         </div>
         {lastRoll && (
           <div style={{
-            border: '1px solid var(--green)', background: 'rgba(0, 30, 0, 0.5)',
+            border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 50%, transparent)',
             padding: '4px 10px', marginBottom: '4px', fontSize: '0.7rem', letterSpacing: '1px',
           }}>
             ⌁ {lastRoll}

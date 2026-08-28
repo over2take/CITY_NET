@@ -59,7 +59,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
         <div style={{
           position: 'absolute', top: directorState.letterbox ? 'calc(10vh + 16px)' : '20px', left: '50%', transform: 'translateX(-50%)',
           animation: 'streamer-chyron-in 0.5s ease-out both',
-          color: 'var(--green, #00ff00)', fontSize: '2em', fontWeight: 'bold',
+          color: 'var(--green)', fontSize: '2em', fontWeight: 'bold',
           textShadow: 'var(--glow)', letterSpacing: '3px', textTransform: 'uppercase',
         }}>
           {battleMapLabel}
@@ -71,9 +71,9 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
         <div style={{
           position: 'absolute', top: directorState.letterbox ? 'calc(10vh + 16px)' : '24px', left: '24px',
           animation: 'streamer-chyron-in 0.5s ease-out both',
-          background: 'rgba(0, 10, 0, 0.82)', border: '1px solid var(--green, #00ff00)',
-          borderLeft: '4px solid var(--green, #00ff00)', padding: '8px 18px',
-          color: 'var(--green, #00ff00)', letterSpacing: '3px', fontSize: '15px',
+          background: 'color-mix(in srgb, var(--black) 82%, transparent)', border: '1px solid var(--green)',
+          borderLeft: '4px solid var(--green)', padding: '8px 18px',
+          color: 'var(--green)', letterSpacing: '3px', fontSize: '15px',
           textTransform: 'uppercase', textShadow: 'var(--glow)',
         }}>
           {directorState.sceneTitle}
@@ -91,27 +91,27 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
           <div style={{
             position: 'absolute', top: directorState.letterbox ? 'calc(10vh + 16px)' : '24px', right: '24px',
             animation: 'streamer-chyron-in 0.4s ease-out both',
-            width: '300px', border: '1px solid var(--green, #00ff00)', background: 'rgba(0, 5, 0, 0.9)',
+            width: '300px', border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 90%, transparent)',
             boxShadow: '0 0 15px color-mix(in srgb, var(--green) 25%, transparent)',
           }}>
-            <div style={{ background: 'var(--green, #00ff00)', color: '#000', fontWeight: 'bold', padding: '6px 12px', fontSize: '13px', letterSpacing: '2px', textTransform: 'uppercase' }}>
+            <div style={{ background: 'var(--green)', color: '#000', fontWeight: 'bold', padding: '6px 12px', fontSize: '13px', letterSpacing: '2px', textTransform: 'uppercase' }}>
               {title}
             </div>
             <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
               <div>
                 <span style={{ color: '#fff', fontWeight: 'bold', letterSpacing: '1px' }}>{isRhombus ? 'DATA_DESCRIPTION: ' : 'DESCRIPTION: '}</span>
-                <span style={{ color: 'var(--green, #00ff00)' }}>{selectedLocation.description || 'NO_DATA'}</span>
+                <span style={{ color: 'var(--green)' }}>{selectedLocation.description || 'NO_DATA'}</span>
               </div>
               {!isRhombus && (
                 <div>
                   <span style={{ color: '#fff', fontWeight: 'bold', letterSpacing: '1px' }}>RESIDENTS: </span>
-                  <span style={{ color: 'var(--green, #00ff00)' }}>{selectedLocation.npcs || 'UNKNOWN'}</span>
+                  <span style={{ color: 'var(--green)' }}>{selectedLocation.npcs || 'UNKNOWN'}</span>
                 </div>
               )}
               {!isRhombus && selectedLocation.district_name && (
                 <div>
                   <span style={{ color: '#fff', fontWeight: 'bold', letterSpacing: '1px' }}>DISTRICT: </span>
-                  <span style={{ color: 'var(--green, #00ff00)' }}>{selectedLocation.district_name}</span>
+                  <span style={{ color: 'var(--green)' }}>{selectedLocation.district_name}</span>
                 </div>
               )}
               {isRhombus && (() => {
@@ -119,7 +119,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                 const hpMax = selectedLocation.hp_max ?? 0;
                 const isDead = hpCurrent <= 0;
                 const hpPct = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
-                const hpColor = isDead ? '#ff3333' : hpPct > 0.5 ? 'var(--green)' : hpPct > 0.25 ? '#ffaa00' : '#ff3333';
+                const hpColor = isDead ? 'var(--danger)' : hpPct > 0.5 ? 'var(--green)' : hpPct > 0.25 ? 'var(--warning)' : 'var(--danger)';
                 const injuries: Record<string, boolean> = (() => {
                   try { return JSON.parse((selectedLocation as any).injuries || '{}'); } catch { return {}; }
                 })();
@@ -148,7 +148,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                           </div>
                         </div>
                         {(['blind', 'bleeding'] as const).filter(c => injuries[c]).map(cond => (
-                          <div key={cond} style={{ textAlign: 'center', color: '#ff3333', fontSize: '10px', letterSpacing: '1px', marginTop: '4px' }}>
+                          <div key={cond} style={{ textAlign: 'center', color: 'var(--danger)', fontSize: '10px', letterSpacing: '1px', marginTop: '4px' }}>
                             ⚠ {cond.toUpperCase()}
                           </div>
                         ))}
@@ -171,7 +171,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
           <div key={e.id} style={{
             animation: 'streamer-slide-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both',
             display: 'flex', alignItems: 'center', gap: '14px',
-            background: 'rgba(0, 10, 0, 0.85)', border: `1px solid ${e.color}`,
+            background: 'color-mix(in srgb, var(--black) 85%, transparent)', border: `1px solid ${e.color}`,
             borderLeft: `4px solid ${e.color}`, padding: '10px 18px', minWidth: '260px',
           }}>
             <div style={{ fontSize: '30px', fontWeight: 'bold', color: e.color, textShadow: `0 0 10px ${e.color}` }}>

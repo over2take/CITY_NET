@@ -350,7 +350,7 @@ interface BankWindowProps {
   currencyIcon?: string;
 }
 
-const CONFETTI_COLORS = ['#ff0066', '#00ff66', '#ffcc00', '#00ccff', '#ff6600', '#cc00ff', '#ffffff'];
+const CONFETTI_COLORS = ['#ff0066', '#00ff66', 'var(--warning)', '#00ccff', '#ff6600', '#cc00ff', '#ffffff'];
 
 const CELEBRATION_CSS = `
 @keyframes confetti-fall {
@@ -372,8 +372,8 @@ const CELEBRATION_CSS = `
   100% { transform: translateY(0)     scale(1)    rotate(0deg);  opacity: 1; }
 }
 @keyframes star-glow {
-  0%, 100% { text-shadow: 0 0 8px #ffcc00, 0 0 20px #ffcc00; }
-  50%       { text-shadow: 0 0 20px #ffcc00, 0 0 50px #ff8800, 0 0 80px #ffcc00; }
+  0%, 100% { text-shadow: 0 0 8px var(--warning), 0 0 20px var(--warning); }
+  50%       { text-shadow: 0 0 20px var(--warning), 0 0 50px #ff8800, 0 0 80px var(--warning); }
 }
 @keyframes debt-free-shimmer {
   0%   { background-position: -200% center; }
@@ -610,7 +610,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
             </div>
 
             <div style={{
-              fontSize: '15px', color: '#ffcc00', fontFamily: 'monospace', fontWeight: 'bold', textAlign: 'center',
+              fontSize: '15px', color: 'var(--warning)', fontFamily: 'monospace', fontWeight: 'bold', textAlign: 'center',
               animation: 'congrats-pop 0.6s 0.7s cubic-bezier(0.34,1.56,0.64,1) both',
             }}>
               You Deserve a Star
@@ -635,7 +635,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
           {creditRainPieces.map((p, i) => (
             <div key={i} style={{
               position: 'absolute', left: `${p.left}%`, top: 0,
-              fontSize: p.size, color: '#ffcc00', pointerEvents: 'none',
+              fontSize: p.size, color: 'var(--warning)', pointerEvents: 'none',
               animation: `credit-rain ${p.duration}s ${p.delay}s ease-in forwards`,
             }}>₡</div>
           ))}
@@ -645,7 +645,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
 
             <div style={{
               fontSize: '22px', fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'center',
-              background: 'linear-gradient(90deg, #ffcc00, #ff8800, #ffcc00)',
+              background: 'linear-gradient(90deg, var(--warning), #ff8800, var(--warning))',
               backgroundSize: '200% auto',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               animation: 'whale-pop 0.65s 0.1s cubic-bezier(0.34,1.56,0.64,1) both, gold-shimmer 2s linear 0.75s infinite',
@@ -653,14 +653,14 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
               WHALE STATUS ACHIEVED
             </div>
 
-            <div style={{ fontSize: '13px', color: '#ffcc00', fontFamily: 'monospace', textAlign: 'center', opacity: 0.8, animation: 'whale-pop 0.5s 0.3s both' }}>
+            <div style={{ fontSize: '13px', color: 'var(--warning)', fontFamily: 'monospace', textAlign: 'center', opacity: 0.8, animation: 'whale-pop 0.5s 0.3s both' }}>
               BALANCE EXCEEDED ₡{HIGH_ROLLER_THRESHOLD.toLocaleString()}
             </div>
             <div style={{ fontSize: '12px', color: '#888', fontFamily: 'monospace', textAlign: 'center', animation: 'whale-pop 0.5s 0.45s both' }}>
               The city knows your name now.
             </div>
 
-            <button className="panel-btn" onClick={() => setShowHighRoller(false)} style={{ marginTop: '8px', borderColor: '#ffcc00', color: '#ffcc00', animation: 'whale-pop 0.5s 0.8s both' }}>
+            <button className="panel-btn" onClick={() => setShowHighRoller(false)} style={{ marginTop: '8px', borderColor: 'var(--warning)', color: 'var(--warning)', animation: 'whale-pop 0.5s 0.8s both' }}>
               I KNOW 💰
             </button>
           </div>
@@ -836,7 +836,7 @@ function CandleChart({ balance }: { balance: number }) {
   const firstPrice = candles[0].open;
   const sessionUp = lastPrice >= firstPrice;
   const upColor = '#00ff66';
-  const downColor = '#ff3333';
+  const downColor = 'var(--danger)';
   const priceColor = sessionUp ? upColor : downColor;
 
   return (

@@ -136,7 +136,7 @@ export function CustomDieBuilder({ pos, setPos, onClose, onCreate, onUpdate, exi
           value={name}
           onChange={e => handleNameChange(e.target.value)}
           placeholder="die name"
-          style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(0,20,0,0.8)', border: `1px solid ${nameError ? '#cc4400' : 'var(--dark-green)'}`, color: 'var(--green)', padding: '5px 8px', fontFamily: 'inherit', fontSize: '0.85rem' }}
+          style={{ width: '100%', boxSizing: 'border-box', background: 'color-mix(in srgb, var(--black) 80%, transparent)', border: `1px solid ${nameError ? '#cc4400' : 'var(--dark-green)'}`, color: 'var(--green)', padding: '5px 8px', fontFamily: 'inherit', fontSize: '0.85rem' }}
         />
         {nameError && (
           <div style={{ fontSize: '0.65rem', color: '#cc4400', marginTop: '3px', textAlign: 'center' }}>{nameError}</div>
@@ -154,7 +154,7 @@ export function CustomDieBuilder({ pos, setPos, onClose, onCreate, onUpdate, exi
             onChange={e => handleSidesInput(e.target.value)}
             onKeyDown={handleSidesKeyDown}
             placeholder="##"
-            style={{ width: '48px', flexShrink: 0, background: 'rgba(0,20,0,0.8)', border: `1px solid ${sidesError ? '#cc4400' : 'var(--dark-green)'}`, color: 'var(--green)', padding: '5px 6px', fontFamily: 'inherit', fontSize: '0.85rem', textAlign: 'center' }}
+            style={{ width: '48px', flexShrink: 0, background: 'color-mix(in srgb, var(--black) 80%, transparent)', border: `1px solid ${sidesError ? '#cc4400' : 'var(--dark-green)'}`, color: 'var(--green)', padding: '5px 6px', fontFamily: 'inherit', fontSize: '0.85rem', textAlign: 'center' }}
           />
           <span style={{ fontSize: '0.7rem', color: '#888', flexShrink: 0 }}>Sides</span>
           <button
@@ -185,7 +185,7 @@ export function CustomDieBuilder({ pos, setPos, onClose, onCreate, onUpdate, exi
                   value={val}
                   onChange={e => handleFaceChange(i, e.target.value)}
                   placeholder="value or symbol"
-                  style={{ flex: 1, background: 'rgba(0,20,0,0.8)', border: `1px solid ${val.trim() ? 'var(--dark-green)' : '#333'}`, color: 'var(--green)', padding: '4px 7px', fontFamily: 'inherit', fontSize: '0.85rem' }}
+                  style={{ flex: 1, background: 'color-mix(in srgb, var(--black) 80%, transparent)', border: `1px solid ${val.trim() ? 'var(--dark-green)' : '#333'}`, color: 'var(--green)', padding: '4px 7px', fontFamily: 'inherit', fontSize: '0.85rem' }}
                 />
               </div>
             ))}

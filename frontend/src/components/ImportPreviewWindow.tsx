@@ -92,7 +92,7 @@ export function ImportPreviewWindow({ pos, setPos, preview, currentData, busy, a
         </div>
 
         {skippedKeys.length > 0 && (
-          <div style={{ ...label9, color: '#ffcc00' }}>
+          <div style={{ ...label9, color: 'var(--warning)' }}>
             SKIPPED (LINKED TO TOKEN/BANK): {skippedKeys.join(', ')}
           </div>
         )}
@@ -111,8 +111,8 @@ export function ImportPreviewWindow({ pos, setPos, preview, currentData, busy, a
           </div>
         )}
 
-        <div style={{ border: '1px solid #ff3333', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ ...label9, color: '#ff3333' }}>
+        <div style={{ border: '1px solid var(--danger)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ ...label9, color: 'var(--danger)' }}>
             THIS REPLACES THE SHEET — everything not in this import is cleared.
           </div>
           {losses.length > 0 ? (

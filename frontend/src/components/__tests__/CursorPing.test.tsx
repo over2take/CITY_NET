@@ -32,10 +32,10 @@ describe('CursorPingListener', () => {
 
   it('emits ping_location on Q keydown when socket is present', () => {
     const socket = makeSocket();
-    render(<CursorPingListener socket={socket} view="list" activeBattleMapData={null} pingColor="#ff0000" />);
+    render(<CursorPingListener socket={socket} view="list" activeBattleMapData={null} pingColor="var(--danger)" />);
     fireEvent.keyDown(window, { key: 'q' });
     expect(socket.emit).toHaveBeenCalledWith('ping_location', expect.objectContaining({
-      color: '#ff0000',
+      color: 'var(--danger)',
       size: 2,
       battle_map_id: null,
       floor_index: null,

@@ -113,9 +113,9 @@ export const seatAnchor = (i: number, total: number) => {
  * windows use, so a car at a quarter reads as urgently as a person at a quarter.
  */
 export const hullColor = (hp: number, hpMax: number) => {
-  if (hp <= 0) return '#ff3333';
+  if (hp <= 0) return 'var(--danger)';
   const pct = hpMax > 0 ? hp / hpMax : 0;
-  return pct > 0.5 ? 'var(--green)' : pct > 0.25 ? '#ffaa00' : '#ff3333';
+  return pct > 0.5 ? 'var(--green)' : pct > 0.25 ? 'var(--warning)' : 'var(--danger)';
 };
 
 export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin, vehicles, players, look, guestTokens = [] }: Props) {
@@ -209,7 +209,7 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
             className="sheet-input"
             value={current ? key(current) : ''}
             onChange={(e) => setSelected(e.target.value)}
-            style={{ background: 'rgba(0,10,0,0.7)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px' }}
+            style={{ background: 'color-mix(in srgb, var(--black) 70%, transparent)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px' }}
           >
             {vehicles.map(v => (
               <option key={key(v)} value={key(v)}>
@@ -292,7 +292,7 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                           onChange={(e) => setAmount(Number(e.target.value.replace(/\D/g, '').slice(0, 4)) || 0)}
                           style={{
                             flex: 1, minWidth: 0, boxSizing: 'border-box',
-                            background: 'rgba(0,10,0,0.7)', color: 'var(--green)',
+                            background: 'color-mix(in srgb, var(--black) 70%, transparent)', color: 'var(--green)',
                             border: '1px solid var(--green)', fontFamily: 'inherit',
                             fontSize: '0.75rem', padding: '0 8px', textAlign: 'center',
                           }}
@@ -385,7 +385,7 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
                         value={sitting ? asPlayer(sitting) : guest ? asGuest(guest.locationId) : ''}
                         onChange={(e) => setSeat(current, seatId, e.target.value)}
                         style={{
-                          background: 'rgba(0,10,0,0.85)',
+                          background: 'color-mix(in srgb, var(--black) 85%, transparent)',
                           // A friendly rider is blue, a person is the vehicle accent. The
                           // seat says which without being read.
                           color: guest ? FRIENDLY : sitting ? 'var(--vehicle)' : 'var(--green)',

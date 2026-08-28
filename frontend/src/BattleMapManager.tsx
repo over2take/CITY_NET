@@ -150,7 +150,7 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 20000,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <div style={{ background: '#111', border: '1px solid #ff0000', padding: '24px', color: 'var(--green)', fontFamily: 'monospace', maxWidth: '360px', width: '90%' }}>
+          <div style={{ background: '#111', border: '1px solid var(--danger)', padding: '24px', color: 'var(--green)', fontFamily: 'monospace', maxWidth: '360px', width: '90%' }}>
             <p style={{ marginTop: 0 }}>{confirmModal.message}</p>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button className="utility-btn" onClick={() => setConfirmModal(null)}>CANCEL</button>
@@ -181,7 +181,7 @@ export const BattleMapManager = ({ locationId, onClose, token, onMapsChanged }: 
               const mb = selectedFile.size / (1024 * 1024);
               const tooBig = selectedFile.size > MAX_MAP_BYTES;
               return (
-                <div style={{ fontSize: '0.65rem', marginBottom: '10px', letterSpacing: '1px', color: tooBig ? '#ff3333' : 'var(--green)' }}>
+                <div style={{ fontSize: '0.65rem', marginBottom: '10px', letterSpacing: '1px', color: tooBig ? 'var(--danger)' : 'var(--green)' }}>
                   {selectedFile.name} — {mb.toFixed(1)}MB / {MAX_MAP_MB}MB{tooBig ? ' — FILE_TOO_LARGE' : ''}
                 </div>
               );

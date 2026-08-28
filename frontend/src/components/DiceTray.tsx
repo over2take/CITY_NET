@@ -416,9 +416,9 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
             <div style={{
               marginTop: '10px',
               padding: '6px 12px',
-              border: `2px solid ${glitchState === 'critical' ? '#ff3333' : '#ffcc00'}`,
+              border: `2px solid ${glitchState === 'critical' ? 'var(--danger)' : 'var(--warning)'}`,
               background: glitchState === 'critical' ? 'rgba(60,0,0,0.5)' : 'rgba(60,45,0,0.5)',
-              color: glitchState === 'critical' ? '#ff3333' : '#ffcc00',
+              color: glitchState === 'critical' ? 'var(--danger)' : 'var(--warning)',
               fontSize: '0.75rem',
               letterSpacing: '2px',
               fontWeight: 700,

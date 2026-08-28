@@ -202,7 +202,7 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
           {busy ? 'READING…' : 'PREVIEW'}
         </button>
 
-        {error && <div style={{ ...label9, color: '#ff3333', border: '1px solid #ff3333', padding: '4px 8px' }}>{error}</div>}
+        {error && <div style={{ ...label9, color: 'var(--danger)', border: '1px solid var(--danger)', padding: '4px 8px' }}>{error}</div>}
 
       </div>
     </DraggableWindow>
