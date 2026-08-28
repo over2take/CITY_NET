@@ -87,31 +87,22 @@
 }
 
 .theme-crimson {
-  /* Given: #1D1616 ground, #8E1616 deep red, #D84040 mid red, #EEEEEE white.
-     The reds cannot carry text on that ground — #D84040 reads 4.01 against it and #8E1616
-     only 1.93, both under the 4.5 needed to be legible. Lightening #D84040 along its own
-     hue until it clears gives #E26F6F at 5.72, which is the primary; the two given reds
-     stay where they are strong, as the accent and the structure. */
-  --green: #e26f6f;
+  --green: #ff3333;
   /* Marks an occupied seat. Each theme's own secondary, so no foreign hue. */
-  --vehicle: #d84040;
-  --dark-green: #8e1616;
-  --black: #1d1616;
-  --glow: 0 0 10px rgba(226, 111, 111, 0.7);
-  --panel-bg: rgba(29, 22, 22, 0.85);
-  /* Body copy takes the white. It reads 15.36 on the ground against the primary's 5.72, so
-     long text is comfortable while the chrome around it stays red. */
-  --text: #eeeeee;
-  --cyan: #d84040;
-  /* Nothing red separates from a red theme: every candidate sat within ~105 of the mid red.
-     This one is chosen for distance from the PRIMARY instead, which is what text is drawn
-     in and therefore what an alert has to be told apart from — 193 away, and legible. */
+  --vehicle: #ff8888;
+  --dark-green: #660000;
+  --black: #110000;
+  --glow: 0 0 10px rgba(255, 51, 51, 0.7);
+  --panel-bg: rgba(20, 0, 0, 0.85);
+  --text: #ff8888;
+  --cyan: #ff5555;
+  /* the primary IS red, so danger goes hotter and warning goes amber */
   --danger: #ff1744;
   --warning: #ffb300;
-  --grid-section: #8e1616;
-  --grid-cell: #470b0b;
-  --bg-gradient: radial-gradient(circle, #2a1d1d 0%, #150f0f 100%);
-  --scanline-tint: rgba(226, 111, 111, 0.05);
+  --grid-section: #880000;
+  --grid-cell: #440000;
+  --bg-gradient: radial-gradient(circle, #2a0505 0%, #0a0000 100%);
+  --scanline-tint: rgba(255, 51, 51, 0.05);
   background-color: var(--black);
 }
 
