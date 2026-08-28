@@ -40,22 +40,29 @@
 }
 
 .theme-vaporwave {
-  --green: #ff71ce;
+  /* Given: #FBF5A7 cream, #FF97D0 light pink, #FF62BB hot pink, #B331F1 purple.
+     All four are light, so the dark end is derived rather than supplied — a four-step
+     value ramp off the purple's hue, drifting toward indigo as it darkens (281deg down to
+     255deg). Scaling the purple straight down keeps it magenta and the pinks sink into it;
+     letting the ground go cool makes them read warm against it. */
+  --green: #ff62bb;
   /* Marks an occupied seat. Each theme's own secondary, so no foreign hue. */
-  --vehicle: #05ffa1;
-  --dark-green: #4a154b;
-  --black: #1a0b2e;
-  --glow: 0 0 10px rgba(255, 113, 206, 0.7);
-  --panel-bg: rgba(26, 11, 46, 0.85);
-  --text: #b967ff;
-  --cyan: #05ffa1;
-  /* a red with blue in it, so it does not read as the pink primary */
-  --danger: #ff2e4c;
-  --warning: #ffc14d;
-  --grid-section: #7b2d8b;
-  --grid-cell: #4a154b;
-  --bg-gradient: linear-gradient(160deg, #2b1250 0%, #1a0b2e 45%, #3d0a3f 100%);
-  --scanline-tint: rgba(255, 113, 206, 0.05);
+  --vehicle: #fbf5a7;
+  --dark-green: #301c4a;
+  --black: #0e091e;
+  --glow: 0 0 10px rgba(255, 98, 187, 0.7);
+  --panel-bg: rgba(27, 16, 48, 0.85);
+  --text: #ff97d0;
+  --cyan: #fbf5a7;
+  /* The cream is a yellow, so an amber warning would read as ordinary text the way Solar's
+     did. Both alerts clear all four palette colours and stay legible on the ground: the
+     obvious deep red fell to 4.1 against it, which is why this one is brighter. */
+  --danger: #ff3b30;
+  --warning: #ff8c1a;
+  --grid-section: #562b75;
+  --grid-cell: #2c1a42;
+  --bg-gradient: linear-gradient(160deg, #241340 0%, #0e091e 48%, #35124a 100%);
+  --scanline-tint: rgba(255, 98, 187, 0.05);
   background-color: var(--black);
 }
 
