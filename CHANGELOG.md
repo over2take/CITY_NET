@@ -9,6 +9,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.12.0] - 2026-08-28
+
+Initiative: the turn stays where you put it, and combats end from the list.
+
+### Added
+
+- **An END button on every combat in the initiative menu.** Combats running elsewhere on the map can be closed from the list without navigating to them and opening the tracker first. A combat spanning several scenes ends everywhere in one press, and anyone watching any of those scenes sees it close.
+
+### Changed
+
+- **Reordering the turn order no longer drags the current turn along with the character.** Moving whoever is up next used to carry their turn down the list with them, so nobody else advanced and the order shuffled underneath an unchanged marker. The turn now belongs to the position: move yourself down the order and the character who takes your place inherits the turn, which is what giving up your slot is supposed to cost. Reordering anywhere else in the list leaves the current turn untouched.
+
+---
+
 ## [1.11.4] - 2026-08-28
 
 Stronger Secure Mode.

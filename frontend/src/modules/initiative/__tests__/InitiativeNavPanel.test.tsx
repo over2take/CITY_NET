@@ -178,3 +178,47 @@ describe('InitiativeNavPanel — active combats list', () => {
     expect(props.onJumpToScene).toHaveBeenCalledWith('42:0');
   });
 });
+
+describe('ending a combat from the list', () => {
+  const combats: ActiveCombat[] = [
+    { id: 1, turn_counter: 3, scene_keys: ['city:0', '42:0'], scene_labels: { 'city:0': 'CITY MAP', '42:0': 'NEON PLAZA — GROUND FLOOR' } },
+    { id: 2, turn_counter: 1, scene_keys: ['7:2'], scene_labels: { '7:2': 'WAREHOUSE — LEVEL 2' } },
+  ];
+
+  it('gives every listed combat its own end button', () => {
+    render(<InitiativeNavPanel {...baseProps({ activeCombats: combats, onEndCombat: vi.fn() })} />);
+    expect(screen.getByLabelText('End combat 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('End combat 2')).toBeInTheDocument();
+  });
+
+  it('ends the combat whose button was pressed', async () => {
+    const onEndCombat = vi.fn();
+    render(<InitiativeNavPanel {...baseProps({ activeCombats: combats, onEndCombat })} />);
+    await userEvent.click(screen.getByLabelText('End combat 2'));
+    expect(onEndCombat).toHaveBeenCalledTimes(1);
+    expect(onEndCombat).toHaveBeenCalledWith(2);
+  });
+
+  it('ends a combat spanning several scenes with one press', async () => {
+    // Combat 1 is running in two places. The button is per combat, not per scene, so
+    // there is still only one of them and it carries the combat id.
+    const onEndCombat = vi.fn();
+    render(<InitiativeNavPanel {...baseProps({ activeCombats: combats, onEndCombat })} />);
+    await userEvent.click(screen.getByLabelText('End combat 1'));
+    expect(onEndCombat).toHaveBeenCalledWith(1);
+  });
+
+  it('does not end anything when a scene is clicked for navigation', async () => {
+    const onEndCombat = vi.fn();
+    const props = baseProps({ activeCombats: combats, onEndCombat });
+    render(<InitiativeNavPanel {...props} />);
+    await userEvent.click(screen.getByText(/WAREHOUSE — LEVEL 2/));
+    expect(props.onJumpToScene).toHaveBeenCalledWith('7:2');
+    expect(onEndCombat).not.toHaveBeenCalled();
+  });
+
+  it('omits the button when no handler is supplied', () => {
+    render(<InitiativeNavPanel {...baseProps({ activeCombats: combats })} />);
+    expect(screen.queryByLabelText('End combat 1')).not.toBeInTheDocument();
+  });
+});

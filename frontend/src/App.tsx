@@ -1633,6 +1633,7 @@ function App() {
               )}
               activeCombats={initiative.activeCombats}
               onListCombats={initiative.listCombats}
+              onEndCombat={initiative.endCombat}
               onJumpToScene={(sceneKey: string) => {
                 if (sceneKey === 'city:0') {
                   setActiveBattleMapData(null);
