@@ -9,6 +9,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.11.3] - 2026-08-28
+
+Security patch for the realtime connection.
+
+### Fixed
+
+- **A player could exhaust the server's memory through the realtime connection.** The websocket library underneath Socket.IO mishandled floods of very small message fragments, so anyone able to open a connection could push the server into swapping or an out-of-memory kill. Nothing about how the connection behaves has changed, and a browser tab left open across the update reconnects on its own.
+
+### Changed
+
+- **The realtime stack moved to patched releases.** `engine.io`, `socket.io-adapter` and `socket.io-parser` on the server, `engine.io-client` and `socket.io-parser` in the browser, all patch-level and all still speaking the same protocol version. Only the lockfiles changed; no dependency was added, removed, or moved to a new major.
+
+---
+
 ## [1.11.2] - 2026-08-27
 
 Custom signs.
