@@ -9,14 +9,17 @@
 // covered by tests rather than by hoping. What differs is where the names come from: the
 // server has its own roll table, and this reads the sheet template it is already drawing.
 //
-// Cyberpunk RED only. The systems differ enough that one shared implementation would be a
-// worse lie than three honest ones; everything here is empty for another system.
+// One profile per system, mirroring the engine on the server. Most of the matching comes
+// from the template this is already drawing, so a profile only has to supply the names the
+// sheet does not print itself — the long attribute names a catalogue entry or an import
+// would use. A system with no profile gets no effects, which is what Shadowrun does.
 
 import type { SheetTemplate } from './types';
 import { statFields, skillFields } from './modTargets';
 import { readRows, isSetKind, needsPlacing, type CyberMod } from './cyberwareRows';
 
 export const EFFECTS_SYSTEM = 'cyberpunk_red';
+export const CWN_SYSTEM = 'cities_without_number';
 
 /**
  * What the Companion calls each CP:R stat.
@@ -28,7 +31,7 @@ export const EFFECTS_SYSTEM = 'cyberpunk_red';
  * "Combat #" is theirs alone — a number they derive that this sheet has no field for — so
  * it is deliberately absent and a modifier naming it stays unmatched.
  */
-const COMPANION_STAT_NAMES: Record<string, string> = {
+const CPR_LONG_NAMES: Record<string, string> = {
   Intelligence: 'int',
   Reflexes: 'ref',
   Dexterity: 'dex',
@@ -60,12 +63,32 @@ export const norm = (s: string): string => String(s || '')
 /** The same, plus the trailing "Roll" the Companion appends to its roll types. */
 export const normRoll = (s: string): string => norm(s).replace(/\s*\broll$/, '').trim();
 
+/**
+ * The attributes as Cities Without Number writes them out.
+ *
+ * The sheet prints the three-letter form, which the template already supplies. A modifier
+ * copied off the book's cyberware table says "Dexterity", so both have to land on `dex`.
+ */
+const CWN_LONG_NAMES: Record<string, string> = {
+  Strength: 'str',
+  Dexterity: 'dex',
+  Constitution: 'con',
+  Intelligence: 'int',
+  Wisdom: 'wis',
+  Charisma: 'cha',
+};
+
+const LONG_NAMES: Record<string, Record<string, string>> = {
+  [EFFECTS_SYSTEM]: CPR_LONG_NAMES,
+  [CWN_SYSTEM]: CWN_LONG_NAMES,
+};
+
 /** Every name that means a stat or a skill on this sheet, pointing at its field id. */
 function buildIndex(template: SheetTemplate): Map<string, string> {
   const index = new Map<string, string>();
   for (const f of statFields(template)) index.set(norm(f.label), f.id);
   for (const f of skillFields(template)) index.set(norm(f.label), f.id);
-  for (const [name, id] of Object.entries(COMPANION_STAT_NAMES)) index.set(norm(name), id);
+  for (const [name, id] of Object.entries(LONG_NAMES[template.id] ?? {})) index.set(norm(name), id);
   return index;
 }
 
@@ -117,7 +140,7 @@ export function sheetEffects(
   data: Record<string, unknown> | undefined | null,
   template: SheetTemplate | undefined,
 ): SheetEffects {
-  if (!template || template.id !== EFFECTS_SYSTEM || !data) return EMPTY;
+  if (!template || !LONG_NAMES[template.id] || !data) return EMPTY;
 
   // Installed, not merely owned. A piece still waiting for somewhere to go is in a list
   // on a sheet, not in anybody's body — a sheet reading "0 INSTALLED" beside a stat that
@@ -195,7 +218,7 @@ export function rollBonus(
   rollType: string,
   template: SheetTemplate | undefined,
 ): number {
-  if (!template || template.id !== EFFECTS_SYSTEM) return 0;
+  if (!template || !LONG_NAMES[template.id]) return 0;
   const wanted = normRoll(rollType);
   if (!wanted) return 0;
 

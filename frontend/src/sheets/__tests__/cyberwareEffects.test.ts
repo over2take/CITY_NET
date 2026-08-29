@@ -308,3 +308,74 @@ describe('agreeing with the server', () => {
       .toEqual(backend.default.effects(data).unmatched.map((u: { target: string }) => u.target));
   });
 });
+
+describe('Cities Without Number', () => {
+  const CWN = getTemplate('cities_without_number');
+  // CWN files chrome by the book's own install types rather than CP:R's categories.
+  const cwnPiece = (name: string, mods: unknown[], extra = {}) =>
+    ({ name, equipped: true, type: 'nerve', side: null, mods, ...extra });
+
+  it('adds to an attribute named the way the sheet prints it', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'DEX', value: 2 }])], { dex: 10 });
+    expect(sheetEffects(data, CWN).fields.dex.value).toBe(12);
+  });
+
+  it('adds to an attribute named the way the book writes it', () => {
+    // A modifier copied off the cyberware table says Dexterity, not DEX.
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Dexterity', value: 2 }])], { dex: 10 });
+    expect(sheetEffects(data, CWN).fields.dex.value).toBe(12);
+  });
+
+  it('raises an attribute to the floor, or pays the bonus above it', () => {
+    const mod = { kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 };
+    expect(sheetEffects(sheet([cwnPiece('P', [mod])], { dex: 9 }), CWN).fields.dex.value).toBe(14);
+    expect(sheetEffects(sheet([cwnPiece('P', [mod])], { dex: 16 }), CWN).fields.dex.value).toBe(18);
+  });
+
+  it('adds to a CWN skill', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'skill', target: 'Drive', value: 2 }])], { drive: 1 });
+    expect(sheetEffects(data, CWN).fields.drive.value).toBe(3);
+  });
+
+  it('leaves a Cyberpunk RED stat unmatched, since CWN has no such field', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Reflexes', value: 2 }])], { dex: 10 });
+    const out = sheetEffects(data, CWN);
+    expect(out.fields).toEqual({});
+    expect(out.unmatched.map((u) => u.target)).toEqual(['Reflexes']);
+  });
+
+  it('never changes what is stored', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Dexterity', value: 4 }])], { dex: 10 });
+    sheetEffects(data, CWN);
+    expect(data.dex).toBe(10);
+  });
+
+  it('reaches the same attribute numbers as the server', async () => {
+    const backend = await import('../../../../backend/sheets/cyberwareEffects.js');
+    const rows = [
+      cwnPiece('Coordination Augment I', [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }], { placed: true }),
+      cwnPiece('Booster', [{ kind: 'skill', target: 'Drive', value: 2 }], { placed: true }),
+    ];
+    const data = sheet(rows, { dex: 9, drive: 1 });
+
+    const mine = sheetEffects(data, CWN).fields;
+    const theirs = backend.default.effects(data, 'cities_without_number').fields;
+
+    expect(Object.keys(mine).sort()).toEqual(Object.keys(theirs).sort());
+    for (const id of Object.keys(mine)) {
+      expect(`${id}=${mine[id].value}`).toBe(`${id}=${theirs[id].value}`);
+    }
+  });
+
+  it('does not move the derived modifier fields, which the server recomputes', () => {
+    // A known and deliberate gap. The server's effectiveData reruns the CWN recompute over
+    // the overlaid copy, so every roll is right; this side has no recompute of its own, so
+    // DEX MOD keeps showing its stored value until the sheet is next saved. Pinned so the
+    // day someone adds a recompute here, they are told this test exists.
+    const data = sheet([cwnPiece('P', [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }], { placed: true })],
+      { dex: 9, dex_mod: 0 });
+    const out = sheetEffects(data, CWN);
+    expect(out.fields.dex.value).toBe(14);
+    expect(out.fields.dex_mod).toBeUndefined();
+  });
+});
