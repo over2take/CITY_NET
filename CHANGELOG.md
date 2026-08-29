@@ -9,6 +9,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.11.4] - 2026-08-28
+
+Stronger Secure Mode.
+
+### Changed
+
+- **Secure Mode checks accounts more strictly when a connection joins.** The account check now runs against fully verified credentials rather than partly trusting what the connecting client says about itself, so it holds in cases where it previously could be sidestepped. Recommended for anyone running with Secure Mode on. Nothing changes day to day: admins, approved players and temporary admin access all work exactly as before, and servers running with Secure Mode off are unaffected.
+
+---
+
 ## [1.11.3] - 2026-08-28
 
 Security patch for the realtime connection.
