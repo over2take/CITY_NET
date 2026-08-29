@@ -170,6 +170,29 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         return;
       }
 
+      // Settle whether this really is an admin before anything reads the flag.
+      //
+      // `isAdmin` arrives as a plain field in the client's payload, so on its own it is
+      // a claim and nothing more. This block used to sit *below* the Secure Mode check,
+      // which meant the check was branching on the unverified claim: sending
+      // `{ isAdmin: true }` with no token skipped the player-token requirement entirely,
+      // and only afterwards was the claim resolved to false. The result was a connection
+      // with no admin rights, which is correct, on a server that was supposed to admit
+      // nobody without an approved account, which is not. Resolving first means the
+      // Secure Mode check below reads a verified value.
+      if (info.isAdmin && info.token) {
+        try {
+          const verified = jwt.verify(info.token, SECRET);
+          if (verified.isTemporary) info.isAdmin = false;
+        } catch (err) {
+          console.warn(`User ${info.userName} claimed admin but provided invalid token.`);
+          info.isAdmin = false;
+        }
+      } else {
+        info.isAdmin = false;
+      }
+      delete info.token;
+
       // Secure Mode: verify player token before allowing connection
       if (process.env.SECURE_MODE === 'true' && !info.isAdmin) {
         if (!info.playerToken) {
@@ -187,19 +210,6 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         }
       }
       delete info.playerToken;
-
-      if (info.isAdmin && info.token) {
-        try {
-          const verified = jwt.verify(info.token, SECRET);
-          if (verified.isTemporary) info.isAdmin = false;
-        } catch (err) {
-          console.warn(`User ${info.userName} claimed admin but provided invalid token.`);
-          info.isAdmin = false;
-        }
-      } else {
-        info.isAdmin = false;
-      }
-      delete info.token;
 
       console.log(`User identified: ${info.userName} (Admin: ${info.isAdmin})`);
       userSockets.set(socket.id, info);
