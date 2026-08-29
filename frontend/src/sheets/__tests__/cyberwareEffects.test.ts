@@ -127,10 +127,13 @@ describe('every kind of modifier reaches the sheet', () => {
     { kind: 'statSet', target: 'Cool', value: 3, field: 'cool', base: 5, expected: 3, why: 'replaces a stat' },
     { kind: 'skill', target: 'Business', value: 6, field: 'business', base: 3, expected: 9, why: 'adds to a skill' },
     { kind: 'skillSet', target: 'Business', value: 6, field: 'business', base: 9, expected: 6, why: 'replaces a skill' },
+    { kind: 'statFloor', target: 'Cool', value: 14, bonus: 2, field: 'cool', base: 5, expected: 14, why: 'raises a stat below the floor' },
+    { kind: 'statFloor', target: 'Cool', value: 14, bonus: 2, field: 'cool', base: 16, expected: 18, why: 'pays the bonus when the stat already clears it' },
   ];
 
-  it.each(KINDS)('$kind $why', ({ kind, target, value, field, base, expected }) => {
-    const data = sheet([piece('P', [{ kind, target, value }])], { [field]: base });
+  it.each(KINDS)('$kind $why', ({ kind, target, value, bonus, field, base, expected }) => {
+    const m = bonus === undefined ? { kind, target, value } : { kind, target, value, bonus };
+    const data = sheet([piece('P', [m])], { [field]: base });
     const effect = sheetEffects(data, CPR).fields[field];
     expect(effect.value).toBe(expected);
     expect(effect.delta).toBe(expected - base);
@@ -151,7 +154,8 @@ describe('every kind of modifier reaches the sheet', () => {
   });
 
   it('covers every kind the row model declares', () => {
-    const covered = [...KINDS.map((k) => k.kind), 'roll', 'note'].sort();
+    // Deduped: a kind may need more than one case above without being declared twice.
+    const covered = [...new Set([...KINDS.map((k) => k.kind), 'roll', 'note'])].sort();
     expect([...MOD_KINDS].sort()).toEqual(covered);
   });
 });

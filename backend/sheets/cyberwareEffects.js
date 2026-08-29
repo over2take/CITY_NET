@@ -93,7 +93,7 @@ const INDEX = buildIndex();
 /** The field a modifier is talking about, or null when the sheet has no such thing. */
 const fieldFor = (target) => INDEX.get(norm(target)) || null;
 
-const isStatKind = (kind) => kind === 'stat' || kind === 'statSet';
+const isStatKind = (kind) => kind === 'stat' || kind === 'statSet' || kind === 'statFloor';
 const isSetKind = (kind) => kind === 'statSet' || kind === 'skillSet';
 
 const numeric = (v) => {
@@ -159,7 +159,13 @@ function effects(data, system = SYSTEM) {
         base: numeric(data[id]), set: null, add: 0, sources: [],
       });
 
-      if (isSetKind(mod.kind)) {
+      if (mod.kind === 'statFloor') {
+        // "Dex 14, or +2 if higher". The comparison is against the stored stat rather than
+        // against what other chrome has already done to it, so two floor pieces cannot
+        // bootstrap each other into paying out both the floor and the bonus.
+        if (entry.base >= mod.value) entry.add += (mod.bonus || 0);
+        else entry.set = entry.set === null ? mod.value : Math.max(entry.set, mod.value);
+      } else if (isSetKind(mod.kind)) {
         entry.set = entry.set === null ? mod.value : Math.max(entry.set, mod.value);
       } else {
         entry.add += mod.value;

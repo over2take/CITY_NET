@@ -150,7 +150,13 @@ export function sheetEffects(
       const entry = fields[id] || (fields[id] = {
         id, base: num(data[id]), value: 0, delta: 0, sources: [],
       });
-      if (isSetKind(mod.kind)) {
+      if (mod.kind === 'statFloor') {
+        // "Dex 14, or +2 if higher". The comparison is against the stored stat rather than
+        // against what other chrome has already done to it, so two floor pieces cannot
+        // bootstrap each other into paying out both the floor and the bonus.
+        if (entry.base >= mod.value) adds[id] = (adds[id] ?? 0) + (mod.bonus ?? 0);
+        else sets[id] = sets[id] === undefined ? mod.value : Math.max(sets[id], mod.value);
+      } else if (isSetKind(mod.kind)) {
         sets[id] = sets[id] === undefined ? mod.value : Math.max(sets[id], mod.value);
       } else {
         adds[id] = (adds[id] ?? 0) + mod.value;

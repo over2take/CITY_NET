@@ -36,9 +36,19 @@ export const CONC_LABEL: Record<Exclude<Conc, ''>, string> = {
  * `modifySkillsBy`, `setSkillTo`, `modifyRollTypesBy` — flattened on import. Adjusting and
  * setting stay apart: +3 Cool and "Cool becomes 3" are different claims.
  */
-export type ModKind = 'stat' | 'statSet' | 'skill' | 'skillSet' | 'roll' | 'note';
+export type ModKind = 'stat' | 'statSet' | 'skill' | 'skillSet' | 'roll' | 'note' | 'statFloor';
 
-export const MOD_KINDS: ModKind[] = ['stat', 'statSet', 'skill', 'skillSet', 'roll', 'note'];
+export const MOD_KINDS: ModKind[] = ['stat', 'statSet', 'skill', 'skillSet', 'roll', 'note', 'statFloor'];
+
+/**
+ * Kinds that need a second number, so the editor knows to draw a second box.
+ *
+ * `statFloor` is "Dex 14, or +2 if higher": `value` is the floor, `bonus` is what you get
+ * instead when you already clear it.
+ */
+export const TWO_NUMBER_KINDS: ModKind[] = ['statFloor'];
+
+export const usesBonus = (kind: ModKind): boolean => TWO_NUMBER_KINDS.includes(kind);
 
 /**
  * A note is a labelled number the app never applies — "Quickhack DV 10".
@@ -58,6 +68,7 @@ export const MOD_KIND_LABEL: Record<ModKind, string> = {
   skillSet: 'Set Skill To',
   roll: 'Modify Roll Type By',
   note: 'Note (not applied)',
+  statFloor: 'Raise Stat To (or bonus)',
 };
 
 /** Whether a kind adjusts the existing value or replaces it, which is how it is shown. */
@@ -68,6 +79,14 @@ export interface CyberMod {
   /** A stat, skill or roll-type name — free text, since the lists differ per system. */
   target: string;
   value: number;
+  /**
+   * The second number, on the kinds that need one. See TWO_NUMBER_KINDS.
+   *
+   * Absent rather than 0 on every other kind, so a modifier written before this existed
+   * reads back byte-identical and nothing has to branch on a field that is always
+   * undefined.
+   */
+  bonus?: number;
 }
 
 /**
@@ -80,6 +99,9 @@ export const describeMod = (mod: CyberMod): string => {
   // A note is neither an adjustment nor a replacement, so it gets no sign and no equals:
   // "Quickhack DV 10" is the whole statement.
   if (isNoteKind(mod.kind)) return `${mod.target} ${mod.value}`;
+  // "Dex 14 or +2": the floor, and what you get instead when you already clear it. Both
+  // numbers or it says nothing useful — a bare "Dex 14" reads as a plain set.
+  if (mod.kind === 'statFloor') return `${mod.target} ${mod.value} or +${mod.bonus ?? 0}`;
   return isSetKind(mod.kind)
     ? `${mod.target} = ${mod.value}`
     : `${mod.value >= 0 ? '+' : ''}${mod.value} ${mod.target}`;
@@ -150,11 +172,15 @@ export function normaliseMods(raw: unknown): CyberMod[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((m): m is Record<string, unknown> => Boolean(m) && typeof m === 'object')
-    .map((m) => ({
-      kind: MOD_KINDS.includes(m.kind as ModKind) ? (m.kind as ModKind) : 'stat',
-      target: String(m.target ?? '').trim(),
-      value: num(m.value),
-    }))
+    .map((m) => {
+      const kind = MOD_KINDS.includes(m.kind as ModKind) ? (m.kind as ModKind) : 'stat';
+      return {
+        kind,
+        target: String(m.target ?? '').trim(),
+        value: num(m.value),
+        ...(usesBonus(kind) ? { bonus: num(m.bonus) } : {}),
+      };
+    })
     .filter((m) => m.target);
 }
 

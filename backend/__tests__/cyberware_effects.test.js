@@ -158,16 +158,28 @@ describe('every kind of modifier, end to end', () => {
       kind: 'skillSet', target: 'Business', value: 6,
       field: 'business', base: 9, expected: 6, why: 'replaces a skill',
     },
+    {
+      kind: 'statFloor', target: 'Cool', value: 14, bonus: 2,
+      field: 'cool', base: 5, expected: 14, why: 'raises a stat that is below the floor',
+    },
+    {
+      kind: 'statFloor', target: 'Cool', value: 14, bonus: 2,
+      field: 'cool', base: 16, expected: 18, why: 'pays the bonus when the stat already clears it',
+    },
   ];
 
-  it.each(KINDS)('$kind $why', ({ kind, target, value, field, base, expected }) => {
-    const data = withChrome([piece('P', [{ kind, target, value }])], { [field]: base });
-    expect(fx.effects(data).fields[field].value).toBe(expected);
+  const mod = ({ kind, target, value, bonus }) =>
+    (bonus === undefined ? { kind, target, value } : { kind, target, value, bonus });
+
+  it.each(KINDS)('$kind $why', (c) => {
+    const data = withChrome([piece('P', [mod(c)])], { [c.field]: c.base });
+    expect(fx.effects(data).fields[c.field].value).toBe(c.expected);
   });
 
-  it.each(KINDS)('$kind reaches a roll built on that field', ({ kind, target, value, field, base, expected }) => {
+  it.each(KINDS)('$kind reaches a roll built on that field ($why)', (c) => {
     // The sheet showing a number the dice do not use would be the worst of both.
-    const data = withChrome([piece('P', [{ kind, target, value }])], { [field]: base });
+    const { field, base, expected } = c;
+    const data = withChrome([piece('P', [mod(c)])], { [field]: base });
     expect(fx.formulaModifiers(data, `1d10 + @${field}`))
       .toEqual([{ label: 'cyberware', value: expected - base }]);
   });

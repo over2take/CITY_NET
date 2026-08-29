@@ -51,8 +51,19 @@ const MOD_KINDS = {
  *
  * Deliberately its own kind rather than a stat modifier with an odd target. A stat modifier
  * that matches no field is a mistake worth reporting; a note is not meant to match one.
+ *
+ * `statFloor` raises a stat to a number, or grants a bonus when it is already there.
+ * Cities Without Number writes attribute cyberware as "Dex 14, or +2 if higher": a floor
+ * with a consolation bonus for anyone who already clears it. That is neither of the two
+ * shapes the Companion has — "modify by" always adds, and "set to" would *lower* a stat
+ * that is already better, which is the opposite of what the implant is for. Needing two
+ * numbers is why it carries a `bonus` alongside `value` where every other kind reads
+ * `value` alone.
  */
-const LOCAL_KINDS = ['note'];
+const LOCAL_KINDS = ['note', 'statFloor'];
+
+/** Kinds that read `bonus` as well as `value`. */
+const TWO_NUMBER_KINDS = new Set(['statFloor']);
 
 const MOD_KIND_VALUES = [...Object.values(MOD_KINDS), ...LOCAL_KINDS];
 
@@ -71,12 +82,18 @@ function normaliseMods(raw) {
     .filter((m) => m && typeof m === 'object')
     .map((m) => {
       const value = Number(m.value);
+      const bonus = Number(m.bonus);
+      const kind = MOD_KIND_VALUES.includes(m.kind) ? m.kind : 'stat';
       return {
-        kind: MOD_KIND_VALUES.includes(m.kind) ? m.kind : 'stat',
+        kind,
         target: String(m.target || '').trim(),
         // Unlike cost, zero is a real answer here — a player can park a modifier at 0
         // while they decide — so an unreadable value becomes 0 rather than dropping.
         value: Number.isFinite(value) ? value : 0,
+        // Only the kinds that use it, so every other modifier keeps the shape it has had
+        // since the import was written and nothing downstream grows a branch for a field
+        // that is always undefined.
+        ...(TWO_NUMBER_KINDS.has(kind) ? { bonus: Number.isFinite(bonus) ? bonus : 0 } : {}),
       };
     })
     .filter((m) => m.target);
@@ -293,7 +310,7 @@ const isFormField = (key) => /^cyber\d+_(name|type|hl|cost|data)$/.test(key);
 
 module.exports = {
   FIELD, humanise, normaliseRow, rows, humanityLoss, PAIRED_TYPES, isPlaced, inferPlaced,
-  LOCAL_KINDS, CONC_VALUES,
+  LOCAL_KINDS, CONC_VALUES, TWO_NUMBER_KINDS,
   MOD_KINDS, normaliseMods, modsFromCompanion,
   fromCompanion, fromNotes, fromFormFields, isFormField,
 };
