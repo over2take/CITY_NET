@@ -48,7 +48,7 @@ export interface CyberType {
 }
 
 /** Ordered head down, then the categories that are not a place so much as a kind. */
-export const CYBER_TYPES: CyberType[] = [
+export const CPR_TYPES: CyberType[] = [
   { id: 'cyberaudio', label: 'Cyberaudio', paired: false, anchor: [0.335, 0.075] },
   // Anatomical, not positional: the figure faces you, so its right eye is on your left.
   // The book labels them the same way, and a sheet that disagrees with the book about
@@ -63,7 +63,51 @@ export const CYBER_TYPES: CyberType[] = [
   { id: 'borgware', label: 'Borgware', paired: false, anchor: null },
 ];
 
-const BY_ID = new Map(CYBER_TYPES.map((t) => [t.id, t]));
+/**
+ * Cities Without Number's five, which the book prints as a Type column on every implant:
+ * Body, Head, Skin, Limb, Nerve. Fewer and broader than Cyberpunk RED's install
+ * categories, and not a renaming of them — Head covers eyes and ears together, and one
+ * Limb entry stands for arms and legs alike.
+ *
+ * Limb is paired because the figure needs somewhere to put two of them; the book records
+ * no side, so a side here says which arm or leg a piece went into and nothing more.
+ *
+ * Skin has no wire on purpose. It is the whole surface rather than a place on it, the same
+ * reason Internal and Fashionware hang below the figure rather than pointing at the chest.
+ *
+ * The three midline anchors were hit-tested against the same trace as the CP:R ones and
+ * all sit on ink; Limb reuses the measured arm pair rather than inventing a second one.
+ */
+export const CWN_TYPES: CyberType[] = [
+  { id: 'head', label: 'Head', paired: false, anchor: [MIDLINE, 0.075] },
+  { id: 'nerve', label: 'Nerve', paired: false, anchor: [MIDLINE, 0.200] },
+  { id: 'body', label: 'Body', paired: false, anchor: [MIDLINE, 0.300] },
+  { id: 'limb', label: 'Limb', paired: true, anchor: { r: [0.090, 0.550], l: [0.890, 0.550] } },
+  { id: 'skin', label: 'Skin', paired: false, anchor: null },
+];
+
+/**
+ * Which list a system draws from.
+ *
+ * A system with no cyberware of its own gets none, so the section never offers a place to
+ * file something it has no rules for.
+ */
+export const typesFor = (system: string): CyberType[] => {
+  if (system === 'cities_without_number') return CWN_TYPES;
+  if (system === 'cyberpunk_red') return CPR_TYPES;
+  return [];
+};
+
+/**
+ * Every type from every system, for looking one up by id.
+ *
+ * Ids are unique across the systems, so a stored row can be read back without knowing
+ * which system wrote it — which matters when a sheet is imported or a system is switched
+ * with rows already on it.
+ */
+export const ALL_TYPES: CyberType[] = [...CPR_TYPES, ...CWN_TYPES];
+
+const BY_ID = new Map(ALL_TYPES.map((t) => [t.id, t]));
 
 /** A type by id, or undefined for a row filed under something that no longer exists. */
 export const typeById = (id: string): CyberType | undefined => BY_ID.get(id);
@@ -115,7 +159,7 @@ export interface Panel {
  * The diagram needs sides split apart; the table needs them together. Deriving the panels
  * here rather than storing them keeps the two views from disagreeing about what exists.
  */
-export const PANELS: Panel[] = CYBER_TYPES.flatMap((t) => {
+export const panelsFor = (system: string): Panel[] => typesFor(system).flatMap((t) => {
   if (!t.paired) {
     return [{
       key: t.id,
@@ -136,10 +180,12 @@ export const PANELS: Panel[] = CYBER_TYPES.flatMap((t) => {
 });
 
 /** The panels drawn beside the figure, in the order they stack down each side. */
-export const wiredPanels = (): Panel[] => PANELS.filter((p) => p.anchor !== null);
+export const wiredPanels = (system: string): Panel[] =>
+  panelsFor(system).filter((p) => p.anchor !== null);
 
 /** The rest, which sit below without a wire. */
-export const unwiredPanels = (): Panel[] => PANELS.filter((p) => p.anchor === null);
+export const unwiredPanels = (system: string): Panel[] =>
+  panelsFor(system).filter((p) => p.anchor === null);
 
 /**
  * The rectangle the figure actually occupies inside a box of the given size.

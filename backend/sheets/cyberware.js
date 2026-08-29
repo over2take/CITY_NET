@@ -130,6 +130,9 @@ function normaliseRow(raw) {
     // Blank rather than zero when it was never given: a piece nobody priced is not a
     // piece that was free, and a column of zeroes hides which is which.
     cost: cost !== null && Number.isFinite(cost) ? cost : null,
+    // Blank on a system that does not rate concealment, and on any row saved before this
+    // existed. An unknown rating is not the same as the easiest one to hide.
+    conc: CONC_VALUES.includes(r.conc) ? r.conc : '',
     data: typeof r.data === 'string' ? r.data : '',
     // Installed unless it says otherwise. Rows stored before this field existed have no
     // opinion, and defaulting those to false would switch off chrome nobody touched.
@@ -148,7 +151,16 @@ function normaliseRow(raw) {
  * where each one sits on the figure. Only the pairing is needed here, and only to answer
  * one question: a Cybereye that is in neither eye has not been installed yet.
  */
-const PAIRED_TYPES = new Set(['cybereye', 'cyberarm', 'cyberleg']);
+const PAIRED_TYPES = new Set(['cybereye', 'cyberarm', 'cyberleg', 'limb']);
+
+/**
+ * How hard a piece is to spot, for systems that rate it.
+ *
+ * Cities Without Number gives every implant one of these; Cyberpunk RED does not rate
+ * concealment at all, so a CP:R row simply leaves it blank. Stored as the lower-case id
+ * rather than the printed word so the label can be reworded without touching saved sheets.
+ */
+const CONC_VALUES = ['obvious', 'sight', 'touch', 'medical'];
 
 /**
  * Whether a piece has been put in the body, as opposed to merely owned.
@@ -281,7 +293,7 @@ const isFormField = (key) => /^cyber\d+_(name|type|hl|cost|data)$/.test(key);
 
 module.exports = {
   FIELD, humanise, normaliseRow, rows, humanityLoss, PAIRED_TYPES, isPlaced, inferPlaced,
-  LOCAL_KINDS,
+  LOCAL_KINDS, CONC_VALUES,
   MOD_KINDS, normaliseMods, modsFromCompanion,
   fromCompanion, fromNotes, fromFormFields, isFormField,
 };

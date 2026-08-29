@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import bodySvg from '../assets/body.svg?raw';
 import {
-  CYBER_TYPES, typeById, wiredPanels, unwiredPanels, drawnFigureBox,
+  typesFor, typeById, wiredPanels, unwiredPanels, drawnFigureBox,
   type Side, type Panel,
 } from '../sheets/cyberwareLocations';
 import {
@@ -34,6 +34,14 @@ interface Props {
   /** Whose chrome this is, for the title bar. */
   who?: string;
 }
+
+/**
+ * Which system's install categories to offer.
+ *
+ * Taken from the template rather than a prop of its own: the template id *is* the system
+ * key, and the window already needs the template for the modifier pickers.
+ */
+const systemOf = (template?: SheetTemplate): string => template?.id ?? '';
 
 const mono = (size: number): React.CSSProperties => ({
   fontFamily: 'monospace', fontSize: size, letterSpacing: 1,
@@ -229,6 +237,8 @@ function ModEditor({ mods, template, onChange }: {
 export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClose, who }: Props) {
   const [pos, setPos] = useState({ x: 90, y: 60 });
   const rows = useMemo(() => readRows(data), [data]);
+  const system = systemOf(template);
+  const types = useMemo(() => typesFor(system), [system]);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const figureRef = useRef<HTMLDivElement>(null);
@@ -270,7 +280,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
       const fig = drawnFigureBox(cb.width, cb.height);
       const out: React.ReactNode[] = [];
 
-      wiredPanels().forEach((panel) => {
+      wiredPanels(system).forEach((panel) => {
         const el = panelRefs.current.get(panel.key);
         if (!el || !panel.anchor) return;
         const r = el.getBoundingClientRect();
@@ -501,8 +511,14 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
     );
   };
 
-  const left = wiredPanels().filter((p) => CYBER_TYPES.find((t) => t.id === p.typeId) && (p.side === 'r' || (p.side === null && p.typeId === 'cyberaudio')));
-  const right = wiredPanels().filter((p) => !left.includes(p));
+  // The figure's own right hangs down the left of the screen, so paired panels sort by
+  // side. The unpaired ones sit on the midline and belong to neither column, so they
+  // alternate to keep the two sides even — which for Cyberpunk RED puts Cyberaudio left
+  // and the Neural Link right, exactly where a hardcoded rule used to put them.
+  const wired = wiredPanels(system);
+  let midlineSeen = 0;
+  const left = wired.filter((p) => (p.side === 'r' ? true : p.side === null && midlineSeen++ % 2 === 0));
+  const right = wired.filter((p) => !left.includes(p));
 
   return (
     <>
@@ -606,7 +622,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
-        {unwiredPanels().map(panelBox)}
+        {unwiredPanels(system).map(panelBox)}
       </div>
 
       {unfiledRows.length > 0 && (
@@ -704,7 +720,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                               showing "Cybereye L" here read as the type having been
                               rewritten by putting it in an eye. Which eye is a fact about
                               the body, and the diagram is where the body is. */}
-                          {CYBER_TYPES.map((t) => (
+                          {types.map((t) => (
                             <option key={t.id} value={t.id}>{t.label}</option>
                           ))}
                         </select>
@@ -765,7 +781,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                 }}
               >
                 <option value="">Unfiled</option>
-                {CYBER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                {types.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
             </Field>
             <Field label="HUMANITY">

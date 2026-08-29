@@ -13,6 +13,23 @@ import { typeById, describe as describeType, looksLike, type Side } from './cybe
 export const CYBERWARE_FIELD = 'cyberware';
 
 /**
+ * Concealment ratings, easiest to hardest to detect.
+ *
+ * Stored as these ids rather than the printed words, so relabelling never rewrites a
+ * saved sheet. Mirrors CONC_VALUES in backend/sheets/cyberware.js.
+ */
+export type Conc = '' | 'obvious' | 'sight' | 'touch' | 'medical';
+
+export const CONC_VALUES: Exclude<Conc, ''>[] = ['obvious', 'sight', 'touch', 'medical'];
+
+export const CONC_LABEL: Record<Exclude<Conc, ''>, string> = {
+  obvious: 'Obvious',
+  sight: 'Sight',
+  touch: 'Touch',
+  medical: 'Medical',
+};
+
+/**
  * What a modifier changes, and whether it adjusts the value or replaces it.
  *
  * The Companion holds these in five buckets — `modifyStatsBy`, `setStatsTo`,
@@ -83,6 +100,13 @@ export interface CyberRow {
    * hides the difference between free and unknown.
    */
   cost: number | null;
+  /**
+   * How hard the piece is to spot: '' where the system does not rate it.
+   *
+   * Cities Without Number gives every implant one of four ratings; Cyberpunk RED rates
+   * none, so a CP:R row leaves this blank rather than claiming a value it never had.
+   */
+  conc: Conc;
   /** What it does. */
   data: string;
   /**
@@ -149,6 +173,9 @@ export function normaliseRow(raw: unknown): CyberRow {
     side: r.side === 'l' || r.side === 'r' ? r.side : null,
     hl: num(r.hl),
     cost: cost !== null && Number.isFinite(cost) ? cost : null,
+    // Blank on a system that does not rate concealment, and on any row saved before the
+    // column existed. Unknown is not the same as the easiest thing to hide.
+    conc: (CONC_VALUES as string[]).includes(r.conc as string) ? (r.conc as Conc) : '',
     data: typeof r.data === 'string' ? r.data : '',
     // Installed unless it says otherwise, so rows stored before this field existed do not
     // all switch themselves off.
