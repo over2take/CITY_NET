@@ -958,3 +958,49 @@ describe('the words each system uses for what a piece costs', () => {
     expect(screen.getByText(/HUMANITY LOSS 7/)).toBeInTheDocument();
   });
 });
+
+describe('filling the form from the book', () => {
+  const CWN = getTemplate('cities_without_number');
+
+  const openAddForm = async (template: SheetTemplate) => {
+    render(<CyberwareWindow data={{ cyberware: [] }} template={template}
+      onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: /ADD CYBERWARE/ }));
+  };
+
+  it('offers the catalogue on a CWN sheet', async () => {
+    await openAddForm(CWN);
+    expect(screen.getByLabelText('Pick from catalogue')).toBeInTheDocument();
+  });
+
+  it('offers nothing on a system with no catalogue', async () => {
+    // An empty picker is worse than no picker.
+    await openAddForm(getTemplate('cyberpunk_red'));
+    expect(screen.queryByLabelText('Pick from catalogue')).not.toBeInTheDocument();
+  });
+
+  it('fills name, strain, price and concealment from the book', async () => {
+    await openAddForm(CWN);
+    await userEvent.selectOptions(screen.getByLabelText('Pick from catalogue'), 'cranial-jack');
+
+    expect((screen.getByLabelText('Cyberware name') as HTMLInputElement).value).toBe('Cranial Jack');
+    expect((screen.getByLabelText('Install type') as HTMLSelectElement).value).toBe('head');
+    expect(Number((screen.getByLabelText(/Strain|Humanity/i) as HTMLInputElement).value)).toBe(0.25);
+    expect(Number((screen.getByLabelText('Price in eddies') as HTMLInputElement).value)).toBe(1000);
+  });
+
+  it('brings the modifiers with it', async () => {
+    // The whole point for the pieces that have them: typing a floor by hand means getting
+    // two numbers and a kind right.
+    await openAddForm(CWN);
+    await userEvent.selectOptions(screen.getByLabelText('Pick from catalogue'), 'coordination-augment-i');
+    expect(screen.getByDisplayValue('Dexterity')).toBeInTheDocument();
+  });
+
+  it('adds nothing on its own — the form is still filled in by hand from there', async () => {
+    await openAddForm(CWN);
+    await userEvent.selectOptions(screen.getByLabelText('Pick from catalogue'), 'skinmod');
+    // Still in the form, not on the sheet: picking is not committing.
+    expect(screen.getByRole('button', { name: 'ADD' })).toBeInTheDocument();
+  });
+});

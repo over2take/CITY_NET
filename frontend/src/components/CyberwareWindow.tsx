@@ -13,6 +13,7 @@ import {
 } from '../sheets/cyberwareRows';
 import type { SheetFieldValue, SheetTemplate } from '../sheets/types';
 import { targetOptions } from '../sheets/modTargets';
+import { CWN_CYBERWARE, cyberById } from '../sheets/cwnCyberwarePresets';
 
 // The augmentation window: a body with what is installed where, and the table underneath.
 //
@@ -255,6 +256,13 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
   const system = systemOf(template);
   const types = useMemo(() => typesFor(system), [system]);
   const words = wordsFor(system);
+  // Sorted by where it goes, then by name, which is how someone hunts for a piece.
+  const catalogue = useMemo(
+    () => (system === 'cities_without_number'
+      ? [...CWN_CYBERWARE].sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name))
+      : []),
+    [system],
+  );
 
   const stageRef = useRef<HTMLDivElement>(null);
   const figureRef = useRef<HTMLDivElement>(null);
@@ -779,6 +787,45 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
 
       {!readOnly && (draft ? (
         <div style={{ marginTop: 8, border: '1px solid var(--dark-green)', padding: 7 }}>
+          {/* Fill the form from the book rather than typing six fields off a page. Only
+              where there is a catalogue to offer - Cyberpunk RED has none, and an empty
+              picker is worse than no picker. Everything it fills stays editable: a piece
+              can be modified, salvaged or house-ruled, and the entry is a starting point
+              rather than a contract. */}
+          {catalogue.length > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              <Field label="FROM THE BOOK">
+                <select
+                  style={inputStyle}
+                  aria-label="Pick from catalogue"
+                  value=""
+                  onChange={(e) => {
+                    const preset = cyberById(e.target.value);
+                    if (!preset) return;
+                    setDraft({
+                      ...draft,
+                      name: preset.name,
+                      // Keep where it is going if the form was opened from a body panel:
+                      // the book says which kind of slot a piece needs, not which arm.
+                      type: draft.type || preset.type,
+                      hl: preset.strain,
+                      cost: preset.price,
+                      conc: preset.conc,
+                      data: preset.effect,
+                      mods: (preset.mods ?? []).map((m) => ({ ...m })),
+                    });
+                  }}
+                >
+                  <option value="">— pick a piece to fill the form —</option>
+                  {catalogue.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} · {c.type.toUpperCase()} · {c.strain} · {c.price.toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.6fr 0.7fr', gap: 6 }}>
             <Field label="NAME">
               <input
