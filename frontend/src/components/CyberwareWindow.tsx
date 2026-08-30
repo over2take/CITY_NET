@@ -43,6 +43,21 @@ interface Props {
  */
 const systemOf = (template?: SheetTemplate): string => template?.id ?? '';
 
+/**
+ * What each system calls the two costs a piece carries.
+ *
+ * One stored number apiece, two vocabularies. Cyberpunk RED spends Humanity and prices in
+ * eurodollars; Cities Without Number spends System Strain and prices in credits. Printing
+ * "HUMANITY LOSS" over a CWN sheet names a stat that system does not have, and the column
+ * headings are the same problem in three characters.
+ */
+const WORDS: Record<string, { cost: string; costShort: string; money: string }> = {
+  cyberpunk_red: { cost: 'HUMANITY LOSS', costShort: 'HL', money: 'eb' },
+  cities_without_number: { cost: 'STRAIN', costShort: 'STR', money: 'cr' },
+};
+
+const wordsFor = (system: string) => WORDS[system] ?? { cost: 'COST', costShort: 'COST', money: '' };
+
 const mono = (size: number): React.CSSProperties => ({
   fontFamily: 'monospace', fontSize: size, letterSpacing: 1,
 });
@@ -239,6 +254,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
   const rows = useMemo(() => readRows(data), [data]);
   const system = systemOf(template);
   const types = useMemo(() => typesFor(system), [system]);
+  const words = wordsFor(system);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const figureRef = useRef<HTMLDivElement>(null);
@@ -492,7 +508,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
               display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6,
             }}
           >
-            <span>{r.name} <span style={{ color: 'var(--grid-section)' }}>HL {r.hl}</span></span>
+            <span>{r.name} <span style={{ color: 'var(--grid-section)' }}>{words.costShort} {r.hl}</span></span>
             {!readOnly && (
               <button
                 type="button"
@@ -547,7 +563,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
           {rows.length - unfiledRows.length} INSTALLED
           {unfiledRows.length ? ` · ${unfiledRows.length} UNFILED` : ''}
         </span>
-        <span>HUMANITY LOSS {hl}{spent > 0 ? ` · ${spent.toLocaleString()}eb` : ''}</span>
+        <span>{words.cost} {hl}{spent > 0 ? ` · ${spent.toLocaleString()}${words.money}` : ''}</span>
       </div>
 
       {!readOnly && placing && (
@@ -574,7 +590,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                   }}
                 >
                   {r.name}
-                  <span style={{ color: 'var(--grid-section)' }}> HL {r.hl}</span>
+                  <span style={{ color: 'var(--grid-section)' }}> {words.costShort} {r.hl}</span>
                   {fits && <span style={{ color: 'var(--cyan)' }}> · fits</span>}
                 </button>
               );
@@ -656,7 +672,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                       ...mono(10), color: 'var(--dark-green)',
                     }}
                   >◌</th>
-                  {([['name', 'NAME'], ['location', 'TYPE'], ['hl', 'HL'], ['cost', 'EB']] as [SortKey, string][])
+                  {([['name', 'NAME'], ['location', 'TYPE'], ['hl', words.costShort], ['cost', words.money.toUpperCase()]] as [SortKey, string][])
                     .map(([k, lbl]) => (
                       <th
                         key={k}

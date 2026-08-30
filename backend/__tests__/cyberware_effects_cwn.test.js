@@ -124,3 +124,155 @@ describe('what does not apply', () => {
     expect(fx.effectiveData(data, 'shadowrun_6e')).toBe(data);
   });
 });
+
+describe('every attribute and skill CWN offers', () => {
+  // Completeness rather than representative cases. A name the picker offers but the index
+  // cannot match is a modifier a player can build that silently does nothing, and on the
+  // page it is indistinguishable from a piece with no effect. One target per kind would
+  // never find it - the same bar the Cyberpunk RED suite is held to.
+  const { CWN_SKILLS } = createRequire(import.meta.url)('../sheets/rolls');
+
+  const ATTR_NAMES = Object.values(fx.CWN_STAT_ALIASES).flat();
+  const SKILL_LABELS = Object.values(CWN_SKILLS).map(([label]) => label);
+  const ATTR_IDS = Object.keys(fx.CWN_STAT_ALIASES);
+
+  it('has lists worth checking', () => {
+    // Guards the guard: an empty list would make every case below pass for free.
+    expect(ATTR_NAMES.length).toBe(12);   // six attributes, two spellings each
+    expect(SKILL_LABELS.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it.each(ATTR_NAMES)('%s resolves to an attribute and moves it', (name) => {
+    const data = sheet([piece('P', [{ kind: 'stat', target: name, value: 2 }])]);
+    const out = fx.effects(data, CWN);
+    expect(out.unmatched).toEqual([]);
+    expect(Object.values(out.fields).map((f) => f.value)).toEqual([2]);
+  });
+
+  it.each(SKILL_LABELS)('%s resolves to a skill and moves it', (label) => {
+    const data = sheet([piece('P', [{ kind: 'skill', target: label, value: 3 }])]);
+    const out = fx.effects(data, CWN);
+    expect(out.unmatched).toEqual([]);
+    expect(Object.values(out.fields).map((f) => f.value)).toEqual([3]);
+  });
+
+  it('gives every attribute and skill its own field rather than collapsing any together', () => {
+    // Two names landing on one field is the failure that hides: the second modifier looks
+    // applied and lands somewhere else.
+    const names = [...ATTR_IDS, ...SKILL_LABELS];
+    const ids = names.map((name) => {
+      const data = sheet([piece('P', [{ kind: 'stat', target: name, value: 1 }])]);
+      return Object.keys(fx.effects(data, CWN).fields)[0];
+    });
+    expect(ids.every(Boolean)).toBe(true);
+    expect(new Set(ids).size).toBe(new Set(names).size);
+  });
+});
+
+describe('every kind of modifier against every attribute', () => {
+  // The cross-product. Each kind has to work on each attribute, and each has to reach the
+  // derived modifier that CWN actually rolls with.
+  const ATTR_IDS = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+
+  const KINDS = [
+    { kind: 'stat', value: 3, base: 10, expected: 13, why: 'adds' },
+    { kind: 'statSet', value: 7, base: 10, expected: 7, why: 'replaces' },
+    { kind: 'statFloor', value: 14, bonus: 2, base: 10, expected: 14, why: 'raises to the floor' },
+    { kind: 'statFloor', value: 14, bonus: 2, base: 16, expected: 18, why: 'pays the bonus above the floor' },
+  ];
+
+  const cases = ATTR_IDS.flatMap((id) => KINDS.map((k) => ({ ...k, id })));
+
+  it.each(cases)('$kind $why on $id', ({ id, kind, value, bonus, base, expected }) => {
+    const mod = bonus === undefined ? { kind, target: id, value } : { kind, target: id, value, bonus };
+    const data = sheet([piece('P', [mod])], { [id]: base });
+    expect(fx.effects(data, CWN).fields[id].value).toBe(expected);
+  });
+
+  it.each(cases)('$kind $why on $id reaches its derived modifier', ({ id, kind, value, bonus, base, expected }) => {
+    // 3 -> -2, 4-7 -> -1, 8-13 -> 0, 14-17 -> +1, 18+ -> +2
+    const cwnMod = (s) => (s <= 0 ? 0 : s <= 3 ? -2 : s <= 7 ? -1 : s <= 13 ? 0 : s <= 17 ? 1 : 2);
+    const mod = bonus === undefined ? { kind, target: id, value } : { kind, target: id, value, bonus };
+    const data = sheet([piece('P', [mod])], { [id]: base, [id + '_mod']: cwnMod(base) });
+    expect(fx.effectiveData(data, CWN)[id + '_mod']).toBe(cwnMod(expected));
+  });
+});
+
+describe('every kind of modifier against every skill', () => {
+  const { CWN_SKILLS } = createRequire(import.meta.url)('../sheets/rolls');
+  const SKILL_IDS = Object.keys(CWN_SKILLS);
+
+  // Targeted by printed label rather than field id: that is what the index matches, and
+  // what a player picks. Most ids happen to equal their lowercased label, but Cast and
+  // Summon do not - which is the whole reason to run every skill rather than a sample.
+  const cases = SKILL_IDS.flatMap((id) => [
+    { id, label: CWN_SKILLS[id][0], kind: 'skill', value: 2, base: 1, expected: 3, why: 'adds' },
+    { id, label: CWN_SKILLS[id][0], kind: 'skillSet', value: 4, base: 1, expected: 4, why: 'replaces' },
+  ]);
+
+  it.each(cases)('$kind on $label', ({ id, label, kind, value, base, expected }) => {
+    const data = sheet([piece('P', [{ kind, target: label, value }])], { [id]: base });
+    expect(fx.effects(data, CWN).fields[id].value).toBe(expected);
+  });
+
+  it.each(SKILL_IDS)('a modifier on %s reaches the roll that skill is made with', (id) => {
+    const [label, modField] = CWN_SKILLS[id];
+    const data = sheet([piece('P', [{ kind: 'skill', target: label, value: 2 }])],
+      { [id]: 1, [modField]: 0 });
+    expect(fx.formulaModifiers(data, '2d6 + @' + id + ' + @' + modField, CWN))
+      .toEqual([{ label: 'cyberware', value: 2 }]);
+  });
+});
+
+describe('modifiers stacking, as several pieces of chrome do', () => {
+  it('adds two pieces together on one attribute', () => {
+    const data = sheet([
+      piece('A', [{ kind: 'stat', target: 'Dexterity', value: 2 }]),
+      piece('B', [{ kind: 'stat', target: 'DEX', value: 3 }]),
+    ], { dex: 10 });
+    expect(fx.effects(data, CWN).fields.dex.value).toBe(15);
+  });
+
+  it('applies a set before the adjustments, whichever order they are listed in', () => {
+    const data = sheet([
+      piece('Adds', [{ kind: 'stat', target: 'Dexterity', value: 2 }]),
+      piece('Sets', [{ kind: 'statSet', target: 'Dexterity', value: 8 }]),
+    ], { dex: 16 });
+    expect(fx.effects(data, CWN).fields.dex.value).toBe(10);
+  });
+
+  it('lets the higher of two sets win, and names both', () => {
+    const data = sheet([
+      piece('Low', [{ kind: 'statSet', target: 'Dexterity', value: 8 }]),
+      piece('High', [{ kind: 'statSet', target: 'Dexterity', value: 12 }]),
+    ], { dex: 10 });
+    const entry = fx.effects(data, CWN).fields.dex;
+    expect(entry.value).toBe(12);
+    expect(entry.sources.map((s) => s.name).sort()).toEqual(['High', 'Low']);
+  });
+
+  it('does not let two floors bootstrap each other', () => {
+    // Both compare against the stored attribute, so a DEX 9 character reaches 14 once and
+    // does not then also collect the bonus for already clearing it.
+    const mod = { kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 };
+    const data = sheet([piece('A', [mod]), piece('B', [mod])], { dex: 9 });
+    expect(fx.effects(data, CWN).fields.dex.value).toBe(14);
+  });
+
+  it('a floor and an adjustment combine, floor first', () => {
+    const data = sheet([
+      piece('Floor', [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }]),
+      piece('Adds', [{ kind: 'stat', target: 'Dexterity', value: 1 }]),
+    ], { dex: 9 });
+    expect(fx.effects(data, CWN).fields.dex.value).toBe(15);
+  });
+
+  it('carries a stacked total through to the derived modifier', () => {
+    const data = sheet([
+      piece('A', [{ kind: 'stat', target: 'Dexterity', value: 4 }]),
+      piece('B', [{ kind: 'stat', target: 'Dexterity', value: 5 }]),
+    ], { dex: 9, dex_mod: 0 });
+    // 9 + 9 = 18, which is +2 on the table.
+    expect(fx.effectiveData(data, CWN).dex_mod).toBe(2);
+  });
+});

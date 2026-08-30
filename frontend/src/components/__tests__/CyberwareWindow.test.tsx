@@ -928,3 +928,33 @@ describe('modifiers', () => {
     expect(screen.queryByLabelText('Modifier 1 target')).not.toBeInTheDocument();
   });
 });
+
+describe('the words each system uses for what a piece costs', () => {
+  const CWN = getTemplate('cities_without_number');
+  const cwnRow = {
+    name: 'Cranial Jack', type: 'head', side: null, hl: 0.25, cost: 1000,
+    conc: 'touch', data: '', equipped: true, placed: true, mods: [],
+  };
+
+  const openFor = (template: SheetTemplate) => render(
+    <CyberwareWindow data={{ cyberware: [cwnRow] }} template={template}
+      onFieldChange={vi.fn()} onClose={vi.fn()} />,
+  );
+
+  it('says Strain and credits on a CWN sheet', () => {
+    // CWN has no Humanity stat and does not price in eurodollars, so both would be
+    // naming rules that system does not have.
+    openFor(CWN);
+    expect(screen.getByText(/STRAIN 0\.25/)).toBeInTheDocument();
+    expect(screen.getByText(/1,000cr/)).toBeInTheDocument();
+    expect(screen.queryByText(/HUMANITY/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/eb/)).not.toBeInTheDocument();
+  });
+
+  it('still says Humanity Loss and eb on a Cyberpunk RED sheet', () => {
+    const cprRow = { ...cwnRow, type: 'neural', hl: 7, conc: '' };
+    render(<CyberwareWindow data={{ cyberware: [cprRow] }} template={getTemplate('cyberpunk_red')}
+      onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText(/HUMANITY LOSS 7/)).toBeInTheDocument();
+  });
+});

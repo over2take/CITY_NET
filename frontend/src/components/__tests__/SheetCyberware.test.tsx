@@ -203,3 +203,52 @@ describe('an NPC sheet gets the same treatment', () => {
     expect(within(row).getByRole('button', { name: 'Roll Perception' })).toHaveTextContent('+9');
   });
 });
+
+describe('the CWN sheet reaches the same table', () => {
+  const CWN = getTemplate('cities_without_number');
+  const showCwn = (data: Record<string, unknown>) => render(
+    <SheetRenderer template={CWN} data={data} onFieldChange={vi.fn()} />,
+  );
+  const cwnChrome = (extra = {}) => ([{
+    name: 'Cranial Jack', equipped: true, type: 'head', side: null, hl: 0.25,
+    cost: 1000, conc: 'touch', data: '', mods: [], placed: true, ...extra,
+  }]);
+
+  it('offers the augmentation window rather than a box to type names into', async () => {
+    showCwn({ cyberware: [] });
+    await openGear();
+    expect(screen.getByRole('button', { name: /AUGMENTATION/ })).toBeInTheDocument();
+  });
+
+  it('calls the cost Strain, not Humanity Loss', async () => {
+    // CWN has no Humanity stat, so naming one on its sheet would be inventing a rule.
+    showCwn({ cyberware: cwnChrome() });
+    await openGear();
+    expect(screen.getByText(/STRAIN/)).toBeInTheDocument();
+    expect(screen.queryByText(/HUMANITY/)).not.toBeInTheDocument();
+  });
+
+  it('keeps fractional strain fractional in the summary', async () => {
+    // Quarter and half points are common, and a summary reading 0 would be wrong twice:
+    // once about the number and once about whether the piece costs anything at all.
+    showCwn({ cyberware: cwnChrome() });
+    await openGear();
+    expect(screen.getByText(/STRAIN 0\.25/)).toBeInTheDocument();
+  });
+
+  it('still shows notes typed before the section became a table', async () => {
+    // The whole migration risk. Rows store under `cyberware`, notes under
+    // `cyberware_notes`; flipping the layout destroyed nothing, but it must not have
+    // hidden it either.
+    showCwn({ cyberware: [], cyberware_notes: 'Dermal armor, cranial jack' });
+    await openGear();
+    expect(screen.getByDisplayValue('Dermal armor, cranial jack')).toBeInTheDocument();
+  });
+
+  it('shows those notes alongside the table, not instead of it', async () => {
+    showCwn({ cyberware: cwnChrome(), cyberware_notes: 'salvaged, needs servicing' });
+    await openGear();
+    expect(screen.getByDisplayValue('salvaged, needs servicing')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /AUGMENTATION/ })).toBeInTheDocument();
+  });
+});

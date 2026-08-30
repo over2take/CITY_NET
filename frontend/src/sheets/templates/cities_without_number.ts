@@ -358,12 +358,32 @@ export const citiesWithoutNumber: SheetTemplate = {
       ],
     },
     {
+      // Rows and a body diagram rather than the line of names this used to be. The book
+      // gives every implant an install location, a System Strain cost, a price and a
+      // concealment rating, none of which survive being typed into one box.
+      //
+      // `fields` is empty because the whole section lives under one array field - see
+      // sheets/cyberwareRows - exactly as Cyberpunk RED's does.
       id: 'cyberware',
       label: 'CYBERWARE',
+      layout: 'cyberware',
+      tab: 'GEAR',
+      fields: [],
+    },
+    {
+      // The old free-text box, kept.
+      //
+      // It stores under `cyberware_notes` while the rows store under `cyberware`, so
+      // switching the section above to a table destroyed nothing - but it would have
+      // stopped displaying what people had already typed, which is its own kind of loss.
+      // A section of its own is cheaper than teaching the table to render trailing fields,
+      // and it reads better: notes about your chrome are not a row of it.
+      id: 'cyberware_notes',
+      label: 'CYBERWARE NOTES',
       layout: 'notes',
       tab: 'GEAR',
       fields: [
-        { id: 'cyberware_notes', label: 'Cyberware', type: 'textarea', placeholder: 'Dermal armor, cranial jack, low-light eyes' },
+        { id: 'cyberware_notes', label: 'Notes', type: 'textarea', placeholder: 'Anything the rows above do not cover' },
       ],
     },
     // DELUXE tab: Spellcasting + Summoning (CWN Deluxe edition). Visibility is
