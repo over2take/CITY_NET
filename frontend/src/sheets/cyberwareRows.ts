@@ -276,3 +276,39 @@ export const panelRank = (row: CyberRow, typeId: string): number => {
 
 /** Everything that has not been given a place yet, which is how every import arrives. */
 export const unfiledRows = (rows: CyberRow[]): CyberRow[] => rows.filter(needsPlacing);
+
+/** The System Strain a character is already carrying from chrome that is actually in them. */
+export const installedStrain = (rows: CyberRow[]): number =>
+  rows.filter((r) => r.equipped && r.placed).reduce((n, r) => n + num(r.hl), 0);
+
+/**
+ * How much chrome a body can take.
+ *
+ * Maximum System Strain is your Constitution (CWN p40), and installed gear cannot exceed
+ * it. Two implants change that and both are stated outright:
+ *
+ *   - A Full Body Conversion gives an effective Constitution of 20 for strain purposes.
+ *   - A Cybernetic Infrastructure Baseline lets you ignore strain from implants equal to
+ *     12 minus your Constitution, so a CON 9 character ignores three points. Never
+ *     negative: a CON 14 character ignores nothing rather than losing capacity.
+ *
+ * Lifestyle also modifies the maximum (p51: squatting -2, fine living +1). The sheet has
+ * no lifestyle field, so that is not accounted for here and a GM allowing it will have to
+ * raise CON or overrule the block.
+ *
+ * Matched by name, which is the weak part: a renamed row stops being recognised. Rows do
+ * not carry the catalogue id they came from, which is what would make this robust.
+ */
+export function strainCeiling(
+  data: Record<string, unknown> | undefined | null,
+  rows: CyberRow[],
+): { max: number; load: number; free: number } {
+  const installed = rows.filter((r) => r.equipped && r.placed);
+  const has = (name: string) => installed.some((r) => r.name.trim().toLowerCase() === name);
+
+  const con = has('full body conversion') ? 20 : num(data?.con);
+  const ignored = has('cybernetic infrastructure baseline') ? Math.max(0, 12 - num(data?.con)) : 0;
+
+  const load = Math.max(0, installedStrain(rows) - ignored);
+  return { max: con, load, free: con - load };
+}

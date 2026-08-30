@@ -8,7 +8,7 @@ import {
 import {
   CYBERWARE_FIELD, readRows, normaliseRow, totalHumanityLoss, totalCost,
   rowLocation, rowsForPanel, needsPlacing, panelRank, describeMod, isSetKind, isNoteKind,
-  MOD_KINDS, MOD_KIND_LABEL,
+  MOD_KINDS, MOD_KIND_LABEL, strainCeiling,
   type CyberRow, type CyberMod, type ModKind,
 } from '../sheets/cyberwareRows';
 import type { SheetFieldValue, SheetTemplate } from '../sheets/types';
@@ -256,6 +256,29 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
   const system = systemOf(template);
   const types = useMemo(() => typesFor(system), [system]);
   const words = wordsFor(system);
+  /** Why the last install was refused, cleared as soon as anything else happens. */
+  const [refused, setRefused] = useState<string | null>(null);
+
+  /**
+   * Whether the body can take this piece, per CWN's ceiling: installed strain may not
+   * exceed your maximum System Strain. Only where the system has such a rule - Cyberpunk
+   * RED spends Humanity, which is a different thing and has no ceiling of this kind.
+   */
+  /** What the body can take, on the systems that limit it. Null where none applies. */
+  const ceiling = system === 'cities_without_number' ? strainCeiling(data, rows) : null;
+
+  const admits = (piece: { hl: number; name: string }, without?: CyberRow): string | null => {
+    if (system !== 'cities_without_number') return null;
+    const others = without ? rows.filter((r) => r !== without) : rows;
+    const { max, load } = strainCeiling(data, others);
+    const need = Number(piece.hl) || 0;
+    if (max <= 0) return 'NO SYSTEM STRAIN MAXIMUM: SET CON FIRST';
+    if (load + need > max) {
+      return `NOT ENOUGH SYSTEM STRAIN — ${piece.name.toUpperCase()} NEEDS ${need}, `
+        + `${+(max - load).toFixed(2)} FREE OF ${max}`;
+    }
+    return null;
+  };
   // Sorted by where it goes, then by name, which is how someone hunts for a piece.
   const catalogue = useMemo(
     () => (system === 'cities_without_number'
@@ -382,6 +405,14 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
     // added and then left blank is not a modifier, and normaliseRow already drops those.
     const row = normaliseRow({ ...draft, name });
 
+    // Only when it is going straight into the body. Adding a piece to the list to be
+    // fitted later is always allowed - owning chrome costs no strain.
+    if (row.placed && !editing) {
+      const no = admits(row);
+      if (no) { setRefused(no); return; }
+    }
+    setRefused(null);
+
     if (editing) {
       // Replaced in place, so an edit keeps the piece where it is in the list rather than
       // moving it to the end as a delete-and-re-add would.
@@ -461,6 +492,12 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
   const fileInto = (row: CyberRow, panel: Panel) => {
     const i = rows.indexOf(row);
     if (i < 0) return;
+    // The body has a limit and this is where it is reached. Refused rather than allowed
+    // and flagged: the sheet would otherwise carry a character the rules do not permit,
+    // and nothing downstream would know to stop.
+    const no = admits(row, row);
+    if (no) { setRefused(no); return; }
+    setRefused(null);
     const next = [...rows];
     next[i] = { ...row, type: panel.typeId, side: panel.side, placed: true };
     write(next);
@@ -571,7 +608,12 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
           {rows.length - unfiledRows.length} INSTALLED
           {unfiledRows.length ? ` · ${unfiledRows.length} UNFILED` : ''}
         </span>
-        <span>{words.cost} {hl}{spent > 0 ? ` · ${spent.toLocaleString()}${words.money}` : ''}</span>
+        <span>
+          {/* The installed load against the ceiling, not the whole list: owning a piece
+              costs no strain, and counting it would make the limit look already reached. */}
+          {words.cost} {ceiling ? `${ceiling.load} / ${ceiling.max}` : hl}
+          {spent > 0 ? ` · ${spent.toLocaleString()}${words.money}` : ''}
+        </span>
       </div>
 
       {!readOnly && placing && (
@@ -644,6 +686,18 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
           {right.map(panelBox)}
         </div>
       </div>
+
+      {refused && (
+        // Where it happened rather than in a toast: the press was on the diagram, and a
+        // message somewhere else is a message nobody connects to what they just did.
+        <div
+          role="alert"
+          style={{
+            ...mono(10), letterSpacing: 0, marginTop: 8, padding: '4px 6px',
+            color: 'var(--danger)', border: '1px solid var(--danger)',
+          }}
+        >{refused}</div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
         {unwiredPanels(system).map(panelBox)}

@@ -1004,3 +1004,70 @@ describe('filling the form from the book', () => {
     expect(screen.getByRole('button', { name: 'ADD' })).toBeInTheDocument();
   });
 });
+
+describe('the System Strain ceiling', () => {
+  const CWN = getTemplate('cities_without_number');
+  const piece = (name: string, hl: number, extra = {}) => ({
+    name, type: 'body', side: null, hl, cost: null, conc: '', data: '',
+    equipped: true, placed: true, mods: [], ...extra,
+  });
+
+  const openWith = (data: Record<string, unknown>, template: SheetTemplate = CWN) => {
+    const onFieldChange = vi.fn();
+    render(<CyberwareWindow data={data} template={template}
+      onFieldChange={onFieldChange} onClose={vi.fn()} />);
+    return onFieldChange;
+  };
+
+  it('shows what the body can take beside what it is carrying', () => {
+    openWith({ con: 10, cyberware: [piece('Heavy', 4)] });
+    expect(screen.getByText(/STRAIN 4 \/ 10/)).toBeInTheDocument();
+  });
+
+  it('refuses an install that would go over, and says by how much', async () => {
+    // CON 10 with 9 points already in the body; a 2-point piece does not fit.
+    const onFieldChange = openWith({
+      con: 10,
+      cyberware: [piece('Installed', 9), piece('Waiting', 2, { placed: false, type: '' })],
+    });
+    await userEvent.click(screen.getByLabelText('Add to Body'));
+    expect(screen.getByText(/PUT SOMETHING IN BODY/)).toBeInTheDocument();
+    // The placing list entry, not the table row that also mentions the piece.
+    const entry = screen.getAllByRole('button')
+      .find((b) => (b.textContent || '').trim().startsWith('Waiting'))!;
+    await userEvent.click(entry);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/NOT ENOUGH SYSTEM STRAIN/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/NEEDS 2/);
+    expect(onFieldChange).not.toHaveBeenCalled();
+  });
+
+  it('allows one that fits exactly', async () => {
+    const onFieldChange = openWith({
+      con: 10,
+      cyberware: [piece('Installed', 8), piece('Waiting', 2, { placed: false, type: '' })],
+    });
+    await userEvent.click(screen.getByLabelText('Add to Body'));
+    // The placing list entry, not the table row that also mentions the piece.
+    const entry = screen.getAllByRole('button')
+      .find((b) => (b.textContent || '').trim().startsWith('Waiting'))!;
+    await userEvent.click(entry);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(onFieldChange).toHaveBeenCalled();
+  });
+
+  it('counts only what is in the body against the ceiling', () => {
+    // 8 installed and 2 merely owned reads as 8 of 10, not 10 of 10 - otherwise the limit
+    // looks reached by things sitting in a bag.
+    openWith({ con: 10, cyberware: [piece('In', 8), piece('Owned', 2, { placed: false })] });
+    expect(screen.getByText(/STRAIN 8 \/ 10/)).toBeInTheDocument();
+  });
+
+  it('says nothing about strain on a Cyberpunk RED sheet', () => {
+    // CP:R spends Humanity, which has no ceiling of this kind.
+    openWith({ humanity: 40, cyberware: [piece('Chrome', 7, { type: 'neural' })] },
+      getTemplate('cyberpunk_red'));
+    expect(screen.queryByText(/\/ 10/)).not.toBeInTheDocument();
+  });
+});
