@@ -133,6 +133,24 @@ describe('the System Strain ceiling', () => {
     expect(strainCeiling({ con: 14 }, rows).load).toBe(8);
   });
 
+  it('adds the strain modifier to the ceiling', () => {
+    // Lifestyle is the usual reason for one: squatting is -2, luxury +2.
+    expect(strainCeiling({ con: 10, strain_mod: -2 }, []).max).toBe(8);
+    expect(strainCeiling({ con: 10, strain_mod: 2 }, []).max).toBe(12);
+  });
+
+  it('never lets the modifier push the ceiling below zero', () => {
+    // A maximum of -1 is not a rule, it is a sheet nobody can use.
+    expect(strainCeiling({ con: 1, strain_mod: -5 }, []).max).toBe(0);
+  });
+
+  it('applies the modifier to a Full Body Conversion too', () => {
+    // The conversion replaces the Constitution half; a squatter cyborg still lives in a
+    // squat.
+    const rows = [normaliseRow({ name: 'Full Body Conversion', type: 'body', hl: 0, equipped: true, placed: true })];
+    expect(strainCeiling({ con: 9, strain_mod: -2 }, rows).max).toBe(18);
+  });
+
   it('reads an unset Constitution as no capacity at all', () => {
     // A blank sheet should refuse rather than silently permit everything.
     expect(strainCeiling({}, []).max).toBe(0);

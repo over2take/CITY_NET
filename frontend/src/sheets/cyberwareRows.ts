@@ -306,9 +306,13 @@ export function strainCeiling(
   const installed = rows.filter((r) => r.equipped && r.placed);
   const has = (name: string) => installed.some((r) => r.name.trim().toLowerCase() === name);
 
+  // The same maximum the sheet shows: Constitution plus whatever modifier the table has
+  // agreed, which is usually lifestyle. A Full Body Conversion replaces the Constitution
+  // half of that rather than the whole thing - a squatter cyborg still lives in a squat.
   const con = has('full body conversion') ? 20 : num(data?.con);
+  const max = Math.max(0, con + num(data?.strain_mod));
   const ignored = has('cybernetic infrastructure baseline') ? Math.max(0, 12 - num(data?.con)) : 0;
 
   const load = Math.max(0, installedStrain(rows) - ignored);
-  return { max: con, load, free: con - load };
+  return { max, load, free: max - load };
 }

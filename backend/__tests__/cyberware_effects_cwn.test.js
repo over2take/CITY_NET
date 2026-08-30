@@ -336,3 +336,31 @@ describe('Trauma Target', () => {
     expect(data.trauma_target).toBe(7);
   });
 });
+
+describe('the strain modifier', () => {
+  const templates = createRequire(import.meta.url)('../sheets/templates');
+  const maxFor = (fields) => {
+    const d = { level: 1, ...fields };
+    templates.applyDerived(CWN, d);
+    return d.system_strain_max;
+  };
+
+  it('is Constitution when there is no modifier', () => {
+    expect(maxFor({ con: 10 })).toBe(10);
+  });
+
+  it('subtracts for a rough lifestyle and adds for a comfortable one', () => {
+    // CWN p51: squatting -2 through luxury +2.
+    expect(maxFor({ con: 10, strain_mod: -2 })).toBe(8);
+    expect(maxFor({ con: 10, strain_mod: 2 })).toBe(12);
+  });
+
+  it('never goes below zero', () => {
+    expect(maxFor({ con: 1, strain_mod: -5 })).toBe(0);
+  });
+
+  it('is a plain number rather than a lifestyle picker', () => {
+    // Deliberate: a GM can account for anything with it, not only where a PC lives.
+    expect(maxFor({ con: 10, strain_mod: 7 })).toBe(17);
+  });
+});

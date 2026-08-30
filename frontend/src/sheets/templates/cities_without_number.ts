@@ -241,7 +241,8 @@ export const citiesWithoutNumber: SheetTemplate = {
       fields: [
         { id: 'ac', label: 'AC', type: 'number', sensitivity: 'combat', source: 'token_ac', sourceWritable: true, hint: 'Armor Class - attacks hit at or above this. Linked to your token: editing here updates the token and vice versa.' },
         { id: 'base_hit_bonus', label: 'BHB', type: 'number', hint: 'Base hit bonus from class and level; added to every attack roll.' },
-        { id: 'system_strain', label: 'STRAIN', type: 'number', maxField: 'system_strain_max', hint: 'System Strain from cyberware, drugs and rapid healing. Max equals your CON score; recovers 1 per full rest.' },
+        { id: 'system_strain', label: 'STRAIN', type: 'number', maxField: 'system_strain_max', hint: 'System Strain from cyberware, drugs and rapid healing. Max is your CON score plus the modifier beside it; recovers 1 per full rest.' },
+        { id: 'strain_mod', label: 'STRAIN MOD', type: 'number', placeholder: '0', hint: "Added to your maximum System Strain. Lifestyle is the usual reason: squatting is -2 and slum living -1, fine living +1 and luxury +2, with a middle-class life at 0. Negative numbers are allowed. Agree it with your GM." },
         { id: 'system_strain_max', label: 'STRAIN MAX', type: 'number', derived: true, hint: 'Derived: equals CON score, recomputed on every save.' },
         { id: 'trauma_target', label: 'TRAUMA TGT', type: 'number', derived: true, hint: "Derived: 6 plus the armor's Trauma Target Mod. Enemy trauma dice at or above this multiply their damage. Cyberware raises it further. Only used when the GRITTY COMBAT house rule is on." },
       ],
