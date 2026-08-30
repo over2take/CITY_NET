@@ -83,6 +83,71 @@ const LONG_NAMES: Record<string, Record<string, string>> = {
   [CWN_SYSTEM]: CWN_LONG_NAMES,
 };
 
+/**
+ * CWN's attribute modifier table. 3 -> -2, 4-7 -> -1, 8-13 -> 0, 14-17 -> +1, 18+ -> +2.
+ *
+ * An unset attribute reads 0 and is neutral rather than "attribute 3", so a half-filled
+ * sheet does not roll at -2 everywhere.
+ */
+const cwnMod = (stat: unknown): number => {
+  const v = num(stat);
+  if (v <= 0) return 0;
+  if (v <= 3) return -2;
+  if (v <= 7) return -1;
+  if (v <= 13) return 0;
+  if (v <= 17) return 1;
+  return 2;
+};
+
+/**
+ * What CWN recomputes from what.
+ *
+ * Written out rather than inferred so a derived field can name the chrome responsible: a
+ * DEX MOD that moved because of a Coordination Augment should say so, the same as DEX
+ * does. Mirrors the reads in cwnRecompute on the server.
+ */
+const CWN_DERIVED_FROM: Record<string, string[]> = {
+  str_mod: ['str'], dex_mod: ['dex'], con_mod: ['con'],
+  int_mod: ['int'], wis_mod: ['wis'], cha_mod: ['cha'],
+  save_physical: ['str', 'con'],
+  save_evasion: ['dex', 'int'],
+  save_mental: ['wis', 'cha'],
+  system_strain_max: ['con'],
+  mage_effort_max: ['int', 'wis', 'cast_skill'],
+  spells_prepared_max: ['cast_skill'],
+  summoner_effort_max: ['con', 'cha', 'summon_skill'],
+};
+
+/**
+ * CWN's derived fields, computed from a sheet the chrome has already been applied to.
+ *
+ * Mirrors cwnRecompute in backend/sheets/templates.js, and the tests cross-check the two
+ * by running the real server module over the same data. `save_luck` is deliberately absent
+ * from the dependency map above: it comes from level alone, so no implant can move it.
+ */
+function cwnDerive(effective: Record<string, unknown>): Record<string, number> {
+  const level = num(effective.level);
+  const m = {
+    str: cwnMod(effective.str), dex: cwnMod(effective.dex), con: cwnMod(effective.con),
+    int: cwnMod(effective.int), wis: cwnMod(effective.wis), cha: cwnMod(effective.cha),
+  };
+  return {
+    str_mod: m.str, dex_mod: m.dex, con_mod: m.con,
+    int_mod: m.int, wis_mod: m.wis, cha_mod: m.cha,
+    save_physical: 16 - (level + Math.max(m.str, m.con)),
+    save_evasion: 16 - (level + Math.max(m.dex, m.int)),
+    save_mental: 16 - (level + Math.max(m.wis, m.cha)),
+    system_strain_max: num(effective.con),
+    mage_effort_max: Math.max(1, Math.max(m.int, m.wis) + num(effective.cast_skill)),
+    spells_prepared_max: Math.ceil(level / 2) + num(effective.cast_skill),
+    summoner_effort_max: Math.max(1, Math.max(m.con, m.cha) + num(effective.summon_skill)),
+  };
+}
+
+const DERIVERS: Record<string, (d: Record<string, unknown>) => Record<string, number>> = {
+  [CWN_SYSTEM]: cwnDerive,
+};
+
 /** Every name that means a stat or a skill on this sheet, pointing at its field id. */
 function buildIndex(template: SheetTemplate): Map<string, string> {
   const index = new Map<string, string>();
@@ -193,7 +258,55 @@ export function sheetEffects(
     entry.value = from + (adds[entry.id] ?? 0);
     entry.delta = entry.value - entry.base;
   }
+
+  applyDerived(template.id, data, fields);
   return { fields, unmatched };
+}
+
+/**
+ * Add the fields a system recomputes from the ones the chrome just moved.
+ *
+ * Without this the page contradicts itself on CWN: DEX reads 14 with a badge while DEX MOD
+ * still reads the modifier for the DEX that was typed, and every skill roll built on that
+ * modifier looks wrong even though the server rolls it correctly.
+ *
+ * Each derived field is attributed to the chrome behind the attribute it came from, so the
+ * badge on DEX MOD names the same piece the badge on DEX does. Nothing is written to the
+ * sheet: this reads a copy and reports, exactly like the rest of the overlay.
+ */
+function applyDerived(
+  system: string,
+  data: Record<string, unknown>,
+  fields: Record<string, FieldEffect>,
+): void {
+  const derive = DERIVERS[system];
+  if (!derive) return;
+
+  const moved = Object.keys(fields);
+  if (!moved.length) return;
+
+  const effective: Record<string, unknown> = { ...data };
+  for (const id of moved) effective[id] = fields[id].value;
+
+  for (const [id, value] of Object.entries(derive(effective))) {
+    // Only the ones that actually moved, and never one the chrome already names directly.
+    const base = num(data[id]);
+    if (fields[id] || value === base) continue;
+
+    const from = (CWN_DERIVED_FROM[id] ?? []).filter((src) => fields[src]);
+    if (!from.length) continue;
+
+    const seen = new Set<string>();
+    const sources: ModSource[] = [];
+    for (const src of from) {
+      for (const s of fields[src].sources) {
+        if (seen.has(s.name)) continue;
+        seen.add(s.name);
+        sources.push(s);
+      }
+    }
+    fields[id] = { id, base, value, delta: value - base, sources };
+  }
 }
 
 /**
@@ -235,5 +348,13 @@ export const effectiveValue = (effects: SheetEffects, id: string, stored: unknow
 /** `Kerenzikov +2, Sandevistan +1` — what to put in a tooltip. */
 export const describeSources = (effect: FieldEffect): string =>
   effect.sources
-    .map((s) => (isSetKind(s.kind) ? `${s.name} = ${s.value}` : `${s.name} ${s.value >= 0 ? '+' : ''}${s.value}`))
+    .map((s) => {
+      if (isSetKind(s.kind)) return `${s.name} = ${s.value}`;
+      // A floor's number is the floor, not what it contributed: printing "+14" beside a
+      // modifier that moved a stat by two, or a derived box by one, states a total nobody
+      // recognises. The name alone is the honest version, and the arrow already shows the
+      // move.
+      if (s.kind === 'statFloor') return `${s.name} → ${s.value}`;
+      return `${s.name} ${s.value >= 0 ? '+' : ''}${s.value}`;
+    })
     .join(', ');

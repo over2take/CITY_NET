@@ -361,21 +361,107 @@ describe('Cities Without Number', () => {
     const mine = sheetEffects(data, CWN).fields;
     const theirs = backend.default.effects(data, 'cities_without_number').fields;
 
-    expect(Object.keys(mine).sort()).toEqual(Object.keys(theirs).sort());
-    for (const id of Object.keys(mine)) {
-      expect(`${id}=${mine[id].value}`).toBe(`${id}=${theirs[id].value}`);
+    // Every field the server names directly, this side must agree on. It may report more
+    // — the derived fields the server folds into effectiveData rather than into `fields`.
+    for (const id of Object.keys(theirs)) {
+      expect(`${id}=${mine[id]?.value}`).toBe(`${id}=${theirs[id].value}`);
     }
   });
 
-  it('does not move the derived modifier fields, which the server recomputes', () => {
-    // A known and deliberate gap. The server's effectiveData reruns the CWN recompute over
-    // the overlaid copy, so every roll is right; this side has no recompute of its own, so
-    // DEX MOD keeps showing its stored value until the sheet is next saved. Pinned so the
-    // day someone adds a recompute here, they are told this test exists.
+  it('moves the derived modifier with the attribute it comes from', () => {
+    // The page contradicting itself was the bug: DEX reading 14 with a badge beside a DEX
+    // MOD still showing the modifier for the DEX that was typed.
     const data = sheet([cwnPiece('P', [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }], { placed: true })],
       { dex: 9, dex_mod: 0 });
     const out = sheetEffects(data, CWN);
     expect(out.fields.dex.value).toBe(14);
-    expect(out.fields.dex_mod).toBeUndefined();
+    expect(out.fields.dex_mod.value).toBe(1);
+    expect(out.fields.dex_mod.delta).toBe(1);
+  });
+
+  it('names the piece responsible on the derived field too', () => {
+    // A badge that cannot say where it came from is a number nobody can argue with.
+    const data = sheet([cwnPiece('Coordination Augment I',
+      [{ kind: 'stat', target: 'Dexterity', value: 5 }], { placed: true })], { dex: 9, dex_mod: 0 });
+    expect(sheetEffects(data, CWN).fields.dex_mod.sources.map((s) => s.name))
+      .toEqual(['Coordination Augment I']);
+  });
+
+  it('moves the saves that hang off a changed attribute', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Dexterity', value: 9 }], { placed: true })],
+      { dex: 9, int: 8, level: 1, save_evasion: 15 });
+    expect(sheetEffects(data, CWN).fields.save_evasion.value).toBe(16 - (1 + 2));
+  });
+
+  it('leaves the luck save alone, since no implant can reach it', () => {
+    // It comes from level and nothing else.
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Dexterity', value: 9 }], { placed: true })],
+      { dex: 9, level: 1, save_luck: 15 });
+    expect(sheetEffects(data, CWN).fields.save_luck).toBeUndefined();
+  });
+
+  it('moves the strain maximum when CON moves, since it is the CON score', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Constitution', value: 2 }], { placed: true })],
+      { con: 10, system_strain_max: 10 });
+    expect(sheetEffects(data, CWN).fields.system_strain_max.value).toBe(12);
+  });
+
+  it('changes no derived field when the chrome moves nothing', () => {
+    const data = sheet([], { dex: 9, dex_mod: 0 });
+    expect(sheetEffects(data, CWN).fields).toEqual({});
+  });
+
+  it('derives exactly what the server derives', async () => {
+    // The mirror is only worth having if it agrees. Run the real server module over the
+    // same sheet and compare every field it recomputed.
+    const backend = await import('../../../../backend/sheets/cyberwareEffects.js');
+    const rows = [
+      cwnPiece('Coordination Augment I', [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }], { placed: true }),
+      cwnPiece('Muscle Fiber', [{ kind: 'stat', target: 'Strength', value: 6 }], { placed: true }),
+      cwnPiece('Filter', [{ kind: 'stat', target: 'Constitution', value: 3 }], { placed: true }),
+    ];
+    // Every derived field starts at what it should be for these attributes, so the only
+    // differences the server produces are the ones the chrome caused. Left blank, it would
+    // also be filling in empty boxes and the comparison would be about that instead.
+    const data = sheet(rows, {
+      dex: 9, str: 12, con: 10, int: 8, wis: 11, cha: 13, level: 2,
+      dex_mod: 0, str_mod: 0, con_mod: 0, int_mod: 0, wis_mod: 0, cha_mod: 0,
+      cast_skill: 1, summon_skill: 0,
+      save_physical: 14, save_evasion: 14, save_mental: 14, save_luck: 14,
+      system_strain_max: 10, mage_effort_max: 1, spells_prepared_max: 2, summoner_effort_max: 1,
+    });
+
+    const mine = sheetEffects(data, CWN).fields;
+    const theirs = backend.default.effectiveData(data, 'cities_without_number');
+
+    for (const id of Object.keys(mine)) {
+      expect(`${id}=${mine[id].value}`).toBe(`${id}=${Number(theirs[id])}`);
+    }
+    // And every field the server moved is one this side reports, or the page still lags.
+    for (const id of Object.keys(theirs)) {
+      if (id === 'cyberware' || Number(theirs[id]) === Number((data as Record<string, unknown>)[id])) continue;
+      expect(mine[id]).toBeDefined();
+    }
+  });
+});
+
+describe('what a badge says about a floor', () => {
+  const CWN = getTemplate('cities_without_number');
+  const cwnPiece = (name: string, mods: unknown[]) =>
+    ({ name, equipped: true, type: 'nerve', side: null, placed: true, mods });
+
+  it('reads a floor as a target rather than a contribution', () => {
+    // "+14" would be the floor printed as though the piece added fourteen. It moved a DEX
+    // of 9 by five, and the derived modifier by one - neither of them fourteen.
+    const data = sheet([cwnPiece('Coordination Augment I',
+      [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }])], { dex: 9, dex_mod: 0 });
+    const out = sheetEffects(data, CWN);
+    expect(describeSources(out.fields.dex)).toBe('Coordination Augment I → 14');
+    expect(describeSources(out.fields.dex_mod)).toBe('Coordination Augment I → 14');
+  });
+
+  it('still prints a plain adjustment with its sign', () => {
+    const data = sheet([cwnPiece('Booster', [{ kind: 'stat', target: 'Dexterity', value: 2 }])], { dex: 10 });
+    expect(describeSources(sheetEffects(data, CWN).fields.dex)).toBe('Booster +2');
   });
 });
