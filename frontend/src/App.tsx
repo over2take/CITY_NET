@@ -24,6 +24,8 @@ import type { ThemeName } from './theme/themes';
 import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
+import { ShopWindow } from './components/ShopWindow';
+import { BUILDING_TYPES, buildingTypeById, isShop, shopsAvailable } from './data/buildingTypes';
 import { HitPointsMenu, HealthReviewWindow } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
@@ -102,6 +104,9 @@ function App() {
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+  /** The building whose shop is open, or null. Its own state so closing the info panel
+      does not take the shop with it. */
+  const [shopLocation, setShopLocation] = useState<Location | null>(null);
   const [showBattleMapManager, setShowBattleMapManager] = useState(false);
   const [tempBattleMapScale, setTempBattleMapScale] = useState<number | string | null>(null);
   const [tempCityMapScale, setTempCityMapScale] = useState<number | string | null>(null);
@@ -2064,6 +2069,15 @@ function App() {
               />
             )}
 
+            {/* ── Shop — a building that trades ─────────────────────────────────── */}
+            {shopLocation && shopsAvailable(gameSystem) && isShop(shopLocation.building_type) && (
+              <ShopWindow
+                name={shopLocation.name}
+                buildingType={shopLocation.building_type || ''}
+                onClose={() => setShopLocation(null)}
+              />
+            )}
+
             {/* ── Initiative Tracker — player floating window ────────────────────── */}
             {!token && isInitiativeOpen && initiative.state && (
               <InitiativeWindow
@@ -2321,6 +2335,59 @@ function App() {
                           {selectedLocation.district_name && <p><strong>DISTRICT:</strong> {selectedLocation.district_name}</p>}
                           <p><strong>DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
                           <p><strong>RESIDENTS:</strong> {selectedLocation.npcs || 'UNKNOWN'}</p>
+
+                          {/* Shops are Cities Without Number only for now. The gate is on
+                              the server too - this just keeps a control off screens where
+                              pressing it would only ever return a refusal. */}
+                          {shopsAvailable(gameSystem) && (
+                            <div style={{ borderTop: '1px solid var(--dark-green)', marginTop: 8, paddingTop: 8 }}>
+                              {isAdmin ? (
+                                <label style={{ display: 'block', marginBottom: 6 }}>
+                                  <span style={{ fontFamily: 'monospace', fontSize: 9, letterSpacing: 1, color: 'var(--grid-section)', display: 'block', marginBottom: 2 }}>
+                                    BUILDING TYPE
+                                  </span>
+                                  <select
+                                    aria-label="Building type"
+                                    value={selectedLocation.building_type || ''}
+                                    onChange={async (e) => {
+                                      const building_type = e.target.value;
+                                      const res = await fetch(`/api/locations/${selectedLocation.id}/building-type`, {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                        body: JSON.stringify({ building_type }),
+                                      });
+                                      if (!res.ok) return;
+                                      // Keep the open panel honest: it is a snapshot taken
+                                      // when the building was clicked, so without this the
+                                      // SHOP button would not appear until it was reopened.
+                                      setSelectedLocation({ ...selectedLocation, building_type: building_type || null });
+                                      fetchLocations();
+                                    }}
+                                    style={{ background: 'var(--black)', border: '1px solid var(--dark-green)', color: 'var(--green)', fontFamily: 'monospace', fontSize: 11, padding: '3px 5px', width: '100%' }}
+                                  >
+                                    <option value="">— none —</option>
+                                    {BUILDING_TYPES.map((t) => (
+                                      <option key={t.id} value={t.id}>{t.label}{t.shop ? ' (shop)' : ''}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              ) : (
+                                buildingTypeById(selectedLocation.building_type) && (
+                                  <p><strong>TYPE:</strong> {buildingTypeById(selectedLocation.building_type)!.label}</p>
+                                )
+                              )}
+
+                              {isShop(selectedLocation.building_type) && (
+                                <button
+                                  className="upload-btn"
+                                  style={{ width: '100%' }}
+                                  onClick={() => setShopLocation(selectedLocation)}
+                                >
+                                  SHOP
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </>
                       )}
                     </div>

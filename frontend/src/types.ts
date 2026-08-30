@@ -25,6 +25,11 @@ export interface Location {
   rotation_x: number;
   rotation_z: number;
   classification: string | null;
+  /**
+   * What the building is for - a shop type, or null. Distinct from `classification`,
+   * which is the mesh a custom structure is drawn from. See data/buildingTypes.
+   */
+  building_type?: string | null;
   polyCount: number;
   battle_map_id: number | null;
   floor_index: number | null;

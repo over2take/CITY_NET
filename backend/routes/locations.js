@@ -5,6 +5,7 @@ const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 const identity = require('../sheets/identity');
 const { mutateSheet, patchSheet } = require('../sheets/mutate');
 const { DEFAULT_SYSTEM } = require('../sheets/templates');
+const { BUILDING_TYPES, isValidType } = require('../buildingTypes');
 
 const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY', 'LANDMARK', 'MARKETS', 'CUSTOM']);
 const isUserDefinedName = (name) => !!name && name.trim() !== '' && !ZONE_TYPE_NAMES.has(name.trim());
@@ -114,6 +115,55 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       });
     });
   });
+
+  /**
+   * Shops are Cities Without Number only, for now.
+   *
+   * Gated on the server rather than only hidden in the client: a button nobody can see is
+   * not a rule, and the point of starting with one system is that the others genuinely do
+   * not have this yet. Widening it later means adding to this set.
+   */
+  const SHOP_SYSTEMS = new Set(['cities_without_number']);
+
+  const withShopSystem = (res, next) => {
+    db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const system = (row && row.value) || DEFAULT_SYSTEM;
+      if (!SHOP_SYSTEMS.has(system)) {
+        return res.status(409).json({ error: 'Building types are only available under Cities Without Number' });
+      }
+      next();
+    });
+  };
+
+  /** The list the admin picker is built from, so the vocabulary has one owner. */
+  router.get('/building-types', (req, res) =>
+    withShopSystem(res, () => res.json(BUILDING_TYPES)));
+
+  /**
+   * What a building is for.
+   *
+   * Its own route rather than a field on the big PUT: that one demands name, x, y and z
+   * and rewrites the whole row, which is a lot of blast radius for setting one label. It
+   * also leaves building_type alone, so the two do not fight.
+   */
+  router.patch('/:id/building-type', authenticate, (req, res) => withShopSystem(res, () => {
+    const { building_type } = req.body;
+    // A value nobody recognises would put a SHOP button on a building that cannot sell
+    // anything, so it is refused rather than stored and puzzled over later.
+    if (!isValidType(building_type)) return res.status(400).json({ error: 'Unknown building type' });
+
+    const next = building_type === '' || building_type === undefined ? null : building_type;
+    db.get('SELECT id FROM locations WHERE id = ?', [req.params.id], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      db.run('UPDATE locations SET building_type = ? WHERE id = ?', [next, req.params.id], (err2) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        emitUpdate();
+        res.json({ id: Number(req.params.id), building_type: next });
+      });
+    });
+  }));
 
   // Custom structure library — structures saved via JOIN → CUSTOM classification
   router.get('/custom-library', authenticate, (req, res) => {

@@ -189,6 +189,14 @@ db.serialize(() => {
   // cover they are shooting at without the sheet itself being exposed. NULL = on foot.
   db.run(`ALTER TABLE locations ADD COLUMN vehicle_state TEXT`, (err) => {});
 
+  // What a building is *for*, as opposed to what it looks like. `classification` is
+  // already taken and means the mesh a custom structure is drawn from, which is a
+  // different question - a ripperdoc and a noodle bar can share a shape.
+  //
+  // Free text in the column, checked against a known list at the route: a value nobody
+  // recognises would put a SHOP button on a building that cannot sell anything.
+  db.run(`ALTER TABLE locations ADD COLUMN building_type TEXT`, (err) => {});
+
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN melee_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN ranged_ac INTEGER`, (err) => {});
 
