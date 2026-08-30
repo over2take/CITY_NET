@@ -1140,3 +1140,55 @@ describe('AdminPanel water selector', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('the building type control', () => {
+  const editView = (over: any = {}) => {
+    const props = baseProps();
+    return render(
+      <AdminPanel
+        {...props}
+        view="editor"
+        editId={7}
+        targetObject={{ scale: { set: vi.fn() }, rotation: { set: vi.fn() }, position: {}, quaternion: {} }}
+        editData={{ shape: 'box', name: 'Clinic', ...(over.editData || {}) }}
+        globalSettings={over.globalSettings ?? { game_system: 'cities_without_number' }}
+        {...over.props}
+      />,
+    );
+  };
+
+  it('offers the types under Cities Without Number', () => {
+    editView();
+    expect(screen.getByLabelText('Building type')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Ripperdoc \(shop\)/ })).toBeInTheDocument();
+  });
+
+  it('marks which types trade, so the SHOP button is not a surprise', () => {
+    editView();
+    expect(screen.getByRole('option', { name: 'Bar' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Bar (shop)' })).not.toBeInTheDocument();
+  });
+
+  it('is absent under another system', () => {
+    // The server refuses it too; this only keeps the control off screens where using it
+    // would return a refusal.
+    editView({ globalSettings: { game_system: 'cyberpunk_red' } });
+    expect(screen.queryByLabelText('Building type')).not.toBeInTheDocument();
+  });
+
+  it('is absent on a token rather than a building', () => {
+    // A rhombus is a person on the map, not somewhere you can walk into and buy something.
+    editView({ editData: { shape: 'enemy_rhombus' } });
+    expect(screen.queryByLabelText('Building type')).not.toBeInTheDocument();
+  });
+
+  it('shows what the building is already set to', () => {
+    editView({ editData: { building_type: 'ripperdoc' } });
+    expect((screen.getByLabelText('Building type') as HTMLSelectElement).value).toBe('ripperdoc');
+  });
+
+  it('can be cleared back to none', () => {
+    editView({ editData: { building_type: '' } });
+    expect((screen.getByLabelText('Building type') as HTMLSelectElement).value).toBe('');
+  });
+});

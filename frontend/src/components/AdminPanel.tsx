@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BUILDING_TYPES, shopsAvailable } from '../data/buildingTypes';
 import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
@@ -478,6 +479,17 @@ export function AdminPanel({
     if (res.ok) {
         for (const childUpdate of updates.filter(u => u.id !== editId)) {
             await fetch(`/api/locations/${childUpdate.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(childUpdate) });
+        }
+        // Its own route: the PUT above neither accepts nor clears building_type, and the
+        // shop gate lives on this one. Sent unconditionally rather than diffed - it is a
+        // single idempotent write, and working out whether it changed costs more than
+        // doing it.
+        if (shopsAvailable(globalSettings['game_system'])) {
+          await fetch(`/api/locations/${editId}/building-type`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ building_type: editData.building_type || '' }),
+          });
         }
         setAdminAlert("CHANGES_SAVED"); targetObject.scale.set(1, 1, 1); refreshLocations(); setView('list');
     }
@@ -1710,6 +1722,27 @@ export function AdminPanel({
                           <input type="checkbox" checked={editData.has_signage ?? true} onChange={e => setEditData({...editData, has_signage: e.target.checked})} />
                           SIGNAGE
                         </label>
+                      </div>
+                    )}
+
+                    {/* What the building is for, which is what puts a SHOP button in the
+                        info window. Cities Without Number only for now, and the server
+                        refuses it under anything else — this just keeps a control off
+                        screens where using it would only ever return a refusal. */}
+                    {editData.shape !== 'enemy_rhombus' && editData.shape !== 'friendly_rhombus' && editData.shape !== 'rhombus' && editData.shape !== 'none' && shopsAvailable(globalSettings['game_system']) && (
+                      <div style={{marginTop: '8px', marginBottom: '10px'}}>
+                        <label>BUILDING TYPE</label>
+                        <select
+                          aria-label="Building type"
+                          value={editData.building_type || ''}
+                          onChange={e => setEditData({...editData, building_type: e.target.value})}
+                          style={{width: '100%'}}
+                        >
+                          <option value="">— NONE —</option>
+                          {BUILDING_TYPES.map((t) => (
+                            <option key={t.id} value={t.id}>{t.label}{t.shop ? ' (shop)' : ''}</option>
+                          ))}
+                        </select>
                       </div>
                     )}
                 </>
