@@ -22,9 +22,14 @@
 //
 // A modifier is attached only where the book states it outright. Where the effect is
 // conditional - "hearing-related Notice checks", "Heal checks on you" - or names something
-// the sheet has no field for, like a base AC or a Trauma Target, it is a `note` instead: a
-// chip everyone can see, which nothing tries to apply. A flat +2 Notice where the book
-// says hearing-related would be a wrong number quietly beating no number at all.
+// the sheet has no field for, like a base AC, it is a `note` instead: a chip everyone can
+// see, which nothing tries to apply. A flat +2 Notice where the book says hearing-related
+// would be a wrong number quietly beating no number at all.
+//
+// Trauma Target *is* applied. It is a real field the recompute owns - 6 plus the armour's
+// mod - and dermal armour adds on top of that, which is what the book describes. Base AC
+// stays a note because AC is computed from the armour block and mirrored to the token, so
+// a modifier aimed at it would fight two systems at once.
 //
 // Still left bare: "extreme feats", "for cyber purposes" and the other phrases that would
 // need inventing a rule to express.
@@ -56,7 +61,7 @@ export const CWN_CYBERWARE: CwnCyberPreset[] = [
   { id: 'banshee-module', name: "Banshee Module", type: 'body', conc: 'medical', strain: 1, price: 30000, effect: "Mimic voices and stun enemies" },
   { id: 'cybernetic-infrastructure-baseline', name: "Cybernetic Infrastructure Baseline", type: 'body', conc: 'medical', strain: 0, price: 20000, effect: "Gain Con 12 for cyber purposes" },
   { id: 'deadman-circuit', name: "Deadman Circuit", type: 'body', conc: 'sight', strain: 0.25, price: 10000, effect: "Fry cyber without access codes" },
-  { id: 'dermal-armor-trauma-shielding', name: "Dermal Armor/Trauma Shielding", type: 'body', conc: 'medical', strain: 1, price: 100000, effect: "Add +1 to user's Trauma Target", mods: [{ kind: 'note', target: 'Trauma Target', value: 1 }] },
+  { id: 'dermal-armor-trauma-shielding', name: "Dermal Armor/Trauma Shielding", type: 'body', conc: 'medical', strain: 1, price: 100000, effect: "Add +1 to user's Trauma Target", mods: [{ kind: 'stat', target: 'Trauma Target', value: 1 }] },
   { id: 'emergency-stabilization-factor', name: "Emergency Stabilization Factor", type: 'body', conc: 'medical', strain: 1, price: 30000, effect: "Automatically stabilize" },
   { id: 'fleshmod', name: "Fleshmod", type: 'body', conc: 'medical', strain: 1, price: 20000, effect: "Completely rework your body" },
   { id: 'full-body-conversion', name: "Full Body Conversion", type: 'body', conc: 'sight', strain: 0, price: 6000000, effect: "Become a full body cyborg" },
@@ -103,9 +108,9 @@ export const CWN_CYBERWARE: CwnCyberPreset[] = [
   { id: 'skillplug-wiring', name: "Skillplug Wiring", type: 'nerve', conc: 'medical', strain: 1, price: 50000, effect: "Boost skillplug max to level-3" },
   { id: 'trajectory-optimization-node', name: "Trajectory Optimization Node", type: 'nerve', conc: 'medical', strain: 1, price: 50000, effect: "1/scene turn a miss into a hit" },
   { id: 'zombie-wires', name: "Zombie Wires", type: 'nerve', conc: 'medical', strain: 2, price: 60000, effect: "Keep acting at zero HP" },
-  { id: 'dermal-armor-i', name: "Dermal Armor I", type: 'skin', conc: 'medical', strain: 1, price: 40000, effect: "AC 16, +1 to Trauma Target", mods: [{ kind: 'note', target: 'Base AC', value: 16 }, { kind: 'note', target: 'Trauma Target', value: 1 }] },
-  { id: 'dermal-armor-ii', name: "Dermal Armor II", type: 'skin', conc: 'touch', strain: 2, price: 80000, effect: "As I, but AC 18 and Shock resist", mods: [{ kind: 'note', target: 'Base AC', value: 18 }, { kind: 'note', target: 'Trauma Target', value: 1 }] },
-  { id: 'dermal-armor-iii', name: "Dermal Armor III", type: 'skin', conc: 'sight', strain: 3, price: 200000, effect: "As II, but AC 20 and +2 TT", mods: [{ kind: 'note', target: 'Base AC', value: 20 }, { kind: 'note', target: 'Trauma Target', value: 2 }] },
+  { id: 'dermal-armor-i', name: "Dermal Armor I", type: 'skin', conc: 'medical', strain: 1, price: 40000, effect: "AC 16, +1 to Trauma Target", mods: [{ kind: 'note', target: 'Base AC', value: 16 }, { kind: 'stat', target: 'Trauma Target', value: 1 }] },
+  { id: 'dermal-armor-ii', name: "Dermal Armor II", type: 'skin', conc: 'touch', strain: 2, price: 80000, effect: "As I, but AC 18 and Shock resist", mods: [{ kind: 'note', target: 'Base AC', value: 18 }, { kind: 'stat', target: 'Trauma Target', value: 1 }] },
+  { id: 'dermal-armor-iii', name: "Dermal Armor III", type: 'skin', conc: 'sight', strain: 3, price: 200000, effect: "As II, but AC 20 and +2 TT", mods: [{ kind: 'note', target: 'Base AC', value: 20 }, { kind: 'stat', target: 'Trauma Target', value: 2 }] },
   { id: 'poseidon-implants', name: "Poseidon Implants", type: 'skin', conc: 'touch', strain: 1, price: 30000, effect: "Aquatic adaptation mods" },
   { id: 'sealed-systems-implant', name: "Sealed Systems Implant", type: 'skin', conc: 'medical', strain: 1, price: 15000, effect: "Trigger a temp space suit" },
   { id: 'sharkskin-electrodes', name: "Sharkskin Electrodes", type: 'skin', conc: 'touch', strain: 1, price: 20000, effect: "Shock grapplers" },

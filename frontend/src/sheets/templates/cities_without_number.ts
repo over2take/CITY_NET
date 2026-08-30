@@ -243,7 +243,7 @@ export const citiesWithoutNumber: SheetTemplate = {
         { id: 'base_hit_bonus', label: 'BHB', type: 'number', hint: 'Base hit bonus from class and level; added to every attack roll.' },
         { id: 'system_strain', label: 'STRAIN', type: 'number', maxField: 'system_strain_max', hint: 'System Strain from cyberware, drugs and rapid healing. Max equals your CON score; recovers 1 per full rest.' },
         { id: 'system_strain_max', label: 'STRAIN MAX', type: 'number', derived: true, hint: 'Derived: equals CON score, recomputed on every save.' },
-        { id: 'trauma_target', label: 'TRAUMA TGT', type: 'number', placeholder: '6', hint: 'Trauma Target: enemy trauma dice at or above this multiply their damage. Default 6; certain cyberware and armor raise it. Only used when the GRITTY COMBAT house rule is on.' },
+        { id: 'trauma_target', label: 'TRAUMA TGT', type: 'number', derived: true, hint: "Derived: 6 plus the armor's Trauma Target Mod. Enemy trauma dice at or above this multiply their damage. Cyberware raises it further. Only used when the GRITTY COMBAT house rule is on." },
       ],
     },
     {
@@ -296,6 +296,7 @@ export const citiesWithoutNumber: SheetTemplate = {
         { id: 'armor_name', label: 'ARMOR', type: 'text', placeholder: 'Armored Vest', hint: 'What you are wearing. Cosmetic - the numbers below do the work.' },
         { id: 'armor_ac', label: 'BASE AC', type: 'number', placeholder: '14', hint: 'The armor\'s base AC. When set, your token AC is computed automatically: base + DEX mod (capped) + shield. Leave blank to manage AC by hand on the STATS tab or token.' },
         { id: 'armor_dex_cap', label: 'MAX DEX', type: 'number', hint: 'Heavy armor caps the DEX bonus. Blank = uncapped, 0 = no DEX bonus.' },
+        { id: 'armor_trauma_mod', label: 'TT MOD', type: 'number', placeholder: '0', hint: "The armor's Trauma Target Mod, as the book prints it: 0 for ordinary clothing, +1 for a Reinforced Longcoat, +3 for a Heavy Armored Suit. Added to the base 6." },
         { id: 'shield_bonus', label: 'SHIELD', type: 'number', placeholder: '0', hint: 'Flat AC bonus from a carried shield.' },
       ],
     },

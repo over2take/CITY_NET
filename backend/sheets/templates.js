@@ -54,6 +54,11 @@ const cwnRecompute = (data) => {
     save_mental: 16 - (level + Math.max(mods.wis, mods.cha)),
     save_luck: 16 - level,
     system_strain_max: num(data.con),
+    // Base 6 for any normal creature, plus the armour's Trauma Target Mod as the book
+    // prints it (0 for ordinary clothing, +3 for a heavy suit). Cyberware raises it too,
+    // but that arrives through the effects overlay rather than being written here - the
+    // same split as an attribute and the modifier hanging off it.
+    trauma_target: 6 + num(data.armor_trauma_mod),
     mage_effort_max: Math.max(1, Math.max(mods.int, mods.wis) + num(data.cast_skill)),
     spells_prepared_max: Math.ceil(level / 2) + num(data.cast_skill),
     summoner_effort_max: Math.max(1, Math.max(mods.con, mods.cha) + num(data.summon_skill)),

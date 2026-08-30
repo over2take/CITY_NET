@@ -84,6 +84,21 @@ const LONG_NAMES: Record<string, Record<string, string>> = {
 };
 
 /**
+ * Fields chrome can move that are neither an attribute nor a skill.
+ *
+ * Trauma Target is one: the recompute owns its base - 6 plus the armour's mod - and a
+ * piece of dermal armour adds on top. Mirrors `extraFields` on the server profile.
+ */
+const EXTRA_FIELDS: Record<string, Record<string, string>> = {
+  [CWN_SYSTEM]: { 'Trauma Target': 'trauma_target', 'TRAUMA TGT': 'trauma_target' },
+};
+
+/** Of those, the ones the recompute rewrites, so a modifier lands after it, not before. */
+const DERIVED_TARGETS: Record<string, string[]> = {
+  [CWN_SYSTEM]: ['trauma_target'],
+};
+
+/**
  * CWN's attribute modifier table. 3 -> -2, 4-7 -> -1, 8-13 -> 0, 14-17 -> +1, 18+ -> +2.
  *
  * An unset attribute reads 0 and is neutral rather than "attribute 3", so a half-filled
@@ -113,6 +128,7 @@ const CWN_DERIVED_FROM: Record<string, string[]> = {
   save_evasion: ['dex', 'int'],
   save_mental: ['wis', 'cha'],
   system_strain_max: ['con'],
+  trauma_target: ['armor_trauma_mod'],
   mage_effort_max: ['int', 'wis', 'cast_skill'],
   spells_prepared_max: ['cast_skill'],
   summoner_effort_max: ['con', 'cha', 'summon_skill'],
@@ -134,6 +150,7 @@ function cwnDerive(effective: Record<string, unknown>): Record<string, number> {
   return {
     str_mod: m.str, dex_mod: m.dex, con_mod: m.con,
     int_mod: m.int, wis_mod: m.wis, cha_mod: m.cha,
+    trauma_target: 6 + num(effective.armor_trauma_mod),
     save_physical: 16 - (level + Math.max(m.str, m.con)),
     save_evasion: 16 - (level + Math.max(m.dex, m.int)),
     save_mental: 16 - (level + Math.max(m.wis, m.cha)),
@@ -154,6 +171,7 @@ function buildIndex(template: SheetTemplate): Map<string, string> {
   for (const f of statFields(template)) index.set(norm(f.label), f.id);
   for (const f of skillFields(template)) index.set(norm(f.label), f.id);
   for (const [name, id] of Object.entries(LONG_NAMES[template.id] ?? {})) index.set(norm(name), id);
+  for (const [name, id] of Object.entries(EXTRA_FIELDS[template.id] ?? {})) index.set(norm(name), id);
   return index;
 }
 
@@ -288,7 +306,18 @@ function applyDerived(
   const effective: Record<string, unknown> = { ...data };
   for (const id of moved) effective[id] = fields[id].value;
 
+  const derivedTargets = DERIVED_TARGETS[system] ?? [];
+
   for (const [id, value] of Object.entries(derive(effective))) {
+    // A field the chrome names directly *and* the recompute owns - Trauma Target - takes
+    // the recomputed base with the modifier on top, rather than the stored value the
+    // recompute just replaced.
+    if (fields[id] && derivedTargets.includes(id)) {
+      const entry = fields[id];
+      entry.value = value + entry.delta;
+      entry.base = value;
+      continue;
+    }
     // Only the ones that actually moved, and never one the chrome already names directly.
     const base = num(data[id]);
     if (fields[id] || value === base) continue;

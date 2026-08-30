@@ -90,6 +90,13 @@ const PROFILES = {
     statAliases: CWN_STAT_ALIASES,
     skills: CWN_SKILLS,
     derive: (data) => { applyDerived(CWN, data); },
+    // Fields that are neither an attribute nor a skill but that chrome can still move.
+    // Trauma Target is one: the recompute owns its base (6 plus the armour's mod) and a
+    // piece of dermal armour adds on top of that.
+    extraFields: { trauma_target: ['Trauma Target', 'TRAUMA TGT'] },
+    // ...and which of those the recompute rewrites, so a modifier aimed at one has to be
+    // applied after it rather than before, or the recompute simply erases it.
+    derivedTargets: ['trauma_target'],
   },
 };
 
@@ -135,6 +142,9 @@ function buildIndex(profile) {
     for (const name of names) index.set(norm(name), id);
   }
   for (const [id, [label]] of Object.entries(profile.skills)) index.set(norm(label), id);
+  for (const [id, names] of Object.entries(profile.extraFields || {})) {
+    for (const name of names) index.set(norm(name), id);
+  }
   return index;
 }
 
@@ -255,7 +265,18 @@ function effectiveData(data, system = SYSTEM) {
   // and the saves and strain maximum follow from the same numbers. On the copy, never the
   // stored sheet — the overlay is still an overlay.
   const profile = profileFor(system);
-  if (profile && profile.derive) profile.derive(out);
+  if (profile && profile.derive) {
+    profile.derive(out);
+    // The recompute owns the base of a derived field - Trauma Target is 6 plus the
+    // armour's mod, whatever the sheet last stored - so a modifier aimed at one is
+    // applied on top of what the recompute just decided, not on top of the stored value
+    // it replaced. Same ordering the attributes already use, one level further down.
+    for (const id of profile.derivedTargets || []) {
+      const entry = fields[id];
+      if (!entry) continue;
+      out[id] = (entry.set === null ? numeric(out[id]) : entry.set) + entry.add;
+    }
+  }
   return out;
 }
 

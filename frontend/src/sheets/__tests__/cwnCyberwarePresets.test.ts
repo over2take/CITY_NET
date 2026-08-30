@@ -125,12 +125,20 @@ describe('modifiers taken from the descriptions, not just the effect column', ()
       .toEqual([{ kind: 'statFloor', target: 'Charisma', value: 14, bonus: 2 }]);
   });
 
-  it('notes what the sheet has no field for rather than aiming a stat modifier at it', () => {
-    // Base AC and Trauma Target are not stats or skills, so a stat modifier naming one
-    // would sit in the unmatched list doing nothing at all.
+  it('applies Trauma Target and only notes Base AC', () => {
+    // Trauma Target is a real field the recompute owns, so chrome adds to it. AC is
+    // computed from the armour block and mirrored to the token, so a modifier aimed at it
+    // would fight two systems at once and stays a chip.
     const mods = cyberById('dermal-armor-i')!.mods!;
-    expect(mods.every((m) => m.kind === 'note')).toBe(true);
-    expect(mods.map((m) => m.target)).toEqual(['Base AC', 'Trauma Target']);
+    expect(mods).toEqual([
+      { kind: 'note', target: 'Base AC', value: 16 },
+      { kind: 'stat', target: 'Trauma Target', value: 1 },
+    ]);
+  });
+
+  it('scales the Trauma Target bonus with the armour tier', () => {
+    expect(cyberById('dermal-armor-iii')!.mods!.find((m) => m.target === 'Trauma Target'))
+      .toEqual({ kind: 'stat', target: 'Trauma Target', value: 2 });
   });
 
   it('notes a conditional bonus rather than applying it flat', () => {

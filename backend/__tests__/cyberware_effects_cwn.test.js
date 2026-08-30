@@ -276,3 +276,63 @@ describe('modifiers stacking, as several pieces of chrome do', () => {
     expect(fx.effectiveData(data, CWN).dex_mod).toBe(2);
   });
 });
+
+describe('Trauma Target', () => {
+  // 6 for any normal creature, raised by the armour's mod and by chrome. The interesting
+  // part is the ordering: the recompute owns the base, so a modifier has to land after it.
+  const armour = (mods) => ({ name: 'Dermal Armor I', type: 'skin', placed: true, equipped: true, hl: 1, mods });
+  const TT = [{ kind: 'stat', target: 'Trauma Target', value: 1 }];
+
+  it('is 6 on a character with no armour and no chrome', () => {
+    const data = sheet([], { con: 10 });
+    const out = fx.effectiveData(data, CWN);
+    // Nothing to overlay, so the sheet's own stored value stands - which the recompute
+    // sets on save. Checked directly against the recompute here.
+    const templates = createRequire(import.meta.url)('../sheets/templates');
+    const copy = { con: 10, level: 1 };
+    templates.applyDerived(CWN, copy);
+    expect(copy.trauma_target).toBe(6);
+    expect(out).toBe(data);
+  });
+
+  it('adds the armour mod to the base', () => {
+    const templates = createRequire(import.meta.url)('../sheets/templates');
+    const copy = { con: 10, level: 1, armor_trauma_mod: 3 };
+    templates.applyDerived(CWN, copy);
+    expect(copy.trauma_target).toBe(9);
+  });
+
+  it('adds chrome on top of the base', () => {
+    const data = sheet([armour(TT)], { con: 10 });
+    expect(fx.effectiveData(data, CWN).trauma_target).toBe(7);
+  });
+
+  it('adds chrome on top of the armour, not instead of it', () => {
+    // The ordering that matters: the recompute rewrites the field, so a modifier applied
+    // before it would simply be erased.
+    const data = sheet([armour(TT)], { con: 10, armor_trauma_mod: 1 });
+    expect(fx.effectiveData(data, CWN).trauma_target).toBe(8);
+  });
+
+  it('stacks two pieces of chrome', () => {
+    const data = sheet([armour(TT), armour([{ kind: 'stat', target: 'Trauma Target', value: 2 }])], { con: 10 });
+    expect(fx.effectiveData(data, CWN).trauma_target).toBe(9);
+  });
+
+  it('answers to the sheet spelling as well as the book one', () => {
+    const data = sheet([armour([{ kind: 'stat', target: 'TRAUMA TGT', value: 1 }])], { con: 10 });
+    expect(fx.effects(data, CWN).unmatched).toEqual([]);
+    expect(fx.effectiveData(data, CWN).trauma_target).toBe(7);
+  });
+
+  it('ignores chrome that is not installed', () => {
+    const data = sheet([{ ...armour(TT), placed: false }], { con: 10, armor_trauma_mod: 1 });
+    expect(fx.effectiveData(data, CWN)).toBe(data);
+  });
+
+  it('never writes any of it to the sheet', () => {
+    const data = sheet([armour(TT)], { con: 10, armor_trauma_mod: 1, trauma_target: 7 });
+    fx.effectiveData(data, CWN);
+    expect(data.trauma_target).toBe(7);
+  });
+});
