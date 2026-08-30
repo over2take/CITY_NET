@@ -116,3 +116,49 @@ describe('lookups', () => {
     }
   });
 });
+
+describe('modifiers taken from the descriptions, not just the effect column', () => {
+  it('gives the Aesthetic Augmentation Suite its Charisma floor', () => {
+    // The column says only "Cha bonus"; the description says a Charisma score of 14, or
+    // +2 if already 14 or greater. Reading only the column left this doing nothing.
+    expect(cyberById('aesthetic-augmentation-suite')?.mods)
+      .toEqual([{ kind: 'statFloor', target: 'Charisma', value: 14, bonus: 2 }]);
+  });
+
+  it('notes what the sheet has no field for rather than aiming a stat modifier at it', () => {
+    // Base AC and Trauma Target are not stats or skills, so a stat modifier naming one
+    // would sit in the unmatched list doing nothing at all.
+    const mods = cyberById('dermal-armor-i')!.mods!;
+    expect(mods.every((m) => m.kind === 'note')).toBe(true);
+    expect(mods.map((m) => m.target)).toEqual(['Base AC', 'Trauma Target']);
+  });
+
+  it('notes a conditional bonus rather than applying it flat', () => {
+    // "+2 to Heal checks made on you" is not "+2 Heal". Applying it would be a wrong
+    // number quietly beating no number.
+    const mods = cyberById('medical-support-readout')!.mods!;
+    expect(mods).toEqual([{ kind: 'note', target: 'Heal checks on you', value: 2 }]);
+  });
+
+  it('carries both halves of an augment that does two things', () => {
+    const mods = cyberById('coordination-augment-ii')!.mods!;
+    expect(mods[0]).toMatchObject({ kind: 'statFloor', target: 'Dexterity', value: 18 });
+    expect(mods[1]).toEqual({ kind: 'note', target: 'Move (metres)', value: 10 });
+  });
+
+  it('only ever names a stat the sheet actually has', async () => {
+    // Every applied modifier has to resolve, or it is a chip that looks mechanical and is
+    // not. Checked against the real server index rather than a list of names.
+    const backend = await import('../../../../backend/sheets/cyberwareEffects.js');
+    for (const item of CWN_CYBERWARE) {
+      for (const m of item.mods ?? []) {
+        if (m.kind === 'note' || m.kind === 'roll') continue;
+        // Named so a failure says which piece, not just "expected null to be truthy".
+        const resolved = backend.default.fieldFor(m.target, 'cities_without_number');
+        expect(`${item.id} → ${m.target} → ${resolved}`)
+          .toBe(`${item.id} → ${m.target} → ${resolved ?? 'UNMATCHED'}`);
+        expect(resolved).toBeTruthy();
+      }
+    }
+  });
+});

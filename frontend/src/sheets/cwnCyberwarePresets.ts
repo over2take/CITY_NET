@@ -15,9 +15,19 @@
 // Medusa Implant prints its strain as `.5` with no leading zero, and Skinmod costs $250
 // flat where every other price is in thousands or millions.
 //
-// `mods` is attached only where the effect line states the mechanic outright and needs no
-// interpreting. Everything else is left for whoever installs the piece, because guessing
-// at "extreme feats" or "for cyber purposes" would put invented rules on a sheet.
+// `mods` come from the effect line *and* the description beside each table, because the
+// column is a summary and the paragraph is where the number lives - the Aesthetic
+// Augmentation Suite's column says only "Cha bonus" while its description says a Charisma
+// score of 14, or +2 if already 14 or greater.
+//
+// A modifier is attached only where the book states it outright. Where the effect is
+// conditional - "hearing-related Notice checks", "Heal checks on you" - or names something
+// the sheet has no field for, like a base AC or a Trauma Target, it is a `note` instead: a
+// chip everyone can see, which nothing tries to apply. A flat +2 Notice where the book
+// says hearing-related would be a wrong number quietly beating no number at all.
+//
+// Still left bare: "extreme feats", "for cyber purposes" and the other phrases that would
+// need inventing a rule to express.
 
 import type { CyberMod, Conc } from './cyberwareRows';
 
@@ -41,18 +51,18 @@ export interface CwnCyberPreset {
 }
 
 export const CWN_CYBERWARE: CwnCyberPreset[] = [
-  { id: 'aesthetic-augmentation-suite', name: "Aesthetic Augmentation Suite", type: 'body', conc: 'sight', strain: 2, price: 50000, effect: "Body sculpt and Cha bonus" },
+  { id: 'aesthetic-augmentation-suite', name: "Aesthetic Augmentation Suite", type: 'body', conc: 'sight', strain: 2, price: 50000, effect: "Body sculpt and Cha bonus", mods: [{ kind: 'statFloor', target: 'Charisma', value: 14, bonus: 2 }] },
   { id: 'assisted-glide-system', name: "Assisted Glide System", type: 'body', conc: 'touch', strain: 2, price: 50000, effect: "Glide from high launch points" },
   { id: 'banshee-module', name: "Banshee Module", type: 'body', conc: 'medical', strain: 1, price: 30000, effect: "Mimic voices and stun enemies" },
   { id: 'cybernetic-infrastructure-baseline', name: "Cybernetic Infrastructure Baseline", type: 'body', conc: 'medical', strain: 0, price: 20000, effect: "Gain Con 12 for cyber purposes" },
   { id: 'deadman-circuit', name: "Deadman Circuit", type: 'body', conc: 'sight', strain: 0.25, price: 10000, effect: "Fry cyber without access codes" },
-  { id: 'dermal-armor-trauma-shielding', name: "Dermal Armor/Trauma Shielding", type: 'body', conc: 'medical', strain: 1, price: 100000, effect: "Add +1 to user's Trauma Target" },
+  { id: 'dermal-armor-trauma-shielding', name: "Dermal Armor/Trauma Shielding", type: 'body', conc: 'medical', strain: 1, price: 100000, effect: "Add +1 to user's Trauma Target", mods: [{ kind: 'note', target: 'Trauma Target', value: 1 }] },
   { id: 'emergency-stabilization-factor', name: "Emergency Stabilization Factor", type: 'body', conc: 'medical', strain: 1, price: 30000, effect: "Automatically stabilize" },
   { id: 'fleshmod', name: "Fleshmod", type: 'body', conc: 'medical', strain: 1, price: 20000, effect: "Completely rework your body" },
   { id: 'full-body-conversion', name: "Full Body Conversion", type: 'body', conc: 'sight', strain: 0, price: 6000000, effect: "Become a full body cyborg" },
   { id: 'hemosynthetic-filter-system', name: "Hemosynthetic Filter System", type: 'body', conc: 'medical', strain: 1, price: 25000, effect: "Immune to normal disease/toxin" },
   { id: 'holdout-cavity', name: "Holdout Cavity", type: 'body', conc: 'medical', strain: 1, price: 10000, effect: "2 Enc. of hidden body space" },
-  { id: 'medical-support-readout', name: "Medical Support Readout", type: 'body', conc: 'medical', strain: 0.25, price: 10000, effect: "Gain +2 to Heal checks on you" },
+  { id: 'medical-support-readout', name: "Medical Support Readout", type: 'body', conc: 'medical', strain: 0.25, price: 10000, effect: "Gain +2 to Heal checks on you", mods: [{ kind: 'note', target: 'Heal checks on you', value: 2 }] },
   { id: 'recovery-support-unit', name: "Recovery Support Unit", type: 'body', conc: 'medical', strain: 1, price: 30000, effect: "Gain 4 System Strain for heals" },
   { id: 'redundant-systems', name: "Redundant Systems", type: 'body', conc: 'medical', strain: 1, price: 15000, effect: "Sacrifice to avoid Major Injury" },
   { id: 'retribution-shield', name: "Retribution Shield", type: 'body', conc: 'touch', strain: 1, price: 50000, effect: "Burst to harm melee targets" },
@@ -83,7 +93,7 @@ export const CWN_CYBERWARE: CwnCyberPreset[] = [
   { id: 'stick-pads', name: "Stick Pads", type: 'limb', conc: 'touch', strain: 0.5, price: 15000, effect: "Climb sheer or vertical surfaces" },
   { id: 'synthlimb', name: "Synthlimb", type: 'limb', conc: 'medical', strain: 0.5, price: 25000, effect: "Lifelike artificial limb" },
   { id: 'coordination-augment-i', name: "Coordination Augment I", type: 'nerve', conc: 'medical', strain: 2, price: 50000, effect: "Dex 14, or +2 if higher", mods: [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }] },
-  { id: 'coordination-augment-ii', name: "Coordination Augment II", type: 'nerve', conc: 'touch', strain: 3, price: 200000, effect: "Dex 18 and +10m Move", mods: [{ kind: 'statFloor', target: 'Dexterity', value: 18, bonus: 0 }] },
+  { id: 'coordination-augment-ii', name: "Coordination Augment II", type: 'nerve', conc: 'touch', strain: 3, price: 200000, effect: "Dex 18 and +10m Move", mods: [{ kind: 'statFloor', target: 'Dexterity', value: 18, bonus: 0 }, { kind: 'note', target: 'Move (metres)', value: 10 }] },
   { id: 'enhanced-reflexes-i', name: "Enhanced Reflexes I", type: 'nerve', conc: 'medical', strain: 2, price: 100000, effect: "1/scene, bonus Main Action" },
   { id: 'enhanced-reflexes-ii', name: "Enhanced Reflexes II", type: 'nerve', conc: 'medical', strain: 3, price: 250000, effect: "1/scene, bonus Main and Move" },
   { id: 'enhanced-reflexes-iii', name: "Enhanced Reflexes III", type: 'nerve', conc: 'touch', strain: 4, price: 750000, effect: "2/scene, bonus Main and Move" },
@@ -93,9 +103,9 @@ export const CWN_CYBERWARE: CwnCyberPreset[] = [
   { id: 'skillplug-wiring', name: "Skillplug Wiring", type: 'nerve', conc: 'medical', strain: 1, price: 50000, effect: "Boost skillplug max to level-3" },
   { id: 'trajectory-optimization-node', name: "Trajectory Optimization Node", type: 'nerve', conc: 'medical', strain: 1, price: 50000, effect: "1/scene turn a miss into a hit" },
   { id: 'zombie-wires', name: "Zombie Wires", type: 'nerve', conc: 'medical', strain: 2, price: 60000, effect: "Keep acting at zero HP" },
-  { id: 'dermal-armor-i', name: "Dermal Armor I", type: 'skin', conc: 'medical', strain: 1, price: 40000, effect: "AC 16, +1 to Trauma Target" },
-  { id: 'dermal-armor-ii', name: "Dermal Armor II", type: 'skin', conc: 'touch', strain: 2, price: 80000, effect: "As I, but AC 18 and Shock resist" },
-  { id: 'dermal-armor-iii', name: "Dermal Armor III", type: 'skin', conc: 'sight', strain: 3, price: 200000, effect: "As II, but AC 20 and +2 TT" },
+  { id: 'dermal-armor-i', name: "Dermal Armor I", type: 'skin', conc: 'medical', strain: 1, price: 40000, effect: "AC 16, +1 to Trauma Target", mods: [{ kind: 'note', target: 'Base AC', value: 16 }, { kind: 'note', target: 'Trauma Target', value: 1 }] },
+  { id: 'dermal-armor-ii', name: "Dermal Armor II", type: 'skin', conc: 'touch', strain: 2, price: 80000, effect: "As I, but AC 18 and Shock resist", mods: [{ kind: 'note', target: 'Base AC', value: 18 }, { kind: 'note', target: 'Trauma Target', value: 1 }] },
+  { id: 'dermal-armor-iii', name: "Dermal Armor III", type: 'skin', conc: 'sight', strain: 3, price: 200000, effect: "As II, but AC 20 and +2 TT", mods: [{ kind: 'note', target: 'Base AC', value: 20 }, { kind: 'note', target: 'Trauma Target', value: 2 }] },
   { id: 'poseidon-implants', name: "Poseidon Implants", type: 'skin', conc: 'touch', strain: 1, price: 30000, effect: "Aquatic adaptation mods" },
   { id: 'sealed-systems-implant', name: "Sealed Systems Implant", type: 'skin', conc: 'medical', strain: 1, price: 15000, effect: "Trigger a temp space suit" },
   { id: 'sharkskin-electrodes', name: "Sharkskin Electrodes", type: 'skin', conc: 'touch', strain: 1, price: 20000, effect: "Shock grapplers" },

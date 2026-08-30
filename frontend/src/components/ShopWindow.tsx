@@ -84,6 +84,20 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
     setTaken((t) => ({ ...t, [item.id]: (t[item.id] ?? 0) + 1 }));
   };
 
+  /**
+   * Resizable, following the chat and sheet windows.
+   *
+   * A shop is a long list read down while comparing prices, and a fixed height meant
+   * scrolling sixty lines through a 320px slot on a monitor with room to spare. The flex
+   * column is what makes the table take the height rather than the window growing round a
+   * fixed-height list.
+   */
+  const windowStyle: React.CSSProperties = {
+    width: '780px', height: '520px',
+    minWidth: '420px', maxWidth: '95vw', minHeight: '260px', maxHeight: '92vh',
+    resize: 'both', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+  };
+
   const tabButton = (id: Tab, label: string) => (
     <button
       type="button"
@@ -100,9 +114,10 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
       pos={pos}
       setPos={setPos}
       onClose={onClose}
-      windowStyle={{ width: 780, maxWidth: '95vw' }}
+      windowStyle={windowStyle}
+      contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column' }}
     >
-      <div className="content">
+      <div className="content" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ ...mono(9), color: 'var(--cyan)', marginBottom: 6 }}>
           {type ? type.label.toUpperCase() : 'UNKNOWN'} · {stock.length} LINE{stock.length === 1 ? '' : 'S'}
         </div>
@@ -113,7 +128,7 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
         </div>
 
         {tab === 'buy' ? (
-          <>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             {/* Said plainly rather than left to be discovered by a player whose money does
                 not move. A button that quietly does half of what it says is worse than one
                 that says which half. */}
@@ -141,7 +156,7 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
                     padding: '3px 5px', width: '100%', marginBottom: 6,
                   }}
                 />
-                <div className="cyber-scroll" style={{ maxHeight: 320, overflowY: 'auto' }}>
+                <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                   <table style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
                     <thead>
                       <tr style={{ color: 'var(--grid-section)' }}>
@@ -184,7 +199,7 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
                 )}
               </>
             )}
-          </>
+          </div>
         ) : (
           <div style={{ ...mono(10), color: 'var(--grid-section)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
             SELLING IS NOT WIRED UP YET.
