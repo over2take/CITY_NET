@@ -2074,6 +2074,8 @@ function App() {
               <ShopWindow
                 name={shopLocation.name}
                 buildingType={shopLocation.building_type || ''}
+                socket={socketRef.current}
+                userName={userName}
                 onClose={() => setShopLocation(null)}
               />
             )}
