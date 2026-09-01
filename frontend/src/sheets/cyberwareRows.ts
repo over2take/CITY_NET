@@ -51,6 +51,22 @@ export const TWO_NUMBER_KINDS: ModKind[] = ['statFloor'];
 export const usesBonus = (kind: ModKind): boolean => TWO_NUMBER_KINDS.includes(kind);
 
 /**
+ * Kinds introduced for one system's rules, and who may be offered them.
+ *
+ * `statFloor` exists for "Dex 14, or +2 if higher", which is a Cities Without Number shape.
+ * Every system's engine still *understands* it, so a row that has one never silently stops
+ * working - but a system whose book has no such rule should not be offering it in a picker,
+ * or the vocabulary of one game leaks into another.
+ */
+const KIND_SYSTEMS: Partial<Record<ModKind, string[]>> = {
+  statFloor: ['cities_without_number'],
+};
+
+/** The kinds a system's modifier picker should list. */
+export const kindsFor = (system: string): ModKind[] =>
+  MOD_KINDS.filter((k) => !KIND_SYSTEMS[k] || KIND_SYSTEMS[k]!.includes(system));
+
+/**
  * A note is a labelled number the app never applies — "Quickhack DV 10".
  *
  * Some chrome does something the sheet has no field for and no dice to roll. Buried in the

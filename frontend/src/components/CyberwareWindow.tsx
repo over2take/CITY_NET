@@ -8,7 +8,7 @@ import {
 import {
   CYBERWARE_FIELD, readRows, normaliseRow, totalHumanityLoss, totalCost,
   rowLocation, rowsForPanel, needsPlacing, panelRank, describeMod, isSetKind, isNoteKind,
-  MOD_KINDS, MOD_KIND_LABEL, strainCeiling,
+  MOD_KINDS, MOD_KIND_LABEL, kindsFor, strainCeiling,
   type CyberRow, type CyberMod, type ModKind,
 } from '../sheets/cyberwareRows';
 import type { SheetFieldValue, SheetTemplate } from '../sheets/types';
@@ -210,7 +210,7 @@ function ModEditor({ mods, template, onChange }: {
             style={inputStyle} aria-label={`Modifier ${i + 1} kind`} value={m.kind}
             onChange={(e) => changeKind(i, e.target.value as ModKind)}
           >
-            {MOD_KINDS.map((k) => <option key={k} value={k}>{MOD_KIND_LABEL[k]}</option>)}
+            {kindsFor(template?.id ?? '').map((k) => <option key={k} value={k}>{MOD_KIND_LABEL[k]}</option>)}
           </select>
           {isNoteKind(m.kind) ? (
             // Typed rather than chosen: a note names whatever the table needs to see, and
