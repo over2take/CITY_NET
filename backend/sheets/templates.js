@@ -17,6 +17,8 @@
 //    bank balance). The server overlays them at read time and refuses to
 //    store them in the sheet's JSON - one source of truth, no drift.
 
+const gearMods = require('./cwnGearMods');
+
 const num = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -44,6 +46,7 @@ const cwnMod = (stat) => {
 //   effort maxes (Deluxe) - best relevant mod + skill, minimum 1
 const cwnRecompute = (data) => {
   const level = num(data.level);
+  const armorMods = gearMods.armorModEffects(data.armor_mods);
   const mods = {};
   ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((s) => { mods[s] = cwnMod(data[s]); });
   const out = {
@@ -62,7 +65,11 @@ const cwnRecompute = (data) => {
     // prints it (0 for ordinary clothing, +3 for a heavy suit). Cyberware raises it too,
     // but that arrives through the effects overlay rather than being written here - the
     // same split as an attribute and the modifier hanging off it.
-    trauma_target: 6 + num(data.armor_trauma_mod),
+    trauma_target: 6 + num(data.armor_trauma_mod) + armorMods.traumaTarget,
+    // The armor's printed Damage Soak plus whatever its mods add - Absorption Pads and
+    // Trauma Dampers are +5 each. Derived rather than typed so uninstalling a mod takes
+    // its five points back, and so `armor_soak` stays the number printed in the book.
+    armor_soak_total: Math.max(0, num(data.armor_soak) + armorMods.soak),
     mage_effort_max: Math.max(1, Math.max(mods.int, mods.wis) + num(data.cast_skill)),
     spells_prepared_max: Math.ceil(level / 2) + num(data.cast_skill),
     summoner_effort_max: Math.max(1, Math.max(mods.con, mods.cha) + num(data.summon_skill)),
@@ -106,8 +113,14 @@ const cwnEffectiveAc = (data) => {
   const meleeBase = blank(data.armor_ac_melee) ? base : num(data.armor_ac_melee);
   const shield = num(data.shield_bonus);
   const meleeShield = blank(data.shield_bonus_melee) ? shield : num(data.shield_bonus_melee);
+  // Armor mods (p58): Customized is +1 to both, Discreet Design trades -2 off both for
+  // being able to wear it somewhere that would not tolerate obvious armor.
+  const mods = gearMods.armorModEffects(data.armor_mods);
   const clamp = (n) => Math.max(1, Math.min(99, n));
-  return { ranged: clamp(base + dex + shield), melee: clamp(meleeBase + dex + meleeShield) };
+  return {
+    ranged: clamp(base + dex + shield + mods.rangedAc),
+    melee: clamp(meleeBase + dex + meleeShield + mods.meleeAc),
+  };
 };
 
 // Recompute SR6 derived fields (monitors, initiative, composure). Mutates

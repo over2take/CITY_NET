@@ -430,6 +430,7 @@ describe('Cities Without Number', () => {
       save_physical: 14, save_evasion: 14, save_mental: 14, save_luck: 14,
       system_strain_max: 10, mage_effort_max: 1, spells_prepared_max: 2, summoner_effort_max: 1,
       trauma_target: 6, armor_trauma_mod: 0,
+      armor_soak: 0, armor_soak_total: 0,
     });
 
     const mine = sheetEffects(data, CWN).fields;

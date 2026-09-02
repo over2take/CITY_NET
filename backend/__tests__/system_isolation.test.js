@@ -100,3 +100,59 @@ describe('Cyberpunk RED still behaves as it did', () => {
     expect(eff.cool).toBe(8);
   });
 });
+
+describe('gear mods reach Cities Without Number alone', () => {
+  const { applyDerived, cwnEffectiveAc } = require('../sheets/templates');
+  const FITTED = JSON.stringify(['absorption_pads', 'active_response', 'customized_armor']);
+
+  it('changes nothing on a sheet of another system', () => {
+    // A sheet carrying an armor_mods value on any other system - pasted in, imported,
+    // switched over - must come back untouched. Only the CWN recompute reads the field,
+    // and only CWN has a recompute that could.
+    for (const system of ['cyberpunk_red', 'shadowrun_6e', 'generic']) {
+      const data = { armor_mods: FITTED, armor_soak: 8, armor_ac: 13 };
+      const before = JSON.stringify(data);
+      applyDerived(system, data);
+      expect(data.armor_soak_total, system).toBeUndefined();
+      expect(data.trauma_target, system).toBeUndefined();
+      // Nothing else moved either, beyond that system's own derived fields.
+      expect(JSON.parse(before).armor_mods).toBe(data.armor_mods);
+    }
+  });
+
+  it('changes the numbers on a CWN sheet', () => {
+    // Guards the guard: if the ids above were wrong, the test would pass for free.
+    const data = { armor_mods: FITTED, armor_soak: 8, armor_trauma_mod: 0, con: 10, level: 1 };
+    applyDerived('cities_without_number', data);
+    expect(data.armor_soak_total).toBe(13);
+    expect(data.trauma_target).toBe(7);
+  });
+
+  it('leaves the AC of a system that has no armor mods alone', () => {
+    // cwnEffectiveAc is only ever called under a CWN guard, but the mods it now reads are
+    // CWN's vocabulary and must not be reachable through any other path.
+    expect(cwnEffectiveAc({ armor_ac: 13, armor_mods: FITTED }).ranged).toBe(14);
+    expect(cwnEffectiveAc({ armor_ac: 13 }).ranged).toBe(13);
+  });
+
+  it('leaves the weapons of another system unchanged', () => {
+    // Weapon mods are read inside attackCwn. Shadowrun has its own resolver with its own
+    // weapon shape, and a mods field on one of its rows has to be inert rather than
+    // quietly handing a Predator a +1 it never bought.
+    const sr6 = require('../sheets/attackSr6');
+    const base = {
+      weapon1_name: 'Predator', weapon1_dv: '3P', weapon1_ar: 10,
+      weapon1_skill: 'firearms', weapon1_atk: 0,
+    };
+    const fitted = { ...base, weapon1_mods: JSON.stringify(['autotargeting', 'predictive_guidance']) };
+    expect(sr6.getWeapon(fitted, 1)).toEqual(sr6.getWeapon(base, 1));
+  });
+
+  it('reads them on a CWN weapon, which is the same guard the other way up', () => {
+    const attackCwn = require('../sheets/attackCwn');
+    const base = { weapon1_dmg: '1d6', weapon1_skill: 'shoot', weapon1_atk: 0, dex_mod: 0 };
+    const fitted = { ...base, weapon1_mods: JSON.stringify(['autotargeting']) };
+    expect(attackCwn.getWeapon(base, 1).atk).toBe(0);
+    expect(attackCwn.getWeapon(fitted, 1).atk).toBe(1);
+  });
+});

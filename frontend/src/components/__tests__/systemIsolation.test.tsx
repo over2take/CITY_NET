@@ -148,13 +148,68 @@ describe('the ranged AC link is CWN alone', () => {
   });
 });
 
+describe('gear mods are Cities Without Number only', () => {
+  const fieldsOf = (t: typeof CPR) => t.sections.flatMap((s) => s.fields ?? []);
+
+  it('puts a mod list on no other system, on armor or on a weapon', () => {
+    for (const t of [CPR, SR6, GENERIC]) {
+      const ids = fieldsOf(t).map((f) => f.id);
+      expect(ids.filter((id) => /_mods$/.test(id) || id === 'armor_mods')).toEqual([]);
+    }
+  });
+
+  it('puts one on every CWN weapon row, and on the armor', () => {
+    // Guards the guard: a renamed field would make the test above pass for free.
+    const ids = fieldsOf(CWN).map((f) => f.id);
+    expect(ids).toContain('armor_mods');
+    for (let i = 1; i <= 4; i += 1) expect(ids).toContain(`weapon${i}_mods`);
+  });
+
+  const FITTED = {
+    armor_soak: 8, armor_soak_total: 8, trauma_target: 6, armor_trauma_mod: 0,
+    armor_mods: JSON.stringify(['absorption_pads', 'active_response']),
+  };
+
+  it('leaves the other systems no deriver to run mods through', () => {
+    // Armor mods reach soak and Trauma Target through the CWN recompute, which is the only
+    // recompute the effects engine has. A system with none cannot be touched by them even
+    // if a sheet somehow carried an armor_mods value, and none of them gains a soak field
+    // it does not have.
+    const data = { ...sheet([piece([{ kind: 'stat', target: 'Cool', value: 3 }])], { cool: 5 }), ...FITTED };
+    for (const t of [CPR, SR6, GENERIC]) {
+      const ids = Object.keys(sheetEffects(data as never, t).fields);
+      expect(ids).not.toContain('armor_soak_total');
+      expect(ids).not.toContain('trauma_target');
+    }
+  });
+
+  it('keeps the mods through the chrome overlay, on CWN', async () => {
+    // The other half of the same guard, and the reason the recompute has to know about
+    // armor mods: the overlay rebuilds the derived layer from an augmented copy of the
+    // sheet, so a recompute blind to the mods would quietly drop the five points the pads
+    // add the moment a character installed any chrome at all.
+    //
+    // Read off the server, which is what the sheet displays and what resolves an attack.
+    const backend = await import('../../../../backend/sheets/cyberwareEffects.js');
+    const data = {
+      ...sheet([piece([{ kind: 'stat', target: 'Constitution', value: 2 }], 'nerve')], { con: 10, con_mod: 0 }),
+      ...FITTED,
+    };
+    const eff = backend.default.effectiveData(data, 'cities_without_number');
+    expect(eff.con).toBe(12);              // the chrome landed
+    expect(eff.armor_soak_total).toBe(13); // and the mods survived it
+    expect(eff.trauma_target).toBe(7);
+  });
+});
+
 describe('CWN fields exist on no other sheet', () => {
   const idsOf = (t: typeof CPR) =>
     t.sections.flatMap((s) => (s.fields ?? []).map((f) => f.id));
 
   it('keeps Lifestyle, TT Mod and Trauma Target off the other templates', () => {
     const cwnOnly = ['strain_mod', 'armor_trauma_mod', 'trauma_target', 'system_strain',
-      'soak_current', 'armor_soak', 'armor_ac_melee', 'shield_bonus_melee', 'ac_ranged'];
+      'soak_current', 'armor_soak', 'armor_ac_melee', 'shield_bonus_melee', 'ac_ranged',
+      'armor_soak_total', 'armor_mods'];
     for (const t of [CPR, SR6, GENERIC]) {
       for (const id of cwnOnly) expect(idsOf(t)).not.toContain(id);
     }
@@ -164,7 +219,8 @@ describe('CWN fields exist on no other sheet', () => {
     // Guards the guard: a typo in the ids above would make the test above pass for free.
     const ids = idsOf(CWN);
     for (const id of ['strain_mod', 'armor_trauma_mod', 'trauma_target', 'system_strain',
-      'soak_current', 'armor_soak', 'armor_ac_melee', 'shield_bonus_melee', 'ac_ranged']) {
+      'soak_current', 'armor_soak', 'armor_ac_melee', 'shield_bonus_melee', 'ac_ranged',
+      'armor_soak_total', 'armor_mods']) {
       expect(ids).toContain(id);
     }
   });

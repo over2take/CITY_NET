@@ -17,6 +17,9 @@
 import type { SheetTemplate } from './types';
 import { statFields, skillFields } from './modTargets';
 import { readRows, isSetKind, needsPlacing, type CyberMod } from './cyberwareRows';
+// Two armor mods land on fields this recompute owns: Absorption Pads and Trauma Dampers
+// add soak, Active Response raises the Trauma Target.
+import { armorModTotals } from './cwnGearMods';
 
 export const EFFECTS_SYSTEM = 'cyberpunk_red';
 export const CWN_SYSTEM = 'cities_without_number';
@@ -143,6 +146,7 @@ const CWN_DERIVED_FROM: Record<string, string[]> = {
  */
 function cwnDerive(effective: Record<string, unknown>): Record<string, number> {
   const level = num(effective.level);
+  const gear = armorModTotals(effective.armor_mods);
   const m = {
     str: cwnMod(effective.str), dex: cwnMod(effective.dex), con: cwnMod(effective.con),
     int: cwnMod(effective.int), wis: cwnMod(effective.wis), cha: cwnMod(effective.cha),
@@ -150,7 +154,8 @@ function cwnDerive(effective: Record<string, unknown>): Record<string, number> {
   return {
     str_mod: m.str, dex_mod: m.dex, con_mod: m.con,
     int_mod: m.int, wis_mod: m.wis, cha_mod: m.cha,
-    trauma_target: 6 + num(effective.armor_trauma_mod),
+    trauma_target: 6 + num(effective.armor_trauma_mod) + gear.traumaTarget,
+    armor_soak_total: Math.max(0, num(effective.armor_soak) + gear.soak),
     save_physical: 16 - (level + Math.max(m.str, m.con)),
     save_evasion: 16 - (level + Math.max(m.dex, m.int)),
     save_mental: 16 - (level + Math.max(m.wis, m.cha)),

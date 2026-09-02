@@ -4,6 +4,11 @@ import { VEHICLE_WEAPON_OPTIONS, getVehicleWeapon, weaponMountFields } from '../
 import {
   FITTING_OPTIONS, describeFitting, getFitting, fittingFitsVehicle, budgetFor,
 } from '../vehicleFittings';
+import {
+  ARMOR_MOD_OPTIONS, WEAPON_MOD_OPTIONS, describeArmorMod, describeWeaponMod,
+  summariseArmorMods, summariseWeaponMods, remainingOptions, parseModIds,
+  labelArmorMod, labelWeaponMod,
+} from '../cwnGearMods';
 
 // Cities Without Number template.
 //
@@ -199,6 +204,18 @@ Leave on FROM SKILL to take it from the attack skill, which is right for most we
   { id: `weapon${i}_trauma`, label: 'TRAUMA', type: 'text', placeholder: 'd8/x3', hint: 'Trauma die / rating, e.g. d8/x3: on a hit the trauma die rolls; at or above the target\'s trauma target the damage is multiplied by the rating. Blank = no trauma. Only used when the GRITTY COMBAT house rule is on.' },
   { id: `weapon${i}_shock`, label: 'SHOCK', type: 'text', placeholder: '2/13', hint: 'Shock damage / max AC, e.g. 2/13: on a miss, targets of AC 13 or less still take 2 + attribute mod damage. Blank = no shock.' },
   { id: `weapon${i}_atk`, label: 'ATK', type: 'number', placeholder: '0', hint: 'Flat weapon attack bonus (smartlink, quality), added to the to-hit roll.' },
+  {
+    // Applied, not printed: every one of these lands on something the server works out
+    // fresh on each roll, so taking a mod off actually takes its bonus off.
+    id: `weapon${i}_mods`, label: 'MODS', type: 'tag_list', fullWidth: true, addLabel: '+ FIT…',
+    hint: `Mods fitted to this weapon. The ones with numbers are applied to the rolls; the rest are carried for the record.
+
+No combination may improve hit or damage by more than +3.`,
+    tagOptions: (data) => remainingOptions(WEAPON_MOD_OPTIONS, parseModIds(data[`weapon${i}_mods`])),
+    tagLabel: labelWeaponMod,
+    tagHint: describeWeaponMod,
+    tagSummary: (values) => summariseWeaponMods(values),
+  },
 ];
 
 export const citiesWithoutNumber: SheetTemplate = {
@@ -274,7 +291,7 @@ export const citiesWithoutNumber: SheetTemplate = {
         { id: 'ac_ranged', label: 'RANGED AC', type: 'number', sensitivity: 'combat', source: 'token_ac_ranged', sourceWritable: true, hint: 'Armor Class against ranged attacks - a shot hits at or above this. Computed from the ARMOR block when you fill one in; otherwise edit it here. Linked to your token, both ways.' },
         { id: 'ac', label: 'MELEE AC', type: 'number', sensitivity: 'combat', source: 'token_ac', sourceWritable: true, hint: 'Armor Class against melee attacks. Most armor turns a bullet and a blade differently, so this is its own number - a War Harness is 13 ranged and 14 melee. Linked to your token, both ways.' },
         { id: 'base_hit_bonus', label: 'BHB', type: 'number', hint: 'Base hit bonus from class and level; added to every attack roll.' },
-        { id: 'soak_current', label: 'SOAK', type: 'number', maxField: 'armor_soak', refillFrom: 'armor_soak', hint: "Damage Soak left. Armor absorbs damage before your hit points do, and refills at the start of a new scene. Its maximum comes from the ARMOR block." },
+        { id: 'soak_current', label: 'SOAK', type: 'number', maxField: 'armor_soak_total', refillFrom: 'armor_soak_total', hint: "Damage Soak left. Armor absorbs damage before your hit points do, and refills at the start of a new scene. Its maximum is the armor's Damage Soak plus whatever its mods add, from the ARMOR block." },
         { id: 'system_strain', label: 'STRAIN', type: 'number', maxField: 'system_strain_max', hint: 'System Strain from cyberware, drugs and rapid healing. Max is your CON score plus the modifier beside it; recovers 1 per full rest.' },
         { id: 'strain_mod', label: 'LIFESTYLE', type: 'number', placeholder: '0', hint: "Added to your maximum System Strain, normally your CON.\n\n  Squatter  -2\n  Slum      -1\n  Middle     0\n  Fine      +1\n  Luxury    +2\n\nCyberware is counted separately." },
         { id: 'system_strain_max', label: 'STRAIN MAX', type: 'number', derived: true, hint: 'Derived: equals CON score, recomputed on every save.' },
@@ -336,6 +353,15 @@ export const citiesWithoutNumber: SheetTemplate = {
         { id: 'armor_soak', label: 'SOAK', type: 'number', placeholder: '0', hint: "Your armor's Damage Soak: extra hit points it spends before you do, refilling each scene.\n\n  Reinforced clothing      2\n  Street leathers          3\n  War harness, longcoats   5\n  Impact jacket            8\n  Medium armored suit     10\n  Heavy armored suit      15" },
         { id: 'shield_bonus', label: 'SHIELD', type: 'number', placeholder: '0', hint: "AC bonus from a carried shield or an armor accessory, against ranged attacks.\n\n  Riot Shield           +2 / +4\n  Absorption Plates     +2 / +2\n  Joint Reinforcement   +1 / +1" },
         { id: 'shield_bonus_melee', label: 'SHIELD (MEL)', type: 'number', placeholder: '0', hint: 'The same bonus against melee attacks. A Riot Shield is much better at fending off a blade than a bullet, at +4 rather than +2. Leave blank when the bonus is the same both ways.' },
+        { id: 'armor_soak_total', label: 'SOAK TOTAL', type: 'number', derived: true, hint: "Derived: the armor's printed Damage Soak plus whatever its mods add. This is the pool the SOAK field on the STATS tab refills to." },
+        {
+          id: 'armor_mods', label: 'ARMOR MODS', type: 'tag_list', fullWidth: true, addLabel: '+ FIT…',
+          hint: "Mods fitted to this armor (p58). The ones with numbers are applied; the rest are carried for the record. Accessories cannot be modded, only the armor itself.",
+          tagOptions: (data) => remainingOptions(ARMOR_MOD_OPTIONS, parseModIds(data.armor_mods)),
+          tagLabel: labelArmorMod,
+          tagHint: describeArmorMod,
+          tagSummary: (values) => summariseArmorMods(values),
+        },
       ],
     },
     {

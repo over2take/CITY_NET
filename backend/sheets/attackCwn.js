@@ -25,6 +25,7 @@ const { cryptoRng } = require('../utils/random');
 
 const rollEngine = require('./rollEngine');
 const vehicleSeats = require('./vehicleSeats');
+const gearMods = require('./cwnGearMods');
 
 const WEAPON_ROWS = 4;
 
@@ -271,14 +272,27 @@ const getWeapon = (data, index, opts = {}) => {
   // Dice with an optional flat modifier (1d8, 1d8+1, 2d6-1). No @field
   // sneak-ins from the client.
   if (!/^\d+d\d+([+-]\d+)?$/i.test(dmg)) return null;
+  // Installed mods (p59). Folded in here rather than at each roll so every caller gets
+  // the modded weapon - and, because they are overlaid on read rather than written into
+  // the row, stripping one back out actually undoes it.
+  const gear = gearMods.weaponModEffects(data[`${prefix}${i}_mods`]);
+  let trauma = parseTrauma(data[`${prefix}${i}_trauma`]);
+  // Stun Rounds trade the trauma die away entirely; Heavy Sabot lets it bite machines.
+  if (trauma && gear.noTrauma) trauma = null;
+  if (trauma && gear.vsVehicles) trauma = { ...trauma, vsVehicles: true };
+  const shock = parseShock(data[`${prefix}${i}_shock`]);
   return {
     name: String(data[`${prefix}${i}_name`] || '').trim() || `WEAPON ${i}`,
     dmg,
     skill,
     mod: weaponAttr(data, data[`${prefix}${i}_attr`], skill),
-    atk: num(data[`${prefix}${i}_atk`]),
-    trauma: parseTrauma(data[`${prefix}${i}_trauma`]),
-    shock: parseShock(data[`${prefix}${i}_shock`]),
+    atk: num(data[`${prefix}${i}_atk`]) + gear.hit,
+    trauma,
+    // Damage and Shock floor at nothing: Stun Rounds' -2 must not turn a light hit into
+    // healing.
+    shock: shock ? { ...shock, dmg: Math.max(0, shock.dmg + gear.shock) } : null,
+    dmgBonus: gear.damage,
+    mods: gear.installed,
     attackType: MELEE_SKILLS.includes(skill) ? 'melee' : 'ranged',
   };
 };
@@ -323,7 +337,9 @@ const rollToHit = (data, weapon, rng = cryptoRng, opts = {}) => {
 
 // Roll weapon damage: dice (+flat from the dmg string) + attribute mod.
 const rollDamage = (data, weapon, rng = cryptoRng) => {
-  const formula = weapon.mod ? `${weapon.dmg} + @${weapon.mod}` : weapon.dmg;
+  let formula = weapon.mod ? `${weapon.dmg} + @${weapon.mod}` : weapon.dmg;
+  const bonus = num(weapon.dmgBonus);
+  if (bonus !== 0) formula += bonus > 0 ? ` + ${bonus}` : ` - ${Math.abs(bonus)}`;
   const resolved = rollEngine.resolveFormula(formula, data);
   return rollEngine.executeRoll(resolved, 'sum', rng);
 };

@@ -173,7 +173,7 @@ function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, styl
                 border: '1px solid var(--green)', padding: '1px 4px', fontSize: '0.6rem',
               }}
             >
-              {options.find(o => o.value === id)?.label ?? id}
+              {field.tagLabel?.(id) ?? options.find(o => o.value === id)?.label ?? id}
               {field.tagHint?.(id) ? <em style={{ opacity: 0.6, fontStyle: 'normal' }}>{field.tagHint(id)}</em> : null}
               {!readOnly && (
                 <button

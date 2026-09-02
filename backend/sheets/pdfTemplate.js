@@ -85,13 +85,13 @@ const LAYOUTS = {
       title: 'COMBAT',
       fields: ['AC', 'Base Hit Bonus', 'Trauma Target', 'System Strain', 'System Strain Max',
         'Lifestyle', 'Armor Name', 'Armor AC', 'Armor Melee AC', 'Max Dex', 'Damage Soak',
-        'TT Mod', 'Shield', 'Shield Melee'],
+        'TT Mod', 'Shield', 'Shield Melee', 'Armor Mods'],
     },
     { title: 'SAVES', fields: ['Save Physical', 'Save Evasion', 'Save Mental', 'Save Luck'] },
     {
       title: 'WEAPONS',
       fields: [1, 2, 3, 4].flatMap(i =>
-        ['Name', 'Dmg', 'Skill', 'Attr', 'Trauma', 'Shock', 'Atk'].map(p => `Weapon${i}${p}`)),
+        ['Name', 'Dmg', 'Skill', 'Attr', 'Trauma', 'Shock', 'Atk', 'Mods'].map(p => `Weapon${i}${p}`)),
     },
     {
       // Picking a book type fills these in on the sheet, so the form is for a car that has

@@ -64,6 +64,11 @@ export interface SheetField {
    *  field count is not a multiple of `columns` bleeds one row's fields into the next,
    *  which quietly breaks anything keyed on a row's first field. */
   startsRow?: boolean;
+  /** For 'tag_list': the name on the chip. Without it the chip falls back to looking the
+   *  id up in `tagOptions`, which is wrong whenever that list narrows as things are
+   *  added - a picker that stops offering what is already fitted leaves the chip with
+   *  nothing to find, and it prints the raw id. */
+  tagLabel?: (value: string) => string;
   /** For 'tag_list': a short suffix on each chip, e.g. what it costs to install. */
   tagHint?: (value: string) => string;
   /** For 'tag_list': a line under the list — a budget, a total, a warning. */

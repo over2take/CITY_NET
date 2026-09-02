@@ -15,6 +15,7 @@
 const { PDFDocument } = require('pdf-lib');
 const { CPR_SKILLS, CWN_SKILLS } = require('./rolls');
 const { getLinkedFields } = require('./templates');
+const gearMods = require('./cwnGearMods');
 
 // 'SP (Head)' / 'sp_head' / 'SP HEAD' all normalize to 'sphead'
 const norm = (key) => String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -311,6 +312,7 @@ const buildCwnAliases = () => {
   // round-trips instead of silently dropping, the same courtesy the attribute mods get.
   alias(['traumatarget', 'traumatgt'], 'trauma_target');
   alias(['lifestyle', 'strainmod', 'lifestylemod'], 'strain_mod');
+  alias(['armormods', 'armormodifications'], 'armor_mods');
   // A Riot Shield is +2 ranged and +4 melee, so the shield bonus splits the same way.
   alias(['shield', 'shieldbonus'], 'shield_bonus');
   alias(['shieldmelee', 'shieldmeleebonus', 'shieldbonusmelee'], 'shield_bonus_melee');
@@ -355,7 +357,7 @@ const buildCwnAliases = () => {
 
   // Weapon rows round-trip (6 fields each)
   for (let i = 1; i <= 4; i++) {
-    ['name', 'dmg', 'skill', 'trauma', 'shock', 'atk', 'attr'].forEach((part) =>
+    ['name', 'dmg', 'skill', 'trauma', 'shock', 'atk', 'attr', 'mods'].forEach((part) =>
       alias([`weapon${i}${part}`], `weapon${i}_${part}`)
     );
   }
@@ -454,6 +456,34 @@ const CWN_WEAPON_ATTR_WORDS = {
   none: 'none', na: 'none', n: 'none',
 };
 
+/**
+ * A typed list of mod names, turned into the ids the sheet stores.
+ *
+ * The printed form gives one text box per weapon and one for the armor, so what arrives is
+ * "Autotargeting, Customized" rather than a JSON array. Matched by label and by id, and
+ * against the right table of the two - the book prints a Customized in both, and they are
+ * different mods.
+ *
+ * A name that matches nothing is dropped rather than kept: unlike a skill or an attribute,
+ * an unrecognised mod id is invisible on the sheet, so keeping it would be a chip that
+ * silently does nothing.
+ */
+const modIdsFrom = (value, table) => {
+  if (value === undefined || value === null) return undefined;
+  const raw = String(value).trim();
+  if (raw === '') return undefined;
+  // Already a JSON array (a sheet exported from here, round-tripping back in).
+  const asIds = gearMods.parseIds(raw);
+  const known = new Map(table.flatMap((m) => [[norm(m.id), m.id], [norm(m.label), m.id]]));
+  const source = asIds.length ? asIds : raw.split(/[,;]/);
+  const out = [];
+  for (const token of source) {
+    const id = known.get(norm(token));
+    if (id && !out.includes(id)) out.push(id);
+  }
+  return JSON.stringify(out);
+};
+
 const normaliseCwnWeaponRows = (mapped) => {
   for (let i = 1; i <= 4; i += 1) {
     const skill = mapped[`weapon${i}_skill`];
@@ -463,6 +493,9 @@ const normaliseCwnWeaponRows = (mapped) => {
       // to fix rather than being silently replaced with a guess.
       if (hit) mapped[`weapon${i}_skill`] = hit;
     }
+    const fitted = modIdsFrom(mapped[`weapon${i}_mods`], gearMods.WEAPON_MODS);
+    if (fitted !== undefined) mapped[`weapon${i}_mods`] = fitted;
+    else delete mapped[`weapon${i}_mods`];
     const attr = mapped[`weapon${i}_attr`];
     if (attr !== undefined) {
       const hit = CWN_WEAPON_ATTR_WORDS[norm(attr)];
@@ -472,6 +505,9 @@ const normaliseCwnWeaponRows = (mapped) => {
       else if (norm(attr) === '') delete mapped[`weapon${i}_attr`];
     }
   }
+  const armor = modIdsFrom(mapped.armor_mods, gearMods.ARMOR_MODS);
+  if (armor !== undefined) mapped.armor_mods = armor;
+  else delete mapped.armor_mods;
 };
 
 const mapCwnFields = makeMapFields({

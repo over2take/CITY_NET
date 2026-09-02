@@ -335,6 +335,39 @@ describe('the import form', () => {
     expect(mapped.weapon1_shock).toBe('1/15');
   });
 
+  it('turns typed mod names into the ids the sheet stores', async () => {
+    // The form gives one text box per weapon, so what arrives is what the player copied
+    // off the page. Matched against the right table of the two: the book prints a
+    // Customized for armor and another for weapons, and they are different mods.
+    const map = (raw) => getImporter('cities_without_number').mapFields(raw).mapped;
+    expect(map({ Weapon1Mods: 'Autotargeting, Customized' }).weapon1_mods)
+      .toBe(JSON.stringify(['autotargeting', 'customized_weapon']));
+    expect(map({ 'Armor Mods': 'Absorption Pads; Customized' }).armor_mods)
+      .toBe(JSON.stringify(['absorption_pads', 'customized_armor']));
+  });
+
+  it('round-trips a list it wrote itself', async () => {
+    const map = (raw) => getImporter('cities_without_number').mapFields(raw).mapped;
+    expect(map({ Weapon1Mods: '["heavy_sabot","stun_rounds"]' }).weapon1_mods)
+      .toBe(JSON.stringify(['heavy_sabot', 'stun_rounds']));
+  });
+
+  it('drops a mod name it does not recognise', async () => {
+    // Unlike a skill or an attribute, an unknown mod id is invisible on the sheet, so
+    // keeping it would be a chip that silently does nothing.
+    const map = (raw) => getImporter('cities_without_number').mapFields(raw).mapped;
+    expect(map({ Weapon1Mods: 'Autotargeting, Banana' }).weapon1_mods)
+      .toBe(JSON.stringify(['autotargeting']));
+    expect(map({ Weapon1Mods: '' }).weapon1_mods).toBeUndefined();
+  });
+
+  it('names each mod once even if the form repeats it', async () => {
+    // A mod goes on a given piece of gear once.
+    const map = (raw) => getImporter('cities_without_number').mapFields(raw).mapped;
+    expect(map({ Weapon1Mods: 'Autotargeting, autotargeting' }).weapon1_mods)
+      .toBe(JSON.stringify(['autotargeting']));
+  });
+
   it('offers nothing for a system with no importer behind it', async () => {
     expect(hasTemplate('generic')).toBe(false);
     expect(await buildTemplate('generic')).toBeNull();

@@ -769,3 +769,84 @@ describe('CWN weapon attribute through the socket', () => {
     expect(res.damage).toBeLessThanOrEqual(7);
   });
 });
+
+describe('CWN gear mods through the socket', () => {
+  /**
+   * The mods have to reach a real attack, not just the resolver. Same weapon, same
+   * target, with and without the mod fitted - and stripping it takes the bonus back,
+   * which is the whole reason they are overlaid rather than written into the row.
+   */
+  const GUN = {
+    base_hit_bonus: 20, shoot: 0, dex_mod: 0,
+    // No trauma die: a traumatic hit multiplies the damage by three, which would swamp
+    // the two-point window these tests read the mod out of.
+    weapon1_name: 'Heavy Pistol', weapon1_dmg: '1d2', weapon1_skill: 'shoot',
+    weapon1_trauma: '', weapon1_shock: '', weapon1_atk: 0,
+  };
+
+  const fire = async (sheet) => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
+      [JSON.stringify(sheet)]);
+    await seedAttackerToken();
+    const target = await seedTarget(1);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+    handlers['sheetAttack']({ targetId: target.lastID, weaponIndex: 1 });
+    await waitFor(() => emitted.some(e => e.event === 'attackResult'));
+    return emitted.find(e => e.event === 'attackResult').data;
+  };
+
+  it('adds a fitted damage mod to the damage that lands', async () => {
+    // 1d2 is 1-2 bare, and 3-4 with Integral Toxins' +2. The ranges cannot overlap.
+    const res = await fire({ ...GUN, weapon1_mods: JSON.stringify(['integral_toxins']) });
+    expect(res.damage).toBeGreaterThanOrEqual(3);
+    expect(res.damage).toBeLessThanOrEqual(4);
+  });
+
+  it('gives back exactly what it was when the mod comes off', async () => {
+    const res = await fire({ ...GUN, weapon1_mods: JSON.stringify([]) });
+    expect(res.damage).toBeGreaterThanOrEqual(1);
+    expect(res.damage).toBeLessThanOrEqual(2);
+  });
+
+  it('leaves a sheet with no mods field at all alone', async () => {
+    // Every CWN weapon on every sheet written before this existed.
+    const res = await fire(GUN);
+    expect(res.damage).toBeGreaterThanOrEqual(1);
+    expect(res.damage).toBeLessThanOrEqual(2);
+  });
+
+  it('drives the token AC through an armor mod', async () => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
+      [JSON.stringify({ dex: 10, armor_ac: 13, armor_ac_melee: 14 })]);
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 10, 10, 20, 20)`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['updateSheetField']({ fieldId: 'armor_mods', value: JSON.stringify(['customized_armor']) });
+    await waitFor(() => emitted.some(e => e.event === 'sheetUpdated'));
+    await flush(50);
+
+    const token = await get(db, `SELECT melee_ac, ranged_ac FROM locations WHERE owner = 'GHOST'`);
+    expect(token.ranged_ac).toBe(14); // 13 + 1
+    expect(token.melee_ac).toBe(15);  // 14 + 1
+  });
+
+  it('recomputes the soak pool when a mod is fitted', async () => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
+      [JSON.stringify({ con: 10, armor_soak: 8 })]);
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 20, 20)`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['updateSheetField']({ fieldId: 'armor_mods', value: JSON.stringify(['absorption_pads']) });
+    await waitFor(() => emitted.some(e => e.event === 'sheetUpdated'));
+    await flush(50);
+
+    const sheet = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    expect(JSON.parse(sheet.data).armor_soak_total).toBe(13);
+  });
+});

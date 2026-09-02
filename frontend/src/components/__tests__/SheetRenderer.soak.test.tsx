@@ -32,7 +32,9 @@ const renderCombat = (data: Record<string, unknown>, onFieldChange = vi.fn(), re
 
 describe('the soak refill button', () => {
   it('puts the pool back to the armor rating', async () => {
-    const onFieldChange = renderCombat({ soak_current: 2, armor_soak: 10 });
+    // Refills to the modded total, not the printed number: Absorption Pads are five more
+    // points of soak per fight, and refilling to the bare armor value would drop them.
+    const onFieldChange = renderCombat({ soak_current: 2, armor_soak: 5, armor_soak_total: 10 });
     await userEvent.click(screen.getByRole('button', { name: 'REFILL' }));
     expect(onFieldChange).toHaveBeenCalledWith('soak_current', 10);
   });
@@ -45,7 +47,7 @@ describe('the soak refill button', () => {
   });
 
   it('does not fire on a sheet the viewer cannot edit', async () => {
-    const onFieldChange = renderCombat({ soak_current: 2, armor_soak: 10 }, vi.fn(), true);
+    const onFieldChange = renderCombat({ soak_current: 2, armor_soak_total: 10 }, vi.fn(), true);
     const button = screen.getByRole('button', { name: 'REFILL' });
     expect(button).toBeDisabled();
     await userEvent.click(button);
@@ -55,7 +57,7 @@ describe('the soak refill button', () => {
   it('leaves the other fields in the block alone', () => {
     // One button, on one field. STRAIN is a pool too and recovers 1 per rest, not all at
     // once, so it must not have picked the button up.
-    renderCombat({ soak_current: 2, armor_soak: 10, system_strain: 3, system_strain_max: 12 });
+    renderCombat({ soak_current: 2, armor_soak_total: 10, system_strain: 3, system_strain_max: 12 });
     expect(screen.getAllByRole('button', { name: 'REFILL' })).toHaveLength(1);
   });
 });
@@ -66,7 +68,7 @@ describe('refill is offered nowhere else', () => {
   it('is on the CWN sheet for Soak alone', () => {
     const refillable = fieldsOf(citiesWithoutNumber).filter((f) => f.refillFrom);
     expect(refillable.map((f) => f.id)).toEqual(['soak_current']);
-    expect(refillable[0].refillFrom).toBe('armor_soak');
+    expect(refillable[0].refillFrom).toBe('armor_soak_total');
   });
 
   it('is on no other system sheet', () => {
@@ -87,7 +89,7 @@ describe('refill is offered nowhere else', () => {
           .filter((f) => f.maxField && !here.has(f.maxField))
           .map((f) => `${f.id} -> ${f.maxField}`);
       }));
-    expect(crossBlock).toEqual(['soak_current -> armor_soak']);
+    expect(crossBlock).toEqual(['soak_current -> armor_soak_total']);
   });
 
   it('points at a field that exists', () => {
