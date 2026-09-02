@@ -628,20 +628,23 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
   );
 }
 
-function GridSection({ section, data, readOnly, onFieldChange, onRoll, effects }: {
-  section: SheetSection; data: SheetData; readOnly: boolean;
+function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll, effects }: {
+  section: SheetSection; allFields: SheetField[]; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onRoll?: (fieldId: string) => void;
   effects: SheetEffects;
 }) {
-  // maxField pairs render inside their base field's cell as CUR / MAX
+  // maxField pairs render inside their base field's cell as CUR / MAX. The maximum is
+  // looked up across the whole sheet, not just this block: CWN's Damage Soak is spent in
+  // COMBAT but set in ARMOR, and a pool showing its current value with no maximum beside
+  // it is the one number a player cannot read at a glance.
   const maxIds = new Set(section.fields.filter(f => f.maxField).map(f => f.maxField as string));
   const visible = section.fields.filter(f => !maxIds.has(f.id));
   const numInput: React.CSSProperties = { textAlign: 'center', fontSize: '0.95rem', padding: '2px', background: 'transparent', border: 'none' };
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(82px, 1fr))', gap: '6px' }}>
       {visible.map((field) => {
-        const maxField = field.maxField ? section.fields.find(f => f.id === field.maxField) : undefined;
+        const maxField = field.maxField ? allFields.find(f => f.id === field.maxField) : undefined;
         return (
           <div key={field.id} title={field.hint} style={{ border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 35%, transparent)', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '4px 2px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
@@ -678,6 +681,22 @@ function GridSection({ section, data, readOnly, onFieldChange, onRoll, effects }
                 }}
               >
                 <DiceIcon size={12} /> ROLL
+              </button>
+            )}
+            {field.refillFrom && (
+              <button
+                onClick={readOnly ? undefined : () => onFieldChange(field.id, num(data[field.refillFrom as string]))}
+                disabled={readOnly}
+                title={`Refill ${field.label} to its maximum. The game decides when that happens.`}
+                style={{
+                  width: '100%', marginTop: 'auto',
+                  borderTop: '1px solid var(--green)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none',
+                  background: 'none', fontSize: '0.55rem', letterSpacing: '1px', padding: '3px 0',
+                  color: 'var(--green)', opacity: readOnly ? 0.5 : 0.9,
+                  cursor: readOnly ? 'default' : 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                REFILL
               </button>
             )}
           </div>
@@ -1217,6 +1236,9 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
 
   const sectionsForTab = template.sections.filter(s => (s.tab ?? tabs[0]) === activeTab);
   const tabHasRolls = sectionsForTab.some(s => s.fields.some(f => f.roll));
+  // Every field on the sheet, for looking up a `maxField` that lives in another block.
+  const allFields = React.useMemo(
+    () => template.sections.flatMap(s => s.fields ?? []), [template]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
@@ -1283,7 +1305,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
               </div>
               {open && (
                 <div style={{ padding: '4px 0 6px' }}>
-                  {section.layout === 'grid' && <GridSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} effects={effects} />}
+                  {section.layout === 'grid' && <GridSection section={section} allFields={allFields} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} effects={effects} />}
                   {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} effects={effects} />}
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}

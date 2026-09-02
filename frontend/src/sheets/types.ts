@@ -34,6 +34,11 @@ export interface SheetField {
   stat?: string;
   /** Paired field id holding this field's maximum (renders as current/max). */
   maxField?: string;
+  /** Id of the field this one refills from, with a button under the input to do it.
+   *  For a pool that empties in play and comes back all at once on a rest or a scene
+   *  change: the player still types into it freely, this is only the shortcut back to
+   *  full. `maxField` is the pairing that renders and clamps; this is the button. */
+  refillFrom?: string;
   /** Short helper text shown as a tooltip on the field. */
   hint?: string;
   /** Recomputed by the server on every save, so anything written here is overwritten.

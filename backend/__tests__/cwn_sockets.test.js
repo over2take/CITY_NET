@@ -524,3 +524,104 @@ describe('system-switch round-trip isolation', () => {
     expect(result.data.traumatic).toBeUndefined();
   });
 });
+
+describe('CWN Damage Soak through the socket', () => {
+  // The resolver is tested on its own in cwn_attack.test.js. What matters here is the
+  // wiring: that the pool is read off the defender's sheet, spent before hit points, and
+  // written back so the next shot meets what this one left.
+  const seedSoakTarget = async (soak, ac = 1, hp = 30) => {
+    const target = await run(db,
+      `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max)
+       VALUES ('Punk', 0, 0, 0, 'enemy_rhombus', 'SYSTEM', ?, ?, ?, ?)`, [ac, ac, hp, hp]);
+    const sheet = await run(db,
+      `INSERT INTO character_sheets (username, system, is_npc, data) VALUES ('punk', 'cities_without_number', 1, ?)`,
+      [JSON.stringify({ name: 'Punk', soak_current: soak, armor_soak: soak })]);
+    await run(db, `INSERT INTO npc_sheet_links (location_id, sheet_id) VALUES (?, ?)`,
+      [target.lastID, sheet.lastID]);
+    return { targetId: target.lastID, sheetId: sheet.lastID };
+  };
+
+  const attack = async (targetId) => {
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+    handlers['sheetAttack']({ targetId, weaponIndex: 1 });
+    await waitFor(() => emitted.some(e => e.event === 'attackResult'));
+    return emitted.find(e => e.event === 'attackResult').data;
+  };
+
+  const soakOf = async (sheetId) =>
+    JSON.parse((await get(db, `SELECT data FROM character_sheets WHERE id = ?`, [sheetId])).data).soak_current;
+
+  it('spends soak before hit points, and reports both', async () => {
+    await seedAttacker();
+    await seedAttackerToken();
+    // A pool far larger than any one hit, so the armour certainly holds.
+    const { targetId, sheetId } = await seedSoakTarget(50);
+    const res = await attack(targetId);
+
+    expect(res.hit).toBe(true);
+    expect(res.soakAbsorbed).toBe(res.damage);
+    expect(res.through).toBe(0);
+
+    const token = await get(db, `SELECT hp_current FROM locations WHERE id = ?`, [targetId]);
+    expect(token.hp_current).toBe(30);
+    expect(await soakOf(sheetId)).toBe(50 - res.damage);
+  });
+
+  it('lets the overflow through to hit points', async () => {
+    await seedAttacker();
+    await seedAttackerToken();
+    const { targetId, sheetId } = await seedSoakTarget(1);
+    const res = await attack(targetId);
+
+    expect(res.soakAbsorbed).toBe(1);
+    expect(res.through).toBe(res.damage - 1);
+    const token = await get(db, `SELECT hp_current FROM locations WHERE id = ?`, [targetId]);
+    expect(token.hp_current).toBe(30 - (res.damage - 1));
+    expect(await soakOf(sheetId)).toBe(0);
+  });
+
+  it('says so in the roll history', async () => {
+    await seedAttacker();
+    await seedAttackerToken();
+    const { targetId } = await seedSoakTarget(50);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+    handlers['sheetAttack']({ targetId, weaponIndex: 1 });
+    await waitFor(() => emitted.some(e => e.event === 'attackResult'));
+
+    const line = emitted.filter(e => e.event === 'diceRollBroadcast')
+      .map(e => e.data.historyString).find(h => h.includes('SOAK'));
+    expect(line).toMatch(/SOAK \d+ absorbed/);
+    expect(line).toMatch(/ARMOR HELD/);
+  });
+
+  it('takes a second hit out of what the first one left', async () => {
+    // The reason the pool is written back rather than recomputed from the armour.
+    await seedAttacker();
+    await seedAttackerToken();
+    const { targetId, sheetId } = await seedSoakTarget(50);
+    const first = await attack(targetId);
+    const afterFirst = await soakOf(sheetId);
+    const second = await attack(targetId);
+
+    expect(afterFirst).toBe(50 - first.damage);
+    expect(await soakOf(sheetId)).toBe(50 - first.damage - second.soakAbsorbed);
+  });
+
+  it('behaves exactly as before for a target with no soak', async () => {
+    // The regression that matters: every existing CWN character has no soak field yet.
+    await seedAttacker();
+    await seedAttackerToken();
+    const { targetId, sheetId } = await seedSoakTarget(0);
+    const res = await attack(targetId);
+
+    expect(res.soakAbsorbed).toBe(0);
+    expect(res.through).toBe(res.damage);
+    const token = await get(db, `SELECT hp_current FROM locations WHERE id = ?`, [targetId]);
+    expect(token.hp_current).toBe(30 - res.damage);
+    expect(await soakOf(sheetId)).toBe(0);
+  });
+});

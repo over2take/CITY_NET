@@ -298,6 +298,13 @@ const buildCwnAliases = () => {
   alias(['armor', 'armorname'], 'armor_name');
   alias(['armorac', 'baseac', 'armorbaseac'], 'armor_ac');
   alias(['maxdex', 'dexcap', 'armordexcap'], 'armor_dex_cap');
+  alias(['soak', 'damagesoak', 'armorsoak'], 'armor_soak');
+  alias(['soakcurrent', 'currentsoak', 'soakleft'], 'soak_current');
+  alias(['ttmod', 'traumatargetmod', 'armortraumamod'], 'armor_trauma_mod');
+  // Derived, so the save recomputes over it — aliased anyway so the printed form's field
+  // round-trips instead of silently dropping, the same courtesy the attribute mods get.
+  alias(['traumatarget', 'traumatgt'], 'trauma_target');
+  alias(['lifestyle', 'strainmod', 'lifestylemod'], 'strain_mod');
   alias(['shield', 'shieldbonus'], 'shield_bonus');
   alias(['bhb', 'basehitbonus', 'hitbonus', 'attackbonus'], 'base_hit_bonus');
   alias(['systemstrain', 'strain'], 'system_strain');
@@ -382,6 +389,7 @@ const NUMERIC_CWN_FIELDS = new Set([
   'save_physical', 'save_evasion', 'save_mental', 'save_luck',
   'system_strain', 'system_strain_max',
   'armor_ac', 'armor_dex_cap', 'shield_bonus', 'trauma_target',
+  'armor_soak', 'soak_current', 'armor_trauma_mod', 'strain_mod',
   'frail', 'auto_initiative',
   'cast_skill', 'mage_effort', 'mage_effort_max', 'spells_prepared_max',
   'summon_skill', 'summoner_effort', 'summoner_effort_max',
@@ -392,6 +400,9 @@ const NUMERIC_CWN_FIELDS = new Set([
 
 // Fields where importing the value also seeds the current (same as CP:R pattern)
 const CWN_MAX_SEEDS = {
+  // A sheet that names its armor's Damage Soak but not what is left of it is a character
+  // arriving between scenes, so the pool comes in full.
+  armor_soak: 'soak_current',
   system_strain_max: 'system_strain',
   mage_effort_max: 'mage_effort',
   summoner_effort_max: 'summoner_effort',

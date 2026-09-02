@@ -6,8 +6,11 @@ const { cryptoRng } = require('../utils/random');
 // Attack flow (Cities Without Number):
 //   to-hit: 1d20 + base hit bonus + combat skill + attribute mod + weapon atk.
 //   Hit if total >= target AC (app-wide >= convention). Nothing explodes.
-//   Damage: weapon dice (+flat) + attribute mod. No armor soak - AC already
-//   priced the armor into the to-hit.
+//   Damage: weapon dice (+flat) + attribute mod, then the target's armor Damage Soak
+//   takes the first points of it. Soak is a pool of temporary hit points that refills
+//   each scene, not a reduction and not part of AC - this used to say AC had already
+//   priced the armor in, which is a different rule and meant armored characters were
+//   over-damaged on every hit.
 //   Trauma (optional rule, cwn_trauma setting): on a hit, roll the weapon's
 //   trauma die; at or above the trauma rating the total damage is multiplied
 //   by the rating.
@@ -116,6 +119,27 @@ const vehicleAc = (baseAc, opts = {}) => {
  * Floors at zero — armour can absorb a hit entirely.
  */
 const applyArmorRating = (damage, armorRating) => Math.max(0, num(damage) - num(armorRating));
+
+/**
+ * Damage Soak: the armour spends its own hit points before the wearer does.
+ *
+ * Not armour reduction and not part of AC. AC decides whether a blow lands; soak is a pool
+ * that takes the first points of what lands, and it refills at the start of a scene rather
+ * than per hit. This file used to say the opposite - that AC had already priced the armour
+ * in - which meant an armoured character was over-damaged on every hit, by up to fifteen
+ * points a scene in a heavy suit.
+ *
+ * Vehicle Armour Rating above is the other thing entirely: that subtracts from every hit
+ * and never runs out. A pool that empties and a reduction that does not are easy to confuse
+ * and behave nothing alike, which is why they are separate functions rather than one with
+ * a flag.
+ */
+const applySoak = (damage, soak) => {
+  const dmg = Math.max(0, num(damage));
+  const pool = Math.max(0, num(soak));
+  const absorbed = Math.min(pool, dmg);
+  return { absorbed, through: dmg - absorbed, soakLeft: pool - absorbed };
+};
 
 /** True once a vehicle has taken enough to be destroyed. */
 const vehicleDestroyed = (hpCurrent) => num(hpCurrent) <= 0;
@@ -306,6 +330,7 @@ const rollStabilize = (data, roundsDown, noTools, rng = cryptoRng) => {
 };
 
 module.exports = {
+  applySoak,
   WEAPON_ROWS, WEAPON_SKILLS, MELEE_SKILLS,
   MORTAL_WOUND_ROUNDS, STABILIZE_BASE_DC, NO_TOOLS_PENALTY, DEFAULT_TRAUMA_TARGET,
   VEHICLE_ROWS, VEHICLE_WEAPON_ROWS, vehicleWeaponPrefix,

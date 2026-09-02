@@ -274,3 +274,48 @@ describe('vehicle combat rules', () => {
     expect(attackCwn.VEHICLE_STATIONARY_AC_PENALTY).toBe(-4);
   });
 });
+
+describe('Damage Soak', () => {
+  // A pool of temporary hit points the armour spends before the wearer does, refilling at
+  // the start of a scene. Not AC, which decides whether a blow lands, and not vehicle
+  // Armour Rating, which subtracts from every hit and never runs out.
+  it('absorbs the whole hit while it has the points', () => {
+    expect(attackCwn.applySoak(2, 5)).toEqual({ absorbed: 2, through: 0, soakLeft: 3 });
+  });
+
+  it('takes what it can and lets the rest through', () => {
+    expect(attackCwn.applySoak(7, 3)).toEqual({ absorbed: 3, through: 4, soakLeft: 0 });
+  });
+
+  it('empties rather than going negative', () => {
+    expect(attackCwn.applySoak(5, 5)).toEqual({ absorbed: 5, through: 0, soakLeft: 0 });
+  });
+
+  it('does nothing once spent', () => {
+    // The second hit of an exchange meets what the first one left.
+    expect(attackCwn.applySoak(10, 0)).toEqual({ absorbed: 0, through: 10, soakLeft: 0 });
+  });
+
+  it('treats an unset or negative pool as none', () => {
+    for (const soak of [undefined, null, '', -3, 'x']) {
+      expect(attackCwn.applySoak(4, soak)).toEqual({ absorbed: 0, through: 4, soakLeft: 0 });
+    }
+  });
+
+  it('never turns a hit into healing', () => {
+    expect(attackCwn.applySoak(0, 5)).toEqual({ absorbed: 0, through: 0, soakLeft: 5 });
+    expect(attackCwn.applySoak(-2, 5).through).toBe(0);
+  });
+
+  it('is not the same thing as vehicle Armour Rating', () => {
+    // AR subtracts from every hit for ever; soak is spent. Two hits of 4 against 5 of each:
+    // the armour rating stops 4 both times, the soak stops 4 then 1.
+    expect(attackCwn.applyArmorRating(4, 5)).toBe(0);
+    expect(attackCwn.applyArmorRating(4, 5)).toBe(0);
+
+    const first = attackCwn.applySoak(4, 5);
+    expect(first.through).toBe(0);
+    const second = attackCwn.applySoak(4, first.soakLeft);
+    expect(second.through).toBe(3);
+  });
+});

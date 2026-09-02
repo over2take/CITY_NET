@@ -229,6 +229,37 @@ describe('the import form', () => {
     expect(mapped.vehicle1_crew).toBe(4);
   });
 
+  it('brings a CWN armor block in whole, pool included', async () => {
+    // Damage Soak is spent in play and written back, so a sheet arriving from paper has
+    // no "current" to state. Naming the armor's rating fills the pool as well, the way
+    // System Strain Max already seeds System Strain.
+    const doc = await PDFDocument.load(await buildTemplate('cities_without_number'));
+    const form = doc.getForm();
+    form.getTextField('Name').setText('Kestrel');
+    form.getTextField('Armor Name').setText('Impact Jacket');
+    form.getTextField('Damage Soak').setText('8');
+    form.getTextField('TT Mod').setText('1');
+    form.getTextField('Lifestyle').setText('-1');
+
+    const raw = await extractPdfFields(Buffer.from(await doc.save()));
+    const { mapped, unmapped } = getImporter('cities_without_number').mapFields(raw);
+
+    expect(unmapped).toEqual({});
+    expect(mapped.armor_soak).toBe(8);
+    expect(mapped.soak_current).toBe(8);
+    expect(mapped.armor_trauma_mod).toBe(1);
+    expect(mapped.strain_mod).toBe(-1);
+  });
+
+  it('keeps a stated soak pool rather than refilling it', () => {
+    // A JSON export mid-scene says both numbers. The max seed must not overwrite the one
+    // that is already there, or importing a save would hand back armor that was spent.
+    const { mapped } = getImporter('cities_without_number')
+      .mapFields({ 'Damage Soak': '10', SoakCurrent: '3' });
+    expect(mapped.armor_soak).toBe(10);
+    expect(mapped.soak_current).toBe(3);
+  });
+
   it('offers nothing for a system with no importer behind it', async () => {
     expect(hasTemplate('generic')).toBe(false);
     expect(await buildTemplate('generic')).toBeNull();

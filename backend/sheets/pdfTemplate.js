@@ -84,7 +84,7 @@ const LAYOUTS = {
     {
       title: 'COMBAT',
       fields: ['AC', 'Base Hit Bonus', 'Trauma Target', 'System Strain', 'System Strain Max',
-        'Armor Name', 'Armor AC', 'Max Dex', 'Shield'],
+        'Lifestyle', 'Armor Name', 'Armor AC', 'Max Dex', 'Damage Soak', 'TT Mod', 'Shield'],
     },
     { title: 'SAVES', fields: ['Save Physical', 'Save Evasion', 'Save Mental', 'Save Luck'] },
     {

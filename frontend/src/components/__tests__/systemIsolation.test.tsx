@@ -138,7 +138,8 @@ describe('CWN fields exist on no other sheet', () => {
     t.sections.flatMap((s) => (s.fields ?? []).map((f) => f.id));
 
   it('keeps Lifestyle, TT Mod and Trauma Target off the other templates', () => {
-    const cwnOnly = ['strain_mod', 'armor_trauma_mod', 'trauma_target', 'system_strain'];
+    const cwnOnly = ['strain_mod', 'armor_trauma_mod', 'trauma_target', 'system_strain',
+      'soak_current', 'armor_soak'];
     for (const t of [CPR, SR6, GENERIC]) {
       for (const id of cwnOnly) expect(idsOf(t)).not.toContain(id);
     }
@@ -147,7 +148,8 @@ describe('CWN fields exist on no other sheet', () => {
   it('still has them on the CWN sheet', () => {
     // Guards the guard: a typo in the ids above would make the test above pass for free.
     const ids = idsOf(CWN);
-    for (const id of ['strain_mod', 'armor_trauma_mod', 'trauma_target', 'system_strain']) {
+    for (const id of ['strain_mod', 'armor_trauma_mod', 'trauma_target', 'system_strain',
+      'soak_current', 'armor_soak']) {
       expect(ids).toContain(id);
     }
   });

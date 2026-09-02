@@ -2100,14 +2100,31 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     });
                   }
                   const frail = Number(defenderData.frail) === 1;
-                  applyTokenDamage(target, amount, (newHp) => {
+                  // Armor spends its own hit points first. A pool rather than a reduction:
+                  // it empties, refills at the start of a scene, and while it lasts the
+                  // wearer takes nothing. Written back before the hit point damage so a
+                  // second shot in the same exchange meets what the first one left.
+                  const soak = attackCwn.applySoak(amount, defenderData.soak_current);
+                  if (soak.absorbed > 0 && defender && defender.id) {
+                    defenderData.soak_current = soak.soakLeft;
+                    patchSheet(db, defender.id, { soak_current: soak.soakLeft });
+                  }
+                  applyTokenDamage(target, soak.through, (newHp) => {
                     const down = newHp <= 0;
                     let history = tagHistory;
+                    if (soak.absorbed > 0) {
+                      history += ` — SOAK ${soak.absorbed} absorbed`
+                        + (soak.through === 0 ? ' — ARMOR HELD' : `, ${soak.through} through`)
+                        + ` (${soak.soakLeft} soak left)`;
+                    }
                     if (down && frail) history += ' — FRAIL: INSTANT DEATH';
                     else if (down && traumatic) history += ' — DOWNED BY A TRAUMATIC HIT · GM: PHYSICAL SAVE OR MAJOR INJURY';
                     else if (down) history += ' — MORTALLY WOUNDED';
                     broadcastRoll(info.userName, outcome ?? { rolls: {}, modTotal: 0, total: amount }, history, color, () => {
-                      emitResult({ ...resultExtras, targetHp: newHp, targetDown: down, frailDeath: down && frail });
+                      emitResult({
+                        ...resultExtras, targetHp: newHp, targetDown: down, frailDeath: down && frail,
+                        soakAbsorbed: soak.absorbed, soakLeft: soak.soakLeft, through: soak.through,
+                      });
                     });
                   });
                 };
