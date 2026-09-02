@@ -319,3 +319,100 @@ describe('Damage Soak', () => {
     expect(second.through).toBe(3);
   });
 });
+
+/**
+ * The weapon's attribute is the weapon's, not the skill's.
+ *
+ * p54: "Attr is the attribute that modifies the weapon's hit and damage roll. If two
+ * attributes are listed, you can use whichever one has the better modifier." The app
+ * inferred it from the attack skill, which agrees with the book for most of the table and
+ * disagrees exactly where the book bothered to print something different - a Mortar is a
+ * Shoot weapon that fires off Wis, and the melee weapons that read Str/Dex can be swung
+ * with either.
+ */
+describe('the weapon attribute column', () => {
+  const STATS = { str_mod: 2, dex_mod: 1, wis_mod: -1, shoot: 1, stab: 1, base_hit_bonus: 0 };
+
+  it('falls back to the skill when the weapon names no attribute', () => {
+    // Every sheet written before the column existed. Shoot means Dex, Stab means Str,
+    // and nothing about those characters may change.
+    expect(attackCwn.weaponAttr(STATS, '', 'shoot')).toBe('dex_mod');
+    expect(attackCwn.weaponAttr(STATS, '', 'stab')).toBe('str_mod');
+    expect(attackCwn.weaponAttr(STATS, undefined, 'punch')).toBe('str_mod');
+  });
+
+  it('uses the attribute the weapon names, over the skill', () => {
+    // The Mortar: a Shoot weapon that would otherwise roll Dex.
+    expect(attackCwn.weaponAttr(STATS, 'wis', 'shoot')).toBe('wis_mod');
+    expect(attackCwn.weaponAttr(STATS, 'str', 'shoot')).toBe('str_mod');
+    expect(attackCwn.weaponAttr(STATS, 'dex', 'stab')).toBe('dex_mod');
+  });
+
+  it('takes the better of a pair, per the sheet it is read against', () => {
+    expect(attackCwn.weaponAttr({ str_mod: 2, dex_mod: 1 }, 'str_dex', 'stab')).toBe('str_mod');
+    expect(attackCwn.weaponAttr({ str_mod: 1, dex_mod: 2 }, 'str_dex', 'stab')).toBe('dex_mod');
+    // A tie keeps the first, which is the order the book prints the pair in.
+    expect(attackCwn.weaponAttr({ str_mod: 1, dex_mod: 1 }, 'str_dex', 'stab')).toBe('str_mod');
+    // Negatives compare like numbers, not like strings.
+    expect(attackCwn.weaponAttr({ str_mod: -2, dex_mod: -1 }, 'str_dex', 'stab')).toBe('dex_mod');
+  });
+
+  it('resolves the pair fresh rather than remembering a choice', () => {
+    // The reason this is not stored on the weapon: a character who trains Str past their
+    // Dex starts swinging their knife with it, without anyone editing the row.
+    const knife = { weapon1_dmg: '1d4', weapon1_skill: 'stab', weapon1_attr: 'str_dex' };
+    expect(attackCwn.getWeapon({ ...knife, str_mod: 0, dex_mod: 2 }, 1).mod).toBe('dex_mod');
+    expect(attackCwn.getWeapon({ ...knife, str_mod: 3, dex_mod: 2 }, 1).mod).toBe('str_mod');
+  });
+
+  it('gives a weapon with no attribute at all none', () => {
+    // The book's dash: a demo charge and a land mine are not swung or aimed.
+    expect(attackCwn.weaponAttr(STATS, 'none', 'shoot')).toBeNull();
+    expect(attackCwn.getWeapon({ weapon1_dmg: '3d10', weapon1_skill: 'shoot', weapon1_attr: 'none' }, 1).mod)
+      .toBeNull();
+  });
+
+  it('ignores a value it does not recognise instead of rolling nothing', () => {
+    // A hand-edited sheet or an import with a typo keeps the old behaviour rather than
+    // silently dropping the character's attribute out of every roll.
+    expect(attackCwn.weaponAttr(STATS, 'charisma', 'shoot')).toBe('dex_mod');
+    expect(attackCwn.weaponAttr(STATS, '  ', 'stab')).toBe('str_mod');
+  });
+
+  it('reaches the to-hit roll', () => {
+    const data = { ...STATS, weapon1_dmg: '3d6', weapon1_skill: 'shoot', weapon1_attr: 'wis' };
+    const w = attackCwn.getWeapon(data, 1);
+    const roll = attackCwn.rollToHit(data, w, rngOf(0.5));
+    // bhb 0 + shoot 1 + wis -1 = 0. Had it used the skill's Dex it would be 2.
+    expect(roll.modTotal).toBe(0);
+    expect(attackCwn.rollToHit(data, { ...w, mod: 'dex_mod' }, rngOf(0.5)).modTotal).toBe(2);
+  });
+
+  it('reaches the damage roll', () => {
+    const data = { ...STATS, weapon1_dmg: '1d4', weapon1_skill: 'stab', weapon1_attr: 'dex' };
+    const w = attackCwn.getWeapon(data, 1);
+    const roll = attackCwn.rollDamage(data, w, rngOf(0.5));
+    expect(roll.modTotal).toBe(1); // dex_mod 1, not str_mod 2
+  });
+
+  it('reaches shock damage, which the book also modifies by it', () => {
+    const data = { ...STATS, weapon1_dmg: '1d4', weapon1_skill: 'stab', weapon1_shock: '2/15', weapon1_attr: 'dex' };
+    const w = attackCwn.getWeapon(data, 1);
+    expect(attackCwn.shockDamage(data, w, 13)).toBe(3); // 2 + dex 1, not 2 + str 2
+  });
+
+  it('adds no term at all for a weapon with no attribute', () => {
+    // Rather than adding a zero, so the breakdown does not claim a modifier it has not got.
+    const data = { ...STATS, weapon1_dmg: '3d10', weapon1_skill: 'shoot', weapon1_shock: '2/15', weapon1_attr: 'none' };
+    const w = attackCwn.getWeapon(data, 1);
+    expect(w.mod).toBeNull();
+    expect(attackCwn.rollToHit(data, w, rngOf(0.5)).modTotal).toBe(1);  // bhb 0 + shoot 1
+    expect(attackCwn.rollDamage(data, w, rngOf(0.5)).modTotal).toBe(0);
+    expect(attackCwn.shockDamage(data, w, 13)).toBe(2);
+  });
+
+  it('offers exactly the column the book prints', () => {
+    expect(Object.keys(attackCwn.WEAPON_ATTRS).sort())
+      .toEqual(['dex', 'none', 'str', 'str_dex', 'wis']);
+  });
+});

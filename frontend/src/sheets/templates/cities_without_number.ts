@@ -36,7 +36,27 @@ export const CWN_WEAPON_SKILLS: { value: string; label: string }[] = [
 export const CWN_WEAPON_ROWS = 4;
 
 /** Fields per weapon row (drives the renderer's row chunking). */
-export const CWN_WEAPON_COLUMNS = 6;
+export const CWN_WEAPON_COLUMNS = 7;
+
+/**
+ * The book's Attr. column: which attribute modifies a weapon's hit, damage and shock.
+ *
+ * Blank keeps the attribute the attack skill implies, which is what the app assumed for
+ * every weapon before this existed. It is right for most of the table and wrong where the
+ * book says otherwise - a Mortar is a Shoot weapon that fires off Wis, and the melee
+ * weapons that read Str/Dex can be swung with either.
+ *
+ * STR OR DEX takes whichever is better on the sheet at the time, which is what the book
+ * says to do and what a player would do anyway.
+ */
+export const CWN_WEAPON_ATTRS: { value: string; label: string }[] = [
+  { value: '', label: 'FROM SKILL' },
+  { value: 'str', label: 'STR' },
+  { value: 'dex', label: 'DEX' },
+  { value: 'str_dex', label: 'STR OR DEX' },
+  { value: 'wis', label: 'WIS' },
+  { value: 'none', label: 'NONE' },
+];
 
 /** Vehicles a sheet can carry, and weapon mounts on each. */
 export const CWN_VEHICLE_ROWS = 6;
@@ -164,6 +184,18 @@ const weaponRow = (i: number): SheetField[] => [
   { id: `weapon${i}_name`, label: 'NAME', type: 'text', placeholder: 'Heavy Pistol' },
   { id: `weapon${i}_dmg`, label: 'DMG', type: 'text', placeholder: '1d8+1', hint: 'Damage dice, flat bonus allowed: 1d8 or 1d8+1. Rolled by the server on a hit; attribute mod is added automatically.' },
   { id: `weapon${i}_skill`, label: 'SKILL', type: 'select', options: CWN_WEAPON_SKILLS, hint: 'Attack skill used with this weapon.' },
+  {
+    id: `weapon${i}_attr`, label: 'ATTR', type: 'select', options: CWN_WEAPON_ATTRS,
+    hint: `The attribute that modifies this weapon's hit, damage and shock.
+
+  Firearms, grenades      DEX
+  Knife, spear, sword     STR OR DEX
+  Club, big sword         STR
+  Mortar                  WIS
+  Demo charge, mines      NONE
+
+Leave on FROM SKILL to take it from the attack skill, which is right for most weapons.`,
+  },
   { id: `weapon${i}_trauma`, label: 'TRAUMA', type: 'text', placeholder: 'd8/x3', hint: 'Trauma die / rating, e.g. d8/x3: on a hit the trauma die rolls; at or above the target\'s trauma target the damage is multiplied by the rating. Blank = no trauma. Only used when the GRITTY COMBAT house rule is on.' },
   { id: `weapon${i}_shock`, label: 'SHOCK', type: 'text', placeholder: '2/13', hint: 'Shock damage / max AC, e.g. 2/13: on a miss, targets of AC 13 or less still take 2 + attribute mod damage. Blank = no shock.' },
   { id: `weapon${i}_atk`, label: 'ATK', type: 'number', placeholder: '0', hint: 'Flat weapon attack bonus (smartlink, quality), added to the to-hit roll.' },

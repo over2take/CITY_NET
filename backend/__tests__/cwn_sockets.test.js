@@ -709,3 +709,63 @@ describe('CWN Damage Soak through the socket', () => {
     expect(await soakOf(sheetId)).toBe(0);
   });
 });
+
+describe('CWN weapon attribute through the socket', () => {
+  /**
+   * A Mortar is the case the old code could not express: the book gives it Wis, and the
+   * app derived the attribute from the attack skill, which for a Shoot weapon is Dex.
+   * Resolved end to end here rather than only in the pure function, since the sheet is
+   * where the field actually lives.
+   */
+  // Wis 0 against Dex +5, and a 1d2 so the dice cannot bridge the gap: damage of 1-2 can
+  // only have come from Wis, and 6-7 only from Dex. The attribute is the whole difference.
+  const MORTAR = {
+    base_hit_bonus: 20, shoot: 0, dex_mod: 5, wis_mod: 0, str_mod: 0,
+    weapon1_name: 'Mortar', weapon1_dmg: '1d2', weapon1_skill: 'shoot',
+    weapon1_attr: 'wis', weapon1_trauma: '', weapon1_shock: '', weapon1_atk: 0,
+  };
+
+  const fire = async (sheet, ac) => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
+      [JSON.stringify(sheet)]);
+    await seedAttackerToken();
+    const target = await seedTarget(ac);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+    handlers['sheetAttack']({ targetId: target.lastID, weaponIndex: 1 });
+    await waitFor(() => emitted.some(e => e.event === 'attackResult'));
+    return emitted.find(e => e.event === 'attackResult').data;
+  };
+
+  it('rolls the weapon attribute, not the one its skill implies', async () => {
+    const res = await fire(MORTAR, 1);
+    expect(res.hit).toBe(true);
+    expect(res.damage).toBeGreaterThanOrEqual(1);
+    expect(res.damage).toBeLessThanOrEqual(2); // Wis 0. On the skill's Dex it would be 6-7.
+  });
+
+  it('leaves a weapon that names no attribute on the skill default', async () => {
+    // The regression that matters: every weapon on every sheet written before the column.
+    const res = await fire({ ...MORTAR, weapon1_attr: '' }, 1);
+    expect(res.damage).toBeGreaterThanOrEqual(6); // 1d2 + dex 5
+    expect(res.damage).toBeLessThanOrEqual(7);
+  });
+
+  it('rolls no attribute at all for a weapon that has none', async () => {
+    const res = await fire({ ...MORTAR, weapon1_attr: 'none' }, 1);
+    expect(res.damage).toBeGreaterThanOrEqual(1);
+    expect(res.damage).toBeLessThanOrEqual(2);
+  });
+
+  it('takes the better of a pair off the sheet it is read against', async () => {
+    const knife = {
+      ...MORTAR, weapon1_name: 'Knife', weapon1_skill: 'stab', weapon1_attr: 'str_dex',
+      str_mod: 0, dex_mod: 5, stab: 0,
+    };
+    const res = await fire(knife, 1);
+    // Stab alone would mean Str 0. The pair reaches for the Dex instead.
+    expect(res.damage).toBeGreaterThanOrEqual(6);
+    expect(res.damage).toBeLessThanOrEqual(7);
+  });
+});

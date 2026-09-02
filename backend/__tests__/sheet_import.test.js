@@ -288,6 +288,53 @@ describe('the import form', () => {
     expect(mapped.armor_ac_melee).toBeUndefined();
   });
 
+  it('matches the words the book prints in the weapon columns', async () => {
+    // The player fills the form from the book, so Attr arrives as "Str/Dex" and Skill as
+    // "Shoot". A near miss is not a visible error - the weapon quietly stops rolling that
+    // attribute, or stops resolving at all - so the words are matched rather than left to
+    // the player to guess our spelling.
+    const map = (raw) => getImporter('cities_without_number').mapFields(raw).mapped;
+    expect(map({ Weapon1Attr: 'Str/Dex' }).weapon1_attr).toBe('str_dex');
+    expect(map({ Weapon1Attr: 'Dex' }).weapon1_attr).toBe('dex');
+    expect(map({ Weapon1Attr: 'Wis' }).weapon1_attr).toBe('wis');
+    expect(map({ Weapon1Skill: 'Shoot' }).weapon1_skill).toBe('shoot');
+    expect(map({ Weapon1Skill: 'Melee' }).weapon1_skill).toBe('stab');
+  });
+
+  it("reads the book's dash as no attribute named", async () => {
+    // A dash in the Attr column means the weapon has none, which on the sheet is the
+    // same blank that means "take it from the skill".
+    const { mapped } = getImporter('cities_without_number').mapFields({ Weapon1Attr: '-' });
+    expect(mapped.weapon1_attr).toBeUndefined();
+  });
+
+  it('leaves a word it does not know for the player to see', async () => {
+    // Rather than guessing. A value that reaches the sheet unrecognised falls back to the
+    // skill's attribute at roll time, so nothing breaks - but it is visible and fixable.
+    const { mapped } = getImporter('cities_without_number').mapFields({ Weapon1Attr: 'banana' });
+    expect(mapped.weapon1_attr).toBe('banana');
+  });
+
+  it('carries a whole weapon row through the form', async () => {
+    const doc = await PDFDocument.load(await buildTemplate('cities_without_number'));
+    const form = doc.getForm();
+    form.getTextField('Weapon1Name').setText('Knife');
+    form.getTextField('Weapon1Dmg').setText('1d4');
+    form.getTextField('Weapon1Skill').setText('Stab');
+    form.getTextField('Weapon1Attr').setText('Str/Dex');
+    form.getTextField('Weapon1Trauma').setText('d6/x3');
+    form.getTextField('Weapon1Shock').setText('1/15');
+
+    const raw = await extractPdfFields(Buffer.from(await doc.save()));
+    const { mapped, unmapped } = getImporter('cities_without_number').mapFields(raw);
+
+    expect(unmapped).toEqual({});
+    expect(mapped.weapon1_name).toBe('Knife');
+    expect(mapped.weapon1_skill).toBe('stab');
+    expect(mapped.weapon1_attr).toBe('str_dex');
+    expect(mapped.weapon1_shock).toBe('1/15');
+  });
+
   it('offers nothing for a system with no importer behind it', async () => {
     expect(hasTemplate('generic')).toBe(false);
     expect(await buildTemplate('generic')).toBeNull();

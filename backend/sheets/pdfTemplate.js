@@ -91,7 +91,7 @@ const LAYOUTS = {
     {
       title: 'WEAPONS',
       fields: [1, 2, 3, 4].flatMap(i =>
-        ['Name', 'Dmg', 'Skill', 'Trauma', 'Shock', 'Atk'].map(p => `Weapon${i}${p}`)),
+        ['Name', 'Dmg', 'Skill', 'Attr', 'Trauma', 'Shock', 'Atk'].map(p => `Weapon${i}${p}`)),
     },
     {
       // Picking a book type fills these in on the sheet, so the form is for a car that has

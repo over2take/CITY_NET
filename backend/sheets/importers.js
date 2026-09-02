@@ -355,7 +355,7 @@ const buildCwnAliases = () => {
 
   // Weapon rows round-trip (6 fields each)
   for (let i = 1; i <= 4; i++) {
-    ['name', 'dmg', 'skill', 'trauma', 'shock', 'atk'].forEach((part) =>
+    ['name', 'dmg', 'skill', 'trauma', 'shock', 'atk', 'attr'].forEach((part) =>
       alias([`weapon${i}${part}`], `weapon${i}_${part}`)
     );
   }
@@ -436,11 +436,50 @@ const parseCwnText = (text) => {
   return out;
 };
 
+/**
+ * Weapon columns whose stored value is a select key, not free text.
+ *
+ * A player filling the printed form copies the book, so the Attr. box arrives as "Str/Dex"
+ * or "Dex" and the Skill box as "Shoot". The sheet stores `str_dex` and `shoot`, and a
+ * value that misses is not a visible error - the weapon just quietly stops rolling that
+ * attribute, or stops resolving at all. So the words are matched here rather than left to
+ * the player to guess our spelling.
+ */
+const CWN_WEAPON_SKILL_WORDS = { shoot: 'shoot', stab: 'stab', punch: 'punch', melee: 'stab', unarmed: 'punch' };
+const CWN_WEAPON_ATTR_WORDS = {
+  str: 'str', strength: 'str',
+  dex: 'dex', dexterity: 'dex',
+  strdex: 'str_dex', dexstr: 'str_dex', strordex: 'str_dex',
+  wis: 'wis', wisdom: 'wis',
+  none: 'none', na: 'none', n: 'none',
+};
+
+const normaliseCwnWeaponRows = (mapped) => {
+  for (let i = 1; i <= 4; i += 1) {
+    const skill = mapped[`weapon${i}_skill`];
+    if (skill !== undefined) {
+      const hit = CWN_WEAPON_SKILL_WORDS[norm(skill)];
+      // Left as typed when it matches nothing, so it shows up on the sheet as something
+      // to fix rather than being silently replaced with a guess.
+      if (hit) mapped[`weapon${i}_skill`] = hit;
+    }
+    const attr = mapped[`weapon${i}_attr`];
+    if (attr !== undefined) {
+      const hit = CWN_WEAPON_ATTR_WORDS[norm(attr)];
+      // The book's dash for a weapon with no attribute survives `norm` as an empty
+      // string, which is already how the sheet spells "take it from the skill".
+      if (hit) mapped[`weapon${i}_attr`] = hit;
+      else if (norm(attr) === '') delete mapped[`weapon${i}_attr`];
+    }
+  }
+};
+
 const mapCwnFields = makeMapFields({
   system: 'cities_without_number',
   buildAliases: buildCwnAliases,
   numericFields: NUMERIC_CWN_FIELDS,
   maxSeeds: CWN_MAX_SEEDS,
+  post: normaliseCwnWeaponRows,
 });
 
 // ─── Shadowrun 6E ────────────────────────────────────────────────────────────

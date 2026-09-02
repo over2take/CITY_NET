@@ -49,8 +49,45 @@ const MORTAL_WOUND_ROUNDS = 6;
 const STABILIZE_BASE_DC = 8;
 const NO_TOOLS_PENALTY = 2;
 
-// Attack skills and the attribute mod each is pinned to.
+// Attack skills and the attribute mod each falls back to.
+//
+// This is a default, not the rule. The book gives every weapon its own Attr. column
+// (p54: "Attr is the attribute that modifies the weapon's hit and damage roll") and it
+// does not always follow from the skill - a Mortar is a Shoot weapon that fires off Wis,
+// and a Knife is a Stab weapon the book lets you swing with Dex. A weapon that names its
+// attribute uses that; one that names none keeps the skill's, which is what every sheet
+// written before the column existed relies on.
 const WEAPON_SKILLS = { shoot: 'dex_mod', stab: 'str_mod', punch: 'str_mod' };
+
+/**
+ * The Attr. column, as the fields it can resolve to.
+ *
+ * A pair means "use whichever one has the better modifier" (p54), which is a choice the
+ * player would make every time and so is not worth asking them for. An empty list is the
+ * book's dash: a demo charge or a land mine has no attribute behind it.
+ */
+const WEAPON_ATTRS = {
+  str: ['str_mod'],
+  dex: ['dex_mod'],
+  str_dex: ['str_mod', 'dex_mod'],
+  wis: ['wis_mod'],
+  none: [],
+};
+
+/**
+ * Which attribute field a weapon actually rolls with, or null for none at all.
+ *
+ * Resolved against the sheet rather than stored, so a character whose Str overtakes their
+ * Dex starts swinging their knife with it without anyone editing the weapon.
+ */
+const weaponAttr = (data, choice, skill) => {
+  const key = String(choice || '').toLowerCase();
+  if (!Object.prototype.hasOwnProperty.call(WEAPON_ATTRS, key)) return WEAPON_SKILLS[skill] || null;
+  const fields = WEAPON_ATTRS[key];
+  if (fields.length === 0) return null;
+  // Ties keep the first, which is the order the book prints the pair in.
+  return fields.reduce((best, f) => (num(data[f]) > num(data[best]) ? f : best), fields[0]);
+};
 const MELEE_SKILLS = ['stab', 'punch'];
 
 const num = (v) => {
@@ -238,7 +275,7 @@ const getWeapon = (data, index, opts = {}) => {
     name: String(data[`${prefix}${i}_name`] || '').trim() || `WEAPON ${i}`,
     dmg,
     skill,
-    mod: WEAPON_SKILLS[skill],
+    mod: weaponAttr(data, data[`${prefix}${i}_attr`], skill),
     atk: num(data[`${prefix}${i}_atk`]),
     trauma: parseTrauma(data[`${prefix}${i}_trauma`]),
     shock: parseShock(data[`${prefix}${i}_shock`]),
@@ -272,7 +309,11 @@ const getVehicleWeapon = (data, vehicleIndex, weaponIndex) => {
  * rather than to the gun: the same weapon fired from a parked car takes none of it.
  */
 const rollToHit = (data, weapon, rng = cryptoRng, opts = {}) => {
-  let formula = `1d20 + @base_hit_bonus + @${weapon.skill} + @${weapon.mod}`;
+  // A weapon with no attribute behind it (a land mine, a demo charge) adds no term at
+  // all rather than adding a zero, so the breakdown does not claim a modifier it has not
+  // got.
+  let formula = `1d20 + @base_hit_bonus + @${weapon.skill}`;
+  if (weapon.mod) formula += ` + @${weapon.mod}`;
   if (weapon.atk !== 0) formula += weapon.atk > 0 ? ` + ${weapon.atk}` : ` - ${Math.abs(weapon.atk)}`;
   const penalty = num(opts.penalty);
   if (penalty !== 0) formula += penalty > 0 ? ` + ${penalty}` : ` - ${Math.abs(penalty)}`;
@@ -282,7 +323,8 @@ const rollToHit = (data, weapon, rng = cryptoRng, opts = {}) => {
 
 // Roll weapon damage: dice (+flat from the dmg string) + attribute mod.
 const rollDamage = (data, weapon, rng = cryptoRng) => {
-  const resolved = rollEngine.resolveFormula(`${weapon.dmg} + @${weapon.mod}`, data);
+  const formula = weapon.mod ? `${weapon.dmg} + @${weapon.mod}` : weapon.dmg;
+  const resolved = rollEngine.resolveFormula(formula, data);
   return rollEngine.executeRoll(resolved, 'sum', rng);
 };
 
@@ -313,7 +355,8 @@ const rollTrauma = (weapon, traumaEnabled, targetTT = DEFAULT_TRAUMA_TARGET, rng
 const shockDamage = (data, weapon, targetAc) => {
   if (!weapon.shock) return 0;
   if (num(targetAc) > weapon.shock.ac) return 0;
-  return Math.max(0, weapon.shock.dmg + num(data[weapon.mod]));
+  // p54: Shock is modified by the weapon's attribute too, not only hit and damage.
+  return Math.max(0, weapon.shock.dmg + (weapon.mod ? num(data[weapon.mod]) : 0));
 };
 
 // Stabilization check: 2d6 + Heal + INT mod vs 8 + rounds down (+2 no tools).
@@ -331,7 +374,7 @@ const rollStabilize = (data, roundsDown, noTools, rng = cryptoRng) => {
 
 module.exports = {
   applySoak,
-  WEAPON_ROWS, WEAPON_SKILLS, MELEE_SKILLS,
+  WEAPON_ROWS, WEAPON_SKILLS, MELEE_SKILLS, WEAPON_ATTRS, weaponAttr,
   MORTAL_WOUND_ROUNDS, STABILIZE_BASE_DC, NO_TOOLS_PENALTY, DEFAULT_TRAUMA_TARGET,
   VEHICLE_ROWS, VEHICLE_WEAPON_ROWS, vehicleWeaponPrefix,
   VEHICLE_STATIONARY_AC_PENALTY, MOVING_FIRE_PENALTY,
