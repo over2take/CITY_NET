@@ -397,23 +397,56 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     });
   });
 
-  router.post('/batch-district', authenticate, (req, res) => {
-    const { ids, district_name, district_color } = req.body;
-    if (!Array.isArray(ids)) return res.status(400).json({ error: 'Invalid data' });
+  /**
+   * Put these buildings in this district.
+   *
+   * Additive. What replaced it - a wipe of the whole district followed by a re-insert of
+   * whatever the client posted - meant the posted list WAS the district, so a stale or
+   * mis-dragged selection silently unassigned buildings with nothing to undo from. Here the
+   * posted ids are the only rows touched.
+   *
+   * A building belongs to one district, so assigning one that is already filed elsewhere
+   * moves it rather than refusing: the UPDATE overwrites whatever it had.
+   *
+   * The colour is read from the districts table rather than taken from the request, so the
+   * copy on the building cannot drift from the district it names.
+   */
+  router.post('/assign-district', authenticate, (req, res) => {
+    const { ids, district_name } = req.body;
+    if (!Array.isArray(ids) || !district_name) return res.status(400).json({ error: 'Invalid data' });
+    if (ids.length === 0) return res.json({ message: 'Nothing to assign', assigned: 0 });
 
-    db.run('UPDATE locations SET district_name = NULL, district_color = NULL WHERE district_name = ?', [district_name], (err) => {
+    db.get('SELECT color FROM districts WHERE name = ?', [district_name], (err, district) => {
       if (err) return res.status(500).json({ error: err.message });
-      if (ids.length === 0) {
-        emitUpdate();
-        return res.json({ message: 'District cleared' });
-      }
+      if (!district) return res.status(404).json({ error: 'District not found' });
       const placeholders = ids.map(() => '?').join(',');
-      db.run(`UPDATE locations SET district_name = ?, district_color = ? WHERE id IN (${placeholders})`, [district_name, district_color, ...ids], function(err2) {
-        if (err2) return res.status(500).json({ error: err2.message });
-        emitUpdate();
-        res.json({ message: 'District updated' });
-      });
+      db.run(
+        `UPDATE locations SET district_name = ?, district_color = ? WHERE id IN (${placeholders})`,
+        [district_name, district.color, ...ids],
+        function (err2) {
+          if (err2) return res.status(500).json({ error: err2.message });
+          emitUpdate();
+          res.json({ message: 'District updated', assigned: this.changes });
+        }
+      );
     });
+  });
+
+  /** Take these buildings out of whatever district they are in. */
+  router.post('/unassign-district', authenticate, (req, res) => {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).json({ error: 'Invalid data' });
+    if (ids.length === 0) return res.json({ message: 'Nothing to unassign', unassigned: 0 });
+    const placeholders = ids.map(() => '?').join(',');
+    db.run(
+      `UPDATE locations SET district_name = NULL, district_color = NULL WHERE id IN (${placeholders})`,
+      ids,
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        emitUpdate();
+        res.json({ message: 'Removed from district', unassigned: this.changes });
+      }
+    );
   });
 
   router.post('/join', authenticate, (req, res) => {

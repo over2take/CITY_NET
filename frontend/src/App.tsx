@@ -102,6 +102,10 @@ function App() {
   const controlsRef = useRef<any>(null);
   const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, signs, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchSigns, fetchAll } = useMapData();
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
+  // Picking buildings is its own mode now, not a side effect of having a district open.
+  // The old flow put you into selection the moment you hit EDIT, so it was never clear
+  // whether you were changing the district or changing what was in it.
+  const [assigningDistrict, setAssigningDistrict] = useState<District | null>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   /** The building whose shop is open, or null. Its own state so closing the info panel
@@ -715,7 +719,7 @@ function App() {
     if (view === 'editor' || view === 'generator') return;
     if (isBatchSelecting) {
       toggleSelection(loc.id);
-    } else if (view === 'district') {
+    } else if (view === 'district' && assigningDistrict) {
       setDistrictSelection(prev => prev.includes(loc.id) ? prev.filter(i => i !== loc.id) : [...prev, loc.id]);
     } else if (view === 'join') {
         const getAllDescendants = (id) => {
@@ -1769,6 +1773,8 @@ function App() {
                 fetchDistricts={fetchDistricts}
                 editingDistrict={editingDistrict}
                 setEditingDistrict={setEditingDistrict}
+                assigningDistrict={assigningDistrict}
+                setAssigningDistrict={setAssigningDistrict}
                 locations={locations}
                 roads={roads}
                 waterBodies={waterBodies}
@@ -2800,7 +2806,7 @@ function App() {
                 onReady={setMapExportApi}
               />
             )}
-            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} roadLayerMode={roadLayerMode} cityGenDrawMode={cityGenDrawMode} genBoundaryTrail={genBoundaryTrail} setGenBoundaryTrail={setGenBoundaryTrail} onBoundaryDrawEnd={(pts: any[]) => setGenBoundaryTrail(pts)} />
+            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district' && assigningDistrict) { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} roadLayerMode={roadLayerMode} cityGenDrawMode={cityGenDrawMode} genBoundaryTrail={genBoundaryTrail} setGenBoundaryTrail={setGenBoundaryTrail} onBoundaryDrawEnd={(pts: any[]) => setGenBoundaryTrail(pts)} />
             {roadSelectionBounds && view === 'city_gen' && (
               <mesh position={[(roadSelectionBounds.min.x + roadSelectionBounds.max.x) / 2, 0.02, (roadSelectionBounds.min.z + roadSelectionBounds.max.z) / 2]}>
                 <boxGeometry args={[Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x), 0.05, Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z)]} />

@@ -154,6 +154,32 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     });
   });
 
+  /**
+   * Recolour a district.
+   *
+   * The colour is denormalised onto every building in it (`locations.district_color`), so
+   * changing it here has to cascade or the map keeps drawing the old one. That copy is why
+   * there was no way to recolour a district before: you could only delete and recreate,
+   * which dropped every assignment.
+   *
+   * The name is the key buildings are filed under, so it is not editable here - renaming
+   * would have to rewrite every row that references it, and nobody has asked for it.
+   */
+  router.put('/districts/:name', authenticate, (req, res) => {
+    const name = req.params.name;
+    const { color } = req.body;
+    if (!color) return res.status(400).json({ error: 'Color required' });
+    db.run('UPDATE districts SET color = ? WHERE name = ?', [color, name], function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      if (this.changes === 0) return res.status(404).json({ error: 'District not found' });
+      db.run('UPDATE locations SET district_color = ? WHERE district_name = ?', [color, name], (err2) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        emitUpdate();
+        res.json({ name, color });
+      });
+    });
+  });
+
   router.delete('/districts/:name', authenticate, (req, res) => {
     const name = req.params.name;
     db.run('DELETE FROM districts WHERE name = ?', [name], function(err) {
