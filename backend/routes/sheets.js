@@ -4,7 +4,10 @@ const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
-const { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc } = require('../sheets/templates');
+const {
+  TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc,
+  TOKEN_SOURCES, rangedAcOf, acColumns,
+} = require('../sheets/templates');
 const sheetImporters = require('../sheets/importers');
 const pdfTemplate = require('../sheets/pdfTemplate');
 const companionFetch = require('../sheets/companionFetch');
@@ -130,9 +133,9 @@ module.exports = (db, io) => {
               done();
             });
           };
-          if (!Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max' || s === 'token_ac')) return overlayCash();
+          if (!Object.values(linked).some(s => TOKEN_SOURCES.has(s))) return overlayCash();
           db.get(
-            `SELECT hp_current, hp_max, melee_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
+            `SELECT hp_current, hp_max, melee_ac, ranged_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
              ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
             [req.params.username],
             (e2, hpRow) => {
@@ -140,6 +143,7 @@ module.exports = (db, io) => {
                 if (source === 'token_hp') data[fieldId] = hpRow ? hpRow.hp_current : null;
                 if (source === 'token_hp_max') data[fieldId] = hpRow ? hpRow.hp_max : null;
                 if (source === 'token_ac') data[fieldId] = hpRow ? (hpRow.melee_ac ?? 10) : null;
+                if (source === 'token_ac_ranged') data[fieldId] = hpRow ? rangedAcOf(hpRow) : null;
               });
               overlayCash();
             }
@@ -166,14 +170,12 @@ module.exports = (db, io) => {
           // token_ac is writable: it routes to the player's token.
           const linked = getLinkedFields(system);
           const patch = Object.fromEntries(Object.entries(fields).filter(([k]) => !linked[k]));
-          const acEntry = Object.entries(fields).find(([k]) => linked[k] === 'token_ac');
+          const acCols = acColumns(linked, fields);
           const routeAc = (done) => {
-            if (!acEntry) return done();
-            const ac = Number(acEntry[1]);
-            if (!Number.isFinite(ac) || ac < 0 || ac > 99) return done();
+            if (!acCols) return done();
             db.run(
-              `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
-              [ac, ac, req.params.username],
+              `UPDATE locations SET ${acCols.sets} WHERE shape = 'rhombus' AND owner = ?`,
+              [...acCols.values, req.params.username],
               () => { io.emit('dataUpdated', { isRhombusOnly: true }); done(); }
             );
           };
@@ -195,7 +197,7 @@ module.exports = (db, io) => {
               const pushAc = effAc !== null
                 ? (done) => db.run(
                     `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
-                    [effAc, effAc, req.params.username],
+                    [effAc.melee, effAc.ranged, req.params.username],
                     () => { io.emit('dataUpdated', { isRhombusOnly: true }); done(); }
                   )
                 : routeAc;
@@ -361,10 +363,10 @@ module.exports = (db, io) => {
         if (!row) return res.status(404).json({ error: 'NPC not found' });
         const data = JSON.parse(row.data || '{}');
         const linked = getLinkedFields(row.system);
-        const wantsHp = Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max' || s === 'token_ac');
+        const wantsHp = Object.values(linked).some(s => TOKEN_SOURCES.has(s));
         if (!wantsHp) return res.json({ ...row, data });
         db.get(
-          `SELECT loc.hp_current, loc.hp_max, loc.melee_ac FROM npc_sheet_links l
+          `SELECT loc.hp_current, loc.hp_max, loc.melee_ac, loc.ranged_ac FROM npc_sheet_links l
            JOIN locations loc ON loc.id = l.location_id
            WHERE l.sheet_id = ? LIMIT 1`,
           [req.params.id],
@@ -374,6 +376,7 @@ module.exports = (db, io) => {
                 if (source === 'token_hp') data[fieldId] = hpRow.hp_current;
                 if (source === 'token_hp_max') data[fieldId] = hpRow.hp_max;
                 if (source === 'token_ac') data[fieldId] = hpRow.melee_ac ?? 10;
+                if (source === 'token_ac_ranged') data[fieldId] = rangedAcOf(hpRow);
               });
             }
             res.json({ ...row, data });
@@ -411,19 +414,18 @@ module.exports = (db, io) => {
       // the sheet's JSON, same rule as player sheets. token_ac is writable:
       // it routes to the linked token when the sheet is attached to one.
       let cleanFields = fields;
-      let acValue;
+      let acCols;
       if (fields) {
         const linked = getLinkedFields(row.system);
         cleanFields = Object.fromEntries(Object.entries(fields).filter(([k]) => !linked[k]));
-        const acEntry = Object.entries(fields).find(([k]) => linked[k] === 'token_ac');
-        if (acEntry) acValue = Number(acEntry[1]);
+        acCols = acColumns(linked, fields);
       }
       const routeAc = (done) => {
-        if (!Number.isFinite(acValue) || acValue < 0 || acValue > 99) return done();
+        if (!acCols) return done();
         db.run(
-          `UPDATE locations SET melee_ac = ?, ranged_ac = ?
+          `UPDATE locations SET ${acCols.sets}
            WHERE id = (SELECT location_id FROM npc_sheet_links WHERE sheet_id = ? LIMIT 1)`,
-          [acValue, acValue, req.params.id],
+          [...acCols.values, req.params.id],
           function () { if (this && this.changes > 0) io.emit('dataUpdated', { isRhombusOnly: true }); done(); }
         );
       };
@@ -438,7 +440,9 @@ module.exports = (db, io) => {
       // Armor fields drive the linked token's AC when set
       if (mergedData && row.system === 'cities_without_number') {
         const effAc = cwnEffectiveAc(mergedData);
-        if (effAc !== null) acValue = effAc;
+        if (effAc !== null) {
+          acCols = { sets: 'melee_ac = ?, ranged_ac = ?', values: [effAc.melee, effAc.ranged] };
+        }
       }
       const sets = ['data = ?', 'updated_at = CURRENT_TIMESTAMP'];
       const params = [data];

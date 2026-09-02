@@ -77,8 +77,22 @@ const cwnRecompute = (data) => {
   return changed;
 };
 
-// CWN effective AC from the sheet's armor fields (QRD: armor SETS your AC,
-// DEX mod adds on top - heavy armor may cap it - and a shield adds a bonus).
+// CWN effective AC from the sheet's armor fields. Armor SETS your AC, the DEX
+// mod adds on top, and a shield adds a bonus.
+//
+// Two numbers, not one. p52: "Most armor provides two different Armor Classes:
+// ranged and melee", and they differ widely - a War Harness is 13 ranged and 14
+// melee, an Impact Jacket 12 and 14, a Heavy Armored Suit 20 and 18. The book's
+// table prints ranged first, so `armor_ac` (the field that has always existed and
+// that players filled from that column) is the RANGED value, and the melee field
+// is the addition. Blank melee means the two are the same, which keeps every
+// sheet written before the split reading exactly as it did.
+//
+// The DEX mod applies to both, uncapped - p52 works the example through: a medium
+// suit at +1 Dex is ranged 19 and melee 15, straight off 18 and 14. `armor_dex_cap`
+// has no rule behind it in this game and is left alone here rather than silently
+// dropped; it does nothing while blank, which is how every sheet has it.
+//
 // Returns null while armor_ac is unset: the token AC is then managed by hand
 // (token menu / the linked ac field), so we never clobber a manual value.
 const cwnEffectiveAc = (data) => {
@@ -86,8 +100,14 @@ const cwnEffectiveAc = (data) => {
   if (!Number.isFinite(base) || base <= 0) return null;
   const capRaw = data.armor_dex_cap;
   const cap = (capRaw === undefined || capRaw === null || capRaw === '') ? Infinity : num(capRaw);
+  const dex = Math.min(cwnMod(data.dex), cap);
+  // A Riot Shield is +2 ranged and +4 melee, so the shield splits the same way.
+  const blank = (v) => v === undefined || v === null || v === '';
+  const meleeBase = blank(data.armor_ac_melee) ? base : num(data.armor_ac_melee);
   const shield = num(data.shield_bonus);
-  return Math.max(1, Math.min(99, base + Math.min(cwnMod(data.dex), cap) + shield));
+  const meleeShield = blank(data.shield_bonus_melee) ? shield : num(data.shield_bonus_melee);
+  const clamp = (n) => Math.max(1, Math.min(99, n));
+  return { ranged: clamp(base + dex + shield), melee: clamp(meleeBase + dex + meleeShield) };
 };
 
 // Recompute SR6 derived fields (monitors, initiative, composure). Mutates
@@ -158,11 +178,19 @@ const TEMPLATES = {
   cities_without_number: {
     name: 'Cities Without Number',
     publicFields: ['name', 'background', 'class', 'description'],
-    combatFields: ['ac'],
-    // ac is a WRITABLE linked field: the token's melee_ac/ranged_ac is the
-    // single source of truth (the attack engine reads the token). Sheet
-    // edits route to the token; the sheet never stores ac in its JSON.
-    linkedFields: { hp: 'token_hp', hp_max: 'token_hp_max', cash: 'bank_balance', ac: 'token_ac' },
+    combatFields: ['ac', 'ac_ranged'],
+    // ac and ac_ranged are WRITABLE linked fields: the token's melee_ac and
+    // ranged_ac are the single source of truth (the attack engine reads the
+    // token, and picks the column by the weapon's attack type). Sheet edits
+    // route to the token; the sheet never stores either in its JSON.
+    //
+    // CWN is the only system that declares a ranged link, because it is the only
+    // one whose two ACs differ. Everywhere else `token_ac` still writes both
+    // columns, which is what a system with one AC means by it.
+    linkedFields: {
+      hp: 'token_hp', hp_max: 'token_hp_max', cash: 'bank_balance',
+      ac: 'token_ac', ac_ranged: 'token_ac_ranged',
+    },
     maxPairs: {
       system_strain_max: 'system_strain',
       mage_effort_max: 'mage_effort',
@@ -206,6 +234,59 @@ const filterPublicData = (system, data) => {
   return out;
 };
 
+// Linked sources that live on the token row rather than in the sheet's JSON, so a
+// read has to join the token to resolve them. Named once here because three call
+// sites test for exactly this set, and a source added to a template but not to this
+// set is a field that silently reads as undefined.
+const TOKEN_SOURCES = new Set(['token_hp', 'token_hp_max', 'token_ac', 'token_ac_ranged']);
+
+/**
+ * A token's ranged AC, falling back to its melee AC.
+ *
+ * Every system but CWN writes one number to both columns, and CWN itself does until
+ * someone fills in the melee field. A token seeded before the columns diverged can
+ * still have ranged_ac null, and reading that as 0 would make it trivially hittable.
+ */
+const rangedAcOf = (row) => {
+  if (!row) return null;
+  if (row.ranged_ac !== null && row.ranged_ac !== undefined) return row.ranged_ac;
+  return row.melee_ac ?? 10;
+};
+
+/**
+ * Which token AC columns a sheet patch should write, and to what.
+ *
+ * A system with one Armor Class means both columns by it, and has always written
+ * both - that is what `token_ac` alone continues to do, so Cyberpunk RED and
+ * Shadowrun are byte-identical through this. A system that also declares
+ * `token_ac_ranged` is saying its two ACs are separate numbers, and then each
+ * field writes only its own column. That is decided by the template rather than by
+ * naming CWN here, so the next system with split ACs needs no change to this.
+ *
+ * Returns null when the patch touches no AC field, or when the value it carries is
+ * not a usable one.
+ */
+const acColumns = (linked, fields) => {
+  const hasRanged = Object.values(linked).includes('token_ac_ranged');
+  const sets = [];
+  const values = [];
+  const usable = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 && n <= 99 ? n : null;
+  };
+  Object.entries(fields).forEach(([key, raw]) => {
+    const source = linked[key];
+    if (source !== 'token_ac' && source !== 'token_ac_ranged') return;
+    const n = usable(raw);
+    if (n === null) return;
+    if (source === 'token_ac_ranged') { sets.push('ranged_ac = ?'); values.push(n); return; }
+    sets.push('melee_ac = ?'); values.push(n);
+    // One AC, so it means both.
+    if (!hasRanged) { sets.push('ranged_ac = ?'); values.push(n); }
+  });
+  return sets.length ? { sets: sets.join(', '), values } : null;
+};
+
 const getLinkedFields = (system) =>
   (TEMPLATES[system] || TEMPLATES[DEFAULT_SYSTEM]).linkedFields || {};
 
@@ -234,4 +315,7 @@ const applyDerived = (system, data, changedFieldId) => {
   return changed;
 };
 
-module.exports = { TEMPLATES, DEFAULT_SYSTEM, isValidSystem, filterPublicData, getLinkedFields, getMaxPairs, applyDerived, cwnEffectiveAc };
+module.exports = {
+  TEMPLATES, DEFAULT_SYSTEM, isValidSystem, filterPublicData, getLinkedFields, getMaxPairs,
+  applyDerived, cwnEffectiveAc, TOKEN_SOURCES, rangedAcOf, acColumns,
+};

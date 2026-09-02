@@ -239,7 +239,8 @@ export const citiesWithoutNumber: SheetTemplate = {
       tab: 'STATS',
       columns: 4,
       fields: [
-        { id: 'ac', label: 'AC', type: 'number', sensitivity: 'combat', source: 'token_ac', sourceWritable: true, hint: 'Armor Class - attacks hit at or above this. Linked to your token: editing here updates the token and vice versa.' },
+        { id: 'ac_ranged', label: 'RANGED AC', type: 'number', sensitivity: 'combat', source: 'token_ac_ranged', sourceWritable: true, hint: 'Armor Class against ranged attacks - a shot hits at or above this. Computed from the ARMOR block when you fill one in; otherwise edit it here. Linked to your token, both ways.' },
+        { id: 'ac', label: 'MELEE AC', type: 'number', sensitivity: 'combat', source: 'token_ac', sourceWritable: true, hint: 'Armor Class against melee attacks. Most armor turns a bullet and a blade differently, so this is its own number - a War Harness is 13 ranged and 14 melee. Linked to your token, both ways.' },
         { id: 'base_hit_bonus', label: 'BHB', type: 'number', hint: 'Base hit bonus from class and level; added to every attack roll.' },
         { id: 'soak_current', label: 'SOAK', type: 'number', maxField: 'armor_soak', refillFrom: 'armor_soak', hint: "Damage Soak left. Armor absorbs damage before your hit points do, and refills at the start of a new scene. Its maximum comes from the ARMOR block." },
         { id: 'system_strain', label: 'STRAIN', type: 'number', maxField: 'system_strain_max', hint: 'System Strain from cyberware, drugs and rapid healing. Max is your CON score plus the modifier beside it; recovers 1 per full rest.' },
@@ -296,11 +297,13 @@ export const citiesWithoutNumber: SheetTemplate = {
       columns: 4,
       fields: [
         { id: 'armor_name', label: 'ARMOR', type: 'text', placeholder: 'Armored Vest', hint: 'What you are wearing. Cosmetic - the numbers below do the work.' },
-        { id: 'armor_ac', label: 'BASE AC', type: 'number', placeholder: '14', hint: 'The armor\'s base AC. When set, your token AC is computed automatically: base + DEX mod (capped) + shield. Leave blank to manage AC by hand on the STATS tab or token.' },
+        { id: 'armor_ac', label: 'RANGED AC', type: 'number', placeholder: '13', hint: "The armor's base AC against ranged attacks - the first AC column in the book's armor table. When set, your token AC is computed automatically: base + DEX mod + shield. Leave blank to manage AC by hand on the STATS tab or token." },
+        { id: 'armor_ac_melee', label: 'MELEE AC', type: 'number', placeholder: '14', hint: "The armor's base AC against melee attacks, the second column in the table.\n\n  Reinforced Clothing   13 / 10\n  War Harness           13 / 14\n  Street Leathers       13 / 12\n  Reinforced Longcoat   15 / 13\n  Impact Jacket         12 / 14\n  Light Armored Suit    16 / 13\n  Medium Armored Suit   18 / 14\n  Heavy Armored Suit    20 / 18\n\nLeave blank when the armor defends the same both ways." },
         { id: 'armor_dex_cap', label: 'MAX DEX', type: 'number', hint: 'Heavy armor caps the DEX bonus. Blank = uncapped, 0 = no DEX bonus.' },
         { id: 'armor_trauma_mod', label: 'TT MOD', type: 'number', placeholder: '0', hint: "Your armor's Trauma Target Mod, added to the base 6.\n\n  Clothing, harness, leathers   0\n  Longcoats, impact jacket     +1\n  Light or medium suit         +2\n  Heavy suit                   +3\n\nCyberware is counted separately." },
         { id: 'armor_soak', label: 'SOAK', type: 'number', placeholder: '0', hint: "Your armor's Damage Soak: extra hit points it spends before you do, refilling each scene.\n\n  Reinforced clothing      2\n  Street leathers          3\n  War harness, longcoats   5\n  Impact jacket            8\n  Medium armored suit     10\n  Heavy armored suit      15" },
-        { id: 'shield_bonus', label: 'SHIELD', type: 'number', placeholder: '0', hint: 'Flat AC bonus from a carried shield.' },
+        { id: 'shield_bonus', label: 'SHIELD', type: 'number', placeholder: '0', hint: "AC bonus from a carried shield or an armor accessory, against ranged attacks.\n\n  Riot Shield           +2 / +4\n  Absorption Plates     +2 / +2\n  Joint Reinforcement   +1 / +1" },
+        { id: 'shield_bonus_melee', label: 'SHIELD (MEL)', type: 'number', placeholder: '0', hint: 'The same bonus against melee attacks. A Riot Shield is much better at fending off a blade than a bullet, at +4 rather than +2. Leave blank when the bonus is the same both ways.' },
       ],
     },
     {

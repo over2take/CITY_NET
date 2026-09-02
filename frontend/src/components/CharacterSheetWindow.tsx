@@ -5,6 +5,7 @@ import { SheetRenderer } from './SheetRenderer';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { VehicleBadgeButton } from './VehicleBadgeButton';
+import type { SheetLinkSource } from '../sheets';
 
 // The player's own character sheet (in-game floating window). Identity is
 // the socket's registered user - the server only ever returns / edits the
@@ -20,7 +21,7 @@ interface CharacterSheetWindowProps {
   playerToken?: string | null;
   adminToken?: string;
   /** Open the window that owns a linked field (HIT_POINTS / BANK). */
-  onOpenLink?: (source: 'token_hp' | 'token_hp_max' | 'bank_balance' | 'token_ac') => void;
+  onOpenLink?: (source: SheetLinkSource) => void;
   /** Called when the player rolls from the sheet - App opens the dice tray
    *  so the result is visible. */
   onRolled?: () => void;

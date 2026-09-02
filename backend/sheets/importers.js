@@ -296,7 +296,13 @@ const buildCwnAliases = () => {
   // Combat
   alias(['ac', 'armorclass', 'defense', 'armour'], 'ac');
   alias(['armor', 'armorname'], 'armor_name');
-  alias(['armorac', 'baseac', 'armorbaseac'], 'armor_ac');
+  // The armor's two ACs. The book's table prints ranged first and that is the column
+  // `armor_ac` has always held, so the melee one is the field that needed adding.
+  alias(['armorac', 'baseac', 'armorbaseac', 'armorrangedac'], 'armor_ac');
+  alias(['armormeleeac', 'armoracmelee'], 'armor_ac_melee');
+  // Linked to the token rather than stored, like `ac` beside it - aliased so a JSON
+  // export of a sheet round-trips into `skipped` instead of looking unrecognised.
+  alias(['acranged', 'rangedarmorclass'], 'ac_ranged');
   alias(['maxdex', 'dexcap', 'armordexcap'], 'armor_dex_cap');
   alias(['soak', 'damagesoak', 'armorsoak'], 'armor_soak');
   alias(['soakcurrent', 'currentsoak', 'soakleft'], 'soak_current');
@@ -305,7 +311,9 @@ const buildCwnAliases = () => {
   // round-trips instead of silently dropping, the same courtesy the attribute mods get.
   alias(['traumatarget', 'traumatgt'], 'trauma_target');
   alias(['lifestyle', 'strainmod', 'lifestylemod'], 'strain_mod');
+  // A Riot Shield is +2 ranged and +4 melee, so the shield bonus splits the same way.
   alias(['shield', 'shieldbonus'], 'shield_bonus');
+  alias(['shieldmelee', 'shieldmeleebonus', 'shieldbonusmelee'], 'shield_bonus_melee');
   alias(['bhb', 'basehitbonus', 'hitbonus', 'attackbonus'], 'base_hit_bonus');
   alias(['systemstrain', 'strain'], 'system_strain');
   alias(['systemstrainmax', 'strainmax'], 'system_strain_max');
@@ -390,6 +398,7 @@ const NUMERIC_CWN_FIELDS = new Set([
   'system_strain', 'system_strain_max',
   'armor_ac', 'armor_dex_cap', 'shield_bonus', 'trauma_target',
   'armor_soak', 'soak_current', 'armor_trauma_mod', 'strain_mod',
+  'armor_ac_melee', 'shield_bonus_melee',
   'frail', 'auto_initiative',
   'cast_skill', 'mage_effort', 'mage_effort_max', 'spells_prepared_max',
   'summon_skill', 'summoner_effort', 'summoner_effort_max',

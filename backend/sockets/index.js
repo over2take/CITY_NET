@@ -743,7 +743,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     const overlayLinkedData = (username, system, data, cb) => {
       const linked = sheetTemplates.getLinkedFields(system);
       const out = { ...data };
-      const wantsToken = Object.values(linked).some(s => s === 'token_hp' || s === 'token_hp_max' || s === 'token_ac');
+      const wantsToken = Object.values(linked).some(s => sheetTemplates.TOKEN_SOURCES.has(s));
       const wantsCash = Object.values(linked).includes('bank_balance');
       const afterToken = (tokenRow) => {
         Object.entries(linked).forEach(([fieldId, source]) => {
@@ -752,6 +752,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           // Unset token AC falls back to 10, matching the attack engine's
           // default - the sheet shows the AC attacks actually resolve against.
           if (source === 'token_ac') out[fieldId] = tokenRow ? (tokenRow.melee_ac ?? 10) : null;
+          if (source === 'token_ac_ranged') out[fieldId] = tokenRow ? sheetTemplates.rangedAcOf(tokenRow) : null;
         });
         if (!wantsCash) return cb(out);
         db.get(`SELECT balance FROM player_banks WHERE username = ?`, [username], (err, bank) => {
@@ -763,7 +764,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       };
       if (!wantsToken) return afterToken(null);
       db.get(
-        `SELECT hp_current, hp_max, melee_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
+        `SELECT hp_current, hp_max, melee_ac, ranged_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
          ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
         [username],
         (err, tokenRow) => afterToken(err ? null : tokenRow)
@@ -1129,16 +1130,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       getGameSystem((err, system) => {
         if (err) return;
         // Linked fields are owned by other systems (token HP, bank) - never
-        // stored in sheet JSON. token_ac is the one WRITABLE link: a sheet
-        // edit routes to the player's token (both melee and ranged - CWN
-        // has a single flat AC), keeping the token the source of truth.
-        const linkSource = sheetTemplates.getLinkedFields(system)[payload.fieldId];
-        if (linkSource === 'token_ac') {
-          const ac = Number(payload.value);
-          if (!Number.isFinite(ac) || ac < 0 || ac > 99) return;
+        // stored in sheet JSON. The AC links are the writable ones: a sheet edit
+        // routes to the player's token, keeping the token the source of truth.
+        // Which columns it touches is the template's call - see acColumns.
+        const linked = sheetTemplates.getLinkedFields(system);
+        const linkSource = linked[payload.fieldId];
+        if (linkSource === 'token_ac' || linkSource === 'token_ac_ranged') {
+          const cols = sheetTemplates.acColumns(linked, { [payload.fieldId]: payload.value });
+          if (!cols) return;
           db.run(
-            `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
-            [ac, ac, info.userName],
+            `UPDATE locations SET ${cols.sets} WHERE shape = 'rhombus' AND owner = ?`,
+            [...cols.values, info.userName],
             (e2) => {
               if (e2) return;
               emitUpdate({ isRhombusOnly: true });
@@ -1208,7 +1210,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 if (effAc !== null) {
                   db.run(
                     `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
-                    [effAc, effAc, info.userName],
+                    [effAc.melee, effAc.ranged, info.userName],
                     () => {
                       emitUpdate({ isRhombusOnly: true });
                       io.emit('sheetUpdated', { username: info.userName, system });
@@ -1301,14 +1303,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     if (effAc === null) return finish();
                     db.run(
                       `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
-                      [effAc, effAc, info.userName], () => finish()
+                      [effAc.melee, effAc.ranged, info.userName], () => finish()
                     );
                   }, system);
                 }
                 if (effAc !== null) {
                   db.run(
                     `UPDATE locations SET melee_ac = ?, ranged_ac = ? WHERE shape = 'rhombus' AND owner = ?`,
-                    [effAc, effAc, info.userName],
+                    [effAc.melee, effAc.ranged, info.userName],
                     () => { emitUpdate({ isRhombusOnly: true }); finish(); }
                   );
                 } else {
@@ -2041,8 +2043,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               try { defenderData = defender ? JSON.parse(defender.data || '{}') : {}; } catch (e) { defenderData = {}; }
 
               resolveOccupiedVehicle(defender, defenderData, (ride) => {
-              // CWN has one flat AC; melee_ac is the canonical token slot and
-              // ranged falls back to it.
+              // Two ACs, and the book is explicit that they are picked by attack type:
+              // "Ranged attacks target ranged AC and melee attacks target melee AC"
+              // (p33). melee_ac is the canonical slot; ranged falls back to it for a
+              // token whose columns have never diverged.
               const meleeAc = target.melee_ac !== null && target.melee_ac !== undefined ? target.melee_ac : 10;
               const tokenAc = weapon.attackType === 'ranged'
                 ? (target.ranged_ac !== null && target.ranged_ac !== undefined ? target.ranged_ac : meleeAc)

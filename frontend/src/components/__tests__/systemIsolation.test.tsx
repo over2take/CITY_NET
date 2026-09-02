@@ -133,13 +133,28 @@ describe('shops are Cities Without Number only', () => {
   });
 });
 
+describe('the ranged AC link is CWN alone', () => {
+  const sourcesOf = (t: typeof CPR) =>
+    t.sections.flatMap((s) => (s.fields ?? []).map((f) => f.source)).filter(Boolean);
+
+  it('is declared by CWN and by nobody else', () => {
+    // A template that links only `token_ac` means both token columns by it, which is
+    // what a system with one Armor Class means. Declaring the ranged link is what
+    // splits them, so it must not appear on a sheet whose rules do not split.
+    expect(sourcesOf(CWN)).toContain('token_ac_ranged');
+    for (const t of [CPR, SR6, GENERIC]) {
+      expect(sourcesOf(t)).not.toContain('token_ac_ranged');
+    }
+  });
+});
+
 describe('CWN fields exist on no other sheet', () => {
   const idsOf = (t: typeof CPR) =>
     t.sections.flatMap((s) => (s.fields ?? []).map((f) => f.id));
 
   it('keeps Lifestyle, TT Mod and Trauma Target off the other templates', () => {
     const cwnOnly = ['strain_mod', 'armor_trauma_mod', 'trauma_target', 'system_strain',
-      'soak_current', 'armor_soak'];
+      'soak_current', 'armor_soak', 'armor_ac_melee', 'shield_bonus_melee', 'ac_ranged'];
     for (const t of [CPR, SR6, GENERIC]) {
       for (const id of cwnOnly) expect(idsOf(t)).not.toContain(id);
     }
@@ -149,7 +164,7 @@ describe('CWN fields exist on no other sheet', () => {
     // Guards the guard: a typo in the ids above would make the test above pass for free.
     const ids = idsOf(CWN);
     for (const id of ['strain_mod', 'armor_trauma_mod', 'trauma_target', 'system_strain',
-      'soak_current', 'armor_soak']) {
+      'soak_current', 'armor_soak', 'armor_ac_melee', 'shield_bonus_melee', 'ac_ranged']) {
       expect(ids).toContain(id);
     }
   });

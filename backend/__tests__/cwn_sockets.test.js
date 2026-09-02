@@ -345,9 +345,16 @@ describe('CWN token_ac linked field', () => {
     expect(sheet.data.data.ac).toBe(10);
   });
 
-  it('routes a sheet AC edit to the token instead of the sheet JSON', async () => {
+  const seedAcSheet = async () => {
     await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', '{}', 0)`);
     await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 10, 10, 20, 20)`);
+  };
+
+  it('routes a melee AC edit to that column alone, not to the sheet JSON', async () => {
+    // The two ACs are separate numbers in CWN, so the melee field is not a way to
+    // set both. It used to be, which meant a character could not have the 13/14 the
+    // book gives a War Harness.
+    await seedAcSheet();
     const { handlers, emitted } = boot(db);
     handlers['identify']('GHOST');
     await flush(50);
@@ -357,9 +364,39 @@ describe('CWN token_ac linked field', () => {
 
     const token = await get(db, `SELECT melee_ac, ranged_ac FROM locations WHERE owner = 'GHOST'`);
     expect(token.melee_ac).toBe(16);
-    expect(token.ranged_ac).toBe(16);
+    expect(token.ranged_ac).toBe(10); // untouched
     const sheet = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
     expect(JSON.parse(sheet.data).ac).toBeUndefined(); // never stored on the sheet
+  });
+
+  it('routes a ranged AC edit to the other column alone', async () => {
+    await seedAcSheet();
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['updateSheetField']({ fieldId: 'ac_ranged', value: 13 });
+    await waitFor(() => emitted.some(e => e.event === 'sheetUpdated'));
+
+    const token = await get(db, `SELECT melee_ac, ranged_ac FROM locations WHERE owner = 'GHOST'`);
+    expect(token.ranged_ac).toBe(13);
+    expect(token.melee_ac).toBe(10);
+    const sheet = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    expect(JSON.parse(sheet.data).ac_ranged).toBeUndefined();
+  });
+
+  it('reads both ACs back off the token', async () => {
+    await seedAcSheet();
+    await run(db, `UPDATE locations SET melee_ac = 14, ranged_ac = 13 WHERE owner = 'GHOST'`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['requestMySheet']();
+    await waitFor(() => emitted.some(e => e.event === 'sheetData'));
+    const sheet = emitted.find(e => e.event === 'sheetData');
+    expect(sheet.data.data.ac).toBe(14);
+    expect(sheet.data.data.ac_ranged).toBe(13);
   });
 
   it('armor fields drive the token AC automatically', async () => {
@@ -376,7 +413,54 @@ describe('CWN token_ac linked field', () => {
 
     const token = await get(db, `SELECT melee_ac, ranged_ac FROM locations WHERE owner = 'GHOST'`);
     expect(token.melee_ac).toBe(15); // 14 base + 1 dex mod
-    expect(token.ranged_ac).toBe(15);
+    expect(token.ranged_ac).toBe(15); // no melee AC set, so the two are the same
+  });
+
+  it('drives the two token columns apart when the armor defends differently', async () => {
+    // The point of the split, end to end. A War Harness is 13 ranged and 14 melee; with
+    // a +1 Dex the token must end up 14 and 15, not one number twice. This is the path
+    // that was producing the wrong number - the resolver already picked the right column,
+    // but both columns held the same value so there was nothing to pick between.
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
+      [JSON.stringify({ dex: 14, dex_mod: 1, armor_ac: 13, armor_ac_melee: 14 })]);
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 10, 10, 20, 20)`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['updateSheetField']({ fieldId: 'armor_name', value: 'War Harness' });
+    await waitFor(() => emitted.some(e => e.event === 'sheetUpdated'));
+    await flush(50);
+
+    const token = await get(db, `SELECT melee_ac, ranged_ac FROM locations WHERE owner = 'GHOST'`);
+    expect(token.ranged_ac).toBe(14); // 13 + 1
+    expect(token.melee_ac).toBe(15);  // 14 + 1
+  });
+
+  it('sends a ranged attack at the ranged AC and a melee attack at the melee one', async () => {
+    // The two columns only matter because the attack picks between them. Same target,
+    // two weapons, and the AC each one reports is the column its attack type targets.
+    await seedAttacker({
+      ...ATTACKER, stab: 1,
+      weapon2_name: 'Knife', weapon2_dmg: '1d4', weapon2_skill: 'stab',
+      weapon2_trauma: 'd6/x3', weapon2_shock: '1/99', weapon2_atk: 0,
+    });
+    await seedAttackerToken();
+    const target = await run(db,
+      `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max)
+       VALUES ('Punk', 0, 0, 0, 'enemy_rhombus', 'SYSTEM', 3, 1, 30, 30)`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['sheetAttack']({ targetId: target.lastID, weaponIndex: 1 }); // Shoot
+    await waitFor(() => emitted.some(e => e.event === 'attackResult'));
+    expect(emitted.find(e => e.event === 'attackResult').data.ac).toBe(1);
+
+    const melee = emitted.length;
+    handlers['sheetAttack']({ targetId: target.lastID, weaponIndex: 2 }); // Stab
+    await waitFor(() => emitted.slice(melee).some(e => e.event === 'attackResult'));
+    expect(emitted.slice(melee).find(e => e.event === 'attackResult').data.ac).toBe(3);
   });
 
   it('rejects garbage AC writes', async () => {

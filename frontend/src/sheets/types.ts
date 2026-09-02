@@ -18,6 +18,16 @@ export type SheetFieldValue = string | number | unknown[];
 
 export interface SheetOption { value: string; label: string }
 
+/**
+ * A value that lives in another system and is overlaid onto the sheet at read time.
+ *
+ * Named once so the handful of places that switch on it cannot drift apart - adding
+ * a source and missing one of them is a field that reads as undefined with nothing
+ * to show for it.
+ */
+export type SheetLinkSource =
+  | 'token_hp' | 'token_hp_max' | 'bank_balance' | 'token_ac' | 'token_ac_ranged';
+
 export interface SheetField {
   id: string;
   label: string;
@@ -68,8 +78,11 @@ export interface SheetField {
    *  server at read time (never stored in the sheet's JSON).
    *  - token_hp / token_hp_max: the player's rhombus health
    *  - bank_balance: the player's bank balance (read-only on the sheet)
-   *  - token_ac: the token's armor class (writable; see sourceWritable) */
-  source?: 'token_hp' | 'token_hp_max' | 'bank_balance' | 'token_ac';
+   *  - token_ac: the token's melee armor class (writable; see sourceWritable)
+   *  - token_ac_ranged: the token's ranged armor class (writable). Only declared by
+   *    a system whose two ACs are separate numbers; where a template links only
+   *    `token_ac`, that one field still means both columns. */
+  source?: SheetLinkSource;
   /** Writable linked field: renders as a normal input; the server routes the
    *  write to the owning system (e.g. token_ac -> the token's AC). */
   sourceWritable?: boolean;

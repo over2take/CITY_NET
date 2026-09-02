@@ -260,6 +260,34 @@ describe('the import form', () => {
     expect(mapped.soak_current).toBe(3);
   });
 
+  it('brings both ACs of a piece of armor in', async () => {
+    // The book prints ranged first, which is the column `Armor AC` has always been.
+    const doc = await PDFDocument.load(await buildTemplate('cities_without_number'));
+    const form = doc.getForm();
+    form.getTextField('Armor Name').setText('War Harness');
+    form.getTextField('Armor AC').setText('13');
+    form.getTextField('Armor Melee AC').setText('14');
+    form.getTextField('Shield').setText('2');
+    form.getTextField('Shield Melee').setText('4');
+
+    const raw = await extractPdfFields(Buffer.from(await doc.save()));
+    const { mapped, unmapped } = getImporter('cities_without_number').mapFields(raw);
+
+    expect(unmapped).toEqual({});
+    expect(mapped.armor_ac).toBe(13);
+    expect(mapped.armor_ac_melee).toBe(14);
+    expect(mapped.shield_bonus).toBe(2);
+    expect(mapped.shield_bonus_melee).toBe(4);
+  });
+
+  it('leaves the melee AC alone on a sheet that names only one', async () => {
+    // Every CWN sheet written before the split. Blank means "the same both ways",
+    // and importing must not invent a number that changes how the character defends.
+    const { mapped } = getImporter('cities_without_number').mapFields({ 'Armor AC': '16' });
+    expect(mapped.armor_ac).toBe(16);
+    expect(mapped.armor_ac_melee).toBeUndefined();
+  });
+
   it('offers nothing for a system with no importer behind it', async () => {
     expect(hasTemplate('generic')).toBe(false);
     expect(await buildTemplate('generic')).toBeNull();

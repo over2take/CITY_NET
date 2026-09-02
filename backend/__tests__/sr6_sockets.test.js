@@ -309,3 +309,46 @@ describe('SR6 resistDrain', () => {
     expect(emitted.find(e => e.event === 'diceRollBroadcast')).toBeFalsy();
   });
 });
+
+describe('SR6 armor rating writes both token AC columns', () => {
+  /**
+   * The no-bleed test for CWN's split ACs.
+   *
+   * Shadowrun has one Armor Rating and keeps it in the melee_ac slot, and the generic
+   * attack path reads ranged_ac with melee as its fallback. CWN's two ACs are separate
+   * numbers and each of its fields writes only its own column - that difference is
+   * decided by the template, and nothing about it may reach a system with one AC.
+   */
+  it('sets melee and ranged alike from armor_rating', async () => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'shadowrun_6e', '{}', 0)`);
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 0, 0, 11, 11)`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['updateSheetField']({ fieldId: 'armor_rating', value: 9 });
+    await waitFor(() => emitted.some(e => e.event === 'sheetUpdated'));
+
+    const token = await get(db, `SELECT melee_ac, ranged_ac FROM locations WHERE owner = 'GHOST'`);
+    expect(token.melee_ac).toBe(9);
+    expect(token.ranged_ac).toBe(9);
+    const sheet = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
+    expect(JSON.parse(sheet.data).armor_rating).toBeUndefined(); // linked, never stored
+  });
+
+  it('reads it back off the melee column', async () => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'shadowrun_6e', '{}', 0)`);
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 9, 9, 11, 11)`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['requestMySheet']();
+    await waitFor(() => emitted.some(e => e.event === 'sheetData'));
+
+    const sheet = emitted.find(e => e.event === 'sheetData');
+    expect(sheet.data.data.armor_rating).toBe(9);
+    // The ranged link is CWN's; Shadowrun declares none and gets no such field.
+    expect(sheet.data.data.ac_ranged).toBeUndefined();
+  });
+});
