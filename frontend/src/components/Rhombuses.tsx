@@ -6,6 +6,7 @@ import { HealthBar } from '../HealthBar';
 import { useStreamerVisibility } from '../context/StreamerVisibilityContext';
 import { IS_SPECTATOR } from '../streamerMode';
 import { parseVehicleState } from '../types';
+import { canMoveToken } from '../utils/tokenControl';
 
 /**
  * Marks a token as being inside a vehicle.
@@ -344,7 +345,7 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
   );
 });
 
-export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap, measureMode }: any) => {
+export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, roads, isBattleMap, measureMode }: any) => {
   const groupRef = useRef<THREE.Group>(null);
   const meshGroupRef = useRef<THREE.Group>(null);
   const lightRef = useRef<THREE.PointLight>(null);
@@ -353,6 +354,9 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
   const intersection = useMemo(() => new THREE.Vector3(), []);
   
   const isAdmin = token !== '';
+  // A friendly NPC can be handed to specific players, or to everyone. The server decides
+  // for real on every move; this is so the map does not offer a drag it would refuse.
+  const canMove = canMoveToken(location, { isAdmin, userName });
   const streamerVis = useStreamerVisibility();
   const [isHovered, setIsHovered] = useState(false);
   const streamerHovered = useStreamerHover(socket, location.id, isAdmin, isHovered);
@@ -518,7 +522,7 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
       if (measureMode) return;
       e.stopPropagation();
     dragDist.current = 0;
-    if (!isAdmin) return;
+    if (!canMove) return;
     pathPoints.current = [{ x: localPos.current.x, z: localPos.current.z }];
     try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
     const currentRaycaster = e.raycaster || raycaster;
@@ -533,7 +537,7 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
 
   const handlePointerMove = (e: any) => {
     if (measureMode) return;
-    if (!isAdmin || e.buttons !== 1) return;
+    if (!canMove || e.buttons !== 1) return;
     dragDist.current += Math.abs(e.movementX) + Math.abs(e.movementY);
     const currentRaycaster = e.raycaster || raycaster;
     if (currentRaycaster && currentRaycaster.ray) {
@@ -555,7 +559,7 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
     if (dragDist.current < 15) {
         e.stopPropagation();
         onClick();
-    } else if (isAdmin) {
+    } else if (canMove) {
         const pts = pathPoints.current;
         const waypoints = Array.from({ length: 30 }, (_, i) => {
           const idx = Math.round(i * (pts.length - 1) / 29);

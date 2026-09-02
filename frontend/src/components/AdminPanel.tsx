@@ -36,6 +36,7 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 import { PNG_EXPORT_PRESETS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExportBounds';
 import { RECORD_DURATIONS, MAX_RECORD_SECONDS } from '../hooks/useMapExport';
+import { parseGrant, describeGrant } from '../utils/tokenControl';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1825,6 +1826,62 @@ export function AdminPanel({
                 </>
             )}
             
+            {editId && editData.shape === 'friendly_rhombus' && (() => {
+              // Handing a friendly NPC to the players running it. Admins keep control
+              // whatever is set here - this shares the token, it does not give it away.
+              const grant = parseGrant(editData.controllers);
+              const players = (activeUsers || [])
+                .filter((u: any) => !u.isAdmin && !u.isNPC)
+                .map((u: any) => u.userName);
+              // Anyone already granted stays listed even if they are offline, or removing
+              // them would mean waiting for them to log back in.
+              const names: string[] = [...new Set([...players, ...grant.users])].sort();
+              const push = (next: { all: boolean; users: string[] }) => {
+                setEditData({ ...editData, controllers: JSON.stringify(next) });
+                socketRef.current?.emit('setTokenControl', { id: editId, all: next.all, users: next.users });
+              };
+              return (
+                <div style={{ marginTop: '15px', borderTop: '1px solid #333', paddingTop: '10px' }}>
+                  <h4 style={{ marginBottom: '4px' }}>PLAYER_CONTROL</h4>
+                  <p style={{ fontSize: '0.62rem', opacity: 0.7, margin: '0 0 8px', lineHeight: 1.5 }}>
+                    Who else can move this NPC. You keep control either way.
+                  </p>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', marginBottom: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={grant.all}
+                      onChange={(e) => push({ all: e.target.checked, users: grant.users })}
+                    />
+                    ALL PLAYERS
+                  </label>
+
+                  {names.length === 0 ? (
+                    <p style={{ fontSize: '0.62rem', opacity: 0.5, fontStyle: 'italic' }}>NO PLAYERS ONLINE TO NAME.</p>
+                  ) : names.map((name) => (
+                    <label key={name} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', opacity: grant.all ? 0.45 : 1 }}>
+                      <input
+                        type="checkbox"
+                        checked={grant.all || grant.users.includes(name)}
+                        disabled={grant.all}
+                        onChange={(e) => push({
+                          all: grant.all,
+                          users: e.target.checked
+                            ? [...grant.users, name]
+                            : grant.users.filter((u) => u !== name),
+                        })}
+                      />
+                      {name}
+                    </label>
+                  ))}
+
+                  <p style={{ fontSize: '0.62rem', opacity: 0.6, marginTop: '8px' }}>
+                    NOW: {describeGrant({ ...editData, shape: 'friendly_rhombus' })}
+                  </p>
+                </div>
+              );
+            })()}
+
             <button type="submit" className="upload-btn">
                 {editData.shape === 'enemy_rhombus' ? (editId ? 'UPDATE_ENEMY_DATA' : 'UPLOAD_NEW_ENEMY') : (editData.shape === 'friendly_rhombus' ? (editId ? 'UPDATE_FRIENDLY_NPC' : 'UPLOAD_NEW_FRIENDLY') : (editId ? 'UPDATE_DATA_POINT' : 'UPLOAD_NEW'))}
             </button>
