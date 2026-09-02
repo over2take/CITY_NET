@@ -127,10 +127,13 @@ describe('every kind of modifier reaches the sheet', () => {
     { kind: 'statSet', target: 'Cool', value: 3, field: 'cool', base: 5, expected: 3, why: 'replaces a stat' },
     { kind: 'skill', target: 'Business', value: 6, field: 'business', base: 3, expected: 9, why: 'adds to a skill' },
     { kind: 'skillSet', target: 'Business', value: 6, field: 'business', base: 9, expected: 6, why: 'replaces a skill' },
+    { kind: 'statFloor', target: 'Cool', value: 14, bonus: 2, field: 'cool', base: 5, expected: 14, why: 'raises a stat below the floor' },
+    { kind: 'statFloor', target: 'Cool', value: 14, bonus: 2, field: 'cool', base: 16, expected: 18, why: 'pays the bonus when the stat already clears it' },
   ];
 
-  it.each(KINDS)('$kind $why', ({ kind, target, value, field, base, expected }) => {
-    const data = sheet([piece('P', [{ kind, target, value }])], { [field]: base });
+  it.each(KINDS)('$kind $why', ({ kind, target, value, bonus, field, base, expected }) => {
+    const m = bonus === undefined ? { kind, target, value } : { kind, target, value, bonus };
+    const data = sheet([piece('P', [m])], { [field]: base });
     const effect = sheetEffects(data, CPR).fields[field];
     expect(effect.value).toBe(expected);
     expect(effect.delta).toBe(expected - base);
@@ -151,7 +154,8 @@ describe('every kind of modifier reaches the sheet', () => {
   });
 
   it('covers every kind the row model declares', () => {
-    const covered = [...KINDS.map((k) => k.kind), 'roll', 'note'].sort();
+    // Deduped: a kind may need more than one case above without being declared twice.
+    const covered = [...new Set([...KINDS.map((k) => k.kind), 'roll', 'note'])].sort();
     expect([...MOD_KINDS].sort()).toEqual(covered);
   });
 });
@@ -302,5 +306,163 @@ describe('agreeing with the server', () => {
 
     expect(sheetEffects(data, CPR).unmatched.map((u) => u.target))
       .toEqual(backend.default.effects(data).unmatched.map((u: { target: string }) => u.target));
+  });
+});
+
+describe('Cities Without Number', () => {
+  const CWN = getTemplate('cities_without_number');
+  // CWN files chrome by the book's own install types rather than CP:R's categories.
+  const cwnPiece = (name: string, mods: unknown[], extra = {}) =>
+    ({ name, equipped: true, type: 'nerve', side: null, mods, ...extra });
+
+  it('adds to an attribute named the way the sheet prints it', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'DEX', value: 2 }])], { dex: 10 });
+    expect(sheetEffects(data, CWN).fields.dex.value).toBe(12);
+  });
+
+  it('adds to an attribute named the way the book writes it', () => {
+    // A modifier copied off the cyberware table says Dexterity, not DEX.
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Dexterity', value: 2 }])], { dex: 10 });
+    expect(sheetEffects(data, CWN).fields.dex.value).toBe(12);
+  });
+
+  it('raises an attribute to the floor, or pays the bonus above it', () => {
+    const mod = { kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 };
+    expect(sheetEffects(sheet([cwnPiece('P', [mod])], { dex: 9 }), CWN).fields.dex.value).toBe(14);
+    expect(sheetEffects(sheet([cwnPiece('P', [mod])], { dex: 16 }), CWN).fields.dex.value).toBe(18);
+  });
+
+  it('adds to a CWN skill', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'skill', target: 'Drive', value: 2 }])], { drive: 1 });
+    expect(sheetEffects(data, CWN).fields.drive.value).toBe(3);
+  });
+
+  it('leaves a Cyberpunk RED stat unmatched, since CWN has no such field', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Reflexes', value: 2 }])], { dex: 10 });
+    const out = sheetEffects(data, CWN);
+    expect(out.fields).toEqual({});
+    expect(out.unmatched.map((u) => u.target)).toEqual(['Reflexes']);
+  });
+
+  it('never changes what is stored', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Dexterity', value: 4 }])], { dex: 10 });
+    sheetEffects(data, CWN);
+    expect(data.dex).toBe(10);
+  });
+
+  it('reaches the same attribute numbers as the server', async () => {
+    const backend = await import('../../../../backend/sheets/cyberwareEffects.js');
+    const rows = [
+      cwnPiece('Coordination Augment I', [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }], { placed: true }),
+      cwnPiece('Booster', [{ kind: 'skill', target: 'Drive', value: 2 }], { placed: true }),
+    ];
+    const data = sheet(rows, { dex: 9, drive: 1 });
+
+    const mine = sheetEffects(data, CWN).fields;
+    const theirs = backend.default.effects(data, 'cities_without_number').fields;
+
+    // Every field the server names directly, this side must agree on. It may report more
+    // — the derived fields the server folds into effectiveData rather than into `fields`.
+    for (const id of Object.keys(theirs)) {
+      expect(`${id}=${mine[id]?.value}`).toBe(`${id}=${theirs[id].value}`);
+    }
+  });
+
+  it('moves the derived modifier with the attribute it comes from', () => {
+    // The page contradicting itself was the bug: DEX reading 14 with a badge beside a DEX
+    // MOD still showing the modifier for the DEX that was typed.
+    const data = sheet([cwnPiece('P', [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }], { placed: true })],
+      { dex: 9, dex_mod: 0 });
+    const out = sheetEffects(data, CWN);
+    expect(out.fields.dex.value).toBe(14);
+    expect(out.fields.dex_mod.value).toBe(1);
+    expect(out.fields.dex_mod.delta).toBe(1);
+  });
+
+  it('names the piece responsible on the derived field too', () => {
+    // A badge that cannot say where it came from is a number nobody can argue with.
+    const data = sheet([cwnPiece('Coordination Augment I',
+      [{ kind: 'stat', target: 'Dexterity', value: 5 }], { placed: true })], { dex: 9, dex_mod: 0 });
+    expect(sheetEffects(data, CWN).fields.dex_mod.sources.map((s) => s.name))
+      .toEqual(['Coordination Augment I']);
+  });
+
+  it('moves the saves that hang off a changed attribute', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Dexterity', value: 9 }], { placed: true })],
+      { dex: 9, int: 8, level: 1, save_evasion: 15 });
+    expect(sheetEffects(data, CWN).fields.save_evasion.value).toBe(16 - (1 + 2));
+  });
+
+  it('leaves the luck save alone, since no implant can reach it', () => {
+    // It comes from level and nothing else.
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Dexterity', value: 9 }], { placed: true })],
+      { dex: 9, level: 1, save_luck: 15 });
+    expect(sheetEffects(data, CWN).fields.save_luck).toBeUndefined();
+  });
+
+  it('moves the strain maximum when CON moves, since it is the CON score', () => {
+    const data = sheet([cwnPiece('P', [{ kind: 'stat', target: 'Constitution', value: 2 }], { placed: true })],
+      { con: 10, system_strain_max: 10 });
+    expect(sheetEffects(data, CWN).fields.system_strain_max.value).toBe(12);
+  });
+
+  it('changes no derived field when the chrome moves nothing', () => {
+    const data = sheet([], { dex: 9, dex_mod: 0 });
+    expect(sheetEffects(data, CWN).fields).toEqual({});
+  });
+
+  it('derives exactly what the server derives', async () => {
+    // The mirror is only worth having if it agrees. Run the real server module over the
+    // same sheet and compare every field it recomputed.
+    const backend = await import('../../../../backend/sheets/cyberwareEffects.js');
+    const rows = [
+      cwnPiece('Coordination Augment I', [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }], { placed: true }),
+      cwnPiece('Muscle Fiber', [{ kind: 'stat', target: 'Strength', value: 6 }], { placed: true }),
+      cwnPiece('Filter', [{ kind: 'stat', target: 'Constitution', value: 3 }], { placed: true }),
+    ];
+    // Every derived field starts at what it should be for these attributes, so the only
+    // differences the server produces are the ones the chrome caused. Left blank, it would
+    // also be filling in empty boxes and the comparison would be about that instead.
+    const data = sheet(rows, {
+      dex: 9, str: 12, con: 10, int: 8, wis: 11, cha: 13, level: 2,
+      dex_mod: 0, str_mod: 0, con_mod: 0, int_mod: 0, wis_mod: 0, cha_mod: 0,
+      cast_skill: 1, summon_skill: 0,
+      save_physical: 14, save_evasion: 14, save_mental: 14, save_luck: 14,
+      system_strain_max: 10, mage_effort_max: 1, spells_prepared_max: 2, summoner_effort_max: 1,
+      trauma_target: 6, armor_trauma_mod: 0,
+    });
+
+    const mine = sheetEffects(data, CWN).fields;
+    const theirs = backend.default.effectiveData(data, 'cities_without_number');
+
+    for (const id of Object.keys(mine)) {
+      expect(`${id}=${mine[id].value}`).toBe(`${id}=${Number(theirs[id])}`);
+    }
+    // And every field the server moved is one this side reports, or the page still lags.
+    for (const id of Object.keys(theirs)) {
+      if (id === 'cyberware' || Number(theirs[id]) === Number((data as Record<string, unknown>)[id])) continue;
+      expect(mine[id]).toBeDefined();
+    }
+  });
+});
+
+describe('what a badge says about a floor', () => {
+  const CWN = getTemplate('cities_without_number');
+  const cwnPiece = (name: string, mods: unknown[]) =>
+    ({ name, equipped: true, type: 'nerve', side: null, placed: true, mods });
+
+  it('reads a floor as a target rather than a contribution', () => {
+    // "+14" would be the floor printed as though the piece added fourteen. It moved a DEX
+    // of 9 by five, and the derived modifier by one - neither of them fourteen.
+    const data = sheet([cwnPiece('Coordination Augment I',
+      [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }])], { dex: 9, dex_mod: 0 });
+    const out = sheetEffects(data, CWN);
+    expect(describeSources(out.fields.dex)).toBe('Coordination Augment I → 14');
+    expect(describeSources(out.fields.dex_mod)).toBe('Coordination Augment I → 14');
+  });
+
+  it('still prints a plain adjustment with its sign', () => {
+    const data = sheet([cwnPiece('Booster', [{ kind: 'stat', target: 'Dexterity', value: 2 }])], { dex: 10 });
+    expect(describeSources(sheetEffects(data, CWN).fields.dex)).toBe('Booster +2');
   });
 });

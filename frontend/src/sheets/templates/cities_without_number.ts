@@ -241,9 +241,10 @@ export const citiesWithoutNumber: SheetTemplate = {
       fields: [
         { id: 'ac', label: 'AC', type: 'number', sensitivity: 'combat', source: 'token_ac', sourceWritable: true, hint: 'Armor Class - attacks hit at or above this. Linked to your token: editing here updates the token and vice versa.' },
         { id: 'base_hit_bonus', label: 'BHB', type: 'number', hint: 'Base hit bonus from class and level; added to every attack roll.' },
-        { id: 'system_strain', label: 'STRAIN', type: 'number', maxField: 'system_strain_max', hint: 'System Strain from cyberware, drugs and rapid healing. Max equals your CON score; recovers 1 per full rest.' },
+        { id: 'system_strain', label: 'STRAIN', type: 'number', maxField: 'system_strain_max', hint: 'System Strain from cyberware, drugs and rapid healing. Max is your CON score plus the modifier beside it; recovers 1 per full rest.' },
+        { id: 'strain_mod', label: 'LIFESTYLE', type: 'number', placeholder: '0', hint: "Added to your maximum System Strain, normally your CON.\n\n  Squatter  -2\n  Slum      -1\n  Middle     0\n  Fine      +1\n  Luxury    +2\n\nCyberware is counted separately." },
         { id: 'system_strain_max', label: 'STRAIN MAX', type: 'number', derived: true, hint: 'Derived: equals CON score, recomputed on every save.' },
-        { id: 'trauma_target', label: 'TRAUMA TGT', type: 'number', placeholder: '6', hint: 'Trauma Target: enemy trauma dice at or above this multiply their damage. Default 6; certain cyberware and armor raise it. Only used when the GRITTY COMBAT house rule is on.' },
+        { id: 'trauma_target', label: 'TRAUMA TGT', type: 'number', derived: true, hint: "Derived: 6 plus the armor's Trauma Target Mod. Enemy trauma dice at or above this multiply their damage. Cyberware raises it further. Only used when the GRITTY COMBAT house rule is on." },
       ],
     },
     {
@@ -296,6 +297,7 @@ export const citiesWithoutNumber: SheetTemplate = {
         { id: 'armor_name', label: 'ARMOR', type: 'text', placeholder: 'Armored Vest', hint: 'What you are wearing. Cosmetic - the numbers below do the work.' },
         { id: 'armor_ac', label: 'BASE AC', type: 'number', placeholder: '14', hint: 'The armor\'s base AC. When set, your token AC is computed automatically: base + DEX mod (capped) + shield. Leave blank to manage AC by hand on the STATS tab or token.' },
         { id: 'armor_dex_cap', label: 'MAX DEX', type: 'number', hint: 'Heavy armor caps the DEX bonus. Blank = uncapped, 0 = no DEX bonus.' },
+        { id: 'armor_trauma_mod', label: 'TT MOD', type: 'number', placeholder: '0', hint: "Your armor's Trauma Target Mod, added to the base 6.\n\n  Clothing, harness, leathers   0\n  Longcoats, impact jacket     +1\n  Light or medium suit         +2\n  Heavy suit                   +3\n\nCyberware is counted separately." },
         { id: 'shield_bonus', label: 'SHIELD', type: 'number', placeholder: '0', hint: 'Flat AC bonus from a carried shield.' },
       ],
     },
@@ -358,12 +360,32 @@ export const citiesWithoutNumber: SheetTemplate = {
       ],
     },
     {
+      // Rows and a body diagram rather than the line of names this used to be. The book
+      // gives every implant an install location, a System Strain cost, a price and a
+      // concealment rating, none of which survive being typed into one box.
+      //
+      // `fields` is empty because the whole section lives under one array field - see
+      // sheets/cyberwareRows - exactly as Cyberpunk RED's does.
       id: 'cyberware',
       label: 'CYBERWARE',
+      layout: 'cyberware',
+      tab: 'GEAR',
+      fields: [],
+    },
+    {
+      // The old free-text box, kept.
+      //
+      // It stores under `cyberware_notes` while the rows store under `cyberware`, so
+      // switching the section above to a table destroyed nothing - but it would have
+      // stopped displaying what people had already typed, which is its own kind of loss.
+      // A section of its own is cheaper than teaching the table to render trailing fields,
+      // and it reads better: notes about your chrome are not a row of it.
+      id: 'cyberware_notes',
+      label: 'CYBERWARE NOTES',
       layout: 'notes',
       tab: 'GEAR',
       fields: [
-        { id: 'cyberware_notes', label: 'Cyberware', type: 'textarea', placeholder: 'Dermal armor, cranial jack, low-light eyes' },
+        { id: 'cyberware_notes', label: 'Notes', type: 'textarea', placeholder: 'Anything the rows above do not cover' },
       ],
     },
     // DELUXE tab: Spellcasting + Summoning (CWN Deluxe edition). Visibility is

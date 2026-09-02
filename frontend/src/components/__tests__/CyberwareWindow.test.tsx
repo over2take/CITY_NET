@@ -928,3 +928,146 @@ describe('modifiers', () => {
     expect(screen.queryByLabelText('Modifier 1 target')).not.toBeInTheDocument();
   });
 });
+
+describe('the words each system uses for what a piece costs', () => {
+  const CWN = getTemplate('cities_without_number');
+  const cwnRow = {
+    name: 'Cranial Jack', type: 'head', side: null, hl: 0.25, cost: 1000,
+    conc: 'touch', data: '', equipped: true, placed: true, mods: [],
+  };
+
+  const openFor = (template: SheetTemplate) => render(
+    <CyberwareWindow data={{ cyberware: [cwnRow] }} template={template}
+      onFieldChange={vi.fn()} onClose={vi.fn()} />,
+  );
+
+  it('says Strain and credits on a CWN sheet', () => {
+    // CWN has no Humanity stat and does not price in eurodollars, so both would be
+    // naming rules that system does not have.
+    openFor(CWN);
+    expect(screen.getByText(/STRAIN 0\.25/)).toBeInTheDocument();
+    expect(screen.getByText(/1,000cr/)).toBeInTheDocument();
+    expect(screen.queryByText(/HUMANITY/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/eb/)).not.toBeInTheDocument();
+  });
+
+  it('still says Humanity Loss and eb on a Cyberpunk RED sheet', () => {
+    const cprRow = { ...cwnRow, type: 'neural', hl: 7, conc: '' };
+    render(<CyberwareWindow data={{ cyberware: [cprRow] }} template={getTemplate('cyberpunk_red')}
+      onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText(/HUMANITY LOSS 7/)).toBeInTheDocument();
+  });
+});
+
+describe('filling the form from the book', () => {
+  const CWN = getTemplate('cities_without_number');
+
+  const openAddForm = async (template: SheetTemplate) => {
+    render(<CyberwareWindow data={{ cyberware: [] }} template={template}
+      onFieldChange={vi.fn()} onClose={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: /ADD CYBERWARE/ }));
+  };
+
+  it('offers the catalogue on a CWN sheet', async () => {
+    await openAddForm(CWN);
+    expect(screen.getByLabelText('Pick from catalogue')).toBeInTheDocument();
+  });
+
+  it('offers nothing on a system with no catalogue', async () => {
+    // An empty picker is worse than no picker.
+    await openAddForm(getTemplate('cyberpunk_red'));
+    expect(screen.queryByLabelText('Pick from catalogue')).not.toBeInTheDocument();
+  });
+
+  it('fills name, strain, price and concealment from the book', async () => {
+    await openAddForm(CWN);
+    await userEvent.selectOptions(screen.getByLabelText('Pick from catalogue'), 'cranial-jack');
+
+    expect((screen.getByLabelText('Cyberware name') as HTMLInputElement).value).toBe('Cranial Jack');
+    expect((screen.getByLabelText('Install type') as HTMLSelectElement).value).toBe('head');
+    expect(Number((screen.getByLabelText(/Strain|Humanity/i) as HTMLInputElement).value)).toBe(0.25);
+    expect(Number((screen.getByLabelText('Price in eddies') as HTMLInputElement).value)).toBe(1000);
+  });
+
+  it('brings the modifiers with it', async () => {
+    // The whole point for the pieces that have them: typing a floor by hand means getting
+    // two numbers and a kind right.
+    await openAddForm(CWN);
+    await userEvent.selectOptions(screen.getByLabelText('Pick from catalogue'), 'coordination-augment-i');
+    expect(screen.getByDisplayValue('Dexterity')).toBeInTheDocument();
+  });
+
+  it('adds nothing on its own — the form is still filled in by hand from there', async () => {
+    await openAddForm(CWN);
+    await userEvent.selectOptions(screen.getByLabelText('Pick from catalogue'), 'skinmod');
+    // Still in the form, not on the sheet: picking is not committing.
+    expect(screen.getByRole('button', { name: 'ADD' })).toBeInTheDocument();
+  });
+});
+
+describe('the System Strain ceiling', () => {
+  const CWN = getTemplate('cities_without_number');
+  const piece = (name: string, hl: number, extra = {}) => ({
+    name, type: 'body', side: null, hl, cost: null, conc: '', data: '',
+    equipped: true, placed: true, mods: [], ...extra,
+  });
+
+  const openWith = (data: Record<string, unknown>, template: SheetTemplate = CWN) => {
+    const onFieldChange = vi.fn();
+    render(<CyberwareWindow data={data} template={template}
+      onFieldChange={onFieldChange} onClose={vi.fn()} />);
+    return onFieldChange;
+  };
+
+  it('shows what the body can take beside what it is carrying', () => {
+    openWith({ con: 10, cyberware: [piece('Heavy', 4)] });
+    expect(screen.getByText(/STRAIN 4 \/ 10/)).toBeInTheDocument();
+  });
+
+  it('refuses an install that would go over, and says by how much', async () => {
+    // CON 10 with 9 points already in the body; a 2-point piece does not fit.
+    const onFieldChange = openWith({
+      con: 10,
+      cyberware: [piece('Installed', 9), piece('Waiting', 2, { placed: false, type: '' })],
+    });
+    await userEvent.click(screen.getByLabelText('Add to Body'));
+    expect(screen.getByText(/PUT SOMETHING IN BODY/)).toBeInTheDocument();
+    // The placing list entry, not the table row that also mentions the piece.
+    const entry = screen.getAllByRole('button')
+      .find((b) => (b.textContent || '').trim().startsWith('Waiting'))!;
+    await userEvent.click(entry);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/NOT ENOUGH SYSTEM STRAIN/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/NEEDS 2/);
+    expect(onFieldChange).not.toHaveBeenCalled();
+  });
+
+  it('allows one that fits exactly', async () => {
+    const onFieldChange = openWith({
+      con: 10,
+      cyberware: [piece('Installed', 8), piece('Waiting', 2, { placed: false, type: '' })],
+    });
+    await userEvent.click(screen.getByLabelText('Add to Body'));
+    // The placing list entry, not the table row that also mentions the piece.
+    const entry = screen.getAllByRole('button')
+      .find((b) => (b.textContent || '').trim().startsWith('Waiting'))!;
+    await userEvent.click(entry);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(onFieldChange).toHaveBeenCalled();
+  });
+
+  it('counts only what is in the body against the ceiling', () => {
+    // 8 installed and 2 merely owned reads as 8 of 10, not 10 of 10 - otherwise the limit
+    // looks reached by things sitting in a bag.
+    openWith({ con: 10, cyberware: [piece('In', 8), piece('Owned', 2, { placed: false })] });
+    expect(screen.getByText(/STRAIN 8 \/ 10/)).toBeInTheDocument();
+  });
+
+  it('says nothing about strain on a Cyberpunk RED sheet', () => {
+    // CP:R spends Humanity, which has no ceiling of this kind.
+    openWith({ humanity: 40, cyberware: [piece('Chrome', 7, { type: 'neural' })] },
+      getTemplate('cyberpunk_red'));
+    expect(screen.queryByText(/\/ 10/)).not.toBeInTheDocument();
+  });
+});

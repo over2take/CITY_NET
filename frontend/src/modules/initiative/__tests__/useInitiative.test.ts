@@ -205,3 +205,63 @@ describe('useInitiative — actions', () => {
     expect(socket.off).toHaveBeenCalledWith('initiative:combats', expect.any(Function));
   });
 });
+
+describe('useInitiative — ending a combat from the nav list', () => {
+  it('ends the combat by id, not by the scene you happen to be standing in', () => {
+    const socket = makeSocket();
+    const socketRef = { current: socket };
+    const { result } = renderHook(() => useInitiative(socketRef, 'city:0'));
+
+    act(() => result.current.endCombat(182));
+
+    expect(socket.emit).toHaveBeenCalledWith('initiative:end_combat', { combatId: 182 });
+  });
+
+  it('works with no scene of its own, which is the usual case from the nav list', () => {
+    const socket = makeSocket();
+    const socketRef = { current: socket };
+    const { result } = renderHook(() => useInitiative(socketRef, null));
+
+    act(() => result.current.endCombat(7));
+
+    expect(socket.emit).toHaveBeenCalledWith('initiative:end_combat', { combatId: 7 });
+  });
+
+  it('ignores a missing combat id rather than emitting a useless event', () => {
+    const socket = makeSocket();
+    const socketRef = { current: socket };
+    const { result } = renderHook(() => useInitiative(socketRef, 'city:0'));
+    socket.emit.mockClear();
+
+    act(() => result.current.endCombat(0 as any));
+
+    expect(socket.emit).not.toHaveBeenCalledWith('initiative:end_combat', expect.anything());
+  });
+
+  it('refreshes the combat list when the server says a scene ended', () => {
+    // The server does not push a new list, it announces the end and each client asks.
+    // That is what repopulates the nav panel after the END button is pressed.
+    const socket = makeSocket();
+    const socketRef = { current: socket };
+    renderHook(() => useInitiative(socketRef, 'city:0'));
+    socket.emit.mockClear();
+
+    act(() => socket.trigger('initiative:ended', { sceneKey: '42:0' }));
+
+    expect(socket.emit).toHaveBeenCalledWith('initiative:list_combats');
+  });
+
+  it('clears the open tracker when the ended scene is the one being watched', () => {
+    const socket = makeSocket();
+    const socketRef = { current: socket };
+    const { result } = renderHook(() => useInitiative(socketRef, 'city:0'));
+
+    act(() => socket.trigger('initiative:state', {
+      sceneKey: 'city:0', combatants: [], sides: [], turnIndex: 0, turnCounter: 1,
+    }));
+    expect(result.current.state).not.toBeNull();
+
+    act(() => socket.trigger('initiative:ended', { sceneKey: 'city:0' }));
+    expect(result.current.state).toBeNull();
+  });
+});

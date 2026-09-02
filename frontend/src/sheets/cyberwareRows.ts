@@ -13,15 +13,58 @@ import { typeById, describe as describeType, looksLike, type Side } from './cybe
 export const CYBERWARE_FIELD = 'cyberware';
 
 /**
+ * Concealment ratings, easiest to hardest to detect.
+ *
+ * Stored as these ids rather than the printed words, so relabelling never rewrites a
+ * saved sheet. Mirrors CONC_VALUES in backend/sheets/cyberware.js.
+ */
+export type Conc = '' | 'obvious' | 'sight' | 'touch' | 'medical';
+
+export const CONC_VALUES: Exclude<Conc, ''>[] = ['obvious', 'sight', 'touch', 'medical'];
+
+export const CONC_LABEL: Record<Exclude<Conc, ''>, string> = {
+  obvious: 'Obvious',
+  sight: 'Sight',
+  touch: 'Touch',
+  medical: 'Medical',
+};
+
+/**
  * What a modifier changes, and whether it adjusts the value or replaces it.
  *
  * The Companion holds these in five buckets — `modifyStatsBy`, `setStatsTo`,
  * `modifySkillsBy`, `setSkillTo`, `modifyRollTypesBy` — flattened on import. Adjusting and
  * setting stay apart: +3 Cool and "Cool becomes 3" are different claims.
  */
-export type ModKind = 'stat' | 'statSet' | 'skill' | 'skillSet' | 'roll' | 'note';
+export type ModKind = 'stat' | 'statSet' | 'skill' | 'skillSet' | 'roll' | 'note' | 'statFloor';
 
-export const MOD_KINDS: ModKind[] = ['stat', 'statSet', 'skill', 'skillSet', 'roll', 'note'];
+export const MOD_KINDS: ModKind[] = ['stat', 'statSet', 'skill', 'skillSet', 'roll', 'note', 'statFloor'];
+
+/**
+ * Kinds that need a second number, so the editor knows to draw a second box.
+ *
+ * `statFloor` is "Dex 14, or +2 if higher": `value` is the floor, `bonus` is what you get
+ * instead when you already clear it.
+ */
+export const TWO_NUMBER_KINDS: ModKind[] = ['statFloor'];
+
+export const usesBonus = (kind: ModKind): boolean => TWO_NUMBER_KINDS.includes(kind);
+
+/**
+ * Kinds introduced for one system's rules, and who may be offered them.
+ *
+ * `statFloor` exists for "Dex 14, or +2 if higher", which is a Cities Without Number shape.
+ * Every system's engine still *understands* it, so a row that has one never silently stops
+ * working - but a system whose book has no such rule should not be offering it in a picker,
+ * or the vocabulary of one game leaks into another.
+ */
+const KIND_SYSTEMS: Partial<Record<ModKind, string[]>> = {
+  statFloor: ['cities_without_number'],
+};
+
+/** The kinds a system's modifier picker should list. */
+export const kindsFor = (system: string): ModKind[] =>
+  MOD_KINDS.filter((k) => !KIND_SYSTEMS[k] || KIND_SYSTEMS[k]!.includes(system));
 
 /**
  * A note is a labelled number the app never applies — "Quickhack DV 10".
@@ -41,6 +84,7 @@ export const MOD_KIND_LABEL: Record<ModKind, string> = {
   skillSet: 'Set Skill To',
   roll: 'Modify Roll Type By',
   note: 'Note (not applied)',
+  statFloor: 'Raise Stat To (or bonus)',
 };
 
 /** Whether a kind adjusts the existing value or replaces it, which is how it is shown. */
@@ -51,6 +95,14 @@ export interface CyberMod {
   /** A stat, skill or roll-type name — free text, since the lists differ per system. */
   target: string;
   value: number;
+  /**
+   * The second number, on the kinds that need one. See TWO_NUMBER_KINDS.
+   *
+   * Absent rather than 0 on every other kind, so a modifier written before this existed
+   * reads back byte-identical and nothing has to branch on a field that is always
+   * undefined.
+   */
+  bonus?: number;
 }
 
 /**
@@ -63,6 +115,9 @@ export const describeMod = (mod: CyberMod): string => {
   // A note is neither an adjustment nor a replacement, so it gets no sign and no equals:
   // "Quickhack DV 10" is the whole statement.
   if (isNoteKind(mod.kind)) return `${mod.target} ${mod.value}`;
+  // "Dex 14 or +2": the floor, and what you get instead when you already clear it. Both
+  // numbers or it says nothing useful — a bare "Dex 14" reads as a plain set.
+  if (mod.kind === 'statFloor') return `${mod.target} ${mod.value} or +${mod.bonus ?? 0}`;
   return isSetKind(mod.kind)
     ? `${mod.target} = ${mod.value}`
     : `${mod.value >= 0 ? '+' : ''}${mod.value} ${mod.target}`;
@@ -83,6 +138,13 @@ export interface CyberRow {
    * hides the difference between free and unknown.
    */
   cost: number | null;
+  /**
+   * How hard the piece is to spot: '' where the system does not rate it.
+   *
+   * Cities Without Number gives every implant one of four ratings; Cyberpunk RED rates
+   * none, so a CP:R row leaves this blank rather than claiming a value it never had.
+   */
+  conc: Conc;
   /** What it does. */
   data: string;
   /**
@@ -126,11 +188,15 @@ export function normaliseMods(raw: unknown): CyberMod[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((m): m is Record<string, unknown> => Boolean(m) && typeof m === 'object')
-    .map((m) => ({
-      kind: MOD_KINDS.includes(m.kind as ModKind) ? (m.kind as ModKind) : 'stat',
-      target: String(m.target ?? '').trim(),
-      value: num(m.value),
-    }))
+    .map((m) => {
+      const kind = MOD_KINDS.includes(m.kind as ModKind) ? (m.kind as ModKind) : 'stat';
+      return {
+        kind,
+        target: String(m.target ?? '').trim(),
+        value: num(m.value),
+        ...(usesBonus(kind) ? { bonus: num(m.bonus) } : {}),
+      };
+    })
     .filter((m) => m.target);
 }
 
@@ -149,6 +215,9 @@ export function normaliseRow(raw: unknown): CyberRow {
     side: r.side === 'l' || r.side === 'r' ? r.side : null,
     hl: num(r.hl),
     cost: cost !== null && Number.isFinite(cost) ? cost : null,
+    // Blank on a system that does not rate concealment, and on any row saved before the
+    // column existed. Unknown is not the same as the easiest thing to hide.
+    conc: (CONC_VALUES as string[]).includes(r.conc as string) ? (r.conc as Conc) : '',
     data: typeof r.data === 'string' ? r.data : '',
     // Installed unless it says otherwise, so rows stored before this field existed do not
     // all switch themselves off.
@@ -223,3 +292,43 @@ export const panelRank = (row: CyberRow, typeId: string): number => {
 
 /** Everything that has not been given a place yet, which is how every import arrives. */
 export const unfiledRows = (rows: CyberRow[]): CyberRow[] => rows.filter(needsPlacing);
+
+/** The System Strain a character is already carrying from chrome that is actually in them. */
+export const installedStrain = (rows: CyberRow[]): number =>
+  rows.filter((r) => r.equipped && r.placed).reduce((n, r) => n + num(r.hl), 0);
+
+/**
+ * How much chrome a body can take.
+ *
+ * Maximum System Strain is your Constitution (CWN p40), and installed gear cannot exceed
+ * it. Two implants change that and both are stated outright:
+ *
+ *   - A Full Body Conversion gives an effective Constitution of 20 for strain purposes.
+ *   - A Cybernetic Infrastructure Baseline lets you ignore strain from implants equal to
+ *     12 minus your Constitution, so a CON 9 character ignores three points. Never
+ *     negative: a CON 14 character ignores nothing rather than losing capacity.
+ *
+ * Lifestyle also modifies the maximum (p51: squatting -2, fine living +1). The sheet has
+ * no lifestyle field, so that is not accounted for here and a GM allowing it will have to
+ * raise CON or overrule the block.
+ *
+ * Matched by name, which is the weak part: a renamed row stops being recognised. Rows do
+ * not carry the catalogue id they came from, which is what would make this robust.
+ */
+export function strainCeiling(
+  data: Record<string, unknown> | undefined | null,
+  rows: CyberRow[],
+): { max: number; load: number; free: number } {
+  const installed = rows.filter((r) => r.equipped && r.placed);
+  const has = (name: string) => installed.some((r) => r.name.trim().toLowerCase() === name);
+
+  // The same maximum the sheet shows: Constitution plus whatever modifier the table has
+  // agreed, which is usually lifestyle. A Full Body Conversion replaces the Constitution
+  // half of that rather than the whole thing - a squatter cyborg still lives in a squat.
+  const con = has('full body conversion') ? 20 : num(data?.con);
+  const max = Math.max(0, con + num(data?.strain_mod));
+  const ignored = has('cybernetic infrastructure baseline') ? Math.max(0, 12 - num(data?.con)) : 0;
+
+  const load = Math.max(0, installedStrain(rows) - ignored);
+  return { max, load, free: max - load };
+}

@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { normaliseRow, needsPlacing, rowsForPanel } from '../cyberwareRows';
+import { normaliseRow, needsPlacing, rowsForPanel, installedStrain, strainCeiling } from '../cyberwareRows';
 
 describe('naming a type does not fit the piece', () => {
   it('leaves an unpaired type unplaced', () => {
@@ -84,5 +84,75 @@ describe('agreeing with the server on what is installed', () => {
   it.each(CASES)('reaches the same answer for $why', async ({ row }) => {
     const backend = await import('../../../../backend/sheets/cyberware.js');
     expect(!needsPlacing(normaliseRow(row))).toBe(backend.default.isPlaced(backend.default.normaliseRow(row)));
+  });
+});
+
+describe('the System Strain ceiling', () => {
+  // CWN p40: maximum System Strain equals Constitution, and installed gear may not exceed
+  // it. Owning chrome costs nothing - only what is in the body counts.
+  const row = (name: string, hl: number, extra = {}) =>
+    normaliseRow({ name, type: 'body', hl, equipped: true, placed: true, ...extra });
+
+  it('counts only what is installed', () => {
+    const rows = [row('In', 3), row('Owned', 5, { placed: false })];
+    expect(installedStrain(rows)).toBe(3);
+  });
+
+  it('ignores chrome that is switched off', () => {
+    expect(installedStrain([row('Off', 4, { equipped: false })])).toBe(0);
+  });
+
+  it('adds fractional strain without rounding it away', () => {
+    // Four quarter-point implants are a whole point, not zero.
+    expect(installedStrain([row('a', 0.25), row('b', 0.25), row('c', 0.25), row('d', 0.25)])).toBe(1);
+  });
+
+  it('sets the ceiling from Constitution', () => {
+    const c = strainCeiling({ con: 13 }, [row('In', 3)]);
+    expect(c.max).toBe(13);
+    expect(c.load).toBe(3);
+    expect(c.free).toBe(10);
+  });
+
+  it('gives a Full Body Conversion an effective Constitution of 20', () => {
+    // p67, stated outright. Without this the characters built to carry the most chrome
+    // would be the ones refused first.
+    const rows = [row('Full Body Conversion', 0), row('Other', 5)];
+    expect(strainCeiling({ con: 9 }, rows).max).toBe(20);
+  });
+
+  it('lets a Cybernetic Infrastructure Baseline ignore 12 minus Constitution', () => {
+    // p66: a CON 9 character ignores three points of implant strain.
+    const rows = [row('Cybernetic Infrastructure Baseline', 0), row('Heavy', 8)];
+    expect(strainCeiling({ con: 9 }, rows).load).toBe(5);
+  });
+
+  it('never lets that ignore become a penalty', () => {
+    // 12 minus a Constitution of 14 is negative; it ignores nothing rather than costing.
+    const rows = [row('Cybernetic Infrastructure Baseline', 0), row('Heavy', 8)];
+    expect(strainCeiling({ con: 14 }, rows).load).toBe(8);
+  });
+
+  it('adds the strain modifier to the ceiling', () => {
+    // Lifestyle is the usual reason for one: squatting is -2, luxury +2.
+    expect(strainCeiling({ con: 10, strain_mod: -2 }, []).max).toBe(8);
+    expect(strainCeiling({ con: 10, strain_mod: 2 }, []).max).toBe(12);
+  });
+
+  it('never lets the modifier push the ceiling below zero', () => {
+    // A maximum of -1 is not a rule, it is a sheet nobody can use.
+    expect(strainCeiling({ con: 1, strain_mod: -5 }, []).max).toBe(0);
+  });
+
+  it('applies the modifier to a Full Body Conversion too', () => {
+    // The conversion replaces the Constitution half; a squatter cyborg still lives in a
+    // squat.
+    const rows = [normaliseRow({ name: 'Full Body Conversion', type: 'body', hl: 0, equipped: true, placed: true })];
+    expect(strainCeiling({ con: 9, strain_mod: -2 }, rows).max).toBe(18);
+  });
+
+  it('reads an unset Constitution as no capacity at all', () => {
+    // A blank sheet should refuse rather than silently permit everything.
+    expect(strainCeiling({}, []).max).toBe(0);
   });
 });

@@ -2,17 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import bodySvg from '../assets/body.svg?raw';
 import {
-  CYBER_TYPES, typeById, wiredPanels, unwiredPanels, drawnFigureBox,
+  typesFor, typeById, wiredPanels, unwiredPanels, drawnFigureBox,
   type Side, type Panel,
 } from '../sheets/cyberwareLocations';
 import {
   CYBERWARE_FIELD, readRows, normaliseRow, totalHumanityLoss, totalCost,
   rowLocation, rowsForPanel, needsPlacing, panelRank, describeMod, isSetKind, isNoteKind,
-  MOD_KINDS, MOD_KIND_LABEL,
+  MOD_KINDS, MOD_KIND_LABEL, kindsFor, strainCeiling,
   type CyberRow, type CyberMod, type ModKind,
 } from '../sheets/cyberwareRows';
 import type { SheetFieldValue, SheetTemplate } from '../sheets/types';
 import { targetOptions } from '../sheets/modTargets';
+import { CWN_CYBERWARE, cyberById } from '../sheets/cwnCyberwarePresets';
 
 // The augmentation window: a body with what is installed where, and the table underneath.
 //
@@ -34,6 +35,29 @@ interface Props {
   /** Whose chrome this is, for the title bar. */
   who?: string;
 }
+
+/**
+ * Which system's install categories to offer.
+ *
+ * Taken from the template rather than a prop of its own: the template id *is* the system
+ * key, and the window already needs the template for the modifier pickers.
+ */
+const systemOf = (template?: SheetTemplate): string => template?.id ?? '';
+
+/**
+ * What each system calls the two costs a piece carries.
+ *
+ * One stored number apiece, two vocabularies. Cyberpunk RED spends Humanity and prices in
+ * eurodollars; Cities Without Number spends System Strain and prices in credits. Printing
+ * "HUMANITY LOSS" over a CWN sheet names a stat that system does not have, and the column
+ * headings are the same problem in three characters.
+ */
+const WORDS: Record<string, { cost: string; costShort: string; money: string }> = {
+  cyberpunk_red: { cost: 'HUMANITY LOSS', costShort: 'HL', money: 'eb' },
+  cities_without_number: { cost: 'STRAIN', costShort: 'STR', money: 'cr' },
+};
+
+const wordsFor = (system: string) => WORDS[system] ?? { cost: 'COST', costShort: 'COST', money: '' };
 
 const mono = (size: number): React.CSSProperties => ({
   fontFamily: 'monospace', fontSize: size, letterSpacing: 1,
@@ -186,7 +210,7 @@ function ModEditor({ mods, template, onChange }: {
             style={inputStyle} aria-label={`Modifier ${i + 1} kind`} value={m.kind}
             onChange={(e) => changeKind(i, e.target.value as ModKind)}
           >
-            {MOD_KINDS.map((k) => <option key={k} value={k}>{MOD_KIND_LABEL[k]}</option>)}
+            {kindsFor(template?.id ?? '').map((k) => <option key={k} value={k}>{MOD_KIND_LABEL[k]}</option>)}
           </select>
           {isNoteKind(m.kind) ? (
             // Typed rather than chosen: a note names whatever the table needs to see, and
@@ -229,6 +253,39 @@ function ModEditor({ mods, template, onChange }: {
 export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClose, who }: Props) {
   const [pos, setPos] = useState({ x: 90, y: 60 });
   const rows = useMemo(() => readRows(data), [data]);
+  const system = systemOf(template);
+  const types = useMemo(() => typesFor(system), [system]);
+  const words = wordsFor(system);
+  /** Why the last install was refused, cleared as soon as anything else happens. */
+  const [refused, setRefused] = useState<string | null>(null);
+
+  /**
+   * Whether the body can take this piece, per CWN's ceiling: installed strain may not
+   * exceed your maximum System Strain. Only where the system has such a rule - Cyberpunk
+   * RED spends Humanity, which is a different thing and has no ceiling of this kind.
+   */
+  /** What the body can take, on the systems that limit it. Null where none applies. */
+  const ceiling = system === 'cities_without_number' ? strainCeiling(data, rows) : null;
+
+  const admits = (piece: { hl: number; name: string }, without?: CyberRow): string | null => {
+    if (system !== 'cities_without_number') return null;
+    const others = without ? rows.filter((r) => r !== without) : rows;
+    const { max, load } = strainCeiling(data, others);
+    const need = Number(piece.hl) || 0;
+    if (max <= 0) return 'NO SYSTEM STRAIN MAXIMUM: SET CON FIRST';
+    if (load + need > max) {
+      return `NOT ENOUGH SYSTEM STRAIN — ${piece.name.toUpperCase()} NEEDS ${need}, `
+        + `${+(max - load).toFixed(2)} FREE OF ${max}`;
+    }
+    return null;
+  };
+  // Sorted by where it goes, then by name, which is how someone hunts for a piece.
+  const catalogue = useMemo(
+    () => (system === 'cities_without_number'
+      ? [...CWN_CYBERWARE].sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name))
+      : []),
+    [system],
+  );
 
   const stageRef = useRef<HTMLDivElement>(null);
   const figureRef = useRef<HTMLDivElement>(null);
@@ -270,7 +327,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
       const fig = drawnFigureBox(cb.width, cb.height);
       const out: React.ReactNode[] = [];
 
-      wiredPanels().forEach((panel) => {
+      wiredPanels(system).forEach((panel) => {
         const el = panelRefs.current.get(panel.key);
         if (!el || !panel.anchor) return;
         const r = el.getBoundingClientRect();
@@ -347,6 +404,14 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
     // Through the normaliser rather than stored as typed: a "+ MODIFIER" line the player
     // added and then left blank is not a modifier, and normaliseRow already drops those.
     const row = normaliseRow({ ...draft, name });
+
+    // Only when it is going straight into the body. Adding a piece to the list to be
+    // fitted later is always allowed - owning chrome costs no strain.
+    if (row.placed && !editing) {
+      const no = admits(row);
+      if (no) { setRefused(no); return; }
+    }
+    setRefused(null);
 
     if (editing) {
       // Replaced in place, so an edit keeps the piece where it is in the list rather than
@@ -427,6 +492,12 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
   const fileInto = (row: CyberRow, panel: Panel) => {
     const i = rows.indexOf(row);
     if (i < 0) return;
+    // The body has a limit and this is where it is reached. Refused rather than allowed
+    // and flagged: the sheet would otherwise carry a character the rules do not permit,
+    // and nothing downstream would know to stop.
+    const no = admits(row, row);
+    if (no) { setRefused(no); return; }
+    setRefused(null);
     const next = [...rows];
     next[i] = { ...row, type: panel.typeId, side: panel.side, placed: true };
     write(next);
@@ -482,7 +553,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
               display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6,
             }}
           >
-            <span>{r.name} <span style={{ color: 'var(--grid-section)' }}>HL {r.hl}</span></span>
+            <span>{r.name} <span style={{ color: 'var(--grid-section)' }}>{words.costShort} {r.hl}</span></span>
             {!readOnly && (
               <button
                 type="button"
@@ -501,8 +572,14 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
     );
   };
 
-  const left = wiredPanels().filter((p) => CYBER_TYPES.find((t) => t.id === p.typeId) && (p.side === 'r' || (p.side === null && p.typeId === 'cyberaudio')));
-  const right = wiredPanels().filter((p) => !left.includes(p));
+  // The figure's own right hangs down the left of the screen, so paired panels sort by
+  // side. The unpaired ones sit on the midline and belong to neither column, so they
+  // alternate to keep the two sides even — which for Cyberpunk RED puts Cyberaudio left
+  // and the Neural Link right, exactly where a hardcoded rule used to put them.
+  const wired = wiredPanels(system);
+  let midlineSeen = 0;
+  const left = wired.filter((p) => (p.side === 'r' ? true : p.side === null && midlineSeen++ % 2 === 0));
+  const right = wired.filter((p) => !left.includes(p));
 
   return (
     <>
@@ -531,7 +608,12 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
           {rows.length - unfiledRows.length} INSTALLED
           {unfiledRows.length ? ` · ${unfiledRows.length} UNFILED` : ''}
         </span>
-        <span>HUMANITY LOSS {hl}{spent > 0 ? ` · ${spent.toLocaleString()}eb` : ''}</span>
+        <span>
+          {/* The installed load against the ceiling, not the whole list: owning a piece
+              costs no strain, and counting it would make the limit look already reached. */}
+          {words.cost} {ceiling ? `${ceiling.load} / ${ceiling.max}` : hl}
+          {spent > 0 ? ` · ${spent.toLocaleString()}${words.money}` : ''}
+        </span>
       </div>
 
       {!readOnly && placing && (
@@ -558,7 +640,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                   }}
                 >
                   {r.name}
-                  <span style={{ color: 'var(--grid-section)' }}> HL {r.hl}</span>
+                  <span style={{ color: 'var(--grid-section)' }}> {words.costShort} {r.hl}</span>
                   {fits && <span style={{ color: 'var(--cyan)' }}> · fits</span>}
                 </button>
               );
@@ -605,8 +687,20 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
         </div>
       </div>
 
+      {refused && (
+        // Where it happened rather than in a toast: the press was on the diagram, and a
+        // message somewhere else is a message nobody connects to what they just did.
+        <div
+          role="alert"
+          style={{
+            ...mono(10), letterSpacing: 0, marginTop: 8, padding: '4px 6px',
+            color: 'var(--danger)', border: '1px solid var(--danger)',
+          }}
+        >{refused}</div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 8 }}>
-        {unwiredPanels().map(panelBox)}
+        {unwiredPanels(system).map(panelBox)}
       </div>
 
       {unfiledRows.length > 0 && (
@@ -640,7 +734,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                       ...mono(10), color: 'var(--dark-green)',
                     }}
                   >◌</th>
-                  {([['name', 'NAME'], ['location', 'TYPE'], ['hl', 'HL'], ['cost', 'EB']] as [SortKey, string][])
+                  {([['name', 'NAME'], ['location', 'TYPE'], ['hl', words.costShort], ['cost', words.money.toUpperCase()]] as [SortKey, string][])
                     .map(([k, lbl]) => (
                       <th
                         key={k}
@@ -704,7 +798,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                               showing "Cybereye L" here read as the type having been
                               rewritten by putting it in an eye. Which eye is a fact about
                               the body, and the diagram is where the body is. */}
-                          {CYBER_TYPES.map((t) => (
+                          {types.map((t) => (
                             <option key={t.id} value={t.id}>{t.label}</option>
                           ))}
                         </select>
@@ -747,6 +841,45 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
 
       {!readOnly && (draft ? (
         <div style={{ marginTop: 8, border: '1px solid var(--dark-green)', padding: 7 }}>
+          {/* Fill the form from the book rather than typing six fields off a page. Only
+              where there is a catalogue to offer - Cyberpunk RED has none, and an empty
+              picker is worse than no picker. Everything it fills stays editable: a piece
+              can be modified, salvaged or house-ruled, and the entry is a starting point
+              rather than a contract. */}
+          {catalogue.length > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              <Field label="FROM THE BOOK">
+                <select
+                  style={inputStyle}
+                  aria-label="Pick from catalogue"
+                  value=""
+                  onChange={(e) => {
+                    const preset = cyberById(e.target.value);
+                    if (!preset) return;
+                    setDraft({
+                      ...draft,
+                      name: preset.name,
+                      // Keep where it is going if the form was opened from a body panel:
+                      // the book says which kind of slot a piece needs, not which arm.
+                      type: draft.type || preset.type,
+                      hl: preset.strain,
+                      cost: preset.price,
+                      conc: preset.conc,
+                      data: preset.effect,
+                      mods: (preset.mods ?? []).map((m) => ({ ...m })),
+                    });
+                  }}
+                >
+                  <option value="">— pick a piece to fill the form —</option>
+                  {catalogue.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} · {c.type.toUpperCase()} · {c.strain} · {c.price.toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.6fr 0.7fr', gap: 6 }}>
             <Field label="NAME">
               <input
@@ -765,7 +898,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                 }}
               >
                 <option value="">Unfiled</option>
-                {CYBER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                {types.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
             </Field>
             <Field label="HUMANITY">

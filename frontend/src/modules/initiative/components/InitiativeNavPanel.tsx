@@ -9,6 +9,7 @@ interface Props {
   onRollFriendlies?: () => void;
   onToggleTracker?: () => void;
   onJumpToScene?: (sceneKey: string) => void;
+  onEndCombat?: (combatId: number) => void;
   onClose: () => void;
 }
 
@@ -28,7 +29,7 @@ export function sceneLabel(sceneKey: string, locations: any[]): string {
 
 export function InitiativeNavPanel({
   initiativeActive, activeCombats, locations,
-  onRollEnemies, onRollFriendlies, onToggleTracker, onJumpToScene, onClose,
+  onRollEnemies, onRollFriendlies, onToggleTracker, onJumpToScene, onEndCombat, onClose,
 }: Props) {
   return (
     <div className="panel sidebar-panel">
@@ -56,8 +57,25 @@ export function InitiativeNavPanel({
             </div>
           ) : activeCombats.map((combat) => (
             <div key={combat.id} style={{ marginBottom: '8px', borderLeft: '2px solid var(--dark-green)', paddingLeft: '8px' }}>
-              <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', marginBottom: '3px' }}>
-                COMBAT #{combat.id} — TURN {combat.turn_counter}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                fontSize: '0.6rem', color: 'var(--dark-green)', marginBottom: '3px',
+              }}>
+                <span style={{ flex: 1 }}>COMBAT #{combat.id} — TURN {combat.turn_counter}</span>
+                {onEndCombat && (
+                  <button
+                    className="utility-btn"
+                    title={`End combat #${combat.id}`}
+                    aria-label={`End combat ${combat.id}`}
+                    style={{
+                      padding: '1px 6px', fontSize: '0.55rem', lineHeight: 1.6,
+                      background: 'transparent', color: 'var(--danger)', borderColor: 'var(--danger)',
+                    }}
+                    onClick={() => onEndCombat(combat.id)}
+                  >
+                    END
+                  </button>
+                )}
               </div>
               {combat.scene_keys.map((sk) => (
                 <button

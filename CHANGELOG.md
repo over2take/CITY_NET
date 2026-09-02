@@ -9,6 +9,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.11.5] - 2026-08-30
+
+Cyberware for Cities Without Number, shops on the map, and two fixes to the initiative tracker.
+
+### Added
+
+- **Cities Without Number has cyberware.** The section was a single free-text box; it is now the same rows and body diagram Cyberpunk RED has, with the book's five install types, System Strain per piece, price and concealment. The old notes box is kept as a section of its own, so anything already typed there is still on the sheet.
+
+- **All sixty implants from the book, as a catalogue.** Adding a piece no longer means copying six fields off a page: pick it from the list and the form fills itself, modifiers included. Everything stays editable, because a piece can be salvaged or house-ruled and the book entry is a starting point rather than a contract.
+
+- **Buildings can be shops.** An admin gives a building a type, and the ones that trade get a SHOP button in its info window. BUY puts a piece on your sheet as an unplaced row and stops there: no money moves and no stock is kept yet, which the window says out loud. Buying and selling are separate tabs, since selling reads what you are carrying rather than what the shop stocks.
+
+- **An END button on every combat in the initiative menu.** Combats running elsewhere on the map can be closed from the list without navigating to them first. A combat spanning several scenes ends everywhere in one press.
+
+- **Trauma Target and the System Strain maximum are now worked out for you.** Trauma Target is 6 plus your armor's mod, and cyberware raises it further. The strain maximum is your CON plus a LIFESTYLE modifier, which the book sets by where a character lives.
+
+### Changed
+
+- **Reordering the turn order no longer drags the current turn along with the character.** Moving whoever is up next used to carry their turn down the list with them, so nobody else advanced. The turn now belongs to the position: move yourself down the order and whoever takes your place inherits it.
+
+- **Installing cyberware is refused when it would exceed your System Strain.** The book allows as much chrome as your maximum strain covers, and nothing was checking. The refusal says what the piece needs and how much you have free. Owning a piece still costs nothing; only fitting it does.
+
+- **A raised attribute now moves everything that hangs off it.** Cities Without Number rolls skills off attribute modifiers rather than the attributes themselves, so an implant that raised DEX and stopped there changed no Dex roll. Modifiers, saves and the strain maximum now follow.
+
+### Fixed
+
+- **Cyberware effects reached only some of what the book gives them.** Modifiers were read from each implant's one-line summary, where the descriptions beside them carry the actual numbers - the Aesthetic Augmentation Suite says only "Cha bonus" in the table and "a Charisma score of 14" in its description. Ten pieces gained the effects they always should have had.
+
+---
+
 ## [1.11.4] - 2026-08-28
 
 Stronger Secure Mode.

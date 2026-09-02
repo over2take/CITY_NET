@@ -49,7 +49,8 @@ function makeTestDb() {
         is_global INTEGER DEFAULT 0,
         has_sidewalk INTEGER DEFAULT 1,
         has_signage INTEGER DEFAULT 1,
-        vehicle_state TEXT
+        vehicle_state TEXT,
+        building_type TEXT
       )`);
 
       db.run(`CREATE TABLE districts (

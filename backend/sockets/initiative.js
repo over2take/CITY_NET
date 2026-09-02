@@ -469,21 +469,48 @@ function registerInitiativeHandlers(io, db) {
             // Individual mode: global reorder
             if (fromIndex < 0 || toIndex < 0 || fromIndex >= list.length || toIndex >= list.length) return;
 
-            const activeId = list[row.turn_index]?.id;
             const [moved] = list.splice(fromIndex, 1);
             list.splice(toIndex, 0, moved);
 
-            let newTurnIndex = row.turn_index;
-            const recalc = list.findIndex((c) => c.id === activeId);
-            if (recalc >= 0) newTurnIndex = recalc;
-
+            // The turn belongs to the slot, not to whoever is standing in it.
+            //
+            // This used to find the active combatant's new index and follow them down the
+            // list, so dragging the character whose turn it was took the turn along for the
+            // ride and nobody else advanced. Holding turn_index still means the character
+            // who moves up into the active slot inherits the turn, which is what giving up
+            // your place in the order is supposed to cost you. A reorder never changes the
+            // list's length, so the index cannot fall out of range.
             db.run(
-              `UPDATE initiative_scene SET combatants = ?, turn_index = ?, updated_at = CURRENT_TIMESTAMP
+              `UPDATE initiative_scene SET combatants = ?, updated_at = CURRENT_TIMESTAMP
                WHERE scene_key = ?`,
-              [JSON.stringify(list), newTurnIndex, sceneKey],
+              [JSON.stringify(list), sceneKey],
               (err) => { if (!err) broadcastScene(io, db, sceneKey); }
             );
           }
+        }
+      );
+    });
+
+    // ── End a whole combat, every scene it spans ──────────────────────────────
+    //
+    // `initiative:end` closes the one scene the caller is looking at. A combat can run
+    // across several scenes at once, so ending it from the nav list means clearing all of
+    // them: emitting `initiative:ended` per scene keeps every client watching any of them
+    // in step, and the combat row goes once its last scene has.
+    socket.on('initiative:end_combat', ({ combatId }) => {
+      if (!combatId) return;
+
+      db.all(
+        `SELECT scene_key FROM initiative_scene WHERE combat_id = ?`,
+        [combatId],
+        (err, rows) => {
+          if (err || !rows) return;
+
+          db.run(`DELETE FROM initiative_scene WHERE combat_id = ?`, [combatId], (delErr) => {
+            if (delErr) return;
+            rows.forEach((r) => io.emit('initiative:ended', { sceneKey: r.scene_key }));
+            db.run(`DELETE FROM initiative_combat WHERE id = ?`, [combatId]);
+          });
         }
       );
     });

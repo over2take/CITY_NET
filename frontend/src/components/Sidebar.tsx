@@ -1136,6 +1136,7 @@ interface SidebarProps {
   activeCombats?: import('../modules/initiative/hooks/useInitiative').ActiveCombat[];
   onListCombats?: () => void;
   onJumpToScene?: (sceneKey: string) => void;
+  onEndCombat?: (combatId: number) => void;
   currentTheme?: ThemeName;
   onThemeChange?: (theme: ThemeName) => void;
   customDice?: CustomDie[];
@@ -1143,7 +1144,7 @@ interface SidebarProps {
   onDeleteCustomDie?: (id: number | string) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
   /** The rail label under the pointer, positioned from the button it belongs to. */
   const [railTip, setRailTip] = useState<{ label: string; x: number; y: number } | null>(null);
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
@@ -1387,6 +1388,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               onRollFriendlies={onRollFriendlies}
               onToggleTracker={onToggleInitiative}
               onJumpToScene={onJumpToScene}
+              onEndCombat={onEndCombat}
               onClose={() => setActiveMenu('none')}
             />
           )}

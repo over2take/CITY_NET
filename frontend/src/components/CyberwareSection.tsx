@@ -35,11 +35,24 @@ interface Props {
 
 const mono: React.CSSProperties = { fontFamily: 'monospace', fontSize: 9, letterSpacing: 1 };
 
+/**
+ * What the per-piece body cost is called, which is not the same thing in each system.
+ *
+ * One stored number, two names: Cyberpunk RED spends Humanity, Cities Without Number
+ * spends System Strain. Calling it Humanity Loss on a CWN sheet would be naming a stat
+ * that system does not have.
+ */
+const COST_LABEL: Record<string, string> = {
+  cyberpunk_red: 'HUMANITY LOSS',
+  cities_without_number: 'STRAIN',
+};
+
 export function CyberwareSection({ data, template, readOnly, onFieldChange, who }: Props) {
   const [open, setOpen] = useState(false);
   const rows = useMemo(() => readRows(data), [data]);
 
   const hl = totalHumanityLoss(rows);
+  const costLabel = COST_LABEL[template?.id ?? ''] ?? 'COST';
   // No eddies total here. What the chrome cost is money already spent — it changes nothing
   // and answers no question this line is for, whereas humanity loss is live and drives EMP.
   // The price stays in the window, where the table has a column for it and can sort by it.
@@ -55,7 +68,7 @@ export function CyberwareSection({ data, template, readOnly, onFieldChange, who 
         <span style={{ ...mono, color: 'var(--cyan)' }}>
           {rows.length === 0
             ? 'NO CYBERWARE'
-            : `${installed} INSTALLED · HUMANITY LOSS ${hl}`}
+            : `${installed} INSTALLED · ${costLabel} ${hl}`}
         </span>
         <button type="button" className="utility-btn" onClick={() => setOpen(true)}>
           {readOnly ? 'VIEW' : 'OPEN'} AUGMENTATION

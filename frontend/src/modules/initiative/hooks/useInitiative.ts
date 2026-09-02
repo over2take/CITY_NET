@@ -150,6 +150,18 @@ export function useInitiative(
     socketRef.current?.emit('initiative:end', { sceneKey });
   }, [socketRef, sceneKey]);
 
+  /**
+   * End a combat from the nav list, wherever it is running.
+   *
+   * Deliberately not tied to `sceneKey` the way `endInitiative` is: the combats in that
+   * list are usually somewhere other than the scene you are standing in, which is the
+   * whole reason for ending them from there.
+   */
+  const endCombat = useCallback((combatId: number) => {
+    if (!combatId) return;
+    socketRef.current?.emit('initiative:end_combat', { combatId });
+  }, [socketRef]);
+
   return {
     state,
     activeCombats,
@@ -162,5 +174,6 @@ export function useInitiative(
     removeCombatant,
     reorder,
     endInitiative,
+    endCombat,
   };
 }

@@ -12,14 +12,22 @@
 // precedent for writing — humanity recomputing EMP — works only because it has exactly one
 // source; a stat can have several pieces of chrome on it *and* a number the player typed.
 //
-// Only Cyberpunk RED: the systems differ enough that one shared implementation would be a
-// worse lie than three honest ones. Everything here returns empty for another system.
+// One engine, one profile per system. The naming and the field lists differ; the matching,
+// the resolution order and the overlay do not, so a system contributes a profile rather
+// than a copy of the file. An earlier note here said three honest implementations would
+// beat one shared lie, which was right while there was one system and wrong as soon as
+// there were two: the shared part is every line except the two lookup tables, and four
+// copies of it is four places to fix the next bug in.
+//
+// A system with no profile gets no effects at all, which is what Shadowrun does today.
 
-const { CPR_SKILLS } = require('./rolls');
+const { CPR_SKILLS, CWN_SKILLS } = require('./rolls');
+const { applyDerived } = require('./templates');
 const rollEngine = require('./rollEngine');
 const cyberware = require('./cyberware');
 
 const SYSTEM = 'cyberpunk_red';
+const CWN = 'cities_without_number';
 
 /**
  * The CP:R stats a modifier can name, and what each is called.
@@ -44,6 +52,55 @@ const CPR_STAT_ALIASES = {
   luck: ['LUCK', 'Luck'],
   move: ['MOVE', 'Movement'],
 };
+
+/**
+ * The CWN attributes, in both the sheet's spelling and the book's.
+ *
+ * The sheet prints the three-letter form and the book writes them out, and a catalogue
+ * entry copied from the table says "Dexterity". Both land on the same field.
+ *
+ * The `*_mod` fields are deliberately absent. They carry `derived: true`, are recomputed
+ * from the attribute on every save, and are therefore not something a modifier may target
+ * — see the derive step in `effectiveData`, which is how a raised attribute reaches them.
+ */
+const CWN_STAT_ALIASES = {
+  str: ['STR', 'Strength'],
+  dex: ['DEX', 'Dexterity'],
+  con: ['CON', 'Constitution'],
+  int: ['INT', 'Intelligence'],
+  wis: ['WIS', 'Wisdom'],
+  cha: ['CHA', 'Charisma'],
+};
+
+/**
+ * What each system names, and what it recomputes afterwards.
+ *
+ * `derive` exists because Cities Without Number puts a derived layer between its
+ * attributes and its rolls: a skill check is `2d6 + skill + the attribute's modifier`, so
+ * an implant that raises DEX and stops there would change no Dex roll at all and read as
+ * broken. Cyberpunk RED rolls the attribute itself and needs no such step.
+ */
+const PROFILES = {
+  [SYSTEM]: {
+    statAliases: CPR_STAT_ALIASES,
+    skills: CPR_SKILLS,
+    derive: null,
+  },
+  [CWN]: {
+    statAliases: CWN_STAT_ALIASES,
+    skills: CWN_SKILLS,
+    derive: (data) => { applyDerived(CWN, data); },
+    // Fields that are neither an attribute nor a skill but that chrome can still move.
+    // Trauma Target is one: the recompute owns its base (6 plus the armour's mod) and a
+    // piece of dermal armour adds on top of that.
+    extraFields: { trauma_target: ['Trauma Target', 'TRAUMA TGT'] },
+    // ...and which of those the recompute rewrites, so a modifier aimed at one has to be
+    // applied after it rather than before, or the recompute simply erases it.
+    derivedTargets: ['trauma_target'],
+  },
+};
+
+const profileFor = (system) => PROFILES[system] || null;
 
 /**
  * A target name reduced to what it is really saying.
@@ -78,22 +135,30 @@ const norm = (s) => String(s || '')
  */
 const normRoll = (s) => norm(s).replace(/\s*\broll$/, '').trim();
 
-/** Every name that means a stat or a skill, pointing at its field id. */
-function buildIndex() {
+/** Every name that means a stat or a skill on one system, pointing at its field id. */
+function buildIndex(profile) {
   const index = new Map();
-  for (const [id, names] of Object.entries(CPR_STAT_ALIASES)) {
+  for (const [id, names] of Object.entries(profile.statAliases)) {
     for (const name of names) index.set(norm(name), id);
   }
-  for (const [id, [label]] of Object.entries(CPR_SKILLS)) index.set(norm(label), id);
+  for (const [id, [label]] of Object.entries(profile.skills)) index.set(norm(label), id);
+  for (const [id, names] of Object.entries(profile.extraFields || {})) {
+    for (const name of names) index.set(norm(name), id);
+  }
   return index;
 }
 
-const INDEX = buildIndex();
+// Built once per system rather than per call: the tables are constant, and `effects` runs
+// on every sheet read and every roll.
+const INDEXES = new Map(Object.entries(PROFILES).map(([sys, p]) => [sys, buildIndex(p)]));
 
 /** The field a modifier is talking about, or null when the sheet has no such thing. */
-const fieldFor = (target) => INDEX.get(norm(target)) || null;
+const fieldFor = (target, system = SYSTEM) => {
+  const index = INDEXES.get(system);
+  return (index && index.get(norm(target))) || null;
+};
 
-const isStatKind = (kind) => kind === 'stat' || kind === 'statSet';
+const isStatKind = (kind) => kind === 'stat' || kind === 'statSet' || kind === 'statFloor';
 const isSetKind = (kind) => kind === 'statSet' || kind === 'skillSet';
 
 const numeric = (v) => {
@@ -123,7 +188,7 @@ const numeric = (v) => {
  */
 function effects(data, system = SYSTEM) {
   const empty = { fields: {}, rolls: {}, unmatched: [] };
-  if (system !== SYSTEM) return empty;
+  if (!profileFor(system)) return empty;
 
   // Installed, not merely owned. A piece waiting to be placed is in a list on a sheet,
   // not in anybody's body, and a stat it claims to set is not set yet — the sheet reading
@@ -148,7 +213,7 @@ function effects(data, system = SYSTEM) {
         continue;
       }
 
-      const id = fieldFor(mod.target);
+      const id = fieldFor(mod.target, system);
       if (!id) {
         unmatched.push({ name: row.name, target: mod.target, kind: mod.kind });
         continue;
@@ -159,7 +224,13 @@ function effects(data, system = SYSTEM) {
         base: numeric(data[id]), set: null, add: 0, sources: [],
       });
 
-      if (isSetKind(mod.kind)) {
+      if (mod.kind === 'statFloor') {
+        // "Dex 14, or +2 if higher". The comparison is against the stored stat rather than
+        // against what other chrome has already done to it, so two floor pieces cannot
+        // bootstrap each other into paying out both the floor and the bonus.
+        if (entry.base >= mod.value) entry.add += (mod.bonus || 0);
+        else entry.set = entry.set === null ? mod.value : Math.max(entry.set, mod.value);
+      } else if (isSetKind(mod.kind)) {
         entry.set = entry.set === null ? mod.value : Math.max(entry.set, mod.value);
       } else {
         entry.add += mod.value;
@@ -188,6 +259,24 @@ function effectiveData(data, system = SYSTEM) {
 
   const out = { ...data };
   for (const id of ids) out[id] = fields[id].value;
+
+  // Then let the system recompute whatever hangs off what just moved. On CWN a raised
+  // attribute has to reach its modifier or no skill roll built on that attribute changes,
+  // and the saves and strain maximum follow from the same numbers. On the copy, never the
+  // stored sheet — the overlay is still an overlay.
+  const profile = profileFor(system);
+  if (profile && profile.derive) {
+    profile.derive(out);
+    // The recompute owns the base of a derived field - Trauma Target is 6 plus the
+    // armour's mod, whatever the sheet last stored - so a modifier aimed at one is
+    // applied on top of what the recompute just decided, not on top of the stored value
+    // it replaced. Same ordering the attributes already use, one level further down.
+    for (const id of profile.derivedTargets || []) {
+      const entry = fields[id];
+      if (!entry) continue;
+      out[id] = (entry.set === null ? numeric(out[id]) : entry.set) + entry.add;
+    }
+  }
   return out;
 }
 
@@ -205,15 +294,16 @@ function effectiveData(data, system = SYSTEM) {
  * bonus as well.
  */
 function formulaModifiers(data, formula, system = SYSTEM) {
-  const { fields } = effects(data, system);
-  if (!Object.keys(fields).length) return [];
+  // Diffed against the effective sheet rather than read off the modifier list, so a field
+  // the chrome moved *indirectly* counts too. Under CWN the modifier names DEX while the
+  // roll reads DEX MOD, and only the derived sheet knows the second one moved.
+  const eff = effectiveData(data, system);
+  if (eff === data) return [];
 
   const out = [];
   for (const term of rollEngine.parseFormula(formula)) {
     if (term.kind !== 'field') continue;
-    const field = fields[term.field];
-    if (!field) continue;
-    const delta = field.value - field.base;
+    const delta = numeric(eff[term.field]) - numeric(data[term.field]);
     if (delta) out.push({ label: 'cyberware', value: term.sign * delta });
   }
   return out;
@@ -226,6 +316,6 @@ function rollBonus(data, rollType, system = SYSTEM) {
 }
 
 module.exports = {
-  SYSTEM, CPR_STAT_ALIASES, norm, normRoll, fieldFor, effects, effectiveData,
-  formulaModifiers, rollBonus,
+  SYSTEM, CWN, PROFILES, CPR_STAT_ALIASES, CWN_STAT_ALIASES,
+  norm, normRoll, fieldFor, effects, effectiveData, formulaModifiers, rollBonus,
 };

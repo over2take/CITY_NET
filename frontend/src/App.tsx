@@ -24,6 +24,8 @@ import type { ThemeName } from './theme/themes';
 import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
+import { ShopWindow } from './components/ShopWindow';
+import { buildingTypeById, isShop, shopsAvailable } from './data/buildingTypes';
 import { HitPointsMenu, HealthReviewWindow } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
@@ -102,6 +104,9 @@ function App() {
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+  /** The building whose shop is open, or null. Its own state so closing the info panel
+      does not take the shop with it. */
+  const [shopLocation, setShopLocation] = useState<Location | null>(null);
   const [showBattleMapManager, setShowBattleMapManager] = useState(false);
   const [tempBattleMapScale, setTempBattleMapScale] = useState<number | string | null>(null);
   const [tempCityMapScale, setTempCityMapScale] = useState<number | string | null>(null);
@@ -1633,6 +1638,7 @@ function App() {
               )}
               activeCombats={initiative.activeCombats}
               onListCombats={initiative.listCombats}
+              onEndCombat={initiative.endCombat}
               onJumpToScene={(sceneKey: string) => {
                 if (sceneKey === 'city:0') {
                   setActiveBattleMapData(null);
@@ -2063,6 +2069,17 @@ function App() {
               />
             )}
 
+            {/* ── Shop — a building that trades ─────────────────────────────────── */}
+            {shopLocation && shopsAvailable(gameSystem) && isShop(shopLocation.building_type) && (
+              <ShopWindow
+                name={shopLocation.name}
+                buildingType={shopLocation.building_type || ''}
+                socket={socketRef.current}
+                userName={userName}
+                onClose={() => setShopLocation(null)}
+              />
+            )}
+
             {/* ── Initiative Tracker — player floating window ────────────────────── */}
             {!token && isInitiativeOpen && initiative.state && (
               <InitiativeWindow
@@ -2320,6 +2337,30 @@ function App() {
                           {selectedLocation.district_name && <p><strong>DISTRICT:</strong> {selectedLocation.district_name}</p>}
                           <p><strong>DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
                           <p><strong>RESIDENTS:</strong> {selectedLocation.npcs || 'UNKNOWN'}</p>
+
+                          {/* Shops are Cities Without Number only for now. The gate is on
+                              the server too - this just keeps a control off screens where
+                              pressing it would only ever return a refusal. */}
+                          {shopsAvailable(gameSystem) && (
+                            <div style={{ borderTop: '1px solid var(--dark-green)', marginTop: 8, paddingTop: 8 }}>
+                              {/* Read-only here. Setting it belongs in the edit window
+                                  beside the building's other properties, not in the panel
+                                  a player opens to look at it. */}
+                              {buildingTypeById(selectedLocation.building_type) && (
+                                <p><strong>TYPE:</strong> {buildingTypeById(selectedLocation.building_type)!.label}</p>
+                              )}
+
+                              {isShop(selectedLocation.building_type) && (
+                                <button
+                                  className="upload-btn"
+                                  style={{ width: '100%' }}
+                                  onClick={() => setShopLocation(selectedLocation)}
+                                >
+                                  SHOP
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
