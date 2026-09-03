@@ -9,6 +9,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.11.6] - 2026-09-02
+
+A clearer way to put buildings in districts, and friendly NPCs a GM can hand to the players running them.
+
+**Existing districts are untouched.** Nothing about this release changes what is already in your database: the districts you have, their colours, and every building assigned to one all come across as they are. The only schema change is a new column for NPC control, which is empty on every existing token and means "admin only" — exactly how they behaved before.
+
+### Added
+
+- **Districts have an ASSIGN button of their own.** Creating a district and choosing what goes in it used to be the same screen, so it was never clear which you were doing. They are separate now: ASSIGN picks structures on the map, EDIT changes the district itself. The list explains the flow and shows how many structures each district holds.
+
+- **Districts can be renamed and recoloured.** Neither was possible before — the only route was delete and recreate, which dropped every assignment. Both carry the buildings with them, and a rename onto a name another district already uses is refused rather than quietly merging the two.
+
+- **The edit screen lists what is in the district.** Each structure by name, with its own REMOVE. A building with no name of its own shows the label the rest of the panel gives it rather than a blank row, and hovering one lights it up on the map so you can see what you are about to take out. The list stops at five and scrolls, so the controls under it stay on screen.
+
+- **A GM can give players control of a friendly NPC.** Specific players, everyone, or both, set from the NPC's own panel while placing it or any time after. The GM never loses control: this shares a token rather than handing it over. Friendly NPCs only — enemies stay with the GM.
+
+### Changed
+
+- **Assigning structures to a district only ever adds.** Saving used to clear the whole district and re-add whatever was selected, so the selection *was* the district and a stale one silently unassigned buildings with nothing to undo from. Only the structures you picked are touched. One already in another district moves, and the panel says how many will before you save.
+
+- **Deleting a district says what it will cost.** The confirmation names how many structures will be left with no district.
+
+---
+
 ## [1.11.5] - 2026-08-30
 
 Cyberware for Cities Without Number, shops on the map, and two fixes to the initiative tracker.
