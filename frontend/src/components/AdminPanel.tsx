@@ -1870,16 +1870,26 @@ export function AdminPanel({
               // Handing a friendly NPC to the players running it. Admins keep control
               // whatever is set here - this shares the token, it does not give it away.
               const grant = parseGrant(editData.controllers);
-              const players = (activeUsers || [])
+              const online = (activeUsers || [])
                 .filter((u: any) => !u.isAdmin && !u.isNPC)
                 .map((u: any) => u.userName);
-              // Anyone already granted stays listed even if they are offline, or removing
-              // them would mean waiting for them to log back in.
-              const names: string[] = [...new Set([...players, ...grant.users])].sort();
+              // Anyone already granted stays reachable even if they are offline, or
+              // revoking them would mean waiting for them to log back in.
+              const known: string[] = [...new Set([...online, ...grant.users])].sort();
               const push = (next: { all: boolean; users: string[] }) => {
                 setEditData({ ...editData, controllers: JSON.stringify(next) });
                 socketRef.current?.emit('setTokenControl', { id: editId, all: next.all, users: next.users });
               };
+              // ALL PLAYERS is always the first thing offered, then whoever is not already
+              // granted. Nothing already on the token is offered a second time.
+              const options = [
+                ...(grant.all ? [] : [{ value: '*', label: 'ALL PLAYERS' }]),
+                ...known.filter((n) => !grant.users.includes(n)).map((n) => ({ value: n, label: n })),
+              ];
+              const chips = [
+                ...(grant.all ? [{ key: '*', label: 'ALL PLAYERS' }] : []),
+                ...grant.users.map((n) => ({ key: n, label: n })),
+              ];
               return (
                 <div style={{ marginTop: '15px', borderTop: '1px solid #333', paddingTop: '10px' }}>
                   <h4 style={{ marginBottom: '4px' }}>PLAYER_CONTROL</h4>
@@ -1887,33 +1897,55 @@ export function AdminPanel({
                     Who else can move this NPC. You keep control either way.
                   </p>
 
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', marginBottom: '8px' }}>
-                    <input
-                      type="checkbox"
-                      checked={grant.all}
-                      onChange={(e) => push({ all: e.target.checked, users: grant.users })}
-                    />
-                    ALL PLAYERS
-                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
+                    {chips.length === 0 && (
+                      <span style={{ fontSize: '0.62rem', opacity: 0.45 }}>NOBODY GRANTED</span>
+                    )}
+                    {chips.map((c) => (
+                      <span key={c.key} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '5px',
+                        border: '1px solid var(--green)', padding: '1px 5px', fontSize: '0.65rem',
+                      }}>
+                        {c.label}
+                        <button
+                          type="button"
+                          aria-label={`Revoke ${c.label}`}
+                          title="REVOKE"
+                          onClick={() => push(c.key === '*'
+                            ? { all: false, users: grant.users }
+                            : { all: grant.all, users: grant.users.filter((u) => u !== c.key) })}
+                          style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', padding: 0, fontSize: '0.75rem', lineHeight: 1 }}
+                        >×</button>
+                      </span>
+                    ))}
+                  </div>
 
-                  {names.length === 0 ? (
-                    <p style={{ fontSize: '0.62rem', opacity: 0.5, fontStyle: 'italic' }}>NO PLAYERS ONLINE TO NAME.</p>
-                  ) : names.map((name) => (
-                    <label key={name} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', opacity: grant.all ? 0.45 : 1 }}>
-                      <input
-                        type="checkbox"
-                        checked={grant.all || grant.users.includes(name)}
-                        disabled={grant.all}
-                        onChange={(e) => push({
-                          all: grant.all,
-                          users: e.target.checked
-                            ? [...grant.users, name]
-                            : grant.users.filter((u) => u !== name),
-                        })}
-                      />
-                      {name}
-                    </label>
-                  ))}
+                  <select
+                    aria-label="Grant control"
+                    value=""
+                    disabled={options.length === 0}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      push(v === '*'
+                        ? { all: true, users: grant.users }
+                        : { all: grant.all, users: [...grant.users, v] });
+                    }}
+                    // Same treatment as the NPC tier picker, which is the app's select:
+                    // every colour a theme token, so it holds in all seven rather than
+                    // only the green one. The panel's older selects hardcode #222.
+                    style={{
+                      width: '100%',
+                      background: 'color-mix(in srgb, var(--black) 70%, transparent)',
+                      color: 'var(--green)', border: '1px solid var(--green)',
+                      fontFamily: 'inherit', fontSize: '0.7rem', padding: '0 4px',
+                      height: '26px', boxSizing: 'border-box',
+                      opacity: options.length === 0 ? 0.5 : 1,
+                    }}
+                  >
+                    <option value="">{options.length === 0 ? 'EVERYONE GRANTED' : '+ GRANT…'}</option>
+                    {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
 
                   <p style={{ fontSize: '0.62rem', opacity: 0.6, marginTop: '8px' }}>
                     NOW: {describeGrant({ ...editData, shape: 'friendly_rhombus' })}

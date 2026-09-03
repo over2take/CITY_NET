@@ -105,79 +105,111 @@ describe('where the control appears', () => {
 });
 
 describe('who it offers', () => {
-  it('lists players, not admins or NPCs', () => {
+  const optionsOf = () =>
+    [...(screen.getByLabelText('Grant control') as HTMLSelectElement).options]
+      .map((o) => o.textContent);
+
+  it('always offers ALL PLAYERS first', () => {
+    // Ahead of every name, whoever happens to be online and however they sort.
     open(friendly());
-    expect(screen.getByLabelText('alice')).toBeTruthy();
-    expect(screen.getByLabelText('bob')).toBeTruthy();
-    expect(screen.queryByLabelText('gm')).toBeNull();
-    expect(screen.queryByLabelText('GOON')).toBeNull();
+    expect(optionsOf()).toEqual(['+ GRANT…', 'ALL PLAYERS', 'alice', 'bob']);
   });
 
-  it('keeps listing someone already granted who is now offline', () => {
-    // Otherwise revoking them would mean waiting for them to log back in.
+  it('offers players, not admins or NPCs', () => {
+    open(friendly());
+    expect(optionsOf()).not.toContain('gm');
+    expect(optionsOf()).not.toContain('GOON');
+  });
+
+  it('stops offering someone already granted', () => {
+    // The list narrows as you grant, so nobody can be added twice.
+    open(friendly({ controllers: JSON.stringify({ all: false, users: ['bob'] }) }));
+    expect(optionsOf()).toEqual(['+ GRANT…', 'ALL PLAYERS', 'alice']);
+  });
+
+  it('stops offering ALL PLAYERS once it is on', () => {
+    open(friendly({ controllers: JSON.stringify({ all: true, users: [] }) }));
+    expect(optionsOf()).toEqual(['+ GRANT…', 'alice', 'bob']);
+  });
+
+  it('still reaches someone granted who is now offline', () => {
+    // Not in the dropdown - they are already granted - but revocable as a chip.
     open(friendly({ controllers: JSON.stringify({ all: false, users: ['carol'] }) }));
-    expect(screen.getByLabelText('carol')).toBeTruthy();
+    expect(screen.getByLabelText('Revoke carol')).toBeTruthy();
   });
 
-  it('says so when there is nobody to name', () => {
+  it('closes itself when there is nobody left to grant', () => {
+    open(friendly({ controllers: JSON.stringify({ all: true, users: ['alice', 'bob'] }) }));
+    const select = screen.getByLabelText('Grant control') as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+    expect(select.options[0].textContent).toBe('EVERYONE GRANTED');
+  });
+
+  it('offers only ALL PLAYERS when no players are online', () => {
     open(friendly(), { activeUsers: [] });
-    expect(screen.getByText('NO PLAYERS ONLINE TO NAME.')).toBeTruthy();
+    expect(optionsOf()).toEqual(['+ GRANT…', 'ALL PLAYERS']);
   });
 });
 
 describe('what it shows and emits', () => {
+  const grantVia = async (value: string) =>
+    userEvent.selectOptions(screen.getByLabelText('Grant control'), value);
+
   it('starts with nobody granted', () => {
     open(friendly());
-    expect((screen.getByLabelText('ALL PLAYERS') as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByLabelText('alice') as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByText('NOBODY GRANTED')).toBeTruthy();
     expect(screen.getByText(/NOW: NOBODY — admin only/)).toBeTruthy();
   });
 
-  it('reflects a grant that is already set', () => {
+  it('shows a chip for each player who has it', () => {
     open(friendly({ controllers: JSON.stringify({ all: false, users: ['bob'] }) }));
-    expect((screen.getByLabelText('bob') as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByLabelText('alice') as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByLabelText('Revoke bob')).toBeTruthy();
+    expect(screen.queryByLabelText('Revoke alice')).toBeNull();
     expect(screen.getByText(/NOW: bob/)).toBeTruthy();
   });
 
   it('grants one player', async () => {
     open(friendly());
-    await userEvent.click(screen.getByLabelText('bob'));
+    await grantVia('bob');
     expect(controlEmits()).toHaveLength(1);
     expect(controlEmits()[0][1]).toEqual({ id: 42, all: false, users: ['bob'] });
   });
 
-  it('takes a player back off', async () => {
-    open(friendly({ controllers: JSON.stringify({ all: false, users: ['alice', 'bob'] }) }));
-    await userEvent.click(screen.getByLabelText('bob'));
-    expect(controlEmits()[0][1]).toEqual({ id: 42, all: false, users: ['alice'] });
-  });
-
-  it('opens the token to everyone', async () => {
+  it('grants everyone', async () => {
     open(friendly());
-    await userEvent.click(screen.getByLabelText('ALL PLAYERS'));
+    await grantVia('*');
     expect(controlEmits()[0][1]).toEqual({ id: 42, all: true, users: [] });
   });
 
-  it('keeps the named list while everyone is on, so turning it off restores them', async () => {
-    // "specific players and/or all players" - the two are separate settings, and the
-    // named list must survive the broader one being switched on and off.
+  it('revokes one player from their chip', async () => {
+    open(friendly({ controllers: JSON.stringify({ all: false, users: ['alice', 'bob'] }) }));
+    await userEvent.click(screen.getByLabelText('Revoke bob'));
+    expect(controlEmits()[0][1]).toEqual({ id: 42, all: false, users: ['alice'] });
+  });
+
+  it('keeps the named players when everyone is granted', async () => {
+    // "specific players and/or all players" - the two are separate, and the named list
+    // must survive the broader one going on.
     open(friendly({ controllers: JSON.stringify({ all: false, users: ['bob'] }) }));
-    await userEvent.click(screen.getByLabelText('ALL PLAYERS'));
+    await grantVia('*');
     expect(controlEmits()[0][1]).toEqual({ id: 42, all: true, users: ['bob'] });
   });
 
-  it('greys out the individual names while everyone has it', () => {
+  it('gives the names back when ALL PLAYERS is revoked', async () => {
+    open(friendly({ controllers: JSON.stringify({ all: true, users: ['bob'] }) }));
+    await userEvent.click(screen.getByLabelText('Revoke ALL PLAYERS'));
+    expect(controlEmits()[0][1]).toEqual({ id: 42, all: false, users: ['bob'] });
+  });
+
+  it('shows ALL PLAYERS as its own chip', () => {
     open(friendly({ controllers: JSON.stringify({ all: true, users: [] }) }));
-    const alice = screen.getByLabelText('alice') as HTMLInputElement;
-    expect(alice.checked).toBe(true);
-    expect(alice.disabled).toBe(true);
+    expect(screen.getByLabelText('Revoke ALL PLAYERS')).toBeTruthy();
   });
 
   it('writes the new grant back onto the form as well as sending it', async () => {
     // So the panel shows the change immediately rather than waiting for a round trip.
     const props = open(friendly());
-    await userEvent.click(screen.getByLabelText('bob'));
+    await grantVia('bob');
     expect(props.setEditData).toHaveBeenCalledWith(
       expect.objectContaining({ controllers: JSON.stringify({ all: false, users: ['bob'] }) })
     );
