@@ -284,6 +284,26 @@ describe('the staged grant survives the save', () => {
     expect(controlEmits()[0][1]).toEqual({ id: 99, all: false, users: ['bob'] });
   });
 
+  it('finishes the create rather than stopping at the grant', async () => {
+    // The grant is emitted part-way through handleSubmit, so asserting only the emit
+    // leaves everything after it unchecked - and a throw there is an unhandled rejection
+    // inside an async handler, which cannot fail an assertion. That is exactly how a
+    // missing fixture setter reported 2134 green and still exited 1. This pins the whole
+    // success path, so the next break in it fails a test instead of only CI.
+    const { props } = await place(friendly({ controllers: JSON.stringify({ all: false, users: ['bob'] }) }));
+    expect(props.refreshLocations).toHaveBeenCalled();
+    expect(props.setView).toHaveBeenCalledWith('list');
+    expect(props.setEditorGenParts).toHaveBeenCalledWith([]);
+    expect(props.setEditorGenType).toHaveBeenCalledWith('');
+  });
+
+  it('finishes it for an NPC nobody was granted, too', async () => {
+    // The path with no grant skips the emit entirely, so it needs its own coverage.
+    const { props } = await place(friendly());
+    expect(props.refreshLocations).toHaveBeenCalled();
+    expect(props.setView).toHaveBeenCalledWith('list');
+  });
+
   it('carries ALL PLAYERS across too', async () => {
     await place(friendly({ controllers: JSON.stringify({ all: true, users: ['bob'] }) }));
     expect(controlEmits()[0][1]).toEqual({ id: 99, all: true, users: ['bob'] });
