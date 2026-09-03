@@ -26,6 +26,7 @@ const { cryptoRng } = require('../utils/random');
 const rollEngine = require('./rollEngine');
 const vehicleSeats = require('./vehicleSeats');
 const gearMods = require('./cwnGearMods');
+const cyberWeapons = require('./cwnCyberWeapons');
 
 const WEAPON_ROWS = 4;
 
@@ -388,8 +389,21 @@ const rollStabilize = (data, roundsDown, noTools, rng = cryptoRng) => {
   };
 };
 
+/**
+ * A weapon that is part of the character rather than carried by them.
+ *
+ * Its own entry point for the same reason `getVehicleWeapon` has one: the caller should
+ * not have to know that cyber weapons are resolved from the cyberware list while the
+ * others come from numbered fields.
+ */
+const getCyberWeapon = (data, index) => cyberWeapons.getCyberWeapon(data, index, module.exports);
+
+/** Every cyber weapon installed, for offering them alongside the weapon rows. */
+const cyberWeaponList = (data) => cyberWeapons.list(data);
+
 module.exports = {
   applySoak,
+  getCyberWeapon, cyberWeaponList,
   WEAPON_ROWS, WEAPON_SKILLS, MELEE_SKILLS, WEAPON_ATTRS, weaponAttr,
   MORTAL_WOUND_ROUNDS, STABILIZE_BASE_DC, NO_TOOLS_PENALTY, DEFAULT_TRAUMA_TARGET,
   VEHICLE_ROWS, VEHICLE_WEAPON_ROWS, vehicleWeaponPrefix,

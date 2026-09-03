@@ -2049,6 +2049,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           // there is nothing for the client to name and nothing for it to get wrong.
           const findWeapon = (cb) => {
             if (payload.rideMount) return vehicleState.getRideWeapon(db, attackerData, payload.weaponIndex, cb);
+            // Body weaponry is resolved from the installed chrome rather than a weapon
+            // row, so it is named separately - `cyberIndex` counts the cyber weapons a
+            // character has, not their position in the cyberware list.
+            if (payload.cyberIndex) return cb(attackCwn.getCyberWeapon(attackerData, payload.cyberIndex));
             cb(vehicleIndex
               ? attackCwn.getVehicleWeapon(attackerData, vehicleIndex, payload.weaponIndex)
               : attackCwn.getWeapon(attackerData, payload.weaponIndex));
@@ -2056,9 +2060,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           findWeapon((weapon) => {
           if (!weapon) {
             return socket.emit('sheetAttackError', {
-              message: (vehicleIndex || payload.rideMount)
-                ? 'INVALID_MOUNT // SET NAME, DMG (e.g. 2d8) AND SKILL ON THE VEHICLE MOUNT'
-                : 'INVALID_WEAPON // SET NAME, DMG (e.g. 1d8+1) AND SKILL ON YOUR SHEET',
+              message: payload.cyberIndex
+                ? 'NO_SUCH_CYBER_WEAPON // INSTALL AND PLACE THE IMPLANT FIRST'
+                : (vehicleIndex || payload.rideMount)
+                  ? 'INVALID_MOUNT // SET NAME, DMG (e.g. 2d8) AND SKILL ON THE VEHICLE MOUNT'
+                  : 'INVALID_WEAPON // SET NAME, DMG (e.g. 1d8+1) AND SKILL ON YOUR SHEET',
             });
           }
           getAttackTarget(payload.targetId, (target) => {

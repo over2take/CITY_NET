@@ -850,3 +850,69 @@ describe('CWN gear mods through the socket', () => {
     expect(JSON.parse(sheet.data).armor_soak_total).toBe(13);
   });
 });
+
+describe('attacking with cyberware', () => {
+  /**
+   * The wiring. Body weaponry is resolved from installed chrome rather than a weapon row,
+   * so sheetAttack names it separately - and the whole point is that the implant's own
+   * dice reach the roll, not the attacker's weapon rows.
+   */
+  const withBlades = (name, over = {}) => ({
+    base_hit_bonus: 30, stab: 0, punch: 0, str_mod: 0, dex_mod: 0,
+    // A weapon row that is obviously not the one we asked for, so a mix-up is visible in
+    // the damage rather than silent.
+    weapon1_name: 'Pistol', weapon1_dmg: '1d2', weapon1_skill: 'shoot', weapon1_trauma: '', weapon1_atk: 0,
+    cyberware: [{ name, type: 'limb', side: null, placed: true, equipped: true, hl: 1, mods: [] }],
+    ...over,
+  });
+
+  const fire = async (sheet, payload) => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
+      [JSON.stringify(sheet)]);
+    await seedAttackerToken();
+    const target = await seedTarget(1);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+    handlers['sheetAttack']({ targetId: target.lastID, ...payload });
+    await waitFor(() => emitted.some(e => e.event === 'attackResult' || e.event === 'sheetAttackError'));
+    return emitted;
+  };
+
+  it('rolls the implant dice, not a weapon row', async () => {
+    // Body Blades II is 2d6, so 2-12. The pistol row is 1d2. The ranges cannot overlap.
+    const emitted = await fire(withBlades('Body Blades II'), { cyberIndex: 1 });
+    const res = emitted.find(e => e.event === 'attackResult').data;
+    expect(res.hit).toBe(true);
+    expect(res.damage).toBeGreaterThanOrEqual(2);
+    expect(res.damage).toBeLessThanOrEqual(12);
+  });
+
+  it('names the implant in the result', async () => {
+    const emitted = await fire(withBlades('Body Blades I'), { cyberIndex: 1 });
+    const roll = emitted.filter(e => e.event === 'diceRollBroadcast')
+      .find(r => String(r.data.historyString).includes('Body Blades I'));
+    expect(roll).toBeTruthy();
+  });
+
+  it('still fires an ordinary weapon row when no cyber weapon is named', async () => {
+    // The regression that matters: every attack anyone was already making.
+    const emitted = await fire(withBlades('Body Blades II'), { weaponIndex: 1 });
+    const res = emitted.find(e => e.event === 'attackResult').data;
+    expect(res.damage).toBeGreaterThanOrEqual(1);
+    expect(res.damage).toBeLessThanOrEqual(2); // the 1d2 pistol
+  });
+
+  it('refuses an implant the character has not installed', async () => {
+    const sheet = withBlades('Body Blades I');
+    sheet.cyberware[0].placed = false;
+    const emitted = await fire(sheet, { cyberIndex: 1 });
+    const err = emitted.find(e => e.event === 'sheetAttackError');
+    expect(err.data.message).toMatch(/NO_SUCH_CYBER_WEAPON/);
+  });
+
+  it('refuses an index that names nothing', async () => {
+    const emitted = await fire(withBlades('Body Blades I'), { cyberIndex: 9 });
+    expect(emitted.find(e => e.event === 'sheetAttackError')).toBeTruthy();
+  });
+});
