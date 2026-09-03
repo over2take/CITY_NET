@@ -420,7 +420,20 @@ export function AdminPanel({
         }
         const finalData = { ...editData, x: targetObject.position.x, z: targetObject.position.z, y: targetObject.position.y, width: finalW, height: finalH, depth: finalD, rotation: targetObject.rotation.y, rotation_x: targetObject.rotation.x, rotation_z: targetObject.rotation.z };
         const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalData) });
-        if (res.ok) { setAdminAlert("STRUCTURE_PLACED"); targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType(''); }
+        if (res.ok) {
+            // A grant set while placing a friendly NPC is applied here, once the create
+            // hands back the id it needs. It goes through the same admin-only socket
+            // handler an edit does rather than riding in on the insert.
+            if (finalData.shape === 'friendly_rhombus' && finalData.controllers) {
+                const created = await res.json().catch(() => null);
+                const newId = created?.data?.[0]?.id;
+                if (newId) {
+                    const staged = parseGrant(finalData.controllers);
+                    socketRef.current?.emit('setTokenControl', { id: newId, all: staged.all, users: staged.users });
+                }
+            }
+            setAdminAlert("STRUCTURE_PLACED"); targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType('');
+        }
         return;
     }
     const children = locations.filter(l => l.parent_id === editId);
@@ -1866,7 +1879,7 @@ export function AdminPanel({
                 </>
             )}
             
-            {editId && editData.shape === 'friendly_rhombus' && (() => {
+            {editData.shape === 'friendly_rhombus' && (() => {
               // Handing a friendly NPC to the players running it. Admins keep control
               // whatever is set here - this shares the token, it does not give it away.
               const grant = parseGrant(editData.controllers);
@@ -1878,7 +1891,9 @@ export function AdminPanel({
               const known: string[] = [...new Set([...online, ...grant.users])].sort();
               const push = (next: { all: boolean; users: string[] }) => {
                 setEditData({ ...editData, controllers: JSON.stringify(next) });
-                socketRef.current?.emit('setTokenControl', { id: editId, all: next.all, users: next.users });
+                // A new NPC has no id yet, so the grant rides on the form and is applied
+                // once the create comes back with one. See handleSubmit.
+                if (editId) socketRef.current?.emit('setTokenControl', { id: editId, all: next.all, users: next.users });
               };
               // ALL PLAYERS is always the first thing offered, then whoever is not already
               // granted. Nothing already on the token is offered a second time.
@@ -1949,6 +1964,7 @@ export function AdminPanel({
 
                   <p style={{ fontSize: '0.62rem', opacity: 0.6, marginTop: '8px' }}>
                     NOW: {describeGrant({ ...editData, shape: 'friendly_rhombus' })}
+                    {!editId && ' — applied when the NPC is placed'}
                   </p>
                 </div>
               );

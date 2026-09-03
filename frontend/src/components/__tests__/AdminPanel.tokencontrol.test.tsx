@@ -92,10 +92,16 @@ describe('where the control appears', () => {
     }
   });
 
-  it('is not offered before the NPC has been saved', () => {
-    // There is no id to grant against yet.
+  it('is offered while placing a new NPC too', () => {
+    // There is no id yet, so the grant rides on the form and is applied by the create.
     open(friendly(), { editId: null });
-    expect(screen.queryByText('PLAYER_CONTROL')).toBeNull();
+    expect(screen.getByText('PLAYER_CONTROL')).toBeTruthy();
+    expect(screen.getByText(/applied when the NPC is placed/i)).toBeTruthy();
+  });
+
+  it('does not say "applied when placed" once the NPC exists', () => {
+    open(friendly());
+    expect(screen.queryByText(/applied when the NPC is placed/i)).toBeNull();
   });
 
   it('says the admin keeps control', () => {
@@ -213,5 +219,87 @@ describe('what it shows and emits', () => {
     expect(props.setEditData).toHaveBeenCalledWith(
       expect.objectContaining({ controllers: JSON.stringify({ all: false, users: ['bob'] }) })
     );
+  });
+});
+
+describe('granting while placing a new NPC', () => {
+  const placing = (over: any = {}) => open(friendly(), { editId: null, ...over });
+
+  it('stages the grant on the form instead of sending it', async () => {
+    // Nothing to send it about yet - emitting with a null id would be a no-op the admin
+    // could not see, and the grant would be silently lost on save.
+    const props = placing();
+    await userEvent.selectOptions(screen.getByLabelText('Grant control'), 'bob');
+
+    expect(props.setEditData).toHaveBeenCalledWith(
+      expect.objectContaining({ controllers: JSON.stringify({ all: false, users: ['bob'] }) })
+    );
+    expect(controlEmits()).toHaveLength(0);
+  });
+
+  it('offers the same choices as it does on an existing NPC', () => {
+    placing();
+    const options = [...(screen.getByLabelText('Grant control') as HTMLSelectElement).options]
+      .map((o) => o.textContent);
+    expect(options).toEqual(['+ GRANT…', 'ALL PLAYERS', 'alice', 'bob']);
+  });
+
+  it('shows a staged grant back as a chip', () => {
+    placing({ editData: { ...friendly(), controllers: JSON.stringify({ all: true, users: [] }) } });
+    expect(screen.getByLabelText('Revoke ALL PLAYERS')).toBeTruthy();
+  });
+});
+
+describe('the staged grant survives the save', () => {
+  /**
+   * The wiring, not the control. A grant chosen while placing an NPC has no id to attach
+   * to, so it rides on the form and is applied once the create hands one back - through
+   * the same admin-only socket handler an edit uses, rather than riding in on the insert.
+   */
+  const targetObject: any = {
+    position: { x: 1, y: 0, z: 2 },
+    scale: { x: 1, y: 1, z: 1, set: vi.fn() },
+    rotation: { x: 0, y: 0, z: 0, set: vi.fn() },
+  };
+
+  const place = async (editData: any, created: any = { data: [{ id: 99 }] }) => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => created });
+    vi.stubGlobal('fetch', fetchMock);
+    const props = {
+      ...baseProps(), editData, editId: null, targetObject,
+      view: 'editor', editorGenParts: [],
+    };
+    render(<AdminPanel {...props} />);
+    const label = editData.shape === 'enemy_rhombus' ? 'UPLOAD_NEW_ENEMY' : 'UPLOAD_NEW_FRIENDLY';
+    await userEvent.click(screen.getByText(label));
+    return { fetchMock, props };
+  };
+
+  it('applies it to the NPC that was just created', async () => {
+    await place(friendly({ controllers: JSON.stringify({ all: false, users: ['bob'] }) }));
+    expect(controlEmits()).toHaveLength(1);
+    expect(controlEmits()[0][1]).toEqual({ id: 99, all: false, users: ['bob'] });
+  });
+
+  it('carries ALL PLAYERS across too', async () => {
+    await place(friendly({ controllers: JSON.stringify({ all: true, users: ['bob'] }) }));
+    expect(controlEmits()[0][1]).toEqual({ id: 99, all: true, users: ['bob'] });
+  });
+
+  it('sends nothing when nothing was granted', async () => {
+    await place(friendly());
+    expect(controlEmits()).toHaveLength(0);
+  });
+
+  it('sends nothing if the create came back without an id', async () => {
+    // Rather than emitting against undefined, which the server would ignore anyway but
+    // which would look like the grant had been applied.
+    await place(friendly({ controllers: JSON.stringify({ all: true, users: [] }) }), { data: [] });
+    expect(controlEmits()).toHaveLength(0);
+  });
+
+  it('does not grant on a shape that cannot carry one', async () => {
+    await place({ shape: 'enemy_rhombus', name: 'GOON', controllers: JSON.stringify({ all: true, users: [] }) });
+    expect(controlEmits()).toHaveLength(0);
   });
 });
