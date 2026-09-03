@@ -1310,3 +1310,66 @@ button:disabled, .utility-btn:disabled, .upload-btn:disabled {
 
 .battle-indicator { z-index: 5 !important; }
 
+
+/* ── District members list ──────────────────────────────────────────────────
+   The structures in a district, each named above its own REMOVE button so it
+   is clear what is about to go. Five rows then it scrolls: any longer and the
+   controls under the list are pushed off the panel.
+
+   The scrollbar is styled here rather than left to the browser. A nested
+   scroller inside the admin panel draws the platform default otherwise, which
+   is wide enough to sit over the right-hand edge of the buttons beside it. */
+.district-members {
+  --member-row: 3.05rem;
+  --member-gap: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--member-gap);
+  max-height: calc(5 * var(--member-row) + 4 * var(--member-gap));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dark-green) var(--black);
+  padding-right: 2px;
+}
+
+.district-members::-webkit-scrollbar { width: 6px; }
+.district-members::-webkit-scrollbar-track { background: var(--black); }
+.district-members::-webkit-scrollbar-thumb {
+  background: var(--dark-green);
+  border: 1px solid var(--green);
+  border-radius: 3px;
+}
+
+.district-member {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+  height: var(--member-row);
+  /* The container caps its own height, so without this the rows are flex items
+     being squeezed to fit it - which silently breaks the "five rows" arithmetic
+     the max-height above is doing. Measured, not assumed. */
+  flex-shrink: 0;
+  margin-bottom: 0;
+  padding: 0.25rem 0.3rem;
+  box-sizing: border-box;
+}
+
+.district-member .member-name {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 0 0 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.district-member .member-name:hover { color: var(--green); text-decoration: underline; }
+.district-member .member-name:focus-visible { outline: 1px solid var(--green); outline-offset: 1px; }
+.district-member .upload-btn { width: 100%; }

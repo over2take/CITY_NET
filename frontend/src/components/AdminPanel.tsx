@@ -1474,33 +1474,36 @@ export function AdminPanel({
               if (members.length === 0) {
                 return <p style={{fontSize: '0.65rem', opacity: 0.5, fontStyle: 'italic'}}>NONE. USE ASSIGN TO ADD SOME.</p>;
               }
-              return members.map((l: any) => (
-                <div
-                  key={l.id}
-                  className="list-item"
-                  style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px'}}
-                  // Hovering the row lights the building up on the map, so you can see
-                  // which one you are about to take out of the district.
-                  onMouseEnter={() => setHoveredStructureId?.(l.id)}
-                  onMouseLeave={() => setHoveredStructureId?.(null)}
-                >
-                  <button
-                    type="button"
-                    title="SHOW_ON_MAP"
-                    onClick={() => { setSelectedLocation(l); setHoveredStructureId?.(null); }}
-                    style={{background: 'none', border: 'none', color: 'inherit', font: 'inherit', cursor: 'pointer', padding: 0, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0}}
-                  >
-                    {isUserDefinedName(l.name) ? l.name : getStructLabel(l)}
-                  </button>
-                  <button className="upload-btn danger-btn" style={{padding: '2px 5px', fontSize: '0.6rem', flexShrink: 0}}
-                    title="REMOVE_FROM_DISTRICT"
-                    onClick={async () => {
-                      const res = await fetch('/api/locations/unassign-district', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: [l.id] }) });
-                      if (res.ok) { setHoveredStructureId?.(null); refreshLocations(); }
-                      else setAdminAlert("REMOVE_FAILED");
-                    }}>REMOVE</button>
+              return (
+                <div className="district-members">
+                  {members.map((l: any) => (
+                    <div
+                      key={l.id}
+                      className="list-item district-member"
+                      // Hovering the row lights the building up on the map, so you can see
+                      // which one you are about to take out of the district.
+                      onMouseEnter={() => setHoveredStructureId?.(l.id)}
+                      onMouseLeave={() => setHoveredStructureId?.(null)}
+                    >
+                      <button
+                        type="button"
+                        className="member-name"
+                        title="SHOW_ON_MAP"
+                        onClick={() => { setSelectedLocation(l); setHoveredStructureId?.(null); }}
+                      >
+                        {isUserDefinedName(l.name) ? l.name : getStructLabel(l)}
+                      </button>
+                      <button className="upload-btn danger-btn" style={{padding: '2px 5px', fontSize: '0.6rem'}}
+                        title="REMOVE_FROM_DISTRICT"
+                        onClick={async () => {
+                          const res = await fetch('/api/locations/unassign-district', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: [l.id] }) });
+                          if (res.ok) { setHoveredStructureId?.(null); refreshLocations(); }
+                          else setAdminAlert("REMOVE_FAILED");
+                        }}>REMOVE</button>
+                    </div>
+                  ))}
                 </div>
-              ));
+              );
             })()}
           </div>
         </>
