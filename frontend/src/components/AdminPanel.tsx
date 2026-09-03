@@ -36,6 +36,7 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
 import { PNG_EXPORT_PRESETS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExportBounds';
 import { RECORD_DURATIONS, MAX_RECORD_SECONDS } from '../hooks/useMapExport';
+import { parseGrant, describeGrant } from '../utils/tokenControl';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,6 +165,8 @@ export function AdminPanel({
   isBatchSelecting, setIsBatchSelecting, selectedIds, setSelectedIds, toggleSelection, batchDelete,
   districtSelection, setDistrictSelection, districtConfig, setDistrictConfig,
   districts, fetchDistricts, editingDistrict, setEditingDistrict,
+  assigningDistrict, setAssigningDistrict,
+  hoveredStructureId, setHoveredStructureId,
   joinSelection, setJoinSelection, selectedClassification, setSelectedClassification, roadSelectionBounds, setRoadSelectionBounds,
   roadTrail, setRoadTrail, waterTrail, setWaterTrail, fetchWaterBodies, roadDrawMode, setRoadDrawMode, snapToGrid, setSnapToGrid, snapRotation, setSnapRotation,
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
@@ -417,7 +420,20 @@ export function AdminPanel({
         }
         const finalData = { ...editData, x: targetObject.position.x, z: targetObject.position.z, y: targetObject.position.y, width: finalW, height: finalH, depth: finalD, rotation: targetObject.rotation.y, rotation_x: targetObject.rotation.x, rotation_z: targetObject.rotation.z };
         const res = await fetch('/api/locations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(finalData) });
-        if (res.ok) { setAdminAlert("STRUCTURE_PLACED"); targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType(''); }
+        if (res.ok) {
+            // A grant set while placing a friendly NPC is applied here, once the create
+            // hands back the id it needs. It goes through the same admin-only socket
+            // handler an edit does rather than riding in on the insert.
+            if (finalData.shape === 'friendly_rhombus' && finalData.controllers) {
+                const created = await res.json().catch(() => null);
+                const newId = created?.data?.[0]?.id;
+                if (newId) {
+                    const staged = parseGrant(finalData.controllers);
+                    socketRef.current?.emit('setTokenControl', { id: newId, all: staged.all, users: staged.users });
+                }
+            }
+            setAdminAlert("STRUCTURE_PLACED"); targetObject.scale.set(1, 1, 1); targetObject.rotation.set(0, 0, 0); refreshLocations(); setView('list'); setEditorGenParts([]); setEditorGenType('');
+        }
         return;
     }
     const children = locations.filter(l => l.parent_id === editId);
@@ -876,7 +892,7 @@ export function AdminPanel({
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setWaterTrail([]); setView('draw_water'); }}>+ DRAW_WATER</button>
           </div>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
-              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setDistrictSelection([]); setEditingDistrict(null); setView('district'); }}>+ MNG_DISTRICT</button>
+              <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setDistrictSelection([]); setEditingDistrict(null); setAssigningDistrict(null); setView('district'); }}>+ MNG_DISTRICT</button>
               <button className="utility-btn" style={{flex: 1}} onClick={() => { setSelectedLocation(null); setJoinSelection([]); setView('join'); }}>+ CUSTOM_STRUCT</button>
           </div>
           <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
@@ -1338,56 +1354,171 @@ export function AdminPanel({
         </>
       )}
 
-      {view === 'district' && !editingDistrict && (
+      {view === 'district' && !editingDistrict && !assigningDistrict && (
         <>
-          <header style={{marginBottom: '10px'}}><h3>MNG_DISTRICT</h3><button onClick={() => { setView('list'); setDistrictSelection([]); setEditingDistrict(null); }} className="close-btn" style={{position: 'static'}}>X</button></header>
-          
-          {districts.map(d => (
-            <div key={d.id} className="list-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                <div>
+          <header style={{marginBottom: '10px'}}><h3>MNG_DISTRICT</h3><button onClick={() => { setView('list'); setDistrictSelection([]); setEditingDistrict(null); setAssigningDistrict(null); }} className="close-btn" style={{position: 'static'}}>X</button></header>
+
+          <p style={{fontSize: '0.65rem', opacity: 0.7, margin: '0 0 12px', lineHeight: 1.5}}>
+            Create a district below, then use ASSIGN on it to pick its structures on the map.
+            EDIT changes its color and lists what is in it.
+          </p>
+
+          {districts.length === 0 && (
+            <p style={{fontSize: '0.65rem', opacity: 0.5, fontStyle: 'italic'}}>NO DISTRICTS YET.</p>
+          )}
+
+          {districts.map(d => {
+            const members = locations.filter((l: any) => l.district_name === d.name);
+            return (
+            <div key={d.id} className="list-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px'}}>
+                <div style={{minWidth: 0}}>
                   <span style={{display: 'inline-block', width: '12px', height: '12px', backgroundColor: d.color, marginRight: '8px', border: '1px solid #000'}}></span>
                   <span>{d.name}</span>
+                  <span style={{opacity: 0.5, marginLeft: '8px', fontSize: '0.6rem'}}>{members.length} STRUCTURES</span>
                 </div>
-                <div style={{display: 'flex', gap: '5px'}}>
-                  <button className="upload-btn" style={{padding: '2px 5px', fontSize: '0.6rem'}} onClick={() => { 
-                      setEditingDistrict(d); 
-                      // Pre-fill selection with current buildings in district
-                      setDistrictSelection(locations.filter((l: any) => l.district_name === d.name).map((l: any) => l.id)); 
+                <div style={{display: 'flex', gap: '5px', flexShrink: 0}}>
+                  <button className="upload-btn" style={{padding: '2px 5px', fontSize: '0.6rem'}} onClick={() => {
+                      // Starts empty. The selection is what you are ADDING, not the district
+                      // as it stands - prefilling it made SAVE look like a full replace,
+                      // which is exactly what it used to be.
+                      setDistrictSelection([]);
+                      setAssigningDistrict(d);
+                  }}>ASSIGN</button>
+                  <button className="upload-btn" style={{padding: '2px 5px', fontSize: '0.6rem'}} onClick={() => {
+                      setDistrictConfig({ name: d.name, color: d.color });
+                      setEditingDistrict(d);
                   }}>EDIT</button>
                   <button className="upload-btn danger-btn" style={{padding: '2px 5px', fontSize: '0.6rem'}} onClick={async () => {
-                      if (!confirm('Delete District?')) return;
-                      await fetch(`/api/districts/${d.name}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                      if (!confirm(`Delete ${d.name}? ${members.length} structure(s) will be left with no district.`)) return;
+                      await fetch(`/api/districts/${encodeURIComponent(d.name)}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
                       fetchDistricts();
                       refreshLocations();
                   }}>DEL</button>
                 </div>
             </div>
-          ))}
+          );})}
 
           <div className="editor-controls" style={{marginTop: '20px', borderTop: '1px solid #333', paddingTop: '10px'}}>
             <h4>CREATE NEW DISTRICT</h4>
             <label style={{fontSize: '0.7rem'}}>DISTRICT_NAME</label><input placeholder="Name" value={districtConfig.name} onChange={e => setDistrictConfig({...districtConfig, name: e.target.value})} style={{width: '100%', marginBottom: '10px'}} />
             <label style={{fontSize: '0.7rem'}}>DISTRICT_COLOR</label>
             <input type="color" value={districtConfig.color} onChange={e => setDistrictConfig({...districtConfig, color: e.target.value})} style={{width: '100%', marginTop: '5px', height: '30px', padding: '0', background: 'none', border: '1px solid var(--green)'}} />
-            <button className="upload-btn" style={{marginTop: '10px'}} onClick={async () => { 
-                if (!districtConfig.name.trim()) return setAdminAlert("NAME REQUIRED"); 
-                const res = await fetch('/api/districts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ name: districtConfig.name, color: districtConfig.color }) }); 
-                if (res.ok) { fetchDistricts(); setDistrictConfig({name: '', color: '#00ff00'}); } 
+            <button className="upload-btn" style={{marginTop: '10px'}} onClick={async () => {
+                if (!districtConfig.name.trim()) return setAdminAlert("NAME REQUIRED");
+                const res = await fetch('/api/districts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ name: districtConfig.name, color: districtConfig.color }) });
+                if (res.ok) { fetchDistricts(); setDistrictConfig({name: '', color: '#00ff00'}); setAdminAlert("DISTRICT_CREATED"); }
+                else setAdminAlert("NAME ALREADY USED");
             }}>CREATE</button>
+          </div>
+        </>
+      )}
+
+      {view === 'district' && assigningDistrict && (
+        <>
+          <header style={{marginBottom: '10px'}}><h3>ASSIGN: {assigningDistrict.name}</h3><button onClick={() => { setAssigningDistrict(null); setDistrictSelection([]); }} className="close-btn" style={{position: 'static'}}>X</button></header>
+
+          <p style={{fontSize: '0.65rem', opacity: 0.7, margin: '0 0 10px', lineHeight: 1.5}}>
+            Click structures on the map to add them, or drag a box to take several at once.
+            A structure already in another district moves to this one.
+          </p>
+
+          <div style={{marginTop: '10px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}>
+            <p style={{margin: 0}}>SELECTED: {districtSelection.length} STRUCTURES</p>
+            {districtSelection.length > 0 && (() => {
+              const moving = locations.filter((l: any) => districtSelection.includes(l.id)
+                && l.district_name && l.district_name !== assigningDistrict.name);
+              return moving.length > 0 ? (
+                <p style={{margin: '6px 0 0', opacity: 0.7}}>{moving.length} will move out of another district.</p>
+              ) : null;
+            })()}
+          </div>
+
+          <div style={{display: 'flex', gap: '6px', marginTop: '15px'}}>
+            <button className="upload-btn" style={{flex: 1}} disabled={districtSelection.length === 0} onClick={async () => {
+                const res = await fetch('/api/locations/assign-district', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: districtSelection, district_name: assigningDistrict.name }) });
+                if (res.ok) { setAdminAlert("STRUCTURES_ASSIGNED"); refreshLocations(); setAssigningDistrict(null); setDistrictSelection([]); }
+                else setAdminAlert("ASSIGN_FAILED");
+            }}>SAVE</button>
+            <button className="upload-btn" style={{flex: 1}} disabled={districtSelection.length === 0}
+              onClick={() => setDistrictSelection([])}>CLEAR</button>
           </div>
         </>
       )}
 
       {view === 'district' && editingDistrict && (
         <>
-          <header style={{marginBottom: '10px'}}><h3>EDITING: {editingDistrict.name}</h3><button onClick={() => { setEditingDistrict(null); setDistrictSelection([]); }} className="close-btn" style={{position: 'static'}}>X</button></header>
-          
-          <div style={{marginTop: '15px', fontSize: '0.7rem', border: '1px dashed var(--green)', padding: '10px'}}><p>SELECTION: {districtSelection.length} UNITS</p><p style={{opacity: 0.7}}>DRAG TO SELECT MULTIPLE UNITS</p><p style={{opacity: 0.7}}>CLICK TO TOGGLE INDIVIDUALS</p></div>
-          
-          <button className="upload-btn" style={{marginTop: '15px'}} onClick={async () => { 
-              const res = await fetch('/api/locations/batch-district', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: districtSelection, district_name: editingDistrict.name, district_color: editingDistrict.color }) }); 
-              if (res.ok) { setAdminAlert("DISTRICT_SAVED"); refreshLocations(); setEditingDistrict(null); setDistrictSelection([]); } 
-          }}>SAVE DISTRICT</button>
+          <header style={{marginBottom: '10px'}}><h3>EDIT: {editingDistrict.name}</h3><button onClick={() => { setEditingDistrict(null); setDistrictSelection([]); setHoveredStructureId?.(null); }} className="close-btn" style={{position: 'static'}}>X</button></header>
+
+          <div className="editor-controls">
+            <label style={{fontSize: '0.7rem'}}>DISTRICT_NAME</label>
+            <input value={districtConfig.name} onChange={e => setDistrictConfig({...districtConfig, name: e.target.value})} style={{width: '100%', marginBottom: '10px'}} />
+            <label style={{fontSize: '0.7rem'}}>DISTRICT_COLOR</label>
+            <input type="color" value={districtConfig.color} onChange={e => setDistrictConfig({...districtConfig, color: e.target.value})} style={{width: '100%', marginTop: '5px', height: '30px', padding: '0', background: 'none', border: '1px solid var(--green)'}} />
+            {(() => {
+              const nextName = (districtConfig.name || '').trim();
+              const renaming = nextName !== editingDistrict.name;
+              const clash = renaming && districts.some((d: any) => d.name === nextName);
+              const dirty = renaming || districtConfig.color !== editingDistrict.color;
+              return (
+                <>
+                  {clash && <p style={{fontSize: '0.62rem', color: 'var(--warning, #ffcc00)', margin: '8px 0 0'}}>ANOTHER DISTRICT ALREADY USES THAT NAME.</p>}
+                  <button className="upload-btn" style={{marginTop: '10px'}} disabled={!dirty || !nextName || clash} onClick={async () => {
+                      const res = await fetch(`/api/districts/${encodeURIComponent(editingDistrict.name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ name: nextName, color: districtConfig.color }) });
+                      if (res.ok) {
+                        setAdminAlert(renaming ? "DISTRICT_RENAMED" : "COLOR_SAVED");
+                        fetchDistricts(); refreshLocations();
+                        setEditingDistrict({ ...editingDistrict, name: nextName, color: districtConfig.color });
+                      } else setAdminAlert(res.status === 409 ? "NAME ALREADY USED" : "SAVE_FAILED");
+                  }}>SAVE CHANGES</button>
+                  {renaming && !clash && nextName && (
+                    <p style={{fontSize: '0.62rem', opacity: 0.6, margin: '6px 0 0'}}>
+                      Renaming moves all {locations.filter((l: any) => l.district_name === editingDistrict.name).length} structure(s) with it.
+                    </p>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+
+          <div style={{marginTop: '20px', borderTop: '1px solid #333', paddingTop: '10px'}}>
+            <h4 style={{marginBottom: '8px'}}>ASSIGNED STRUCTURES</h4>
+            {(() => {
+              const members = locations.filter((l: any) => l.district_name === editingDistrict.name);
+              if (members.length === 0) {
+                return <p style={{fontSize: '0.65rem', opacity: 0.5, fontStyle: 'italic'}}>NONE. USE ASSIGN TO ADD SOME.</p>;
+              }
+              return (
+                <div className="district-members">
+                  {members.map((l: any) => (
+                    <div
+                      key={l.id}
+                      className="list-item district-member"
+                      // Hovering the row lights the building up on the map, so you can see
+                      // which one you are about to take out of the district.
+                      onMouseEnter={() => setHoveredStructureId?.(l.id)}
+                      onMouseLeave={() => setHoveredStructureId?.(null)}
+                    >
+                      <button
+                        type="button"
+                        className="member-name"
+                        title="SHOW_ON_MAP"
+                        onClick={() => { setSelectedLocation(l); setHoveredStructureId?.(null); }}
+                      >
+                        {isUserDefinedName(l.name) ? l.name : getStructLabel(l)}
+                      </button>
+                      <button className="upload-btn danger-btn" style={{padding: '2px 5px', fontSize: '0.6rem'}}
+                        title="REMOVE_FROM_DISTRICT"
+                        onClick={async () => {
+                          const res = await fetch('/api/locations/unassign-district', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: [l.id] }) });
+                          if (res.ok) { setHoveredStructureId?.(null); refreshLocations(); }
+                          else setAdminAlert("REMOVE_FAILED");
+                        }}>REMOVE</button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
         </>
       )}
 
@@ -1748,6 +1879,98 @@ export function AdminPanel({
                 </>
             )}
             
+            {editData.shape === 'friendly_rhombus' && (() => {
+              // Letting players move a friendly NPC. This grants movement and nothing
+              // else, and admins keep control whatever is set here - it shares the token
+              // rather than giving it away.
+              const grant = parseGrant(editData.controllers);
+              const online = (activeUsers || [])
+                .filter((u: any) => !u.isAdmin && !u.isNPC)
+                .map((u: any) => u.userName);
+              // Anyone already granted stays reachable even if they are offline, or
+              // revoking them would mean waiting for them to log back in.
+              const known: string[] = [...new Set([...online, ...grant.users])].sort();
+              const push = (next: { all: boolean; users: string[] }) => {
+                setEditData({ ...editData, controllers: JSON.stringify(next) });
+                // A new NPC has no id yet, so the grant rides on the form and is applied
+                // once the create comes back with one. See handleSubmit.
+                if (editId) socketRef.current?.emit('setTokenControl', { id: editId, all: next.all, users: next.users });
+              };
+              // ALL PLAYERS is always the first thing offered, then whoever is not already
+              // granted. Nothing already on the token is offered a second time.
+              const options = [
+                ...(grant.all ? [] : [{ value: '*', label: 'ALL PLAYERS' }]),
+                ...known.filter((n) => !grant.users.includes(n)).map((n) => ({ value: n, label: n })),
+              ];
+              const chips = [
+                ...(grant.all ? [{ key: '*', label: 'ALL PLAYERS' }] : []),
+                ...grant.users.map((n) => ({ key: n, label: n })),
+              ];
+              return (
+                <div style={{ marginTop: '15px', borderTop: '1px solid #333', paddingTop: '10px' }}>
+                  <h4 style={{ marginBottom: '4px' }}>PLAYER_CONTROL</h4>
+                  <p style={{ fontSize: '0.62rem', opacity: 0.7, margin: '0 0 8px', lineHeight: 1.5 }}>
+                    Who else can move this NPC. You keep control either way.
+                  </p>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
+                    {chips.length === 0 && (
+                      <span style={{ fontSize: '0.62rem', opacity: 0.45 }}>NOBODY GRANTED</span>
+                    )}
+                    {chips.map((c) => (
+                      <span key={c.key} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '5px',
+                        border: '1px solid var(--green)', padding: '1px 5px', fontSize: '0.65rem',
+                      }}>
+                        {c.label}
+                        <button
+                          type="button"
+                          aria-label={`Revoke ${c.label}`}
+                          title="REVOKE"
+                          onClick={() => push(c.key === '*'
+                            ? { all: false, users: grant.users }
+                            : { all: grant.all, users: grant.users.filter((u) => u !== c.key) })}
+                          style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', padding: 0, fontSize: '0.75rem', lineHeight: 1 }}
+                        >×</button>
+                      </span>
+                    ))}
+                  </div>
+
+                  <select
+                    aria-label="Grant control"
+                    value=""
+                    disabled={options.length === 0}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      push(v === '*'
+                        ? { all: true, users: grant.users }
+                        : { all: grant.all, users: [...grant.users, v] });
+                    }}
+                    // Same treatment as the NPC tier picker, which is the app's select:
+                    // every color a theme token, so it holds in all seven rather than
+                    // only the green one. The panel's older selects hardcode #222.
+                    style={{
+                      width: '100%',
+                      background: 'color-mix(in srgb, var(--black) 70%, transparent)',
+                      color: 'var(--green)', border: '1px solid var(--green)',
+                      fontFamily: 'inherit', fontSize: '0.7rem', padding: '0 4px',
+                      height: '26px', boxSizing: 'border-box',
+                      opacity: options.length === 0 ? 0.5 : 1,
+                    }}
+                  >
+                    <option value="">{options.length === 0 ? 'EVERYONE GRANTED' : '+ GRANT…'}</option>
+                    {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+
+                  <p style={{ fontSize: '0.62rem', opacity: 0.6, marginTop: '8px' }}>
+                    NOW: {describeGrant({ ...editData, shape: 'friendly_rhombus' })}
+                    {!editId && ' — applied when the NPC is placed'}
+                  </p>
+                </div>
+              );
+            })()}
+
             <button type="submit" className="upload-btn">
                 {editData.shape === 'enemy_rhombus' ? (editId ? 'UPDATE_ENEMY_DATA' : 'UPLOAD_NEW_ENEMY') : (editData.shape === 'friendly_rhombus' ? (editId ? 'UPDATE_FRIENDLY_NPC' : 'UPLOAD_NEW_FRIENDLY') : (editId ? 'UPDATE_DATA_POINT' : 'UPLOAD_NEW'))}
             </button>

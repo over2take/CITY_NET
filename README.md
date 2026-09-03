@@ -372,6 +372,7 @@ CITY_NET/
 │   │   ├── importers.js        # Modular sheet import — PDF form extraction + data-driven per-system field mappers (makeMapFields)
 │   │   └── npcTiers.js         # Per-system NPC power tiers for GENERATE_SHEET (CP:R: Mook→Elite; CWN: +Spirits; SR6: Ganger→Prime Runner)
 │   ├── sockets/
+│   │   ├── tokenControl.js     # Who may move a token, in one place because two move handlers ask it. An admin always may; the owner may; a friendly NPC may name players, or open to everyone. Only friendly NPCs can carry a grant, enforced here rather than by the caller, so one that reaches an enemy row through an import or a restore is inert — and anything unreadable in the column means nobody, since a malformed grant must never open a token up
 │   │   ├── index.js            # All Socket.IO event handlers. Every write to a character sheet goes through sheets/mutate.js: rolls, damage, death saves, stabilisation, spell effort and vehicle hulls all touch sheets their owner is very likely looking at, and anything relative is worked out inside the write so two of them landing together both count
 │   │   └── initiative.js       # Initiative tracker socket events (start, roll, next, remove, reorder, end); individual and side-based modes; SR6 pass-decay on wrap; CWN side auto-create, PC-side score derivation, friendly-NPC routing; roll history broadcast
 │   ├── startup/
@@ -639,6 +640,7 @@ CITY_NET/
 │   │   └── utils/
 │   │       ├── updateClient.ts     # One implementation of the in-app update flow, shared by the update modal and the nav panel — stale-container probe, server refusal passed through verbatim, restart detected by boot id, bounded wait. Two copies is how one of them stayed unhardened
 │   │       ├── locationHelpers.ts  # Location geometry utilities; exports ZONE_TYPE_NAMES and isUserDefinedName
+│   │       ├── tokenControl.ts     # The client's copy of the movement rule, so the map does not offer a drag the server would refuse. Mirrored from backend/sockets/tokenControl.js — which is authoritative — and cross-checked against it by a test that walks the same rows through both
 │   │       ├── rhombusHelpers.ts   # Player token position math
 │   │       ├── threeHelpers.tsx    # Three.js scene utilities
 │   │       ├── roadHelpers.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry, getClosestPointOnRoads

@@ -46,6 +46,7 @@ function makeTestDb() {
         melee_ac INTEGER,
         ranged_ac INTEGER,
         injuries TEXT DEFAULT '{}',
+        controllers TEXT,
         is_global INTEGER DEFAULT 0,
         has_sidewalk INTEGER DEFAULT 1,
         has_signage INTEGER DEFAULT 1,

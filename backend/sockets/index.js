@@ -9,6 +9,7 @@ const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
 const cyberEffects = require('../sheets/cyberwareEffects');
 const attackCwn = require('../sheets/attackCwn');
+const tokenControl = require('./tokenControl');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const headshots = require('../sheets/headshots');
@@ -450,12 +451,38 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
+    /**
+     * Hand a friendly NPC to some players, or to everyone.
+     *
+     * Admin only, and it never costs the admin anything: the grant adds movers, it does not
+     * transfer the token. Only friendly NPCs can carry one - `tokenControl` refuses the
+     * write for any other shape rather than storing a grant that would silently do nothing.
+     */
+    socket.on('setTokenControl', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.isAdmin) return;
+      const id = Number(data && data.id);
+      if (!Number.isInteger(id)) return;
+      db.get('SELECT id, shape FROM locations WHERE id = ?', [id], (err, row) => {
+        if (err || !row) return;
+        if (!tokenControl.isGrantable(row)) {
+          return socket.emit('tokenControlDenied', { id, reason: 'Only friendly NPCs can be shared.' });
+        }
+        const stored = tokenControl.serialize({ all: data.all, users: data.users });
+        db.run('UPDATE locations SET controllers = ? WHERE id = ?', [stored, id], (updateErr) => {
+          if (updateErr) return;
+          emitUpdate({ isRhombusOnly: true });
+          io.emit('tokenControlChanged', { id, ...tokenControl.describe({ ...row, controllers: stored }) });
+        });
+      });
+    });
+
     socket.on('moveRhombus', (data) => {
       const info = userSockets.get(socket.id);
       if (!info) return;
-      db.get('SELECT owner FROM locations WHERE id = ?', [data.id], (err, row) => {
+      db.get('SELECT owner, shape, controllers FROM locations WHERE id = ?', [data.id], (err, row) => {
         if (err || !row) return;
-        if (info.isAdmin || info.userName === row.owner) {
+        if (tokenControl.canMove(row, info)) {
           db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [data.x, data.z, data.id], function(updateErr) {
             if (!updateErr) emitUpdate({ isRhombusOnly: true });
           });
@@ -471,9 +498,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const { id, waypoints } = data; // waypoints: [{x,z}, ...], last entry is the final position
       if (!Array.isArray(waypoints) || waypoints.length === 0) return;
       const final = waypoints[waypoints.length - 1];
-      db.get('SELECT owner FROM locations WHERE id = ?', [id], (err, row) => {
+      db.get('SELECT owner, shape, controllers FROM locations WHERE id = ?', [id], (err, row) => {
         if (err || !row) return;
-        if (info.isAdmin || info.userName === row.owner) {
+        if (tokenControl.canMove(row, info)) {
           db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [final.x, final.z, id], function(updateErr) {
             if (!updateErr) {
               // Broadcast path to everyone else; mover already animated locally.
