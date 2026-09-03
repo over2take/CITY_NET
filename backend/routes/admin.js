@@ -154,6 +154,52 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     });
   });
 
+  /**
+   * Rename or recolor a district.
+   *
+   * Both cascade, for the same reason: `locations` carries a copy of the district's name
+   * AND its color on every building in it. The name is the key those rows are filed
+   * under, so renaming has to rewrite them in step or the buildings are orphaned from a
+   * district that no longer answers to that name.
+   *
+   * Done in one statement each rather than a transaction because SQLite runs these
+   * serialized on one connection, and the districts row is updated first - so a failure
+   * between them leaves buildings pointing at the old name, which the next rename repairs,
+   * rather than at a name nothing owns.
+   */
+  router.put('/districts/:name', authenticate, (req, res) => {
+    const current = req.params.name;
+    const { color, name } = req.body;
+    const nextName = name === undefined ? current : String(name).trim();
+    if (!color) return res.status(400).json({ error: 'Color required' });
+    if (!nextName) return res.status(400).json({ error: 'Name required' });
+
+    const apply = () => {
+      db.run('UPDATE districts SET name = ?, color = ? WHERE name = ?', [nextName, color, current], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: 'District not found' });
+        db.run(
+          'UPDATE locations SET district_name = ?, district_color = ? WHERE district_name = ?',
+          [nextName, color, current],
+          (err2) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            emitUpdate();
+            res.json({ name: nextName, color });
+          }
+        );
+      });
+    };
+
+    // A rename onto a name already in use would merge two districts by accident, and the
+    // UNIQUE index would fail the write anyway - so say so plainly instead.
+    if (nextName === current) return apply();
+    db.get('SELECT name FROM districts WHERE name = ?', [nextName], (err, clash) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (clash) return res.status(409).json({ error: 'A district already uses that name' });
+      apply();
+    });
+  });
+
   router.delete('/districts/:name', authenticate, (req, res) => {
     const name = req.params.name;
     db.run('DELETE FROM districts WHERE name = ?', [name], function(err) {

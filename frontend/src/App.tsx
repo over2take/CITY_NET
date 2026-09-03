@@ -102,6 +102,13 @@ function App() {
   const controlsRef = useRef<any>(null);
   const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, signs, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchSigns, fetchAll } = useMapData();
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);
+  // Picking buildings is its own mode now, not a side effect of having a district open.
+  // The old flow put you into selection the moment you hit EDIT, so it was never clear
+  // whether you were changing the district or changing what was in it.
+  const [assigningDistrict, setAssigningDistrict] = useState<District | null>(null);
+  // The structure whose row the admin is hovering in the district editor. Lights that
+  // building up on the map so they can see what REMOVE is about to take out.
+  const [hoveredStructureId, setHoveredStructureId] = useState<number | null>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   /** The building whose shop is open, or null. Its own state so closing the info panel
@@ -715,7 +722,7 @@ function App() {
     if (view === 'editor' || view === 'generator') return;
     if (isBatchSelecting) {
       toggleSelection(loc.id);
-    } else if (view === 'district') {
+    } else if (view === 'district' && assigningDistrict) {
       setDistrictSelection(prev => prev.includes(loc.id) ? prev.filter(i => i !== loc.id) : [...prev, loc.id]);
     } else if (view === 'join') {
         const getAllDescendants = (id) => {
@@ -1102,7 +1109,7 @@ function App() {
 
       const children = groupedLocations[loc.id] || [];
       const isSelected = !isBatchSelecting && view !== 'district' && view !== 'join' && selectedLocation?.id === loc.id;
-      const isBatchSelected = selectedIds.includes(loc.id) || districtSelection.includes(loc.id) || joinSelection.includes(loc.id);
+      const isBatchSelected = selectedIds.includes(loc.id) || districtSelection.includes(loc.id) || joinSelection.includes(loc.id) || hoveredStructureId === loc.id;
       const isOverlapped = overlapIds.includes(loc.id) || children.some((c: any) => overlapIds.includes(c.id));
       const isBattleActive = activeUsers && activeUsers.some((user: any) => user.currentBattleMapId && Number(user.currentBattleMapId) === Number(loc.id));
 
@@ -1125,7 +1132,7 @@ function App() {
       }
     });
     return { simple, interactive };
-  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers, isAdmin, exportSuppressHidden]);
+  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers, isAdmin, exportSuppressHidden, hoveredStructureId]);
 
   // ─── Map Export ─────────────────────────────────────────────────────────────
   // Hidden structures live inside shared InstancedMesh draw calls, so they cannot be
@@ -1769,6 +1776,10 @@ function App() {
                 fetchDistricts={fetchDistricts}
                 editingDistrict={editingDistrict}
                 setEditingDistrict={setEditingDistrict}
+                assigningDistrict={assigningDistrict}
+                setAssigningDistrict={setAssigningDistrict}
+                hoveredStructureId={hoveredStructureId}
+                setHoveredStructureId={setHoveredStructureId}
                 locations={locations}
                 roads={roads}
                 waterBodies={waterBodies}
@@ -2800,7 +2811,7 @@ function App() {
                 onReady={setMapExportApi}
               />
             )}
-            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district') { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} roadLayerMode={roadLayerMode} cityGenDrawMode={cityGenDrawMode} genBoundaryTrail={genBoundaryTrail} setGenBoundaryTrail={setGenBoundaryTrail} onBoundaryDrawEnd={(pts: any[]) => setGenBoundaryTrail(pts)} />
+            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district' && assigningDistrict) { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} roadLayerMode={roadLayerMode} cityGenDrawMode={cityGenDrawMode} genBoundaryTrail={genBoundaryTrail} setGenBoundaryTrail={setGenBoundaryTrail} onBoundaryDrawEnd={(pts: any[]) => setGenBoundaryTrail(pts)} />
             {roadSelectionBounds && view === 'city_gen' && (
               <mesh position={[(roadSelectionBounds.min.x + roadSelectionBounds.max.x) / 2, 0.02, (roadSelectionBounds.min.z + roadSelectionBounds.max.z) / 2]}>
                 <boxGeometry args={[Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x), 0.05, Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z)]} />
@@ -2848,7 +2859,7 @@ function App() {
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
                 (view !== 'battle_map' && l.battle_map_id == null)
             )).map(loc => (
-              <FriendlyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
+              <FriendlyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
             ))}
             </group>
             {token && view === 'editor' && !editId && (

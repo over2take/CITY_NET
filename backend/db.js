@@ -29,6 +29,9 @@ db.serialize(() => {
     injuries TEXT DEFAULT '{}'
   )`);
   db.run(`ALTER TABLE locations ADD COLUMN injuries TEXT DEFAULT '{}'`, () => {});
+  // Who besides an admin may move this token. JSON: {"all":bool,"users":[names]}.
+  // Only friendly NPCs honour it - see backend/sockets/tokenControl.js.
+  db.run(`ALTER TABLE locations ADD COLUMN controllers TEXT`, () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS battle_maps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

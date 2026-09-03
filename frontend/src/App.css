@@ -9,9 +9,9 @@
   --text: #00ff00;
   --cyan: #00ffaa;
   /* An alert has to stay legible as an alert on every theme, so these are tuned per
-     theme rather than shared. Two of them had to move: Crimson's own text colour is
+     theme rather than shared. Two of them had to move: Crimson's own text color is
      #ff3333 and Solar's is #ffaa00, which is what the code used for danger and warning
-     — on those themes the warnings were the same colour as everything else. */
+     — on those themes the warnings were the same color as everything else. */
   --danger: #ff4444;
   --warning: #ffcc00;
   --grid-section: #006600;
@@ -55,7 +55,7 @@
   --text: #ff97d0;
   --cyan: #fbf5a7;
   /* The cream is a yellow, so an amber warning would read as ordinary text the way Solar's
-     did. Both alerts clear all four palette colours and stay legible on the ground: the
+     did. Both alerts clear all four palette colors and stay legible on the ground: the
      obvious deep red fell to 4.1 against it, which is why this one is brighter. */
   --danger: #ff3b30;
   --warning: #ff8c1a;
@@ -155,7 +155,7 @@
   --panel-bg: rgba(10, 10, 10, 0.90);
   --text: #cccccc;
   --cyan: #aaaaaa;
-  /* the only colour in the theme, which is the point: an alert should break the grey */
+  /* the only color in the theme, which is the point: an alert should break the grey */
   --danger: #ff5555;
   --warning: #ffcc00;
   --grid-section: #444444;
@@ -171,10 +171,10 @@ body, html, #root {
   width: 100%;
   height: 100%;
   background: var(--black);
-  /* No colour here. These are ancestors of .crt-container, which is where the theme class
+  /* No color here. These are ancestors of .crt-container, which is where the theme class
      sits, so a var() resolved at this level always reads the :root defaults — green — and
-     every element that inherits its colour rather than setting one stays green whatever
-     theme is chosen. The colour belongs inside the themed element; see below. */
+     every element that inherits its color rather than setting one stays green whatever
+     theme is chosen. The color belongs inside the themed element; see below. */
   font-family: 'Courier New', Courier, monospace;
   overflow: hidden;
 }
@@ -185,7 +185,7 @@ body, html, #root {
   position: relative;
   background: var(--bg-gradient);
   /* Inside the theme class, so this resolves to the active theme rather than the default,
-     and everything that inherits a colour follows the theme with it. */
+     and everything that inherits a color follows the theme with it. */
   color: var(--green);
   /* Checkboxes and range sliders draw themselves, and without this they draw in the
      browser's own blue — the one thing on screen that belongs to no theme at all. It
@@ -1310,3 +1310,66 @@ button:disabled, .utility-btn:disabled, .upload-btn:disabled {
 
 .battle-indicator { z-index: 5 !important; }
 
+
+/* ── District members list ──────────────────────────────────────────────────
+   The structures in a district, each named above its own REMOVE button so it
+   is clear what is about to go. Five rows then it scrolls: any longer and the
+   controls under the list are pushed off the panel.
+
+   The scrollbar is styled here rather than left to the browser. A nested
+   scroller inside the admin panel draws the platform default otherwise, which
+   is wide enough to sit over the right-hand edge of the buttons beside it. */
+.district-members {
+  --member-row: 3.05rem;
+  --member-gap: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--member-gap);
+  max-height: calc(5 * var(--member-row) + 4 * var(--member-gap));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dark-green) var(--black);
+  padding-right: 2px;
+}
+
+.district-members::-webkit-scrollbar { width: 6px; }
+.district-members::-webkit-scrollbar-track { background: var(--black); }
+.district-members::-webkit-scrollbar-thumb {
+  background: var(--dark-green);
+  border: 1px solid var(--green);
+  border-radius: 3px;
+}
+
+.district-member {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+  height: var(--member-row);
+  /* The container caps its own height, so without this the rows are flex items
+     being squeezed to fit it - which silently breaks the "five rows" arithmetic
+     the max-height above is doing. Measured, not assumed. */
+  flex-shrink: 0;
+  margin-bottom: 0;
+  padding: 0.25rem 0.3rem;
+  box-sizing: border-box;
+}
+
+.district-member .member-name {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 0 0 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.district-member .member-name:hover { color: var(--green); text-decoration: underline; }
+.district-member .member-name:focus-visible { outline: 1px solid var(--green); outline-offset: 1px; }
+.district-member .upload-btn { width: 100%; }
