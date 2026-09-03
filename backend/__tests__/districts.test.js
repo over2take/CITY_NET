@@ -212,3 +212,90 @@ describe('PUT /api/districts/:name', () => {
     expect((await request(app).put('/api/districts/DOWNTOWN').send({ color: '#0000ff' })).status).toBe(401);
   });
 });
+
+describe('renaming a district', () => {
+  /**
+   * The name is the key every building is filed under, so a rename has to rewrite those
+   * rows in step. Leaving them behind would orphan them from a district that no longer
+   * answers to that name - they would vanish from the list while still carrying a colour.
+   */
+  it('carries the buildings across with it', async () => {
+    await seedDistrict('DOWNTOWN', '#ff0000');
+    const a = await seedBuilding('A', 'DOWNTOWN', '#ff0000');
+    const b = await seedBuilding('B', 'DOWNTOWN', '#ff0000');
+
+    const res = await auth(request(app).put('/api/districts/DOWNTOWN'))
+      .send({ name: 'THE CORE', color: '#ff0000' });
+
+    expect(res.status).toBe(200);
+    expect(await get(db, `SELECT name FROM districts WHERE name = 'THE CORE'`)).toBeTruthy();
+    expect(await get(db, `SELECT name FROM districts WHERE name = 'DOWNTOWN'`)).toBeFalsy();
+    expect((await districtOf(a)).district_name).toBe('THE CORE');
+    expect((await districtOf(b)).district_name).toBe('THE CORE');
+  });
+
+  it('renames and recolours in one go', async () => {
+    await seedDistrict('DOWNTOWN', '#ff0000');
+    const a = await seedBuilding('A', 'DOWNTOWN', '#ff0000');
+
+    await auth(request(app).put('/api/districts/DOWNTOWN')).send({ name: 'THE CORE', color: '#0000ff' });
+
+    expect(await districtOf(a)).toEqual({ district_name: 'THE CORE', district_color: '#0000ff' });
+  });
+
+  it('leaves another district alone', async () => {
+    await seedDistrict('DOWNTOWN', '#ff0000');
+    await seedDistrict('SLUMS', '#00ff00');
+    const slum = await seedBuilding('S', 'SLUMS', '#00ff00');
+
+    await auth(request(app).put('/api/districts/DOWNTOWN')).send({ name: 'THE CORE', color: '#ff0000' });
+
+    expect(await districtOf(slum)).toEqual({ district_name: 'SLUMS', district_color: '#00ff00' });
+  });
+
+  it('refuses a name another district already uses', async () => {
+    // Allowing it would silently merge two districts, and the UNIQUE index would fail the
+    // write anyway - so it says so plainly.
+    await seedDistrict('DOWNTOWN', '#ff0000');
+    await seedDistrict('SLUMS', '#00ff00');
+    const a = await seedBuilding('A', 'DOWNTOWN', '#ff0000');
+
+    const res = await auth(request(app).put('/api/districts/DOWNTOWN')).send({ name: 'SLUMS', color: '#ff0000' });
+
+    expect(res.status).toBe(409);
+    expect((await districtOf(a)).district_name).toBe('DOWNTOWN');
+    expect(await get(db, `SELECT name FROM districts WHERE name = 'DOWNTOWN'`)).toBeTruthy();
+  });
+
+  it('lets a district keep its own name while recolouring', async () => {
+    // The no-op rename must not trip the clash check against itself.
+    await seedDistrict('DOWNTOWN', '#ff0000');
+    const res = await auth(request(app).put('/api/districts/DOWNTOWN')).send({ name: 'DOWNTOWN', color: '#0000ff' });
+    expect(res.status).toBe(200);
+    expect((await get(db, `SELECT color FROM districts WHERE name = 'DOWNTOWN'`)).color).toBe('#0000ff');
+  });
+
+  it('trims the name rather than storing the spaces', async () => {
+    await seedDistrict('DOWNTOWN', '#ff0000');
+    const a = await seedBuilding('A', 'DOWNTOWN', '#ff0000');
+    await auth(request(app).put('/api/districts/DOWNTOWN')).send({ name: '  THE CORE  ', color: '#ff0000' });
+    expect((await districtOf(a)).district_name).toBe('THE CORE');
+  });
+
+  it('refuses an empty name', async () => {
+    await seedDistrict('DOWNTOWN', '#ff0000');
+    for (const name of ['', '   ']) {
+      const res = await auth(request(app).put('/api/districts/DOWNTOWN')).send({ name, color: '#ff0000' });
+      expect(res.status).toBe(400);
+    }
+    expect(await get(db, `SELECT name FROM districts WHERE name = 'DOWNTOWN'`)).toBeTruthy();
+  });
+
+  it('still recolours when no name is sent at all', async () => {
+    // Backwards compatible with a client that only knows about colour.
+    await seedDistrict('DOWNTOWN', '#ff0000');
+    const res = await auth(request(app).put('/api/districts/DOWNTOWN')).send({ color: '#0000ff' });
+    expect(res.status).toBe(200);
+    expect((await get(db, `SELECT color FROM districts WHERE name = 'DOWNTOWN'`)).color).toBe('#0000ff');
+  });
+});

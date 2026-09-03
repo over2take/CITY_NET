@@ -54,6 +54,7 @@ const baseProps = (): any => ({
   districts: DISTRICTS, fetchDistricts: vi.fn(),
   editingDistrict: null, setEditingDistrict: vi.fn(),
   assigningDistrict: null, setAssigningDistrict: vi.fn(),
+  hoveredStructureId: null, setHoveredStructureId: vi.fn(),
   joinSelection: null, setJoinSelection: vi.fn(),
   selectedClassification: '', setSelectedClassification: vi.fn(),
   roadSelectionBounds: null,
@@ -212,33 +213,71 @@ describe('assigning structures', () => {
 });
 
 describe('editing a district', () => {
-  const editing = (color = '#ff0000') =>
-    open({ editingDistrict: DISTRICTS[0], districtConfig: { name: 'DOWNTOWN', color } });
+  const editing = (config: any = {}) =>
+    open({
+      editingDistrict: DISTRICTS[0],
+      districtConfig: { name: 'DOWNTOWN', color: '#ff0000', ...config },
+    });
 
-  it('shows the colour it currently has', () => {
+  it('shows the name and colour it currently has', () => {
+    // Without the name field there was no way to rename a district at all - the only
+    // route was delete and recreate, which dropped every assignment.
     editing();
     const swatch = document.querySelector('input[type="color"]') as HTMLInputElement;
     expect(swatch.value).toBe('#ff0000');
+    const name = document.querySelector('.editor-controls input:not([type="color"])') as HTMLInputElement;
+    expect(name.value).toBe('DOWNTOWN');
   });
 
-  it('will not save a colour that has not changed', () => {
-    editing('#ff0000');
-    expect(screen.getByText('SAVE COLOR').hasAttribute('disabled')).toBe(true);
+  it('will not save when nothing has changed', () => {
+    editing();
+    expect(screen.getByText('SAVE CHANGES').hasAttribute('disabled')).toBe(true);
   });
 
   it('saves a new colour to the district', async () => {
-    editing('#0000ff');
-    await userEvent.click(screen.getByText('SAVE COLOR'));
+    editing({ color: '#0000ff' });
+    await userEvent.click(screen.getByText('SAVE CHANGES'));
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/districts/DOWNTOWN');
     expect(init.method).toBe('PUT');
-    expect(bodyOf(fetchMock.mock.calls[0])).toEqual({ color: '#0000ff' });
+    expect(bodyOf(fetchMock.mock.calls[0])).toEqual({ name: 'DOWNTOWN', color: '#0000ff' });
   });
 
-  it('refreshes the map after a recolour, since every building carries a copy', async () => {
-    const props = editing('#0000ff');
-    await userEvent.click(screen.getByText('SAVE COLOR'));
+  it('renames the district, keyed on the name it had', async () => {
+    editing({ name: 'THE CORE' });
+    await userEvent.click(screen.getByText('SAVE CHANGES'));
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/districts/DOWNTOWN');
+    expect(bodyOf(fetchMock.mock.calls[0])).toEqual({ name: 'THE CORE', color: '#ff0000' });
+  });
+
+  it('says how many structures a rename will carry with it', () => {
+    editing({ name: 'THE CORE' });
+    expect(screen.getByText(/Renaming moves all 2 structure\(s\) with it/i)).toBeTruthy();
+  });
+
+  it('refuses a name another district already uses', async () => {
+    // SLUMS exists. Saving would merge two districts, and the server refuses it anyway.
+    editing({ name: 'SLUMS' });
+    expect(screen.getByText(/ANOTHER DISTRICT ALREADY USES THAT NAME/i)).toBeTruthy();
+    expect(screen.getByText('SAVE CHANGES').hasAttribute('disabled')).toBe(true);
+  });
+
+  it('refuses an empty name', () => {
+    editing({ name: '   ' });
+    expect(screen.getByText('SAVE CHANGES').hasAttribute('disabled')).toBe(true);
+  });
+
+  it('trims before deciding whether anything changed', () => {
+    editing({ name: '  DOWNTOWN  ' });
+    expect(screen.getByText('SAVE CHANGES').hasAttribute('disabled')).toBe(true);
+  });
+
+  it('refreshes the map after a save, since every building carries a copy', async () => {
+    const props = editing({ color: '#0000ff' });
+    await userEvent.click(screen.getByText('SAVE CHANGES'));
     expect(props.refreshLocations).toHaveBeenCalled();
     expect(props.fetchDistricts).toHaveBeenCalled();
   });
@@ -249,6 +288,41 @@ describe('editing a district', () => {
     expect(screen.getByText('ARCADE')).toBeTruthy();
     // SHACK is in SLUMS, not this one.
     expect(screen.queryByText('SHACK')).toBeNull();
+  });
+
+  it('names a structure that has no name of its own', () => {
+    // Most buildings are never named, so the list was four identical REMOVE buttons with
+    // nothing to tell them apart. Falls back to the label the rest of the panel uses.
+    open({
+      editingDistrict: DISTRICTS[0],
+      districtConfig: { name: 'DOWNTOWN', color: '#ff0000' },
+      locations: [{ id: 77, name: '', shape: 'box', district_name: 'DOWNTOWN', district_color: '#ff0000' }],
+    });
+    expect(screen.getByText('STRUCT_77')).toBeTruthy();
+  });
+
+  it('lights the building up on the map while the row is hovered', async () => {
+    const props = editing();
+    const row = screen.getByText('TOWER').closest('.list-item')! as HTMLElement;
+    await userEvent.hover(row);
+    expect(props.setHoveredStructureId).toHaveBeenCalledWith(10);
+    await userEvent.unhover(row);
+    expect(props.setHoveredStructureId).toHaveBeenCalledWith(null);
+  });
+
+  it('stops highlighting once the structure is removed', async () => {
+    // Otherwise the map keeps a building lit that is no longer in the list.
+    const props = editing();
+    const tower = screen.getByText('TOWER').closest('.list-item')! as HTMLElement;
+    await userEvent.click(within(tower).getByText('REMOVE'));
+    expect(props.setHoveredStructureId).toHaveBeenCalledWith(null);
+  });
+
+  it('jumps to the structure when its name is clicked', () => {
+    editing();
+    const tower = screen.getByText('TOWER');
+    expect(tower.tagName).toBe('BUTTON');
+    expect(tower.getAttribute('title')).toBe('SHOW_ON_MAP');
   });
 
   it('removes one structure without touching the rest', async () => {

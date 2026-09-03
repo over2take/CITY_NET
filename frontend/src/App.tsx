@@ -106,6 +106,9 @@ function App() {
   // The old flow put you into selection the moment you hit EDIT, so it was never clear
   // whether you were changing the district or changing what was in it.
   const [assigningDistrict, setAssigningDistrict] = useState<District | null>(null);
+  // The structure whose row the admin is hovering in the district editor. Lights that
+  // building up on the map so they can see what REMOVE is about to take out.
+  const [hoveredStructureId, setHoveredStructureId] = useState<number | null>(null);
   const [overlapIds, setOverlapIds] = useState<number[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   /** The building whose shop is open, or null. Its own state so closing the info panel
@@ -1106,7 +1109,7 @@ function App() {
 
       const children = groupedLocations[loc.id] || [];
       const isSelected = !isBatchSelecting && view !== 'district' && view !== 'join' && selectedLocation?.id === loc.id;
-      const isBatchSelected = selectedIds.includes(loc.id) || districtSelection.includes(loc.id) || joinSelection.includes(loc.id);
+      const isBatchSelected = selectedIds.includes(loc.id) || districtSelection.includes(loc.id) || joinSelection.includes(loc.id) || hoveredStructureId === loc.id;
       const isOverlapped = overlapIds.includes(loc.id) || children.some((c: any) => overlapIds.includes(c.id));
       const isBattleActive = activeUsers && activeUsers.some((user: any) => user.currentBattleMapId && Number(user.currentBattleMapId) === Number(loc.id));
 
@@ -1129,7 +1132,7 @@ function App() {
       }
     });
     return { simple, interactive };
-  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers, isAdmin, exportSuppressHidden]);
+  }, [groupedLocations, isBatchSelecting, view, selectedLocation, selectedIds, districtSelection, joinSelection, overlapIds, activeUsers, isAdmin, exportSuppressHidden, hoveredStructureId]);
 
   // ─── Map Export ─────────────────────────────────────────────────────────────
   // Hidden structures live inside shared InstancedMesh draw calls, so they cannot be
@@ -1775,6 +1778,8 @@ function App() {
                 setEditingDistrict={setEditingDistrict}
                 assigningDistrict={assigningDistrict}
                 setAssigningDistrict={setAssigningDistrict}
+                hoveredStructureId={hoveredStructureId}
+                setHoveredStructureId={setHoveredStructureId}
                 locations={locations}
                 roads={roads}
                 waterBodies={waterBodies}

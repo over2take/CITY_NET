@@ -166,6 +166,7 @@ export function AdminPanel({
   districtSelection, setDistrictSelection, districtConfig, setDistrictConfig,
   districts, fetchDistricts, editingDistrict, setEditingDistrict,
   assigningDistrict, setAssigningDistrict,
+  hoveredStructureId, setHoveredStructureId,
   joinSelection, setJoinSelection, selectedClassification, setSelectedClassification, roadSelectionBounds, setRoadSelectionBounds,
   roadTrail, setRoadTrail, waterTrail, setWaterTrail, fetchWaterBodies, roadDrawMode, setRoadDrawMode, snapToGrid, setSnapToGrid, snapRotation, setSnapRotation,
   drawingRoadWidth, setDrawingRoadWidth, isGeneratingMap, setIsGeneratingMap, citySectionType, setCitySectionType,
@@ -1433,16 +1434,37 @@ export function AdminPanel({
 
       {view === 'district' && editingDistrict && (
         <>
-          <header style={{marginBottom: '10px'}}><h3>EDIT: {editingDistrict.name}</h3><button onClick={() => { setEditingDistrict(null); setDistrictSelection([]); }} className="close-btn" style={{position: 'static'}}>X</button></header>
+          <header style={{marginBottom: '10px'}}><h3>EDIT: {editingDistrict.name}</h3><button onClick={() => { setEditingDistrict(null); setDistrictSelection([]); setHoveredStructureId?.(null); }} className="close-btn" style={{position: 'static'}}>X</button></header>
 
           <div className="editor-controls">
+            <label style={{fontSize: '0.7rem'}}>DISTRICT_NAME</label>
+            <input value={districtConfig.name} onChange={e => setDistrictConfig({...districtConfig, name: e.target.value})} style={{width: '100%', marginBottom: '10px'}} />
             <label style={{fontSize: '0.7rem'}}>DISTRICT_COLOR</label>
             <input type="color" value={districtConfig.color} onChange={e => setDistrictConfig({...districtConfig, color: e.target.value})} style={{width: '100%', marginTop: '5px', height: '30px', padding: '0', background: 'none', border: '1px solid var(--green)'}} />
-            <button className="upload-btn" style={{marginTop: '10px'}} disabled={districtConfig.color === editingDistrict.color} onClick={async () => {
-                const res = await fetch(`/api/districts/${encodeURIComponent(editingDistrict.name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ color: districtConfig.color }) });
-                if (res.ok) { setAdminAlert("COLOR_SAVED"); fetchDistricts(); refreshLocations(); setEditingDistrict({ ...editingDistrict, color: districtConfig.color }); }
-                else setAdminAlert("SAVE_FAILED");
-            }}>SAVE COLOR</button>
+            {(() => {
+              const nextName = (districtConfig.name || '').trim();
+              const renaming = nextName !== editingDistrict.name;
+              const clash = renaming && districts.some((d: any) => d.name === nextName);
+              const dirty = renaming || districtConfig.color !== editingDistrict.color;
+              return (
+                <>
+                  {clash && <p style={{fontSize: '0.62rem', color: 'var(--warning, #ffcc00)', margin: '8px 0 0'}}>ANOTHER DISTRICT ALREADY USES THAT NAME.</p>}
+                  <button className="upload-btn" style={{marginTop: '10px'}} disabled={!dirty || !nextName || clash} onClick={async () => {
+                      const res = await fetch(`/api/districts/${encodeURIComponent(editingDistrict.name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ name: nextName, color: districtConfig.color }) });
+                      if (res.ok) {
+                        setAdminAlert(renaming ? "DISTRICT_RENAMED" : "COLOR_SAVED");
+                        fetchDistricts(); refreshLocations();
+                        setEditingDistrict({ ...editingDistrict, name: nextName, color: districtConfig.color });
+                      } else setAdminAlert(res.status === 409 ? "NAME ALREADY USED" : "SAVE_FAILED");
+                  }}>SAVE CHANGES</button>
+                  {renaming && !clash && nextName && (
+                    <p style={{fontSize: '0.62rem', opacity: 0.6, margin: '6px 0 0'}}>
+                      Renaming moves all {locations.filter((l: any) => l.district_name === editingDistrict.name).length} structure(s) with it.
+                    </p>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           <div style={{marginTop: '20px', borderTop: '1px solid #333', paddingTop: '10px'}}>
@@ -1453,13 +1475,28 @@ export function AdminPanel({
                 return <p style={{fontSize: '0.65rem', opacity: 0.5, fontStyle: 'italic'}}>NONE. USE ASSIGN TO ADD SOME.</p>;
               }
               return members.map((l: any) => (
-                <div key={l.id} className="list-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                  <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{l.name || `#${l.id}`}</span>
+                <div
+                  key={l.id}
+                  className="list-item"
+                  style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px'}}
+                  // Hovering the row lights the building up on the map, so you can see
+                  // which one you are about to take out of the district.
+                  onMouseEnter={() => setHoveredStructureId?.(l.id)}
+                  onMouseLeave={() => setHoveredStructureId?.(null)}
+                >
+                  <button
+                    type="button"
+                    title="SHOW_ON_MAP"
+                    onClick={() => { setSelectedLocation(l); setHoveredStructureId?.(null); }}
+                    style={{background: 'none', border: 'none', color: 'inherit', font: 'inherit', cursor: 'pointer', padding: 0, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0}}
+                  >
+                    {isUserDefinedName(l.name) ? l.name : getStructLabel(l)}
+                  </button>
                   <button className="upload-btn danger-btn" style={{padding: '2px 5px', fontSize: '0.6rem', flexShrink: 0}}
                     title="REMOVE_FROM_DISTRICT"
                     onClick={async () => {
                       const res = await fetch('/api/locations/unassign-district', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ids: [l.id] }) });
-                      if (res.ok) refreshLocations();
+                      if (res.ok) { setHoveredStructureId?.(null); refreshLocations(); }
                       else setAdminAlert("REMOVE_FAILED");
                     }}>REMOVE</button>
                 </div>
