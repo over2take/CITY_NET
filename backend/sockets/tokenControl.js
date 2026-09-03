@@ -2,13 +2,14 @@
 //
 // Until now this was one expression repeated in two socket handlers: an admin, or the
 // player whose name is in `owner`. That covers a player moving their own rhombus and a GM
-// moving anything, and leaves no way to hand a friendly NPC to the player who is actually
-// running it for the evening.
+// moving anything, and leaves no way to let a player move a friendly NPC the GM wants
+// them shifting around the map.
 //
-// So a token can carry a grant. Three rules, in this order:
+// So a token can carry a grant. It grants MOVEMENT and nothing else: the NPC is still the
+// GM's to speak for, roll for and edit. Three rules, in this order:
 //
-//   1. An admin can always move anything. The grant adds control, it never removes any -
-//      handing an NPC to a player does not hand it over, it shares it.
+//   1. An admin can always move anything. The grant adds movers, it never removes any -
+//      sharing an NPC does not hand it over.
 //   2. The owner can move their own token, exactly as before.
 //   3. A friendly NPC can name players who may move it, or open itself to everyone.
 //

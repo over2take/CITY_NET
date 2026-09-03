@@ -1880,8 +1880,9 @@ export function AdminPanel({
             )}
             
             {editData.shape === 'friendly_rhombus' && (() => {
-              // Handing a friendly NPC to the players running it. Admins keep control
-              // whatever is set here - this shares the token, it does not give it away.
+              // Letting players move a friendly NPC. This grants movement and nothing
+              // else, and admins keep control whatever is set here - it shares the token
+              // rather than giving it away.
               const grant = parseGrant(editData.controllers);
               const online = (activeUsers || [])
                 .filter((u: any) => !u.isAdmin && !u.isNPC)

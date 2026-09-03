@@ -11,7 +11,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [1.11.6] - 2026-09-02
 
-A clearer way to put buildings in districts, and friendly NPCs a GM can hand to the players running them.
+A clearer way to put buildings in districts, and friendly NPCs a GM can let players move.
 
 **Existing districts are untouched.** Nothing about this release changes what is already in your database: the districts you have, their colours, and every building assigned to one all come across as they are. The only schema change is a new column for NPC control, which is empty on every existing token and means "admin only" — exactly how they behaved before.
 
