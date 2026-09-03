@@ -84,6 +84,40 @@ const cwnRecompute = (data) => {
   return changed;
 };
 
+/**
+ * The Armor Class a character's own chrome gives them, or 0 for none.
+ *
+ * Dermal Armor and its kin set a base AC rather than adding to one: p38 works it through,
+ * "a base Armor Class of 16 versus melee and ranged attacks, modified by -1 for his Dex
+ * modifier" - so one value covering both, with the Dex mod applied on top exactly as worn
+ * armour gets it.
+ *
+ * Read off the modifier the catalogue already writes, which is why no existing sheet needs
+ * migrating: a character who installed Dermal Armor months ago starts defending at the
+ * right number the moment this ships. It was stored as a `note` because the sheet had no
+ * field for it; the note stays, so the chip still shows, and now it also counts.
+ *
+ * The highest wins if somehow two are fitted. They are base values, not bonuses, and
+ * nothing in the book adds one to another.
+ */
+const cwnImplantAc = (data) => {
+  const rows = Array.isArray(data && data.cyberware) ? data.cyberware : [];
+  let best = 0;
+  for (const row of rows) {
+    if (!row || typeof row !== 'object' || !row.equipped || !row.placed) continue;
+    let mods = row.mods;
+    if (typeof mods === 'string') { try { mods = JSON.parse(mods); } catch { mods = []; } }
+    if (!Array.isArray(mods)) continue;
+    for (const m of mods) {
+      if (!m || typeof m !== 'object') continue;
+      if (String(m.target || '').trim().toLowerCase() !== 'base ac') continue;
+      const v = num(m.value);
+      if (v > best) best = v;
+    }
+  }
+  return best;
+};
+
 // CWN effective AC from the sheet's armor fields. Armor SETS your AC, the DEX
 // mod adds on top, and a shield adds a bonus.
 //
@@ -103,14 +137,25 @@ const cwnRecompute = (data) => {
 // Returns null while armor_ac is unset: the token AC is then managed by hand
 // (token menu / the linked ac field), so we never clobber a manual value.
 const cwnEffectiveAc = (data) => {
-  const base = Number(data.armor_ac);
-  if (!Number.isFinite(base) || base <= 0) return null;
+  // Chrome that sets its own AC. p71: armor and intrinsic AC do NOT stack - "will use
+  // either the cyber stats or the armor stats, not both" - so the two are compared and the
+  // better taken, never added. Automatic rather than a choice: a player would take the
+  // higher number every time, the same call the Str/Dex weapons make.
+  const implant = cwnImplantAc(data);
+  const armorBase = Number(data.armor_ac);
+  const hasArmor = Number.isFinite(armorBase) && armorBase > 0;
+  // Nothing worn and nothing implanted: the token AC stays hand-managed, as before.
+  if (!hasArmor && implant <= 0) return null;
+  const base = hasArmor ? armorBase : implant;
   const capRaw = data.armor_dex_cap;
   const cap = (capRaw === undefined || capRaw === null || capRaw === '') ? Infinity : num(capRaw);
   const dex = Math.min(cwnMod(data.dex), cap);
   // A Riot Shield is +2 ranged and +4 melee, so the shield splits the same way.
   const blank = (v) => v === undefined || v === null || v === '';
   const meleeBase = blank(data.armor_ac_melee) ? base : num(data.armor_ac_melee);
+  // The implant covers both attack types with one number, so it is compared against each.
+  const rangedFrom = Math.max(base, implant);
+  const meleeFrom = Math.max(meleeBase, implant);
   const shield = num(data.shield_bonus);
   const meleeShield = blank(data.shield_bonus_melee) ? shield : num(data.shield_bonus_melee);
   // Armor mods (p58): Customized is +1 to both, Discreet Design trades -2 off both for
@@ -118,8 +163,8 @@ const cwnEffectiveAc = (data) => {
   const mods = gearMods.armorModEffects(data.armor_mods);
   const clamp = (n) => Math.max(1, Math.min(99, n));
   return {
-    ranged: clamp(base + dex + shield + mods.rangedAc),
-    melee: clamp(meleeBase + dex + meleeShield + mods.meleeAc),
+    ranged: clamp(rangedFrom + dex + shield + mods.rangedAc),
+    melee: clamp(meleeFrom + dex + meleeShield + mods.meleeAc),
   };
 };
 
@@ -330,5 +375,5 @@ const applyDerived = (system, data, changedFieldId) => {
 
 module.exports = {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, filterPublicData, getLinkedFields, getMaxPairs,
-  applyDerived, cwnEffectiveAc, TOKEN_SOURCES, rangedAcOf, acColumns,
+  applyDerived, cwnEffectiveAc, cwnImplantAc, TOKEN_SOURCES, rangedAcOf, acColumns,
 };
