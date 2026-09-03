@@ -53,7 +53,10 @@ const baseProps = (): any => ({
   activeUsers: ACTIVE_USERS,
   globalSettings: {}, fetchGlobalSettings: vi.fn(),
   isAdmin: true, isPrimaryAdmin: true,
-  editorGenParts: [], setEditorGenParts: vi.fn(),
+  // handleSubmit calls every one of these after a successful create. A missing setter
+  // throws inside an async handler, which surfaces as an unhandled rejection rather than
+  // a failing assertion - the suite reports green and the process still exits 1.
+  editorGenParts: [], setEditorGenParts: vi.fn(), setEditorGenType: vi.fn(),
 });
 
 beforeEach(() => {
