@@ -867,6 +867,11 @@ describe('attacking with cyberware', () => {
   });
 
   const fire = async (sheet, payload) => {
+    // Trauma off. A cyber weapon's trauma die is intrinsic and cannot be blanked on the
+    // sheet the way a weapon row's can, and a traumatic hit multiplies the damage by
+    // three - which would put a 2d6 blade at up to 36 and make any range assertion here
+    // a coin toss rather than a check.
+    await run(db, `INSERT OR REPLACE INTO global_settings (key, value) VALUES ('cwn_trauma', '0')`);
     await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
       [JSON.stringify(sheet)]);
     await seedAttackerToken();
@@ -914,5 +919,102 @@ describe('attacking with cyberware', () => {
   it('refuses an index that names nothing', async () => {
     const emitted = await fire(withBlades('Body Blades I'), { cyberIndex: 9 });
     expect(emitted.find(e => e.event === 'sheetAttackError')).toBeTruthy();
+  });
+});
+
+describe('cyberware mods reach a real attack', () => {
+  /**
+   * The gap these close. The mod table was covered by unit tests against the pure
+   * functions, which pass whether or not anything calls them - and two of the five turned
+   * out to be calling nothing at all. These drive the whole path instead.
+   *
+   * Asserted against the TARGET'S HIT POINTS rather than the number in the result, because
+   * the number that matters is the one that actually comes off the target. A mod that
+   * reached the report but not the subtraction would pass a weaker test.
+   */
+  const armed = (mods, over = {}) => ({
+    base_hit_bonus: 30, stab: 0, punch: 0, str_mod: 0, dex_mod: 0,
+    cyberware: [{
+      name: 'Body Blades II', type: 'limb', side: null, placed: true, equipped: true,
+      hl: 2, mods: [], cyberMods: mods,
+    }],
+    ...over,
+  });
+
+  const HP = 40;
+
+  /** One strike, returning what was reported and what the target actually lost. */
+  const strike = async (sheet) => {
+    // Trauma off, so this measures the mod rather than a multiplier. Monoblade makes
+    // traumatic hits MORE likely - it adds to that roll - so leaving the house rule on
+    // would let a modded blade hit harder overall, which is the trade the book describes
+    // and the opposite of what these are checking.
+    await run(db, `INSERT OR REPLACE INTO global_settings (key, value) VALUES ('cwn_trauma', '0')`);
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
+      [JSON.stringify(sheet)]);
+    await seedAttackerToken();
+    const target = await seedTarget(1, HP);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+    handlers['sheetAttack']({ targetId: target.lastID, cyberIndex: 1 });
+    await waitFor(() => emitted.some(e => e.event === 'attackResult'));
+    const res = emitted.find(e => e.event === 'attackResult').data;
+    const token = await get(db, `SELECT hp_current FROM locations WHERE id = ?`, [target.lastID]);
+    return { res, lost: HP - token.hp_current };
+  };
+
+  it('subtracts full Body Blades damage with no mod fitted', async () => {
+    // Body Blades II is 2d6: 2 to 12 off the target, and the report agrees with the loss.
+    const { res, lost } = await strike(armed([]));
+    expect(res.hit).toBe(true);
+    expect(lost).toBeGreaterThanOrEqual(2);
+    expect(lost).toBeLessThanOrEqual(12);
+    expect(lost).toBe(res.damage);
+  });
+
+  it('takes Monoblade off the hit points, not just off the report', async () => {
+    // 2d6 less 2 is 0 to 10. The ranges only separate at the top, which is where this
+    // asserts - and against the target's own hit points.
+    const { res, lost } = await strike(armed(['monoblade']));
+    expect(lost).toBeLessThanOrEqual(10);
+    expect(lost).toBe(res.damage);
+  });
+
+  it('does not apply Monoblade to an implant it does not fit', async () => {
+    // The fits check, driven end to end rather than through the pure function. A
+    // Cyberlimb is not a blade, so the mod is inert and the blade beside it is untouched.
+    const sheet = armed([]);
+    sheet.cyberware.unshift({
+      name: 'Cyberlimb', type: 'limb', side: null, placed: true, equipped: true,
+      hl: 1, mods: [], cyberMods: ['monoblade'],
+    });
+    const { lost } = await strike(sheet);
+    expect(lost).toBeGreaterThanOrEqual(2); // full 2d6, nothing taken off
+  });
+
+  it('reaches the token AC through Hardened Weave', async () => {
+    // Not an attack, but the same question: does the mod reach the number the game uses.
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('GHOST', 'cities_without_number', ?, 0)`,
+      [JSON.stringify({
+        dex: 10,
+        cyberware: [{
+          name: 'Dermal Armor I', type: 'skin', side: null, placed: true, equipped: true,
+          hl: 1, conc: 'medical', mods: [{ kind: 'note', target: 'Base AC', value: 16 }],
+          cyberMods: ['hardened_weave'],
+        }],
+      })]);
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, melee_ac, ranged_ac, hp_current, hp_max) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 10, 10, 20, 20)`);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+
+    handlers['updateSheetField']({ fieldId: 'armor_name', value: 'nothing' });
+    await waitFor(() => emitted.some(e => e.event === 'sheetUpdated'));
+    await flush(50);
+
+    const token = await get(db, `SELECT melee_ac, ranged_ac FROM locations WHERE owner = 'GHOST'`);
+    expect(token.ranged_ac).toBe(18); // 16 implant + 2 weave
+    expect(token.melee_ac).toBe(18);
   });
 });

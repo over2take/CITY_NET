@@ -102,6 +102,36 @@ describe('the System Strain ceiling', () => {
     expect(installedStrain([row('Off', 4, { equipped: false })])).toBe(0);
   });
 
+  /**
+   * Tailored Interface (p71) lowers what its own system costs, and Strain is what decides
+   * whether the next piece fits at all - so the mod has to reach this sum or it changes
+   * nothing a player can feel. It did not: the helper existed and nothing called it, and
+   * normalisation was dropping the field before the sum could see it.
+   */
+  it('counts a Tailored Interface off the system it is fitted to', () => {
+    expect(installedStrain([row('Reflexes', 3, { cyberMods: ['tailored_interface'] })])).toBe(2);
+  });
+
+  it('leaves a system too cheap for it alone', () => {
+    // "only functions on cyber that inflicts 2+ points of permanent System Strain"
+    expect(installedStrain([row('Cheap', 1, { cyberMods: ['tailored_interface'] })])).toBe(1);
+  });
+
+  it('keeps the mods through normalisation', () => {
+    // The bug under the bug: a row read back without its mods charges full price for one
+    // somebody paid for.
+    expect(normaliseRow({ name: 'X', hl: 3, cyberMods: ['tailored_interface'] }).cyberMods)
+      .toEqual(['tailored_interface']);
+    expect(normaliseRow({ name: 'X', hl: 3 }).cyberMods).toEqual([]);
+  });
+
+  it('frees up room under the ceiling, which is the point', () => {
+    const rows = [row('A', 3, { cyberMods: ['tailored_interface'] }), row('B', 2)];
+    const { load, free } = strainCeiling({ con: 10 }, rows);
+    expect(load).toBe(4); // 2 + 2, not 3 + 2
+    expect(free).toBe(6);
+  });
+
   it('adds fractional strain without rounding it away', () => {
     // Four quarter-point implants are a whole point, not zero.
     expect(installedStrain([row('a', 0.25), row('b', 0.25), row('c', 0.25), row('d', 0.25)])).toBe(1);
