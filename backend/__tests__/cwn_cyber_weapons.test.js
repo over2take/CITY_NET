@@ -54,7 +54,8 @@ describe('what a cyber weapon rolls', () => {
     expect(w.name).toBe('Body Blades I');
     expect(w.dmg).toBe('1d8');
     expect(w.shock).toEqual({ dmg: 2, ac: 15 });
-    expect(w.trauma).toEqual({ die: 8, rating: 3, vsVehicles: false });
+    // bonus is 0 until a Monoblade is fitted (p71); see cwn_cyber_mods.test.js.
+    expect(w.trauma).toEqual({ die: 8, rating: 3, vsVehicles: false, bonus: 0 });
     expect(w.attackType).toBe('melee');
   });
 
@@ -62,7 +63,7 @@ describe('what a cyber weapon rolls', () => {
     const w = attackCwn.getCyberWeapon(sheet([blades('Body Blades II')]), 1);
     expect(w.dmg).toBe('2d6');
     expect(w.shock).toEqual({ dmg: 4, ac: 15 });
-    expect(w.trauma).toEqual({ die: 10, rating: 3, vsVehicles: false });
+    expect(w.trauma).toEqual({ die: 10, rating: 3, vsVehicles: false, bonus: 0 });
   });
 
   it('rolls with whichever of Stab or Punch is better', () => {

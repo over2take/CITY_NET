@@ -18,6 +18,7 @@
 //    store them in the sheet's JSON - one source of truth, no drift.
 
 const gearMods = require('./cwnGearMods');
+const cyberMods = require('./cwnCyberMods');
 
 const num = (v) => {
   const n = Number(v);
@@ -111,7 +112,9 @@ const cwnImplantAc = (data) => {
     for (const m of mods) {
       if (!m || typeof m !== 'object') continue;
       if (String(m.target || '').trim().toLowerCase() !== 'base ac') continue;
-      const v = num(m.value);
+      // Hardened Weave improves whatever AC the system grants, so it is added to the
+      // implant's own value before the best is taken rather than after.
+      const v = num(m.value) + cyberMods.rowEffects(row).implantAc;
       if (v > best) best = v;
     }
   }

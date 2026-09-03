@@ -14,6 +14,8 @@
 // System Strain maximum. Rows do not carry the catalogue id they came from; when they do,
 // this and that should both move over to it.
 
+const cyberMods = require('./cwnCyberMods');
+
 const num = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -90,16 +92,21 @@ const getCyberWeapon = (data, index, attackCwn) => {
   const row = armed[i - 1];
   const spec = CYBER_WEAPONS[String(row.name).trim().toLowerCase()];
   const skill = bestSkill(data, spec.skills);
+  // Mods fitted to this implant (p71). Monoblade trades damage and Shock for a keener
+  // trauma die; Targeting Processor buys a point of accuracy.
+  const fitted = cyberMods.rowEffects(row);
   return {
     name: spec.label,
     dmg: spec.dmg,
     skill,
     mod: attackCwn.weaponAttr(data, spec.attr, skill),
-    atk: 0,
-    trauma: { ...spec.trauma },
-    shock: { ...spec.shock },
-    dmgBonus: 0,
-    mods: [],
+    atk: fitted.hit,
+    // The bonus is to the trauma ROLL rather than the die's size, so it rides along on
+    // the parsed trauma rather than changing which die is thrown.
+    trauma: { ...spec.trauma, bonus: fitted.traumaBonus },
+    shock: { ...spec.shock, dmg: Math.max(0, spec.shock.dmg + fitted.shock) },
+    dmgBonus: fitted.damage,
+    mods: fitted.installed,
     // Body weaponry is melee, whichever of the two skills it is rolled with.
     attackType: 'melee',
     // Marks it as chrome rather than a weapon row, for anything that needs to tell them

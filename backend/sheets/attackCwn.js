@@ -357,10 +357,14 @@ const rollTrauma = (weapon, traumaEnabled, targetTT = DEFAULT_TRAUMA_TARGET, rng
   // devastating to a person and does nothing at all to a car.
   if (opts.vsVehicle && !weapon.trauma.vsVehicles) return null;
   const tt = num(targetTT) > 0 ? num(targetTT) : DEFAULT_TRAUMA_TARGET;
-  const roll = Math.floor(rng() * weapon.trauma.die) + 1;
+  // A Monoblade adds to the roll rather than enlarging the die (p71), so the bonus lands
+  // here. Absent on every weapon that has none, which is all of them but cyber blades.
+  const bonus = num(weapon.trauma.bonus);
+  const roll = Math.floor(rng() * weapon.trauma.die) + 1 + bonus;
   return {
     die: weapon.trauma.die,
     rating: weapon.trauma.rating,
+    bonus,
     roll,
     tt,
     traumatic: roll >= tt,
