@@ -1360,7 +1360,7 @@ export function AdminPanel({
 
           <p style={{fontSize: '0.65rem', opacity: 0.7, margin: '0 0 12px', lineHeight: 1.5}}>
             Create a district below, then use ASSIGN on it to pick its structures on the map.
-            EDIT changes its colour and lists what is in it.
+            EDIT changes its color and lists what is in it.
           </p>
 
           {districts.length === 0 && (
@@ -1948,7 +1948,7 @@ export function AdminPanel({
                         : { all: grant.all, users: [...grant.users, v] });
                     }}
                     // Same treatment as the NPC tier picker, which is the app's select:
-                    // every colour a theme token, so it holds in all seven rather than
+                    // every color a theme token, so it holds in all seven rather than
                     // only the green one. The panel's older selects hardcode #222.
                     style={{
                       width: '100%',

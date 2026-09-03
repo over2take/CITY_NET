@@ -13,13 +13,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 A clearer way to put buildings in districts, and friendly NPCs a GM can let players move.
 
-**Existing districts are untouched.** Nothing about this release changes what is already in your database: the districts you have, their colours, and every building assigned to one all come across as they are. The only schema change is a new column for NPC control, which is empty on every existing token and means "admin only" — exactly how they behaved before.
+**Existing districts are untouched.** Nothing about this release changes what is already in your database: the districts you have, their colors, and every building assigned to one all come across as they are. The only schema change is a new column for NPC control, which is empty on every existing token and means "admin only" — exactly how they behaved before.
 
 ### Added
 
 - **Districts have an ASSIGN button of their own.** Creating a district and choosing what goes in it used to be the same screen, so it was never clear which you were doing. They are separate now: ASSIGN picks structures on the map, EDIT changes the district itself. The list explains the flow and shows how many structures each district holds.
 
-- **Districts can be renamed and recoloured.** Neither was possible before — the only route was delete and recreate, which dropped every assignment. Both carry the buildings with them, and a rename onto a name another district already uses is refused rather than quietly merging the two.
+- **Districts can be renamed and recolored.** Neither was possible before — the only route was delete and recreate, which dropped every assignment. Both carry the buildings with them, and a rename onto a name another district already uses is refused rather than quietly merging the two.
 
 - **The edit screen lists what is in the district.** Each structure by name, with its own REMOVE. A building with no name of its own shows the label the rest of the panel gives it rather than a blank row, and hovering one lights it up on the map so you can see what you are about to take out. The list stops at five and scrolls, so the controls under it stay on screen.
 

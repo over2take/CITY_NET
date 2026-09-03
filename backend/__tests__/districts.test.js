@@ -20,10 +20,10 @@ const auth = (r) => r.set('Authorization', `Bearer ${ADMIN_TOKEN}`);
  * The old flow was one endpoint that cleared the whole district and re-inserted whatever
  * the client posted, so the posted list WAS the district: a stale or mis-dragged selection
  * unassigned buildings silently, with nothing to undo from. These cover the replacement -
- * additive assign, explicit unassign, and a recolour that reaches the buildings.
+ * additive assign, explicit unassign, and a recolor that reaches the buildings.
  *
- * The colour is denormalised onto every building (`locations.district_color`), which is why
- * recolouring has to cascade and why assign reads the colour from the districts table
+ * The color is denormalized onto every building (`locations.district_color`), which is why
+ * recoloring has to cascade and why assign reads the color from the districts table
  * rather than trusting the request: two copies that can disagree is the whole hazard.
  */
 
@@ -93,9 +93,9 @@ describe('POST /api/locations/assign-district', () => {
     expect(await districtOf(b)).toEqual({ district_name: 'SLUMS', district_color: '#00ff00' });
   });
 
-  it('takes the colour off the district, not off the request', async () => {
+  it('takes the color off the district, not off the request', async () => {
     // Otherwise the copy on the building can disagree with the district it names, and the
-    // map draws a colour no district has.
+    // map draws a color no district has.
     await seedDistrict('DOWNTOWN', '#ff0000');
     const b = await seedBuilding('B');
 
@@ -156,8 +156,8 @@ describe('POST /api/locations/unassign-district', () => {
     expect((await districtOf(stays)).district_name).toBe('DOWNTOWN');
   });
 
-  it('clears the colour with the name', async () => {
-    // Leaving the colour behind would tint a building that is in no district at all.
+  it('clears the color with the name', async () => {
+    // Leaving the color behind would tint a building that is in no district at all.
     await seedDistrict('DOWNTOWN', '#ff0000');
     const b = await seedBuilding('B', 'DOWNTOWN', '#ff0000');
     await auth(request(app).post('/api/locations/unassign-district')).send({ ids: [b] });
@@ -172,9 +172,9 @@ describe('POST /api/locations/unassign-district', () => {
 });
 
 describe('PUT /api/districts/:name', () => {
-  it('recolours the district and every building in it', async () => {
-    // The copy on each building is why this has to cascade, and why recolouring was not
-    // possible before: the only way to change a colour was delete and recreate, which
+  it('recolors the district and every building in it', async () => {
+    // The copy on each building is why this has to cascade, and why recoloring was not
+    // possible before: the only way to change a color was delete and recreate, which
     // dropped every assignment.
     await seedDistrict('DOWNTOWN', '#ff0000');
     const a = await seedBuilding('A', 'DOWNTOWN', '#ff0000');
@@ -206,7 +206,7 @@ describe('PUT /api/districts/:name', () => {
     expect(res.status).toBe(404);
   });
 
-  it('needs a colour, and a token', async () => {
+  it('needs a color, and a token', async () => {
     await seedDistrict('DOWNTOWN', '#ff0000');
     expect((await auth(request(app).put('/api/districts/DOWNTOWN')).send({})).status).toBe(400);
     expect((await request(app).put('/api/districts/DOWNTOWN').send({ color: '#0000ff' })).status).toBe(401);
@@ -217,7 +217,7 @@ describe('renaming a district', () => {
   /**
    * The name is the key every building is filed under, so a rename has to rewrite those
    * rows in step. Leaving them behind would orphan them from a district that no longer
-   * answers to that name - they would vanish from the list while still carrying a colour.
+   * answers to that name - they would vanish from the list while still carrying a color.
    */
   it('carries the buildings across with it', async () => {
     await seedDistrict('DOWNTOWN', '#ff0000');
@@ -234,7 +234,7 @@ describe('renaming a district', () => {
     expect((await districtOf(b)).district_name).toBe('THE CORE');
   });
 
-  it('renames and recolours in one go', async () => {
+  it('renames and recolors in one go', async () => {
     await seedDistrict('DOWNTOWN', '#ff0000');
     const a = await seedBuilding('A', 'DOWNTOWN', '#ff0000');
 
@@ -267,7 +267,7 @@ describe('renaming a district', () => {
     expect(await get(db, `SELECT name FROM districts WHERE name = 'DOWNTOWN'`)).toBeTruthy();
   });
 
-  it('lets a district keep its own name while recolouring', async () => {
+  it('lets a district keep its own name while recoloring', async () => {
     // The no-op rename must not trip the clash check against itself.
     await seedDistrict('DOWNTOWN', '#ff0000');
     const res = await auth(request(app).put('/api/districts/DOWNTOWN')).send({ name: 'DOWNTOWN', color: '#0000ff' });
@@ -291,8 +291,8 @@ describe('renaming a district', () => {
     expect(await get(db, `SELECT name FROM districts WHERE name = 'DOWNTOWN'`)).toBeTruthy();
   });
 
-  it('still recolours when no name is sent at all', async () => {
-    // Backwards compatible with a client that only knows about colour.
+  it('still recolors when no name is sent at all', async () => {
+    // Backwards compatible with a client that only knows about color.
     await seedDistrict('DOWNTOWN', '#ff0000');
     const res = await auth(request(app).put('/api/districts/DOWNTOWN')).send({ color: '#0000ff' });
     expect(res.status).toBe(200);

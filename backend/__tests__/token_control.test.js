@@ -6,7 +6,7 @@ const tokenControl = require('../sockets/tokenControl');
  * Who may move a token.
  *
  * The rule used to be one expression in two socket handlers - an admin, or the player whose
- * name is in `owner` - which left no way to hand a friendly NPC to the player running it.
+ * name is in `owner` - which left no way to let a player move a friendly NPC at all.
  * A grant adds movers; it never takes the admin's control away, and it never reaches a
  * token whose shape is not meant to carry one.
  */
@@ -159,7 +159,7 @@ describe('writing a grant back', () => {
     expect(tokenControl.parse(stored).users).toEqual(['bob', 'carol']);
   });
 
-  it('normalises on the way in, so what is stored is what will be read', () => {
+  it('normalizes on the way in, so what is stored is what will be read', () => {
     const stored = tokenControl.serialize({ all: 'yes', users: ['bob', 99] });
     expect(tokenControl.parse(stored)).toEqual({ all: false, users: ['bob'] });
   });

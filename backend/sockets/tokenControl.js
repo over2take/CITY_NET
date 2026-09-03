@@ -47,7 +47,7 @@ const parse = (raw) => {
   return { all: value.all === true, users };
 };
 
-/** Back to the column, normalised so what is stored is what `parse` would have read. */
+/** Back to the column, normalized so what is stored is what `parse` would have read. */
 const serialize = (grant) => {
   const g = parse(grant);
   // Nothing granted is stored as nothing, so the common case leaves no JSON behind.

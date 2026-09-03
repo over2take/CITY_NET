@@ -408,7 +408,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
    * A building belongs to one district, so assigning one that is already filed elsewhere
    * moves it rather than refusing: the UPDATE overwrites whatever it had.
    *
-   * The colour is read from the districts table rather than taken from the request, so the
+   * The color is read from the districts table rather than taken from the request, so the
    * copy on the building cannot drift from the district it names.
    */
   router.post('/assign-district', authenticate, (req, res) => {

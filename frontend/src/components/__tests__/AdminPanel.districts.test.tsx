@@ -16,7 +16,7 @@ import { AdminPanel } from '../AdminPanel';
  * The old one put you into map-selection the moment you pressed EDIT, and SAVE replaced
  * the district with whatever was selected - so editing a district and choosing what was in
  * it were the same screen, and a stale selection quietly emptied it. These pin the split:
- * ASSIGN picks structures and only ever adds, EDIT changes the colour and removes one at a
+ * ASSIGN picks structures and only ever adds, EDIT changes the color and removes one at a
  * time, and neither can do the other's job.
  */
 
@@ -88,7 +88,7 @@ describe('the district list', () => {
     expect(screen.getByText(/use ASSIGN on it to pick its structures/i)).toBeTruthy();
   });
 
-  it('shows each district with its colour and how much is in it', () => {
+  it('shows each district with its color and how much is in it', () => {
     open();
     const downtown = screen.getByText('DOWNTOWN').closest('.list-item')!;
     expect(within(downtown as HTMLElement).getByText('2 STRUCTURES')).toBeTruthy();
@@ -115,7 +115,7 @@ describe('the district list', () => {
     expect(props.setEditingDistrict).not.toHaveBeenCalled();
   });
 
-  it('opens EDIT with that district colour loaded', async () => {
+  it('opens EDIT with that district color loaded', async () => {
     const props = open();
     const downtown = screen.getByText('DOWNTOWN').closest('.list-item')! as HTMLElement;
     await userEvent.click(within(downtown).getByText('EDIT'));
@@ -169,7 +169,7 @@ describe('assigning structures', () => {
     expect(screen.queryByText(/will move out of another district/i)).toBeNull();
   });
 
-  it('posts only the selected ids, and lets the server pick the colour', async () => {
+  it('posts only the selected ids, and lets the server pick the color', async () => {
     // Additive by construction: the request carries no notion of the district's
     // current members, so nothing outside the selection can be touched.
     assigning([12, 13]);
@@ -219,7 +219,7 @@ describe('editing a district', () => {
       districtConfig: { name: 'DOWNTOWN', color: '#ff0000', ...config },
     });
 
-  it('shows the name and colour it currently has', () => {
+  it('shows the name and color it currently has', () => {
     // Without the name field there was no way to rename a district at all - the only
     // route was delete and recreate, which dropped every assignment.
     editing();
@@ -234,7 +234,7 @@ describe('editing a district', () => {
     expect(screen.getByText('SAVE CHANGES').hasAttribute('disabled')).toBe(true);
   });
 
-  it('saves a new colour to the district', async () => {
+  it('saves a new color to the district', async () => {
     editing({ color: '#0000ff' });
     await userEvent.click(screen.getByText('SAVE CHANGES'));
 

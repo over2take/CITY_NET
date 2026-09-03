@@ -9,9 +9,9 @@
   --text: #00ff00;
   --cyan: #00ffaa;
   /* An alert has to stay legible as an alert on every theme, so these are tuned per
-     theme rather than shared. Two of them had to move: Crimson's own text colour is
+     theme rather than shared. Two of them had to move: Crimson's own text color is
      #ff3333 and Solar's is #ffaa00, which is what the code used for danger and warning
-     — on those themes the warnings were the same colour as everything else. */
+     — on those themes the warnings were the same color as everything else. */
   --danger: #ff4444;
   --warning: #ffcc00;
   --grid-section: #006600;
@@ -55,7 +55,7 @@
   --text: #ff97d0;
   --cyan: #fbf5a7;
   /* The cream is a yellow, so an amber warning would read as ordinary text the way Solar's
-     did. Both alerts clear all four palette colours and stay legible on the ground: the
+     did. Both alerts clear all four palette colors and stay legible on the ground: the
      obvious deep red fell to 4.1 against it, which is why this one is brighter. */
   --danger: #ff3b30;
   --warning: #ff8c1a;
@@ -155,7 +155,7 @@
   --panel-bg: rgba(10, 10, 10, 0.90);
   --text: #cccccc;
   --cyan: #aaaaaa;
-  /* the only colour in the theme, which is the point: an alert should break the grey */
+  /* the only color in the theme, which is the point: an alert should break the grey */
   --danger: #ff5555;
   --warning: #ffcc00;
   --grid-section: #444444;
@@ -171,10 +171,10 @@ body, html, #root {
   width: 100%;
   height: 100%;
   background: var(--black);
-  /* No colour here. These are ancestors of .crt-container, which is where the theme class
+  /* No color here. These are ancestors of .crt-container, which is where the theme class
      sits, so a var() resolved at this level always reads the :root defaults — green — and
-     every element that inherits its colour rather than setting one stays green whatever
-     theme is chosen. The colour belongs inside the themed element; see below. */
+     every element that inherits its color rather than setting one stays green whatever
+     theme is chosen. The color belongs inside the themed element; see below. */
   font-family: 'Courier New', Courier, monospace;
   overflow: hidden;
 }
@@ -185,7 +185,7 @@ body, html, #root {
   position: relative;
   background: var(--bg-gradient);
   /* Inside the theme class, so this resolves to the active theme rather than the default,
-     and everything that inherits a colour follows the theme with it. */
+     and everything that inherits a color follows the theme with it. */
   color: var(--green);
   /* Checkboxes and range sliders draw themselves, and without this they draw in the
      browser's own blue — the one thing on screen that belongs to no theme at all. It

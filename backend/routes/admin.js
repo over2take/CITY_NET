@@ -155,10 +155,10 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   /**
-   * Rename or recolour a district.
+   * Rename or recolor a district.
    *
    * Both cascade, for the same reason: `locations` carries a copy of the district's name
-   * AND its colour on every building in it. The name is the key those rows are filed
+   * AND its color on every building in it. The name is the key those rows are filed
    * under, so renaming has to rewrite them in step or the buildings are orphaned from a
    * district that no longer answers to that name.
    *
