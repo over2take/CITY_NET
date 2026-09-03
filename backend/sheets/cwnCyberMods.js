@@ -179,7 +179,17 @@ const concOf = (row) => {
   return CONC_ORDER[Math.min(CONC_ORDER.length - 1, i + eff.concSteps)];
 };
 
-/** What a row's Strain costs once its mods are counted. Never below zero. */
+/**
+ * What a row's Strain costs once its mods are counted. Never below zero.
+ *
+ * NOT called in the running server. System Strain is enforced on the client, where
+ * `cyberwareRows.installedStrain` does this sum - so this exists as the authority that
+ * mirror is checked against, and as the place the rule is written down. If strain
+ * enforcement ever moves server-side, this is what it should call.
+ *
+ * The same goes for `concOf` below. Both are deliberately kept rather than deleted, but
+ * neither is wired: do not read their existence as the feature working.
+ */
 const strainOf = (row) => Math.max(0, num(row && row.hl) + rowEffects(row).strain);
 
 module.exports = {
