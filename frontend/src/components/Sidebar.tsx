@@ -14,6 +14,7 @@ import { getTemplate } from '../sheets';
 import { CWN_VEHICLE_ROWS, CWN_VEHICLE_WEAPON_ROWS } from '../sheets/templates/cities_without_number';
 import { hasVehicles } from '../sheets/vehicleSystems';
 import { startUpdate, waitForRestart, currentBootId } from '../utils/updateClient';
+import { cyberWeaponsOf } from '../sheets/cwnCyberWeapons';
 
 // Token defense config for the active game system; default is D&D-style AC
 const getTokenDefense = (gameSystem?: string) =>
@@ -509,6 +510,9 @@ const ATTACK_PANEL_CONFIG = {
     hasAimed: true,
     hasLuck: true,
     vehicles: null,
+    // Cyberpunk RED has body weaponry too, but the app does not model its stats yet, so
+    // claiming the picker could offer them would be a lie in a config table.
+    cyberWeapons: false,
   },
   cities_without_number: {
     dmgExample: '1d8+1',
@@ -519,6 +523,9 @@ const ATTACK_PANEL_CONFIG = {
     // fewer than the sheet declares makes the last vehicles' mounts unfireable
     // with nothing to show for it.
     vehicles: { rows: CWN_VEHICLE_ROWS, weaponRows: CWN_VEHICLE_WEAPON_ROWS },
+    // Body Blades are a weapon the character IS rather than one they carry, so the picker
+    // offers them from the installed chrome. Only CWN prices and stats them.
+    cyberWeapons: true,
   },
   shadowrun_6e: {
     dmgExample: '3P',
@@ -526,6 +533,7 @@ const ATTACK_PANEL_CONFIG = {
     hasAimed: false,
     hasLuck: false,
     vehicles: null,
+    cyberWeapons: false,
   },
 } as const;
 
@@ -542,6 +550,9 @@ type WeaponChoice = {
   key: string;
   index: number;
   vehicleIndex?: number;
+  /** Body weaponry. Resolved from the installed chrome rather than a weapon row, so the
+   *  server is told which cyber weapon rather than which row. */
+  cyberIndex?: number;
   /** A mount on the vehicle you are riding in — the row lives on its owner's sheet, so
    *  the server resolves it from your declared ride rather than from an index. */
   rideMount?: boolean;
@@ -591,6 +602,13 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
       for (let i = 1; i <= 4; i++) {
         const row = readWeapon(sheet.data, `weapon${i}`);
         if (row) rows.push({ key: String(i), index: i, name: row.name || `WEAPON ${i}`, dmg: row.dmg, skill: row.skill });
+      }
+      // Body weaponry, after the carried weapons and before anything on a vehicle: it is
+      // the same kind of act as drawing a gun, and the chrome is always to hand.
+      if (cfg.cyberWeapons) {
+        for (const c of cyberWeaponsOf(sheet.data)) {
+          rows.push({ key: `c:${c.index}`, index: c.index, cyberIndex: c.index, name: c.name, dmg: c.dmg, skill: c.skill });
+        }
       }
       // The mounts of someone else's car, sent down by the server because a gunner
       // cannot see the sheet they live on.
@@ -658,6 +676,7 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
     socketRef.current?.emit('sheetAttack', {
       targetId,
       weaponIndex: choice.index,
+      ...(choice.cyberIndex ? { cyberIndex: choice.cyberIndex } : {}),
       ...(choice.vehicleIndex ? { vehicleIndex: choice.vehicleIndex } : {}),
       ...(choice.rideMount ? { rideMount: true } : {}),
       ...(cfg.hasAimed ? { aimed } : {}),
