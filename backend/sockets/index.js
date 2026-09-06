@@ -770,6 +770,21 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     const overlayLinkedData = (username, system, data, cb) => {
       const linked = sheetTemplates.getLinkedFields(system);
       const out = { ...data };
+      /**
+       * Hand back the sheet with its derived fields recomputed.
+       *
+       * They are written on save, so a sheet last saved before a derived field existed
+       * carries nothing for it - and a blank number field reads as 0, which is a wrong
+       * answer rather than an absent one. MOVE showed every existing character as 0
+       * metres until they happened to edit something.
+       *
+       * In memory only, on the way out. Nothing is written here: the next ordinary save
+       * persists it, and until then the sheet at least states the truth.
+       */
+      const done = (result) => {
+        sheetTemplates.applyDerived(system, result);
+        cb(result);
+      };
       const wantsToken = Object.values(linked).some(s => sheetTemplates.TOKEN_SOURCES.has(s));
       const wantsCash = Object.values(linked).includes('bank_balance');
       const afterToken = (tokenRow) => {
@@ -781,12 +796,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           if (source === 'token_ac') out[fieldId] = tokenRow ? (tokenRow.melee_ac ?? 10) : null;
           if (source === 'token_ac_ranged') out[fieldId] = tokenRow ? sheetTemplates.rangedAcOf(tokenRow) : null;
         });
-        if (!wantsCash) return cb(out);
+        if (!wantsCash) return done(out);
         db.get(`SELECT balance FROM player_banks WHERE username = ?`, [username], (err, bank) => {
           Object.entries(linked).forEach(([fieldId, source]) => {
             if (source === 'bank_balance') out[fieldId] = bank ? bank.balance : 0;
           });
-          cb(out);
+          done(out);
         });
       };
       if (!wantsToken) return afterToken(null);

@@ -97,3 +97,20 @@ describe('it belongs to Cities Without Number', () => {
     }
   });
 });
+
+describe('a sheet saved before the field existed', () => {
+  it('reads as ten rather than zero, without being written to', () => {
+    // The bug this was written for: derived fields are computed on save, so every
+    // character created before MOVE existed carried nothing for it - and an empty number
+    // field renders as 0, which is a wrong answer rather than an absent one. The read
+    // path recomputes, so the sheet states the truth the moment it loads.
+    const stored = { name: 'The Wraith', con: 10, strain_mod: 5 };
+    const onRead = { ...stored };
+    applyDerived('cities_without_number', onRead);
+
+    expect(stored.move).toBeUndefined();   // nothing was written into the stored copy
+    expect(onRead.move).toBe(10);
+    // And the rest of the derived layer heals the same way.
+    expect(onRead.system_strain_max).toBe(15);
+  });
+});
