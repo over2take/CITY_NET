@@ -98,7 +98,7 @@ export const CWN_CYBERWARE: CwnCyberPreset[] = [
   { id: 'stick-pads', name: "Stick Pads", type: 'limb', conc: 'touch', strain: 0.5, price: 15000, effect: "Climb sheer or vertical surfaces" },
   { id: 'synthlimb', name: "Synthlimb", type: 'limb', conc: 'medical', strain: 0.5, price: 25000, effect: "Lifelike artificial limb" },
   { id: 'coordination-augment-i', name: "Coordination Augment I", type: 'nerve', conc: 'medical', strain: 2, price: 50000, effect: "Dex 14, or +2 if higher", mods: [{ kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 }] },
-  { id: 'coordination-augment-ii', name: "Coordination Augment II", type: 'nerve', conc: 'touch', strain: 3, price: 200000, effect: "Dex 18 and +10m Move", mods: [{ kind: 'statFloor', target: 'Dexterity', value: 18, bonus: 0 }, { kind: 'note', target: 'Move (metres)', value: 10 }] },
+  { id: 'coordination-augment-ii', name: "Coordination Augment II", type: 'nerve', conc: 'touch', strain: 3, price: 200000, effect: "Dex 18 and +10m Move", mods: [{ kind: 'statFloor', target: 'Dexterity', value: 18, bonus: 0 }, { kind: 'note', target: 'Move (meters)', value: 10 }] },
   { id: 'enhanced-reflexes-i', name: "Enhanced Reflexes I", type: 'nerve', conc: 'medical', strain: 2, price: 100000, effect: "1/scene, bonus Main Action" },
   { id: 'enhanced-reflexes-ii', name: "Enhanced Reflexes II", type: 'nerve', conc: 'medical', strain: 3, price: 250000, effect: "1/scene, bonus Main and Move" },
   { id: 'enhanced-reflexes-iii', name: "Enhanced Reflexes III", type: 'nerve', conc: 'touch', strain: 4, price: 750000, effect: "2/scene, bonus Main and Move" },

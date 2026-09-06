@@ -151,7 +151,7 @@ describe('modifiers taken from the descriptions, not just the effect column', ()
   it('carries both halves of an augment that does two things', () => {
     const mods = cyberById('coordination-augment-ii')!.mods!;
     expect(mods[0]).toMatchObject({ kind: 'statFloor', target: 'Dexterity', value: 18 });
-    expect(mods[1]).toEqual({ kind: 'note', target: 'Move (metres)', value: 10 });
+    expect(mods[1]).toEqual({ kind: 'note', target: 'Move (meters)', value: 10 });
   });
 
   it('only ever names a stat the sheet actually has', async () => {

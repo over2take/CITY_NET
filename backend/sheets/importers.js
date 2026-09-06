@@ -312,6 +312,10 @@ const buildCwnAliases = () => {
   // round-trips instead of silently dropping, the same courtesy the attribute mods get.
   alias(['traumatarget', 'traumatgt'], 'trauma_target');
   alias(['lifestyle', 'strainmod', 'lifestylemod'], 'strain_mod');
+  alias(['movemod', 'movementmod'], 'move_mod');
+  // Derived like trauma_target above, and aliased for the same reason: a form that prints
+  // MOVE should round-trip rather than land in the unrecognised pile.
+  alias(['move', 'movement', 'moverate'], 'move');
   alias(['armormods', 'armormodifications'], 'armor_mods');
   // A Riot Shield is +2 ranged and +4 melee, so the shield bonus splits the same way.
   alias(['shield', 'shieldbonus'], 'shield_bonus');
@@ -400,6 +404,7 @@ const NUMERIC_CWN_FIELDS = new Set([
   'system_strain', 'system_strain_max',
   'armor_ac', 'armor_dex_cap', 'shield_bonus', 'trauma_target',
   'armor_soak', 'soak_current', 'armor_trauma_mod', 'strain_mod',
+  'move', 'move_mod',
   'armor_ac_melee', 'shield_bonus_melee',
   'frail', 'auto_initiative',
   'cast_skill', 'mage_effort', 'mage_effort_max', 'spells_prepared_max',

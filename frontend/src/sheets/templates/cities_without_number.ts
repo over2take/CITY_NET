@@ -296,6 +296,8 @@ export const citiesWithoutNumber: SheetTemplate = {
         { id: 'strain_mod', label: 'LIFESTYLE', type: 'number', placeholder: '0', hint: "Added to your maximum System Strain, normally your CON.\n\n  Squatter  -2\n  Slum      -1\n  Middle     0\n  Fine      +1\n  Luxury    +2\n\nCyberware is counted separately." },
         { id: 'system_strain_max', label: 'STRAIN MAX', type: 'number', derived: true, hint: 'Derived: equals CON score, recomputed on every save.' },
         { id: 'trauma_target', label: 'TRAUMA TGT', type: 'number', derived: true, hint: "Derived: 6 plus the armor's Trauma Target Mod. Enemy trauma dice at or above this multiply their damage. Cyberware raises it further. Only used when the GRITTY COMBAT house rule is on." },
+        { id: 'move_mod', label: 'MOVE MOD', type: 'number', placeholder: '0', hint: "Added to your Move rate. Two real rules the app cannot work out for you:\n\n  Over-encumbered   -30% (p48)\n  Prone             halved (p35)\n\nAlso where a non-human NPC's own rate goes. Cyberware is counted separately." },
+        { id: 'move', label: 'MOVE', type: 'number', derived: true, hint: "Derived: how far you cover with one Move action, in meters.\n\n  Base, any normal human   10m (p34)\n  Coordination Augment II  +10m\n\nRunning is this rate again; charging needs a straight line. Measure it with the ruler - the app does not enforce distance." },
       ],
     },
     {

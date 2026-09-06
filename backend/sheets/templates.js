@@ -71,6 +71,11 @@ const cwnRecompute = (data) => {
     // Trauma Dampers are +5 each. Derived rather than typed so uninstalling a mod takes
     // its five points back, and so `armor_soak` stays the number printed in the book.
     armor_soak_total: Math.max(0, num(data.armor_soak) + armorMods.soak),
+    // Base 10 meters for a normal human, plus what the chrome adds, plus whatever the
+    // table has agreed. The manual modifier is there because two real rules cannot be
+    // computed: encumbrance cuts Move by 30% and the app has no inventory to weigh, and
+    // an NPC need not be a normal human. Never below zero.
+    move: Math.max(0, CWN_BASE_MOVE + num(data.move_mod) + cwnMoveBonus(data)),
     mage_effort_max: Math.max(1, Math.max(mods.int, mods.wis) + num(data.cast_skill)),
     spells_prepared_max: Math.ceil(level / 2) + num(data.cast_skill),
     summoner_effort_max: Math.max(1, Math.max(mods.con, mods.cha) + num(data.summon_skill)),
@@ -83,6 +88,44 @@ const cwnRecompute = (data) => {
     }
   });
   return changed;
+};
+
+/** A normal human's Move rate in meters (CWN p34, and repeated in the Run action). */
+const CWN_BASE_MOVE = 10;
+
+/**
+ * What a character's chrome adds to their Move rate.
+ *
+ * One implant in the book does this: Coordination Augment II, "their base Move rate is
+ * increased by 10 meters". Read off the modifier the catalogue already writes, the same
+ * way cwnImplantAc reads a base AC - so a character who installed it months ago gets the
+ * ten meters the moment this ships, with no sheet migrating.
+ *
+ * Summed rather than best-of, because this one IS a bonus rather than a base value.
+ *
+ * Not counted here, deliberately: Enhanced Reflexes grants a bonus Move *action*, which is
+ * another turn's worth of moving rather than a longer stride, and the Assisted Glide System
+ * and Skyborn Shielding give alternate movement modes (a 30m glide, 3D movement at twice
+ * normal) that apply in situations rather than to the ground rate this field states.
+ */
+const cwnMoveBonus = (data) => {
+  const rows = Array.isArray(data && data.cyberware) ? data.cyberware : [];
+  let total = 0;
+  for (const row of rows) {
+    if (!row || typeof row !== 'object' || !row.equipped || !row.placed) continue;
+    let mods = row.mods;
+    if (typeof mods === 'string') { try { mods = JSON.parse(mods); } catch { mods = []; } }
+    if (!Array.isArray(mods)) continue;
+    for (const m of mods) {
+      if (!m || typeof m !== 'object') continue;
+      // Matched on the word rather than the exact label: the catalogue wrote this note as
+      // "Move (metres)" before the spelling was settled, and a stored row keeps whatever
+      // it was written with. Anything starting "move" is this modifier.
+      if (!/^move\b/.test(String(m.target || '').trim().toLowerCase())) continue;
+      total += num(m.value);
+    }
+  }
+  return total;
 };
 
 /**
@@ -378,5 +421,6 @@ const applyDerived = (system, data, changedFieldId) => {
 
 module.exports = {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, filterPublicData, getLinkedFields, getMaxPairs,
-  applyDerived, cwnEffectiveAc, cwnImplantAc, TOKEN_SOURCES, rangedAcOf, acColumns,
+  applyDerived, cwnEffectiveAc, cwnImplantAc, cwnMoveBonus, CWN_BASE_MOVE,
+  TOKEN_SOURCES, rangedAcOf, acColumns,
 };

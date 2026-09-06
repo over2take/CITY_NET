@@ -132,6 +132,9 @@ const CWN_DERIVED_FROM: Record<string, string[]> = {
   save_mental: ['wis', 'cha'],
   system_strain_max: ['con', 'strain_mod'],
   trauma_target: ['armor_trauma_mod'],
+  // Not from an attribute: CWN gives every normal human a flat 10 meters. What moves it is
+  // the table's own modifier and the one implant that grants more.
+  move: ['move_mod'],
   mage_effort_max: ['int', 'wis', 'cast_skill'],
   spells_prepared_max: ['cast_skill'],
   summoner_effort_max: ['con', 'cha', 'summon_skill'],
@@ -144,6 +147,53 @@ const CWN_DERIVED_FROM: Record<string, string[]> = {
  * by running the real server module over the same data. `save_luck` is deliberately absent
  * from the dependency map above: it comes from level alone, so no implant can move it.
  */
+/** A normal human's Move rate in meters (CWN p34). Mirrors CWN_BASE_MOVE on the server. */
+export const CWN_BASE_MOVE = 10;
+
+/**
+ * A character's Move rate, for anything that wants it without a full recompute.
+ *
+ * The server writes this into the sheet on every save, which is where the STATS field
+ * reads it from - the same arrangement every other derived field has. This exists so the
+ * number has one definition on this side too, and so the cross-check has something to
+ * call.
+ */
+export const cwnMoveRate = (data: Record<string, unknown>): number =>
+  Math.max(0, CWN_BASE_MOVE + num(data.move_mod) + cwnMoveBonus(data));
+
+/**
+ * What a character's chrome adds to their Move rate.
+ *
+ * Coordination Augment II is the only implant in the book that does it: "their base Move
+ * rate is increased by 10 meters". Read off the modifier the catalogue already writes, so
+ * no sheet needs migrating. Mirrors cwnMoveBonus in backend/sheets/templates.js, which the
+ * cross-check test runs against this.
+ *
+ * Enhanced Reflexes is deliberately not counted - a bonus Move *action* is another turn's
+ * worth of moving, not a longer stride.
+ */
+export const cwnMoveBonus = (data: Record<string, unknown>): number => {
+  const rows = Array.isArray(data?.cyberware) ? (data.cyberware as unknown[]) : [];
+  let total = 0;
+  for (const raw of rows) {
+    if (!raw || typeof raw !== 'object') continue;
+    const row = raw as Record<string, unknown>;
+    if (!row.equipped || !row.placed) continue;
+    let mods: unknown = row.mods;
+    if (typeof mods === 'string') { try { mods = JSON.parse(mods); } catch { continue; } }
+    if (!Array.isArray(mods)) continue;
+    for (const m of mods) {
+      if (!m || typeof m !== 'object') continue;
+      const mod = m as { target?: unknown; value?: unknown };
+      // Matched on the word: the catalogue wrote this as "Move (metres)" before the
+      // spelling was settled, and a stored row keeps whatever it was written with.
+      if (!/^move\b/.test(String(mod.target ?? '').trim().toLowerCase())) continue;
+      total += num(mod.value);
+    }
+  }
+  return total;
+};
+
 function cwnDerive(effective: Record<string, unknown>): Record<string, number> {
   const level = num(effective.level);
   const gear = armorModTotals(effective.armor_mods);
@@ -156,6 +206,7 @@ function cwnDerive(effective: Record<string, unknown>): Record<string, number> {
     int_mod: m.int, wis_mod: m.wis, cha_mod: m.cha,
     trauma_target: 6 + num(effective.armor_trauma_mod) + gear.traumaTarget,
     armor_soak_total: Math.max(0, num(effective.armor_soak) + gear.soak),
+    move: cwnMoveRate(effective),
     save_physical: 16 - (level + Math.max(m.str, m.con)),
     save_evasion: 16 - (level + Math.max(m.dex, m.int)),
     save_mental: 16 - (level + Math.max(m.wis, m.cha)),

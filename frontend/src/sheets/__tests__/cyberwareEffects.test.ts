@@ -431,6 +431,9 @@ describe('Cities Without Number', () => {
       system_strain_max: 10, mage_effort_max: 1, spells_prepared_max: 2, summoner_effort_max: 1,
       trauma_target: 6, armor_trauma_mod: 0,
       armor_soak: 0, armor_soak_total: 0,
+      // Seeded like the rest: none of this chrome carries a Move modifier, so the
+      // server recomputing it to the base 10 is not a difference the chrome caused.
+      move: 10, move_mod: 0,
     });
 
     const mine = sheetEffects(data, CWN).fields;
