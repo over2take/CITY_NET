@@ -285,3 +285,46 @@ describe('the p71 cyberware mod table stays in Cities Without Number', () => {
     expect(screen.getAllByTitle(/from its fitted mods/).length).toBeGreaterThan(0);
   });
 });
+
+describe('concealment is rated by Cities Without Number only', () => {
+  /**
+   * CWN gives every implant one of four ratings; Cyberpunk RED rates none. A CONC column
+   * on a CP:R sheet would be a row of dashes claiming a stat that game has no rule for,
+   * and a picker for it would invite someone to fill it in.
+   */
+  const rated = [{
+    name: 'Neural Link', type: 'neural', side: null, hl: 2, cost: null,
+    placed: true, equipped: true, conc: 'touch', mods: [], cyberMods: [],
+  }];
+
+  const openWindow = (template: typeof CPR) => render(
+    <CyberwareWindow
+      data={sheet(rated, { con: 20 })} template={template}
+      onFieldChange={vi.fn()} onClose={vi.fn()} who="nyx"
+    />,
+  );
+
+  it('shows no CONC column outside CWN', async () => {
+    for (const t of [CPR, SR6, GENERIC]) {
+      const { unmount } = openWindow(t);
+      expect(screen.queryByRole('columnheader', { name: /CONC/ })).toBeNull();
+      unmount();
+    }
+  });
+
+  it('offers no concealment picker outside CWN', async () => {
+    for (const t of [CPR, SR6, GENERIC]) {
+      const { unmount } = openWindow(t);
+      await userEvent.click(screen.getByRole('button', { name: 'Edit Neural Link' }));
+      expect(screen.queryByLabelText('Concealment')).toBeNull();
+      unmount();
+    }
+  });
+
+  it('shows both on CWN, so the two above are not passing for free', async () => {
+    openWindow(CWN);
+    expect(screen.getByRole('columnheader', { name: /CONC/ })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Neural Link' }));
+    expect(screen.getByLabelText('Concealment')).toBeInTheDocument();
+  });
+});

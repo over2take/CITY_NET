@@ -281,3 +281,63 @@ describe('the draft form as it is being filled', () => {
     expect(offered().find(([l]) => l.startsWith('TARGETING PROCESSOR'))?.[1]).toBe(false);
   });
 });
+
+/**
+ * Concealment, which is what makes Profile Adjustment real.
+ *
+ * The rating was stored on every row and rendered nowhere, so two of the ten mods were
+ * invisible: Profile Adjustment did nothing anyone could see, and Hardened Weave's price -
+ * it makes the system Obvious - was charged silently.
+ */
+describe('how hard the chrome is to spot', () => {
+  it('shows the rating the piece carries', () => {
+    show([row({ conc: 'touch' })]);
+    expect(screen.getAllByText('Touch').length).toBeGreaterThan(0);
+  });
+
+  it('shows a dash where nobody rated it', () => {
+    show([row({ conc: '' })]);
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('steps it down for Profile Adjustment, and says what it was', () => {
+    show([row({ conc: 'sight', cyberMods: ['profile_adjustment'] })]);
+    const cell = screen.getByTitle('Sight on its own, Touch with its mods fitted');
+    expect(cell).toHaveTextContent('Touch (Sight)');
+  });
+
+  it('makes Hardened Weave visibly cost you Obvious', () => {
+    // The whole point: the player takes +2 AC and should be able to see what it cost.
+    show([derm({ conc: 'medical', cyberMods: ['hardened_weave'] })]);
+    expect(screen.getByTitle('Medical on its own, Obvious with its mods fitted'))
+      .toHaveTextContent('Obvious (Medical)');
+  });
+
+  it('says nothing extra when no mod moved it', () => {
+    show([row({ conc: 'touch', cyberMods: ['quick_detach'] })]);
+    expect(screen.queryByTitle(/with its mods fitted/)).toBeNull();
+  });
+
+  it('lets a hand-added piece be given a rating', async () => {
+    const wrote = show([]);
+    await userEvent.click(screen.getByText('+ ADD CYBERWARE'));
+    await userEvent.type(screen.getByLabelText('Cyberware name'), 'Backstreet Chrome');
+    await userEvent.selectOptions(screen.getByLabelText('Concealment'), 'medical');
+    await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
+
+    expect(written(wrote)[0]).toMatchObject({ name: 'Backstreet Chrome', conc: 'medical' });
+  });
+
+  it('sorts by how visible it is, not alphabetically', async () => {
+    // Alphabetical puts Medical between Obvious and Sight, which means nothing.
+    show([
+      row({ name: 'A', conc: 'medical' }),
+      row({ name: 'B', conc: 'obvious' }),
+      row({ name: 'C', conc: 'touch' }),
+    ]);
+    await userEvent.click(screen.getByRole('columnheader', { name: /CONC/ }));
+    const names = screen.getAllByRole('row').slice(1)
+      .map((r) => r.querySelectorAll('td')[1]?.textContent);
+    expect(names).toEqual(['B', 'C', 'A']); // Obvious, Touch, Medical
+  });
+});

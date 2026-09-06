@@ -8,14 +8,14 @@ import {
 import {
   CYBERWARE_FIELD, readRows, normaliseRow, totalHumanityLoss, totalCost,
   rowLocation, rowsForPanel, needsPlacing, panelRank, describeMod, isSetKind, isNoteKind,
-  MOD_KINDS, MOD_KIND_LABEL, kindsFor, strainCeiling,
-  type CyberRow, type CyberMod, type ModKind,
+  MOD_KINDS, MOD_KIND_LABEL, kindsFor, strainCeiling, CONC_VALUES, CONC_LABEL,
+  type CyberRow, type CyberMod, type ModKind, type Conc,
 } from '../sheets/cyberwareRows';
 import type { SheetFieldValue, SheetTemplate } from '../sheets/types';
 import { targetOptions } from '../sheets/modTargets';
 import { CWN_CYBERWARE, cyberById } from '../sheets/cwnCyberwarePresets';
 import {
-  CWN_CYBER_MODS, CWN_CYBER_MOD_BY_ID, rowStrain, modFits, unfitReason,
+  CWN_CYBER_MODS, CWN_CYBER_MOD_BY_ID, rowStrain, rowConc, modFits, unfitReason,
   type CwnCyberMod,
 } from '../sheets/cwnCyberMods';
 
@@ -72,7 +72,7 @@ const inputStyle: React.CSSProperties = {
   fontFamily: 'monospace', fontSize: 11, padding: '3px 5px', width: '100%',
 };
 
-type SortKey = 'name' | 'location' | 'hl' | 'cost';
+type SortKey = 'name' | 'location' | 'hl' | 'cost' | 'conc';
 
 /** What the amount column is asking for, which depends on what the modifier does. */
 const amountHeading = (mod: CyberMod): string => {
@@ -284,6 +284,33 @@ function StrainCost({ row, system }: { row: CyberRow; system: string }) {
   return (
     <span title={`${row.hl} for the system, less ${row.hl - eff} from its fitted mods`}>
       {eff} <span style={{ color: 'var(--grid-section)' }}>({row.hl})</span>
+    </span>
+  );
+}
+
+/** A concealment id as the book's word, or a dash where nobody rated it. */
+const concLabel = (c: Conc | string): string =>
+  (c && CONC_LABEL[c as Exclude<Conc, ''>]) || '—';
+
+/**
+ * How hard an implant is to spot, after its mods.
+ *
+ * The rating was stored on every row and shown nowhere, which made two of the ten mods
+ * invisible: Profile Adjustment did nothing anyone could see, and Hardened Weave's price -
+ * the plating makes you Obvious - was charged silently, so a player took the +2 AC and
+ * never learned what it cost them.
+ *
+ * `Obvious (Medical)` when a mod moved it, matching how StrainCost shows a discount: the
+ * effective value first, what the piece is rated on its own in brackets.
+ */
+function Concealment({ row, system }: { row: CyberRow; system: string }) {
+  // Cyberpunk RED does not rate concealment at all, so its rows are blank by design.
+  if (!hasModTable(system)) return <>{concLabel(row.conc)}</>;
+  const after = rowConc(row) as Conc;
+  if (after === row.conc) return <>{concLabel(row.conc)}</>;
+  return (
+    <span title={`${concLabel(row.conc)} on its own, ${concLabel(after)} with its mods fitted`}>
+      {concLabel(after)} <span style={{ color: 'var(--grid-section)' }}>({concLabel(row.conc)})</span>
     </span>
   );
 }
@@ -529,6 +556,16 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
         if (a.cost === null) return 1;
         if (b.cost === null) return -1;
         return (a.cost - b.cost) * dir;
+      }
+      if (sortKey === 'conc') {
+        // By how visible it is, in the book's order - alphabetical would put Medical
+        // between Obvious and Sight and mean nothing. Unrated sorts last, as unpriced does.
+        const at = CONC_VALUES.indexOf(rowConc(a) as Exclude<Conc, ''>);
+        const bt = CONC_VALUES.indexOf(rowConc(b) as Exclude<Conc, ''>);
+        if (at < 0 && bt < 0) return 0;
+        if (at < 0) return 1;
+        if (bt < 0) return -1;
+        return (at - bt) * dir;
       }
       const x = sortKey === 'location' ? rowLocation(a) : a.name;
       const y = sortKey === 'location' ? rowLocation(b) : b.name;
@@ -895,7 +932,11 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                       ...mono(10), color: 'var(--dark-green)',
                     }}
                   >◌</th>
-                  {([['name', 'NAME'], ['location', 'TYPE'], ['hl', words.costShort], ['cost', words.money.toUpperCase()]] as [SortKey, string][])
+                  {([['name', 'NAME'], ['location', 'TYPE'], ['hl', words.costShort], ['cost', words.money.toUpperCase()],
+                    // Only where the system rates it. Cyberpunk RED does not, so the column
+                    // would be a row of dashes claiming a stat that game has no rule for.
+                    ...(hasModTable(system) ? [['conc', 'CONC'] as [SortKey, string]] : []),
+                  ] as [SortKey, string][])
                     .map(([k, lbl]) => (
                       <th
                         key={k}
@@ -914,7 +955,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
               </thead>
               <tbody>
                 {sorted.length === 0 && (
-                  <tr><td colSpan={readOnly ? 6 : 7} style={{ ...mono(11), color: 'var(--grid-section)', padding: '4px 6px', letterSpacing: 0 }}>
+                  <tr><td colSpan={(readOnly ? 6 : 7) + (hasModTable(system) ? 1 : 0)} style={{ ...mono(11), color: 'var(--grid-section)', padding: '4px 6px', letterSpacing: 0 }}>
                     Nothing installed. Add a piece, or import a character.
                   </td></tr>
                 )}
@@ -969,6 +1010,11 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
                     <td style={{ ...mono(11), color: r.cost === null ? 'var(--dark-green)' : 'var(--cyan)', padding: '3px 6px', textAlign: 'right' }}>
                       {r.cost === null ? '—' : r.cost.toLocaleString()}
                     </td>
+                    {hasModTable(system) && (
+                      <td style={{ ...mono(11), color: 'var(--cyan)', padding: '3px 6px', letterSpacing: 0, whiteSpace: 'nowrap' }}>
+                        <Concealment row={r} system={system} />
+                      </td>
+                    )}
                     <td style={{ ...mono(11), color: 'var(--grid-section)', padding: '3px 6px', letterSpacing: 0 }}>
                       {r.data && <span style={{ marginRight: r.mods.length ? 6 : 0 }}>{r.data}</span>}
                       <ModChips mods={r.mods} />
@@ -1084,13 +1130,27 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
               />
             </Field>
           </div>
-          <div style={{ marginTop: 6 }}>
+          <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: hasModTable(system) ? '1fr 130px' : '1fr', gap: 6 }}>
             <Field label="EFFECT">
               <input
                 style={inputStyle} aria-label="Effect"
                 value={draft.data} onChange={(e) => setDraft({ ...draft, data: e.target.value })}
               />
             </Field>
+            {/* Only the catalogue used to set this, so a piece added by hand had no rating
+                and never could. The book gives every implant one, and Profile Adjustment
+                has nothing to step without it. */}
+            {hasModTable(system) && (
+              <Field label="CONC">
+                <select
+                  style={inputStyle} aria-label="Concealment" value={draft.conc}
+                  onChange={(e) => setDraft({ ...draft, conc: e.target.value as Conc })}
+                >
+                  <option value="">Unrated</option>
+                  {CONC_VALUES.map((c) => <option key={c} value={c}>{CONC_LABEL[c]}</option>)}
+                </select>
+              </Field>
+            )}
           </div>
           <ModEditor mods={draft.mods} template={template} onChange={(mods) => setDraft({ ...draft, mods })} />
           {hasModTable(system) && (
