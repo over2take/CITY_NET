@@ -57,6 +57,11 @@ export interface SheetField {
   derived?: true;
   /** Example value shown as ghost text inside an empty field (input placeholder). */
   placeholder?: string;
+  /** A unit caption under the value, e.g. METERS.
+   *  For a number that means nothing on its own - the same small caption the CUR/MAX pair
+   *  already uses, rather than a suffix inside the box, because a number input fills its
+   *  cell and has nowhere to put one. */
+  unit?: string;
   /** Give this field a row of its own spanning the whole grid, with its label above it.
    *  For a notes box inside a repeated entry, where a grid cell will not do. */
   fullWidth?: boolean;

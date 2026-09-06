@@ -265,7 +265,17 @@ function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, styl
       placeholder={field.placeholder}
       readOnly={readOnly}
       onFocus={isNumber ? (e) => e.target.select() : undefined}
-      onChange={(e) => onFieldChange(field.id, isNumber ? Number(e.target.value) : e.target.value)}
+      onChange={(e) => {
+        const raw = e.target.value;
+        if (!isNumber) return onFieldChange(field.id, raw);
+        // A number input reports '' for anything it cannot parse yet, and a lone minus
+        // sign is one of those. Number('') is 0, so pressing minus used to overwrite the
+        // field with a zero before the digits arrived - which meant no number field on
+        // any sheet could be given a negative value by typing at all. Passed through
+        // instead, and resolved the moment it parses.
+        if (raw === '' || raw === '-') return onFieldChange(field.id, raw);
+        onFieldChange(field.id, Number(raw));
+      }}
     />
   );
 }
@@ -707,6 +717,17 @@ function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll
               </>
             ) : (
               <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
+            )}
+            {/* The strip ROLL and REFILL sit in, without being a control: a number input
+                fills its cell, so a suffix cannot go beside the value, and MOVE reading a
+                bare "10" says nothing about what it is ten of. Same geometry as those
+                buttons so the box keeps one shape whichever it has. */}
+            {field.unit && (
+              <div style={{
+                marginTop: 'auto', width: '100%', borderTop: '1px solid var(--green)',
+                fontSize: '0.6rem', letterSpacing: '1px', padding: '3px 0',
+                opacity: 0.65, textAlign: 'center',
+              }}>{field.unit}</div>
             )}
             {field.roll && (
               <button
