@@ -1,13 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { rowStrain, rowConc, fittedModIds, CONC_ORDER, CWN_CYBER_MOD_SHEET_EFFECTS } from '../cwnCyberMods';
+import {
+  rowStrain, rowConc, fittedModIds, modFits, unfitReason,
+  CONC_ORDER, CWN_CYBER_MODS, CWN_CYBER_MOD_SHEET_EFFECTS,
+} from '../cwnCyberMods';
 
 /**
  * The sheet's half of the cyberware mod table (p71).
  *
- * The server owns the whole table; this mirrors only the effects the *client* computes -
- * System Strain, which gates installing, and concealment. The first block is what makes
- * that safe, and it exists because the file claimed a cross-check that had not been
- * written: a comment asserting a test is worse than no comment at all.
+ * The server owns the whole table; this mirrors the ten names, what they may be fitted to,
+ * and only the two effects the *client* computes - System Strain, which gates installing,
+ * and concealment. The first block is what makes that safe, and it exists because the file
+ * claimed a cross-check that had not been written: a comment asserting a test is worse
+ * than no comment at all.
  */
 
 const row = (over = {}) => ({
@@ -15,11 +19,41 @@ const row = (over = {}) => ({
 });
 const derm = (over = {}) =>
   row({ name: 'Dermal Armor I', conc: 'medical', mods: [{ kind: 'note', target: 'Base AC', value: 16 }], ...over });
+const blade = (over = {}) => row({ name: 'Body Blades II', hl: 2, ...over });
 
 describe('the mirror agrees with the server', () => {
   it('steps concealment in the same order', async () => {
     const backend = await import('../../../../backend/sheets/cwnCyberMods.js');
     expect(CONC_ORDER).toEqual(backend.CONC_ORDER);
+  });
+
+  it('carries the same ten, named and described the same way', async () => {
+    // The picker prints these, so a drifted label is a player reading the wrong rule.
+    const backend = await import('../../../../backend/sheets/cwnCyberMods.js');
+    expect(CWN_CYBER_MODS.map((m) => [m.id, m.label, m.effect]))
+      .toEqual(backend.CYBER_MODS.map((m) => [m.id, m.label, m.effect]));
+  });
+
+  it('fits them to the same systems, and gives the same reason when it will not', async () => {
+    // Every mod against every shape of row, rather than the handful I thought to check.
+    const backend = await import('../../../../backend/sheets/cwnCyberMods.js');
+    const rows = [
+      row(), row({ hl: 1 }), row({ hl: 0 }), blade(), blade({ hl: 1 }), derm(),
+      derm({ hl: 1 }), row({ name: 'Body Blades I', hl: 1 }), row({ name: '' }),
+    ];
+    for (const r of rows) {
+      for (const mod of CWN_CYBER_MODS) {
+        const fitted = { ...r, cyberMods: [mod.id] };
+        const serverTook = backend.activeMods(fitted).length === 1;
+        expect(modFits(mod, fitted), `${mod.id} on ${r.name} hl=${r.hl}`).toBe(serverTook);
+      }
+    }
+    // And when it will not take, the mirror says what the server says.
+    for (const mod of CWN_CYBER_MODS) {
+      const note = backend.BY_ID[mod.id].fitsNote;
+      expect(mod.fit?.note, mod.id).toBe(note);
+      if (note) expect(unfitReason(mod, row({ hl: 0, name: '' }))).toBe(`needs ${note}`);
+    }
   });
 
   it('reads a fitted list the same way', async () => {
