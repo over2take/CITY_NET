@@ -309,7 +309,7 @@ describe('the fittings list', () => {
     const onFieldChange = vi.fn();
     renderSheet(car, { onFieldChange });
 
-    await userEvent.selectOptions(screen.getByLabelText('Add FITTINGS'), 'medbay');
+    await userEvent.selectOptions(screen.getByLabelText('Add VEHICLE FITTINGS'), 'medbay');
     expect(onFieldChange).toHaveBeenCalledWith('vehicle1_fittings', '["medbay"]');
 
     onFieldChange.mockClear();

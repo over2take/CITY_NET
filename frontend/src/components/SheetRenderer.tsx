@@ -199,7 +199,7 @@ function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, styl
           </select>
         )}
         {summary && (
-          <div style={{ fontSize: '0.6rem', opacity: summary.warn ? 1 : 0.65, color: summary.warn ? '#ff4444' : undefined }}>
+          <div style={{ fontSize: '0.6rem', opacity: summary.warn ? 1 : 0.65, color: summary.warn ? 'var(--danger)' : undefined }}>
             {summary.text}
           </div>
         )}
@@ -628,6 +628,37 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
   );
 }
 
+/**
+ * A field that takes the whole width of its section: a heading, then the control.
+ *
+ * Shared by every layout that has one, so a MODS list looks the same wherever it appears.
+ * The armor grid used to draw its own instead - each field there is a bordered stat box
+ * with a centred 0.95rem control, which is right for a number and wrong for a list of
+ * chips: it boxed the list, centred the picker, and made the same field look like a
+ * different feature depending on which section you found it in.
+ */
+function FullWidthField({ field, data, readOnly, onFieldChange, onFieldsChange }: {
+  field: SheetField; data: SheetData; readOnly: boolean;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
+  onFieldsChange?: (fields: Record<string, string | number>) => void;
+}) {
+  return (
+    <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '2px', margin: '2px 0' }}>
+      <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px', textAlign: 'left' }}>
+        {field.label}
+      </div>
+      <FieldInput
+        field={field}
+        data={data}
+        readOnly={readOnly}
+        onFieldChange={onFieldChange}
+        onFieldsChange={onFieldsChange}
+        style={{ padding: '2px 4px', fontSize: '0.7rem' }}
+      />
+    </div>
+  );
+}
+
 function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll, effects }: {
   section: SheetSection; allFields: SheetField[]; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
@@ -645,6 +676,17 @@ function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(82px, 1fr))', gap: '6px' }}>
       {visible.map((field) => {
         const maxField = field.maxField ? allFields.find(f => f.id === field.maxField) : undefined;
+        // A list of chips is a row of prose, not a stat box. Rendered by the shared
+        // full-width field so it matches the same list in the weapons table rather than
+        // being boxed and centred like the numbers around it.
+        if (field.fullWidth) {
+          return (
+            <FullWidthField
+              key={field.id} field={field} data={data}
+              readOnly={readOnly} onFieldChange={onFieldChange}
+            />
+          );
+        }
         return (
           <div key={field.id} title={field.hint} style={{ border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 35%, transparent)', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '4px 2px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
@@ -864,17 +906,10 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
   ));
 
   const fullWidthRow = (field: SheetField) => (
-    <div key={field.id} style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '2px', margin: '2px 0' }}>
-      <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px', textAlign: 'left' }}>{field.label}</div>
-      <FieldInput
-        field={field}
-        data={data}
-        readOnly={readOnly}
-        onFieldChange={onFieldChange}
-        onFieldsChange={onFieldsChange}
-        style={cell}
-      />
-    </div>
+    <FullWidthField
+      key={field.id} field={field} data={data} readOnly={readOnly}
+      onFieldChange={onFieldChange} onFieldsChange={onFieldsChange}
+    />
   );
 
   const fieldRow = (row: SheetField[]) => row.map((field, i) => (
@@ -901,7 +936,15 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
     return (
       <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
         {labelRow(rows[0] ?? [])}
-        {rows.map((row) => <React.Fragment key={row[0].id}>{fieldRow(row)}</React.Fragment>)}
+        {/* fullWidth means the same thing here as in a grouped section. It used to be
+            honoured only there, so a section that did not repeat an entry - the weapons
+            table - squeezed its MODS list into the first column and lost the heading with
+            it: a chip carrying a sentence of effect text wrapped to one word per line. */}
+        {rows.map((row) => (
+          <React.Fragment key={row[0].id}>
+            {row[0].fullWidth ? fullWidthRow(row[0]) : fieldRow(row)}
+          </React.Fragment>
+        ))}
       </div>
     );
   }

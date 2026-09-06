@@ -149,7 +149,7 @@ const vehicleRow = (i: number): SheetField[] => [
     // A list rather than fields, because a fitting can be stripped out again: a control
     // that wrote "+25% HP" into the stat block would have no way to take it back. The
     // effects are printed on the chips and the numbers stay yours to set.
-    id: `vehicle${i}_fittings`, label: 'FITTINGS', type: 'tag_list', fullWidth: true, addLabel: '+ INSTALL…',
+    id: `vehicle${i}_fittings`, label: 'VEHICLE FITTINGS', type: 'tag_list', fullWidth: true, addLabel: '+ INSTALL…',
     hint: 'Installed fittings. Each spends Power and Mass, as mounted weapons do, and the hull has to be big enough. Effects are printed, not applied — several change the stat block and could not be undone if they were.',
     tagOptions: (data) => {
       const size = String(data[`vehicle${i}_size`] ?? '');
@@ -207,7 +207,7 @@ Leave on FROM SKILL to take it from the attack skill, which is right for most we
   {
     // Applied, not printed: every one of these lands on something the server works out
     // fresh on each roll, so taking a mod off actually takes its bonus off.
-    id: `weapon${i}_mods`, label: 'MODS', type: 'tag_list', fullWidth: true, addLabel: '+ FIT…',
+    id: `weapon${i}_mods`, label: 'WEAPON MODS', type: 'tag_list', fullWidth: true, addLabel: '+ FIT…',
     hint: `Mods fitted to this weapon. The ones with numbers are applied to the rolls; the rest are carried for the record.
 
 No combination may improve hit or damage by more than +3.`,
