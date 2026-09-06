@@ -18,6 +18,7 @@ import userEvent from '@testing-library/user-event';
 import { CyberwareWindow } from '../CyberwareWindow';
 import { getTemplate } from '../../sheets';
 import { typesFor, CWN_TYPES, CPR_TYPES } from '../../sheets/cyberwareLocations';
+import { readRows, totalHumanityLoss, totalStrain } from '../../sheets/cyberwareRows';
 import { sheetEffects } from '../../sheets/cyberwareEffects';
 import { shopsAvailable } from '../../data/buildingTypes';
 
@@ -223,5 +224,64 @@ describe('CWN fields exist on no other sheet', () => {
       'armor_soak_total', 'armor_mods']) {
       expect(ids).toContain(id);
     }
+  });
+});
+
+describe('the p71 cyberware mod table stays in Cities Without Number', () => {
+  /**
+   * A row carrying a p71 mod id under another system's sheet.
+   *
+   * Not reachable by clicking - the picker below is CWN-only - but reachable by a
+   * hand-edited sheet or a character moved between systems, and the maths that reads the
+   * field is shared. The rule is that another game's discount must not touch Humanity.
+   */
+  const withMod = [{
+    name: 'Neural Link', type: 'neural', side: null, hl: 3, cost: null,
+    placed: true, equipped: true, mods: [], cyberMods: ['tailored_interface'],
+  }];
+
+  const openWindow = (template: typeof CPR) => render(
+    <CyberwareWindow
+      data={sheet(withMod, { con: 20 })} template={template}
+      onFieldChange={vi.fn()} onClose={vi.fn()} who="nyx"
+    />,
+  );
+
+  it('does not discount Humanity on a Cyberpunk RED sheet', () => {
+    // The bleed this was written for: rowStrain applied to every system took a CP:R
+    // character's Humanity Loss from 3 to 2 by a rule from a different book.
+    expect(totalHumanityLoss(readRows(sheet(withMod)))).toBe(3);
+    // And CWN, where the rule is real, still gets its point back.
+    expect(totalStrain(readRows(sheet(withMod)))).toBe(2);
+  });
+
+  it('offers no fitting picker outside CWN', async () => {
+    for (const t of [CPR, SR6, GENERIC]) {
+      const { unmount } = openWindow(t);
+      await userEvent.click(screen.getByRole('button', { name: 'Edit Neural Link' }));
+      expect(screen.queryByRole('combobox', { name: 'Fit a cyberware mod' })).toBeNull();
+      unmount();
+    }
+  });
+
+  it('offers it on CWN, so the test above is not passing for free', async () => {
+    openWindow(CWN);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Neural Link' }));
+    expect(screen.getByRole('combobox', { name: 'Fit a cyberware mod' })).toBeInTheDocument();
+  });
+
+  it('shows neither the chip nor the discounted cost outside CWN', () => {
+    for (const t of [CPR, SR6, GENERIC]) {
+      const { unmount } = openWindow(t);
+      expect(screen.queryByText('TAILORED INTERFACE')).toBeNull();
+      expect(screen.queryByTitle(/from its fitted mods/)).toBeNull();
+      unmount();
+    }
+  });
+
+  it('shows both on CWN', () => {
+    openWindow(CWN);
+    expect(screen.getAllByText('TAILORED INTERFACE').length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle(/from its fitted mods/).length).toBeGreaterThan(0);
   });
 });

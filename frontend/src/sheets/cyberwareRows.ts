@@ -252,9 +252,27 @@ export function readRows(data: Record<string, unknown> | undefined | null): Cybe
   return value.filter((r) => r && typeof r === 'object').map(normaliseRow);
 }
 
-/** What the chrome has cost, for showing beside Humanity. */
+/**
+ * What the chrome has cost, for showing beside Humanity.
+ *
+ * A raw sum, deliberately. Humanity is Cyberpunk RED's currency and CP:R has no mod table
+ * to discount it - running every row through `rowStrain` here applied a Cities Without
+ * Number rule (p71) to a Cyberpunk RED number, which is exactly the bleed
+ * systemIsolation.test.tsx exists to stop. CWN's discounted total is `totalStrain`, and
+ * the caller picks by system rather than this guessing.
+ */
 export const totalHumanityLoss = (rows: CyberRow[]): number =>
   rows.reduce((sum, r) => sum + num(r.hl), 0);
+
+/**
+ * The same total under Cities Without Number, where a fitted mod can lower it.
+ *
+ * A Tailored Interface lowers what its own system costs, so a total ignoring it would
+ * disagree with the strain ceiling printed beside it. Its own function rather than a flag
+ * on the one above: the two answer questions in different games.
+ */
+export const totalStrain = (rows: CyberRow[]): number =>
+  rows.reduce((sum, r) => sum + rowStrain(r), 0);
 
 /** What it cost in money, ignoring anything nobody priced. */
 export const totalCost = (rows: CyberRow[]): number =>

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SheetSection, SheetTemplate, SheetFieldValue } from '../sheets/types';
-import { readRows, totalHumanityLoss, needsPlacing } from '../sheets/cyberwareRows';
+import { readRows, totalHumanityLoss, totalStrain, needsPlacing } from '../sheets/cyberwareRows';
 import { CyberwareWindow } from './CyberwareWindow';
 import { themeRoot } from '../utils/themeRoot';
 
@@ -51,7 +51,11 @@ export function CyberwareSection({ data, template, readOnly, onFieldChange, who 
   const [open, setOpen] = useState(false);
   const rows = useMemo(() => readRows(data), [data]);
 
-  const hl = totalHumanityLoss(rows);
+  // Two totals because the two systems price chrome differently: CWN's fitted mods can
+  // lower what a system costs in Strain (p71), and Cyberpunk RED has no such table, so
+  // running a CP:R sheet through the discount would apply another game's rule to Humanity.
+  const isCwn = template?.id === 'cities_without_number';
+  const hl = isCwn ? totalStrain(rows) : totalHumanityLoss(rows);
   const costLabel = COST_LABEL[template?.id ?? ''] ?? 'COST';
   // No eddies total here. What the chrome cost is money already spent — it changes nothing
   // and answers no question this line is for, whereas humanity loss is live and drives EMP.
