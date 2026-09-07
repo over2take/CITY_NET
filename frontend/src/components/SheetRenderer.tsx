@@ -6,6 +6,7 @@ import {
 import React, { useState, useEffect, useMemo } from 'react';
 import type { SheetTemplate, SheetSection, SheetField, SheetData, SheetFieldValue } from '../sheets';
 import { TvPortrait } from './TvPortrait';
+import { xpProgress, describeXp } from '../sheets/cwnAdvancement';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
   return (
@@ -625,6 +626,37 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
             ))}
           </div>
         )}
+        {h.xpBar && (() => {
+          // Under the HP bar and its chips, because it answers the same kind of question:
+          // how far through something am I. Display only - the number is typed on the
+          // STATS tab, and the level field stays the player's, since advancing grants
+          // skill points and sometimes a Focus and both are choices.
+          const p = xpProgress(data);
+          const ready = p.ready || p.capped;
+          const barColor = ready ? 'var(--cyan)' : 'var(--green)';
+          return (
+            <div style={{ marginTop: '6px' }} title={`Experience toward the next level. ${describeXp(p)}`}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '0.6rem', opacity: 0.65 }}>EXP</span>
+                <div style={{
+                  flex: 1, height: '12px', border: `1px solid ${barColor}`, padding: '1px',
+                  background: 'color-mix(in srgb, var(--black) 60%, transparent)',
+                }}>
+                  <div style={{
+                    width: `${Math.round(p.fraction * 100)}%`, height: '100%',
+                    background: barColor, transition: 'width 0.2s',
+                  }} />
+                </div>
+                <span style={{ fontSize: '0.65rem', color: barColor }}>
+                  {p.nextAt === null ? p.xp : `${p.xp}/${p.nextAt}`}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.6rem', marginTop: '3px', letterSpacing: '1px', color: ready ? 'var(--cyan)' : undefined, opacity: ready ? 1 : 0.65 }}>
+                {describeXp(p)}
+              </div>
+            </div>
+          );
+        })()}
         {h.luckField && (() => {
           const luckCur = num(data[h.luckField!]) ?? 0;
           const luckMax = h.luckMaxField ? (num(data[h.luckMaxField]) ?? 0) : luckCur;

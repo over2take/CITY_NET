@@ -313,6 +313,8 @@ const buildCwnAliases = () => {
   alias(['traumatarget', 'traumatgt'], 'trauma_target');
   alias(['lifestyle', 'strainmod', 'lifestylemod'], 'strain_mod');
   alias(['movemod', 'movementmod'], 'move_mod');
+  alias(['xp', 'exp', 'experience', 'experiencepoints'], 'xp');
+  alias(['xprate', 'advancementrate', 'exprate'], 'xp_rate');
   // Derived like trauma_target above, and aliased for the same reason: a form that prints
   // MOVE should round-trip rather than land in the unrecognised pile.
   alias(['move', 'movement', 'moverate'], 'move');
@@ -408,7 +410,7 @@ const NUMERIC_CWN_FIELDS = new Set([
   'system_strain', 'system_strain_max',
   'armor_ac', 'armor_dex_cap', 'shield_bonus', 'trauma_target',
   'armor_soak', 'soak_current', 'armor_trauma_mod', 'strain_mod',
-  'move', 'move_mod',
+  'move', 'move_mod', 'xp',
   'armor_ac_melee', 'shield_bonus_melee',
   'frail', 'auto_initiative',
   'cast_skill', 'mage_effort', 'mage_effort_max', 'spells_prepared_max',
@@ -524,6 +526,15 @@ const normaliseCwnWeaponRows = (mapped) => {
     if (word === 'readied' || word === 'ready' || word === 'r') mapped[`weapon${i}_carry`] = 'readied';
     else if (word === 'stowed' || word === 'stow' || word === 's') mapped[`weapon${i}_carry`] = 'stowed';
     else delete mapped[`weapon${i}_carry`];
+  }
+  // FAST or SLOW, however a form spells it. Anything else is dropped rather than guessed:
+  // the two columns differ by up to 46 XP at level 10, so picking one for a table that
+  // wrote something unreadable would misstate every threshold on the sheet.
+  if (mapped.xp_rate !== undefined) {
+    const word = norm(mapped.xp_rate);
+    if (word === 'fast') mapped.xp_rate = 'fast';
+    else if (word === 'slow') mapped.xp_rate = 'slow';
+    else delete mapped.xp_rate;
   }
   // Languages arrive as "English, Cantonese; Sperantu" from a form and as JSON from a
   // sheet round-trip. Anything typed is kept as typed - the list can never be complete,

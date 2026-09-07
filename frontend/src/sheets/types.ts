@@ -190,6 +190,10 @@ export interface SheetHeader {
   luckMaxField?: string;
   /** Label shown above the pip row. Defaults to 'LUCK'. */
   luckLabel?: string;
+  /** An experience bar under the HP bar, filling from what this level cost toward what
+   *  the next one does. Display only: levelling is a choice a player makes, so the bar
+   *  says when they are ready and leaves the level field alone. */
+  xpBar?: { xpField: string; levelField: string; rateField: string };
 }
 
 /** How this system's defense value appears on tokens. When absent, the
