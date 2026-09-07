@@ -40,6 +40,38 @@ describe('the thresholds the book prints', () => {
   });
 });
 
+describe('the sheet and the server read one table', () => {
+  it('agrees on every threshold in both columns', async () => {
+    // The server climbs the level on an award; the sheet draws the bar. Two copies of a
+    // table is two places to mistype it, so this walks both.
+    const backend = await import('../../../../backend/sheets/awardXp.js');
+    for (const rate of ['fast', 'slow'] as const) {
+      for (let level = 1; level <= CWN_MAX_LEVEL; level += 1) {
+        expect(xpForLevel(level, rate), `${rate} L${level}`).toBe(backend.THRESHOLDS[rate][level]);
+      }
+    }
+  });
+
+  it('agrees on where the table stops', async () => {
+    const backend = await import('../../../../backend/sheets/awardXp.js');
+    expect(backend.MAX_LEVEL).toBe(CWN_MAX_LEVEL);
+  });
+
+  it('says READY exactly when the server would have levelled them', async () => {
+    // If these disagreed, a bar would sit on READY for a character the server had already
+    // advanced, or advance one the bar said was short.
+    const backend = await import('../../../../backend/sheets/awardXp.js');
+    for (const rate of ['fast', 'slow'] as const) {
+      for (const xp of [0, 2, 3, 5, 6, 11, 12, 20, 50, 93, 139, 400]) {
+        const earned = backend.levelForXp(xp, rate, 1);
+        const p = xpProgress({ level: earned, xp }, rate);
+        // At the level the server would put them, the bar must not still say READY.
+        expect(p.ready, `${rate} ${xp}xp -> L${earned}`).toBe(false);
+      }
+    }
+  });
+});
+
 describe('where a character is between levels', () => {
   it('names the next level and what it needs', () => {
     const p = prog(at({ level: 3, xp: 8 }));

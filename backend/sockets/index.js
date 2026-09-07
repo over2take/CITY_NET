@@ -1779,7 +1779,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (decoded.isTemporary || (decoded.role && decoded.role !== 'admin')) return;
         getGameSystem((sysErr, system) => {
           if (sysErr) return;
-          awardXpModule.awardXp(db, { system, usernames: data.usernames, amount: data.amount }, (reason, results) => {
+          // Which column the table advances on, so the award can carry the level with it.
+          db.get(`SELECT value FROM global_settings WHERE key = 'cwn_slow_advancement'`, (rErr, rRow) => {
+          const rate = (!rErr && rRow && rRow.value === '1') ? 'slow' : 'fast';
+          awardXpModule.awardXp(db, { system, usernames: data.usernames, amount: data.amount, rate }, (reason, results) => {
             if (reason) return socket.emit('xpAwardResult', { ok: false, reason });
             // Told to the GM who asked, so a name that did nothing is visible rather than
             // looking like the button missed.
@@ -1788,6 +1791,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             results.filter((r) => r.ok).forEach((r) => {
               io.emit('sheetUpdated', { username: r.username, system });
             });
+          });
           });
         });
       });

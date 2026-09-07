@@ -108,7 +108,8 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
             {/* Said plainly, because the button beside it in PAY_PLAYERS does the
                 opposite and muscle memory is a real thing. */}
             <div style={{ fontSize: '11px', opacity: 0.6, marginBottom: '12px' }}>
-              Each selected character gets this many. Negative takes it back.
+              Each selected character gets this many, and levels up if the total earns it.
+              Negative takes points back, but never a level.
             </div>
 
             <div className="crt-scroll" style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid var(--dark-green)', padding: '5px', marginBottom: '10px', background: 'color-mix(in srgb, var(--black) 50%, transparent)' }}>
@@ -163,7 +164,9 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
                       <div key={r.username} style={{ color: r.ok ? undefined : 'var(--danger)' }}>
                         {r.username}: {!r.ok
                           ? (r.reason ?? 'no sheet')
-                          : r.level !== undefined ? `level ${r.level}` : `${r.xp} XP`}
+                          : r.xp === undefined ? `level ${r.level}`
+                          : r.level === undefined ? `${r.xp} XP`
+                          : `${r.xp} XP · level ${r.level}`}
                       </div>
                     ))}
                   </>

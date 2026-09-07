@@ -210,3 +210,75 @@ describe('moving a character up or down a level', () => {
     expect(results.find((r) => r.username === 'nobody')).toMatchObject({ ok: false });
   });
 });
+
+describe('the level follows the experience', () => {
+  const readLevel = (username) => new Promise((resolve) => {
+    db.get('SELECT data FROM character_sheets WHERE username = ?', [username],
+      (e, row) => resolve(row ? JSON.parse(row.data).level : undefined));
+  });
+
+  it('climbs as far as the total reaches, not one step', async () => {
+    // The bug this exists for: 3 XP a session, four sessions, and the character sat at
+    // level 1 with the bar reading READY FOR 2 forever. 12 XP is level 4 on fast.
+    await sheet('ghost', { level: 1, xp: 0 });
+    for (let i = 0; i < 4; i += 1) {
+      await award({ system: 'cities_without_number', usernames: ['ghost'], amount: 3, rate: 'fast' });
+    }
+    expect(await readXp('ghost')).toBe(12);
+    expect(await readLevel('ghost')).toBe(4);
+  });
+
+  it('gets there the same way in one award as in four', async () => {
+    await sheet('nyx', { level: 1, xp: 0 });
+    await award({ system: 'cities_without_number', usernames: ['nyx'], amount: 12, rate: 'fast' });
+    expect(await readLevel('nyx')).toBe(4);
+  });
+
+  it('follows the slow column when the table uses it', async () => {
+    // 12 XP is only level 2 on slow, where level 3 costs 15.
+    await sheet('ghost', { level: 1, xp: 0 });
+    await award({ system: 'cities_without_number', usernames: ['ghost'], amount: 12, rate: 'slow' });
+    expect(await readLevel('ghost')).toBe(2);
+  });
+
+  it('stops at the top of the table', async () => {
+    await sheet('ghost', { level: 1, xp: 0 });
+    await award({ system: 'cities_without_number', usernames: ['ghost'], amount: 500, rate: 'fast' });
+    expect(await readLevel('ghost')).toBe(10);
+  });
+
+  it('never takes a level away when experience is removed', async () => {
+    // A level is not un-earned: the skill points and Focus that came with it do not undo
+    // themselves. Correcting one is deliberate, which is what LEVEL_DOWN is for.
+    await sheet('ghost', { level: 4, xp: 12 });
+    await award({ system: 'cities_without_number', usernames: ['ghost'], amount: -12, rate: 'fast' });
+    expect(await readXp('ghost')).toBe(0);
+    expect(await readLevel('ghost')).toBe(4);
+  });
+
+  it('leaves a level a GM set by hand above the earned one', async () => {
+    // A GM may put an NPC at level 6 with no XP at all. An award must not demote them.
+    await sheet('ghost', { level: 6, xp: 0 });
+    await award({ system: 'cities_without_number', usernames: ['ghost'], amount: 3, rate: 'fast' });
+    expect(await readLevel('ghost')).toBe(6);
+  });
+
+  it('reports the level it reached', async () => {
+    await sheet('ghost', { level: 1, xp: 0 });
+    const { results } = await award({
+      system: 'cities_without_number', usernames: ['ghost'], amount: 6, rate: 'fast',
+    });
+    expect(results[0]).toMatchObject({ ok: true, xp: 6, level: 3 });
+  });
+
+  it('works the thresholds the book prints', () => {
+    const at = (xp, rate) => xp.level;
+    expect(xp.levelForXp(0, 'fast')).toBe(1);
+    expect(xp.levelForXp(3, 'fast')).toBe(2);
+    expect(xp.levelForXp(5, 'fast')).toBe(2);
+    expect(xp.levelForXp(6, 'fast')).toBe(3);
+    expect(xp.levelForXp(93, 'fast')).toBe(10);
+    expect(xp.levelForXp(6, 'slow')).toBe(2);
+    expect(xp.levelForXp(139, 'slow')).toBe(10);
+  });
+});

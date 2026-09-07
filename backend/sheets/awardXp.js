@@ -77,7 +77,7 @@ const validate = ({ system, usernames, amount }) => {
  * A character with no sheet is reported rather than skipped silently - on a night when the
  * GM awards the party and one name does nothing, they should be told which.
  */
-const awardXp = (db, { system, usernames, amount }, cb = () => {}) => {
+const awardXp = (db, { system, usernames, amount, rate }, cb = () => {}) => {
   const reason = validate({ system, usernames, amount });
   if (reason) return cb(reason, null);
 
@@ -92,13 +92,16 @@ const awardXp = (db, { system, usernames, amount }, cb = () => {}) => {
       (data) => {
         const { to } = applyAward(data[field], amount);
         data[field] = to;
+        // The level follows the total. Three points a session, four sessions running, is
+        // level 4 on the fast column - not level 2 with the bar stuck on READY.
+        data.level = levelForXp(to, rate, data.level);
         return data;
       },
       (err, data) => {
         if (err || !data) {
           results.push({ username, ok: false, reason: 'No sheet.' });
         } else {
-          results.push({ username, ok: true, xp: num(data[field]) });
+          results.push({ username, ok: true, xp: num(data[field]), level: num(data.level) });
         }
         remaining -= 1;
         if (remaining === 0) cb(null, results);
@@ -110,6 +113,41 @@ const awardXp = (db, { system, usernames, amount }, cb = () => {}) => {
 /** The levels the book prints a cost for (CWN p44). */
 const MIN_LEVEL = 1;
 const MAX_LEVEL = 10;
+
+/**
+ * Total XP needed to REACH each level, indexed by level. Mirrors the table in
+ * frontend/src/sheets/cwnAdvancement.ts, and a test walks both copies.
+ *
+ * "Experience points earned are cumulative, and do not reset each level" (p44), so these
+ * are running totals rather than the cost of one level.
+ */
+const THRESHOLDS = {
+  //        L1 L2  L3  L4  L5  L6  L7  L8   L9  L10
+  fast: [0, 0, 3, 6, 12, 18, 27, 39, 54, 72, 93],
+  slow: [0, 0, 6, 15, 24, 36, 51, 69, 87, 105, 139],
+};
+
+const rateOf = (v) => (String(v || '').trim().toLowerCase() === 'slow' ? 'slow' : 'fast');
+
+/**
+ * The level a given XP total has earned.
+ *
+ * Climbs as far as the total reaches rather than one step at a time: a GM awarding 3 a
+ * session four times running has earned level 4 on the fast column, and stopping at 2
+ * would leave them stuck a level behind with the bar reading READY forever - which is
+ * exactly what happened before this existed.
+ *
+ * Never DOWN. A level is not un-earned by spending or losing experience: the skill points
+ * and the Focus that came with it do not undo themselves. Correcting one is a deliberate
+ * act, which is what LEVEL_DOWN is for.
+ */
+const levelForXp = (xp, rate, currentLevel = MIN_LEVEL) => {
+  const table = THRESHOLDS[rateOf(rate)];
+  const now = Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, num(currentLevel) || MIN_LEVEL));
+  let level = now;
+  while (level < MAX_LEVEL && num(xp) >= table[level + 1]) level += 1;
+  return level;
+};
 
 /**
  * What a level change does to one character.
@@ -160,5 +198,5 @@ const adjustLevel = (db, { system, usernames, delta }, cb = () => {}) => {
 
 module.exports = {
   XP_FIELD, xpFieldFor, supportsXp, applyAward, validate, awardXp,
-  MIN_LEVEL, MAX_LEVEL, applyLevel, adjustLevel,
+  MIN_LEVEL, MAX_LEVEL, applyLevel, adjustLevel, THRESHOLDS, levelForXp,
 };

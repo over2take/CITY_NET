@@ -158,6 +158,16 @@ describe('systems that do not have experience', () => {
 });
 
 describe('what came back', () => {
+  it('shows the level an award carried them to', async () => {
+    // The award advances the level, so the result says where they landed rather than
+    // leaving the GM to check four sheets.
+    const { handlers } = show();
+    handlers.xpAwardResult({
+      ok: true, amount: 3, results: [{ username: 'ghost', ok: true, xp: 12, level: 4 }],
+    });
+    expect(await screen.findByText('ghost: 12 XP · level 4')).toBeInTheDocument();
+  });
+
   it('reports each character, and names the ones that did nothing', async () => {
     // A name with no sheet is the case worth showing: without this it looks like the
     // button missed.
