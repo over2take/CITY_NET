@@ -926,10 +926,19 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
   // CP:R keeps its hand-tuned column widths; other row shapes get a generic
   // grid: name column flexes, selects get room, the rest stay compact.
   const widthRow = (rows.find(r => r.length === perRow) ?? rows[0] ?? []);
+  /**
+   * The name column takes the slack, but only so much of it.
+   *
+   * `1fr` gave it every spare pixel, which is invisible in a docked panel and absurd in a
+   * full tab: at 1600px the weapon NAME box measured 1112px for the word "gun". minmax
+   * keeps it flexible downwards - it still shrinks on a narrow pane rather than forcing
+   * the row to overflow - and stops it growing past a width a weapon name could ever use.
+   */
+  const NAME_COL = 'minmax(0, 320px)';
   const gridTemplateColumns = perRow === 4
-    ? '1fr 70px 130px 44px'
+    ? `${NAME_COL} 70px 130px 44px`
     : widthRow.map((f, i) => (
-      i === 0 ? '1fr' : f.type === 'select' ? '90px' : '56px'
+      i === 0 ? NAME_COL : f.type === 'select' ? '90px' : '56px'
     )).join(' ');
 
   const hasData = (group: SheetField[][]) =>

@@ -95,6 +95,16 @@ describe('it does not crowd the weapon row', () => {
     expect(CWN_WEAPON_COLUMNS).toBe(7);
   });
 
+  it('caps the name column instead of letting it eat the slack', () => {
+    // jsdom has no layout, but the template string is the thing that was wrong: `1fr`
+    // gave NAME every spare pixel, which is invisible in a docked panel and absurd in a
+    // full tab - at 1600px the box measured 1112px for the word "gun". minmax still lets
+    // it shrink on a narrow pane, which is why it is not a flat width.
+    show({ weapon1_name: 'Heavy Pistol' });
+    const grid = screen.getAllByText('NAME')[0].parentElement!;
+    expect(grid.style.gridTemplateColumns).toMatch(/^minmax\(0, 320px\)/);
+  });
+
   it('still shows every stat heading', () => {
     // An eighth column pushed ATK off the visible row at a normal width.
     show({ weapon1_name: 'Heavy Pistol' });
