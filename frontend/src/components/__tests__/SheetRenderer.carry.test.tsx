@@ -3,7 +3,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SheetRenderer } from '../SheetRenderer';
-import { citiesWithoutNumber, CWN_WEAPON_ROWS } from '../../sheets/templates/cities_without_number';
+import {
+  citiesWithoutNumber, CWN_WEAPON_ROWS, CWN_WEAPON_COLUMNS,
+} from '../../sheets/templates/cities_without_number';
 import { getTemplate } from '../../sheets';
 
 /**
@@ -74,6 +76,31 @@ describe('where a weapon is being carried', () => {
     // The first weapon was not touched, and still reads as it did.
     expect(wrote.mock.calls.some((c) => c[0] === 'weapon1_carry')).toBe(false);
     expect(within(group(1)).getByRole('radio', { name: 'R' })).toBeChecked();
+  });
+});
+
+describe('it does not crowd the weapon row', () => {
+  it('takes a line of its own rather than an eighth column', () => {
+    // The regression this exists for. As a column it did not fit a normal sheet pane: the
+    // weapon's NAME collapsed to 33px, and giving the name a floor instead put a third of
+    // the row behind a sideways scrollbar sitting four rows below it. Vertical space is
+    // what this section has.
+    const carry = citiesWithoutNumber.sections
+      .flatMap((sec) => sec.fields ?? [])
+      .find((f) => f.id === 'weapon1_carry')!;
+    expect(carry.fullWidth).toBe(true);
+  });
+
+  it('leaves the stat row at seven columns', () => {
+    expect(CWN_WEAPON_COLUMNS).toBe(7);
+  });
+
+  it('still shows every stat heading', () => {
+    // An eighth column pushed ATK off the visible row at a normal width.
+    show({ weapon1_name: 'Heavy Pistol' });
+    for (const h of ['NAME', 'DMG', 'SKILL', 'ATTR', 'TRAUMA', 'SHOCK', 'ATK']) {
+      expect(screen.getAllByText(h).length, h).toBeGreaterThan(0);
+    }
   });
 });
 

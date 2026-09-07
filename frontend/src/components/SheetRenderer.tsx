@@ -928,13 +928,8 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
   const widthRow = (rows.find(r => r.length === perRow) ?? rows[0] ?? []);
   const gridTemplateColumns = perRow === 4
     ? '1fr 70px 130px 44px'
-    // A radio pair needs more than a number box and less than a select: two 11px dots
-    // with a one-letter label each, and nothing to open.
     : widthRow.map((f, i) => (
-      // minmax, not 1fr: eight columns do not fit a narrow sheet pane, and a bare 1fr
-      // answers that by crushing the weapon's NAME to about 33px. A floor makes the row
-      // scroll sideways instead, which is legible where a 33px name is not.
-      i === 0 ? 'minmax(90px, 1fr)' : f.type === 'select' ? '90px' : f.type === 'radio' ? '68px' : '56px'
+      i === 0 ? '1fr' : f.type === 'select' ? '90px' : '56px'
     )).join(' ');
 
   const hasData = (group: SheetField[][]) =>
@@ -997,7 +992,6 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
 
   if (!rowsPerGroup) {
     return (
-      <div className="crt-scroll" style={{ overflowX: 'auto' }}>
       <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
         {labelRow(rows[0] ?? [])}
         {/* fullWidth means the same thing here as in a grouped section. It used to be
@@ -1009,7 +1003,6 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
             {row[0].fullWidth ? fullWidthRow(row[0]) : fieldRow(row)}
           </React.Fragment>
         ))}
-      </div>
       </div>
     );
   }

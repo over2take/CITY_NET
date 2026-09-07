@@ -41,7 +41,7 @@ export const CWN_WEAPON_SKILLS: { value: string; label: string }[] = [
 export const CWN_WEAPON_ROWS = 4;
 
 /** Fields per weapon row (drives the renderer's row chunking). */
-export const CWN_WEAPON_COLUMNS = 8;
+export const CWN_WEAPON_COLUMNS = 7;
 
 /**
  * Where a weapon is being carried (CWN p48).
@@ -221,7 +221,12 @@ Leave on FROM SKILL to take it from the attack skill, which is right for most we
   { id: `weapon${i}_shock`, label: 'SHOCK', type: 'text', placeholder: '2/13', hint: 'Shock damage / max AC, e.g. 2/13: on a miss, targets of AC 13 or less still take 2 + attribute mod damage. Blank = no shock.' },
   { id: `weapon${i}_atk`, label: 'ATK', type: 'number', placeholder: '0', hint: 'Flat weapon attack bonus (smartlink, quality), added to the to-hit roll.' },
   {
+    // Its own line rather than an eighth column. The stat row is already full at a normal
+    // sheet width - an eighth crushed the weapon's NAME to 33px, and letting the row
+    // scroll sideways instead put a third of it behind a scrollbar sitting four rows
+    // below. Vertical space is what this section has; horizontal is what it has not.
     id: `weapon${i}_carry`, label: 'CARRY', type: 'radio', options: CWN_WEAPON_CARRY,
+    fullWidth: true,
     hint: `Where this weapon is right now.
 
   R  Readied - in hand or on a quick-draw rig, ready to use
