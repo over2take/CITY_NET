@@ -4,7 +4,7 @@
 // renderer (SheetRenderer) can draw for any system. Adding a system later
 // means adding a template file, not new UI.
 
-export type SheetFieldType = 'number' | 'text' | 'textarea' | 'select' | 'tag_list';
+export type SheetFieldType = 'number' | 'text' | 'textarea' | 'select' | 'tag_list' | 'radio';
 
 /**
  * What a field can hold.

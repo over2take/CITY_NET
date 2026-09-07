@@ -41,7 +41,23 @@ export const CWN_WEAPON_SKILLS: { value: string; label: string }[] = [
 export const CWN_WEAPON_ROWS = 4;
 
 /** Fields per weapon row (drives the renderer's row chunking). */
-export const CWN_WEAPON_COLUMNS = 7;
+export const CWN_WEAPON_COLUMNS = 8;
+
+/**
+ * Where a weapon is being carried (CWN p48).
+ *
+ * Readied is in your hands or on a quick-draw holster; Stowed is packed away and takes a
+ * Main Action to get out. Both count against Encumbrance, at different limits - Readied up
+ * to half your Strength, Stowed up to all of it.
+ *
+ * Blank is a real state and the default: a weapon nobody has decided about yet is not
+ * being claimed as either, and every sheet written before this column existed reads that
+ * way rather than silently arming its owner.
+ */
+export const CWN_WEAPON_CARRY: { value: string; label: string }[] = [
+  { value: 'readied', label: 'R' },
+  { value: 'stowed', label: 'S' },
+];
 
 /**
  * The book's Attr. column: which attribute modifies a weapon's hit, damage and shock.
@@ -204,6 +220,15 @@ Leave on FROM SKILL to take it from the attack skill, which is right for most we
   { id: `weapon${i}_trauma`, label: 'TRAUMA', type: 'text', placeholder: 'd8/x3', hint: 'Trauma die / rating, e.g. d8/x3: on a hit the trauma die rolls; at or above the target\'s trauma target the damage is multiplied by the rating. Blank = no trauma. Only used when the GRITTY COMBAT house rule is on.' },
   { id: `weapon${i}_shock`, label: 'SHOCK', type: 'text', placeholder: '2/13', hint: 'Shock damage / max AC, e.g. 2/13: on a miss, targets of AC 13 or less still take 2 + attribute mod damage. Blank = no shock.' },
   { id: `weapon${i}_atk`, label: 'ATK', type: 'number', placeholder: '0', hint: 'Flat weapon attack bonus (smartlink, quality), added to the to-hit roll.' },
+  {
+    id: `weapon${i}_carry`, label: 'CARRY', type: 'radio', options: CWN_WEAPON_CARRY,
+    hint: `Where this weapon is right now.
+
+  R  Readied - in hand or on a quick-draw rig, ready to use
+  S  Stowed  - packed away, a Main Action to get out
+
+Both count against Encumbrance and at different limits: Readied up to half your Strength, Stowed up to all of it. Recorded, not enforced - the app does not stop you drawing a stowed weapon.`,
+  },
   {
     // Applied, not printed: every one of these lands on something the server works out
     // fresh on each roll, so taking a mod off actually takes its bonus off.

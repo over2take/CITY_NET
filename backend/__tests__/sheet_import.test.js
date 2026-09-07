@@ -586,3 +586,39 @@ describe('the cyberware line from a form or a paste', () => {
     expect(rows.map((r) => r.name)).toEqual(['Cybereye (Low Light)', 'Neural Link']);
   });
 });
+
+describe('a weapon says where it is carried', () => {
+  /**
+   * Readied or Stowed (CWN p48), imported from whatever a form calls it.
+   *
+   * Anything unrecognised is dropped rather than guessed at: a weapon nobody has filed is
+   * undecided, which is a real state, and inventing "readied" for it would arm a character
+   * their sheet never claimed to be holding anything.
+   */
+  const map = (raw) => getImporter('cities_without_number').mapFields(raw).mapped;
+
+  it('reads the words a form would print', () => {
+    expect(map({ weapon1carry: 'Readied' }).weapon1_carry).toBe('readied');
+    expect(map({ weapon1carry: 'STOWED' }).weapon1_carry).toBe('stowed');
+  });
+
+  it('reads the single letters the sheet shows', () => {
+    expect(map({ weapon2carry: 'R' }).weapon2_carry).toBe('readied');
+    expect(map({ weapon2carry: 's' }).weapon2_carry).toBe('stowed');
+  });
+
+  it('takes the field under the names a form might give it', () => {
+    expect(map({ weapon3readied: 'R' }).weapon3_carry).toBe('readied');
+    expect(map({ weapon4carried: 'Stowed' }).weapon4_carry).toBe('stowed');
+  });
+
+  it('drops anything it cannot read rather than guessing', () => {
+    for (const v of ['', 'somewhere', '42', 'in hand']) {
+      expect(map({ weapon1carry: v }).weapon1_carry, v).toBeUndefined();
+    }
+  });
+
+  it('leaves a row alone when the form says nothing', () => {
+    expect(map({ weapon1name: 'Heavy Pistol' }).weapon1_carry).toBeUndefined();
+  });
+});

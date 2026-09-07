@@ -206,6 +206,41 @@ function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, styl
       </div>
     );
   }
+  if (field.type === 'radio') {
+    /**
+     * A small set of mutually exclusive choices, shown all at once.
+     *
+     * A select hides the alternatives behind a click, which is the wrong trade when there
+     * are two of them and the answer is glanced at rather than edited - whether a weapon
+     * is in your hands or in your pack is read every round and changed rarely.
+     *
+     * `name` is scoped to the field id so two weapons' pairs do not become one group and
+     * start deselecting each other.
+     */
+    const options = field.options ?? [];
+    return (
+      <div role="radiogroup" aria-label={field.label} style={{ display: 'flex', gap: 6, ...style }}>
+        {options.map((o) => (
+          <label
+            key={o.value}
+            title={o.label}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: readOnly ? 'default' : 'pointer', fontSize: '0.6rem' }}
+          >
+            <input
+              type="radio"
+              name={`${field.id}_choice`}
+              value={o.value}
+              checked={String(value ?? '') === o.value}
+              disabled={readOnly}
+              onChange={() => onFieldChange(field.id, o.value)}
+              style={{ accentColor: 'var(--green)', margin: 0, width: 11, height: 11 }}
+            />
+            {o.label}
+          </label>
+        ))}
+      </div>
+    );
+  }
   if (field.type === 'select') {
     const options = field.options ?? [];
     // A template that names its own blank state keeps it; anything else gets the
@@ -893,7 +928,14 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
   const widthRow = (rows.find(r => r.length === perRow) ?? rows[0] ?? []);
   const gridTemplateColumns = perRow === 4
     ? '1fr 70px 130px 44px'
-    : widthRow.map((f, i) => (i === 0 ? '1fr' : f.type === 'select' ? '90px' : '56px')).join(' ');
+    // A radio pair needs more than a number box and less than a select: two 11px dots
+    // with a one-letter label each, and nothing to open.
+    : widthRow.map((f, i) => (
+      // minmax, not 1fr: eight columns do not fit a narrow sheet pane, and a bare 1fr
+      // answers that by crushing the weapon's NAME to about 33px. A floor makes the row
+      // scroll sideways instead, which is legible where a 33px name is not.
+      i === 0 ? 'minmax(90px, 1fr)' : f.type === 'select' ? '90px' : f.type === 'radio' ? '68px' : '56px'
+    )).join(' ');
 
   const hasData = (group: SheetField[][]) =>
     group.some(row => row.some(f => {
@@ -955,6 +997,7 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
 
   if (!rowsPerGroup) {
     return (
+      <div className="crt-scroll" style={{ overflowX: 'auto' }}>
       <div style={{ display: 'grid', gridTemplateColumns, gap: '3px 4px', alignItems: 'center' }}>
         {labelRow(rows[0] ?? [])}
         {/* fullWidth means the same thing here as in a grouped section. It used to be
@@ -966,6 +1009,7 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
             {row[0].fullWidth ? fullWidthRow(row[0]) : fieldRow(row)}
           </React.Fragment>
         ))}
+      </div>
       </div>
     );
   }

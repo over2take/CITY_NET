@@ -1373,3 +1373,12 @@ button:disabled, .utility-btn:disabled, .upload-btn:disabled {
 .district-member .member-name:hover { color: var(--green); text-decoration: underline; }
 .district-member .member-name:focus-visible { outline: 1px solid var(--green); outline-offset: 1px; }
 .district-member .upload-btn { width: 100%; }
+
+/* Themed scrollbar for any nested scroll container.
+
+   A nested scroller draws the platform default otherwise - wide, pale, and sitting on top
+   of whatever is beside it. Both axes: a dense table scrolls sideways on a narrow pane. */
+.crt-scroll { scrollbar-width: thin; scrollbar-color: var(--dark-green) var(--black); }
+.crt-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.crt-scroll::-webkit-scrollbar-track { background: var(--black); }
+.crt-scroll::-webkit-scrollbar-thumb { background: var(--dark-green); border: 1px solid var(--green); }

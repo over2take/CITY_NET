@@ -359,11 +359,12 @@ const buildCwnAliases = () => {
   alias(['contacts', 'contactsnotes'], 'contacts_notes');
   alias(['injuries', 'injurynotes', 'majorinjuries'], 'injury_notes');
 
-  // Weapon rows round-trip (6 fields each)
+  // Weapon rows round-trip
   for (let i = 1; i <= 4; i++) {
-    ['name', 'dmg', 'skill', 'trauma', 'shock', 'atk', 'attr', 'mods'].forEach((part) =>
+    ['name', 'dmg', 'skill', 'trauma', 'shock', 'atk', 'attr', 'mods', 'carry'].forEach((part) =>
       alias([`weapon${i}${part}`], `weapon${i}_${part}`)
     );
+    alias([`weapon${i}readied`, `weapon${i}stowed`, `weapon${i}carried`], `weapon${i}_carry`);
   }
 
   // Vehicle rows. Less load-bearing than Cyberpunk's, since picking a book type fills the
@@ -509,6 +510,17 @@ const normaliseCwnWeaponRows = (mapped) => {
       if (hit) mapped[`weapon${i}_attr`] = hit;
       else if (norm(attr) === '') delete mapped[`weapon${i}_attr`];
     }
+  }
+  // A form says READIED or STOWED, or R / S, or nothing at all. The sheet stores the two
+  // ids and treats anything else as undecided, which is a real state rather than a
+  // failure - a weapon nobody has filed is not being claimed as either.
+  for (let i = 1; i <= 4; i++) {
+    const carry = mapped[`weapon${i}_carry`];
+    if (carry === undefined) continue;
+    const word = norm(carry);
+    if (word === 'readied' || word === 'ready' || word === 'r') mapped[`weapon${i}_carry`] = 'readied';
+    else if (word === 'stowed' || word === 'stow' || word === 's') mapped[`weapon${i}_carry`] = 'stowed';
+    else delete mapped[`weapon${i}_carry`];
   }
   const armor = modIdsFrom(mapped.armor_mods, gearMods.ARMOR_MODS);
   if (armor !== undefined) mapped.armor_mods = armor;
