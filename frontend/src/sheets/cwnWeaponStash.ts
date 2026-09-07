@@ -136,6 +136,52 @@ export const stashedToCarried = (
   };
 };
 
+/** Every field of one carried row, as a plain object. */
+const readCarried = (data: Record<string, unknown> | undefined | null, i: number) => {
+  const f = carriedFields(i);
+  return {
+    name: str(data?.[f.name]), dmg: str(data?.[f.dmg]), skill: str(data?.[f.skill]),
+    attr: str(data?.[f.attr]), trauma: str(data?.[f.trauma]), shock: str(data?.[f.shock]),
+    atk: data?.[f.atk] ?? '', enc: str(data?.[f.enc]), mods: str(data?.[f.mods]),
+    carry: str(data?.[f.carry]),
+  };
+};
+
+/**
+ * The rows a character is left carrying once one is taken out, closed up.
+ *
+ * Without this, taking the first of two weapons away leaves a hole: the sheet decides how
+ * many rows to draw from the LAST one that holds anything, so an empty row 1 above a
+ * filled row 2 is still drawn - a blank weapon nobody can get rid of.
+ *
+ * Rewrites every row rather than moving one, which is more writes but one save, and it
+ * also closes any hole that was already there.
+ */
+export const compactCarried = (
+  data: Record<string, unknown> | undefined | null,
+  rows: number,
+  removeIndex: number,
+): Record<string, string | number> => {
+  const kept: ReturnType<typeof readCarried>[] = [];
+  for (let i = 1; i <= rows; i += 1) {
+    if (i === removeIndex) continue;
+    const row = readCarried(data, i);
+    if (row.name.trim()) kept.push(row);
+  }
+
+  const out: Record<string, string | number> = {};
+  for (let i = 1; i <= rows; i += 1) {
+    const f = carriedFields(i);
+    const row = kept[i - 1];
+    if (!row) { Object.assign(out, clearCarried(i)); continue; }
+    out[f.name] = row.name; out[f.dmg] = row.dmg; out[f.skill] = row.skill;
+    out[f.attr] = row.attr; out[f.trauma] = row.trauma; out[f.shock] = row.shock;
+    out[f.atk] = row.atk as string | number; out[f.enc] = row.enc;
+    out[f.mods] = row.mods; out[f.carry] = row.carry;
+  }
+  return out;
+};
+
 /**
  * The field writes that empty a carried row, for when a weapon is put away.
  *

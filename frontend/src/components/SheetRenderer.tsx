@@ -10,7 +10,7 @@ import { xpProgress, describeXp } from '../sheets/cwnAdvancement';
 import { carriedEnc, encState, describeEnc, encumberedMove } from '../sheets/cwnEncumbrance';
 import {
   STASH_FIELD, readStash, writeStash, firstFreeRow, stashedToCarried,
-  carriedToStashed, clearCarried, type StashedWeapon,
+  carriedToStashed, compactCarried, type StashedWeapon,
 } from '../sheets/cwnWeaponStash';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
@@ -847,7 +847,10 @@ function WeaponStashSection({ section, data, readOnly, onFieldChange, onFieldsCh
    */
   const putAway = (i: number) => {
     onFieldsChange?.({
-      ...clearCarried(i),
+      // Closed up rather than blanked: the sheet draws rows up to the last one holding
+      // anything, so an emptied row above a filled one stays on screen as a weapon nobody
+      // can get rid of.
+      ...compactCarried(data, rows, i),
       [STASH_FIELD]: writeStash([...stash, carriedToStashed(data, i)]),
     });
   };

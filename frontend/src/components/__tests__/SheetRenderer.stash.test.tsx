@@ -86,6 +86,22 @@ describe('putting one away', () => {
     expect(JSON.parse(saved[STASH_FIELD])[0]).toMatchObject({ name: 'Shotgun', dmg: '3d4', enc: '2' });
   });
 
+  it('closes the gap so no blank row is left behind', async () => {
+    // What the owner hit: stashing the first of two weapons left an empty row on screen
+    // that nothing could remove.
+    const { onFieldsChange } = show({
+      weapon1_name: 'gun', weapon1_dmg: '1d6',
+      weapon2_name: 'knife', weapon2_dmg: '1d12',
+    });
+    await gear();
+    await userEvent.selectOptions(screen.getByLabelText('Stash a carried weapon'), '1');
+
+    const [saved] = onFieldsChange.mock.calls[0];
+    expect(saved.weapon1_name).toBe('knife');
+    expect(saved.weapon2_name).toBe('');
+    expect(JSON.parse(saved[STASH_FIELD])[0]).toMatchObject({ name: 'gun' });
+  });
+
   it('offers only rows that have a weapon in them', async () => {
     show({ weapon1_name: 'gun', weapon4_name: 'knife' });
     await gear();

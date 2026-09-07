@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   readStash, writeStash, normaliseStashed, firstFreeRow,
-  carriedToStashed, stashedToCarried, clearCarried, STASH_FIELD,
+  carriedToStashed, stashedToCarried, clearCarried, compactCarried, STASH_FIELD,
 } from '../cwnWeaponStash';
 import { getTemplate, } from '../index';
 import { CWN_WEAPON_ROWS } from '../templates/cities_without_number';
@@ -111,6 +111,53 @@ describe('putting one away', () => {
     // Empty, not zero: the sheet draws a row when any field in it holds something, and a
     // zero would leave a stashed weapon's row on screen with nothing in it.
     expect(cleared.weapon3_atk).toBe('');
+  });
+});
+
+describe('closing the gap when one is taken out', () => {
+  const two = {
+    weapon1_name: 'gun', weapon1_dmg: '1d6', weapon1_enc: '1', weapon1_carry: 'readied',
+    weapon2_name: 'knife', weapon2_dmg: '1d12', weapon2_enc: '1', weapon2_carry: 'stowed',
+  };
+
+  it('moves the ones below up, rather than leaving a hole', () => {
+    // The bug this exists for: the sheet draws rows up to the LAST one holding anything,
+    // so blanking row 1 while row 2 was filled left an empty weapon on screen that could
+    // not be removed.
+    const out = compactCarried(two, 6, 1);
+    expect(out.weapon1_name).toBe('knife');
+    expect(out.weapon1_dmg).toBe('1d12');
+    expect(out.weapon1_carry).toBe('stowed');
+    expect(out.weapon2_name).toBe('');
+  });
+
+  it('leaves the rows above where they were', () => {
+    const out = compactCarried(two, 6, 2);
+    expect(out.weapon1_name).toBe('gun');
+    expect(out.weapon2_name).toBe('');
+  });
+
+  it('empties every row past the ones kept', () => {
+    const out = compactCarried(two, 6, 1);
+    for (let i = 2; i <= 6; i += 1) {
+      expect(out[`weapon${i}_name`], String(i)).toBe('');
+      expect(out[`weapon${i}_atk`], String(i)).toBe('');
+    }
+  });
+
+  it('closes a hole that was already there', () => {
+    // Rewriting every row rather than moving one means a sheet that already had a gap -
+    // hand-edited, or from before this existed - comes back tidy.
+    const gappy = { weapon2_name: 'knife', weapon2_dmg: '1d12', weapon4_name: 'gun' };
+    const out = compactCarried(gappy, 6, 6);
+    expect(out.weapon1_name).toBe('knife');
+    expect(out.weapon2_name).toBe('gun');
+    expect(out.weapon3_name).toBe('');
+  });
+
+  it('keeps the last weapon when it is the one removed', () => {
+    const out = compactCarried({ weapon1_name: 'gun' }, 6, 1);
+    for (let i = 1; i <= 6; i += 1) expect(out[`weapon${i}_name`]).toBe('');
   });
 });
 
