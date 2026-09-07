@@ -81,6 +81,8 @@ describe('putting one away', () => {
     const [saved] = onFieldsChange.mock.calls[0];
     expect(saved.weapon2_name).toBe('');
     expect(saved.weapon2_carry).toBe('');
+    // Cleared to empty, not to zero: a zero would keep the row on screen forever.
+    expect(saved.weapon2_atk).toBe('');
     expect(JSON.parse(saved[STASH_FIELD])[0]).toMatchObject({ name: 'Shotgun', dmg: '3d4', enc: '2' });
   });
 

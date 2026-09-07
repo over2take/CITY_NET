@@ -128,10 +128,13 @@ describe('vehicles section', () => {
     }
   });
 
-  it('leaves the weapons section alone, which declares no group size', () => {
-    // Weapons render every row as before; only sections opting in collapse.
+  it('collapses weapons the same way, now that it opts in too', () => {
+    // Weapons used to draw all its rows whatever was in them. Six empty ones was most of
+    // the GEAR tab saying nothing, so it now declares a group size like vehicles does.
+    // Ten fields per weapon: the seven of the stat row, plus CARRY, ENC and MODS.
     const weapons = citiesWithoutNumber.sections.find(s => s.id === 'weapons')!;
-    expect(weapons.groupSize).toBeUndefined();
+    expect(weapons.groupSize).toBe(10);
+    expect(weapons.fields.length % weapons.groupSize!).toBe(0);
   });
 });
 

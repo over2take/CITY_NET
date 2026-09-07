@@ -136,11 +136,18 @@ export const stashedToCarried = (
   };
 };
 
-/** The field writes that empty a carried row, for when a weapon is put away. */
+/**
+ * The field writes that empty a carried row, for when a weapon is put away.
+ *
+ * Every field goes to the empty string, including the numeric one. A zero is a value: the
+ * sheet decides which rows to draw by whether any field in them holds anything, so a row
+ * cleared to `atk: 0` would stay on screen forever as an empty weapon nobody could get
+ * rid of.
+ */
 export const clearCarried = (i: number): Record<string, string | number> => {
   const f = carriedFields(i);
   return {
     [f.name]: '', [f.dmg]: '', [f.skill]: '', [f.attr]: '',
-    [f.trauma]: '', [f.shock]: '', [f.atk]: 0, [f.enc]: '', [f.mods]: '', [f.carry]: '',
+    [f.trauma]: '', [f.shock]: '', [f.atk]: '', [f.enc]: '', [f.mods]: '', [f.carry]: '',
   };
 };

@@ -865,7 +865,10 @@ function WeaponStashSection({ section, data, readOnly, onFieldChange, onFieldsCh
           style={{
             display: 'grid', gridTemplateColumns: '1fr 60px 40px 1fr auto',
             gap: '6px', alignItems: 'center', fontSize: '0.7rem',
-            borderBottom: '1px solid var(--dark-green)', padding: '2px 0',
+            // The last row needs no line under it: a rule with nothing below it reads as
+            // a missing entry rather than as the end of the list.
+            borderBottom: i === stash.length - 1 ? 'none' : '1px solid var(--green)',
+            opacity: 1, padding: '5px 0',
           }}
         >
           <span style={{ color: 'var(--cyan)' }}>{w.name || '(unnamed)'}</span>
@@ -1362,7 +1365,7 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
                     that actually shows the row: entries can hide different rows, so
                     "first entry" alone would strand a heading. */}
                 {gi > 0 && ri === 0 && (
-                  <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--green)', opacity: 0.25, margin: '4px 0 2px' }} />
+                  <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--green)', opacity: 0.45, margin: '10px 0 6px' }} />
                 )}
                 {row[0].fullWidth
                   ? fullWidthRow(row[0])

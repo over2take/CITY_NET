@@ -439,6 +439,13 @@ export const citiesWithoutNumber: SheetTemplate = {
       layout: 'weapons',
       tab: 'GEAR',
       columns: CWN_WEAPON_COLUMNS,
+      // Empty rows collapse; + ADD reveals the next. Six blank weapons was most of the
+      // GEAR tab saying nothing, and it got worse when four became six. A row comes back
+      // on its own the moment anything is in it - bought, moved out of the stash, or
+      // typed - so nothing a player wrote can hide.
+      //
+      // Ten fields per weapon: the seven of the stat row, plus CARRY, ENC and MODS.
+      groupSize: CWN_WEAPON_COLUMNS + 3,
       fields: Array.from({ length: CWN_WEAPON_ROWS }, (_, i) => weaponRow(i + 1)).flat(),
     },
     {

@@ -108,7 +108,9 @@ describe('putting one away', () => {
     const cleared = clearCarried(3);
     expect(cleared.weapon3_name).toBe('');
     expect(cleared.weapon3_carry).toBe('');
-    expect(cleared.weapon3_atk).toBe(0);
+    // Empty, not zero: the sheet draws a row when any field in it holds something, and a
+    // zero would leave a stashed weapon's row on screen with nothing in it.
+    expect(cleared.weapon3_atk).toBe('');
   });
 });
 

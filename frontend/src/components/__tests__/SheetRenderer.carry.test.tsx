@@ -36,10 +36,23 @@ const show = (data: Record<string, unknown> = {}) => {
 const group = (n = 1) => screen.getAllByRole('radiogroup', { name: 'CARRY' })[n - 1];
 
 describe('where a weapon is being carried', () => {
-  it('offers Readied and Stowed on every weapon row', () => {
+  it('offers Readied and Stowed on each weapon that exists', () => {
+    // One per weapon, not one per declared row: empty rows collapse now, so a sheet with
+    // one weapon shows one CARRY rather than six.
     show({ weapon1_name: 'Heavy Pistol' });
-    expect(screen.getAllByRole('radiogroup', { name: 'CARRY' })).toHaveLength(CWN_WEAPON_ROWS);
+    expect(screen.getAllByRole('radiogroup', { name: 'CARRY' })).toHaveLength(1);
     expect(within(group()).getAllByRole('radio')).toHaveLength(2);
+  });
+
+  it('offers one for each of several weapons', () => {
+    show({ weapon1_name: 'Heavy Pistol', weapon2_name: 'Combat Knife' });
+    expect(screen.getAllByRole('radiogroup', { name: 'CARRY' })).toHaveLength(2);
+  });
+
+  it('declares a row for every weapon the resolver can fire', () => {
+    // The collapse is a display choice; the fields still exist for all of them.
+    const ids = citiesWithoutNumber.sections.flatMap((s) => (s.fields ?? []).map((f) => f.id));
+    for (let i = 1; i <= CWN_WEAPON_ROWS; i += 1) expect(ids).toContain(`weapon${i}_carry`);
   });
 
   it('starts undecided rather than assuming you are armed', () => {
