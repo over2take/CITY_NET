@@ -92,6 +92,21 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/**
+ * The HP and EXP bars are two of the same thing, so they are measured the same.
+ *
+ * Fixed widths either side: without them the labels ("HP" against "EXP") started the two
+ * bars at different x, and the values ("35/35" against "0/3") ended them at different x -
+ * two bars that were meant to read as a stack and visibly did not.
+ */
+const barLabel: React.CSSProperties = {
+  fontSize: '0.6rem', opacity: 0.65, width: '24px', flexShrink: 0,
+};
+
+const barValue: React.CSSProperties = {
+  fontSize: '0.65rem', width: '46px', flexShrink: 0, textAlign: 'right',
+};
+
 const inputStyle: React.CSSProperties = {
   background: 'color-mix(in srgb, var(--black) 50%, transparent)',
   border: '1px solid var(--green)',
@@ -494,7 +509,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
               onClick={onOpenLink ? () => onOpenLink('token_hp') : undefined}
               style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', cursor: onOpenLink ? 'pointer' : 'default' }}
             >
-              <span style={{ fontSize: '0.6rem', opacity: 0.65 }}>HP</span>
+              <span style={{ ...barLabel }}>HP</span>
               <div style={{ flex: 1, display: 'flex', gap: max > 40 ? '1px' : '2px', height: '12px', border: `1px solid ${hpColor}`, background: 'color-mix(in srgb, var(--black) 60%, transparent)', padding: '1px', transition: 'border-color 0.3s' }}>
                 {max > 0 ? Array.from({ length: max }, (_, i) => (
                   <div
@@ -509,7 +524,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
                   <div style={{ width: `${hpPct}%`, height: '100%', background: 'var(--green)' }} />
                 )}
               </div>
-              <span style={{ fontSize: '0.65rem', color: hpColor, transition: 'color 0.3s' }}>{hp ?? 0}/{hpMax ?? 0}</span>
+              <span style={{ ...barValue, color: hpColor, transition: 'color 0.3s' }}>{hp ?? 0}/{hpMax ?? 0}</span>
             </div>
           );
         })()}
@@ -637,7 +652,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
           return (
             <div style={{ marginTop: '6px' }} title={`Experience toward the next level. ${describeXp(p)}`}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.6rem', opacity: 0.65 }}>EXP</span>
+                <span style={{ ...barLabel }}>EXP</span>
                 <div style={{
                   flex: 1, height: '12px', border: `1px solid ${barColor}`, padding: '1px',
                   background: 'color-mix(in srgb, var(--black) 60%, transparent)',
@@ -647,7 +662,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
                     background: barColor, transition: 'width 0.2s',
                   }} />
                 </div>
-                <span style={{ fontSize: '0.65rem', color: barColor }}>
+                <span style={{ ...barValue, color: barColor }}>
                   {p.nextAt === null ? p.xp : `${p.xp}/${p.nextAt}`}
                 </span>
               </div>

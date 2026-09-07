@@ -96,9 +96,15 @@ export const xpProgress = (data: Record<string, unknown> | undefined | null): Xp
   };
 };
 
-/** The line under the bar: where you are, and what it would take to move. */
+/**
+ * The line under the bar.
+ *
+ * Just the level while there is climbing left to do: the numbers on the end of the bar
+ * already say how far, and repeating them under it was the same fact twice. What the bar
+ * cannot say is that the climbing is over, so those two states still get words.
+ */
 export const describeXp = (p: XpProgress): string => {
   if (p.capped) return `LEVEL ${p.level} · MAX`;
   if (p.ready) return `LEVEL ${p.level} · READY FOR ${p.nextLevel}`;
-  return `LEVEL ${p.level} · ${p.remaining} TO ${p.nextLevel}`;
+  return `LEVEL ${p.level}`;
 };

@@ -94,8 +94,16 @@ describe('sheets that are not filled in yet', () => {
 });
 
 describe('what the header says', () => {
-  it('counts down to the next level', () => {
-    expect(describeXp(xpProgress(at({ level: 2, xp: 4 })))).toBe('LEVEL 2 · 2 TO 3');
+  it('says only the level while there is climbing left', () => {
+    // The numbers on the end of the bar already say how far - "4/6" sits right there -
+    // so repeating it underneath was the same fact twice.
+    expect(describeXp(xpProgress(at({ level: 2, xp: 4 })))).toBe('LEVEL 2');
+  });
+
+  it('still uses words for the two things a bar cannot show', () => {
+    // A full bar does not distinguish "you may advance" from "this is as far as it goes".
+    expect(describeXp(xpProgress(at({ level: 2, xp: 6 })))).toBe('LEVEL 2 · READY FOR 3');
+    expect(describeXp(xpProgress(at({ level: 10, xp: 200 })))).toBe('LEVEL 10 · MAX');
   });
 });
 
