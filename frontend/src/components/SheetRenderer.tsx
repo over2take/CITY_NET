@@ -111,6 +111,52 @@ const parseTagList = (raw: unknown): string[] => {
   } catch { return []; }
 };
 
+/**
+ * Typing an entry a fixed list could not contain.
+ *
+ * Its own component so it can hold the half-typed text: the tag list stores a committed
+ * array, and keeping a draft in there would write a language into the sheet on every
+ * keystroke.
+ *
+ * Enter commits, because a text box beside a list is a thing people press Enter in.
+ */
+function CustomTagEntry({ placeholder, label, onAdd }: {
+  placeholder: string;
+  label: string;
+  onAdd: (entry: string) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const commit = () => {
+    const entry = draft.trim();
+    if (!entry) return;
+    onAdd(entry);
+    setDraft('');
+  };
+  return (
+    <div style={{ display: 'flex', gap: '4px', maxWidth: '260px' }}>
+      <input
+        aria-label={`Add a custom ${label}`}
+        className="sheet-input"
+        style={{ ...inputStyle, fontSize: '0.7rem' }}
+        placeholder={placeholder}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
+      />
+      <button
+        type="button"
+        aria-label={`Add typed ${label}`}
+        onClick={commit}
+        disabled={!draft.trim()}
+        style={{
+          ...inputStyle, width: 'auto', padding: '3px 8px', fontSize: '0.7rem',
+          cursor: draft.trim() ? 'pointer' : 'default', opacity: draft.trim() ? 1 : 0.4,
+        }}
+      >+</button>
+    </div>
+  );
+}
+
 function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, style, onOpenLink }: {
   field: SheetField; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
@@ -197,6 +243,13 @@ function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, styl
             <option value="">{field.addLabel ?? "+ ADD…"}</option>
             {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
+        )}
+        {!readOnly && field.allowCustom && (
+          <CustomTagEntry
+            placeholder={field.allowCustom}
+            label={field.label}
+            onAdd={(entry) => { if (!chosen.includes(entry)) write([...chosen, entry]); }}
+          />
         )}
         {summary && (
           <div style={{ fontSize: '0.6rem', opacity: summary.warn ? 1 : 0.65, color: summary.warn ? 'var(--danger)' : undefined }}>

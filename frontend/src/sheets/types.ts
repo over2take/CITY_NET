@@ -80,6 +80,10 @@ export interface SheetField {
   tagSummary?: (values: string[], data: SheetData) => { text: string; warn?: boolean };
   /** For 'tag_list': narrow the choices using the rest of the sheet. */
   tagOptions?: (data: SheetData) => SheetOption[];
+  /** For 'tag_list': also accept a typed entry, with this as the input's placeholder.
+   *  For a list that cannot be complete - languages, where the two a character starts
+   *  with are their city's tongue and their enclave's, both invented per campaign. */
+  allowCustom?: string;
   /** For 'tag_list': the placeholder on the picker. Defaults to '+ ADD…'. */
   addLabel?: string;
   /** Hint that this field is rollable (Phase 2 wires the actual roll). */

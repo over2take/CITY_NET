@@ -358,6 +358,9 @@ const buildCwnAliases = () => {
   alias(['foci', 'focinotes', 'edges', 'abilities'], 'foci_notes');
   alias(['contacts', 'contactsnotes'], 'contacts_notes');
   alias(['injuries', 'injurynotes', 'majorinjuries'], 'injury_notes');
+  // A JSON array on the sheet, but a form prints a line of words. The normaliser below
+  // splits one into the other so a filled-in form does not lose them.
+  alias(['languages', 'languagesspoken', 'fluentin'], 'languages');
 
   // Weapon rows round-trip
   for (let i = 1; i <= 4; i++) {
@@ -521,6 +524,19 @@ const normaliseCwnWeaponRows = (mapped) => {
     if (word === 'readied' || word === 'ready' || word === 'r') mapped[`weapon${i}_carry`] = 'readied';
     else if (word === 'stowed' || word === 'stow' || word === 's') mapped[`weapon${i}_carry`] = 'stowed';
     else delete mapped[`weapon${i}_carry`];
+  }
+  // Languages arrive as "English, Cantonese; Sperantu" from a form and as JSON from a
+  // sheet round-trip. Anything typed is kept as typed - the list can never be complete,
+  // since a campaign's own city tongue is invented, so there is nothing to validate it
+  // against and dropping an unrecognised one would throw away the commonest case.
+  if (typeof mapped.languages === 'string') {
+    const raw = mapped.languages.trim();
+    let list = null;
+    if (raw.startsWith('[')) { try { list = JSON.parse(raw); } catch { list = null; } }
+    if (!Array.isArray(list)) list = raw.split(/[,;\n]/);
+    const cleaned = list.map((l) => String(l).trim()).filter(Boolean);
+    if (cleaned.length) mapped.languages = JSON.stringify(cleaned);
+    else delete mapped.languages;
   }
   const armor = modIdsFrom(mapped.armor_mods, gearMods.ARMOR_MODS);
   if (armor !== undefined) mapped.armor_mods = armor;

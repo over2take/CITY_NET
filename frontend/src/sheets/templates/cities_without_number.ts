@@ -9,6 +9,7 @@ import {
   summariseArmorMods, summariseWeaponMods, remainingOptions, parseModIds,
   labelArmorMod, labelWeaponMod,
 } from '../cwnGearMods';
+import { CWN_LANGUAGE_OPTIONS, summariseLanguages } from '../cwnLanguages';
 
 // Cities Without Number template.
 //
@@ -543,6 +544,31 @@ export const citiesWithoutNumber: SheetTemplate = {
       fields: [
         { id: 'foci_notes', label: 'Foci, edges, class abilities', type: 'textarea', placeholder: 'Alert (auto initiative), Killing Blow' },
         { id: 'auto_initiative', label: 'Automatic initiative (from Foci/cyber)', type: 'number', hint: '1 = acts before the normal initiative order. Read by the future initiative tracker.' },
+      ],
+    },
+    {
+      id: 'languages',
+      label: 'LANGUAGES',
+      layout: 'notes',
+      tab: 'NOTES',
+      fields: [
+        {
+          // In NOTES rather than SKILLS: a language is not something you roll, and the
+          // SKILLS tab is a grid of numbers you click to roll one. A list of chips there
+          // would be the only thing on the tab that does nothing when clicked.
+          id: 'languages', label: 'Languages spoken', type: 'tag_list', fullWidth: true,
+          addLabel: '+ SPEAK…',
+          options: CWN_LANGUAGE_OPTIONS,
+          // The list cannot be complete: a character's first two are their city's common
+          // tongue and their enclave's native one, and the city is invented per campaign.
+          allowCustom: 'or type one…',
+          tagSummary: (values, data) => summariseLanguages(values, data),
+          hint: `Languages you are fluent in.
+
+You start with your city's most common language and your own enclave's, then Connect and Know each grant more - one at level-0, two at level-1, and another for every level after.
+
+Counted, not enforced: the book also lets a few months inside a culture earn one, and that is the GM's call.`,
+        },
       ],
     },
     {

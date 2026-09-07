@@ -622,3 +622,45 @@ describe('a weapon says where it is carried', () => {
     expect(map({ weapon1name: 'Heavy Pistol' }).weapon1_carry).toBeUndefined();
   });
 });
+
+describe('languages arrive from a form as words', () => {
+  /**
+   * The sheet stores a JSON array; a printed form has one line to write on. Nothing is
+   * validated against the list, because the list can never be complete - a campaign's own
+   * city tongue is invented - so dropping an unrecognised one would throw away the
+   * commonest case.
+   */
+  const map = (raw) => getImporter('cities_without_number').mapFields(raw).mapped;
+  const langs = (raw) => JSON.parse(map(raw).languages ?? 'null');
+
+  it('splits a comma-separated line', () => {
+    expect(langs({ languages: 'English (GB), Cantonese, Arabic' }))
+      .toEqual(['English (GB)', 'Cantonese', 'Arabic']);
+  });
+
+  it('accepts semicolons and newlines too', () => {
+    expect(langs({ languages: 'Hindi; Tamil\nSwahili' })).toEqual(['Hindi', 'Tamil', 'Swahili']);
+  });
+
+  it('keeps a language the list has never heard of', () => {
+    // The city's common tongue is invented per campaign, so this is the normal case.
+    expect(langs({ languages: 'Sperantu, Nuyorican' })).toEqual(['Sperantu', 'Nuyorican']);
+  });
+
+  it('round-trips the JSON a sheet exports', () => {
+    expect(langs({ languages: '["Mandarin","Farsi"]' })).toEqual(['Mandarin', 'Farsi']);
+  });
+
+  it('drops empty entries rather than storing blanks', () => {
+    expect(langs({ languages: 'Polish,, ,Zulu' })).toEqual(['Polish', 'Zulu']);
+  });
+
+  it('leaves nothing behind for an empty field', () => {
+    expect(map({ languages: '   ' }).languages).toBeUndefined();
+  });
+
+  it('takes the field under the names a form might give it', () => {
+    expect(langs({ fluentin: 'Korean' })).toEqual(['Korean']);
+    expect(langs({ languagesspoken: 'Yoruba' })).toEqual(['Yoruba']);
+  });
+});
