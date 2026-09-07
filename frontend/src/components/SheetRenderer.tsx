@@ -95,16 +95,24 @@ const num = (v: unknown): number => {
 /**
  * The HP and EXP bars are two of the same thing, so they are measured the same.
  *
- * Fixed widths either side: without them the labels ("HP" against "EXP") started the two
- * bars at different x, and the values ("35/35" against "0/3") ended them at different x -
- * two bars that were meant to read as a stack and visibly did not.
+ * Fixed widths either side, and the SAME width: without them the labels ("HP" against
+ * "EXP") started the two bars at different x and the values ("35/35" against "0/3") ended
+ * them at different x. Equal widths do a second job - they put the same gutter either side
+ * of the track, so the bar is centred in the header column. It was not: a 30px gutter left
+ * and 52px right sat the bar 11px off centre, and the name and level line centred above
+ * and below it then looked crooked against it.
+ *
+ * The value is left-aligned so it sits against the bar it belongs to, rather than drifting
+ * out to the far edge of its box.
  */
+const BAR_GUTTER = '32px';
+
 const barLabel: React.CSSProperties = {
-  fontSize: '0.6rem', opacity: 0.65, width: '24px', flexShrink: 0,
+  fontSize: '0.6rem', opacity: 0.65, width: BAR_GUTTER, flexShrink: 0,
 };
 
 const barValue: React.CSSProperties = {
-  fontSize: '0.65rem', width: '46px', flexShrink: 0, textAlign: 'right',
+  fontSize: '0.65rem', width: BAR_GUTTER, flexShrink: 0, textAlign: 'left', whiteSpace: 'nowrap',
 };
 
 const inputStyle: React.CSSProperties = {
