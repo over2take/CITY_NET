@@ -121,7 +121,7 @@ export interface SheetField {
  *  row (one-click: rolls the row's damage dice and spends its Effort cost).
  *  'ability_list' is a dynamic add/remove list stored as JSON in a single
  *  field; each item has name, cost, attr (dropdown), die, and effect. */
-export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware' | 'encumbrance';
+export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware' | 'encumbrance' | 'weapon_stash';
 
 /** Configuration for the 'ability_list' section layout. */
 export interface AbilityListConfig {

@@ -8,6 +8,10 @@ import type { SheetTemplate, SheetSection, SheetField, SheetData, SheetFieldValu
 import { TvPortrait } from './TvPortrait';
 import { xpProgress, describeXp } from '../sheets/cwnAdvancement';
 import { carriedEnc, encState, describeEnc, encumberedMove } from '../sheets/cwnEncumbrance';
+import {
+  STASH_FIELD, readStash, writeStash, firstFreeRow, stashedToCarried,
+  carriedToStashed, clearCarried, type StashedWeapon,
+} from '../sheets/cwnWeaponStash';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
   return (
@@ -790,6 +794,129 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
 }
 
 /**
+ * Weapons owned but not carried.
+ *
+ * The book limits what you carry by Encumbrance, not by a slot count, and Encumbrance is
+ * about what is ON you - so a rifle in a safehouse belongs on neither list of the ones the
+ * resolver fires. It lives here instead: unlimited, free, and saying where it actually is.
+ *
+ * Shown short on purpose. A stashed weapon is a thing you own, not a thing you are about
+ * to roll, so the name, what it hits for, what it would cost to pick up, and where it is
+ * are the whole story. Its full stat block travels with it and comes back intact.
+ */
+function WeaponStashSection({ section, data, readOnly, onFieldChange, onFieldsChange, rows }: {
+  section: SheetSection; data: SheetData; readOnly: boolean;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
+  onFieldsChange?: (fields: Record<string, string | number>) => void;
+  rows: number;
+}) {
+  const stash = readStash(data);
+  const free = firstFreeRow(data, rows);
+
+  const write = (next: StashedWeapon[]) => onFieldChange(STASH_FIELD, writeStash(next));
+
+  /**
+   * Take one out of the stash and into a carried row.
+   *
+   * One save rather than eleven: the row's fields and the shortened stash have to land
+   * together, or a crash between them leaves the weapon in both places or neither.
+   */
+  const takeOut = (index: number) => {
+    if (free === null) return;
+    const next = stash.filter((_, n) => n !== index);
+    onFieldsChange?.({
+      ...stashedToCarried(stash[index], free),
+      [STASH_FIELD]: writeStash(next),
+    });
+  };
+
+  const setLocation = (index: number, location: string) =>
+    write(stash.map((w, n) => (n === index ? { ...w, location } : w)));
+
+  /** The carried rows there is anything to put away from. */
+  const carried = Array.from({ length: rows }, (_, n) => n + 1)
+    .map((i) => ({ i, name: String(data[`weapon${i}_name`] ?? '').trim() }))
+    .filter((r) => r.name);
+
+  /**
+   * Put a carried weapon away.
+   *
+   * Both moves live here rather than one on each list: they are the same gesture in two
+   * directions, and a button on the weapons grid would have meant an eighth thing in a row
+   * that ran out of space at seven.
+   */
+  const putAway = (i: number) => {
+    onFieldsChange?.({
+      ...clearCarried(i),
+      [STASH_FIELD]: writeStash([...stash, carriedToStashed(data, i)]),
+    });
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {stash.length === 0 ? (
+        <div style={{ fontSize: '0.65rem', opacity: 0.5 }}>
+          Nothing stashed. Weapons you own but are not carrying live here — they cost no
+          Encumbrance and can be picked up on the GEAR tab.
+        </div>
+      ) : stash.map((w, i) => (
+        <div
+          key={`${w.name}-${i}`}
+          style={{
+            display: 'grid', gridTemplateColumns: '1fr 60px 40px 1fr auto',
+            gap: '6px', alignItems: 'center', fontSize: '0.7rem',
+            borderBottom: '1px solid var(--dark-green)', padding: '2px 0',
+          }}
+        >
+          <span style={{ color: 'var(--cyan)' }}>{w.name || '(unnamed)'}</span>
+          <span style={{ opacity: 0.7 }}>{w.dmg}</span>
+          <span style={{ opacity: 0.7 }} title="Encumbrance if you pick it up">{w.enc || '-'}</span>
+          <input
+            aria-label={`Location of ${w.name || 'weapon'}`}
+            value={w.location}
+            placeholder="where is it?"
+            readOnly={readOnly}
+            onChange={(e) => setLocation(i, e.target.value)}
+            style={{ ...inputStyle, fontSize: '0.65rem', padding: '1px 4px' }}
+          />
+          {!readOnly && (
+            <button
+              type="button"
+              className="utility-btn"
+              style={{ fontSize: '0.6rem', padding: '1px 6px' }}
+              disabled={free === null}
+              title={free === null
+                ? 'No free weapon row — put one away first'
+                : 'Move to your carried weapons, stowed'}
+              onClick={() => takeOut(i)}
+            >CARRY</button>
+          )}
+        </div>
+      ))}
+      {free === null && stash.length > 0 && (
+        <div style={{ fontSize: '0.6rem', color: 'var(--warning)' }}>
+          All {rows} weapon rows are full. Stash one to make room.
+        </div>
+      )}
+      {!readOnly && carried.length > 0 && (
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
+          <select
+            aria-label="Stash a carried weapon"
+            className="sheet-input"
+            style={{ ...inputStyle, fontSize: '0.7rem', maxWidth: '200px' }}
+            value=""
+            onChange={(e) => { if (e.target.value) putAway(Number(e.target.value)); }}
+          >
+            <option value="">+ PUT ONE AWAY…</option>
+            {carried.map((r) => <option key={r.i} value={r.i}>{r.name}</option>)}
+          </select>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * What a character is carrying, at the top of GEAR.
  *
  * Shown whether or not the table enforces it - knowing what you have on you is useful at
@@ -1524,6 +1651,14 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
   // sheet rather than per field: it reads the cyberware list, which every stat and skill
   // would otherwise re-read and re-scan for itself.
   const effects = useMemo(() => sheetEffects(data, template), [data, template]);
+  // How many carried weapon rows this template declares. Counted rather than imported, so
+  // the stash cannot disagree with the sheet it is moving weapons into.
+  const weaponRows = useMemo(
+    () => template.sections
+      .flatMap((s) => s.fields ?? [])
+      .filter((f) => /^weapon\d+_name$/.test(f.id)).length,
+    [template],
+  );
   // If the active tab gets hidden (house rule toggled off), fall back to the
   // first visible one.
   useEffect(() => {
@@ -1627,6 +1762,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
+                  {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}

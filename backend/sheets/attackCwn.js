@@ -28,7 +28,16 @@ const vehicleSeats = require('./vehicleSeats');
 const gearMods = require('./cwnGearMods');
 const cyberWeapons = require('./cwnCyberWeapons');
 
-const WEAPON_ROWS = 4;
+/**
+ * How many weapons a character can have in hand or on their back at once.
+ *
+ * Not a rule from the book, which limits what you carry by Encumbrance rather than by a
+ * slot count - Readied up to half your Strength, Stowed up to all of it (p48). This is a
+ * sheet constraint, and it was four until Encumbrance existed to do the real limiting.
+ * Six because a Str 12 character can legitimately ready six things; anything past that is
+ * far more likely to be in the stash than in their hands.
+ */
+const WEAPON_ROWS = 6;
 
 /**
  * Vehicles a character sheet can carry, and weapon mounts on each.

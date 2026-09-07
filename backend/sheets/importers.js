@@ -16,6 +16,9 @@ const { PDFDocument } = require('pdf-lib');
 const { CPR_SKILLS, CWN_SKILLS } = require('./rolls');
 const { getLinkedFields } = require('./templates');
 const gearMods = require('./cwnGearMods');
+// One source for how many weapon rows a CWN sheet has, so the aliases and the resolver
+// cannot disagree about which rows exist.
+const { WEAPON_ROWS: CWN_WEAPON_ROWS } = require('./attackCwn');
 
 // 'SP (Head)' / 'sp_head' / 'SP HEAD' all normalize to 'sphead'
 const norm = (key) => String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -367,7 +370,7 @@ const buildCwnAliases = () => {
   alias(['languages', 'languagesspoken', 'fluentin'], 'languages');
 
   // Weapon rows round-trip
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= CWN_WEAPON_ROWS; i++) {
     ['name', 'dmg', 'skill', 'trauma', 'shock', 'atk', 'attr', 'mods', 'carry', 'enc'].forEach((part) =>
       alias([`weapon${i}${part}`], `weapon${i}_${part}`)
     );
@@ -499,7 +502,7 @@ const modIdsFrom = (value, table) => {
 };
 
 const normaliseCwnWeaponRows = (mapped) => {
-  for (let i = 1; i <= 4; i += 1) {
+  for (let i = 1; i <= CWN_WEAPON_ROWS; i += 1) {
     const skill = mapped[`weapon${i}_skill`];
     if (skill !== undefined) {
       const hit = CWN_WEAPON_SKILL_WORDS[norm(skill)];
@@ -522,7 +525,7 @@ const normaliseCwnWeaponRows = (mapped) => {
   // A form says READIED or STOWED, or R / S, or nothing at all. The sheet stores the two
   // ids and treats anything else as undecided, which is a real state rather than a
   // failure - a weapon nobody has filed is not being claimed as either.
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= CWN_WEAPON_ROWS; i++) {
     const carry = mapped[`weapon${i}_carry`];
     if (carry === undefined) continue;
     const word = norm(carry);

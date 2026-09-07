@@ -39,8 +39,14 @@ export const CWN_WEAPON_SKILLS: { value: string; label: string }[] = [
   { value: 'punch', label: 'Punch' },
 ];
 
-/** Number of structured weapon rows on the sheet. */
-export const CWN_WEAPON_ROWS = 4;
+/**
+ * Weapons a character can have in hand or on their back at once.
+ *
+ * Not a rule from the book, which limits carrying by Encumbrance rather than a slot count.
+ * Mirrors WEAPON_ROWS in backend/sheets/attackCwn.js, which is what actually resolves an
+ * attack - a row the sheet draws and the resolver will not fire is worse than no row.
+ */
+export const CWN_WEAPON_ROWS = 6;
 
 /** Fields per weapon row (drives the renderer's row chunking). */
 export const CWN_WEAPON_COLUMNS = 7;
@@ -434,6 +440,14 @@ export const citiesWithoutNumber: SheetTemplate = {
       tab: 'GEAR',
       columns: CWN_WEAPON_COLUMNS,
       fields: Array.from({ length: CWN_WEAPON_ROWS }, (_, i) => weaponRow(i + 1)).flat(),
+    },
+    {
+      // After the carried rows, because it is what those rows are not.
+      id: 'weapon_stash',
+      label: 'STASH',
+      layout: 'weapon_stash',
+      tab: 'GEAR',
+      fields: [],
     },
     {
       id: 'weapon_notes',
