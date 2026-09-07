@@ -141,7 +141,9 @@ describe('where it lives', () => {
     expect(ENCUMBRANCE_RULE).toBe('cwn_encumbrance');
   });
 
-  it('offers only the sizes the book prints', () => {
+  it('keeps the guideline sizes, which are a guide and not a list', () => {
+    // Not the set of legal values: the weapon and armour tables print their own - an
+    // Automatic Rifle is 4, a Plated Longcoat 3 - and the last row of this one is 5+.
     expect(CWN_ENC_SIZES.map((o) => o.value)).toEqual(['0', '1', '2', '5', '12']);
   });
 

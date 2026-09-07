@@ -77,9 +77,17 @@ describe('a ripperdoc', () => {
 
 describe('a shop with no catalogue built yet', () => {
   it('says so rather than showing an empty table', () => {
-    show('gun_shop');
+    // The gun shop used to be the example here. A clinic still is: armour and drugs are
+    // the stock lists nobody has written.
+    show('clinic');
     expect(screen.getByText(/NO CATALOGUE FOR THIS SHOP YET/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Filter stock')).not.toBeInTheDocument();
+  });
+
+  it('sells weapons at the gun shop now, which it did not', () => {
+    show('gun_shop');
+    expect(screen.queryByText(/NO CATALOGUE FOR THIS SHOP YET/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Buy Heavy Pistol' })).toBeInTheDocument();
   });
 });
 
@@ -201,5 +209,62 @@ describe('buying a piece', () => {
     show('ripperdoc');
     expect(screen.getByLabelText('Buy Cranial Jack')).toBeDisabled();
     expect(screen.getByText(/NO CHARACTER SHEET LOADED/)).toBeInTheDocument();
+  });
+});
+
+describe('buying a weapon', () => {
+  /**
+   * It lands in the STASH, not in a carried row.
+   *
+   * You have walked out of a shop holding a bag; whether it ends up in your hands is a
+   * decision made on the sheet afterwards. It also means a shop can never fail for want
+   * of a free row, which is what "do not enforce how much someone can buy" requires.
+   */
+  const lastWrite = () => handleFieldChange.mock.calls.at(-1)!;
+
+  it('puts it in the stash rather than a weapon row', async () => {
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Combat Rifle' }));
+
+    const [field, value] = lastWrite();
+    expect(field).toBe('weapons_stash');
+    const stash = JSON.parse(value as string);
+    expect(stash).toHaveLength(1);
+    expect(stash[0]).toMatchObject({
+      name: 'Combat Rifle', dmg: '1d12', skill: 'shoot', attr: 'dex',
+      trauma: 'd8/x3', enc: '2',
+    });
+  });
+
+  it('keeps what was already stashed', async () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { weapons_stash: JSON.stringify([{ name: 'Knife', dmg: '1d4' }]) },
+    };
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Sword' }));
+
+    const stash = JSON.parse(lastWrite()[1] as string);
+    expect(stash.map((w: { name: string }) => w.name)).toEqual(['Knife', 'Sword']);
+  });
+
+  it('remembers which shop it came from, since that is where it is', async () => {
+    show('gun_shop', 'The Gun Rack');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Knife' }));
+    expect(JSON.parse(lastWrite()[1] as string)[0].location).toBe('The Gun Rack');
+  });
+
+  it('says that nothing is charged, and where the weapon went', () => {
+    show('gun_shop');
+    expect(screen.getByText(/NOTHING IS CHARGED YET — BUY PUTS THE WEAPON IN YOUR STASH/))
+      .toBeInTheDocument();
+  });
+
+  it('prints range and magazine, and says they will not be kept', () => {
+    // The sheet has no field for either, so they are reference only. Better said than
+    // discovered when they fail to appear on the weapon.
+    show('gun_shop');
+    expect(screen.getByText(/Range and magazine are printed for reference/)).toBeInTheDocument();
+    expect(screen.getByText('100/300')).toBeInTheDocument();
   });
 });

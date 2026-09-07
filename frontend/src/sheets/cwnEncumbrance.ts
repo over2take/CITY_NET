@@ -15,10 +15,12 @@
 export const ENCUMBRANCE_RULE = 'cwn_encumbrance';
 
 /**
- * What the book charges for an item, by size (p48).
+ * The book's guideline for sizing something it does not price (p48).
  *
- * Offered as a picker rather than typed, because these are the only five values the table
- * has and a free number invites a 4 that means nothing.
+ * A guideline and not an enum, which is worth saying because it was a picker first: the
+ * weapon and armour tables print their own values and they do not all appear here. An
+ * Automatic Rifle is 4 and a Plated Longcoat is 3, and the table's last row is "5+".
+ * So Enc is typed, and this is what a GM reaches for when pricing something improvised.
  */
 export const CWN_ENC_SIZES: { value: string; label: string }[] = [
   { value: '0', label: '0 · pocket' },

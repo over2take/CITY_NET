@@ -10,7 +10,6 @@ import {
   labelArmorMod, labelWeaponMod,
 } from '../cwnGearMods';
 import { CWN_LANGUAGE_OPTIONS, summariseLanguages } from '../cwnLanguages';
-import { CWN_ENC_SIZES } from '../cwnEncumbrance';
 
 // Cities Without Number template.
 //
@@ -245,8 +244,10 @@ Both count against Encumbrance and at different limits: Readied up to half your 
   {
     // Drawn beside CARRY rather than as a ninth column: the stat row is full, and this is
     // the line that already answers "how is this weapon being carried".
-    id: `weapon${i}_enc`, label: 'ENC', type: 'select', options: CWN_ENC_SIZES,
-    hint: `What this weapon costs against Encumbrance (p48). The book prints one per weapon: a Light Pistol is 1, a Combat Rifle or Shotgun 2.
+    id: `weapon${i}_enc`, label: 'ENC', type: 'number', placeholder: '1',
+    hint: `What this weapon costs against Encumbrance (p48). The book prints one per weapon: a Light Pistol is 1, a Combat Rifle or Shotgun 2, an Automatic Rifle 4.
+
+The sizes below are the guideline for anything the book does not price:
 
   0   fits a pocket
   1   carried in one hand

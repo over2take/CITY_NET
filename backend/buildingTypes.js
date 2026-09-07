@@ -12,7 +12,7 @@
 
 const BUILDING_TYPES = [
   { id: 'ripperdoc', label: 'Ripperdoc', shop: true, sells: 'cyberware' },
-  { id: 'gun_shop', label: 'Gun Shop', shop: true, sells: null },
+  { id: 'gun_shop', label: 'Gun Shop', shop: true, sells: 'weapons' },
   { id: 'clinic', label: 'Clinic', shop: true, sells: null },
   { id: 'garage', label: 'Garage', shop: true, sells: null },
   { id: 'bar', label: 'Bar', shop: false, sells: null },

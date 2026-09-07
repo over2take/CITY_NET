@@ -3,6 +3,8 @@ import { DraggableWindow } from './DraggableWindow';
 import { buildingTypeById } from '../data/buildingTypes';
 import { CWN_CYBERWARE, type CwnCyberPreset } from '../sheets/cwnCyberwarePresets';
 import { CYBERWARE_FIELD, readRows, normaliseRow } from '../sheets/cyberwareRows';
+import { CWN_WEAPONS, weaponToStashed, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
+import { STASH_FIELD, readStash, writeStash } from '../sheets/cwnWeaponStash';
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
 
 // A shop: what the building carries, and a way to take a piece away with you.
@@ -42,9 +44,13 @@ const cell: React.CSSProperties = {
   padding: '3px 6px', borderBottom: '1px solid var(--dark-green)', textAlign: 'left',
 };
 
-/** What the shop has on the shelf, which for now is one catalogue or none. */
+/** What the shop has on the shelf. Two catalogues so far, or none. */
 function stockFor(sells: string | null): CwnCyberPreset[] {
   return sells === 'cyberware' ? CWN_CYBERWARE : [];
+}
+
+function weaponStockFor(sells: string | null): CwnWeaponPreset[] {
+  return sells === 'weapons' ? CWN_WEAPONS : [];
 }
 
 export function ShopWindow({ name, buildingType, socket, userName, onClose }: Props) {
@@ -58,6 +64,31 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
 
   const type = buildingTypeById(buildingType);
   const stock = useMemo(() => stockFor(type?.sells ?? null), [type]);
+  const weaponStock = useMemo(() => weaponStockFor(type?.sells ?? null), [type]);
+  const sellsWeapons = (type?.sells ?? null) === 'weapons';
+
+  const shownWeapons = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return weaponStock;
+    return weaponStock.filter((w) =>
+      w.name.toLowerCase().includes(q) || w.note.toLowerCase().includes(q)
+      || w.category.includes(q));
+  }, [weaponStock, filter]);
+
+  /**
+   * Buying a weapon puts it in the stash, not into a carried row.
+   *
+   * You have walked out of a shop holding a bag; whether the thing ends up in your hands
+   * is a decision you make afterwards, on the sheet. It also means a shop can never fail
+   * for want of a free row, which is what "do not enforce how much someone can buy" needs
+   * in order to be true.
+   */
+  const buyWeapon = (w: CwnWeaponPreset) => {
+    if (!sheet) return;
+    const next = [...readStash(sheet.data), weaponToStashed(w, name || '')];
+    handleFieldChange(STASH_FIELD, writeStash(next) as never);
+    setTaken((t) => ({ ...t, [w.id]: (t[w.id] ?? 0) + 1 }));
+  };
 
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -119,7 +150,8 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
     >
       <div className="content" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ ...mono(9), color: 'var(--cyan)', marginBottom: 6 }}>
-          {type ? type.label.toUpperCase() : 'UNKNOWN'} · {stock.length} LINE{stock.length === 1 ? '' : 'S'}
+          {type ? type.label.toUpperCase() : 'UNKNOWN'} ·{' '}
+          {(sellsWeapons ? weaponStock.length : stock.length)} LINE{(sellsWeapons ? weaponStock.length : stock.length) === 1 ? '' : 'S'}
         </div>
 
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -133,15 +165,80 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
                 not move. A button that quietly does half of what it says is worse than one
                 that says which half. */}
             <div style={{ ...mono(9), color: 'var(--warning)', marginBottom: 8, letterSpacing: 0 }}>
-              {sheet
-                ? 'NOTHING IS CHARGED YET — BUY ADDS THE PIECE TO YOUR AUGMENTS, UNPLACED'
-                : 'NO CHARACTER SHEET LOADED — NOTHING TO BUY ONTO'}
+              {!sheet
+                ? 'NO CHARACTER SHEET LOADED — NOTHING TO BUY ONTO'
+                : sellsWeapons
+                  ? 'NOTHING IS CHARGED YET — BUY PUTS THE WEAPON IN YOUR STASH'
+                  : 'NOTHING IS CHARGED YET — BUY ADDS THE PIECE TO YOUR AUGMENTS, UNPLACED'}
             </div>
 
-            {stock.length === 0 ? (
+            {sellsWeapons ? (
+              <>
+                <input
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Filter by name, note or kind"
+                  aria-label="Filter stock"
+                  style={{
+                    background: 'var(--black)', border: '1px solid var(--dark-green)',
+                    color: 'var(--green)', fontFamily: 'monospace', fontSize: 11,
+                    padding: '3px 5px', width: '100%', marginBottom: 6,
+                  }}
+                />
+                {/* RANGE and MAG are shown and not bought: the sheet has no field for
+                    either, and picking a rifle without knowing its range is not a choice.
+                    Said here rather than discovered when they fail to appear. */}
+                <div style={{ ...mono(9), color: 'var(--grid-section)', marginBottom: 6, letterSpacing: 0 }}>
+                  Range and magazine are printed for reference — the sheet has nowhere to keep them yet.
+                </div>
+                <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                  <table style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
+                    <thead>
+                      <tr style={{ color: 'var(--grid-section)' }}>
+                        <th style={cell}>NAME</th>
+                        <th style={cell}>DMG</th>
+                        <th style={cell}>RANGE</th>
+                        <th style={{ ...cell, textAlign: 'right' }}>MAG</th>
+                        <th style={{ ...cell, textAlign: 'right' }}>ENC</th>
+                        <th style={{ ...cell, textAlign: 'right' }}>PRICE</th>
+                        <th style={cell}>NOTE</th>
+                        <th style={{ ...cell, textAlign: 'right' }}>&nbsp;</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shownWeapons.map((w) => (
+                        <tr key={w.id}>
+                          <td style={cell}>{w.name}</td>
+                          <td style={{ ...cell, color: 'var(--cyan)' }}>{w.dmg || '—'}</td>
+                          <td style={cell}>{w.range || '—'}</td>
+                          <td style={{ ...cell, textAlign: 'right' }}>{w.mag || '—'}</td>
+                          <td style={{ ...cell, textAlign: 'right' }}>{w.enc}</td>
+                          <td style={{ ...cell, textAlign: 'right' }}>
+                            {w.price === 0 ? 'N/A' : `${w.price.toLocaleString()}cr`}
+                          </td>
+                          <td style={{ ...cell, color: 'var(--grid-section)' }}>{w.note}</td>
+                          <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button
+                              type="button"
+                              className="utility-btn"
+                              disabled={!sheet}
+                              aria-label={`Buy ${w.name}`}
+                              onClick={() => buyWeapon(w)}
+                            >BUY</button>
+                            {taken[w.id] ? (
+                              <span style={{ marginLeft: 6, color: 'var(--cyan)' }}>x{taken[w.id]}</span>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : stock.length === 0 ? (
               <div style={{ ...mono(10), color: 'var(--grid-section)', padding: '10px 0', letterSpacing: 0 }}>
-                NO CATALOGUE FOR THIS SHOP YET. Cyberware is the only stock list built so far;
-                weapons, armour and drugs are still to come.
+                NO CATALOGUE FOR THIS SHOP YET. Cyberware and weapons are the stock lists built
+                so far; armour and drugs are still to come.
               </div>
             ) : (
               <>

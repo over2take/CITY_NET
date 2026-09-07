@@ -101,34 +101,16 @@ describe('the CARRY and ENC pair on a weapon', () => {
     expect(cells[1]).toBe('ENC');
   });
 
-  /**
-   * The weapon's, specifically.
-   *
-   * Armor has an ENC too, and it is a number box rather than a picker - both are labelled
-   * ENC and both live on the GEAR tab, so the first match is whichever renders first.
-   */
-  const weaponEnc = () =>
-    screen.getAllByLabelText('ENC').find((el) => el.tagName === 'SELECT') as HTMLSelectElement;
-
-  it('offers only the sizes the book prints', async () => {
-    show(LOADED);
-    await gear();
-    expect([...weaponEnc().options].map((o) => o.value)).toEqual(['', '0', '1', '2', '5', '12']);
-  });
-
-  it('writes the size to that weapon', async () => {
+  it('takes any Enc the book prints, not a fixed list', async () => {
+    // It was a picker of the five guideline sizes until the Automatic Rifle turned up at
+    // 4, which the picker could not express. The weapon and armour tables print their own
+    // values and the guideline's last row is "5+", so it is typed.
     const wrote = show(LOADED);
     await gear();
-    await userEvent.selectOptions(weaponEnc(), '2');
-    expect(wrote).toHaveBeenCalledWith('weapon1_enc', '2');
-  });
+    const boxes = screen.getAllByLabelText('ENC') as HTMLInputElement[];
+    expect(boxes.every((b) => b.tagName === 'INPUT')).toBe(true);
 
-  it("keeps armor's own ENC as a number box, not a picker", async () => {
-    // Two fields share the label on one tab. They mean the same thing and are entered
-    // differently: armor's comes off the book's armor table as a plain number.
-    show(LOADED);
-    await gear();
-    const armorEnc = screen.getAllByLabelText('ENC').find((el) => el.tagName === 'INPUT');
-    expect(armorEnc).toBeTruthy();
+    await userEvent.type(boxes[boxes.length - 1], '4');
+    expect(wrote.mock.calls.some(([id, v]) => /^weapon\d+_enc$/.test(id) && v === 4)).toBe(true);
   });
 });
