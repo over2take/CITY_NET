@@ -36,12 +36,22 @@ interface Props {
 /** Systems that have an experience field. Mirrors XP_FIELD in backend/sheets/awardXp.js. */
 const SYSTEMS_WITH_XP = ['cities_without_number'];
 
+/**
+ * Whether to offer experience at all on this system.
+ *
+ * Exported so the admin panel can hide the button rather than offering one that opens a
+ * window saying no. The window keeps its own check anyway - the button is a courtesy, not
+ * the gate.
+ */
+export const xpAvailable = (system: string | undefined | null): boolean =>
+  SYSTEMS_WITH_XP.includes(String(system ?? ''));
+
 export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers, system }: Props) {
   const [amount, setAmount] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [outcome, setOutcome] = useState<XpAwardResult | null>(null);
 
-  const supported = SYSTEMS_WITH_XP.includes(String(system ?? ''));
+  const supported = xpAvailable(system);
 
   const players = (activeUsers || [])
     .filter((u) => !u.isNPC && !(u.isAdmin && !u.isTemporaryAdmin))

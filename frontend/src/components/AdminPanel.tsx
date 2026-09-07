@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BUILDING_TYPES, shopsAvailable } from '../data/buildingTypes';
+import { xpAvailable } from './XpWindow';
 import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
@@ -1056,8 +1057,13 @@ export function AdminPanel({
               <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
               {/* Beside PAY_PLAYERS because it is the same gesture at the end of a
                   session, and deliberately named for what it does: that one splits a pot,
-                  this one gives each character the same number. */}
-              <button onClick={() => setIsAdminXpOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>AWARD_EXPERIENCE</button>
+                  this one gives each character the same number.
+                  Hidden where the system has no experience at all - Cyberpunk RED spends
+                  Improvement Points and Shadowrun spends Karma - rather than offering a
+                  button whose only outcome is a window saying no. */}
+              {xpAvailable(globalSettings['game_system']) && (
+                <button onClick={() => setIsAdminXpOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>AWARD_EXPERIENCE</button>
+              )}
               <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
               <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
                 <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setPurgeConfirm({ label: 'CLEAR ALL CHAT HISTORY?', onConfirm: async () => { await fetch('/api/chat/purge', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); } })}>PURGE_CHAT_HISTORY</button>

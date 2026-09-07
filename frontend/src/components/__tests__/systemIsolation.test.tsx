@@ -21,6 +21,7 @@ import { typesFor, CWN_TYPES, CPR_TYPES } from '../../sheets/cyberwareLocations'
 import { readRows, totalHumanityLoss, totalStrain } from '../../sheets/cyberwareRows';
 import { sheetEffects } from '../../sheets/cyberwareEffects';
 import { shopsAvailable } from '../../data/buildingTypes';
+import { xpAvailable } from '../XpWindow';
 
 const CWN = getTemplate('cities_without_number');
 const CPR = getTemplate('cyberpunk_red');
@@ -326,5 +327,76 @@ describe('concealment is rated by Cities Without Number only', () => {
     expect(screen.getByRole('columnheader', { name: /CONC/ })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Edit Neural Link' }));
     expect(screen.getByLabelText('Concealment')).toBeInTheDocument();
+  });
+});
+
+describe("this session's CWN work reaches no other system", () => {
+  /**
+   * One place to answer "is that gated?" without reading four files.
+   *
+   * The sheet fields, the experience window and the house rule are all Cities Without
+   * Number. What is deliberately NOT gated is the renderer work underneath them - the
+   * radio control, custom tag entry, full-width fields, negatives in number boxes - which
+   * are improvements to the shared sheet engine and belong to every system.
+   */
+  const idsOf = (t: typeof CPR) => t.sections.flatMap((s) => (s.fields ?? []).map((f) => f.id));
+
+  const CWN_ONLY_FIELDS = [
+    'move_mod',                   // Move rate's manual modifier
+    'languages',                  // Languages
+    'xp',                         // Experience
+    'weapon1_carry', 'weapon2_carry', 'weapon3_carry', 'weapon4_carry', // Readied/Stowed
+  ];
+
+  // `move` is deliberately absent from that list, and it is the interesting case: both
+  // CWN and Cyberpunk RED have a field with that id and they are different stats. CWN's
+  // is derived in meters from a flat base plus chrome; CP:R's is an attribute the player
+  // sets and its own rules multiply. Sharing an id is safe because templates are
+  // per-system, but only while neither borrows the other's behaviour - which is what the
+  // test below actually checks.
+
+  it('puts none of the new fields on another system', () => {
+    for (const t of [CPR, SR6, GENERIC]) {
+      for (const id of CWN_ONLY_FIELDS) expect(idsOf(t), `${t.id}: ${id}`).not.toContain(id);
+    }
+  });
+
+  it('puts all of them on CWN, so the guard above is not passing for free', () => {
+    for (const id of CWN_ONLY_FIELDS) expect(idsOf(CWN), id).toContain(id);
+  });
+
+  it('gives the experience bar to CWN alone', () => {
+    expect(CWN.header?.xpBar).toBeTruthy();
+    for (const t of [CPR, SR6, GENERIC]) expect(t.header?.xpBar, t.id).toBeUndefined();
+  });
+
+  it('offers the experience window on CWN alone', () => {
+    expect(xpAvailable('cities_without_number')).toBe(true);
+    for (const s of ['cyberpunk_red', 'shadowrun_6e', 'generic', '', null, undefined]) {
+      expect(xpAvailable(s), String(s)).toBe(false);
+    }
+  });
+
+  it('keeps the two MOVE fields apart, which share an id and mean different things', () => {
+    const fieldOf = (t: typeof CPR) =>
+      t.sections.flatMap((sec) => sec.fields ?? []).find((f) => f.id === 'move');
+    // CWN's is computed from the base 10m and the chrome.
+    expect(fieldOf(CWN)?.derived).toBe(true);
+    // Cyberpunk RED's is an attribute somebody types, and must not pick up a derivation
+    // from another game's book.
+    expect(fieldOf(CPR)?.derived).toBeUndefined();
+    // And nobody else has one at all.
+    for (const t of [SR6, GENERIC]) expect(fieldOf(t), t.id).toBeUndefined();
+  });
+
+  it('leaves the shared renderer work available to everyone', () => {
+    // The other half of the answer. These are sheet-engine improvements, not CWN rules,
+    // and gating them would mean four copies of a control instead of one.
+    const cprFields = idsOf(CPR);
+    expect(cprFields.length).toBeGreaterThan(0);
+    // Cyberpunk RED keeps its own MOVE, which shares an id with CWN's and is a different
+    // stat - typed by the player, not derived from anything.
+    const cprMove = CPR.sections.flatMap((s) => s.fields ?? []).find((f) => f.id === 'move');
+    expect(cprMove?.derived).toBeUndefined();
   });
 });
