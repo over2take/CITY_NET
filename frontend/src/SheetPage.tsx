@@ -76,7 +76,7 @@ export default function SheetPage() {
     return () => { s.disconnect(); };
   }, [userName, playerToken, adminToken]);
 
-  const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, hiddenTabs, actions } =
+  const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, xpRate, hiddenTabs, actions } =
     usePlayerSheet(socket, userName);
 
   const handlePortraitUpload = useCallback(
@@ -133,6 +133,7 @@ export default function SheetPage() {
               onRoll={actions.onRoll}
               onDeathSave={actions.onDeathSave}
               onStabilize={actions.onStabilize}
+              xpRate={xpRate}
               onCastSpell={actions.onCastSpell}
               onRollAbility={actions.onRollAbility}
               onResistDrain={actions.onResistDrain}

@@ -16,7 +16,8 @@ export interface XpAwardResult {
   ok: boolean;
   reason?: string;
   amount?: number;
-  results?: { username: string; ok: boolean; xp?: number; reason?: string }[];
+  levelChange?: number;
+  results?: { username: string; ok: boolean; xp?: number; level?: number; reason?: string }[];
 }
 
 interface Props {
@@ -58,6 +59,20 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
 
   const toggle = (u: string) =>
     setSelected((prev) => (prev.includes(u) ? prev.filter((x) => x !== u) : [...prev, u]));
+
+  /**
+   * Levelling is its own message, not an award of some XP figure.
+   *
+   * XP records what was earned; a level is a decision made from it. A GM fixing a level
+   * should not have to work out what XP total would produce it, and taking XP back does
+   * not un-level anyone - the skill points and Focus that came with the level do not undo
+   * themselves.
+   */
+  const changeLevel = (delta: number) => {
+    if (selected.length === 0) return;
+    setOutcome(null);
+    socket?.emit('adminAdjustLevel', { token, usernames: selected, delta });
+  };
 
   const send = (who: string[]) => {
     const n = Number(amount);
@@ -120,6 +135,24 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
               >{verb}_ALL</button>
             </div>
 
+            <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
+              <div style={{ fontSize: '11px', opacity: 0.6, marginBottom: '5px' }}>
+                Levels for the selected characters, if one needs correcting.
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  className="utility-btn" style={{ flex: 1 }}
+                  disabled={selected.length === 0}
+                  onClick={() => changeLevel(-1)}
+                >LEVEL_DOWN</button>
+                <button
+                  className="utility-btn" style={{ flex: 1 }}
+                  disabled={selected.length === 0}
+                  onClick={() => changeLevel(1)}
+                >LEVEL_UP</button>
+              </div>
+            </div>
+
             {outcome && (
               <div style={{ marginTop: '10px', fontSize: '11px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
                 {!outcome.ok ? (
@@ -128,7 +161,9 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
                   <>
                     {(outcome.results ?? []).map((r) => (
                       <div key={r.username} style={{ color: r.ok ? undefined : 'var(--danger)' }}>
-                        {r.username}: {r.ok ? `${r.xp} XP` : (r.reason ?? 'no sheet')}
+                        {r.username}: {!r.ok
+                          ? (r.reason ?? 'no sheet')
+                          : r.level !== undefined ? `level ${r.level}` : `${r.xp} XP`}
                       </div>
                     ))}
                   </>

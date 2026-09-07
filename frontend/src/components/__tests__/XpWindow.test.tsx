@@ -105,6 +105,48 @@ describe('what it refuses to send', () => {
   });
 });
 
+describe('correcting a level', () => {
+  const levels = (emit: ReturnType<typeof vi.fn>) =>
+    emit.mock.calls.filter((c) => c[0] === 'adminAdjustLevel').map((c) => c[1]);
+
+  it('steps the selected characters down', async () => {
+    const { emit } = show();
+    await userEvent.click(screen.getByLabelText('ghost'));
+    await userEvent.click(screen.getByRole('button', { name: 'LEVEL_DOWN' }));
+    expect(levels(emit)).toEqual([{ token: 't', usernames: ['ghost'], delta: -1 }]);
+  });
+
+  it('steps them up', async () => {
+    const { emit } = show();
+    await userEvent.click(screen.getByLabelText('ghost'));
+    await userEvent.click(screen.getByRole('button', { name: 'LEVEL_UP' }));
+    expect(levels(emit)[0]).toMatchObject({ delta: 1 });
+  });
+
+  it('needs somebody selected', async () => {
+    show();
+    expect(screen.getByRole('button', { name: 'LEVEL_DOWN' })).toBeDisabled();
+  });
+
+  it('does not need an XP amount, since a level is not an award', async () => {
+    // The two are separate: a GM fixing a level should not have to invent an XP figure.
+    const { emit } = show();
+    await userEvent.click(screen.getByLabelText('ghost'));
+    expect(screen.getByRole('button', { name: 'LEVEL_DOWN' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'LEVEL_DOWN' }));
+    expect(levels(emit)).toHaveLength(1);
+    expect(emit.mock.calls.filter((c) => c[0] === 'adminAwardXp')).toEqual([]);
+  });
+
+  it('reports the level that came back', async () => {
+    const { handlers } = show();
+    handlers.xpAwardResult({
+      ok: true, levelChange: -1, results: [{ username: 'ghost', ok: true, level: 3 }],
+    });
+    expect(await screen.findByText('ghost: level 3')).toBeInTheDocument();
+  });
+});
+
 describe('systems that do not have experience', () => {
   it('says so rather than offering a button that does nothing', () => {
     // Cyberpunk RED spends Improvement Points and Shadowrun spends Karma. Both real,

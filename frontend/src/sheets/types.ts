@@ -192,8 +192,10 @@ export interface SheetHeader {
   luckLabel?: string;
   /** An experience bar under the HP bar, filling from what this level cost toward what
    *  the next one does. Display only: levelling is a choice a player makes, so the bar
-   *  says when they are ready and leaves the level field alone. */
-  xpBar?: { xpField: string; levelField: string; rateField: string };
+   *  says when they are ready and leaves the level field alone.
+   *  Which threshold column it measures against is a house rule, not a field - the whole
+   *  table advances at one rate. */
+  xpBar?: { xpField: string; levelField: string };
 }
 
 /** How this system's defense value appears on tokens. When absent, the

@@ -53,6 +53,9 @@ interface SheetRendererProps {
   /** House-rule gate: show the 1-LUCK fumble shield control. Off = a natural
    *  1 always fumbles and the button is hidden. */
   allowFumbleShield?: boolean;
+  /** Which XP column the table advances on - the cwn_slow_advancement house rule. The
+   *  whole table uses one, so it arrives as a setting rather than off the sheet. */
+  xpRate?: 'fast' | 'slow';
   /** A section's header button was pressed. Sections declare the label; what it does is
    *  the surface's business — the renderer has no idea what a window is. */
   onSectionAction?: (sectionId: string) => void;
@@ -465,7 +468,7 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilt
   );
 }
 
-function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, canRoll }: {
+function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll }: {
   template: SheetTemplate; data: SheetData; portraitUrl?: string | null;
   onPortraitUpload?: (file: File) => void;
   portraitShadow?: boolean;
@@ -481,6 +484,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
   armedNegate?: boolean;
   setArmedNegate?: (v: boolean) => void;
   allowFumbleShield?: boolean;
+  xpRate?: 'fast' | 'slow';
   canRoll?: boolean;
 }) {
   const h = template.header;
@@ -654,7 +658,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
           // how far through something am I. Display only - the number is typed on the
           // STATS tab, and the level field stays the player's, since advancing grants
           // skill points and sometimes a Focus and both are choices.
-          const p = xpProgress(data);
+          const p = xpProgress(data, xpRate);
           const ready = p.ready || p.capped;
           const barColor = ready ? 'var(--cyan)' : 'var(--green)';
           return (
@@ -1418,7 +1422,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // What the character's chrome is doing to their numbers. Computed once for the whole
@@ -1474,7 +1478,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
       `}</style>
 
-      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} canRoll={!!onRoll} />
+      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} />
 
       {/* The sheet body, and the thing that actually scrolls — not the window's own
           content box, which sits outside it. The right padding is what keeps the

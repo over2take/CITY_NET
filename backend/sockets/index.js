@@ -1793,6 +1793,31 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
+    /**
+     * Move a character up or down a level.
+     *
+     * Its own message rather than a flag on the award: XP records what was earned, a
+     * level is a decision made from it, and taking XP back does not un-level anyone -
+     * the skill points and Focus that came with the level do not undo themselves.
+     */
+    socket.on('adminAdjustLevel', (data) => {
+      if (!data || !data.token || !Array.isArray(data.usernames)) return;
+      jwt.verify(data.token, SECRET, (err, decoded) => {
+        if (err) return;
+        if (decoded.isTemporary || (decoded.role && decoded.role !== 'admin')) return;
+        getGameSystem((sysErr, system) => {
+          if (sysErr) return;
+          awardXpModule.adjustLevel(db, { system, usernames: data.usernames, delta: data.delta }, (reason, results) => {
+            if (reason) return socket.emit('xpAwardResult', { ok: false, reason });
+            socket.emit('xpAwardResult', { ok: true, levelChange: Number(data.delta), results });
+            results.filter((r) => r.ok).forEach((r) => {
+              io.emit('sheetUpdated', { username: r.username, system });
+            });
+          });
+        });
+      });
+    });
+
     socket.on('adminUpdateBank', (data) => {
       if (!data || !data.token || !data.username) return;
       jwt.verify(data.token, SECRET, (err, decoded) => {

@@ -8,10 +8,14 @@
 
 export type XpRate = 'fast' | 'slow';
 
-export const CWN_XP_RATES: { value: XpRate; label: string }[] = [
-  { value: 'fast', label: 'FAST' },
-  { value: 'slow', label: 'SLOW' },
-];
+/**
+ * Which column a table uses is the GM's decision, not each character's.
+ *
+ * So it is a house rule (`cwn_slow_advancement`) rather than a field on the sheet. As a
+ * field it would have to be set on every character and could disagree between them, which
+ * is not a state the rules have a meaning for.
+ */
+export const SLOW_ADVANCEMENT_RULE = 'cwn_slow_advancement';
 
 /** Total XP needed to REACH each level, indexed by level. Level 1 costs nothing. */
 const THRESHOLDS: Record<XpRate, number[]> = {
@@ -74,8 +78,11 @@ export interface XpProgress {
  * both of which are choices a player makes, so the sheet says "ready" and leaves the level
  * field to the person who picked the skills.
  */
-export const xpProgress = (data: Record<string, unknown> | undefined | null): XpProgress => {
-  const rate = rateOf(data?.xp_rate);
+export const xpProgress = (
+  data: Record<string, unknown> | undefined | null,
+  rateSetting?: unknown,
+): XpProgress => {
+  const rate = rateOf(rateSetting);
   const level = levelOf(data?.level);
   const xp = Math.max(0, num(data?.xp));
   const nextLevel = level >= CWN_MAX_LEVEL ? null : level + 1;

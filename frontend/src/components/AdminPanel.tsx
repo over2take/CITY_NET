@@ -2146,6 +2146,11 @@ const CWN_HOUSE_RULES: HouseRuleDef[] = [
     defaultOn: true,
   },
   {
+    settingKey: 'cwn_slow_advancement',
+    label: 'SLOW ADVANCEMENT',
+    title: "House rule: the book prints two XP columns and tells the table to pick one (p44). Off = FAST, which reaches level 2 at 3 XP and level 10 at 93. On = SLOW, 6 and 139 - suited to a long-running game. The whole table advances on one column, so this is set once here rather than on each sheet.",
+  },
+  {
     settingKey: 'cwn_deluxe',
     label: 'DELUXE EDITION (SPELLCASTING + SUMMONING)',
     title: 'CWN Deluxe Edition: enables Spellcasting and Summoning on character sheets, including Mage Effort, Summoner Effort, and one-click casting. Off by default.',

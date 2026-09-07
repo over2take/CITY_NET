@@ -10,7 +10,6 @@ import {
   labelArmorMod, labelWeaponMod,
 } from '../cwnGearMods';
 import { CWN_LANGUAGE_OPTIONS, summariseLanguages } from '../cwnLanguages';
-import { CWN_XP_RATES } from '../cwnAdvancement';
 
 // Cities Without Number template.
 //
@@ -276,7 +275,7 @@ export const citiesWithoutNumber: SheetTemplate = {
     chips: [
       { field: 'base_hit_bonus', label: 'BHB' },
     ],
-    xpBar: { xpField: 'xp', levelField: 'level', rateField: 'xp_rate' },
+    xpBar: { xpField: 'xp', levelField: 'level' },
   },
   tabs: ['STATS', 'SKILLS', 'GEAR', 'DELUXE', 'NOTES'],
   sections: [
@@ -291,13 +290,6 @@ export const citiesWithoutNumber: SheetTemplate = {
         { id: 'class', label: 'Class', type: 'text', visibility: 'public', placeholder: 'Operator' },
         { id: 'level', label: 'Level', type: 'number', placeholder: '1', hint: "Your character level, 1 to 10. Set by hand when you advance: levelling grants three skill points and, at 2, 5, 7 and 10, a Focus - all choices the sheet should not make for you. The EXP bar says when you have earned it." },
         { id: 'xp', label: 'Experience', type: 'number', placeholder: '0', hint: 'Experience points earned so far, cumulative. Usually 1-3 a session for a job done, more for something well beyond your weight.' },
-        { id: 'xp_rate', label: 'XP Rate', type: 'select', options: CWN_XP_RATES, hint: `Which of the book's two advancement columns your table uses (p44).
-
-           L2  L3  L4  L5  L6  L7  L8  L9  L10
-  Fast      3   6  12  18  27  39  54  72   93
-  Slow      6  15  24  36  51  69  87 105  139
-
-Fast suits a campaign that wants to see progress; slow suits a long-running game. The GM picks, and can tweak either.` },
         { id: 'description', label: 'Description', type: 'textarea', visibility: 'public', placeholder: 'Chromed left arm, mirrorshades, never blinks' },
         { id: 'aliases', label: 'Aliases', type: 'text', placeholder: 'The Wraith' },
       ],

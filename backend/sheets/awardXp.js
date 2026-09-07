@@ -107,4 +107,58 @@ const awardXp = (db, { system, usernames, amount }, cb = () => {}) => {
   });
 };
 
-module.exports = { XP_FIELD, xpFieldFor, supportsXp, applyAward, validate, awardXp };
+/** The levels the book prints a cost for (CWN p44). */
+const MIN_LEVEL = 1;
+const MAX_LEVEL = 10;
+
+/**
+ * What a level change does to one character.
+ *
+ * Clamped to the levels the book has: 1 is where operators start and 10 is the top of the
+ * table, so neither end runs off into numbers with no thresholds behind them. A blank
+ * level reads as 1 for the same reason the sheet does.
+ */
+const applyLevel = (current, delta) => {
+  const from = Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, num(current) || MIN_LEVEL));
+  const to = Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, from + num(delta)));
+  return { from, to, delta: to - from };
+};
+
+/**
+ * Move a character up or down a level.
+ *
+ * Separate from awarding experience on purpose. XP is a record of what was earned and
+ * levelling is a decision made from it - a GM correcting a level should not have to
+ * invent an XP figure to do it, and taking XP back does not un-level anybody, because
+ * the skill points and Focus picks that came with the level do not undo themselves.
+ */
+const adjustLevel = (db, { system, usernames, delta }, cb = () => {}) => {
+  if (!supportsXp(system)) return cb('This system does not track levels.', null);
+  if (!Array.isArray(usernames) || usernames.length === 0) return cb('Nobody selected.', null);
+  const step = Number(delta);
+  if (!Number.isInteger(step) || step === 0) return cb('Level change must be a whole number.', null);
+
+  const results = [];
+  let remaining = usernames.length;
+  usernames.forEach((username) => {
+    mutateSheetForUser(
+      db,
+      { username, system },
+      (data) => {
+        data.level = applyLevel(data.level, step).to;
+        return data;
+      },
+      (err, data) => {
+        if (err || !data) results.push({ username, ok: false, reason: 'No sheet.' });
+        else results.push({ username, ok: true, level: num(data.level) });
+        remaining -= 1;
+        if (remaining === 0) cb(null, results);
+      },
+    );
+  });
+};
+
+module.exports = {
+  XP_FIELD, xpFieldFor, supportsXp, applyAward, validate, awardXp,
+  MIN_LEVEL, MAX_LEVEL, applyLevel, adjustLevel,
+};

@@ -150,3 +150,63 @@ describe('awarding a party', () => {
     expect(await readXp('ghost', 'cyberpunk_red')).toBeUndefined();
   });
 });
+
+describe('moving a character up or down a level', () => {
+  const level = (opts) => new Promise((resolve) => {
+    xp.adjustLevel(db, opts, (reason, results) => resolve({ reason, results }));
+  });
+  const readLevel = (username) => new Promise((resolve) => {
+    db.get('SELECT data FROM character_sheets WHERE username = ?', [username],
+      (e, row) => resolve(row ? JSON.parse(row.data).level : undefined));
+  });
+
+  it('steps down', async () => {
+    await sheet('ghost', { level: 4, xp: 20 });
+    await level({ system: 'cities_without_number', usernames: ['ghost'], delta: -1 });
+    expect(await readLevel('ghost')).toBe(3);
+  });
+
+  it('steps up', async () => {
+    await sheet('ghost', { level: 4 });
+    await level({ system: 'cities_without_number', usernames: ['ghost'], delta: 1 });
+    expect(await readLevel('ghost')).toBe(5);
+  });
+
+  it('stops at the levels the book has', async () => {
+    // 1 is where operators start and 10 is the top of the table. Outside those the
+    // thresholds have nothing behind them.
+    expect(xp.applyLevel(1, -1)).toEqual({ from: 1, to: 1, delta: 0 });
+    expect(xp.applyLevel(10, 1)).toEqual({ from: 10, to: 10, delta: 0 });
+    await sheet('ghost', { level: 1 });
+    await level({ system: 'cities_without_number', usernames: ['ghost'], delta: -1 });
+    expect(await readLevel('ghost')).toBe(1);
+  });
+
+  it('reads a blank level as 1, like the sheet does', () => {
+    expect(xp.applyLevel(undefined, 1).to).toBe(2);
+    expect(xp.applyLevel(0, 1).to).toBe(2);
+  });
+
+  it('leaves experience alone', async () => {
+    // The two are separate on purpose: taking a level back does not un-earn the XP, and
+    // the skill points that came with the level do not undo themselves either.
+    await sheet('ghost', { level: 4, xp: 20 });
+    await level({ system: 'cities_without_number', usernames: ['ghost'], delta: -1 });
+    expect(await readXp('ghost')).toBe(20);
+  });
+
+  it('refuses a system with no levels, and a change of zero', async () => {
+    expect((await level({ system: 'cyberpunk_red', usernames: ['a'], delta: 1 })).reason).toBeTruthy();
+    expect((await level({ system: 'cities_without_number', usernames: ['a'], delta: 0 })).reason).toBeTruthy();
+    expect((await level({ system: 'cities_without_number', usernames: [], delta: 1 })).reason).toBeTruthy();
+  });
+
+  it('reports each character, and names one with no sheet', async () => {
+    await sheet('ghost', { level: 2 });
+    const { results } = await level({
+      system: 'cities_without_number', usernames: ['ghost', 'nobody'], delta: 1,
+    });
+    expect(results.find((r) => r.username === 'ghost')).toMatchObject({ ok: true, level: 3 });
+    expect(results.find((r) => r.username === 'nobody')).toMatchObject({ ok: false });
+  });
+});
