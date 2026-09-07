@@ -866,30 +866,41 @@ function FullWidthField({ field, data, readOnly, onFieldChange, onFieldsChange, 
     ? (allFields ?? []).find((f) => f.id === field.inlineField)
     : undefined;
 
+  const labelStyle: React.CSSProperties = {
+    fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px', textAlign: 'left',
+  };
+
+  const control = (f: SheetField) => (
+    <FieldInput
+      field={f}
+      data={data}
+      readOnly={readOnly}
+      onFieldChange={onFieldChange}
+      onFieldsChange={onFieldsChange}
+      style={{ padding: '2px 4px', fontSize: '0.7rem' }}
+    />
+  );
+
   const one = (f: SheetField) => (
     <div key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-      <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px', textAlign: 'left' }}>
-        {f.label}
-      </div>
-      <FieldInput
-        field={f}
-        data={data}
-        readOnly={readOnly}
-        onFieldChange={onFieldChange}
-        onFieldsChange={onFieldsChange}
-        style={{ padding: '2px 4px', fontSize: '0.7rem' }}
-      />
+      <div style={labelStyle}>{f.label}</div>
+      {control(f)}
     </div>
   );
 
   return (
     <div style={{ gridColumn: '1 / -1', margin: '2px 0' }}>
       {inline ? (
-        // Two short controls that would each waste a line alone. Sized so the pair reads
-        // as one row rather than two things that happen to be adjacent.
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-          <div style={{ flex: '0 0 auto' }}>{one(field)}</div>
-          <div style={{ flex: '0 0 120px' }}>{one(inline)}</div>
+        // Two short controls that would each waste a line alone. A grid rather than a
+        // flex row: the controls are different heights - a pair of radios against a select
+        // - and aligning the columns by either edge put the two labels on different lines.
+        // Two explicit rows keeps the labels level with each other and the controls level
+        // with each other, whatever is in them.
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 120px', gap: '2px 12px', justifyContent: 'start' }}>
+          <div style={labelStyle}>{field.label}</div>
+          <div style={labelStyle}>{inline.label}</div>
+          <div style={{ alignSelf: 'center' }}>{control(field)}</div>
+          <div style={{ alignSelf: 'center' }}>{control(inline)}</div>
         </div>
       ) : one(field)}
     </div>
