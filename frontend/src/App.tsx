@@ -31,6 +31,7 @@ import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
 import { CityDataBaseMenu } from './components/CityDatabase';
 import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './components/BankWindows';
+import { AdminXpWindow } from './components/XpWindow';
 import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, CharacterControlsMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
@@ -331,6 +332,8 @@ function App() {
   const [adminBankPlayer, setAdminBankPlayer] = useState<string | null>(null);
   const [adminBankPos, setAdminBankPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 100 }));
   const [isAdminPayOpen, setIsAdminPayOpen] = useState(false);
+  const [isAdminXpOpen, setIsAdminXpOpen] = useState(false);
+  const [adminXpPos, setAdminXpPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
   const [adminPayPos, setAdminPayPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
   useEffect(() => {
     const handleClear = () => { (window as any).hasUnsavedChanges = false; };
@@ -1750,6 +1753,7 @@ function App() {
               <AdminPanel
                 isAdmin={isAdmin}
                 setIsAdminPayOpen={setIsAdminPayOpen}
+                setIsAdminXpOpen={setIsAdminXpOpen}
                 isPrimaryAdmin={isPrimaryAdmin}
                 setShowBattleMapManager={setShowBattleMapManager}
                 isPlantingTrees={isPlantingTrees} setIsPlantingTrees={setIsPlantingTrees}
@@ -1920,6 +1924,17 @@ function App() {
                   targetUser={adminBankPlayer}
                   socket={socketRef.current}
                   token={token}
+              />
+            )}
+            {isAdminXpOpen && (
+              <AdminXpWindow
+                  pos={adminXpPos}
+                  setPos={setAdminXpPos}
+                  onClose={() => setIsAdminXpOpen(false)}
+                  socket={socketRef.current}
+                  token={token}
+                  activeUsers={activeUsers}
+                  system={gameSystem}
               />
             )}
             {isAdminPayOpen && (

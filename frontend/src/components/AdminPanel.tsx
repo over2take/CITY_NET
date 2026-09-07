@@ -44,7 +44,7 @@ import { parseGrant, describeGrant } from '../utils/tokenControl';
 function BattleAdminPanel({
   token, isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly,
   tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, locations, refreshLocations,
-  handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, secureModeEnabled, onLogout,
+  handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen, secureModeEnabled, onLogout,
   globalSettings, fetchGlobalSettings, onOpenNpcLibrary, activeUsers,
 }: any) {
   const [tab, setTab] = useState<'battle_map' | 'game'>('battle_map');
@@ -182,7 +182,7 @@ export function AdminPanel({
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
-    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen,
+    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen, setIsAdminXpOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
@@ -199,7 +199,7 @@ export function AdminPanel({
         tempBattleMapScale={tempBattleMapScale} setTempBattleMapScale={setTempBattleMapScale}
         activeBattleMapData={activeBattleMapData} locations={locations} refreshLocations={refreshLocations}
         handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
-        setIsAdminPayOpen={setIsAdminPayOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
+        setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
         globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings}
         onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers}
       />
@@ -1054,6 +1054,10 @@ export function AdminPanel({
                 </div>
               </div>
               <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
+              {/* Beside PAY_PLAYERS because it is the same gesture at the end of a
+                  session, and deliberately named for what it does: that one splits a pot,
+                  this one gives each character the same number. */}
+              <button onClick={() => setIsAdminXpOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>AWARD_EXPERIENCE</button>
               <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
               <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
                 <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setPurgeConfirm({ label: 'CLEAR ALL CHAT HISTORY?', onConfirm: async () => { await fetch('/api/chat/purge', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); } })}>PURGE_CHAT_HISTORY</button>

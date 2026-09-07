@@ -9,6 +9,7 @@ const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
 const cyberEffects = require('../sheets/cyberwareEffects');
 const attackCwn = require('../sheets/attackCwn');
+const awardXpModule = require('../sheets/awardXp');
 const tokenControl = require('./tokenControl');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
@@ -1758,6 +1759,35 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             } else {
               db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, 0)', [uname, amountPerPlayer], () => sendBankUpdate(uname));
             }
+          });
+        });
+      });
+    });
+
+    /**
+     * Award or take back experience (CWN p44).
+     *
+     * Deliberately not the shape of adminPayPlayers above. Money is a pot the GM splits
+     * between whoever was on the job; experience is per character, so each name gets the
+     * full amount. Splitting it would mean a full party earned less each than a pair, and
+     * the book says the opposite. The arithmetic and the rules live in sheets/awardXp.js.
+     */
+    socket.on('adminAwardXp', (data) => {
+      if (!data || !data.token || !Array.isArray(data.usernames)) return;
+      jwt.verify(data.token, SECRET, (err, decoded) => {
+        if (err) return;
+        if (decoded.isTemporary || (decoded.role && decoded.role !== 'admin')) return;
+        getGameSystem((sysErr, system) => {
+          if (sysErr) return;
+          awardXpModule.awardXp(db, { system, usernames: data.usernames, amount: data.amount }, (reason, results) => {
+            if (reason) return socket.emit('xpAwardResult', { ok: false, reason });
+            // Told to the GM who asked, so a name that did nothing is visible rather than
+            // looking like the button missed.
+            socket.emit('xpAwardResult', { ok: true, amount: Number(data.amount), results });
+            // And to each player, whose sheet is showing an EXP bar that just moved.
+            results.filter((r) => r.ok).forEach((r) => {
+              io.emit('sheetUpdated', { username: r.username, system });
+            });
           });
         });
       });
