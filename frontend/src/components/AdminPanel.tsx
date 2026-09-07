@@ -2157,6 +2157,11 @@ const CWN_HOUSE_RULES: HouseRuleDef[] = [
     title: "House rule: the book prints two XP columns and tells the table to pick one (p44). Off = FAST, which reaches level 2 at 3 XP and level 10 at 93. On = SLOW, 6 and 139 - suited to a long-running game. The whole table advances on one column, so this is set once here rather than on each sheet.",
   },
   {
+    settingKey: 'cwn_encumbrance',
+    label: 'ENCUMBRANCE',
+    title: "House rule: what a character carries comes off their Move - 30% over the limits, 50% a step past that (p48). Off by default, and the book agrees: it says outright that some tables prefer not to use these rules. The count is shown at the top of GEAR either way; this decides whether it costs anything.",
+  },
+  {
     settingKey: 'cwn_deluxe',
     label: 'DELUXE EDITION (SPELLCASTING + SUMMONING)',
     title: 'CWN Deluxe Edition: enables Spellcasting and Summoning on character sheets, including Mage Effort, Summoner Effort, and one-click casting. Off by default.',

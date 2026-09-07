@@ -314,6 +314,9 @@ const buildCwnAliases = () => {
   alias(['lifestyle', 'strainmod', 'lifestylemod'], 'strain_mod');
   alias(['movemod', 'movementmod'], 'move_mod');
   alias(['xp', 'exp', 'experience', 'experiencepoints'], 'xp');
+  alias(['armorenc', 'armourenc'], 'armor_enc');
+  alias(['gearencreadied', 'otherreadied', 'readiedenc'], 'gear_enc_readied');
+  alias(['gearencstowed', 'otherstowed', 'stowedenc'], 'gear_enc_stowed');
   // Derived like trauma_target above, and aliased for the same reason: a form that prints
   // MOVE should round-trip rather than land in the unrecognised pile.
   alias(['move', 'movement', 'moverate'], 'move');
@@ -365,7 +368,7 @@ const buildCwnAliases = () => {
 
   // Weapon rows round-trip
   for (let i = 1; i <= 4; i++) {
-    ['name', 'dmg', 'skill', 'trauma', 'shock', 'atk', 'attr', 'mods', 'carry'].forEach((part) =>
+    ['name', 'dmg', 'skill', 'trauma', 'shock', 'atk', 'attr', 'mods', 'carry', 'enc'].forEach((part) =>
       alias([`weapon${i}${part}`], `weapon${i}_${part}`)
     );
     alias([`weapon${i}readied`, `weapon${i}stowed`, `weapon${i}carried`], `weapon${i}_carry`);
@@ -410,6 +413,7 @@ const NUMERIC_CWN_FIELDS = new Set([
   'armor_ac', 'armor_dex_cap', 'shield_bonus', 'trauma_target',
   'armor_soak', 'soak_current', 'armor_trauma_mod', 'strain_mod',
   'move', 'move_mod', 'xp',
+  'armor_enc', 'gear_enc_readied', 'gear_enc_stowed',
   'armor_ac_melee', 'shield_bonus_melee',
   'frail', 'auto_initiative',
   'cast_skill', 'mage_effort', 'mage_effort_max', 'spells_prepared_max',

@@ -10,6 +10,7 @@ import {
   labelArmorMod, labelWeaponMod,
 } from '../cwnGearMods';
 import { CWN_LANGUAGE_OPTIONS, summariseLanguages } from '../cwnLanguages';
+import { CWN_ENC_SIZES } from '../cwnEncumbrance';
 
 // Cities Without Number template.
 //
@@ -227,13 +228,27 @@ Leave on FROM SKILL to take it from the attack skill, which is right for most we
     // scroll sideways instead put a third of it behind a scrollbar sitting four rows
     // below. Vertical space is what this section has; horizontal is what it has not.
     id: `weapon${i}_carry`, label: 'CARRY', type: 'radio', options: CWN_WEAPON_CARRY,
-    fullWidth: true,
+    fullWidth: true, inlineField: `weapon${i}_enc`,
     hint: `Where this weapon is right now.
 
   R  Readied - in hand or on a quick-draw rig, ready to use
   S  Stowed  - packed away, a Main Action to get out
 
 Both count against Encumbrance and at different limits: Readied up to half your Strength, Stowed up to all of it. Recorded, not enforced - the app does not stop you drawing a stowed weapon.`,
+  },
+  {
+    // Drawn beside CARRY rather than as a ninth column: the stat row is full, and this is
+    // the line that already answers "how is this weapon being carried".
+    id: `weapon${i}_enc`, label: 'ENC', type: 'select', options: CWN_ENC_SIZES,
+    hint: `What this weapon costs against Encumbrance (p48). The book prints one per weapon: a Light Pistol is 1, a Combat Rifle or Shotgun 2.
+
+  0   fits a pocket
+  1   carried in one hand
+  2   needs two hands
+  5   a whole-body effort
+  12  a person
+
+Counted at the top of GEAR. Whether it costs you anything is the ENCUMBRANCE house rule.`,
   },
   {
     // Applied, not printed: every one of these lands on something the server works out
@@ -375,6 +390,17 @@ export const citiesWithoutNumber: SheetTemplate = {
       ],
     },
     {
+      // First on the tab on purpose: it is a total of everything below it.
+      id: 'encumbrance',
+      label: 'ENCUMBRANCE',
+      layout: 'encumbrance',
+      tab: 'GEAR',
+      fields: [
+        { id: 'gear_enc_readied', label: 'OTHER READIED', type: 'number', placeholder: '0', hint: 'Encumbrance for anything Readied that the sheet cannot count - everything in the GEAR notes below. Weapons and armor are counted from their own rows.' },
+        { id: 'gear_enc_stowed', label: 'OTHER STOWED', type: 'number', placeholder: '0', hint: "Encumbrance for anything Stowed that the sheet cannot count. Three small regular items - grenades, pharmaceuticals, rations, magazines - bundle into one, though breaking the bundle costs a Main Action (p48)." },
+      ],
+    },
+    {
       id: 'armor',
       label: 'ARMOR',
       layout: 'grid',
@@ -389,6 +415,7 @@ export const citiesWithoutNumber: SheetTemplate = {
         { id: 'armor_soak', label: 'SOAK', type: 'number', placeholder: '0', hint: "Your armor's Damage Soak: extra hit points it spends before you do, refilling each scene.\n\n  Reinforced clothing      2\n  Street leathers          3\n  War harness, longcoats   5\n  Impact jacket            8\n  Medium armored suit     10\n  Heavy armored suit      15" },
         { id: 'shield_bonus', label: 'SHIELD', type: 'number', placeholder: '0', hint: "AC bonus from a carried shield or an armor accessory, against ranged attacks.\n\n  Riot Shield           +2 / +4\n  Absorption Plates     +2 / +2\n  Joint Reinforcement   +1 / +1" },
         { id: 'shield_bonus_melee', label: 'SHIELD (MEL)', type: 'number', placeholder: '0', hint: 'The same bonus against melee attacks. A Riot Shield is much better at fending off a blade than a bullet, at +4 rather than +2. Leave blank when the bonus is the same both ways.' },
+        { id: 'armor_enc', label: 'ENC', type: 'number', placeholder: '1', hint: "What the armor costs against Encumbrance, from the book's armor table (p52). Ordinary clothing 0, a War Harness or Reinforced Longcoat 1, a Plated Longcoat or armored suit 3. Worn armor is always Readied." },
         { id: 'armor_soak_total', label: 'SOAK TOTAL', type: 'number', derived: true, hint: "Derived: the armor's printed Damage Soak plus whatever its mods add. This is the pool the SOAK field on the STATS tab refills to." },
         {
           id: 'armor_mods', label: 'ARMOR MODS', type: 'tag_list', fullWidth: true, addLabel: '+ FIT…',

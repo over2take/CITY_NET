@@ -62,6 +62,10 @@ export interface SheetField {
    *  already uses, rather than a suffix inside the box, because a number input fills its
    *  cell and has nowhere to put one. */
   unit?: string;
+  /** Render this other field beside me on the same full-width row, each with its own
+   *  label. For two short controls that would each waste a line alone - CARRY and ENC on
+   *  a weapon, where the stat row above has no space left for either. */
+  inlineField?: string;
   /** Give this field a row of its own spanning the whole grid, with its label above it.
    *  For a notes box inside a repeated entry, where a grid cell will not do. */
   fullWidth?: boolean;
@@ -117,7 +121,7 @@ export interface SheetField {
  *  row (one-click: rolls the row's damage dice and spends its Effort cost).
  *  'ability_list' is a dynamic add/remove list stored as JSON in a single
  *  field; each item has name, cost, attr (dropdown), die, and effect. */
-export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware';
+export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware' | 'encumbrance';
 
 /** Configuration for the 'ability_list' section layout. */
 export interface AbilityListConfig {

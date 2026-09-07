@@ -7,6 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { SheetTemplate, SheetSection, SheetField, SheetData, SheetFieldValue } from '../sheets';
 import { TvPortrait } from './TvPortrait';
 import { xpProgress, describeXp } from '../sheets/cwnAdvancement';
+import { carriedEnc, encState, describeEnc, encumberedMove } from '../sheets/cwnEncumbrance';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
   return (
@@ -56,6 +57,9 @@ interface SheetRendererProps {
   /** Which XP column the table advances on - the cwn_slow_advancement house rule. The
    *  whole table uses one, so it arrives as a setting rather than off the sheet. */
   xpRate?: 'fast' | 'slow';
+  /** Whether the cwn_encumbrance house rule is on. Off, what you carry is counted and
+   *  shown but costs you nothing; on, it comes off your Move. */
+  encumbranceEnforced?: boolean;
   /** A section's header button was pressed. Sections declare the label; what it does is
    *  the surface's business — the renderer has no idea what a window is. */
   onSectionAction?: (sectionId: string) => void;
@@ -786,6 +790,63 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
 }
 
 /**
+ * What a character is carrying, at the top of GEAR.
+ *
+ * Shown whether or not the table enforces it - knowing what you have on you is useful at
+ * a table that never charges you for it, and the book is explicit that charging is
+ * optional. When the ENCUMBRANCE house rule is off this is a count and nothing more; when
+ * it is on, the Move field below has already had the penalty taken off.
+ *
+ * Readied and Stowed are counted apart because the book limits them apart: a character can
+ * be over on one and fine on the other.
+ */
+function EncumbranceSection({ section, data, readOnly, onFieldChange, enforced }: {
+  section: SheetSection; data: SheetData; readOnly: boolean;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
+  enforced?: boolean;
+}) {
+  const state = encState(data, carriedEnc(data));
+  const tone = state.impossible ? 'var(--danger)'
+    : state.overload > 0 ? 'var(--warning)'
+    : 'var(--green)';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={{ fontSize: '0.7rem', letterSpacing: '1px', color: tone }}>
+        {describeEnc(state)}
+      </div>
+      {state.overload > 0 && (enforced ? (
+        // The effective rate is stated here rather than written into MOVE, which stays the
+        // character's own number and matches what the server computed. Move is measured
+        // with the ruler and enforced by nobody, so saying it is enough - and one number
+        // that disagrees with the server is worse than two that agree and are explained.
+        <div style={{ fontSize: '0.6rem', color: 'var(--warning)' }}>
+          Carrying this, Move is {encumberedMove(num(data.move), state)}m
+          {' '}rather than {num(data.move)}m.
+        </div>
+      ) : (
+        // Said out loud rather than silently ignored: the number is over the limit and the
+        // Move rate is deliberately not paying for it.
+        <div style={{ fontSize: '0.6rem', opacity: 0.6 }}>
+          Not enforced — the ENCUMBRANCE house rule is off, so Move is unchanged.
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        {section.fields.map((f) => (
+          <label key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px' }}>{f.label}</span>
+            <FieldInput
+              field={f} data={data} readOnly={readOnly} onFieldChange={onFieldChange}
+              style={{ width: '90px', padding: '2px 4px', fontSize: '0.7rem', textAlign: 'center' }}
+            />
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * A field that takes the whole width of its section: a heading, then the control.
  *
  * Shared by every layout that has one, so a MODS list looks the same wherever it appears.
@@ -794,24 +855,43 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
  * chips: it boxed the list, centred the picker, and made the same field look like a
  * different feature depending on which section you found it in.
  */
-function FullWidthField({ field, data, readOnly, onFieldChange, onFieldsChange }: {
+function FullWidthField({ field, data, readOnly, onFieldChange, onFieldsChange, allFields }: {
   field: SheetField; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onFieldsChange?: (fields: Record<string, string | number>) => void;
+  /** For resolving `inlineField`, which names another field by id. */
+  allFields?: SheetField[];
 }) {
-  return (
-    <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '2px', margin: '2px 0' }}>
+  const inline = field.inlineField
+    ? (allFields ?? []).find((f) => f.id === field.inlineField)
+    : undefined;
+
+  const one = (f: SheetField) => (
+    <div key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
       <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '0 4px', textAlign: 'left' }}>
-        {field.label}
+        {f.label}
       </div>
       <FieldInput
-        field={field}
+        field={f}
         data={data}
         readOnly={readOnly}
         onFieldChange={onFieldChange}
         onFieldsChange={onFieldsChange}
         style={{ padding: '2px 4px', fontSize: '0.7rem' }}
       />
+    </div>
+  );
+
+  return (
+    <div style={{ gridColumn: '1 / -1', margin: '2px 0' }}>
+      {inline ? (
+        // Two short controls that would each waste a line alone. Sized so the pair reads
+        // as one row rather than two things that happen to be adjacent.
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+          <div style={{ flex: '0 0 auto' }}>{one(field)}</div>
+          <div style={{ flex: '0 0 120px' }}>{one(inline)}</div>
+        </div>
+      ) : one(field)}
     </div>
   );
 }
@@ -1006,10 +1086,13 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
    * Fields into rows of `perRow`, except a fullWidth field, which takes a row to itself.
    * That is what lets an entry carry a notes box without the grid arithmetic collapsing.
    */
+  // A field claimed by another's `inlineField` is drawn beside it, not again on its own.
+  const inlined = new Set(section.fields.map((f) => f.inlineField).filter(Boolean) as string[]);
   const toRows = (fields: SheetField[]) => {
     const out: SheetField[][] = [];
     let cur: SheetField[] = [];
     for (const f of fields) {
+      if (inlined.has(f.id)) continue;
       if (f.fullWidth) {
         if (cur.length) { out.push(cur); cur = []; }
         out.push([f]);
@@ -1088,6 +1171,7 @@ function WeaponsSection({ section, data, readOnly, onFieldChange, onFieldsChange
     <FullWidthField
       key={field.id} field={field} data={data} readOnly={readOnly}
       onFieldChange={onFieldChange} onFieldsChange={onFieldsChange}
+      allFields={section.fields}
     />
   );
 
@@ -1422,7 +1506,7 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // What the character's chrome is doing to their numbers. Computed once for the whole
@@ -1532,6 +1616,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
+                  {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
