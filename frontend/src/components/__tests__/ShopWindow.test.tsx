@@ -9,17 +9,27 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ShopWindow } from '../ShopWindow';
 
 // The hook is the sheet's own business; what matters here is what the shop does with it.
-const sheetState: { sheet: any } = { sheet: { system: 'cities_without_number', data: {} } };
+const sheetState: { sheet: any; encumbranceEnforced: boolean } = {
+  sheet: { system: 'cities_without_number', data: {} },
+  encumbranceEnforced: false,
+};
 const handleFieldChange = vi.fn();
+const handleFieldsChange = vi.fn();
 vi.mock('../../hooks/usePlayerSheet', () => ({
-  usePlayerSheet: () => ({ sheet: sheetState.sheet, handleFieldChange }),
+  usePlayerSheet: () => ({
+    sheet: sheetState.sheet,
+    handleFieldChange,
+    handleFieldsChange,
+    encumbranceEnforced: sheetState.encumbranceEnforced,
+  }),
 }));
 import { BUILDING_TYPES, isShop, buildingTypeById, shopsAvailable } from '../../data/buildingTypes';
+import { CWN_WEAPON_ROWS } from '../../sheets/templates/cities_without_number';
 import { CWN_CYBERWARE } from '../../sheets/cwnCyberwarePresets';
 
 const show = (buildingType: string, name = 'Doc Wu') =>
@@ -28,7 +38,9 @@ const show = (buildingType: string, name = 'Doc Wu') =>
 
 beforeEach(() => {
   handleFieldChange.mockClear();
+  handleFieldsChange.mockClear();
   sheetState.sheet = { system: 'cities_without_number', data: {} };
+  sheetState.encumbranceEnforced = false;
 });
 
 describe('a ripperdoc', () => {
@@ -214,50 +226,54 @@ describe('buying a piece', () => {
 
 describe('buying a weapon', () => {
   /**
-   * It lands in the STASH, not in a carried row.
+   * It goes into a carried slot, Stowed - you are walking out of the shop with it.
    *
-   * You have walked out of a shop holding a bag; whether it ends up in your hands is a
-   * decision made on the sheet afterwards. It also means a shop can never fail for want
-   * of a free row, which is what "do not enforce how much someone can buy" requires.
+   * Which means the shop can refuse, and has to: a slot count and, where the table asked
+   * for it, the Stowed Encumbrance allowance. A shop that took the money and quietly
+   * dropped the gun would be worse than one that says no.
    */
-  const lastWrite = () => handleFieldChange.mock.calls.at(-1)!;
+  const lastFields = () => handleFieldsChange.mock.calls.at(-1)?.[0] as Record<string, unknown>;
 
-  it('puts it in the stash rather than a weapon row', async () => {
+  it('puts it in the first free weapon slot', async () => {
     show('gun_shop');
     await userEvent.click(screen.getByRole('button', { name: 'Buy Combat Rifle' }));
 
-    const [field, value] = lastWrite();
-    expect(field).toBe('weapons_stash');
-    const stash = JSON.parse(value as string);
-    expect(stash).toHaveLength(1);
-    expect(stash[0]).toMatchObject({
-      name: 'Combat Rifle', dmg: '1d12', skill: 'shoot', attr: 'dex',
-      trauma: 'd8/x3', enc: '2',
+    expect(lastFields()).toMatchObject({
+      weapon1_name: 'Combat Rifle', weapon1_dmg: '1d12', weapon1_skill: 'shoot',
+      weapon1_attr: 'dex', weapon1_trauma: 'd8/x3', weapon1_enc: '2',
     });
   });
 
-  it('keeps what was already stashed', async () => {
+  it('lands it stowed rather than readied', async () => {
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Knife' }));
+    expect(lastFields().weapon1_carry).toBe('stowed');
+  });
+
+  it('takes the next free slot when the first is used', async () => {
     sheetState.sheet = {
       system: 'cities_without_number',
-      data: { weapons_stash: JSON.stringify([{ name: 'Knife', dmg: '1d4' }]) },
+      data: { weapon1_name: 'gun', weapon2_name: 'knife' },
     };
     show('gun_shop');
     await userEvent.click(screen.getByRole('button', { name: 'Buy Sword' }));
-
-    const stash = JSON.parse(lastWrite()[1] as string);
-    expect(stash.map((w: { name: string }) => w.name)).toEqual(['Knife', 'Sword']);
+    expect(lastFields().weapon3_name).toBe('Sword');
   });
 
-  it('remembers which shop it came from, since that is where it is', async () => {
-    show('gun_shop', 'The Gun Rack');
+  it('refuses when every slot is full, rather than losing the weapon', async () => {
+    const data: Record<string, unknown> = {};
+    for (let i = 1; i <= CWN_WEAPON_ROWS; i += 1) data[`weapon${i}_name`] = 'gun';
+    sheetState.sheet = { system: 'cities_without_number', data };
+    show('gun_shop');
     await userEvent.click(screen.getByRole('button', { name: 'Buy Knife' }));
-    expect(JSON.parse(lastWrite()[1] as string)[0].location).toBe('The Gun Rack');
+
+    expect(screen.getByText(/No free weapon slot/)).toBeInTheDocument();
+    expect(handleFieldsChange).not.toHaveBeenCalled();
   });
 
   it('says that nothing is charged, and where the weapon went', () => {
     show('gun_shop');
-    expect(screen.getByText(/NOTHING IS CHARGED YET — BUY PUTS THE WEAPON IN YOUR STASH/))
-      .toBeInTheDocument();
+    expect(screen.getByText(/BUY PUTS THE WEAPON IN A WEAPON SLOT, STOWED/)).toBeInTheDocument();
   });
 
   it('prints range and magazine, and says they will not be kept', () => {
@@ -266,5 +282,233 @@ describe('buying a weapon', () => {
     show('gun_shop');
     expect(screen.getByText(/Range and magazine are printed for reference/)).toBeInTheDocument();
     expect(screen.getByText('100/300')).toBeInTheDocument();
+  });
+});
+
+describe('the shelf says how many you own', () => {
+  /**
+   * Counted off the sheet, not off what was clicked this visit. Deleting one from the
+   * sheet has to show up here, or the shop is reporting button presses.
+   */
+  it('counts what is in a weapon slot', () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { weapon1_name: 'Knife', weapon2_name: 'Knife' },
+    };
+    show('gun_shop');
+    const row = screen.getByRole('button', { name: 'Buy Knife' }).closest('tr')!;
+    expect(within(row).getByText('x2')).toBeInTheDocument();
+  });
+
+  it('gives it a column of its own rather than moving the BUY button', () => {
+    // Hung off the button, it shifted the button every time somebody bought something.
+    show('gun_shop');
+    expect(screen.getByRole('columnheader', { name: 'Sort by OWNED' })).toBeInTheDocument();
+  });
+
+  it('counts what is in the stash too, since you still own it', () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { weapons_stash: JSON.stringify([{ name: 'Knife' }, { name: 'Knife' }]) },
+    };
+    show('gun_shop');
+    const row = screen.getByRole('button', { name: 'Buy Knife' }).closest('tr')!;
+    expect(within(row).getByText('x2')).toBeInTheDocument();
+  });
+
+  it('shows nothing against a weapon you do not have', () => {
+    sheetState.sheet = { system: 'cities_without_number', data: { weapon1_name: 'Knife' } };
+    show('gun_shop');
+    const row = screen.getByRole('button', { name: 'Buy Sword' }).closest('tr')!;
+    expect(within(row).queryByText(/^x\d/)).toBeNull();
+  });
+});
+
+describe('encumbrance can refuse a sale', () => {
+  /**
+   * Only where the table asked for it. The house rule is off by default, and with it off
+   * a shop has no business telling anyone what they can lift.
+   */
+  const heavy = { str: 4 };  // Stowed allowance of 4
+
+  it('refuses a weapon that will not fit the Stowed allowance', async () => {
+    sheetState.encumbranceEnforced = true;
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { ...heavy, weapon1_name: 'gun', weapon1_enc: '3', weapon1_carry: 'stowed' },
+    };
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Automatic Rifle' }));
+
+    expect(screen.getByText(/Too much to carry/)).toBeInTheDocument();
+    expect(handleFieldsChange).not.toHaveBeenCalled();
+  });
+
+  it('allows one that does fit', async () => {
+    sheetState.encumbranceEnforced = true;
+    sheetState.sheet = { system: 'cities_without_number', data: heavy };
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Knife' }));
+    expect(handleFieldsChange).toHaveBeenCalled();
+  });
+
+  it('says nothing about weight while the house rule is off', async () => {
+    sheetState.encumbranceEnforced = false;
+    sheetState.sheet = { system: 'cities_without_number', data: heavy };
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Automatic Rifle' }));
+
+    expect(screen.queryByText(/Too much to carry/)).toBeNull();
+    expect(handleFieldsChange).toHaveBeenCalled();
+  });
+});
+
+describe('sorting the shelf', () => {
+  /**
+   * Three states, not two. A shelf has a natural order - the book's, which groups pistols
+   * with pistols - and after sorting by price there would otherwise be no way back to it
+   * short of closing the window.
+   */
+  const names = () =>
+    screen.getAllByRole('button', { name: /^Buy / })
+      .map((b) => b.getAttribute('aria-label')!.replace('Buy ', ''));
+
+  const clickHeader = (label: string) =>
+    userEvent.click(screen.getByRole('columnheader', { name: new RegExp(`^Sort by ${label}$`) }));
+
+  it('starts in the order the book prints', () => {
+    show('gun_shop');
+    // Light Pistol is the first line of the firearms table.
+    expect(names()[0]).toBe('Light Pistol');
+  });
+
+  it('sorts names A-Z on the first click, and Z-A on the second', async () => {
+    show('gun_shop');
+    await clickHeader('NAME');
+    const az = names();
+    expect(az).toEqual([...az].sort((a, b) => a.localeCompare(b)));
+
+    await clickHeader('NAME');
+    expect(names()).toEqual([...az].reverse());
+  });
+
+  it('returns to the book order on the third click', async () => {
+    show('gun_shop');
+    const original = names();
+    await clickHeader('NAME');
+    await clickHeader('NAME');
+    await clickHeader('NAME');
+    expect(names()).toEqual(original);
+  });
+
+  it('starts price at the most expensive, because that is the useful end', async () => {
+    show('gun_shop');
+    await clickHeader('PRICE');
+    // Automatic Rifle and Heavy Machine Gun are the 10,000cr lines.
+    expect(names()[0]).toMatch(/Automatic Rifle|Heavy Machine Gun/);
+
+    await clickHeader('PRICE');
+    // Cheapest last time round: the Club is priced N/A, which reads as 0.
+    expect(names()[0]).toBe('Club');
+  });
+
+  it('sorts a numeric column as numbers, not as text', async () => {
+    // "10/80" against "100/300": sorted as strings, 100 comes before 30.
+    show('gun_shop');
+    await clickHeader('RANGE');
+    expect(names()[0]).toMatch(/Sniper Rifle|Rocket Launcher|Anti-Materiel Rifle|Mortar/);
+  });
+
+  it('only ever sorts by one column', async () => {
+    show('gun_shop');
+    await clickHeader('PRICE');
+    await clickHeader('NAME');
+    const byName = names();
+    expect(byName).toEqual([...byName].sort((a, b) => a.localeCompare(b)));
+  });
+
+  it('sorts the ripperdoc the same way', async () => {
+    show('ripperdoc');
+    await clickHeader('NAME');
+    const az = names();
+    expect(az).toEqual([...az].sort((a, b) => a.localeCompare(b)));
+  });
+
+  it('keeps sorting after a filter is typed', async () => {
+    show('gun_shop');
+    await clickHeader('NAME');
+    await userEvent.type(screen.getByLabelText('Filter stock'), 'grenade');
+    const shown = names();
+    expect(shown.length).toBeGreaterThan(1);
+    expect(shown).toEqual([...shown].sort((a, b) => a.localeCompare(b)));
+  });
+});
+
+describe('showing one kind of weapon', () => {
+  /**
+   * Split on the SKILL, not on the book's table: the melee table also holds grenades, and
+   * a thrown grenade is not a melee weapon.
+   */
+  const names = () =>
+    screen.getAllByRole('button', { name: /^Buy / })
+      .map((b) => b.getAttribute('aria-label')!.replace('Buy ', ''));
+
+  const toggle = (label: string) => userEvent.click(screen.getByRole('button', { name: label }));
+
+  it('shows everything with neither pressed', () => {
+    show('gun_shop');
+    expect(names()).toContain('Heavy Pistol');
+    expect(names()).toContain('Sword');
+  });
+
+  it('narrows to ranged when only RANGED is pressed', async () => {
+    show('gun_shop');
+    await toggle('RANGED');
+    expect(names()).toContain('Heavy Pistol');
+    expect(names()).not.toContain('Sword');
+  });
+
+  it('narrows to melee when only MELEE is pressed', async () => {
+    show('gun_shop');
+    await toggle('MELEE');
+    expect(names()).toContain('Sword');
+    expect(names()).not.toContain('Heavy Pistol');
+  });
+
+  it('counts a thrown grenade as ranged, whatever table it is printed in', async () => {
+    // The book prints grenades with the melee weapons. They are thrown, and they roll
+    // Shoot, so a player looking for something to throw expects them under RANGED.
+    show('gun_shop');
+    await toggle('RANGED');
+    expect(names()).toContain('Grenade, Frag');
+
+    await toggle('RANGED');
+    await toggle('MELEE');
+    expect(names()).not.toContain('Grenade, Frag');
+  });
+
+  it('shows everything again with both pressed, rather than nothing', async () => {
+    // Both on and both off mean the same thing - no opinion - so neither empties the shelf.
+    show('gun_shop');
+    await toggle('RANGED');
+    await toggle('MELEE');
+    expect(names()).toContain('Heavy Pistol');
+    expect(names()).toContain('Sword');
+  });
+
+  it('says which are pressed', async () => {
+    show('gun_shop');
+    expect(screen.getByRole('button', { name: 'RANGED' })).toHaveAttribute('aria-pressed', 'false');
+    await toggle('RANGED');
+    expect(screen.getByRole('button', { name: 'RANGED' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('still sorts and filters what it has narrowed to', async () => {
+    show('gun_shop');
+    await toggle('MELEE');
+    await userEvent.click(screen.getByRole('columnheader', { name: 'Sort by NAME' }));
+    const shown = names();
+    expect(shown).toEqual([...shown].sort((a, b) => a.localeCompare(b)));
+    expect(shown).not.toContain('Heavy Pistol');
   });
 });
