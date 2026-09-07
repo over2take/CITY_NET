@@ -14,13 +14,14 @@ import { citiesWithoutNumber } from '../../sheets/templates/cities_without_numbe
  * at different x, and "35/35" against "0/3" ended them at different x.
  */
 
-const show = (data: Record<string, unknown>) =>
+const show = (data: Record<string, unknown>, xpRate?: 'fast' | 'slow') =>
   render(
     <SheetRenderer
       template={citiesWithoutNumber}
       data={data as never}
       readOnly={false}
       onFieldChange={vi.fn()}
+      xpRate={xpRate}
     />,
   );
 
@@ -57,6 +58,35 @@ describe('the two bars are measured the same', () => {
   it('sits the value against its bar rather than out at the far edge', () => {
     show({ hp: 7, hp_max: 35, level: 3, xp: 9, xp_rate: 'fast' });
     expect(spanFor('9/12').style.textAlign).toBe('left');
+  });
+});
+
+describe('which column the bar measures against', () => {
+  /**
+   * The rate is a house rule and arrives as a prop, so this is the end of a chain that
+   * starts in global settings. If it stopped arriving, every bar would silently draw
+   * against the fast column while the server levelled people on the slow one.
+   */
+  it('uses the fast column by default', () => {
+    // Level 3 costs 6 on fast and 15 on slow.
+    show({ hp: 7, hp_max: 35, level: 2, xp: 4 });
+    expect(screen.getByText('4/6')).toBeInTheDocument();
+  });
+
+  it('uses the slow column when the table does', () => {
+    show({ hp: 7, hp_max: 35, level: 2, xp: 4 }, 'slow');
+    expect(screen.getByText('4/15')).toBeInTheDocument();
+  });
+
+  it('changes what counts as ready, not just the printed number', async () => {
+    // 6 XP has earned level 3 on fast and is less than half way on slow. The two must
+    // disagree, or the prop is being read and then ignored.
+    const { unmount } = show({ hp: 7, hp_max: 35, level: 2, xp: 6 }, 'fast');
+    expect(screen.getByText('LEVEL 2 · READY FOR 3')).toBeInTheDocument();
+    unmount();
+
+    show({ hp: 7, hp_max: 35, level: 2, xp: 6 }, 'slow');
+    expect(screen.getByText('LEVEL 2')).toBeInTheDocument();
   });
 });
 
