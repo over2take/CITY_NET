@@ -1,5 +1,6 @@
 import { CyberwareSection } from './CyberwareSection';
 import { InventorySection } from './InventorySection';
+import { PharmaSection } from './PharmaSection';
 import {
   sheetEffects, effectiveValue, describeSources,
   type SheetEffects, type FieldEffect,
@@ -1798,6 +1799,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
                   {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
+                  {section.layout === 'pharma' && <PharmaSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}

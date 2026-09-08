@@ -26,6 +26,7 @@ const { cryptoRng } = require('../utils/random');
 const rollEngine = require('./rollEngine');
 const vehicleSeats = require('./vehicleSeats');
 const gearMods = require('./cwnGearMods');
+const pharma = require('./cwnPharma');
 const cyberWeapons = require('./cwnCyberWeapons');
 
 /**
@@ -286,6 +287,15 @@ const getWeapon = (data, index, opts = {}) => {
   // the modded weapon - and, because they are overlaid on read rather than written into
   // the row, stripping one back out actually undoes it.
   const gear = gearMods.weaponModEffects(data[`${prefix}${i}_mods`]);
+  // Whatever the shooter is on (p60-61). Folded in here for the same reason the mods are:
+  // every caller gets the weapon as it will actually be rolled, and nothing is written
+  // back, so a drug wearing off gives back exactly what it gave.
+  //
+  // Added on TOP of the mods' +3 ceiling rather than under it. That cap is written about
+  // mods - "no combination of mods can improve a weapon's hit or damage bonus by more
+  // than +3" (p59) - and Boneshaker is not a mod; it is a chemical in the person holding
+  // the gun, and it follows them to whatever they pick up next.
+  const drugs = pharma.activeEffects(data);
   let trauma = parseTrauma(data[`${prefix}${i}_trauma`]);
   // Stun Rounds trade the trauma die away entirely; Heavy Sabot lets it bite machines.
   if (trauma && gear.noTrauma) trauma = null;
@@ -296,12 +306,12 @@ const getWeapon = (data, index, opts = {}) => {
     dmg,
     skill,
     mod: weaponAttr(data, data[`${prefix}${i}_attr`], skill),
-    atk: num(data[`${prefix}${i}_atk`]) + gear.hit,
+    atk: num(data[`${prefix}${i}_atk`]) + gear.hit + drugs.hit,
     trauma,
     // Damage and Shock floor at nothing: Stun Rounds' -2 must not turn a light hit into
     // healing.
-    shock: shock ? { ...shock, dmg: Math.max(0, shock.dmg + gear.shock) } : null,
-    dmgBonus: gear.damage,
+    shock: shock ? { ...shock, dmg: Math.max(0, shock.dmg + gear.shock + drugs.shock) } : null,
+    dmgBonus: gear.damage + drugs.damage,
     mods: gear.installed,
     attackType: MELEE_SKILLS.includes(skill) ? 'melee' : 'ranged',
   };
@@ -368,12 +378,19 @@ const rollTrauma = (weapon, traumaEnabled, targetTT = DEFAULT_TRAUMA_TARGET, rng
   const tt = num(targetTT) > 0 ? num(targetTT) : DEFAULT_TRAUMA_TARGET;
   // A Monoblade adds to the roll rather than enlarging the die (p71), so the bonus lands
   // here. Absent on every weapon that has none, which is all of them but cyber blades.
+  //
+  // `defenderBonus` is the other half, and it belongs to the person being shot rather than
+  // to the weapon: Boneshaker's recklessness means "all attacks against them add +2 to any
+  // Trauma Die rolls" (p60). Same roll, opposite side of the table, so it is passed in
+  // rather than read off the weapon.
   const bonus = num(weapon.trauma.bonus);
-  const roll = Math.floor(rng() * weapon.trauma.die) + 1 + bonus;
+  const defenderBonus = num(opts.defenderBonus);
+  const roll = Math.floor(rng() * weapon.trauma.die) + 1 + bonus + defenderBonus;
   return {
     die: weapon.trauma.die,
     rating: weapon.trauma.rating,
     bonus,
+    defenderBonus,
     roll,
     tt,
     traumatic: roll >= tt,

@@ -9,6 +9,7 @@ const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
 const cyberEffects = require('../sheets/cyberwareEffects');
 const attackCwn = require('../sheets/attackCwn');
+const cwnPharma = require('../sheets/cwnPharma');
 const awardXpModule = require('../sheets/awardXp');
 const tokenControl = require('./tokenControl');
 const attackSr6 = require('../sheets/attackSr6');
@@ -2256,9 +2257,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   // the damage multiplier.
                   // A vehicle has its own Trauma Target, and only weapons marked ! in the book can
                   // traumatise one at all — the occupant's trauma target is not the car's.
+                  // Boneshaker leaves the defender wide open: every Trauma Die rolled
+                  // against them takes +2 (p60). A car is not on drugs, so the penalty
+                  // rides with the person and not with the vehicle they are sitting in.
                   const trauma = ride
                     ? attackCwn.rollTrauma(weapon, traumaOn, ride.vehicle.traumaTarget, undefined, { vsVehicle: true })
-                    : attackCwn.rollTrauma(weapon, traumaOn, defenderData.trauma_target);
+                    : attackCwn.rollTrauma(weapon, traumaOn, defenderData.trauma_target, undefined, {
+                        defenderBonus: cwnPharma.activeEffects(defenderData).incomingTrauma,
+                      });
                   const traumatic = !!(trauma && trauma.traumatic);
                   const total = Math.max(0, traumatic ? dmg.total * trauma.rating : dmg.total);
                   let dmgHistory = `${weapon.name} damage vs ${target.name} [${dmg.breakdown} = ${dmg.total}]`;
