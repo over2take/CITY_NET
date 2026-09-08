@@ -76,6 +76,24 @@ describe('the retired Gear box', () => {
   });
 });
 
+describe('the retired Weapon Notes box on CWN', () => {
+  it('takes its whole section with it, being the only field in it', async () => {
+    show(citiesWithoutNumber, { str: 10 });
+    await gear();
+    expect(screen.queryByText(/WEAPON NOTES/)).not.toBeInTheDocument();
+    // The sections either side are untouched.
+    expect(screen.getByText(/STASH/)).toBeInTheDocument();
+    expect(screen.getByText(/INVENTORY/)).toBeInTheDocument();
+  });
+
+  it('comes back whole for a sheet that wrote something in it', async () => {
+    show(citiesWithoutNumber, { str: 10, weapons_notes: 'monoblade never leaves the boot' });
+    await gear();
+    expect(screen.getByText(/WEAPON NOTES/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('monoblade never leaves the boot')).toBeInTheDocument();
+  });
+});
+
 describe('a section left with nothing', () => {
   it('takes its heading with it rather than leaving one over nothing', async () => {
     const template: SheetTemplate = {

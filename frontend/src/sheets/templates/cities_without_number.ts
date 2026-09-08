@@ -461,8 +461,12 @@ export const citiesWithoutNumber: SheetTemplate = {
       label: 'WEAPON NOTES',
       layout: 'notes',
       tab: 'GEAR',
+      // Nothing left for it to hold. Ammunition is inventory rows, mods are fitted to the
+      // weapon that carries them, and where a weapon lives is the stash's Location field.
+      // Retired rather than deleted, and it is the section's only field, so the heading
+      // goes with it - see SheetField.retired.
       fields: [
-        { id: 'weapons_notes', label: 'Ammo, mods, notes', type: 'textarea', placeholder: 'Smartlinked pistol; monoblade never leaves the boot' },
+        { id: 'weapons_notes', label: 'Ammo, mods, notes', type: 'textarea', retired: true, placeholder: 'Smartlinked pistol; monoblade never leaves the boot' },
       ],
     },
     {
