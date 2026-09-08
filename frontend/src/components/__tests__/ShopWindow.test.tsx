@@ -89,9 +89,9 @@ describe('a ripperdoc', () => {
 
 describe('a shop with no catalogue built yet', () => {
   it('says so rather than showing an empty table', () => {
-    // The gun shop used to be the example here. A clinic still is: armour and drugs are
-    // the stock lists nobody has written.
-    show('clinic');
+    // The gun shop was the example here, then the clinic. Both have shelves now, so the
+    // garage is what is left: armour and vehicles are the stock lists nobody has written.
+    show('garage');
     expect(screen.getByText(/NO CATALOGUE FOR THIS SHOP YET/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Filter stock')).not.toBeInTheDocument();
   });
@@ -510,5 +510,108 @@ describe('showing one kind of weapon', () => {
     const shown = names();
     expect(shown).toEqual([...shown].sort((a, b) => a.localeCompare(b)));
     expect(shown).not.toContain('Heavy Pistol');
+  });
+});
+
+describe('the clinic sells pharmaceuticals', () => {
+  it('carries the whole book table', () => {
+    show('clinic');
+    expect(screen.getByText(/16 LINES/)).toBeInTheDocument();
+    expect(screen.getByText('BONESHAKER')).toBeInTheDocument();
+    expect(screen.getByText('TRAUMA PATCH')).toBeInTheDocument();
+  });
+
+  it('says the money does not move and where a dose lands', () => {
+    show('clinic');
+    expect(screen.getByText(/BUY ADDS A DOSE TO YOUR INVENTORY, STOWED/)).toBeInTheDocument();
+  });
+
+  it('says which three actually change a number', () => {
+    // The shelf sells sixteen and the sheet rolls with three. A player choosing Psycho
+    // should learn that here rather than by watching nothing happen.
+    show('clinic');
+    expect(screen.getByText(/Boneshaker, Olympus and Avalanche change a number/)).toBeInTheDocument();
+  });
+
+  it('flags the one you need a Contact for', () => {
+    show('clinic');
+    expect(screen.getByTitle('Needs a Contact to obtain')).toBeInTheDocument();
+  });
+
+  it('buys a dose into the inventory', async () => {
+    show('clinic');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy BONESHAKER' }));
+    const [field, value] = handleFieldChange.mock.calls[0];
+    expect(field).toBe('inventory');
+    expect(JSON.parse(value)).toEqual([
+      expect.objectContaining({ name: 'BONESHAKER', qty: 1, carry: 'stowed' }),
+    ]);
+  });
+
+  it('stacks onto the row it already has rather than adding a second', async () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: {
+        inventory: JSON.stringify([
+          { name: 'BONESHAKER', qty: 2, enc: '', bundled: false, carry: 'stowed', location: '' },
+        ]),
+      },
+    };
+    show('clinic');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy BONESHAKER' }));
+    const parsed = JSON.parse(handleFieldChange.mock.calls[0][1]);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].qty).toBe(3);
+  });
+
+  it('leaves other inventory rows alone', async () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: {
+        inventory: JSON.stringify([
+          { name: 'Rope', qty: 1, enc: '2', bundled: false, carry: 'stowed', location: '' },
+        ]),
+      },
+    };
+    show('clinic');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy OLYMPUS' }));
+    const parsed = JSON.parse(handleFieldChange.mock.calls[0][1]);
+    expect(parsed.map((i: { name: string }) => i.name)).toEqual(['Rope', 'OLYMPUS']);
+  });
+
+  it('shows what you already own, stash included', () => {
+    // The shelf reports what you own; the sheet decides what you can inject. A box in a
+    // locker is still yours.
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: {
+        inventory: JSON.stringify([
+          { name: 'Olympus', qty: 2, enc: '', bundled: false, carry: 'stowed', location: '' },
+          { name: 'Olympus', qty: 1, enc: '', bundled: false, carry: 'stash', location: 'the safe' },
+        ]),
+      },
+    };
+    show('clinic');
+    expect(screen.getByText('x3')).toBeInTheDocument();
+  });
+
+  it('never refuses, because a dose is pocket-sized', async () => {
+    // The gun shop has to say no when the slots are full. Nothing here is finite, so a
+    // refusal would be a rule the app invented.
+    sheetState.encumbranceEnforced = true;
+    sheetState.sheet = { system: 'cities_without_number', data: { str: 3 } };
+    show('clinic');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy RESET' }));
+    expect(handleFieldChange).toHaveBeenCalled();
+  });
+
+  it('sorts by price without disturbing the book order first', async () => {
+    show('clinic');
+    const rows = () => screen.getAllByRole('row').slice(1).map((r) => r.cells[0].textContent);
+    expect(rows()[0]).toBe('AVALANCHE');
+    await userEvent.click(screen.getByLabelText('Sort by PRICE'));
+    expect(rows()[0]).toContain('RESET');
+    await userEvent.click(screen.getByLabelText('Sort by PRICE'));
+    expect(rows()[0]).toBe('SAND');
   });
 });

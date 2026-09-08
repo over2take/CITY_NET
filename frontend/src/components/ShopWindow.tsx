@@ -6,6 +6,8 @@ import { CYBERWARE_FIELD, readRows, normaliseRow } from '../sheets/cyberwareRows
 import { CWN_WEAPONS, weaponToStashed, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
 import { readStash, firstFreeRow, stashedToCarried } from '../sheets/cwnWeaponStash';
 import { carriedEnc, encLimits } from '../sheets/cwnEncumbrance';
+import { CWN_PHARMACEUTICALS, pharmaByName, type Pharmaceutical } from '../sheets/cwnPharma';
+import { INVENTORY_FIELD, readInventory, writeInventory, blankItem } from '../sheets/inventory';
 import { CWN_WEAPON_ROWS } from '../sheets/templates/cities_without_number';
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
 
@@ -53,6 +55,10 @@ function stockFor(sells: string | null): CwnCyberPreset[] {
 
 function weaponStockFor(sells: string | null): CwnWeaponPreset[] {
   return sells === 'weapons' ? CWN_WEAPONS : [];
+}
+
+function pharmaStockFor(sells: string | null): Pharmaceutical[] {
+  return sells === 'pharmaceuticals' ? CWN_PHARMACEUTICALS : [];
 }
 
 /**
@@ -134,7 +140,13 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
   const type = buildingTypeById(buildingType);
   const stock = useMemo(() => stockFor(type?.sells ?? null), [type]);
   const weaponStock = useMemo(() => weaponStockFor(type?.sells ?? null), [type]);
+  const pharmaStock = useMemo(() => pharmaStockFor(type?.sells ?? null), [type]);
   const sellsWeapons = (type?.sells ?? null) === 'weapons';
+  const sellsPharma = (type?.sells ?? null) === 'pharmaceuticals';
+  /** Whichever shelf this shop is showing, for the line under the title. */
+  const lineCount = sellsWeapons ? weaponStock.length
+    : sellsPharma ? pharmaStock.length
+      : stock.length;
 
   /** What each weapon column sorts on, and which way its first click goes. */
   const WEAPON_COLUMNS: Record<string, {
@@ -230,6 +242,75 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
     handleFieldsChange?.(stashedToCarried(weaponToStashed(w, name || ''), row));
   };
 
+  /**
+   * The pharmacy shelf.
+   *
+   * LASTS earns its column: a scene and an hour are the difference between a drug you take
+   * in a fight and one you take before walking into a building, and it is the only thing
+   * separating several otherwise similar lines.
+   */
+  const PHARMA_COLUMNS: Record<string, {
+    label: string; value: (p: Pharmaceutical) => string | number;
+    numeric?: boolean; first: SortDir; align?: 'right';
+  }> = {
+    name: { label: 'NAME', value: (p) => p.label, first: 'asc' },
+    price: { label: 'PRICE', value: (p) => p.cost, numeric: true, first: 'desc', align: 'right' },
+    // "None" is a real answer and a useful one to sort to the top - it means anyone can
+    // administer it. Sorted as -1 so it lands below Heal-0 rather than being read as blank.
+    heal: { label: 'HEAL', value: (p) => (p.heal === null ? -1 : p.heal), numeric: true, first: 'asc', align: 'right' },
+    lasts: { label: 'LASTS', value: (p) => p.duration, first: 'asc' },
+    effect: { label: 'EFFECT', value: (p) => p.effect, first: 'asc' },
+    owned: { label: 'OWNED', value: (p) => ownedDoses(p.id), numeric: true, first: 'desc', align: 'right' },
+  };
+
+  const shownPharma = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    const matched = !q ? pharmaStock : pharmaStock.filter((p) =>
+      p.label.toLowerCase().includes(q) || p.effect.toLowerCase().includes(q));
+    return applySort(matched, sort, PHARMA_COLUMNS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pharmaStock, filter, sort, sheet]);
+
+  /**
+   * How many doses of a drug the character owns.
+   *
+   * Read off the inventory, stash included: the shelf is showing what you own, and a box
+   * of stims in a locker is still yours. That is deliberately wider than what the sheet
+   * will let you inject, which is the carried rows only.
+   */
+  const ownedDoses = (drugId: string): number => {
+    if (!sheet) return 0;
+    return readInventory(sheet.data as Record<string, unknown>)
+      .filter((item) => pharmaByName(item.name)?.id === drugId)
+      .reduce((n, item) => n + item.qty, 0);
+  };
+
+  /**
+   * A dose goes into the inventory, because that is what a dose is.
+   *
+   * Onto an existing row where there is one, so buying three Boneshakers is a row reading
+   * three rather than three rows reading one. Stowed: you are walking out of the shop with
+   * it in a pocket.
+   *
+   * No refusal here, unlike the gun shop. That one had to say no because weapon slots are
+   * finite; drugs are pocket-sized, the book's own rule is that any reasonable number of
+   * such things can be carried, and there is nothing for a purchase to fail against.
+   */
+  const buyDose = (drug: Pharmaceutical) => {
+    if (!sheet) return;
+    const data = (sheet.data ?? {}) as Record<string, unknown>;
+    const items = readInventory(data);
+    const i = items.findIndex(
+      (item) => item.carry !== 'stash' && pharmaByName(item.name)?.id === drug.id,
+    );
+    const next = i >= 0
+      ? items.map((item, n) => (n === i ? { ...item, qty: item.qty + 1 } : item))
+      : [...items, { ...blankItem(), name: drug.label, qty: 1 }];
+    setRefused(null);
+    setTaken((t) => ({ ...t, [drug.id]: (t[drug.id] ?? 0) + 1 }));
+    handleFieldChange?.(INVENTORY_FIELD, writeInventory(next));
+  };
+
   /** The same treatment for the ripperdoc's shelf: it is the same kind of list. */
   const CYBER_COLUMNS: Record<string, {
     label: string; value: (c: CwnCyberPreset) => string | number;
@@ -305,7 +386,7 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
       <div className="content" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ ...mono(9), color: 'var(--cyan)', marginBottom: 6 }}>
           {type ? type.label.toUpperCase() : 'UNKNOWN'} ·{' '}
-          {(sellsWeapons ? weaponStock.length : stock.length)} LINE{(sellsWeapons ? weaponStock.length : stock.length) === 1 ? '' : 'S'}
+          {lineCount} LINE{lineCount === 1 ? '' : 'S'}
         </div>
 
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -323,7 +404,9 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
                 ? 'NO CHARACTER SHEET LOADED — NOTHING TO BUY ONTO'
                 : sellsWeapons
                   ? 'NOTHING IS CHARGED YET — BUY PUTS THE WEAPON IN A WEAPON SLOT, STOWED'
-                  : 'NOTHING IS CHARGED YET — BUY ADDS THE PIECE TO YOUR AUGMENTS, UNPLACED'}
+                  : sellsPharma
+                    ? 'NOTHING IS CHARGED YET — BUY ADDS A DOSE TO YOUR INVENTORY, STOWED'
+                    : 'NOTHING IS CHARGED YET — BUY ADDS THE PIECE TO YOUR AUGMENTS, UNPLACED'}
             </div>
 
             {sellsWeapons ? (
@@ -412,10 +495,94 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
                   </table>
                 </div>
               </>
+            ) : sellsPharma ? (
+              <>
+                <input
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Filter by name or effect"
+                  aria-label="Filter stock"
+                  style={{
+                    background: 'var(--black)', border: '1px solid var(--dark-green)',
+                    color: 'var(--green)', fontFamily: 'monospace', fontSize: 11,
+                    padding: '3px 5px', width: '100%', marginBottom: 6,
+                  }}
+                />
+                {/* Said on the shelf, because the table sells sixteen and the sheet rolls
+                    with three. A player choosing Psycho should know what they are getting. */}
+                <div style={{ ...mono(9), color: 'var(--grid-section)', marginBottom: 6, letterSpacing: 0 }}>
+                  Boneshaker, Olympus and Avalanche change a number the app rolls with. The rest
+                  carry their text for the table to rule on.
+                </div>
+                <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                  <table style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
+                    <thead>
+                      <tr style={{ color: 'var(--grid-section)' }}>
+                        {Object.entries(PHARMA_COLUMNS).map(([key, col]) => (
+                          <th
+                            key={key}
+                            onClick={() => setSort((st) => nextSort(st, key, col.first))}
+                            aria-label={`Sort by ${col.label}`}
+                            title="Click to sort — again to reverse, again for the book's own order"
+                            style={{
+                              ...cell, cursor: 'pointer', whiteSpace: 'nowrap',
+                              textAlign: col.align ?? 'left',
+                              color: sort.key === key && sort.dir ? 'var(--cyan)' : undefined,
+                            }}
+                          >{col.label}{sortArrow(sort, key)}</th>
+                        ))}
+                        <th style={{ ...cell, textAlign: 'right' }}>&nbsp;</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shownPharma.map((p) => (
+                        <tr key={p.id}>
+                          <td style={{ ...cell, whiteSpace: 'nowrap' }}>
+                            {p.label}
+                            {/* The book's @: you cannot simply walk in and buy this one. */}
+                            {p.rare && <span style={{ color: 'var(--warning)' }} title="Needs a Contact to obtain"> @</span>}
+                          </td>
+                          <td style={{ ...cell, textAlign: 'right' }}>{p.cost.toLocaleString()}cr</td>
+                          <td style={{ ...cell, textAlign: 'right' }}>
+                            {p.heal === null ? '—' : `Heal-${p.heal}`}
+                          </td>
+                          <td style={{ ...cell, color: 'var(--cyan)' }}>
+                            {p.duration === 'instant' ? '—' : p.duration}
+                          </td>
+                          {/* Clipped to one line with the whole thing on hover. These are
+                              the book's paragraphs, not the one-liners the cyberware shelf
+                              carries - Reset's runs to four hundred characters, and a row
+                              that tall makes the shelf unreadable. */}
+                          <td
+                            title={p.effect}
+                            style={{
+                              ...cell, color: 'var(--grid-section)',
+                              maxWidth: 340, overflow: 'hidden',
+                              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}
+                          >{p.effect}</td>
+                          <td style={{ ...cell, textAlign: 'right', color: 'var(--cyan)' }}>
+                            {ownedDoses(p.id) > 0 ? `x${ownedDoses(p.id)}` : ''}
+                          </td>
+                          <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button
+                              type="button"
+                              className="utility-btn"
+                              disabled={!sheet}
+                              aria-label={`Buy ${p.label}`}
+                              onClick={() => buyDose(p)}
+                            >BUY</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             ) : stock.length === 0 ? (
               <div style={{ ...mono(10), color: 'var(--grid-section)', padding: '10px 0', letterSpacing: 0 }}>
-                NO CATALOGUE FOR THIS SHOP YET. Cyberware and weapons are the stock lists built
-                so far; armour and drugs are still to come.
+                NO CATALOGUE FOR THIS SHOP YET. Cyberware, weapons and pharmaceuticals are the
+                stock lists built so far; armour is still to come.
               </div>
             ) : (
               <>

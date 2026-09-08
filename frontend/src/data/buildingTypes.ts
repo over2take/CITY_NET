@@ -9,7 +9,7 @@
 // inside.
 
 /** What a shop deals in, or null while it has no catalogue yet. */
-export type ShopStock = 'cyberware' | 'weapons' | null;
+export type ShopStock = 'cyberware' | 'weapons' | 'pharmaceuticals' | null;
 
 export interface BuildingType {
   id: string;
@@ -21,7 +21,9 @@ export interface BuildingType {
 export const BUILDING_TYPES: BuildingType[] = [
   { id: 'ripperdoc', label: 'Ripperdoc', shop: true, sells: 'cyberware' },
   { id: 'gun_shop', label: 'Gun Shop', shop: true, sells: 'weapons' },
-  { id: 'clinic', label: 'Clinic', shop: true, sells: null },
+  // The pharmacy. A clinic was always a shop with an empty shelf; the drug table (p60-61)
+  // is what it was waiting for.
+  { id: 'clinic', label: 'Clinic', shop: true, sells: 'pharmaceuticals' },
   { id: 'garage', label: 'Garage', shop: true, sells: null },
   { id: 'bar', label: 'Bar', shop: false, sells: null },
   { id: 'corp', label: 'Corporate', shop: false, sells: null },
