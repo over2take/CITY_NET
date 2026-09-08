@@ -189,13 +189,21 @@ export const shadowrun6e: SheetTemplate = {
       ],
     },
     {
+      id: 'inventory',
+      label: 'INVENTORY',
+      layout: 'inventory',
+      tab: 'GEAR',
+      fields: [],
+    },
+    {
       id: 'gear',
       label: 'GEAR & NUYEN',
       layout: 'list',
       tab: 'GEAR',
       fields: [
         { id: 'cash', label: 'Nuyen', type: 'number', source: 'bank_balance' },
-        { id: 'gear_notes', label: 'Gear', type: 'textarea', placeholder: 'Commlink, medkit rating 3, grapple gun' },
+        // Replaced by INVENTORY. Kept while it still holds text - see SheetField.retired.
+        { id: 'gear_notes', label: 'Gear', type: 'textarea', retired: true, placeholder: 'Commlink, medkit rating 3, grapple gun' },
       ],
     },
     {

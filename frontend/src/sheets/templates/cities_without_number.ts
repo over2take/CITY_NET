@@ -402,10 +402,9 @@ export const citiesWithoutNumber: SheetTemplate = {
       label: 'ENCUMBRANCE',
       layout: 'encumbrance',
       tab: 'GEAR',
-      fields: [
-        { id: 'gear_enc_readied', label: 'OTHER READIED', type: 'number', placeholder: '0', hint: 'Encumbrance for anything Readied that the sheet cannot count - everything in the GEAR notes below. Weapons and armor are counted from their own rows.' },
-        { id: 'gear_enc_stowed', label: 'OTHER STOWED', type: 'number', placeholder: '0', hint: "Encumbrance for anything Stowed that the sheet cannot count. Three small regular items - grenades, pharmaceuticals, rations, magazines - bundle into one, though breaking the bundle costs a Main Action (p48)." },
-      ],
+      // No fields: everything it counts is counted from somewhere else on the sheet. It
+      // took two boxes of hand-totalled "other gear" while gear was a textarea.
+      fields: [],
     },
     {
       id: 'armor',
@@ -498,13 +497,23 @@ export const citiesWithoutNumber: SheetTemplate = {
       fields: Array.from({ length: CWN_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
     },
     {
+      id: 'inventory',
+      label: 'INVENTORY',
+      layout: 'inventory',
+      tab: 'GEAR',
+      inventoryEnc: true,
+      fields: [],
+    },
+    {
       id: 'gear',
       label: 'GEAR & CASH',
       layout: 'list',
       tab: 'GEAR',
       fields: [
         { id: 'cash', label: 'Cash', type: 'number', source: 'bank_balance' },
-        { id: 'gear_notes', label: 'Gear', type: 'textarea', placeholder: 'Medkit, dataslab, grapnel line, 2x stim' },
+        // Replaced by INVENTORY, which can count what this box could only describe.
+        // Retired rather than removed: sheets that predate the rows have real text in here.
+        { id: 'gear_notes', label: 'Gear', type: 'textarea', retired: true, placeholder: 'Medkit, dataslab, grapnel line, 2x stim' },
       ],
     },
     {

@@ -35,13 +35,21 @@ export const generic: SheetTemplate = {
       ],
     },
     {
+      id: 'inventory',
+      label: 'INVENTORY',
+      layout: 'inventory',
+      tab: 'GEAR',
+      fields: [],
+    },
+    {
       id: 'gear',
       label: 'GEAR',
       layout: 'list',
       tab: 'GEAR',
       fields: [
         { id: 'cash', label: 'Cash', type: 'number', source: 'bank_balance' },
-        { id: 'gear_notes', label: 'Gear & inventory', type: 'textarea' },
+        // Replaced by INVENTORY. Kept while it still holds text - see SheetField.retired.
+        { id: 'gear_notes', label: 'Gear & inventory', type: 'textarea', retired: true },
       ],
     },
     {

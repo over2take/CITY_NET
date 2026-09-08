@@ -57,6 +57,18 @@ export interface SheetField {
   derived?: true;
   /** Example value shown as ghost text inside an empty field (input placeholder). */
   placeholder?: string;
+  /**
+   * A field something else has replaced, kept only while it still holds text.
+   *
+   * The free-text Gear box is the case: the INVENTORY rows do its job properly now, but
+   * existing sheets have real notes typed into it and deleting the field would take them
+   * with it. So it renders while it has content and goes away the moment it is emptied -
+   * nobody loses anything, and nobody new is offered the box that was replaced.
+   *
+   * Retiring is a display decision only: the value stays stored, the importer still fills
+   * it, and clearing the flag brings it back.
+   */
+  retired?: true;
   /** A unit caption under the value, e.g. METERS.
    *  For a number that means nothing on its own - the same small caption the CUR/MAX pair
    *  already uses, rather than a suffix inside the box, because a number input fills its
@@ -121,7 +133,7 @@ export interface SheetField {
  *  row (one-click: rolls the row's damage dice and spends its Effort cost).
  *  'ability_list' is a dynamic add/remove list stored as JSON in a single
  *  field; each item has name, cost, attr (dropdown), die, and effect. */
-export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware' | 'encumbrance' | 'weapon_stash';
+export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware' | 'encumbrance' | 'weapon_stash' | 'inventory';
 
 /** Configuration for the 'ability_list' section layout. */
 export interface AbilityListConfig {
@@ -146,6 +158,10 @@ export interface SheetSection {
    * the section renders every row it declares, which is what weapons and spells do.
    */
   groupSize?: number;
+  /** inventory layout: show the Encumbrance column. Only for a system that has a
+   *  carrying rule - inventing one for a game without it would be worse than not
+   *  counting. */
+  inventoryEnc?: boolean;
   /** grid layout: number of columns (default 4) */
   columns?: number;
   /**

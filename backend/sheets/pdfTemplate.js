@@ -74,7 +74,10 @@ const LAYOUTS = {
     },
     {
       title: 'NOTES',
-      fields: ['Ammunition', 'Gear', 'Cyberware', 'Lifepath', 'Critical Injuries', 'Addictions'],
+      // Inventory beside Gear rather than instead of it: the sheet has retired the Gear box
+      // in favour of countable rows, but a paper form cannot print rows, and one line of
+      // "2x Airhypo, Grapple gun" is read straight into them on the way in.
+      fields: ['Ammunition', 'Inventory', 'Gear', 'Cyberware', 'Lifepath', 'Critical Injuries', 'Addictions'],
     },
   ],
 
@@ -100,7 +103,8 @@ const LAYOUTS = {
       fields: [1, 2, 3].flatMap(i =>
         ['Name', 'Type', 'HP', 'HPMax', 'AR', 'AC', 'Spd', 'TT', 'Crew', 'Hrdpt', 'Cost'].map(p => `Vehicle${i}${p}`)),
     },
-    { title: 'NOTES', fields: ['Weapons Notes', 'Gear', 'Cyberware', 'Foci', 'Contacts', 'Injuries'] },
+    // Inventory is one line here and rows on the sheet - see the CP:R note above.
+    { title: 'NOTES', fields: ['Weapons Notes', 'Inventory', 'Gear', 'Cyberware', 'Foci', 'Contacts', 'Injuries'] },
   ],
 
   shadowrun_6e: [

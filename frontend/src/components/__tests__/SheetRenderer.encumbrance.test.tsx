@@ -50,15 +50,25 @@ describe('the count at the top of GEAR', () => {
     expect(screen.getByText(/READIED 1\/5 · STOWED 3\/10/)).toBeInTheDocument();
   });
 
-  it('adds what the player totalled for the gear notes', async () => {
-    show({ ...LOADED, gear_enc_readied: 3, gear_enc_stowed: 4 });
+  it('adds up the inventory, which used to be prose it could not count', async () => {
+    show({
+      ...LOADED,
+      inventory: JSON.stringify([
+        { name: 'Medkit', qty: 3, enc: '1', carry: 'readied' },
+        { name: 'Rope', qty: 2, enc: '2', carry: 'stowed' },
+      ]),
+    });
     await gear();
     expect(screen.getByText(/READIED 5\/5 · STOWED 6\/10/)).toBeInTheDocument();
   });
 });
 
 describe('whether being over costs anything', () => {
-  const OVER = { ...LOADED, gear_enc_readied: 4 };  // 6 readied against a limit of 5
+  // 6 readied against a limit of 5: armor 1, a readied pistol 1, and four of ammunition.
+  const OVER = {
+    ...LOADED,
+    inventory: JSON.stringify([{ name: 'Ammunition', qty: 4, enc: '1', carry: 'readied' }]),
+  };
 
   it('says what it would cost, and that nothing is being charged', async () => {
     show(OVER, false);
@@ -82,7 +92,10 @@ describe('whether being over costs anything', () => {
   });
 
   it('says when more is being carried than can be hauled', async () => {
-    show({ ...LOADED, gear_enc_readied: 20 }, true);
+    show({
+      ...LOADED,
+      inventory: JSON.stringify([{ name: 'Anvil', qty: 20, enc: '1', carry: 'readied' }]),
+    }, true);
     await gear();
     expect(screen.getByText(/more than can be hauled/)).toBeInTheDocument();
   });

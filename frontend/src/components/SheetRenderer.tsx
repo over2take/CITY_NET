@@ -1,4 +1,5 @@
 import { CyberwareSection } from './CyberwareSection';
+import { InventorySection } from './InventorySection';
 import {
   sheetEffects, effectiveValue, describeSources,
   type SheetEffects, type FieldEffect,
@@ -1650,6 +1651,31 @@ function ListSection({ section, data, readOnly, onFieldChange, onOpenLink }: {
   );
 }
 
+/**
+ * A section with its retired fields dropped, or null if that empties it.
+ *
+ * A retired field is one something else has replaced (see SheetField.retired). It stays on
+ * screen while it still holds text - the old Gear box has real notes typed into it on
+ * sheets that predate the INVENTORY rows - and disappears once emptied, so nobody loses
+ * anything and nobody new is handed a box that has been superseded.
+ *
+ * Untouched sections are returned as they are rather than rebuilt: the cheap path is the
+ * one every section but one takes, and a new object each render would defeat the memos
+ * downstream of it.
+ *
+ * Not for a section with `groupSize`, which counts fields to find its rows.
+ */
+function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection | null {
+  if (!section.fields.some((f) => f.retired)) return section;
+  const fields = section.fields.filter(
+    (f) => !f.retired || String(data[f.id] ?? '').trim() !== '',
+  );
+  if (fields.length === section.fields.length) return section;
+  // A section that was only the retired field goes with it, rather than leaving a heading
+  // over nothing.
+  return fields.length === 0 ? null : { ...section, fields };
+}
+
 export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
@@ -1692,7 +1718,10 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
     });
   };
 
-  const sectionsForTab = template.sections.filter(s => (s.tab ?? tabs[0]) === activeTab);
+  const sectionsForTab = template.sections
+    .filter(s => (s.tab ?? tabs[0]) === activeTab)
+    .map(s => dropEmptyRetired(s, data))
+    .filter(s => s !== null) as SheetSection[];
   const tabHasRolls = sectionsForTab.some(s => s.fields.some(f => f.roll));
   // Every field on the sheet, for looking up a `maxField` that lives in another block.
   const allFields = React.useMemo(
@@ -1768,6 +1797,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
+                  {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
                   {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}

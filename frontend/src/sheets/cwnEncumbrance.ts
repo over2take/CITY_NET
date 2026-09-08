@@ -11,6 +11,8 @@
 // than "encumbrance" usually implies, and it means the payoff is concrete - the Move field
 // already on the sheet simply becomes correct.
 
+import { inventoryEnc } from './inventory';
+
 /** The house rule that turns the Move penalty on. Off by default. */
 export const ENCUMBRANCE_RULE = 'cwn_encumbrance';
 
@@ -116,10 +118,10 @@ export const encumberedMove = (baseMove: number, state: EncState): number =>
 /**
  * What the sheet can actually count, split by where it is carried.
  *
- * Three sources, and only two of them are structured. Worn armor is Readied by
- * definition. Weapon rows carry their own Enc and say whether they are Readied or Stowed.
- * Everything else lives in the gear textarea, which is prose - so there are two boxes for
- * a player to total that up themselves rather than the sheet pretending to know.
+ * Three sources, and all three are structured now. Worn armor is Readied by definition.
+ * Weapon rows carry their own Enc and say which way they are carried. Everything else is
+ * in the inventory, which used to be a textarea - and while it was, this took two boxes of
+ * totals a player had to work out themselves. Those are gone: rows can be added up.
  *
  * A weapon nobody has filed as Readied or Stowed counts as Stowed: it is on the sheet, so
  * it is being carried, and Stowed is the more forgiving of the two limits to guess at.
@@ -128,8 +130,9 @@ export const carriedEnc = (
   data: Record<string, unknown> | undefined | null,
   weaponRows = 4,
 ): { readied: number; stowed: number } => {
-  let readied = num(data?.armor_enc) + num(data?.gear_enc_readied);
-  let stowed = num(data?.gear_enc_stowed);
+  const inv = inventoryEnc(data);
+  let readied = num(data?.armor_enc) + inv.readied;
+  let stowed = inv.stowed;
 
   for (let i = 1; i <= weaponRows; i += 1) {
     // A row with no name is an empty slot, not a weapon weighing nothing.

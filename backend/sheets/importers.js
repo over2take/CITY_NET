@@ -23,6 +23,64 @@ const { WEAPON_ROWS: CWN_WEAPON_ROWS } = require('./attackCwn');
 // 'SP (Head)' / 'sp_head' / 'SP HEAD' all normalize to 'sphead'
 const norm = (key) => String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
 
+// ─── The inventory, which every system has ───────────────────────────────────
+//
+// One list of countable things - ammunition, stims, rations, rope - stored as a JSON array
+// under a single field. Shared here rather than written three times because the field is
+// the same on Cyberpunk RED, Cities Without Number and Shadowrun; only Encumbrance, which
+// the importer does not touch, is CWN's.
+
+/** Where a form or a paste can spell the inventory. */
+const aliasInventory = (alias) =>
+  alias(['inventory', 'items', 'itemscarried', 'carried', 'kit'], 'inventory');
+
+/**
+ * One line of a written-out inventory.
+ *
+ * A form prints "3x Stim" or "Stim x3" or just "Rope", so both places a quantity can sit
+ * are read and the rest is the name. A number that is only part of the name - "9mm rounds",
+ * "Type 2 Vacc Suit" - is left alone: it is not at either end with an x beside it.
+ */
+const parseInventoryLine = (line) => {
+  const text = String(line).trim();
+  if (!text) return null;
+  let qty = 1;
+  let name = text;
+  const lead = /^(\d{1,4})\s*[x×]\s*(.+)$/i.exec(text);
+  const trail = /^(.+?)\s*[x×]\s*(\d{1,4})$/i.exec(text);
+  if (lead) { qty = Number(lead[1]); name = lead[2].trim(); }
+  else if (trail) { name = trail[1].trim(); qty = Number(trail[2]); }
+  if (!name) return null;
+  // Stowed rather than unfiled: an imported sheet lists what the character is carrying,
+  // and the stash - which costs nothing and is not on them - is a claim the form did not
+  // make. Same reading the weapon rows take of a row nobody filed.
+  return { name, qty: Math.max(1, qty), enc: '', bundled: false, carry: 'stowed', location: '' };
+};
+
+/**
+ * The inventory as the sheet stores it, from whichever way it arrived.
+ *
+ * JSON from a sheet round-trip, or "2x Stim, Rope; 9mm rounds" from a printed form. Rows
+ * that come in as JSON are passed through as objects rather than rebuilt: the sheet
+ * normalises what it reads (sheets/inventory.ts), so a second copy of that rule here would
+ * only be somewhere for the two to disagree. What is enforced is that it is a list of
+ * objects, which is the part that would throw.
+ */
+const normaliseInventory = (mapped) => {
+  if (typeof mapped.inventory !== 'string') return;
+  const raw = mapped.inventory.trim();
+  let items = null;
+  if (raw.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) items = parsed.filter((r) => r && typeof r === 'object');
+    } catch { items = null; }
+  }
+  if (!items) items = raw.split(/[,;\n]/).map(parseInventoryLine).filter(Boolean);
+  if (items.length) mapped.inventory = JSON.stringify(items);
+  else delete mapped.inventory;
+};
+
 // ─── Stage 1: extraction ─────────────────────────────────────────────────────
 
 // Fillable-PDF form fields → { name: value }. Returns null when the PDF has
@@ -114,7 +172,10 @@ const buildCprAliases = () => {
   // Notes / gear
   alias(['weapons', 'weaponsnotes'], 'weapons_notes');
   alias(['ammunition', 'ammo'], 'ammunition');
+  // Retired on the sheet in favour of the inventory rows, but still the way in: a form
+  // prints one Gear box, and an older sheet has notes in it worth keeping.
   alias(['gear', 'gearnotes', 'equipment'], 'gear_notes');
+  aliasInventory(alias);
   // Cyberpunk RED keeps chrome as rows rather than a line of text, but a printed form and
   // a pasted stat block still offer one line for it. So this stays as the way in, and the
   // import turns it into rows on the way to the sheet rather than storing the line — see
@@ -265,6 +326,7 @@ const mapCprFields = makeMapFields({
     if (mapped.humanity !== undefined && mapped.humanity_max === undefined) {
       mapped.humanity_max = mapped.humanity;
     }
+    normaliseInventory(mapped);
   },
 });
 
@@ -318,8 +380,10 @@ const buildCwnAliases = () => {
   alias(['movemod', 'movementmod'], 'move_mod');
   alias(['xp', 'exp', 'experience', 'experiencepoints'], 'xp');
   alias(['armorenc', 'armourenc'], 'armor_enc');
-  alias(['gearencreadied', 'otherreadied', 'readiedenc'], 'gear_enc_readied');
-  alias(['gearencstowed', 'otherstowed', 'stowedenc'], 'gear_enc_stowed');
+  // The two hand-totalled Enc boxes are gone from the sheet - the inventory rows add
+  // themselves up now - so a form that still prints them has nothing to import them into,
+  // and they belong in `unmapped` where the user is told so rather than in a field the
+  // sheet no longer draws.
   // Derived like trauma_target above, and aliased for the same reason: a form that prints
   // MOVE should round-trip rather than land in the unrecognised pile.
   alias(['move', 'movement', 'moverate'], 'move');
@@ -361,6 +425,7 @@ const buildCwnAliases = () => {
   // Notes
   alias(['weaponsnotes', 'weapons', 'weaponnotes'], 'weapons_notes');
   alias(['gear', 'gearnotes', 'equipment'], 'gear_notes');
+  aliasInventory(alias);
   alias(['cyberware', 'cyberwarenotes', 'chrome'], 'cyberware_notes');
   alias(['foci', 'focinotes', 'edges', 'abilities'], 'foci_notes');
   alias(['contacts', 'contactsnotes'], 'contacts_notes');
@@ -416,7 +481,7 @@ const NUMERIC_CWN_FIELDS = new Set([
   'armor_ac', 'armor_dex_cap', 'shield_bonus', 'trauma_target',
   'armor_soak', 'soak_current', 'armor_trauma_mod', 'strain_mod',
   'move', 'move_mod', 'xp',
-  'armor_enc', 'gear_enc_readied', 'gear_enc_stowed',
+  'armor_enc',
   'armor_ac_melee', 'shield_bonus_melee',
   'frail', 'auto_initiative',
   'cast_skill', 'mage_effort', 'mage_effort_max', 'spells_prepared_max',
@@ -549,6 +614,7 @@ const normaliseCwnWeaponRows = (mapped) => {
   const armor = modIdsFrom(mapped.armor_mods, gearMods.ARMOR_MODS);
   if (armor !== undefined) mapped.armor_mods = armor;
   else delete mapped.armor_mods;
+  normaliseInventory(mapped);
 };
 
 const mapCwnFields = makeMapFields({
@@ -605,6 +671,9 @@ const buildSr6Aliases = () => {
       alias([`weapon${i}${part}`], `weapon${i}_${part}`)
     );
   }
+
+  alias(['gear', 'gearnotes', 'equipment'], 'gear_notes');
+  aliasInventory(alias);
   return a;
 };
 
@@ -643,6 +712,7 @@ const mapSr6Fields = makeMapFields({
   buildAliases: buildSr6Aliases,
   numericFields: NUMERIC_SR6_FIELDS,
   maxSeeds: { edge_max: 'edge' },
+  post: normaliseInventory,
 });
 
 // ─── Registry ────────────────────────────────────────────────────────────────

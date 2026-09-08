@@ -381,6 +381,13 @@ export const cyberpunkRed: SheetTemplate = {
       fields: Array.from({ length: CPR_VEHICLE_ROWS }, (_, i) => vehicleRow(i + 1)).flat(),
     },
     {
+      id: 'inventory',
+      label: 'INVENTORY',
+      layout: 'inventory',
+      tab: 'GEAR',
+      fields: [],
+    },
+    {
       id: 'gear',
       label: 'GEAR & CASH',
       layout: 'list',
@@ -388,7 +395,8 @@ export const cyberpunkRed: SheetTemplate = {
       fields: [
         { id: 'cash', label: 'Cash (eb)', type: 'number', source: 'bank_balance' },
         { id: 'ammunition', label: 'Ammunition', type: 'text', placeholder: '30x heavy pistol, 2x grenade' },
-        { id: 'gear_notes', label: 'Gear', type: 'textarea', placeholder: 'Agent, medtech bag, grapple gun, 2x airhypo' },
+        // Replaced by INVENTORY. Kept while it still holds text - see SheetField.retired.
+        { id: 'gear_notes', label: 'Gear', type: 'textarea', retired: true, placeholder: 'Agent, medtech bag, grapple gun, 2x airhypo' },
       ],
     },
     {

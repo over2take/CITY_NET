@@ -110,9 +110,33 @@ describe('what the sheet can count', () => {
     expect(carriedEnc({ str: 10, weapon3_enc: '2' })).toEqual({ readied: 0, stowed: 0 });
   });
 
-  it('adds what the player totalled for the gear notes', () => {
-    const out = carriedEnc(sheet({ gear_enc_readied: 2, gear_enc_stowed: 4 }));
+  it('adds up the inventory, which it could not do while gear was prose', () => {
+    // This took two boxes of hand-totalled "other gear" until the inventory became rows.
+    const out = carriedEnc(sheet({
+      inventory: JSON.stringify([
+        { name: 'Medkit', qty: 1, enc: '2', carry: 'readied' },
+        { name: 'Rope', qty: 1, enc: '4', carry: 'stowed' },
+      ]),
+    }));
     expect(out).toEqual({ readied: 4, stowed: 6 });
+  });
+
+  it('leaves stashed items out of it entirely', () => {
+    // The stash is not on you, so it weighs nothing.
+    const out = carriedEnc(sheet({
+      inventory: JSON.stringify([{ name: 'Spare rifle', qty: 1, enc: '9', carry: 'stash' }]),
+    }));
+    expect(out).toEqual({ readied: 2, stowed: 2 });
+  });
+
+  it('bundles three small things into one, as the book does', () => {
+    // "Three such items can be tied into a bundle that only counts as one item" (p48).
+    const out = carriedEnc(sheet({
+      inventory: JSON.stringify([
+        { name: 'Grenade', qty: 6, enc: '1', bundled: true, carry: 'stowed' },
+      ]),
+    }));
+    expect(out.stowed).toBe(2 + 2);  // two bundles, plus the stowed rifle in the fixture
   });
 });
 
@@ -159,9 +183,11 @@ describe('where it lives', () => {
     for (let i = 1; i <= 4; i += 1) expect(ids).toContain(`weapon${i}_enc`);
   });
 
-  it('gives the player somewhere to total the gear notes', () => {
-    expect(ids).toContain('gear_enc_readied');
-    expect(ids).toContain('gear_enc_stowed');
+  it('no longer asks the player to total anything by hand', () => {
+    // Both boxes existed only because gear was a textarea. The inventory counts itself.
+    expect(ids).not.toContain('gear_enc_readied');
+    expect(ids).not.toContain('gear_enc_stowed');
+    expect(CWN.sections.some((s) => s.layout === 'inventory')).toBe(true);
   });
 
   it('is on no other system', () => {
