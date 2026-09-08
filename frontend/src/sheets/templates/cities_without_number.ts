@@ -451,7 +451,9 @@ export const citiesWithoutNumber: SheetTemplate = {
     {
       // After the carried rows, because it is what those rows are not.
       id: 'weapon_stash',
-      label: 'STASH',
+      // Named for what it holds, because the inventory rows have a stash of their own now
+      // and two headings reading STASH on one tab is a question nobody should have to ask.
+      label: 'WEAPON STASH',
       layout: 'weapon_stash',
       tab: 'GEAR',
       fields: [],

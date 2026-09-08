@@ -82,7 +82,7 @@ describe('the retired Weapon Notes box on CWN', () => {
     await gear();
     expect(screen.queryByText(/WEAPON NOTES/)).not.toBeInTheDocument();
     // The sections either side are untouched.
-    expect(screen.getByText(/STASH/)).toBeInTheDocument();
+    expect(screen.getByText(/WEAPON STASH/)).toBeInTheDocument();
     expect(screen.getByText(/INVENTORY/)).toBeInTheDocument();
   });
 
