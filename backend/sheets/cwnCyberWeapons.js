@@ -15,6 +15,7 @@
 // this and that should both move over to it.
 
 const cyberMods = require('./cwnCyberMods');
+const pharma = require('./cwnPharma');
 
 const num = (v) => {
   const n = Number(v);
@@ -95,17 +96,22 @@ const getCyberWeapon = (data, index, attackCwn) => {
   // Mods fitted to this implant (p71). Monoblade trades damage and Shock for a keener
   // trauma die; Targeting Processor buys a point of accuracy.
   const fitted = cyberMods.rowEffects(row);
+  // Whatever the character is on (p60-61). Body weaponry is still a weapon they are
+  // attacking with, and Boneshaker is in the arm swinging it - a drug that worked for a
+  // knife and not for the blade in your forearm would be the app inventing a distinction
+  // the book does not draw.
+  const drugs = pharma.activeEffects(data);
   return {
     name: spec.label,
     dmg: spec.dmg,
     skill,
     mod: attackCwn.weaponAttr(data, spec.attr, skill),
-    atk: fitted.hit,
+    atk: fitted.hit + drugs.hit,
     // The bonus is to the trauma ROLL rather than the die's size, so it rides along on
     // the parsed trauma rather than changing which die is thrown.
     trauma: { ...spec.trauma, bonus: fitted.traumaBonus },
-    shock: { ...spec.shock, dmg: Math.max(0, spec.shock.dmg + fitted.shock) },
-    dmgBonus: fitted.damage,
+    shock: { ...spec.shock, dmg: Math.max(0, spec.shock.dmg + fitted.shock + drugs.shock) },
+    dmgBonus: fitted.damage + drugs.damage,
     mods: fitted.installed,
     // Body weaponry is melee, whichever of the two skills it is rolled with.
     attackType: 'melee',

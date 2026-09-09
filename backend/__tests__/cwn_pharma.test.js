@@ -144,3 +144,30 @@ describe('the shelf', () => {
     expect(pharma.PHARMACEUTICALS[0].id).toBe('avalanche');
   });
 });
+
+describe('body weaponry is a weapon too', () => {
+  // Found by tracing the attack path rather than by a failing test: getCyberWeapon builds
+  // its own weapon object and originally never saw the drugs, so a character on Boneshaker
+  // swinging a cyber blade got nothing. The book draws no such distinction - the chemical
+  // is in the arm doing the swinging.
+  const BLADED = {
+    ...dosed('boneshaker'),
+    stab: 1, punch: 0, str_mod: 1, dex_mod: 1, base_hit_bonus: 0,
+    cyberware: [{ name: 'Body Blades I', type: 'body', placed: true, equipped: true, location: 'arm' }],
+  };
+
+  it('puts the drug on a cyber blade', () => {
+    const sober = attackCwn.getCyberWeapon({ ...BLADED, [pharma.FIELD]: [] }, 1);
+    const high = attackCwn.getCyberWeapon(BLADED, 1);
+    expect(sober).not.toBeNull();
+    expect(high.atk).toBe(sober.atk + 2);
+    expect(high.dmgBonus).toBe(sober.dmgBonus + 2);
+    expect(high.shock.dmg).toBe(sober.shock.dmg + 2);
+  });
+
+  it('leaves a sober set of blades alone', () => {
+    const w = attackCwn.getCyberWeapon({ ...BLADED, [pharma.FIELD]: [] }, 1);
+    expect(w.atk).toBe(0);
+    expect(w.dmgBonus).toBe(0);
+  });
+});
