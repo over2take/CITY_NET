@@ -400,12 +400,20 @@ export const takeDoseFromRow = (
     .filter((it, n) => n !== index || it.qty > 0);
 
   const active = activeDrugs(data);
-  const fields: Record<string, string | number> = {
-    // A second dose of something already running is still swallowed - it just does not
+  // An instant is a thing you do, not a state you are in. Lurch heals and is over; a
+  // Trauma Patch either stabilizes or does not. Listing one as "running" would leave a
+  // chip nothing can clear - END SCENE only ends scene-length doses - and would claim the
+  // character is still under an effect that finished the moment it resolved.
+  //
+  // The dose is still spent: you used the patch either way.
+  const running = drug.duration === 'instant'
+    ? active
+    // A second dose of something already running is swallowed too - it just does not
     // stack, which the effects already handle - so the row is spent either way.
-    [PHARMA_FIELD]: writeActive(
-      active.some((d) => d.id === drug.id) ? active : [...active, drug],
-    ),
+    : (active.some((d) => d.id === drug.id) ? active : [...active, drug]);
+
+  const fields: Record<string, string | number> = {
+    [PHARMA_FIELD]: writeActive(running),
     [INVENTORY_FIELD]: writeInventory(next),
   };
   // Hit points are the one thing a drug hands over rather than lends. A real write,

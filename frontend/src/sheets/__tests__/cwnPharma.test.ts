@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CWN_PHARMACEUTICALS, PHARMA_FIELD, pharmaById, activeDrugs, writeActive,
-  pharmaEffects, endScene, describePharma, carriedDoses, consumeDose,
+  pharmaEffects, endScene, describePharma, carriedDoses, consumeDose, takeDoseFromRow,
 } from '../cwnPharma';
 
 /**
@@ -254,5 +254,50 @@ describe('the line under a drug', () => {
 
   it('flags the one you need a Contact for', () => {
     expect(describePharma(pharmaById('reset')!)).toContain('needs a Contact');
+  });
+});
+
+describe('an instant is a thing you do, not a state you are in', () => {
+  // Found by asking when the effects end: all five instants became chips that nothing
+  // could clear, because END SCENE only ends scene-length doses. The module header had
+  // said "'instant' never sits on a sheet at all" since the first commit; the code did
+  // the opposite.
+  const readied = (name: string) => ({
+    inventory: JSON.stringify([
+      { name, qty: 2, enc: '', bundled: false, carry: 'readied', location: '' },
+    ]),
+  });
+
+  const INSTANTS = CWN_PHARMACEUTICALS.filter((d) => d.duration === 'instant');
+  const LASTING = CWN_PHARMACEUTICALS.filter((d) => d.duration !== 'instant');
+
+  it('covers the five the book gives no duration', () => {
+    expect(INSTANTS.map((d) => d.id).sort())
+      .toEqual(['hellbender', 'lurch', 'panacea', 'reset', 'trauma_patch']);
+  });
+
+  it.each(INSTANTS.map((d) => [d.id, d] as const))('%s never starts running', (_id, drug) => {
+    const written = takeDoseFromRow(readied(drug.label) as never, 0)!;
+    expect(JSON.parse(written[PHARMA_FIELD] as string)).toEqual([]);
+  });
+
+  it.each(INSTANTS.map((d) => [d.id, d] as const))('%s is still spent from the kit', (_id, drug) => {
+    // You used the patch either way - it just does not leave you in a state afterwards.
+    const written = takeDoseFromRow(readied(drug.label) as never, 0)!;
+    expect(JSON.parse(written.inventory as string)[0].qty).toBe(1);
+  });
+
+  it.each(LASTING.map((d) => [d.id, d] as const))('%s does start running', (_id, drug) => {
+    const written = takeDoseFromRow(readied(drug.label) as never, 0)!;
+    expect(JSON.parse(written[PHARMA_FIELD] as string)).toEqual([drug.id]);
+  });
+
+  it('leaves an instant out without disturbing what is already running', () => {
+    const data = {
+      ...readied('Lurch'),
+      [PHARMA_FIELD]: ['boneshaker'],
+    };
+    const written = takeDoseFromRow(data as never, 0)!;
+    expect(JSON.parse(written[PHARMA_FIELD] as string)).toEqual(['boneshaker']);
   });
 });
