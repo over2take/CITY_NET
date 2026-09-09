@@ -313,3 +313,119 @@ describe('every drug reaches the player somehow', () => {
     }
   });
 });
+
+describe('undoing a change to what is running', () => {
+  /**
+   * The x bills System Strain, which is the right reading of the rules and a harsh answer
+   * to a misclick. So there is one step back - and it appears only once there is something
+   * to step back from, because a permanent button on the header is clutter.
+   */
+  const live = (start: Record<string, unknown>) => {
+    // A sheet that actually holds what is written to it, so UNDO has something to restore
+    // into rather than being asserted on a mock's arguments.
+    let data = { ...start };
+    const Harness = () => {
+      const [state, setState] = React.useState(data);
+      data = state;
+      return (
+        <SheetRenderer
+          template={citiesWithoutNumber}
+          data={state as never}
+          readOnly={false}
+          onFieldChange={(id, v) => setState((d) => ({ ...d, [id]: v }))}
+          onFieldsChange={(f) => setState((d) => ({ ...d, ...f }))}
+        />
+      );
+    };
+    render(<Harness />);
+    return () => data;
+  };
+
+  it('is absent until something changes', () => {
+    live({ str: 10, [PHARMA_FIELD]: ['boneshaker'], system_strain: 2, system_strain_max: 10 });
+    expect(screen.queryByRole('button', { name: /^UNDO/ })).not.toBeInTheDocument();
+  });
+
+  it('appears after ending a drug, naming what it will put back', async () => {
+    live({ str: 10, [PHARMA_FIELD]: ['boneshaker'], system_strain: 2, system_strain_max: 10 });
+    await userEvent.click(screen.getByRole('button', { name: 'Remove BONESHAKER' }));
+    expect(screen.getByRole('button', { name: 'UNDO END BONESHAKER' })).toBeInTheDocument();
+  });
+
+  it('survives ending the only drug, which unmounts the strip', async () => {
+    // The moment somebody most wants it back is the moment the component holding it would
+    // have gone. That is why the snapshot lives on the renderer.
+    live({ str: 10, [PHARMA_FIELD]: ['boneshaker'], system_strain: 2, system_strain_max: 10 });
+    await userEvent.click(screen.getByRole('button', { name: 'Remove BONESHAKER' }));
+    expect(screen.queryByText('BONESHAKER')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'UNDO END BONESHAKER' })).toBeInTheDocument();
+  });
+
+  it('puts the drug back and refunds the Strain it billed', async () => {
+    const read = live({
+      str: 10, [PHARMA_FIELD]: ['boneshaker'], system_strain: 2, system_strain_max: 10,
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Remove BONESHAKER' }));
+    expect(read().system_strain).toBe(4);
+    await userEvent.click(screen.getByRole('button', { name: 'UNDO END BONESHAKER' }));
+    expect(read().system_strain).toBe(2);
+    expect(screen.getByText('BONESHAKER')).toBeInTheDocument();
+  });
+
+  it('goes away once used, because it is one step and not a history', async () => {
+    live({ str: 10, [PHARMA_FIELD]: ['boneshaker'], system_strain: 2, system_strain_max: 10 });
+    await userEvent.click(screen.getByRole('button', { name: 'Remove BONESHAKER' }));
+    await userEvent.click(screen.getByRole('button', { name: 'UNDO END BONESHAKER' }));
+    expect(screen.queryByRole('button', { name: /^UNDO/ })).not.toBeInTheDocument();
+  });
+
+  it('undoes a dose taken by mistake, dose and all', async () => {
+    const read = live({
+      str: 10, hp: 4, hp_max: 20,
+      inventory: JSON.stringify([
+        { name: 'Avalanche', qty: 2, enc: '', bundled: false, carry: 'readied', location: '' },
+      ]),
+    });
+    await gear();
+    await userEvent.click(screen.getByRole('button', { name: 'CONSUME Avalanche' }));
+    expect(read().hp).toBe(14);
+    expect(JSON.parse(read().inventory as string)[0].qty).toBe(1);
+
+    await userEvent.click(screen.getByRole('button', { name: 'UNDO CONSUME AVALANCHE' }));
+    // The hit points it handed over and the dose it spent both come back.
+    expect(read().hp).toBe(4);
+    expect(JSON.parse(read().inventory as string)[0].qty).toBe(2);
+    // Restored to what the field held before, which was nothing at all - and an absent
+    // field reads as no drugs, which is what the strip disappearing says.
+    expect(screen.queryByText('AVALANCHE')).not.toBeInTheDocument();
+  });
+
+  it('undoes ending the whole scene', async () => {
+    const read = live({
+      str: 10, system_strain: 1, system_strain_max: 10,
+      [PHARMA_FIELD]: ['boneshaker', 'olympus'],
+    });
+    await userEvent.click(screen.getByRole('button', { name: /END SCENE/ }));
+    expect(read().system_strain).toBe(4);
+    await userEvent.click(screen.getByRole('button', { name: 'UNDO END SCENE' }));
+    expect(read().system_strain).toBe(1);
+    expect(screen.getByText('BONESHAKER')).toBeInTheDocument();
+    expect(screen.getByText('OLYMPUS')).toBeInTheDocument();
+  });
+
+  it('replaces itself rather than stacking, so it is always the last change', async () => {
+    live({ str: 10, [PHARMA_FIELD]: ['boneshaker', 'olympus'], system_strain: 0, system_strain_max: 10 });
+    await userEvent.click(screen.getByRole('button', { name: 'Remove BONESHAKER' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove OLYMPUS' }));
+    expect(screen.getByRole('button', { name: 'UNDO END OLYMPUS' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'UNDO END BONESHAKER' })).not.toBeInTheDocument();
+  });
+
+  it('is not offered on a read-only sheet', () => {
+    render(
+      <SheetRenderer template={citiesWithoutNumber} data={{ [PHARMA_FIELD]: ['boneshaker'] } as never}
+        readOnly onFieldChange={vi.fn()} onFieldsChange={vi.fn()} />,
+    );
+    expect(screen.queryByRole('button', { name: /^UNDO/ })).not.toBeInTheDocument();
+  });
+});

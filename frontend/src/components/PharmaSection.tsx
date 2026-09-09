@@ -18,7 +18,14 @@ interface Props {
   data: SheetData;
   readOnly: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
-  onFieldsChange?: (fields: Record<string, string | number>) => void;
+  /**
+   * Apply a change to what is running, naming it so it can be undone.
+   *
+   * Routed through the renderer rather than written here, because the snapshot an UNDO
+   * restores has to outlive this component: ending your only drug unmounts it, and that is
+   * exactly the moment somebody wants the change back.
+   */
+  onPharmaChange?: (fields: Record<string, string | number>, label: string) => void;
 }
 
 /** What the active drugs are doing, in the order the book lists them. */
@@ -32,7 +39,7 @@ const describeEffects = (e: ReturnType<typeof pharmaEffects>): string => {
   return bits.join(' · ');
 };
 
-export function PharmaSection({ data, readOnly, onFieldChange, onFieldsChange }: Props) {
+export function PharmaSection({ data, readOnly, onFieldChange, onPharmaChange }: Props) {
   const active = activeDrugs(data);
   const effects = pharmaEffects(data);
   const scene = endScene(data);
@@ -44,8 +51,8 @@ export function PharmaSection({ data, readOnly, onFieldChange, onFieldsChange }:
    * SCENE charges for the same thing. That was a real bug: the book bills the Strain when
    * the drug ends, and taking the chip off is the drug ending.
    */
-  const end = (ids: string[]) => {
-    if (!onFieldsChange) {
+  const end = (ids: string[], label: string) => {
+    if (!onPharmaChange) {
       // No batching available: end them anyway rather than refusing, and leave the Strain
       // for the player. Losing the drug silently would be worse than an uncharged one.
       return onFieldChange(
@@ -53,7 +60,7 @@ export function PharmaSection({ data, readOnly, onFieldChange, onFieldsChange }:
         writeActive(active.filter((d) => !ids.includes(d.id))),
       );
     }
-    onFieldsChange(endDoses(data, ids));
+    onPharmaChange(endDoses(data, ids), label);
   };
 
   return (
@@ -77,7 +84,7 @@ export function PharmaSection({ data, readOnly, onFieldChange, onFieldsChange }:
                 title={strainOwed(data, [drug.id]) > 0
                   ? `End ${drug.label} — +${strainOwed(data, [drug.id])} System Strain`
                   : `End ${drug.label}`}
-                onClick={() => end([drug.id])}
+                onClick={() => end([drug.id], `END ${drug.label}`)}
                 style={{
                   background: 'none', border: 'none', color: 'var(--danger)',
                   cursor: 'pointer', padding: 0, fontSize: '0.75rem', lineHeight: 1,
@@ -99,7 +106,7 @@ export function PharmaSection({ data, readOnly, onFieldChange, onFieldsChange }:
             type="button"
             className="utility-btn"
             style={{ fontSize: '0.6rem', padding: '2px 10px', whiteSpace: 'nowrap' }}
-            onClick={() => end(scene.ended)}
+            onClick={() => end(scene.ended, 'END SCENE')}
             title="Ends the scene-length doses. Anything measured in hours keeps running."
           >
             END SCENE{scene.strain > 0 ? ` (+${scene.strain} STRAIN)` : ''}

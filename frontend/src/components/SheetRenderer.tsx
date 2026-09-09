@@ -2,6 +2,7 @@ import { CyberwareSection } from './CyberwareSection';
 import { InventorySection, type RowAction } from './InventorySection';
 import { PharmaSection } from './PharmaSection';
 import { consumable, takeDoseFromRow, hasPharma, activeDrugs } from '../sheets/cwnPharma';
+import { readInventory } from '../sheets/inventory';
 import {
   sheetEffects, effectiveValue, describeSources,
   type SheetEffects, type FieldEffect,
@@ -479,7 +480,7 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilt
   );
 }
 
-function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll }: {
+function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, onPharmaChange, pharmaUndo, onUndoPharma, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll }: {
   template: SheetTemplate; data: SheetData; portraitUrl?: string | null;
   onPortraitUpload?: (file: File) => void;
   portraitShadow?: boolean;
@@ -487,6 +488,11 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onFieldsChange?: (fields: Record<string, string | number>) => void;
+  /** Apply a change to what is running, naming it for the UNDO button. */
+  onPharmaChange?: (fields: Record<string, string | number>, label: string) => void;
+  /** The last such change, or null while nothing has been changed to put back. */
+  pharmaUndo?: { label: string; before: Record<string, string | number> } | null;
+  onUndoPharma?: () => void;
   readOnly?: boolean;
   onDeathSave?: () => void;
   onStabilize?: () => void;
@@ -701,13 +707,32 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
             player onto every tab. A drug wears off at the end of a scene and bills System
             Strain for it; a reminder that only exists on GEAR is one somebody is going to
             walk past. Draws nothing at all while a character is on nothing. */}
-        {hasPharma(template.id) && activeDrugs(data).length > 0 && (
-          <PharmaSection
-            data={data}
-            readOnly={!!readOnly}
-            onFieldChange={onFieldChange}
-            onFieldsChange={onFieldsChange}
-          />
+        {hasPharma(template.id) && (activeDrugs(data).length > 0 || pharmaUndo) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {activeDrugs(data).length > 0 && (
+              <PharmaSection
+                data={data}
+                readOnly={!!readOnly}
+                onFieldChange={onFieldChange}
+                onPharmaChange={onPharmaChange}
+              />
+            )}
+            {/* Only after something has actually changed, and only one step back. The x
+                bills System Strain, so a misclick is expensive enough to deserve a way
+                out - but a button that is always there is clutter on a header that has
+                to stay readable. */}
+            {!readOnly && pharmaUndo && (
+              <div>
+                <button
+                  type="button"
+                  className="utility-btn"
+                  style={{ fontSize: '0.6rem', padding: '2px 10px', whiteSpace: 'nowrap' }}
+                  onClick={onUndoPharma}
+                  title="Put back what that change overwrote, Strain and doses included."
+                >UNDO {pharmaUndo.label}</button>
+              </div>
+            )}
+          </div>
         )}
         {h.luckField && (() => {
           const luckCur = num(data[h.luckField!]) ?? 0;
@@ -1735,6 +1760,50 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
   };
 
   /**
+   * The last change to what is running, so it can be put back.
+   *
+   * Only pharmaceuticals have this, and only because the x is a one-way door: it bills
+   * System Strain, which is the correct reading of the rules and a harsh answer to a
+   * misclick. So the change is snapshotted rather than the button softened.
+   *
+   * It lives here rather than in PharmaSection because ending your only drug unmounts that
+   * component, and that is exactly when somebody wants the change back.
+   */
+  const [pharmaUndo, setPharmaUndo] = useState<
+    { label: string; before: Record<string, string | number> } | null
+  >(null);
+
+  /**
+   * Apply a pharmaceutical change, remembering what it overwrote.
+   *
+   * Only the fields being written are captured, so undoing puts back exactly what this
+   * change touched and nothing else. It is one step deep on purpose: two would need a
+   * stack, and the button exists for the press you did not mean rather than as history.
+   */
+  const applyPharma = React.useCallback((
+    fields: Record<string, string | number>, label: string,
+  ) => {
+    if (!onFieldsChange) return;
+    const before: Record<string, string | number> = {};
+    for (const key of Object.keys(fields)) {
+      const value = data[key];
+      // Arrays are stored as JSON on the sheet, which is the form these fields write, so
+      // a restored value round-trips rather than arriving as "[object Object]".
+      before[key] = typeof value === 'number' ? value
+        : Array.isArray(value) ? JSON.stringify(value)
+          : String(value ?? '');
+    }
+    setPharmaUndo({ label, before });
+    onFieldsChange(fields);
+  }, [data, onFieldsChange]);
+
+  const undoPharma = () => {
+    if (!pharmaUndo || !onFieldsChange) return;
+    onFieldsChange(pharmaUndo.before);
+    setPharmaUndo(null);
+  };
+
+  /**
    * CONSUME on an inventory row that holds a drug.
    *
    * Here rather than inside InventorySection because that table is on all four systems and
@@ -1751,10 +1820,12 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
       title: (item) => consumable(item).why,
       onAct: (index) => {
         const fields = takeDoseFromRow(data, index);
-        if (fields) onFieldsChange(fields);
+        if (!fields) return;
+        const name = readInventory(data)[index]?.name ?? 'DOSE';
+        applyPharma(fields, `CONSUME ${name.toUpperCase()}`);
       },
     };
-  }, [template.id, data, onFieldsChange]);
+  }, [template.id, data, onFieldsChange, applyPharma]);
 
   const sectionsForTab = template.sections
     .filter(s => (s.tab ?? tabs[0]) === activeTab)
@@ -1781,7 +1852,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
       `}</style>
 
-      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} readOnly={readOnly} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} />
+      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} onPharmaChange={applyPharma} pharmaUndo={pharmaUndo} onUndoPharma={undoPharma} readOnly={readOnly} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} />
 
       {/* The sheet body, and the thing that actually scrolls — not the window's own
           content box, which sits outside it. The right padding is what keeps the
