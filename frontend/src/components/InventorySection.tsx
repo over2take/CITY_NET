@@ -32,14 +32,32 @@ const heading: React.CSSProperties = {
   fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px',
 };
 
+/**
+ * An extra button on the rows that want one.
+ *
+ * Generic on purpose. This table is on all four systems and the only thing that needs a
+ * per-row button so far is a Cities Without Number drug, so the rule about which rows get
+ * one and what pressing it does is supplied from outside rather than known in here.
+ */
+export interface RowAction {
+  label: string;
+  /** Nothing is drawn for a row this returns null for. */
+  applies: (item: InventoryItem) => boolean;
+  enabled: (item: InventoryItem) => boolean;
+  /** Tooltip, and the whole explanation when the button is disabled. */
+  title: (item: InventoryItem) => string;
+  onAct: (index: number) => void;
+}
+
 interface Props {
   section: SheetSection;
   data: SheetData;
   readOnly: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
+  rowAction?: RowAction;
 }
 
-export function InventorySection({ section, data, readOnly, onFieldChange }: Props) {
+export function InventorySection({ section, data, readOnly, onFieldChange, rowAction }: Props) {
   const items = readInventory(data);
   // Encumbrance is Cities Without Number's. A system with no carrying rule gets the table
   // without the column, rather than a rule invented for it.
@@ -49,9 +67,16 @@ export function InventorySection({ section, data, readOnly, onFieldChange }: Pro
   const patch = (i: number, change: Partial<InventoryItem>) =>
     write(items.map((it, n) => (n === i ? { ...it, ...change } : it)));
 
-  const columns = showEnc
-    ? '1fr 48px 48px 28px 84px 1fr 20px'
-    : '1fr 48px 84px 1fr 20px';
+  // The action column is only laid out when something actually uses it, so a system with
+  // no per-row button loses no width to an empty column.
+  const showAction = !readOnly && !!rowAction && items.some((it) => rowAction.applies(it));
+  const columns = [
+    '1fr', '48px',
+    ...(showEnc ? ['48px', '28px'] : []),
+    '84px', '1fr',
+    ...(showAction ? ['auto'] : []),
+    ...(readOnly ? [] : ['20px']),
+  ].join(' ');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
@@ -67,6 +92,7 @@ export function InventorySection({ section, data, readOnly, onFieldChange }: Pro
           )}
           <div style={heading}>WHERE</div>
           <div style={heading} title="Where a stashed item actually is">LOCATION</div>
+          {showAction && <div />}
           {!readOnly && <div />}
 
           {items.map((item, i) => (
@@ -130,6 +156,19 @@ export function InventorySection({ section, data, readOnly, onFieldChange }: Pro
                 onChange={(e) => patch(i, { location: e.target.value })}
                 style={input}
               />
+              {showAction && (
+                rowAction!.applies(item) ? (
+                  <button
+                    type="button"
+                    aria-label={`${rowAction!.label} ${item.name}`}
+                    className="utility-btn"
+                    disabled={!rowAction!.enabled(item)}
+                    title={rowAction!.title(item)}
+                    onClick={() => rowAction!.onAct(i)}
+                    style={{ fontSize: '0.55rem', padding: '1px 6px', whiteSpace: 'nowrap' }}
+                  >{rowAction!.label}</button>
+                ) : <div />
+              )}
               {!readOnly && (
                 <button
                   type="button"

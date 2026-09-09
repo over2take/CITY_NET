@@ -511,18 +511,6 @@ export const citiesWithoutNumber: SheetTemplate = {
       fields: [],
     },
     {
-      // What the character is currently on (p60-61). CWN only: the drug table is this
-      // book's, and Cyberpunk RED has its own with different numbers.
-      //
-      // `fields` is empty because the whole section lives under one array field, the same
-      // way cyberware and the inventory do.
-      id: 'pharmaceuticals',
-      label: 'PHARMACEUTICALS',
-      layout: 'pharma',
-      tab: 'GEAR',
-      fields: [],
-    },
-    {
       id: 'gear',
       label: 'GEAR & CASH',
       layout: 'list',

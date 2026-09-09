@@ -1,6 +1,7 @@
 import { CyberwareSection } from './CyberwareSection';
-import { InventorySection } from './InventorySection';
+import { InventorySection, type RowAction } from './InventorySection';
 import { PharmaSection } from './PharmaSection';
+import { consumable, takeDoseFromRow, hasPharma, activeDrugs } from '../sheets/cwnPharma';
 import {
   sheetEffects, effectiveValue, describeSources,
   type SheetEffects, type FieldEffect,
@@ -478,13 +479,15 @@ function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilt
   );
 }
 
-function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll }: {
+function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll }: {
   template: SheetTemplate; data: SheetData; portraitUrl?: string | null;
   onPortraitUpload?: (file: File) => void;
   portraitShadow?: boolean;
   onTogglePortraitShadow?: () => void;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
+  onFieldsChange?: (fields: Record<string, string | number>) => void;
+  readOnly?: boolean;
   onDeathSave?: () => void;
   onStabilize?: () => void;
   /** LUCK armed for the next roll (declared before rolling, per CP:R). */
@@ -694,6 +697,18 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
             </div>
           );
         })()}
+        {/* What is running, in the header rather than in a section, so it follows the
+            player onto every tab. A drug wears off at the end of a scene and bills System
+            Strain for it; a reminder that only exists on GEAR is one somebody is going to
+            walk past. Draws nothing at all while a character is on nothing. */}
+        {hasPharma(template.id) && activeDrugs(data).length > 0 && (
+          <PharmaSection
+            data={data}
+            readOnly={!!readOnly}
+            onFieldChange={onFieldChange}
+            onFieldsChange={onFieldsChange}
+          />
+        )}
         {h.luckField && (() => {
           const luckCur = num(data[h.luckField!]) ?? 0;
           const luckMax = h.luckMaxField ? (num(data[h.luckMaxField]) ?? 0) : luckCur;
@@ -1719,6 +1734,28 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
     });
   };
 
+  /**
+   * CONSUME on an inventory row that holds a drug.
+   *
+   * Here rather than inside InventorySection because that table is on all four systems and
+   * this rule is Cities Without Number's. Readied only: injecting is a Main Action (p60)
+   * and reaching a Stowed item is another (p48), so a dose you have not readied is not one
+   * you can take this turn. The disabled button says exactly that.
+   */
+  const consumeAction: RowAction | undefined = useMemo(() => {
+    if (!hasPharma(template.id) || !onFieldsChange) return undefined;
+    return {
+      label: 'CONSUME',
+      applies: (item) => consumable(item).drug !== null,
+      enabled: (item) => consumable(item).ok,
+      title: (item) => consumable(item).why,
+      onAct: (index) => {
+        const fields = takeDoseFromRow(data, index);
+        if (fields) onFieldsChange(fields);
+      },
+    };
+  }, [template.id, data, onFieldsChange]);
+
   const sectionsForTab = template.sections
     .filter(s => (s.tab ?? tabs[0]) === activeTab)
     .map(s => dropEmptyRetired(s, data))
@@ -1744,7 +1781,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
       `}</style>
 
-      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} />
+      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} readOnly={readOnly} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} />
 
       {/* The sheet body, and the thing that actually scrolls — not the window's own
           content box, which sits outside it. The right padding is what keeps the
@@ -1798,8 +1835,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
-                  {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
-                  {section.layout === 'pharma' && <PharmaSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
+                  {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} rowAction={consumeAction} />}
                   {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}

@@ -13,7 +13,9 @@
 // Morale is not a stat we roll, a cyberspace action is not a number, and the hostile
 // drugs are saving throws aimed at a victim rather than states a character is in.
 
-import { readInventory, type InventoryItem } from './inventory';
+import {
+  INVENTORY_FIELD, readInventory, writeInventory, type InventoryItem,
+} from './inventory';
 
 /**
  * What is currently in the bloodstream. NOT what is being carried.
@@ -24,6 +26,19 @@ import { readInventory, type InventoryItem } from './inventory';
  * Taking a dose moves one from the inventory to here.
  */
 export const PHARMA_FIELD = 'pharma_active';
+
+/**
+ * Which systems have this drug table.
+ *
+ * A per-system flag rather than a name check at the call site, the same way the mod table
+ * and experience are gated. p60-61 is a Cities Without Number table; Cyberpunk RED has its
+ * own drugs with their own numbers, and offering these there would state something false
+ * about that game.
+ */
+const PHARMA_SYSTEMS = new Set(['cities_without_number']);
+
+export const hasPharma = (system: string | null | undefined): boolean =>
+  PHARMA_SYSTEMS.has(String(system ?? ''));
 
 export type PharmaDuration = 'scene' | 'hour' | 'instant' | 'extended';
 
@@ -245,6 +260,48 @@ export const endScene = (
 };
 
 /**
+ * Ending named doses, and charging for them.
+ *
+ * The single place a drug stops, so ending one by hand and ending a whole scene cannot
+ * disagree about the price. Boneshaker "adds 2 System Strain at the end of it" (p60) and
+ * Olympus one at its end: the bill falls when the drug ENDS, however it ended, and taking
+ * the chip off IS a drug ending. Splitting those two was a bug - the × quietly ended a
+ * drug for free while END SCENE charged for the same thing.
+ *
+ * Strain is summed rather than capped at the highest. It is the price each drug charges
+ * for itself, not a benefit the stacking rule limits. Clamped at the maximum because the
+ * sheet has nowhere to say "over" - the pool has a ceiling, and a character at it is
+ * already in the state the rules care about.
+ */
+export const endDoses = (
+  data: Record<string, unknown> | undefined | null,
+  ids: string[],
+): Record<string, string | number> => {
+  const ending = new Set(ids);
+  const active = activeDrugs(data);
+  const owed = active
+    .filter((d) => ending.has(d.id))
+    .reduce((n, d) => n + (Number(d.strain) || 0), 0);
+  const max = num(data?.system_strain_max);
+  const strain = num(data?.system_strain) + owed;
+  return {
+    [PHARMA_FIELD]: writeActive(active.filter((d) => !ending.has(d.id))),
+    system_strain: max > 0 ? Math.min(max, strain) : strain,
+  };
+};
+
+/** What ending these doses will cost, for a control that should say so beforehand. */
+export const strainOwed = (
+  data: Record<string, unknown> | undefined | null,
+  ids: string[],
+): number => {
+  const ending = new Set(ids);
+  return activeDrugs(data)
+    .filter((d) => ending.has(d.id))
+    .reduce((n, d) => n + (Number(d.strain) || 0), 0);
+};
+
+/**
  * How many doses of each drug the character is actually carrying.
  *
  * Read off the inventory rather than kept in a second place: a dose is a countable
@@ -286,6 +343,74 @@ export const consumeDose = (
   return items
     .map((it, n) => (n === i ? { ...it, qty: it.qty - 1 } : it))
     .filter((it, n) => n !== i || it.qty > 0);
+};
+
+const num = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+/**
+ * Whether an inventory row can be taken right now, and why not.
+ *
+ * Readied only, and that is the book rather than a preference: injecting or ingesting a
+ * drug "requires a Main Action" (p60), and a Stowed item is itself "a Main Action to
+ * reach" (p48). Two Main Actions is two turns, so a dose you have not readied is not one
+ * you can take this turn.
+ */
+export const consumable = (
+  item: InventoryItem,
+): { drug: Pharmaceutical | null; ok: boolean; why: string } => {
+  const drug = pharmaByName(item.name);
+  if (!drug) return { drug: null, ok: false, why: '' };
+  if (item.carry === 'readied') return { drug, ok: true, why: `Take a dose of ${drug.label}` };
+  return {
+    drug,
+    ok: false,
+    why: item.carry === 'stash'
+      ? 'Stashed — this is not on you.'
+      : 'Ready it first. Reaching a Stowed item is a Main Action and injecting is another.',
+  };
+};
+
+/**
+ * Taking the dose in one particular inventory row.
+ *
+ * Every field the sheet has to change, returned together so a dose cannot half-apply: what
+ * is now running, the row it came out of, and - for Avalanche alone - the hit points it
+ * hands over. Null when that row is not a drug.
+ *
+ * The row is addressed by index rather than by drug, because the player clicked a row.
+ * Two rows of Boneshaker readied and stowed are different rows, and only one of them is
+ * the one they pressed.
+ */
+export const takeDoseFromRow = (
+  data: Record<string, unknown> | undefined | null,
+  index: number,
+): Record<string, string | number> | null => {
+  const items = readInventory(data);
+  const item = items[index];
+  if (!item) return null;
+  const { drug, ok } = consumable(item);
+  if (!drug || !ok) return null;
+
+  const next = items
+    .map((it, n) => (n === index ? { ...it, qty: it.qty - 1 } : it))
+    .filter((it, n) => n !== index || it.qty > 0);
+
+  const active = activeDrugs(data);
+  const fields: Record<string, string | number> = {
+    // A second dose of something already running is still swallowed - it just does not
+    // stack, which the effects already handle - so the row is spent either way.
+    [PHARMA_FIELD]: writeActive(
+      active.some((d) => d.id === drug.id) ? active : [...active, drug],
+    ),
+    [INVENTORY_FIELD]: writeInventory(next),
+  };
+  // Hit points are the one thing a drug hands over rather than lends. A real write,
+  // because they get spent - an overlay would hand the +10 back on every read.
+  if (drug.grantsHp) fields.hp = num(data?.hp) + drug.grantsHp;
+  return fields;
 };
 
 /** A one-line summary of what a dose costs and needs, for the picker and the shelf. */
