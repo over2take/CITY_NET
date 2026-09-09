@@ -541,6 +541,11 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
                             {p.label}
                             {/* The book's @: you cannot simply walk in and buy this one. */}
                             {p.rare && <span style={{ color: 'var(--warning)' }} title="Needs a Contact to obtain"> @</span>}
+                            {/* Four of these are poisons. Worth knowing at the counter
+                                rather than after you have swallowed one yourself. */}
+                            {p.hostile && (
+                              <span style={{ color: 'var(--danger)' }} title="Hostile — administered to someone else"> ☠</span>
+                            )}
                           </td>
                           <td style={{ ...cell, textAlign: 'right' }}>{p.cost.toLocaleString()}cr</td>
                           <td style={{ ...cell, textAlign: 'right' }}>

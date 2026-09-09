@@ -615,3 +615,17 @@ describe('the clinic sells pharmaceuticals', () => {
     expect(rows()[0]).toBe('SAND');
   });
 });
+
+describe('the shelf marks what is dangerous to swallow', () => {
+  it('flags the four hostile drugs', () => {
+    // Dead metadata until now: nothing read `hostile`, so Pillow had drifted out of the
+    // set without anything noticing. Worth knowing at the counter.
+    show('clinic');
+    expect(screen.getAllByTitle('Hostile — administered to someone else')).toHaveLength(4);
+  });
+
+  it('keeps the Contact marker separate from it', () => {
+    show('clinic');
+    expect(screen.getAllByTitle('Needs a Contact to obtain')).toHaveLength(1);
+  });
+});

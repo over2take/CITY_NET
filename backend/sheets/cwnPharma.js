@@ -71,7 +71,7 @@ const PHARMACEUTICALS = [
   },
   {
     id: 'control_delete', label: 'CONTROL-DELETE', cost: 25, heal: null, duration: 'extended',
-    effect: 'Hostile. No saving throw, but toxin-filtering cyber stops it. The target acts normally and forgets everything between the dose and their next sleep.',
+    effect: 'Hostile. Ingested in food or drink; no saving throw, but toxin-filtering cyber stops it. The target acts normally and forgets everything between the dose and their next sleep or unconsciousness.',
     hostile: true,
   },
   {
@@ -103,7 +103,8 @@ const PHARMACEUTICALS = [
   },
   {
     id: 'pillow', label: 'PILLOW', cost: 10, heal: 0, duration: 'extended',
-    effect: 'A sedative for a restrained or helpless subject: 24 hours of torpor indistinguishable from death. A second dose inside 24 hours means a Physical save or die.',
+    effect: 'Hostile. A sedative injected into a restrained or helpless subject: 24 hours of torpor indistinguishable from death. A second dose inside 24 hours means a Physical save or die.',
+    hostile: true,
   },
   {
     id: 'psycho', label: 'PSYCHO', cost: 10, heal: null, duration: 'hour',
@@ -114,7 +115,7 @@ const PHARMACEUTICALS = [
   },
   {
     id: 'reset', label: 'RESET', cost: 1000, heal: null, duration: 'instant', rare: true,
-    effect: 'A drug of desperation, for a subject with a Body or Nerve system. Sheds all System Strain above the permanent minimum; five minutes later Strain maxes and a Physical save is made at a penalty equal to the Strain gained since. Success drops you to 1 hit point, failure is Mortally Wounded, and 1 or less means a second save or die. More than once a week is fatal.',
+    effect: 'A drug of desperation, for a willing subject with at least one Body or Nerve cyber system. Sheds all System Strain above the permanent minimum; five minutes later Strain maxes and a Physical save is made at a penalty equal to the Strain gained since. Success drops you to 1 hit point, failure is Mortally Wounded, and 1 or less means a second save or die. More than once a week is fatal.',
   },
   {
     id: 'sand', label: 'SAND', cost: 2, heal: null, duration: 'hour',
