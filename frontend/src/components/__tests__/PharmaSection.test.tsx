@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { SheetRenderer } from '../SheetRenderer';
 import { citiesWithoutNumber } from '../../sheets/templates/cities_without_number';
 import { cyberpunkRed } from '../../sheets/templates/cyberpunk_red';
-import { PHARMA_FIELD } from '../../sheets/cwnPharma';
+import { PHARMA_FIELD, CWN_PHARMACEUTICALS } from '../../sheets/cwnPharma';
 
 /**
  * Pharmaceuticals, in the two places they appear.
@@ -282,5 +282,34 @@ describe('taking a drug off bills what it cost', () => {
     const b = show(data);
     await userEvent.click(screen.getByRole('button', { name: /END SCENE/ }));
     expect(b.onFieldsChange.mock.calls[0][0]).toEqual(byHand);
+  });
+});
+
+describe('every drug reaches the player somehow', () => {
+  // Thirteen of the sixteen change no number this app rolls, so their whole effect IS
+  // their text. If that text never reaches a screen those drugs do literally nothing, and
+  // the matrix asserting "changes no roll" would pass while the feature was hollow.
+  const ALL = CWN_PHARMACEUTICALS.map((d) => [d.id, d] as const);
+
+  it.each(ALL)('%s shows its name and carries its rule', (_id, drug) => {
+    show({ str: 10, [PHARMA_FIELD]: [drug.id] });
+    const chip = screen.getByText(drug.label);
+    // The book's own sentence, on the chip, for the table to rule from.
+    expect(chip.closest('[title]')).toHaveAttribute('title', drug.effect);
+  });
+
+  it('spells out Avalanche\'s Major Injury penalty, which a player applies by hand', () => {
+    // The app never rolls the d12 Major Injury table, so -1 is only worth carrying if it
+    // is legible. Nothing else in the feature would notice if it vanished.
+    show({ str: 10, [PHARMA_FIELD]: ['avalanche'] });
+    expect(screen.getByText(/-1 on Major Injury/)).toBeInTheDocument();
+  });
+
+  it('spells out every modelled number on the effects line', () => {
+    show({ str: 10, [PHARMA_FIELD]: ['boneshaker', 'avalanche'] });
+    const line = screen.getByText(/\+2 to hit/);
+    for (const bit of ['+2 to hit', '+2 damage', '+2 Shock', 'Trauma Dice against you', '-1 on Major Injury']) {
+      expect(line.textContent, bit).toContain(bit);
+    }
   });
 });
