@@ -10,13 +10,26 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
 import { makeTestDb, get, run } from './helpers/testDb.js';
+import { untilValue } from './helpers/until.js';
 
 process.env.JWT_SECRET = 'test-secret';
 process.env.DICE_ANIM_MS = '0';
 
 const socketsFactory = (await import('../sockets/index.js')).default;
 
-const flush = (ms = 60) => new Promise((r) => setTimeout(r, ms));
+/**
+ * A settle, for asserting that nothing happened.
+ *
+ * Only refusals use this. Everything that expects a write waits for the write with
+ * `untilValue` instead - a fixed sleep before a positive assertion is a bet on how long
+ * the database takes, and this suite lost that bet under load. Here the failure mode is
+ * the other way round: too short a wait makes a refusal pass spuriously rather than fail,
+ * so it is generous and the risk is a missed regression, not a broken build.
+ */
+const settle = (ms = 250) => new Promise((r) => setTimeout(r, ms));
+
+/** Wait for the sheet to reach a state, and hand it back. */
+const sheetBecomes = (check, label) => untilValue(() => sheetOf(), check, { label });
 
 function boot(db) {
   const emitted = [];
@@ -62,21 +75,20 @@ describe('who may award experience', () => {
   it('lets an admin', async () => {
     const { handlers } = boot(db);
     handlers['adminAwardXp']({ token: adminToken(), usernames: ['ghost'], amount: 3 });
-    await flush();
-    expect((await sheetOf()).xp).toBe(3);
+    expect(await sheetBecomes((s) => s.xp === 3, 'xp reaching 3')).toMatchObject({ xp: 3 });
   });
 
   it('refuses a player', async () => {
     const { handlers } = boot(db);
     handlers['adminAwardXp']({ token: playerToken(), usernames: ['ghost'], amount: 3 });
-    await flush();
+    await settle();
     expect((await sheetOf()).xp).toBe(0);
   });
 
   it('refuses a forged token', async () => {
     const { handlers } = boot(db);
     handlers['adminAwardXp']({ token: jwt.sign({ username: 'gm', role: 'admin' }, 'wrong-secret'), usernames: ['ghost'], amount: 3 });
-    await flush();
+    await settle();
     expect((await sheetOf()).xp).toBe(0);
   });
 });
@@ -86,8 +98,7 @@ describe('the house rule reaches the award', () => {
     // 12 XP is level 4 on fast.
     const { handlers } = boot(db);
     handlers['adminAwardXp']({ token: adminToken(), usernames: ['ghost'], amount: 12 });
-    await flush();
-    expect(await sheetOf()).toMatchObject({ xp: 12, level: 4 });
+    expect(await sheetBecomes((s) => s.xp === 12, 'xp reaching 12')).toMatchObject({ xp: 12, level: 4 });
   });
 
   it('advances on the slow column when it is on', async () => {
@@ -96,15 +107,13 @@ describe('the house rule reaches the award', () => {
     await setRule('1');
     const { handlers } = boot(db);
     handlers['adminAwardXp']({ token: adminToken(), usernames: ['ghost'], amount: 12 });
-    await flush();
-    expect(await sheetOf()).toMatchObject({ xp: 12, level: 2 });
+    expect(await sheetBecomes((s) => s.xp === 12, 'xp reaching 12')).toMatchObject({ xp: 12, level: 2 });
   });
 
   it('treats the rule being absent as fast', async () => {
     const { handlers } = boot(db);
     handlers['adminAwardXp']({ token: adminToken(), usernames: ['ghost'], amount: 6 });
-    await flush();
-    expect((await sheetOf()).level).toBe(3);
+    expect(await sheetBecomes((s) => s.xp === 6, 'xp reaching 6')).toMatchObject({ level: 3 });
   });
 });
 
@@ -112,8 +121,8 @@ describe('what comes back', () => {
   it('tells the GM what each character ended on', async () => {
     const { handlers, emitted } = boot(db);
     handlers['adminAwardXp']({ token: adminToken(), usernames: ['ghost'], amount: 6 });
-    await flush();
-    const result = emitted.find((e) => e.event === 'xpAwardResult');
+    const result = await untilValue(
+      () => emitted.find((e) => e.event === 'xpAwardResult'), Boolean, { label: 'an xpAwardResult' });
     expect(result.data).toMatchObject({ ok: true, amount: 6 });
     expect(result.data.results[0]).toMatchObject({ username: 'ghost', ok: true, xp: 6, level: 3 });
   });
@@ -121,14 +130,16 @@ describe('what comes back', () => {
   it('tells the player their sheet moved, so the bar redraws', async () => {
     const { handlers, emitted } = boot(db);
     handlers['adminAwardXp']({ token: adminToken(), usernames: ['ghost'], amount: 3 });
-    await flush();
-    expect(emitted.some((e) => e.event === 'sheetUpdated' && e.data.username === 'ghost')).toBe(true);
+    await untilValue(
+      () => emitted.some((e) => e.event === 'sheetUpdated' && e.data.username === 'ghost'),
+      Boolean, { label: 'a sheetUpdated for ghost' });
   });
 
   it('says why when the award was refused, rather than going quiet', async () => {
     const { handlers, emitted } = boot(db);
     handlers['adminAwardXp']({ token: adminToken(), usernames: ['ghost'], amount: 0 });
-    await flush();
+    await untilValue(() => emitted.find((e) => e.event === 'xpAwardResult'), Boolean,
+      { label: 'an xpAwardResult' });
     expect(emitted.find((e) => e.event === 'xpAwardResult').data)
       .toMatchObject({ ok: false, reason: expect.stringContaining('zero') });
   });
@@ -136,7 +147,7 @@ describe('what comes back', () => {
   it('does not announce a sheet that never moved', async () => {
     const { handlers, emitted } = boot(db);
     handlers['adminAwardXp']({ token: adminToken(), usernames: ['nobody'], amount: 3 });
-    await flush();
+    await settle();
     expect(emitted.some((e) => e.event === 'sheetUpdated')).toBe(false);
   });
 });
@@ -147,21 +158,21 @@ describe('correcting a level over the socket', () => {
       [JSON.stringify({ level: 4, xp: 12 })]);
     const { handlers } = boot(db);
     handlers['adminAdjustLevel']({ token: adminToken(), usernames: ['ghost'], delta: -1 });
-    await flush();
+    await settle();
     expect(await sheetOf()).toMatchObject({ level: 3, xp: 12 });
   });
 
   it('refuses a player', async () => {
     const { handlers } = boot(db);
     handlers['adminAdjustLevel']({ token: playerToken(), usernames: ['ghost'], delta: 1 });
-    await flush();
+    await settle();
     expect((await sheetOf()).level).toBe(1);
   });
 
   it('tells the player, so their sheet redraws', async () => {
     const { handlers, emitted } = boot(db);
     handlers['adminAdjustLevel']({ token: adminToken(), usernames: ['ghost'], delta: 1 });
-    await flush();
+    await settle();
     expect(emitted.some((e) => e.event === 'sheetUpdated' && e.data.username === 'ghost')).toBe(true);
   });
 });

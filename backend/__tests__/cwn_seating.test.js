@@ -9,6 +9,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { makeTestDb, get, run } from './helpers/testDb.js';
+import { untilValue } from './helpers/until.js';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
@@ -18,7 +19,15 @@ process.env.JWT_SECRET = 'test-secret';
 process.env.DICE_ANIM_MS = '0';
 const socketsFactory = (await import('../sockets/index.js')).default;
 
-const flush = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+/**
+ * A settle, for asserting that nothing happened.
+ *
+ * Anything expecting a write waits for the write with `untilValue` instead: a fixed sleep
+ * before a positive assertion is a bet on how long the database takes, and under load this
+ * file lost it. Where a refusal is being asserted the bet is safe in the other direction -
+ * too short a wait passes spuriously rather than failing - so a settle is enough.
+ */
+const settle = (ms = 250) => new Promise((r) => setTimeout(r, ms));
 
 function boot(db, { admin = false } = {}) {
   const emitted = [];
@@ -163,7 +172,7 @@ describe('the roster arriving', () => {
     // save happened to refresh it.
     const { handlers, emitted } = boot(db);
     handlers['identify']('GHOST');
-    await flush(80);
+    await settle();
 
     const pushed = emitted.find(e => e.event === 'vehicleRoster');
     expect(pushed).toBeTruthy();
@@ -174,7 +183,7 @@ describe('the roster arriving', () => {
   it('names players by character, keeping the login as the key', async () => {
     const { handlers, emitted } = boot(db);
     handlers['identify']('GHOST');
-    await flush(80);
+    await settle();
 
     const { players } = emitted.find(e => e.event === 'vehicleRoster').data;
     expect(players).toContainEqual({ username: 'CODY', name: 'Sam' });
@@ -194,9 +203,9 @@ describe('the seatOut permission, over the socket', () => {
   it('refuses to pull someone else out', async () => {
     const { handlers, emitted } = boot(db);
     handlers['identify']('GHOST');
-    await flush(50);
+    await settle();
     handlers['seatOut']({ occupant: 'MOUSE' });
-    await flush(60);
+    await settle();
 
     expect(emitted.some(e => e.event === 'vehicleSeatingError' && e.data.message === 'NOT_YOURS')).toBe(true);
     // Refused in the server, not merely hidden in the UI.
@@ -206,28 +215,28 @@ describe('the seatOut permission, over the socket', () => {
   it('lets you out of your own seat', async () => {
     const { handlers } = boot(db);
     handlers['identify']('MOUSE');
-    await flush(50);
+    await settle();
     handlers['seatOut']({ occupant: 'MOUSE' });
-    await flush(60);
+    await settle();
     expect((await dataOf('MOUSE')).in_vehicle).toBeUndefined();
   });
 
   it('lets the GM pull anyone out', async () => {
     const { handlers } = boot(db, { admin: true });
     handlers['identify']('GHOST');
-    await flush(50);
+    await settle();
     handlers['seatOut']({ occupant: 'MOUSE' });
-    await flush(60);
+    await settle();
     expect((await dataOf('MOUSE')).in_vehicle).toBeUndefined();
   });
 
   it('lets anyone seat anyone, which is the deliberate asymmetry', async () => {
     const { handlers } = boot(db);
     handlers['identify']('GHOST');
-    await flush(50);
+    await settle();
     handlers['seatIn']({ occupant: 'MOUSE', owner: 'CODY', vehicleIndex: 1, seat: 'seat5' });
-    await flush(60);
-    expect((await dataOf('MOUSE')).vehicle_seat).toBe('seat5');
+    await untilValue(() => dataOf('MOUSE'), (d) => d.vehicle_seat === 'seat5',
+      { label: 'MOUSE being seated in seat5' });
   });
 });
 

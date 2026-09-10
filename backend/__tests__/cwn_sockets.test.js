@@ -11,13 +11,22 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { makeTestDb, get, run } from './helpers/testDb.js';
+import { drain } from './helpers/until.js';
 
 process.env.JWT_SECRET = 'test-secret';
 process.env.DICE_ANIM_MS = '0'; // skip the 5s dice-animation delay on outcome writes
 
 const socketsFactory = (await import('../sockets/index.js')).default;
 
-const flush = (ms = 25) => new Promise((r) => setTimeout(r, ms));
+/**
+ * Wait for what the handler queued, not for a stopwatch.
+ *
+ * This was a fixed sleep, which is a bet that the database finishes within N milliseconds.
+ * On an idle machine it does; under load it does not, and the assertion then ran against
+ * state that had not arrived. `drain` queues its own queries behind the handler's and
+ * waits for those, so it is exact and usually faster.
+ */
+const flush = () => drain(db);
 const waitFor = async (cond, timeout = 2000) => {
   const start = Date.now();
   while (!cond()) {

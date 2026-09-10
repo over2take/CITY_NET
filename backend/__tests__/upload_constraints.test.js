@@ -151,7 +151,10 @@ describe('an oversized upload', () => {
 });
 
 describe('a real battle map upload', () => {
-  it('stores a large map without buffering it, and stores it once', async () => {
+  // 40MB through the streaming path is genuinely slow, and slower again on a machine
+  // running the rest of the suite beside it. This one is not racy - it is long - so it
+  // gets room rather than a poll.
+  it('stores a large map without buffering it, and stores it once', { timeout: 60000 }, async () => {
     // 40MB is past the old ceiling entirely and is an ordinary size for an animated map.
     // It also covers the streaming path end to end: written to a temporary file, hashed
     // in chunks, renamed to its hash.
