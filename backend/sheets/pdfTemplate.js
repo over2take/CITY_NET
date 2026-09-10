@@ -16,6 +16,28 @@
 // reproduction of anyone's character sheet design.
 
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { CWN_SKILLS } = require('./rolls');
+const { WEAPON_ROWS: CWN_WEAPON_ROWS } = require('./attackCwn');
+
+/**
+ * Every CWN skill, by the label the importer already maps.
+ *
+ * Read off the roll table rather than retyped, so a skill added to the game gets a box
+ * without anybody remembering to add one here.
+ */
+const CWN_SKILL_LABELS = Object.values(CWN_SKILLS).map(([label]) => label);
+
+/** Weapon rows, counted from the resolver so the form cannot print fewer than the sheet. */
+const CWN_FORM_WEAPON_ROWS = Array.from({ length: CWN_WEAPON_ROWS }, (_, i) => i + 1);
+
+/**
+ * Stash rows on paper.
+ *
+ * The sheet's stash grows without limit; a printed form cannot, so this is a judgement:
+ * four is more weapons than most characters own and leaves the form a page shorter than
+ * six would.
+ */
+const CWN_FORM_STASH_ROWS = [1, 2, 3, 4];
 
 /**
  * What the form asks for, in reading order.
@@ -82,26 +104,58 @@ const LAYOUTS = {
   ],
 
   cities_without_number: [
-    { title: 'IDENTITY', fields: ['Name', 'Background', 'Class', 'Level', 'Description', 'Faction'] },
+    { title: 'IDENTITY', fields: ['Name', 'Background', 'Class', 'Level', 'XP', 'Aliases', 'Description', 'Faction', 'Languages'] },
     { title: 'ATTRIBUTES', fields: ['Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma'] },
     {
       title: 'COMBAT',
       fields: ['AC', 'Base Hit Bonus', 'Trauma Target', 'System Strain', 'System Strain Max',
         'Lifestyle', 'Armor Name', 'Armor AC', 'Armor Melee AC', 'Max Dex', 'Damage Soak',
-        'TT Mod', 'Shield', 'Shield Melee', 'Armor Mods'],
+        'TT Mod', 'Shield', 'Shield Melee', 'Armor Mods', 'Armor Enc', 'Move Mod',
+        'Frail', 'Auto Initiative'],
     },
     { title: 'SAVES', fields: ['Save Physical', 'Save Evasion', 'Save Mental', 'Save Luck'] },
     {
+      // The whole skill list, which this form has never had. Every one of them has resolved
+      // in the importer since it was written; there was simply nowhere to write them down,
+      // so a filled-in form produced a character who could not roll anything.
+      title: 'SKILLS',
+      fields: CWN_SKILL_LABELS,
+    },
+    {
+      // Six rows, matching the sheet. It printed four, so a character with a full rack lost
+      // two weapons on the way in and nothing said so.
       title: 'WEAPONS',
-      fields: [1, 2, 3, 4].flatMap(i =>
-        ['Name', 'Dmg', 'Skill', 'Attr', 'Trauma', 'Shock', 'Atk', 'Mods'].map(p => `Weapon${i}${p}`)),
+      fields: CWN_FORM_WEAPON_ROWS.flatMap(i =>
+        ['Name', 'Dmg', 'Skill', 'Attr', 'Trauma', 'Shock', 'Atk', 'Mods', 'Carry', 'Enc']
+          .map(p => `Weapon${i}${p}`)),
+    },
+    {
+      // Weapons you own but are not carrying. Numbered boxes gathered into the array on
+      // the way in, the same shape Cyberpunk's cyberware table uses - a paper form cannot
+      // print a growable list, and one line cannot hold a location per weapon.
+      title: 'WEAPON STASH',
+      fields: CWN_FORM_STASH_ROWS.flatMap(i =>
+        ['Name', 'Dmg', 'Skill', 'Attr', 'Trauma', 'Shock', 'Enc', 'Location']
+          .map(p => `Stash${i}${p}`)),
     },
     {
       // Picking a book type fills these in on the sheet, so the form is for a car that has
       // been edited away from its preset — or one arriving from somewhere else entirely.
+      //
+      // Mounts are deliberately NOT printed: three per vehicle across six vehicles is 108
+      // boxes, which would more than double this form for a case the preset already fills.
       title: 'VEHICLES',
-      fields: [1, 2, 3].flatMap(i =>
-        ['Name', 'Type', 'HP', 'HPMax', 'AR', 'AC', 'Spd', 'TT', 'Crew', 'Hrdpt', 'Cost'].map(p => `Vehicle${i}${p}`)),
+      fields: [1, 2, 3, 4, 5, 6].flatMap(i =>
+        ['Name', 'Type', 'HP', 'HPMax', 'AR', 'AC', 'Spd', 'TT', 'Crew', 'Hrdpt', 'Pow', 'Mass', 'Cost']
+          .map(p => `Vehicle${i}${p}`)),
+    },
+    {
+      // Only drawn on a sheet with the DELUXE house rule on, but a form cannot ask, and a
+      // box nobody fills costs nothing.
+      title: 'MAGIC',
+      fields: ['Cast Skill', 'Mage Effort', 'Mage Effort Max', 'Spells Prepared Max',
+        ...[1, 2, 3, 4].flatMap(i => ['Name', 'Effect', 'Dmg', 'Cost'].map(p => `Spell${i}${p}`)),
+        'Summon Skill', 'Summoner Effort', 'Summoner Effort Max', 'Spirits'],
     },
     // Inventory is one line here and rows on the sheet - see the CP:R note above.
     { title: 'NOTES', fields: ['Weapons Notes', 'Inventory', 'Gear', 'Cyberware', 'Foci', 'Contacts', 'Injuries'] },

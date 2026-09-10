@@ -181,3 +181,28 @@ describe('where it lives', () => {
     }
   });
 });
+
+describe('a stash filled in on paper', () => {
+  // The form prints four numbered rows and the importer gathers them into the array this
+  // module reads. Proving that here rather than only on the server side: the two halves
+  // are in different languages and the shape between them is the contract.
+  it('reads back as a stashed weapon', async () => {
+    const { getImporter } = await import('../../../../backend/sheets/importers.js');
+    const { mapped } = getImporter('cities_without_number').mapFields({
+      Stash1Name: 'Combat Rifle', Stash1Dmg: '1d12', Stash1Skill: 'shoot',
+      Stash1Attr: 'dex_mod', Stash1Trauma: 'd10/x3', Stash1Shock: '3/15',
+      Stash1Enc: '2', Stash1Location: 'the Kestrel',
+    });
+    const rows = readStash({ weapons_stash: mapped.weapons_stash } as never);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      name: 'Combat Rifle', dmg: '1d12', skill: 'shoot',
+      enc: '2', location: 'the Kestrel', atk: 0,
+    });
+  });
+
+  it('carries no attack bonus, because the form has no box for one', () => {
+    // A stashed weapon is not being fired. atk is what the carried row earns.
+    expect(readStash({ weapons_stash: '[{"name":"Shotgun"}]' } as never)[0].atk).toBe(0);
+  });
+});

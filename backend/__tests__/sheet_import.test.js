@@ -183,8 +183,29 @@ describe('the import form', () => {
     // fields like CWN's token AC are understood and deliberately routed elsewhere rather
     // than written into sheet JSON, which is not the same as being lost.
     expect(Object.keys(unmapped)).toEqual([]);
-    expect(Object.keys(mapped).length + Object.keys(skipped).length)
-      .toBeGreaterThanOrEqual(labels.length);
+    // Most boxes become a field each, but some tables are gathered: CP:R's twelve
+    // cyberware lines and CWN's four stash rows each collapse into one JSON array, and
+    // their transport fields are dropped on the way. So the count cannot be compared to
+    // the label count directly - the assertion that matters is `unmapped` being empty
+    // above, plus the gathered arrays actually arriving.
+    expect(Object.keys(mapped).length + Object.keys(skipped).length).toBeGreaterThan(0);
+  });
+
+  it.each(SYSTEMS)('%s loses nothing to the gather step', (system) => {
+    // A gathered table has to produce its array. Without this, deleting the transport
+    // fields and never writing the array would pass the check above in silence.
+    const labels = labelsFor(system);
+    const filled = Object.fromEntries(labels.map((l) => [l, 'x']));
+    const { mapped } = getImporter(system).mapFields(filled);
+    const gathered = {
+      cyberpunk_red: [],           // chrome is gathered by the socket, not the mapper
+      cities_without_number: ['weapons_stash'],
+      shadowrun_6e: [],
+    }[system];
+    for (const field of gathered) {
+      expect(mapped[field], field).toBeTruthy();
+      expect(JSON.parse(mapped[field]).length, field).toBeGreaterThan(0);
+    }
   });
 
   it.each(SYSTEMS)('%s names each box once', (system) => {

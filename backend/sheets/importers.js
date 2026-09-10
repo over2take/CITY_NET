@@ -426,6 +426,7 @@ const buildCwnAliases = () => {
   alias(['weaponsnotes', 'weapons', 'weaponnotes'], 'weapons_notes');
   alias(['gear', 'gearnotes', 'equipment'], 'gear_notes');
   aliasInventory(alias);
+  alias(['weaponsstash', 'stash'], 'weapons_stash');
   alias(['cyberware', 'cyberwarenotes', 'chrome'], 'cyberware_notes');
   alias(['foci', 'focinotes', 'edges', 'abilities'], 'foci_notes');
   alias(['contacts', 'contactsnotes'], 'contacts_notes');
@@ -433,6 +434,15 @@ const buildCwnAliases = () => {
   // A JSON array on the sheet, but a form prints a line of words. The normaliser below
   // splits one into the other so a filled-in form does not lose them.
   alias(['languages', 'languagesspoken', 'fluentin'], 'languages');
+
+  // The weapon stash's printed boxes. Transport rather than sheet fields: `mapCwnFields`
+  // gathers them into the array and drops them, the same way Cyberpunk's cyberware table
+  // works. A paper form cannot print a list that grows.
+  for (let i = 1; i <= CWN_FORM_STASH_ROWS; i += 1) {
+    ['name', 'dmg', 'skill', 'attr', 'trauma', 'shock', 'enc', 'location'].forEach((part) =>
+      alias([`stash${i}${part}`], `stash${i}_${part}`)
+    );
+  }
 
   // Weapon rows round-trip
   for (let i = 1; i <= CWN_WEAPON_ROWS; i++) {
@@ -615,6 +625,44 @@ const normaliseCwnWeaponRows = (mapped) => {
   if (armor !== undefined) mapped.armor_mods = armor;
   else delete mapped.armor_mods;
   normaliseInventory(mapped);
+  gatherStash(mapped);
+};
+
+/** How many stash rows the printed form offers. Mirrors CWN_FORM_STASH_ROWS on the PDF. */
+const CWN_FORM_STASH_ROWS = 4;
+
+/**
+ * The printed stash boxes, gathered into the array the sheet keeps.
+ *
+ * Numbered boxes in, one JSON field out, and the transport fields dropped - exactly what
+ * `cyberware.fromFormFields` does for Cyberpunk's chrome table, and for the same reason: a
+ * form has a fixed number of lines and the sheet does not.
+ *
+ * A row with no name is an empty line on the form rather than a weapon weighing nothing,
+ * so it is skipped. Never written over a stash that already arrived as JSON, which is what
+ * a sheet round-trip carries.
+ */
+const gatherStash = (mapped) => {
+  const rows = [];
+  for (let i = 1; i <= CWN_FORM_STASH_ROWS; i += 1) {
+    const row = {};
+    let named = false;
+    ['name', 'dmg', 'skill', 'attr', 'trauma', 'shock', 'enc', 'location'].forEach((part) => {
+      const key = `stash${i}_${part}`;
+      if (mapped[key] !== undefined) {
+        row[part] = String(mapped[key]);
+        if (part === 'name' && row.name.trim()) named = true;
+        delete mapped[key];
+      }
+    });
+    if (!named) continue;
+    // The two fields the form has no room for. A stashed weapon is not being fired, so an
+    // attack bonus it does not have yet is not worth a box.
+    rows.push({ atk: 0, mods: '', ...row });
+  }
+  if (rows.length && typeof mapped.weapons_stash !== 'string') {
+    mapped.weapons_stash = JSON.stringify(rows);
+  }
 };
 
 const mapCwnFields = makeMapFields({

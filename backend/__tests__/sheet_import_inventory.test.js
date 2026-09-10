@@ -102,3 +102,75 @@ describe('the two hand-totalled Enc boxes that are gone', () => {
     expect(Object.keys(out.unmapped)).toEqual(['GearEncReadied', 'GearEncStowed']);
   });
 });
+
+describe('the CWN form covers the sheet it feeds', () => {
+  const boxes = () => LAYOUTS.cities_without_number.flatMap((s) => s.fields);
+  const fill = (extra = {}) => map('cities_without_number', {
+    ...Object.fromEntries(boxes().map((b) => [b, '1'])), ...extra,
+  });
+
+  it('prints every skill, which it never did', () => {
+    // A character form with no skill boxes produced a character who could not roll
+    // anything. The importer had aliased all of them since it was written.
+    const { mapped } = fill();
+    for (const id of ['shoot', 'stab', 'punch', 'notice', 'heal', 'fix', 'program', 'talk']) {
+      expect(mapped[id], id).toBe(1);
+    }
+  });
+
+  it('prints as many weapon rows as the sheet holds', () => {
+    // It printed four for a sheet with six, so a full rack lost two on the way in.
+    const { mapped } = fill();
+    expect(mapped.weapon6_name).toBeDefined();
+    expect(mapped.weapon6_enc).toBeDefined();
+    expect(mapped.weapon6_carry).toBeUndefined(); // '1' is not a carry state; see below
+  });
+
+  it('takes a weapon carry state off the form', () => {
+    const { mapped } = fill({ Weapon1Carry: 'Readied', Weapon2Carry: 'S' });
+    expect(mapped.weapon1_carry).toBe('readied');
+    expect(mapped.weapon2_carry).toBe('stowed');
+  });
+
+  it('gathers the stash boxes into the array the sheet keeps', () => {
+    const { mapped } = map('cities_without_number', {
+      Stash1Name: 'Combat Rifle', Stash1Dmg: '1d12', Stash1Skill: 'Shoot',
+      Stash1Enc: '2', Stash1Location: 'the Kestrel',
+      Stash2Name: 'Monoblade', Stash2Dmg: '1d8',
+    });
+    const stash = JSON.parse(mapped.weapons_stash);
+    expect(stash).toHaveLength(2);
+    expect(stash[0]).toMatchObject({ name: 'Combat Rifle', enc: '2', location: 'the Kestrel' });
+    // The transport boxes are dropped once gathered - they are not sheet fields.
+    expect(Object.keys(mapped).some((k) => k.startsWith('stash1_'))).toBe(false);
+  });
+
+  it('skips an empty stash line rather than storing a nameless weapon', () => {
+    const { mapped } = map('cities_without_number', {
+      Stash1Name: 'Shotgun', Stash2Name: '', Stash2Dmg: '1d6',
+    });
+    expect(JSON.parse(mapped.weapons_stash)).toHaveLength(1);
+  });
+
+  it('leaves a stash that arrived as JSON alone', () => {
+    // A sheet round-trip carries the real array, with the atk and mods a form cannot hold.
+    const real = JSON.stringify([{ name: 'Laser', dmg: '1d10', atk: 2, mods: '["scope"]' }]);
+    const { mapped } = map('cities_without_number', { weapons_stash: real, Stash1Name: 'Shotgun' });
+    expect(JSON.parse(mapped.weapons_stash)[0]).toMatchObject({ name: 'Laser', atk: 2 });
+  });
+
+  it('takes the fields added since the form was last regenerated', () => {
+    const { mapped } = fill();
+    for (const id of ['xp', 'aliases', 'move_mod', 'armor_enc', 'frail', 'auto_initiative',
+      'cast_skill', 'summon_skill', 'spell1_name', 'vehicle6_name', 'vehicle1_pow']) {
+      expect(mapped[id], id).toBeDefined();
+    }
+  });
+
+  it('does not print what is running in a character\'s bloodstream', () => {
+    // Doses are inventory rows and import as such. Which drug somebody is high on at the
+    // moment they fill in a form is not a fact a form should carry.
+    expect(boxes()).not.toContain('Pharmaceuticals');
+    expect(fill().mapped.pharma_active).toBeUndefined();
+  });
+});
