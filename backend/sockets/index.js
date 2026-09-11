@@ -1310,8 +1310,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             // cannot hold rows. Read it into rows here rather than keeping a field the
             // template no longer has — and never over rows that already arrived, which
             // the Companion path fills in with costs this line cannot carry.
-            if (system === 'cyberpunk_red') {
-              // The printed form's numbered boxes, gathered into rows and then dropped.
+            // The printed form's numbered boxes, gathered into rows and then dropped. Both
+            // systems store chrome as the same kind of row, so one gatherer reads both
+            // forms - only the column labels differ, and those are the PDF's business.
+            if (system === 'cyberpunk_red' || system === 'cities_without_number') {
               const fromForm = cyberware.fromFormFields(data);
               Object.keys(data).filter(cyberware.isFormField).forEach((k) => { delete data[k]; });
               if (fromForm.length && !Array.isArray(data[cyberware.FIELD])) {

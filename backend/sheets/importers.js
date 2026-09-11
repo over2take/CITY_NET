@@ -427,7 +427,22 @@ const buildCwnAliases = () => {
   alias(['gear', 'gearnotes', 'equipment'], 'gear_notes');
   aliasInventory(alias);
   alias(['weaponsstash', 'stash'], 'weapons_stash');
+  // The free-text box stays a real field here, unlike Cyberpunk's: CWN's sheet still draws
+  // a CYBERWARE NOTES section, so a line about your chrome has somewhere to live that is
+  // not a row.
   alias(['cyberware', 'cyberwarenotes', 'chrome'], 'cyberware_notes');
+  // The printed cyberware table. Transport rather than sheet fields: the socket gathers
+  // them into the rows array and drops them, the same way Cyberpunk's does - and by the
+  // same code, since both systems store chrome as the same kind of row.
+  for (let n = 1; n <= CWN_FORM_CYBER_ROWS; n += 1) {
+    alias([`cyber${n}name`], `cyber${n}_name`);
+    alias([`cyber${n}type`], `cyber${n}_type`);
+    // Strain here, Humanity Loss on the Cyberpunk form. One column, two games.
+    alias([`cyber${n}strain`, `cyber${n}hl`], `cyber${n}_hl`);
+    alias([`cyber${n}cost`, `cyber${n}credits`], `cyber${n}_cost`);
+    alias([`cyber${n}conc`, `cyber${n}concealment`], `cyber${n}_conc`);
+    alias([`cyber${n}effect`], `cyber${n}_data`);
+  }
   alias(['foci', 'focinotes', 'edges', 'abilities'], 'foci_notes');
   alias(['contacts', 'contactsnotes'], 'contacts_notes');
   alias(['injuries', 'injurynotes', 'majorinjuries'], 'injury_notes');
@@ -630,6 +645,9 @@ const normaliseCwnWeaponRows = (mapped) => {
 
 /** How many stash rows the printed form offers. Mirrors CWN_FORM_STASH_ROWS on the PDF. */
 const CWN_FORM_STASH_ROWS = 4;
+
+/** How many cyberware lines the CWN form offers. Mirrors the PDF's own constant. */
+const CWN_FORM_CYBER_ROWS = 12;
 
 /**
  * The printed stash boxes, gathered into the array the sheet keeps.

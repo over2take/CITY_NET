@@ -293,8 +293,14 @@ function fromFormFields(data, max = 12) {
     out.push(normaliseRow({
       name,
       type: String(data[`cyber${n}_type`] ?? '').trim().toLowerCase(),
+      // Humanity Loss on a Cyberpunk form, System Strain on a Cities Without Number one.
+      // The same column of the same row either way, so one box serves both.
       hl: data[`cyber${n}_hl`],
       cost: data[`cyber${n}_cost`],
+      // Only CWN prints this: its chrome carries a concealment rating and Cyberpunk's does
+      // not. `normaliseRow` drops anything that is not one of the known ratings, so a form
+      // without the box simply leaves it blank.
+      conc: String(data[`cyber${n}_conc`] ?? '').trim().toLowerCase(),
       data: String(data[`cyber${n}_data`] ?? '').trim(),
       // Typed but not fitted, like every other import. The form names what a piece is; it
       // has no column for which arm, so a Cyberarm off a form is in neither one until
@@ -306,7 +312,7 @@ function fromFormFields(data, max = 12) {
 }
 
 /** Whether a field is one of the form's transport boxes rather than sheet data. */
-const isFormField = (key) => /^cyber\d+_(name|type|hl|cost|data)$/.test(key);
+const isFormField = (key) => /^cyber\d+_(name|type|hl|cost|conc|data)$/.test(key);
 
 module.exports = {
   FIELD, humanise, normaliseRow, rows, humanityLoss, PAIRED_TYPES, isPlaced, inferPlaced,

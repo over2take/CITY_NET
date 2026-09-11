@@ -157,7 +157,24 @@ const LAYOUTS = {
         ...[1, 2, 3, 4].flatMap(i => ['Name', 'Effect', 'Dmg', 'Cost'].map(p => `Spell${i}${p}`)),
         'Summon Skill', 'Summoner Effort', 'Summoner Effort Max', 'Spirits'],
     },
-    // Inventory is one line here and rows on the sheet - see the CP:R note above.
+    {
+      // The chrome table, ported from Cyberpunk's rather than invented: both games store
+      // a piece as the same kind of row, so the same gatherer reads both forms.
+      //
+      // Two columns differ, and the labels say which game you are in. STRAIN is what
+      // Cyberpunk calls Humanity Loss - one column, two names - and CONC is CWN's alone,
+      // because its chrome carries a concealment rating and Cyberpunk's does not.
+      //
+      // Twelve lines because paper has to stop somewhere, which the app does not.
+      title: 'CYBERWARE',
+      fields: CYBER_ROWS.flatMap((n) => [
+        `Cyber${n}Name`, `Cyber${n}Type`, `Cyber${n}Strain`, `Cyber${n}Cost`,
+        `Cyber${n}Conc`, `Cyber${n}Effect`,
+      ]),
+    },
+    // Inventory is one line here and rows on the sheet - see the CP:R note above. The
+    // Cyberware box stays beside the table: CWN's sheet still draws a CYBERWARE NOTES
+    // section, so a line about your chrome has somewhere to live that is not a row.
     { title: 'NOTES', fields: ['Weapons Notes', 'Inventory', 'Gear', 'Cyberware', 'Foci', 'Contacts', 'Injuries'] },
   ],
 

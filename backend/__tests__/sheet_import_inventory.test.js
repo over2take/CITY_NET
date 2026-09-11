@@ -174,3 +174,73 @@ describe('the CWN form covers the sheet it feeds', () => {
     expect(fill().mapped.pharma_active).toBeUndefined();
   });
 });
+
+describe('the CWN cyberware table', () => {
+  // Ported from Cyberpunk's rather than invented: both games store a piece as the same
+  // kind of row, so the same gatherer reads both forms. Only two columns differ - STRAIN
+  // is what Cyberpunk calls Humanity Loss, and CONC is CWN's alone.
+  const cyberware = require('../sheets/cyberware.js');
+
+  const form = {
+    Cyber1Name: 'Cranial Jack', Cyber1Type: 'head', Cyber1Strain: '0.25',
+    Cyber1Cost: '1000', Cyber1Conc: 'touch', Cyber1Effect: 'A socket behind the ear',
+    Cyber2Name: 'Dermal Armor', Cyber2Type: 'body', Cyber2Strain: '2', Cyber2Conc: 'obvious',
+  };
+
+  it('prints twelve lines on the form', () => {
+    const boxes = LAYOUTS.cities_without_number.flatMap((s) => s.fields);
+    expect(boxes).toContain('Cyber1Name');
+    expect(boxes).toContain('Cyber12Effect');
+    expect(boxes.filter((b) => /^Cyber\d+Name$/.test(b))).toHaveLength(12);
+  });
+
+  it('maps every column the form prints', () => {
+    const { mapped, unmapped } = map('cities_without_number', form);
+    expect(unmapped).toEqual({});
+    expect(mapped).toMatchObject({
+      cyber1_name: 'Cranial Jack', cyber1_type: 'head', cyber1_hl: '0.25',
+      cyber1_cost: '1000', cyber1_conc: 'touch',
+    });
+  });
+
+  it('gathers the boxes into rows the sheet can actually read', () => {
+    // `cyberware.rows` wants a real array, not a JSON string - which is why this is
+    // gathered in the socket like Cyberpunk's rather than in the mapper like the stash.
+    const { mapped } = map('cities_without_number', form);
+    const rows = cyberware.fromFormFields(mapped);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      name: 'Cranial Jack', type: 'head', hl: 0.25, cost: 1000, conc: 'touch',
+    });
+    expect(cyberware.rows({ cyberware: rows })).toHaveLength(2);
+  });
+
+  it('carries the concealment rating Cyberpunk has no column for', () => {
+    const rows = cyberware.fromFormFields(map('cities_without_number', form).mapped);
+    expect(rows[1].conc).toBe('obvious');
+  });
+
+  it('leaves a piece unplaced, because the form has no column for which arm', () => {
+    const rows = cyberware.fromFormFields(map('cities_without_number', form).mapped);
+    expect(rows.every((r) => r.placed === false)).toBe(true);
+  });
+
+  it('skips an empty line rather than storing a nameless implant', () => {
+    const rows = cyberware.fromFormFields({ cyber1_name: 'Skinmod', cyber2_hl: '1' });
+    expect(rows).toHaveLength(1);
+  });
+
+  it('still recognises Cyberpunk\'s own labels for the shared columns', () => {
+    // The CP:R form says HL and Eddies where CWN says Strain and Cost. Both have to keep
+    // landing in the same two fields, or one game's form breaks to fix the other's.
+    const { mapped } = map('cyberpunk_red', { Cyber1Name: 'Kerenzikov', Cyber1HL: '7', Cyber1Eddies: '500' });
+    expect(mapped).toMatchObject({ cyber1_name: 'Kerenzikov', cyber1_hl: '7', cyber1_cost: '500' });
+  });
+
+  it('keeps the free-text Cyberware box, which CWN still draws', () => {
+    // Cyberpunk dropped that field from its template and turns the line into rows. CWN
+    // has a CYBERWARE NOTES section, so a line about your chrome stays a line.
+    expect(map('cities_without_number', { Cyberware: 'twitchy since the surgery' })
+      .mapped.cyberware_notes).toBe('twitchy since the surgery');
+  });
+});
