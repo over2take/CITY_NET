@@ -68,6 +68,16 @@ const takeFrom = (line, wanted, state) => {
       state.stashDropped.add(at.index);
     } else if (at.source === owned.SOURCES.CYBERWARE) {
       state.cyberDropped.add(at.index);
+      /**
+       * Chrome coming out of a body, counted so somebody can be told.
+       *
+       * The book puts surgery and a complications roll on removal and this app models
+       * neither, so the sale itself is clean - the row goes, the strain goes with it, and
+       * nothing is rolled. That is a gap the table has to fill, and it is only fillable if
+       * the player is told it exists rather than finding out later that their doctor never
+       * got involved.
+       */
+      if (at.placed) state.fromBody += take;
     } else if (at.source === owned.SOURCES.VEHICLE) {
       VEHICLE_FIELDS(at.slot).forEach((f) => { state.patch[f] = ''; });
     }
@@ -107,6 +117,8 @@ const planSale = ({ data, items, catalogues, locationPct, globalPct }) => {
     inventoryDropped: new Set(),
     stashDropped: new Set(),
     cyberDropped: new Set(),
+    /** How many pieces came out of a body, for the surgery warning. */
+    fromBody: 0,
   };
 
   let payout = 0;
@@ -168,7 +180,21 @@ const planSale = ({ data, items, catalogues, locationPct, globalPct }) => {
     state.patch.cyberware = rows.filter((_r, i) => !state.cyberDropped.has(i));
   }
 
-  return { ok: true, payout, patch: state.patch, sold, pct };
+  return {
+    ok: true,
+    payout,
+    patch: state.patch,
+    sold,
+    pct,
+    /**
+     * How many pieces of installed chrome this sale took out of a body.
+     *
+     * Reported rather than acted on: the app does not model extraction surgery, so this
+     * is what lets a window say so before the player clicks, and say so again on the
+     * receipt. Zero for a sale that touched nothing installed.
+     */
+    fromBody: state.fromBody,
+  };
 };
 
 module.exports = { planSale, WEAPON_FIELDS, VEHICLE_FIELDS, VEHICLE_MOUNT_ROWS };

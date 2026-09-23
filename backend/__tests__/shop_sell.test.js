@@ -206,6 +206,44 @@ describe('what a shop refuses', () => {
   });
 });
 
+describe('chrome coming out of a body', () => {
+  /**
+   * The book puts surgery and a complications roll on taking cyberware out, and the app
+   * models neither - the row goes, the strain goes with it, nothing is rolled. That gap is
+   * only fillable at the table if the player is told it exists, so the sale counts what
+   * came out of a body and the window says so before and after. Counted rather than
+   * refused: selling installed chrome is allowed, it just is not the whole procedure.
+   */
+  it('counts an installed piece', () => {
+    const out = sell({ cyberware: [{ name: 'Cranial Jack', placed: true }] },
+      [{ catalogue: 'cyberware', id: 'cranial-jack', qty: 1 }]);
+    expect(out).toMatchObject({ ok: true, fromBody: 1 });
+  });
+
+  it('does not count one that was never installed', () => {
+    // A boxed piece in a bag is just goods. No surgery, nothing to warn about.
+    const out = sell({ cyberware: [{ name: 'Cranial Jack', placed: false }] },
+      [{ catalogue: 'cyberware', id: 'cranial-jack', qty: 1 }]);
+    expect(out).toMatchObject({ ok: true, fromBody: 0 });
+  });
+
+  it('counts only the installed ones when both are sold at once', () => {
+    const data = {
+      cyberware: [
+        { name: 'Cyberlimb', placed: true },
+        { name: 'Cyberlimb', placed: false },
+      ],
+    };
+    const out = sell(data, [{ catalogue: 'cyberware', id: 'cyberlimb', qty: 2 }]);
+    expect(out.fromBody).toBe(1);
+  });
+
+  it('is zero for a sale that touches no chrome at all', () => {
+    const out = sell({ weapon1_name: 'Rifle' }, [{ catalogue: 'weapons', id: 'rifle', qty: 1 }]);
+    expect(out.fromBody).toBe(0);
+  });
+});
+
 describe('things no catalogue carries', () => {
   const data = { inventory: JSON.stringify([{ name: "Betty's lucky knife", qty: 2 }]) };
 

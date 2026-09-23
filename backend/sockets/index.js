@@ -24,6 +24,8 @@ const enemyVehicles = require('../sheets/enemyVehicles');
 const buildingTypes = require('../buildingTypes');
 const shopPrices = require('../shops/prices');
 const shopPurchase = require('../shops/purchase');
+const shopSell = require('../shops/sell');
+const shopBuyback = require('../shops/buyback');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -1876,6 +1878,108 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     debt: plan.debt,
                   });
                 });
+              },
+            );
+          },
+        );
+      });
+    });
+
+    /**
+     * Sell a basket of things back to a shop.
+     *
+     * The mirror image of buyFromShop, and deliberately stricter in one way: buying lets
+     * the window place the item once the charge lands, because the failure mode there is
+     * losing the item. Here the failure mode is being paid AND keeping the goods, so the
+     * server does both halves itself - the sheet is emptied and the bank credited on this
+     * side, and the window is told afterwards.
+     *
+     * Nothing about what a basket is worth comes from the message. Who is selling comes
+     * from the verified socket identity, what they own is re-derived from their sheet,
+     * and the payout is the book price times the shop's rate.
+     */
+    socket.on('sellToShop', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      if (!data || data.locationId === undefined) return;
+
+      const username = info.userName;
+      const refuse = (reason, extra) =>
+        socket.emit('shopSale', { ok: false, reason, ...(extra || {}) });
+
+      getGameSystem((sysErr, system) => {
+        if (sysErr) return refuse('no_system');
+
+        db.get(
+          'SELECT building_type, buyback_pct FROM locations WHERE id = ?',
+          [data.locationId],
+          (err, loc) => {
+            if (err || !loc) return refuse('no_shop');
+            const catalogues = buildingTypes.shelvedCatalogues(loc.building_type);
+            if (!catalogues.length) return refuse('not_sold');
+
+            db.get(
+              'SELECT value FROM global_settings WHERE key = ?',
+              [shopBuyback.BUYBACK_SETTING],
+              (rErr, rRow) => {
+                const globalPct = rErr || !rRow ? null : rRow.value;
+
+                db.get(
+                  `SELECT id, data FROM character_sheets
+                   WHERE username = ? AND system = ? AND is_npc = 0`,
+                  [username, system],
+                  (sErr, sheetRow) => {
+                    if (sErr || !sheetRow) return refuse('no_sheet');
+
+                    let sheetData;
+                    try { sheetData = JSON.parse(sheetRow.data || '{}'); } catch { return refuse('no_sheet'); }
+
+                    const plan = shopSell.planSale({
+                      data: sheetData,
+                      items: Array.isArray(data.items) ? data.items : [],
+                      catalogues,
+                      locationPct: loc.buyback_pct,
+                      globalPct,
+                    });
+                    if (!plan.ok) return refuse(plan.reason, { itemId: plan.itemId });
+
+                    // The sheet first. Being paid for goods still on the sheet is the one
+                    // outcome worth ordering against.
+                    patchSheet(db, sheetRow.id, plan.patch, (pErr) => {
+                      if (pErr) return refuse('write');
+
+                      db.get(
+                        'SELECT balance FROM player_banks WHERE username = ?',
+                        [username],
+                        (bErr, bank) => {
+                          if (bErr) return refuse('write');
+                          const balance = (bank ? Number(bank.balance) || 0 : 0) + plan.payout;
+                          const sql = bank
+                            ? 'UPDATE player_banks SET balance = ? WHERE username = ?'
+                            : 'INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, 0)';
+                          const args = bank ? [balance, username] : [username, balance];
+
+                          db.run(sql, args, (wErr) => {
+                            if (wErr) return refuse('write');
+                            sendBankUpdate(username);
+                            // The window re-reads the sheet from this, so the SELL list
+                            // and the counts on it follow without being told separately.
+                            socket.emit('sheetUpdated', { username });
+                            socket.emit('shopSale', {
+                              ok: true,
+                              payout: plan.payout,
+                              pct: plan.pct,
+                              sold: plan.sold,
+                              // Chrome that came out of a body. The window warns about
+                              // surgery; the app does not model it.
+                              fromBody: plan.fromBody,
+                            });
+                          });
+                        },
+                      );
+                    });
+                  },
+                );
               },
             );
           },
