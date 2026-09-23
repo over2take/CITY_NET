@@ -23,7 +23,9 @@ import { CWN_ARMOR_MODS, CWN_WEAPON_MODS } from '../cwnGearMods';
 import { VEHICLE_PRESETS } from '../vehiclePresets';
 import { VEHICLE_FITTINGS } from '../vehicleFittings';
 import { VEHICLE_WEAPONS } from '../vehicleWeapons';
-import { OVERDRAFT_RULE, SETTLE_BALANCE, SETTLE_DEBT } from '../../data/shopRules';
+import {
+  OVERDRAFT_RULE, SETTLE_BALANCE, SETTLE_DEBT, BUYBACK_SETTING, DEFAULT_BUYBACK_PCT,
+} from '../../data/shopRules';
 
 const prices = createRequire(import.meta.url)('../../../../backend/shops/prices.js');
 
@@ -86,6 +88,15 @@ describe('what the shelf says and what the bank charges', () => {
     expect(OVERDRAFT_RULE).toBe(purchase.OVERDRAFT_RULE);
     expect(SETTLE_BALANCE).toBe(purchase.SETTLE_BALANCE);
     expect(SETTLE_DEBT).toBe(purchase.SETTLE_DEBT);
+  });
+
+  it('agrees on the buy-back setting and its default', () => {
+    // The admin panel writes this key and shows this default; the server reads the key and
+    // falls back to the same number. A drift here would show the GM one rate and pay
+    // another.
+    const buyback = createRequire(import.meta.url)('../../../../backend/shops/buyback.js');
+    expect(BUYBACK_SETTING).toBe(buyback.BUYBACK_SETTING);
+    expect(DEFAULT_BUYBACK_PCT).toBe(buyback.DEFAULT_BUYBACK_PCT);
   });
 
   it('answers null for something that is not on any shelf', () => {

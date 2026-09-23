@@ -200,6 +200,13 @@ db.serialize(() => {
   // recognises would put a SHOP button on a building that cannot sell anything.
   db.run(`ALTER TABLE locations ADD COLUMN building_type TEXT`, (err) => {});
 
+  // What this shop pays for something sold back to it, as a percentage of the book price.
+  //
+  // NULL means "no opinion, use the global rate" - which is why it is nullable and has no
+  // default. A shop set to 0 is a different thing entirely: one that buys nothing back.
+  // Collapsing those two would make it impossible to stop overriding once you started.
+  db.run(`ALTER TABLE locations ADD COLUMN buyback_pct REAL`, (err) => {});
+
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN melee_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN ranged_ac INTEGER`, (err) => {});
 

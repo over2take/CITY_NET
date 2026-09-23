@@ -31,6 +31,17 @@ export type Settle = 'balance' | 'debt';
 export const SETTLE_BALANCE: Settle = 'balance';
 export const SETTLE_DEBT: Settle = 'debt';
 
+/**
+ * What a shop pays for something sold back to it, as a percentage of the book price.
+ *
+ * Mirrored from backend/shops/buyback.js, which is the only thing that decides what a
+ * sale is actually worth. Two levels: this global rate, and an optional per-shop override
+ * stored on the location. A blank override means "use the global"; an override of 0 means
+ * a shop that buys nothing back, and those must not collapse into each other.
+ */
+export const BUYBACK_SETTING = 'shop_buyback_pct';
+export const DEFAULT_BUYBACK_PCT = 45;
+
 /** Why a purchase was refused, as the server names it. */
 export type RefusalReason =
   | 'no_shop' | 'not_sold' | 'price' | 'funds' | 'needs_choice' | 'no_account' | 'write';

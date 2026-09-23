@@ -162,6 +162,56 @@ describe('setting a type', () => {
       .toBeNull();
   });
 
+  /**
+   * The per-shop buy-back rate rides along with the building type, because that is the
+   * moment it is decided: you give a building a storefront and say what it pays.
+   */
+  describe('what this shop pays for second-hand goods', () => {
+    const setType = (body) => request(app)
+      .patch(`/api/locations/${locId}/building-type`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(body);
+
+    const stored = async () =>
+      (await get(db, 'SELECT buyback_pct FROM locations WHERE id = ?', [locId])).buyback_pct;
+
+    it('leaves the rate alone when the request does not mention it', async () => {
+      // Setting a building type is not a statement about prices.
+      await setType({ building_type: 'gun_shop', buyback_pct: 30 });
+      const res = await setType({ building_type: 'clinic' });
+      expect(res.status).toBe(200);
+      expect(await stored()).toBe(30);
+    });
+
+    it('stores an override', async () => {
+      const res = await setType({ building_type: 'gun_shop', buyback_pct: 30 });
+      expect(res.status).toBe(200);
+      expect(res.body.buyback_pct).toBe(30);
+      expect(await stored()).toBe(30);
+    });
+
+    it('clears back to the global rate on a blank', async () => {
+      // The only way back once an override is set, which is why blank cannot mean zero.
+      await setType({ building_type: 'gun_shop', buyback_pct: 30 });
+      await setType({ building_type: 'gun_shop', buyback_pct: '' });
+      expect(await stored()).toBeNull();
+    });
+
+    it('keeps a deliberate zero, which is a shop that buys nothing back', async () => {
+      await setType({ building_type: 'gun_shop', buyback_pct: 0 });
+      expect(await stored()).toBe(0);
+    });
+
+    it('treats an unusable rate as blank rather than failing the whole save', async () => {
+      // A mistyped percentage should not stop the building type being set.
+      const res = await setType({ building_type: 'gun_shop', buyback_pct: 'forty' });
+      expect(res.status).toBe(200);
+      expect(await stored()).toBeNull();
+      expect((await get(db, 'SELECT building_type FROM locations WHERE id = ?', [locId])).building_type)
+        .toBe('gun_shop');
+    });
+  });
+
   it('needs an admin', async () => {
     const res = await request(app)
       .patch(`/api/locations/${locId}/building-type`)
