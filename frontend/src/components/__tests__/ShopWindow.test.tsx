@@ -55,8 +55,13 @@ import { CWN_CYBERWARE } from '../../sheets/cwnCyberwarePresets';
 const bank = { balance: 10_000_000, debt: 0 };
 /** Every buyFromShop that went out, so a test can check what was asked for. */
 let sent: any[] = [];
-/** Set to a reason to make the fake server refuse the next purchase. */
+/** Set to a reason to make the fake server refuse the next purchase or sale. */
 let refuseWith: string | null = null;
+/** Every sellToShop that went out. */
+let sold: any[] = [];
+/** What the fake server says a sale came to. */
+let salePayout = 0;
+let saleFromBody = 0;
 
 /** The listeners of the socket most recently handed to a window, so a test can push to it. */
 let live: Record<string, Function[]> = {};
@@ -73,6 +78,14 @@ const makeSocket = () => {
       // requestBankBalance is answered by show() after mount rather than here: this emit
       // happens inside the window's own mount effect, and a state update pushed from
       // inside that effect does not land.
+      if (ev === 'sellToShop') {
+        sold.push(payload);
+        act(() => (listeners.shopSale || []).forEach((f) => f(
+          refuseWith
+            ? { ok: false, reason: refuseWith }
+            : { ok: true, payout: salePayout, fromBody: saleFromBody },
+        )));
+      }
       if (ev === 'buyFromShop') {
         sent.push(payload);
         act(() => (listeners.shopPurchase || []).forEach((f) => f(
@@ -88,7 +101,7 @@ const makeSocket = () => {
 
 const show = (buildingType: string, name = 'Doc Wu') => {
   const result = render(<ShopWindow name={name} locationId={7} buildingType={buildingType}
-    socket={makeSocket()} userName="JADE" onClose={vi.fn()} />);
+    buybackPct={45} socket={makeSocket()} userName="JADE" onClose={vi.fn()} />);
   // The server broadcasts the balance in answer to the window's request. Delivered here,
   // after mount, because that is when a state update actually lands.
   act(() => (live.bankUpdate || []).forEach((f) => f({ username: 'JADE', ...bank })));
@@ -104,7 +117,10 @@ beforeEach(() => {
   bank.balance = 10_000_000;
   bank.debt = 0;
   sent = [];
+  sold = [];
   refuseWith = null;
+  salePayout = 0;
+  saleFromBody = 0;
 });
 
 describe('a ripperdoc', () => {
@@ -237,8 +253,9 @@ describe('one tab per catalogue', () => {
     const { rerender } = show('armorer');
     expect(screen.getByText('War Harness')).toBeInTheDocument();
 
-    rerender(<ShopWindow name="Doc Wu" buildingType="general_store"
-      socket={{ on: vi.fn(), off: vi.fn(), emit: vi.fn() }} userName="JADE" onClose={vi.fn()} />);
+    rerender(<ShopWindow name="Doc Wu" locationId={7} buildingType="general_store"
+      buybackPct={45} socket={{ on: vi.fn(), off: vi.fn(), emit: vi.fn() }}
+      userName="JADE" onClose={vi.fn()} />);
 
     expect(screen.queryByText('War Harness')).toBeNull();
     expect(screen.getByText('Climbing kit')).toBeInTheDocument();
@@ -319,11 +336,11 @@ describe('buying and selling are separate tabs', () => {
     expect(screen.queryByLabelText('Sell Cranial Jack')).not.toBeInTheDocument();
   });
 
-  it('says what selling will be, rather than showing an empty list', async () => {
+  it('says so plainly when there is nothing this shop would buy', async () => {
+    // Used to assert "SELLING IS NOT WIRED UP YET", which stopped being true.
     show('ripperdoc');
     await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
-    expect(screen.getByText(/SELLING IS NOT WIRED UP YET/)).toBeInTheDocument();
-    expect(screen.getByText(/more than augments/)).toBeInTheDocument();
+    expect(screen.getByText(/NOTHING HERE THIS SHOP WOULD BUY/)).toBeInTheDocument();
   });
 
   it('puts the stock away while selling', async () => {
@@ -1026,5 +1043,214 @@ describe('the shelf marks what is dangerous to swallow', () => {
   it('keeps the Contact marker separate from it', () => {
     show('clinic');
     expect(screen.getAllByTitle('Needs a Contact to obtain')).toHaveLength(1);
+  });
+});
+
+describe('the sell tab', () => {
+  /** A character with something in three of the places a sheet keeps things. */
+  const loaded = () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: {
+        inventory: JSON.stringify([{ name: 'Climbing kit', qty: 3 }]),
+        weapon1_name: 'Heavy Pistol',
+        cyberware: [{ name: 'Cranial Jack', placed: true }],
+      },
+    };
+  };
+
+  const openSell = async (type: string) => {
+    show(type);
+    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+  };
+
+  const addKit = () => screen.getByRole('button', { name: 'Add Climbing kit to the sell list' });
+  const sellBtn = () => screen.getByRole('button', { name: /^SELL ·/ });
+
+  it('offers only what this shop deals in', async () => {
+    // A gun shop buys guns. Not rope, not chrome.
+    loaded();
+    await openSell('gun_shop');
+    expect(screen.getByText('Heavy Pistol')).toBeInTheDocument();
+    expect(screen.queryByText('Climbing kit')).toBeNull();
+    expect(screen.queryByText('Cranial Jack')).toBeNull();
+  });
+
+  it('shows another shop a different half of the same character', async () => {
+    loaded();
+    await openSell('ripperdoc');
+    expect(screen.getByText('Cranial Jack')).toBeInTheDocument();
+    expect(screen.queryByText('Heavy Pistol')).toBeNull();
+  });
+
+  it('counts how many you have', async () => {
+    loaded();
+    await openSell('general_store');
+    const row = screen.getByText('Climbing kit').closest('tr')!;
+    expect(within(row).getByText('×3')).toBeInTheDocument();
+  });
+
+  it('prices at the buy-back rate, not the book price', async () => {
+    // Climbing kit is 150. At 45% that is 67, rounded down from 67.5.
+    loaded();
+    await openSell('general_store');
+    const row = screen.getByText('Climbing kit').closest('tr')!;
+    expect(within(row).getByText('67cr')).toBeInTheDocument();
+  });
+
+  it('sells nothing until the list is confirmed', async () => {
+    loaded();
+    await openSell('general_store');
+    await userEvent.click(addKit());
+    expect(sold).toHaveLength(0);
+    await userEvent.click(sellBtn());
+    expect(sold).toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+    expect(sold).toHaveLength(1);
+  });
+
+  it('sends what was staged, and no price at all', async () => {
+    // The payout is the server's to decide, so the message carries no money.
+    loaded();
+    await openSell('general_store');
+    await userEvent.click(addKit());
+    await userEvent.click(addKit());
+    await userEvent.click(sellBtn());
+    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+
+    expect(sold[0]).toMatchObject({ locationId: 7 });
+    expect(sold[0].items).toEqual([
+      { catalogue: 'gear', id: 'climbing_kit', label: 'Climbing kit', qty: 2 },
+    ]);
+    expect(JSON.stringify(sold[0])).not.toMatch(/price|payout|each/);
+  });
+
+  it('adds up the list before asking', async () => {
+    loaded();
+    await openSell('general_store');
+    await userEvent.click(addKit());
+    await userEvent.click(addKit());
+    expect(screen.getByRole('button', { name: /SELL · 134cr/ })).toBeInTheDocument();
+  });
+
+  it('will not stage more than you have', async () => {
+    loaded();
+    await openSell('general_store');
+    for (let i = 0; i < 6; i += 1) await userEvent.click(addKit());
+    // Three owned, so three staged and the ADD is spent.
+    expect(screen.getByRole('button', { name: /SELL · 201cr/ })).toBeInTheDocument();
+    expect(addKit()).toBeDisabled();
+  });
+
+  it('counts down what is left as things are staged', async () => {
+    loaded();
+    await openSell('general_store');
+    await userEvent.click(addKit());
+    const row = screen.getByText('Climbing kit').closest('tr')!;
+    // Three owned, one staged, so two are still there to sell.
+    expect(within(row).getByText('×2')).toBeInTheDocument();
+  });
+
+  it('backs out of the confirmation without selling', async () => {
+    loaded();
+    await openSell('general_store');
+    await userEvent.click(addKit());
+    await userEvent.click(sellBtn());
+    await userEvent.click(screen.getByRole('button', { name: 'BACK' }));
+    expect(sold).toHaveLength(0);
+    expect(sellBtn()).toBeInTheDocument();
+  });
+
+  it('clears the list without selling', async () => {
+    loaded();
+    await openSell('general_store');
+    await userEvent.click(addKit());
+    await userEvent.click(screen.getByRole('button', { name: 'CLEAR' }));
+    expect(sold).toHaveLength(0);
+    expect(screen.getByText(/NOTHING ON THE SELL LIST YET/)).toBeInTheDocument();
+  });
+
+  it('says what the sale came to', async () => {
+    salePayout = 201;
+    loaded();
+    await openSell('general_store');
+    await userEvent.click(addKit());
+    await userEvent.click(sellBtn());
+    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+    expect(screen.getByText(/SOLD FOR 201cr/)).toBeInTheDocument();
+  });
+
+  it('says why when the server refuses', async () => {
+    refuseWith = 'not_owned';
+    loaded();
+    await openSell('general_store');
+    await userEvent.click(addKit());
+    await userEvent.click(sellBtn());
+    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+    expect(screen.getByText(/do not have/i)).toBeInTheDocument();
+  });
+});
+
+describe('selling chrome out of a body', () => {
+  /**
+   * The book puts surgery and a complications roll on taking cyberware out, and this app
+   * models neither. That gap is only fillable at the table if the player is told it
+   * exists, so it is flagged on the row, again in the confirmation, and again on the
+   * receipt - before the click, at the click, and after it.
+   */
+  const withChrome = (placed: boolean) => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { cyberware: [{ name: 'Cranial Jack', placed }] },
+    };
+  };
+
+  const openSell = async () => {
+    show('ripperdoc');
+    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+  };
+
+  const addJack = () => screen.getByRole('button', { name: 'Add Cranial Jack to the sell list' });
+
+  it('marks an installed piece on the row', async () => {
+    withChrome(true);
+    await openSell();
+    const row = screen.getByText('Cranial Jack').closest('tr')!;
+    expect(within(row).getByTitle(/surgery roll/i)).toBeInTheDocument();
+  });
+
+  it('leaves a boxed piece unmarked, since no surgeon is involved', async () => {
+    withChrome(false);
+    await openSell();
+    const row = screen.getByText('Cranial Jack').closest('tr')!;
+    expect(within(row).queryByTitle(/surgery roll/i)).toBeNull();
+  });
+
+  it('warns in the confirmation, before anything is sold', async () => {
+    withChrome(true);
+    await openSell();
+    await userEvent.click(addJack());
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+    expect(screen.getByText(/ask your GM/i)).toBeInTheDocument();
+    expect(sold).toHaveLength(0);
+  });
+
+  it('does not warn for a boxed piece', async () => {
+    withChrome(false);
+    await openSell();
+    await userEvent.click(addJack());
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+    expect(screen.queryByText(/ask your GM/i)).toBeNull();
+  });
+
+  it('says it again on the receipt', async () => {
+    saleFromBody = 1;
+    salePayout = 450;
+    withChrome(true);
+    await openSell();
+    await userEvent.click(addJack());
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+    expect(screen.getByText(/surgery roll/i)).toBeInTheDocument();
   });
 });

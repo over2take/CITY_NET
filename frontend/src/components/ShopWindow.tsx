@@ -4,8 +4,10 @@ import {
   buildingTypeById, shelvedCatalogues, catalogueById, type ShopStock,
 } from '../data/buildingTypes';
 import {
-  SETTLE_BALANCE, SETTLE_DEBT, REFUSAL_TEXT, type Settle, type RefusalReason,
+  SETTLE_BALANCE, SETTLE_DEBT, REFUSAL_TEXT, buybackValue,
+  type Settle, type RefusalReason,
 } from '../data/shopRules';
+import { ownedItems, sellableAt } from '../sheets/ownedItems';
 import { CWN_CYBERWARE, type CwnCyberPreset } from '../sheets/cwnCyberwarePresets';
 import { CYBERWARE_FIELD, readRows, normaliseRow } from '../sheets/cyberwareRows';
 import { CWN_WEAPONS, weaponToStashed, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
@@ -63,6 +65,11 @@ interface Props {
   name: string;
   /** Which building, so the server can check this shop really stocks what was asked for. */
   locationId: number;
+  /**
+   * What this shop pays for second-hand goods, already resolved from the location's own
+   * rate and the global one. Shown here; worked out again by the server when it pays.
+   */
+  buybackPct: number;
   buildingType: string;
   /** The shopper's own sheet: where a bought piece lands, and what a sold one comes from. */
   socket: any;
@@ -184,7 +191,9 @@ interface Shelf<T> {
   controls?: React.ReactNode;
 }
 
-export function ShopWindow({ name, locationId, buildingType, socket, userName, onClose }: Props) {
+export function ShopWindow({
+  name, locationId, buildingType, buybackPct: pct, socket, userName, onClose,
+}: Props) {
   const [pos, setPos] = useState({ x: 140, y: 90 });
   const [tab, setTab] = useState<Tab>('buy');
   const [filter, setFilter] = useState('');
@@ -354,6 +363,104 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
     setAsking({ catalogue, itemId, label, price });
     pending.current.set(pendingKey(catalogue, itemId), place);
   };
+
+  // ─────────────────────────────────────────────────────────────── selling ───
+
+  /**
+   * What this character owns that this shop would take.
+   *
+   * Derived from the sheet every render rather than kept anywhere. The server derives the
+   * same list from the same sheet when it pays, which is what stops the two disagreeing -
+   * see the note at the top of ownedItems.ts.
+   */
+  const owned = sheet ? ownedItems(sheet.data as Record<string, unknown>) : [];
+  const sellable = sellableAt(owned, catalogues);
+
+  /** How many of each line are on the sell list, by line key. */
+  const [basket, setBasket] = useState<Record<string, number>>({});
+  /** True once SELL is pressed, until it is confirmed or backed out of. */
+  const [confirming, setConfirming] = useState(false);
+  /** What the last sale came to, so the payout and any warning stay on screen. */
+  const [receipt, setReceipt] = useState<{ payout: number; fromBody: number } | null>(null);
+
+  /**
+   * Add or remove one, never past what they own.
+   *
+   * Clamped here as well as on the server because the list is the thing a player reasons
+   * about: a basket that says three when they own two is a question they should never be
+   * asked to answer.
+   */
+  const stage = (key: string, delta: number) => {
+    const line = sellable.find((l) => l.key === key);
+    if (!line) return;
+    setReceipt(null);
+    setBasket((b) => {
+      const next = Math.max(0, Math.min(line.qty, (b[key] ?? 0) + delta));
+      const out = { ...b, [key]: next };
+      if (next === 0) delete out[key];
+      return out;
+    });
+  };
+
+  /** The sell list as lines, in the order the shelf shows them. */
+  const staging = sellable
+    .filter((l) => (basket[l.key] ?? 0) > 0)
+    .map((l) => ({ line: l, qty: basket[l.key], label: l.label }));
+
+  const basketTotal = staging.reduce(
+    (sum, s) => sum + buybackValue(s.line.unitPrice, pct) * s.qty, 0,
+  );
+
+  /**
+   * How much of the sell list is chrome currently in somebody's body.
+   *
+   * Counted from the places a line sits rather than from the line itself, because a
+   * character can own two of a piece with one installed and one still boxed - and only
+   * one of those needs a surgeon.
+   */
+  const stagedFromBody = staging.reduce((n, s) => {
+    let left = s.qty;
+    let installed = 0;
+    for (const at of s.line.at) {
+      if (left <= 0) break;
+      const take = Math.min(left, at.qty);
+      if (at.placed) installed += take;
+      left -= take;
+    }
+    return n + installed;
+  }, 0);
+
+  const commitSale = () => {
+    if (!staging.length) return;
+    setConfirming(false);
+    socket?.emit('sellToShop', {
+      locationId,
+      items: staging.map((s) => ({
+        catalogue: s.line.catalogue,
+        id: s.line.id,
+        // Carried for the unpriced lines, which have no catalogue or id to be found by.
+        label: s.line.label,
+        qty: s.qty,
+      })),
+    });
+  };
+
+  useEffect(() => {
+    if (!socket) return;
+    const onSale = (res: { ok: boolean; reason?: RefusalReason; payout?: number; fromBody?: number }) => {
+      if (!res.ok) {
+        setRefused(REFUSAL_TEXT[res.reason as RefusalReason] ?? 'The sale did not go through.');
+        return;
+      }
+      // The sheet has already changed on the server; the list here follows from it as
+      // soon as the refreshed sheet arrives, so the basket just empties.
+      setRefused(null);
+      setBasket({});
+      setReceipt({ payout: Number(res.payout) || 0, fromBody: Number(res.fromBody) || 0 });
+    };
+    socket.on('shopSale', onSale);
+    return () => { socket.off?.('shopSale', onSale); };
+  }, [socket]);
 
   /** The player answered the shortfall question. Send it with their choice. */
   const answerAsking = (settle: Settle) => {
@@ -1218,14 +1325,178 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
             )}
           </div>
         ) : (
-          <div style={{ ...mono(10), color: 'var(--grid-section)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
-            SELLING IS NOT WIRED UP YET.
-            <br />
-            <br />
-            It reads what you are carrying rather than what the shop stocks, and that is
-            more than augments — gear, weapons and vehicles all end up here. Taking chrome
-            out is also not the mirror image of putting it in: the book puts surgery and a
-            complications roll on the way out too.
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ ...mono(9), color: 'var(--grid-section)', marginBottom: 8, letterSpacing: 0 }}>
+              THIS SHOP PAYS {pct}% OF THE BOOK PRICE · ADD WHAT YOU WANT TO SELL, THEN SELL
+            </div>
+
+            {refused && (
+              <div style={{ ...mono(10), color: 'var(--danger)', marginBottom: 6, letterSpacing: 0 }}>
+                {refused}
+              </div>
+            )}
+
+            {/* What the last sale came to, kept until something else happens. */}
+            {receipt && (
+              <div style={{ ...mono(10), color: 'var(--cyan)', marginBottom: 6, letterSpacing: 0, lineHeight: 1.5 }}>
+                SOLD FOR {credits(receipt.payout)}.
+                {receipt.fromBody > 0 && (
+                  <span style={{ color: 'var(--warning)' }}>
+                    {' '}{receipt.fromBody === 1 ? 'A piece' : `${receipt.fromBody} pieces`} of
+                    installed cyberware came out. Ask your GM about the surgery roll.
+                  </span>
+                )}
+              </div>
+            )}
+
+            {sellable.length === 0 ? (
+              <div style={{ ...mono(10), color: 'var(--grid-section)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
+                {!sheet
+                  ? 'NO CHARACTER SHEET LOADED — NOTHING TO SELL.'
+                  : 'NOTHING HERE THIS SHOP WOULD BUY. A shop only takes the kinds of thing it sells.'}
+              </div>
+            ) : (
+              <>
+                <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                  <table style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
+                    <thead>
+                      <tr style={{ color: 'var(--grid-section)' }}>
+                        <th style={cell}>ITEM</th>
+                        <th style={{ ...cell, textAlign: 'right' }}>HAVE</th>
+                        <th style={{ ...cell, textAlign: 'right' }}>EACH</th>
+                        <th style={{ ...cell, textAlign: 'right' }}>SELLING</th>
+                        <th style={{ ...cell, textAlign: 'right' }}>&nbsp;</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sellable.map((l) => {
+                        const staged = basket[l.key] ?? 0;
+                        const left = l.qty - staged;
+                        const each = buybackValue(l.unitPrice, pct);
+                        const installed = l.at.some((a) => a.placed);
+                        return (
+                          <tr key={l.key}>
+                            <td style={{ ...cell, whiteSpace: 'nowrap' }}>
+                              {l.label}
+                              {/* The book puts surgery on taking chrome out and this app
+                                  models none of it, so it is flagged before it is sold
+                                  rather than mentioned afterwards. */}
+                              {installed && (
+                                <span
+                                  style={{ color: 'var(--warning)' }}
+                                  title="Currently installed. Selling it removes the implant with no surgery roll — square that with your GM."
+                                > ⚕</span>
+                              )}
+                              {/* Nothing on any shelf, so nothing the shop can value. */}
+                              {l.unitPrice === null && (
+                                <span
+                                  style={{ color: 'var(--grid-section)' }}
+                                  title="Not on any shelf, so the shop cannot price it. Sells for nothing — settle up with your GM."
+                                > ?</span>
+                              )}
+                            </td>
+                            <td style={{ ...cell, textAlign: 'right' }}>×{left}</td>
+                            <td style={{ ...cell, textAlign: 'right' }}>
+                              {l.unitPrice === null ? '—' : credits(each)}
+                            </td>
+                            <td style={{ ...cell, textAlign: 'right', color: 'var(--cyan)' }}>
+                              {staged > 0 ? `×${staged}` : ''}
+                            </td>
+                            <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <button
+                                type="button"
+                                className="utility-btn"
+                                disabled={left <= 0 || confirming}
+                                aria-label={`Add ${l.label} to the sell list`}
+                                onClick={() => stage(l.key, 1)}
+                                style={{ padding: '1px 6px', fontSize: 9 }}
+                              >ADD</button>
+                              {staged > 0 && (
+                                <button
+                                  type="button"
+                                  className="utility-btn"
+                                  disabled={confirming}
+                                  aria-label={`Take ${l.label} off the sell list`}
+                                  onClick={() => stage(l.key, -1)}
+                                  style={{ padding: '1px 6px', fontSize: 9, marginLeft: 4 }}
+                                >−</button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/*
+                  The sell list, and one confirmation for the lot.
+
+                  A basket rather than a button per row: selling is irreversible and this
+                  way there is exactly one moment to look at what is about to go, whatever
+                  its size.
+                */}
+                <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: 6, marginTop: 6 }}>
+                  {staging.length === 0 ? (
+                    <div style={{ ...mono(9), color: 'var(--grid-section)', letterSpacing: 0 }}>
+                      NOTHING ON THE SELL LIST YET
+                    </div>
+                  ) : confirming ? (
+                    <div style={{ ...mono(10), letterSpacing: 0, lineHeight: 1.5 }}>
+                      <div style={{ color: 'var(--warning)', marginBottom: 4 }}>
+                        SELL {staging.reduce((n, s) => n + s.qty, 0)} ITEM
+                        {staging.reduce((n, s) => n + s.qty, 0) === 1 ? '' : 'S'} FOR{' '}
+                        {credits(basketTotal)}? THIS CANNOT BE UNDONE.
+                      </div>
+                      {stagedFromBody > 0 && (
+                        <div style={{ color: 'var(--danger)', marginBottom: 4 }}>
+                          ⚕ {stagedFromBody === 1 ? 'One piece' : `${stagedFromBody} pieces`} of
+                          this is installed cyberware. It comes straight out with no surgery
+                          roll — ask your GM how they want to handle that.
+                        </div>
+                      )}
+                      <div style={{ color: 'var(--grid-section)', marginBottom: 6 }}>
+                        {staging.map((s) => `${s.label} ×${s.qty}`).join(' · ')}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          type="button"
+                          className="utility-btn"
+                          onClick={commitSale}
+                          style={{ ...mono(10), padding: '2px 10px' }}
+                        >CONFIRM</button>
+                        <button
+                          type="button"
+                          className="utility-btn"
+                          onClick={() => setConfirming(false)}
+                          style={{ ...mono(10), padding: '2px 10px' }}
+                        >BACK</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ ...mono(10), letterSpacing: 0 }}>
+                      <div style={{ color: 'var(--grid-section)', marginBottom: 6, lineHeight: 1.5 }}>
+                        {staging.map((s) => `${s.label} ×${s.qty}`).join(' · ')}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="utility-btn"
+                          onClick={() => { setReceipt(null); setConfirming(true); }}
+                          style={{ ...mono(10), padding: '2px 10px' }}
+                        >SELL · {credits(basketTotal)}</button>
+                        <button
+                          type="button"
+                          className="utility-btn"
+                          onClick={() => setBasket({})}
+                          style={{ ...mono(10), padding: '2px 10px' }}
+                        >CLEAR</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

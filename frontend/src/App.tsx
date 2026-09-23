@@ -38,6 +38,7 @@ import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { VehiclesWindow } from './components/VehiclesWindow';
 import { EnemyVehiclesWindow } from './components/EnemyVehiclesWindow';
 import { vehicleLook as cwnVehicleLook } from './sheets/vehiclePresets';
+import { buybackPct, BUYBACK_SETTING } from './data/shopRules';
 import { archetypeLook } from './sheets/vehicleArchetypes';
 import { VehicleBadgeButton } from './components/VehicleBadgeButton';
 import { useVehicleRoster } from './hooks/useVehicleRoster';
@@ -2101,6 +2102,9 @@ function App() {
                 name={shopLocation.name}
                 locationId={shopLocation.id}
                 buildingType={shopLocation.building_type || ''}
+                // This shop's own rate if it has one, otherwise the global, otherwise the
+                // default. Resolved here for display; the server works it out again to pay.
+                buybackPct={buybackPct(shopLocation.buyback_pct, globalSettings[BUYBACK_SETTING])}
                 socket={socketRef.current}
                 userName={userName}
                 onClose={() => setShopLocation(null)}

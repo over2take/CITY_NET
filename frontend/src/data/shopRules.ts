@@ -42,9 +42,46 @@ export const SETTLE_DEBT: Settle = 'debt';
 export const BUYBACK_SETTING = 'shop_buyback_pct';
 export const DEFAULT_BUYBACK_PCT = 45;
 
-/** Why a purchase was refused, as the server names it. */
+/**
+ * A stored rate as a number, or null if it is not one.
+ *
+ * Null rather than a fallback: a missing location rate means "use the global", a missing
+ * global means "use the default", and collapsing those loses the difference. The type is
+ * checked before the value because `Number([])` is 0, which would read as a shop that
+ * pays nothing - a real, meaningful setting - rather than as rubbish.
+ */
+export const readPct = (value: unknown): number | null => {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 1000) return null;
+  return n;
+};
+
+/**
+ * The rate that applies at one storefront: its own, then the global, then the default.
+ *
+ * A location set to 0 counts as set - a shop that pays nothing is a decision, not a blank.
+ * This is for SHOWING a price; the server works the same number out again when it pays.
+ */
+export const buybackPct = (locationPct: unknown, globalPct: unknown): number => {
+  const local = readPct(locationPct);
+  if (local !== null) return local;
+  const global = readPct(globalPct);
+  return global !== null ? global : DEFAULT_BUYBACK_PCT;
+};
+
+/** What a shop hands over for something that cost `price`. Rounded down, never up. */
+export const buybackValue = (price: number | null | undefined, pct: number): number => {
+  if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return 0;
+  return Math.floor((price * pct) / 100);
+};
+
+/** Why a purchase or a sale was refused, as the server names it. */
 export type RefusalReason =
-  | 'no_shop' | 'not_sold' | 'price' | 'funds' | 'needs_choice' | 'no_account' | 'write';
+  | 'no_shop' | 'not_sold' | 'price' | 'funds' | 'needs_choice' | 'no_account' | 'write'
+  // Selling adds its own: nothing staged, nothing owned, or no sheet to sell from.
+  | 'empty' | 'not_owned' | 'no_sheet' | 'no_system';
 
 /**
  * What to tell the player when the server says no.
@@ -60,4 +97,15 @@ export const REFUSAL_TEXT: Record<RefusalReason, string> = {
   needs_choice: 'The shop did not ask how to cover this. Nothing was bought.',
   no_account: 'Could not read your account.',
   write: 'The payment did not go through. Nothing was bought.',
+  empty: 'Nothing on the sell list.',
+  /**
+   * The sale was checked against the sheet and came up short.
+   *
+   * Reachable without anybody cheating: a sheet edited in another window while the sell
+   * list sat here is enough. So it reads as something to look at again rather than as an
+   * accusation.
+   */
+  not_owned: 'You do not have all of that any more. Nothing was sold — check the list.',
+  no_sheet: 'No character sheet to sell from.',
+  no_system: 'Could not tell which game is running.',
 };
