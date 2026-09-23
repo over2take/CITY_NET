@@ -233,6 +233,24 @@ describe('what it will not do', () => {
 });
 
 describe('chrome out of a body', () => {
+  it('tells every window the sheet changed, not just the one that sold', async () => {
+    /**
+     * A player can have the sheet open in the standalone tab as well as the game window.
+     * This was a real bug: the reply went back down the selling socket only, so the other
+     * view kept showing an item that was no longer there.
+     */
+    await seed({ weapon1_name: 'Heavy Pistol' });
+    await fund('GHOST', 0);
+    const { handlers, emitted } = await identified();
+    handlers['sellToShop']({ locationId: gunShop, items: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
+    await waitResult(emitted);
+
+    const update = [...emitted].reverse().find((e) => e.event === 'sheetUpdated');
+    expect(update, 'no sheetUpdated at all').toBeTruthy();
+    expect(update.direct, 'sent to one socket instead of broadcast').toBeFalsy();
+    expect(update.data).toMatchObject({ username: 'GHOST' });
+  });
+
   it('says how many pieces were installed, so the window can warn', async () => {
     // The app does not model extraction surgery. The player has to be told.
     const r = await run(db,

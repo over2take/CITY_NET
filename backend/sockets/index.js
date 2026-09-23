@@ -1962,9 +1962,16 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                           db.run(sql, args, (wErr) => {
                             if (wErr) return refuse('write');
                             sendBankUpdate(username);
-                            // The window re-reads the sheet from this, so the SELL list
-                            // and the counts on it follow without being told separately.
-                            socket.emit('sheetUpdated', { username });
+                            /**
+                             * Broadcast, not sent back down this one socket.
+                             *
+                             * A player can have the sheet open in the standalone tab as
+                             * well as the game window, and every other handler that
+                             * changes a sheet uses io.emit for exactly that reason.
+                             * Telling only the socket that sold would leave the other
+                             * view showing an item that is no longer there.
+                             */
+                            io.emit('sheetUpdated', { username, system });
                             socket.emit('shopSale', {
                               ok: true,
                               payout: plan.payout,
