@@ -21,6 +21,9 @@ const vehicleState = require('../sheets/vehicleState');
 const vehicleSystems = require('../sheets/vehicleSystems');
 const ram = require('../sheets/ram');
 const enemyVehicles = require('../sheets/enemyVehicles');
+const buildingTypes = require('../buildingTypes');
+const shopPrices = require('../shops/prices');
+const shopPurchase = require('../shops/purchase');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -1766,6 +1769,93 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         db.run('UPDATE player_banks SET balance = balance - ?, debt = debt - ? WHERE username = ?', [amount, amount, data.username], (err2) => {
           if (!err2) sendBankUpdate(data.username);
         });
+      });
+    });
+
+    /**
+     * Buy something from a shop, and charge it to the buyer's own account.
+     *
+     * Three things are deliberately not taken from the client. **Who is paying** comes
+     * from the verified socket identity, never from a username in the payload - the older
+     * money handlers above take `data.username` and will hand anyone anyone else's
+     * account, which is worth fixing but is not this handler's to repeat. **What it
+     * costs** comes from shops/prices.js. **Whether the shop sells it** comes from
+     * buildingTypes.js, so a player cannot buy a Tank from a clinic by asking nicely.
+     *
+     * The item itself is placed by the window once this confirms, because the sheet
+     * writing - a weapon row, a vehicle slot, an unplaced augment, an inventory line -
+     * already lives there and is tested there. The gap that leaves is a disconnect
+     * between the charge landing and the item arriving, which loses the player the item
+     * rather than the money. Refunding it needs the reverse of every one of those writes,
+     * so for now the money moves first and the receipt says what was paid.
+     */
+    socket.on('buyFromShop', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      if (!data || data.locationId === undefined) return;
+
+      const username = info.userName;
+      const catalogue = String(data.catalogue || '');
+      const itemId = String(data.itemId || '');
+      const refuse = (reason, extra) =>
+        socket.emit('shopPurchase', { ok: false, reason, itemId, catalogue, ...(extra || {}) });
+
+      db.get('SELECT building_type FROM locations WHERE id = ?', [data.locationId], (err, loc) => {
+        if (err || !loc) return refuse('no_shop');
+        // Shelved rather than merely sold: `sells` names what the book says the storefront
+        // deals in, which is deliberately wider than what can be bought today.
+        if (!buildingTypes.shelvedCatalogues(loc.building_type).includes(catalogue)) {
+          return refuse('not_sold');
+        }
+
+        const price = shopPrices.priceOf(catalogue, itemId);
+        if (price === null) return refuse('price');
+
+        db.get(
+          'SELECT value FROM global_settings WHERE key = ?',
+          [shopPurchase.OVERDRAFT_RULE],
+          (rErr, rRow) => {
+            const overdraftAllowed = !rErr && rRow && rRow.value === '1';
+
+            db.get(
+              'SELECT balance, debt FROM player_banks WHERE username = ?',
+              [username],
+              (bErr, bank) => {
+                if (bErr) return refuse('no_account');
+                // No row yet is a real state - an account is created on first read - and
+                // it means nothing saved rather than an error.
+                const balance = bank ? Number(bank.balance) || 0 : 0;
+                const debt = bank ? Number(bank.debt) || 0 : 0;
+
+                const plan = shopPurchase.planPurchase({
+                  balance, debt, price, overdraftAllowed, settle: data.settle,
+                });
+                if (!plan.ok) return refuse(plan.reason, { price, balance, debt });
+
+                const write = bank
+                  ? ['UPDATE player_banks SET balance = ?, debt = ? WHERE username = ?',
+                    [plan.balance, plan.debt, username]]
+                  : ['INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)',
+                    [username, plan.balance, plan.debt]];
+
+                db.run(write[0], write[1], (wErr) => {
+                  if (wErr) return refuse('write');
+                  sendBankUpdate(username);
+                  // The window waits for this before putting anything on the sheet.
+                  socket.emit('shopPurchase', {
+                    ok: true,
+                    catalogue,
+                    itemId,
+                    price,
+                    settled: plan.settled,
+                    balance: plan.balance,
+                    debt: plan.debt,
+                  });
+                });
+              },
+            );
+          },
+        );
       });
     });
 

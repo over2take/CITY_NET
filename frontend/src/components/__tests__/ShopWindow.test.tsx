@@ -1,22 +1,27 @@
 /**
- * The shop, as far as it goes: what a building carries, and the fact that it does not
- * charge for it yet.
+ * The shop: what a building carries, and what pressing BUY costs.
  *
- * The inertness is tested deliberately. A shell that quietly looked functional would be
- * worse than no shell at all, so the buttons being disabled and the notice being present
- * are assertions rather than an accident of it being unfinished.
+ * This file used to test the opposite - that the shop was inert and said so - because for
+ * a while it was. Now that money moves, the property worth defending is **paid for, then
+ * owned**: nothing reaches a sheet until the server says the account was charged. Several
+ * tests below exist only to pin that ordering, and the fake socket replies rather than
+ * stubbing so that the ordering is real rather than assumed.
+ *
+ * What the shop cannot decide is deliberately tested too. The price is not in the message
+ * it sends, and a shortfall is a question rather than a decision.
  */
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ShopWindow } from '../ShopWindow';
 
 // The hook is the sheet's own business; what matters here is what the shop does with it.
-const sheetState: { sheet: any; encumbranceEnforced: boolean } = {
+const sheetState: { sheet: any; encumbranceEnforced: boolean; overdraftAllowed: boolean } = {
   sheet: { system: 'cities_without_number', data: {} },
   encumbranceEnforced: false,
+  overdraftAllowed: false,
 };
 const handleFieldChange = vi.fn();
 const handleFieldsChange = vi.fn();
@@ -26,6 +31,7 @@ vi.mock('../../hooks/usePlayerSheet', () => ({
     handleFieldChange,
     handleFieldsChange,
     encumbranceEnforced: sheetState.encumbranceEnforced,
+    overdraftAllowed: sheetState.overdraftAllowed,
   }),
 }));
 import {
@@ -34,15 +40,71 @@ import {
 import { CWN_WEAPON_ROWS } from '../../sheets/templates/cities_without_number';
 import { CWN_CYBERWARE } from '../../sheets/cwnCyberwarePresets';
 
-const show = (buildingType: string, name = 'Doc Wu') =>
-  render(<ShopWindow name={name} buildingType={buildingType}
-    socket={{ on: vi.fn(), off: vi.fn(), emit: vi.fn() }} userName="JADE" onClose={vi.fn()} />);
+/**
+ * A socket that answers the way the server does.
+ *
+ * Buying became a round trip when the bank was wired up: the window sends `buyFromShop`,
+ * the server charges, and only the receipt puts anything on the sheet. A stub that never
+ * replies would make every purchase here look like a no-op, so this replies - and that is
+ * worth having rather than working around, because "the item arrives only once it is paid
+ * for" is the property most worth keeping.
+ *
+ * `bank.balance` is deliberately huge by default so the money is not what these tests are
+ * about; the ones that care set it themselves.
+ */
+const bank = { balance: 10_000_000, debt: 0 };
+/** Every buyFromShop that went out, so a test can check what was asked for. */
+let sent: any[] = [];
+/** Set to a reason to make the fake server refuse the next purchase. */
+let refuseWith: string | null = null;
+
+/** The listeners of the socket most recently handed to a window, so a test can push to it. */
+let live: Record<string, Function[]> = {};
+
+const makeSocket = () => {
+  const listeners: Record<string, Function[]> = {};
+  live = listeners;
+  const socket: any = {
+    on: (ev: string, fn: Function) => { (listeners[ev] ||= []).push(fn); },
+    off: (ev: string, fn: Function) => {
+      listeners[ev] = (listeners[ev] || []).filter((f) => f !== fn);
+    },
+    emit: (ev: string, payload?: any) => {
+      // requestBankBalance is answered by show() after mount rather than here: this emit
+      // happens inside the window's own mount effect, and a state update pushed from
+      // inside that effect does not land.
+      if (ev === 'buyFromShop') {
+        sent.push(payload);
+        act(() => (listeners.shopPurchase || []).forEach((f) => f(
+          refuseWith
+            ? { ok: false, reason: refuseWith, catalogue: payload.catalogue, itemId: payload.itemId }
+            : { ok: true, catalogue: payload.catalogue, itemId: payload.itemId, settled: payload.settle ?? 'balance' },
+        )));
+      }
+    },
+  };
+  return socket;
+};
+
+const show = (buildingType: string, name = 'Doc Wu') => {
+  const result = render(<ShopWindow name={name} locationId={7} buildingType={buildingType}
+    socket={makeSocket()} userName="JADE" onClose={vi.fn()} />);
+  // The server broadcasts the balance in answer to the window's request. Delivered here,
+  // after mount, because that is when a state update actually lands.
+  act(() => (live.bankUpdate || []).forEach((f) => f({ username: 'JADE', ...bank })));
+  return result;
+};
 
 beforeEach(() => {
   handleFieldChange.mockClear();
   handleFieldsChange.mockClear();
   sheetState.sheet = { system: 'cities_without_number', data: {} };
   sheetState.encumbranceEnforced = false;
+  sheetState.overdraftAllowed = false;
+  bank.balance = 10_000_000;
+  bank.debt = 0;
+  sent = [];
+  refuseWith = null;
 });
 
 describe('a ripperdoc', () => {
@@ -64,10 +126,12 @@ describe('a ripperdoc', () => {
     expect(screen.getAllByText('0.25').length).toBeGreaterThan(0);
   });
 
-  it('says out loud that nothing is charged yet', () => {
+  it('says out loud what pressing BUY will do', () => {
     // A button that quietly does half of what it says is worse than one that says which.
     show('ripperdoc');
-    expect(screen.getByText(/NOTHING IS CHARGED YET/)).toBeInTheDocument();
+    // This used to read "NOTHING IS CHARGED YET", which stopped being true the day the
+    // bank was wired up. A notice that lies about money is worse than no notice.
+    expect(screen.getByText(/BUY CHARGES YOUR ACCOUNT/)).toBeInTheDocument();
   });
 
   it('filters the stock by name', async () => {
@@ -372,9 +436,10 @@ describe('buying a weapon', () => {
     expect(handleFieldsChange).not.toHaveBeenCalled();
   });
 
-  it('says that nothing is charged, and where the weapon went', () => {
+  it('says that it charges, and where the weapon went', () => {
     show('gun_shop');
-    expect(screen.getByText(/BUY PUTS THE WEAPON IN A WEAPON SLOT, STOWED/)).toBeInTheDocument();
+    expect(screen.getByText(/CHARGES YOUR ACCOUNT AND PUTS THE WEAPON IN A WEAPON SLOT, STOWED/))
+      .toBeInTheDocument();
   });
 
   it('prints range and magazine, and says they will not be kept', () => {
@@ -614,6 +679,136 @@ describe('showing one kind of weapon', () => {
   });
 });
 
+describe('paying for it', () => {
+  const heavyPistol = () => screen.getByRole('button', { name: 'Buy Heavy Pistol' });
+
+  it('asks the server to charge, naming the catalogue and the item but never a price', async () => {
+    // The price is deliberately absent from the message. The server looks it up, so a
+    // crafted client cannot name its own.
+    show('gun_shop');
+    await userEvent.click(heavyPistol());
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ locationId: 7, catalogue: 'weapons', itemId: 'heavy_pistol' });
+    expect(sent[0]).not.toHaveProperty('price');
+  });
+
+  it('puts nothing on the sheet until the purchase comes back paid', async () => {
+    // The property most worth keeping: paid for, then owned. The fake server here is
+    // told to refuse, and the weapon must not appear.
+    refuseWith = 'funds';
+    show('gun_shop');
+    await userEvent.click(heavyPistol());
+
+    expect(handleFieldsChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/Not enough credits/)).toBeInTheDocument();
+  });
+
+  it('places the item once the receipt arrives', async () => {
+    show('gun_shop');
+    await userEvent.click(heavyPistol());
+    expect(handleFieldsChange).toHaveBeenCalled();
+  });
+
+  it('says why when the server refuses for a reason of its own', async () => {
+    refuseWith = 'not_sold';
+    show('gun_shop');
+    await userEvent.click(heavyPistol());
+    expect(screen.getByText(/does not sell that/i)).toBeInTheDocument();
+  });
+
+  it('shows what you have to spend', () => {
+    bank.balance = 4250;
+    show('gun_shop');
+    expect(screen.getByText(/4,250cr/)).toBeInTheDocument();
+  });
+
+  it('shows a debt alongside the balance', () => {
+    bank.balance = 100;
+    bank.debt = 900;
+    show('gun_shop');
+    expect(screen.getByText(/900cr OWED/)).toBeInTheDocument();
+  });
+});
+
+describe('when you cannot afford it', () => {
+  const heavyPistol = () => screen.getByRole('button', { name: 'Buy Heavy Pistol' });
+
+  it('refuses outright while the house rule is off, without troubling the server', async () => {
+    bank.balance = 5;
+    show('gun_shop');
+    await userEvent.click(heavyPistol());
+
+    expect(sent).toHaveLength(0);
+    expect(screen.getByText(/Not enough credits/)).toBeInTheDocument();
+    expect(handleFieldsChange).not.toHaveBeenCalled();
+  });
+
+  it('asks how to cover it when the house rule is on, and sends nothing yet', async () => {
+    sheetState.overdraftAllowed = true;
+    bank.balance = 5;
+    show('gun_shop');
+    await userEvent.click(heavyPistol());
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getByRole('button', { name: 'TAKE DEBT' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'GO NEGATIVE' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'CANCEL' })).toBeInTheDocument();
+    // Nothing has been charged while the question is on screen.
+    expect(sent).toHaveLength(0);
+  });
+
+  it('sends the choice the player made', async () => {
+    sheetState.overdraftAllowed = true;
+    bank.balance = 5;
+    show('gun_shop');
+    await userEvent.click(heavyPistol());
+    await userEvent.click(screen.getByRole('button', { name: 'TAKE DEBT' }));
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ settle: 'debt', itemId: 'heavy_pistol' });
+    expect(handleFieldsChange).toHaveBeenCalled();
+  });
+
+  it('sends the other choice when that is the one picked', async () => {
+    sheetState.overdraftAllowed = true;
+    bank.balance = 5;
+    show('gun_shop');
+    await userEvent.click(heavyPistol());
+    await userEvent.click(screen.getByRole('button', { name: 'GO NEGATIVE' }));
+
+    expect(sent[0]).toMatchObject({ settle: 'balance' });
+  });
+
+  it('buys nothing at all on cancel', async () => {
+    sheetState.overdraftAllowed = true;
+    bank.balance = 5;
+    show('gun_shop');
+    await userEvent.click(heavyPistol());
+    await userEvent.click(screen.getByRole('button', { name: 'CANCEL' }));
+
+    expect(sent).toHaveLength(0);
+    expect(handleFieldsChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('checks the weapon rack before the wallet', async () => {
+    // A full rack is a reason not to sell at all. Asking someone to go into debt for
+    // something that cannot be delivered would be the wrong question.
+    sheetState.overdraftAllowed = true;
+    bank.balance = 5;
+    const full: Record<string, string> = {};
+    for (let i = 1; i <= CWN_WEAPON_ROWS; i += 1) full[`weapon${i}_name`] = `Gun ${i}`;
+    sheetState.sheet = { system: 'cities_without_number', data: full };
+    show('gun_shop');
+    await userEvent.click(heavyPistol());
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByText(/No free weapon slot/)).toBeInTheDocument();
+    expect(sent).toHaveLength(0);
+  });
+});
+
 describe('the garage sells vehicles', () => {
   /**
    * A second route to a vehicle, not a replacement for the first.
@@ -696,9 +891,10 @@ describe('the clinic sells pharmaceuticals', () => {
     expect(screen.getByText('TRAUMA PATCH')).toBeInTheDocument();
   });
 
-  it('says the money does not move and where a dose lands', () => {
+  it('says that it charges and where a dose lands', () => {
     show('clinic');
-    expect(screen.getByText(/BUY ADDS A DOSE TO YOUR INVENTORY, STOWED/)).toBeInTheDocument();
+    expect(screen.getByText(/CHARGES YOUR ACCOUNT AND ADDS A DOSE TO YOUR INVENTORY, STOWED/))
+      .toBeInTheDocument();
   });
 
   it('says which three actually change a number', () => {

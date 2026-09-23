@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BUILDING_TYPES, shopsAvailable } from '../data/buildingTypes';
+import { OVERDRAFT_RULE } from '../data/shopRules';
 import { xpAvailable } from './XpWindow';
 import { createPortal } from 'react-dom';
 import * as THREE from 'three';
@@ -2119,6 +2120,13 @@ const GLOBAL_HOUSE_RULES: HouseRuleDef[] = [
     settingKey: 'initiative_follows_building',
     label: 'INITIATIVE FOLLOWS BUILDING (ALL FLOORS SHARE ONE TRACKER)',
     title: 'When enabled, all floors of the same building share a single initiative tracker. Players moving between floors stay in the same combat order. Each building and the city map still have their own separate initiatives.',
+  },
+  {
+    // Universal rather than per-system: every ruleset in the app has money, and whether
+    // you can spend what you have not got is a table decision, not a ruleset one.
+    settingKey: OVERDRAFT_RULE,
+    label: 'BUY WITH MONEY YOU DO NOT HAVE',
+    title: "House rule: a player who cannot afford something in a shop is asked how to cover it - take the shortfall as debt, or let the balance go negative - instead of being refused. Off by default, which refuses the purchase. What happens to someone carrying a negative balance is yours to decide; the app records the hole, it does not collect on it.",
   },
 ];
 

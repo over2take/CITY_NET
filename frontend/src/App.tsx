@@ -2099,6 +2099,7 @@ function App() {
             {shopLocation && shopsAvailable(gameSystem) && isShop(shopLocation.building_type) && (
               <ShopWindow
                 name={shopLocation.name}
+                locationId={shopLocation.id}
                 buildingType={shopLocation.building_type || ''}
                 socket={socketRef.current}
                 userName={userName}

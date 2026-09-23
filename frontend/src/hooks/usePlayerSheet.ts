@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet, type SheetFieldValue } from '../sheets';
 import { SLOW_ADVANCEMENT_RULE } from '../sheets/cwnAdvancement';
 import { ENCUMBRANCE_RULE } from '../sheets/cwnEncumbrance';
+import { OVERDRAFT_RULE } from '../data/shopRules';
 
 // Shared client logic for the player's own character sheet, used by both
 // surfaces that render it: the in-game floating window
@@ -183,9 +184,15 @@ export function usePlayerSheet(
   const encumbranceEnforced =
     ruleSettings.find((r) => r.key === ENCUMBRANCE_RULE)?.value === '1';
 
+  // Whether a shop may let a player spend past zero. Off refuses the purchase outright;
+  // on, the shop asks how to cover the shortfall. The server enforces it either way -
+  // this only decides whether the window offers the choice.
+  const overdraftAllowed =
+    ruleSettings.find((r) => r.key === OVERDRAFT_RULE)?.value === '1';
+
   return {
     sheet, template, handleFieldChange, handleFieldsChange,
-    allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, actions,
+    allowFumbleShield, xpRate, encumbranceEnforced, overdraftAllowed, hiddenTabs, actions,
   };
 }
 

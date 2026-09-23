@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import {
   buildingTypeById, shelvedCatalogues, catalogueById, type ShopStock,
 } from '../data/buildingTypes';
+import {
+  SETTLE_BALANCE, SETTLE_DEBT, REFUSAL_TEXT, type Settle, type RefusalReason,
+} from '../data/shopRules';
 import { CWN_CYBERWARE, type CwnCyberPreset } from '../sheets/cwnCyberwarePresets';
 import { CYBERWARE_FIELD, readRows, normaliseRow } from '../sheets/cyberwareRows';
 import { CWN_WEAPONS, weaponToStashed, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
@@ -23,10 +26,22 @@ import { usePlayerSheet } from '../hooks/usePlayerSheet';
 
 // A shop: what the building carries, and a way to take a piece away with you.
 //
-// BUY puts the piece on your sheet and stops there. No money moves, no stock is kept. That
-// split is not a shortcut - buying is a transaction and installing is surgery with strain
-// and a doctor's roll behind it, so a bought piece lands in the same "not yet placed on the
-// body" list an import lands in, and gets fitted on the diagram like anything else.
+// **BUY charges the buyer's bank account, and the thing only appears once it is paid for.**
+// The money is the server's business and is not decided here: this window sends a
+// catalogue and an id, and the price is looked up on the other side. It prints prices, but
+// it does not get to name them.
+//
+// That makes a purchase a round trip. The sheet write for each shelf is registered when
+// the BUY goes out and run when the receipt comes back, so nothing lands on a sheet that
+// was not paid for. The gap it leaves is the opposite one - a disconnect between the
+// charge and the write loses the item rather than the money - which is the safer way round
+// but is still a gap, and undoing it would mean reversing every kind of sheet write.
+//
+// Buying is still not installing. A bought augment lands in the same "not yet placed on
+// the body" list an import lands in, because buying is a transaction and installing is
+// surgery with strain and a doctor's roll behind it.
+//
+// No stock is kept: a shop never runs out.
 //
 // Buying and selling are separate tabs rather than two buttons on a row, because they are
 // not two halves of one list. Buying reads the shop's stock; selling reads what *you* are
@@ -46,6 +61,8 @@ import { usePlayerSheet } from '../hooks/usePlayerSheet';
 interface Props {
   /** The building being shopped in, for the title. */
   name: string;
+  /** Which building, so the server can check this shop really stocks what was asked for. */
+  locationId: number;
   buildingType: string;
   /** The shopper's own sheet: where a bought piece lands, and what a sold one comes from. */
   socket: any;
@@ -167,15 +184,81 @@ interface Shelf<T> {
   controls?: React.ReactNode;
 }
 
-export function ShopWindow({ name, buildingType, socket, userName, onClose }: Props) {
+export function ShopWindow({ name, locationId, buildingType, socket, userName, onClose }: Props) {
   const [pos, setPos] = useState({ x: 140, y: 90 });
   const [tab, setTab] = useState<Tab>('buy');
   const [filter, setFilter] = useState('');
   /** How many of each line has been taken this visit, so a press has visible effect. */
   const [taken, setTaken] = useState<Record<string, number>>({});
 
-  const { sheet, handleFieldChange, handleFieldsChange, encumbranceEnforced } =
+  const { sheet, handleFieldChange, handleFieldsChange, encumbranceEnforced, overdraftAllowed } =
     usePlayerSheet(socket, userName);
+
+  /**
+   * What the buyer has, straight from the server's own broadcast.
+   *
+   * Not read off the sheet. The sheet carries cash as a linked field that mirrors this,
+   * but a shop deciding whether somebody can afford something should be looking at the
+   * account rather than at a copy of it.
+   */
+  const [account, setAccount] = useState<{ balance: number; debt: number } | null>(null);
+
+  useEffect(() => {
+    if (!socket || !userName) return;
+    const onBank = (info: { username: string; balance: number; debt: number }) => {
+      if (info && info.username === userName) {
+        setAccount({ balance: Number(info.balance) || 0, debt: Number(info.debt) || 0 });
+      }
+    };
+    socket.on('bankUpdate', onBank);
+    socket.emit('requestBankBalance', { username: userName });
+    return () => { socket.off?.('bankUpdate', onBank); };
+  }, [socket, userName]);
+
+  /**
+   * A purchase the player has been asked to make a decision about.
+   *
+   * Held rather than acted on: the shop knows the balance, so it can see a shortfall
+   * coming and ask how to cover it BEFORE spending anything. Nothing has been sent to the
+   * server while this is set.
+   */
+  const [asking, setAsking] = useState<
+    { catalogue: ShopStock; itemId: string; label: string; price: number } | null
+  >(null);
+
+  /**
+   * What each shelf does with a row once it has actually been paid for.
+   *
+   * Registered when the BUY is sent and run when the receipt comes back, because the
+   * sheet write and the charge are two different machines: money is the server's, and
+   * placing a thing on a sheet - a weapon row, a vehicle slot, an unplaced augment - is
+   * this window's and is tested here. Keyed by catalogue and id so two purchases in
+   * flight cannot deliver each other's goods.
+   */
+  const pending = React.useRef(new Map<string, () => void>());
+  const pendingKey = (catalogue: string, itemId: string) => `${catalogue}/${itemId}`;
+
+  useEffect(() => {
+    if (!socket) return;
+    const onPurchase = (res: {
+      ok: boolean; catalogue: string; itemId: string; reason?: RefusalReason;
+      price?: number; settled?: Settle;
+    }) => {
+      const key = pendingKey(res.catalogue, res.itemId);
+      const place = pending.current.get(key);
+      pending.current.delete(key);
+      if (!res.ok) {
+        setRefused(REFUSAL_TEXT[res.reason as RefusalReason] ?? 'The purchase did not go through.');
+        return;
+      }
+      setRefused(null);
+      // Only now does the thing exist. Paid for, then owned.
+      place?.();
+      setTaken((t) => ({ ...t, [res.itemId]: (t[res.itemId] ?? 0) + 1 }));
+    };
+    socket.on('shopPurchase', onPurchase);
+    return () => { socket.off?.('shopPurchase', onPurchase); };
+  }, [socket]);
   /** Why the last purchase did not happen, cleared as soon as anything else does. */
   const [refused, setRefused] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState>({ key: '', dir: null });
@@ -232,8 +315,54 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
     handleFieldChange?.(INVENTORY_FIELD, writeInventory(next));
   };
 
-  /** A press landed. Counted per line so the button can say how many you have taken. */
-  const count = (key: string) => setTaken((t) => ({ ...t, [key]: (t[key] ?? 0) + 1 }));
+  /**
+   * Send a purchase, and remember what to do when it is paid for.
+   *
+   * `settle` is only sent when the player has been asked and answered. The server checks
+   * everything again - the price, the shop, the house rule, the balance - so this is a
+   * courtesy rather than a gate: it exists so the common refusal happens without a round
+   * trip and so a shortfall is a question rather than a rejection.
+   */
+  const send = (
+    catalogue: ShopStock, itemId: string, place: () => void, settle?: Settle,
+  ) => {
+    pending.current.set(pendingKey(catalogue, itemId), place);
+    setRefused(null);
+    socket?.emit('buyFromShop', { locationId, catalogue, itemId, settle });
+  };
+
+  /**
+   * Try to buy one of something.
+   *
+   * The shelf hands over what to write onto the sheet if this succeeds; nothing is
+   * written here. Three outcomes: it is affordable and goes straight out, it is not and
+   * the house says no, or it is not and the player gets asked how to cover it.
+   */
+  const purchase = (
+    catalogue: ShopStock, itemId: string, label: string, price: number, place: () => void,
+  ) => {
+    if (!sheet) { setRefused('No character sheet loaded.'); return; }
+    const balance = account?.balance ?? 0;
+    if (price <= balance) return send(catalogue, itemId, place);
+    if (!overdraftAllowed) {
+      setRefused(
+        `Not enough credits — ${label} is ${credits(price)} and you have ${credits(balance)}.`,
+      );
+      return;
+    }
+    // Asked rather than assumed. Debt and a negative balance are different problems.
+    setAsking({ catalogue, itemId, label, price });
+    pending.current.set(pendingKey(catalogue, itemId), place);
+  };
+
+  /** The player answered the shortfall question. Send it with their choice. */
+  const answerAsking = (settle: Settle) => {
+    if (!asking) return;
+    const { catalogue, itemId } = asking;
+    const place = pending.current.get(pendingKey(catalogue, itemId));
+    setAsking(null);
+    if (place) send(catalogue, itemId, place, settle);
+  };
 
   // ---------------------------------------------------------------- weapons
 
@@ -285,12 +414,16 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
    * a bag until you decide otherwise, which is also the more forgiving of the two limits.
    */
   const buyWeapon = (w: CwnWeaponPreset) => {
+    // Checked before the money moves: a full weapon rack is a reason not to sell, not
+    // something to discover after the account has been debited.
     const why = refuseReason(w);
     if (why) { setRefused(why); return; }
-    const data = (sheet!.data ?? {}) as Record<string, unknown>;
-    const row = firstFreeRow(data, CWN_WEAPON_ROWS)!;
-    setRefused(null);
-    handleFieldsChange?.(stashedToCarried(weaponToStashed(w, name || ''), row));
+    purchase('weapons', w.id, w.name, w.price, () => {
+      const data = (sheet!.data ?? {}) as Record<string, unknown>;
+      const row = firstFreeRow(data, CWN_WEAPON_ROWS);
+      if (row === null) return;
+      handleFieldsChange?.(stashedToCarried(weaponToStashed(w, name || ''), row));
+    });
   };
 
   const weaponShelf: Shelf<CwnWeaponPreset> = {
@@ -323,7 +456,7 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
       w.name.toLowerCase().includes(q) || w.note.toLowerCase().includes(q)
       || w.category.includes(q),
     buy: buyWeapon,
-    notice: 'NOTHING IS CHARGED YET — BUY PUTS THE WEAPON IN A WEAPON SLOT, STOWED',
+    notice: 'BUY CHARGES YOUR ACCOUNT AND PUTS THE WEAPON IN A WEAPON SLOT, STOWED',
     filterHint: 'Filter by name, note or kind',
     // RANGE and MAG are shown and not bought: the sheet has no field for either, and
     // picking a rifle without knowing its range is not a choice. Said here rather than
@@ -409,11 +542,10 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
       },
     },
     matches: (p, q) => p.label.toLowerCase().includes(q) || p.effect.toLowerCase().includes(q),
-    buy: (p) => {
+    buy: (p) => purchase('pharmaceuticals', p.id, p.label, p.cost, () => {
       addToInventory(p.label, '', (item) => pharmaByName(item.name)?.id === p.id);
-      count(p.id);
-    },
-    notice: 'NOTHING IS CHARGED YET — BUY ADDS A DOSE TO YOUR INVENTORY, STOWED',
+    }),
+    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS A DOSE TO YOUR INVENTORY, STOWED',
     filterHint: 'Filter by name or effect',
     // Said on the shelf, because the table sells sixteen and the sheet rolls with three.
     // A player choosing Psycho should know what they are getting.
@@ -436,7 +568,7 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
     },
     matches: (c, q) => c.name.toLowerCase().includes(q) || c.effect.toLowerCase().includes(q),
     countKey: (c) => c.id,
-    buy: (item) => {
+    buy: (item) => purchase('cyberware', item.id, item.name, item.price, () => {
       if (!sheet) return;
       // Unplaced: owning a piece and having it in your body are two different facts, and
       // the diagram is the only thing that decides the second.
@@ -452,9 +584,8 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
         placed: false,
       });
       handleFieldChange(CYBERWARE_FIELD, [...readRows(sheet.data), row] as never);
-      count(item.id);
-    },
-    notice: 'NOTHING IS CHARGED YET — BUY ADDS THE PIECE TO YOUR AUGMENTS, UNPLACED',
+    }),
+    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE PIECE TO YOUR AUGMENTS, UNPLACED',
     filterHint: 'Filter by name or effect',
   };
 
@@ -522,11 +653,10 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
       },
     },
     matches: (a, q) => a.label.toLowerCase().includes(q) || a.group.includes(q),
-    buy: (a) => {
+    buy: (a) => purchase('armor', a.id, a.label, a.cost, () => {
       addToInventory(a.label, String(a.enc), (item) => item.name === a.label);
-      count(a.id);
-    },
-    notice: 'NOTHING IS CHARGED YET — BUY ADDS THE ARMOR TO YOUR INVENTORY, STOWED',
+    }),
+    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE ARMOR TO YOUR INVENTORY, STOWED',
     filterHint: 'Filter by name or kind',
     note: (
       <>
@@ -556,13 +686,12 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
       },
     },
     matches: (g, q) => g.label.toLowerCase().includes(q) || g.note.toLowerCase().includes(q),
-    buy: (g) => {
+    buy: (g) => purchase('gear', g.id, g.label, g.cost, () => {
       // The symbol rows carry no Encumbrance the sheet can add up, so they go in blank
       // rather than as a zero somebody would later mistake for a measurement.
       addToInventory(g.label, g.encNote ? '' : String(g.enc), (item) => item.name === g.label);
-      count(g.id);
-    },
-    notice: 'NOTHING IS CHARGED YET — BUY ADDS THE ITEM TO YOUR INVENTORY, STOWED',
+    }),
+    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE ITEM TO YOUR INVENTORY, STOWED',
     filterHint: 'Filter by name or what it does',
     note: ENC_FOOTNOTE,
   };
@@ -605,11 +734,10 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
       },
     },
     matches: (m, q) => m.label.toLowerCase().includes(q) || m.effect.toLowerCase().includes(q),
-    buy: (m) => {
+    buy: (m) => purchase(id, m.id, m.label, m.cost, () => {
       addToInventory(m.label, '', (item) => item.name === m.label);
-      count(m.id);
-    },
-    notice: 'NOTHING IS CHARGED YET — BUY ADDS THE MOD TO YOUR INVENTORY, UNFITTED',
+    }),
+    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE MOD TO YOUR INVENTORY, UNFITTED',
     filterHint: 'Filter by name or effect',
     note: `Buying a mod is not fitting it — that is a ${fits} check at a bench, and the `
       + 'sheet is where a fitted mod goes. A given mod can only be added once to any one item.',
@@ -656,19 +784,21 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
    */
   const buyVehicle = (preset: VehiclePreset) => {
     if (!sheet) { setRefused('No character sheet loaded.'); return; }
-    const data = (sheet.data ?? {}) as Record<string, unknown>;
-    const slot = firstFreeVehicle(data);
-    if (slot === null) {
+    // Checked before the money moves, like the weapon rack.
+    if (firstFreeVehicle((sheet.data ?? {}) as Record<string, unknown>) === null) {
       setRefused(
         `No free vehicle slot — all ${CWN_VEHICLE_ROWS} are full. Clear one on the sheet first.`,
       );
       return;
     }
-    const fields = presetFields(slot, preset);
-    if (preset.note) fields[`vehicle${slot}_notes`] = preset.note;
-    setRefused(null);
-    count(preset.id);
-    handleFieldsChange?.(fields);
+    purchase('vehicles', preset.id, preset.label, preset.cost, () => {
+      const data = (sheet.data ?? {}) as Record<string, unknown>;
+      const slot = firstFreeVehicle(data);
+      if (slot === null) return;
+      const fields = presetFields(slot, preset);
+      if (preset.note) fields[`vehicle${slot}_notes`] = preset.note;
+      handleFieldsChange?.(fields);
+    });
   };
 
   const vehicleShelf: Shelf<VehiclePreset> = {
@@ -702,7 +832,7 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
     },
     matches: (v, q) => v.label.toLowerCase().includes(q) || v.art.includes(q) || v.size.toLowerCase() === q,
     buy: buyVehicle,
-    notice: `NOTHING IS CHARGED YET — BUY FILLS ONE OF YOUR ${CWN_VEHICLE_ROWS} VEHICLE SLOTS`,
+    notice: `BUY CHARGES YOUR ACCOUNT AND FILLS ONE OF YOUR ${CWN_VEHICLE_ROWS} VEHICLE SLOTS`,
     filterHint: 'Filter by name, kind or size',
     note: 'AR shown as * is an immunity rather than a rating — the rule goes into that '
       + "vehicle's notes when you buy it. POW and MASS are the budget its fittings and "
@@ -726,11 +856,10 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
       },
     },
     matches: (f, q) => f.label.toLowerCase().includes(q) || f.effect.toLowerCase().includes(q),
-    buy: (f) => {
+    buy: (f) => purchase('vehicle_fittings', f.id, f.label, f.cost, () => {
       addToInventory(f.label, '', (item) => item.name === f.label);
-      count(f.id);
-    },
-    notice: 'NOTHING IS CHARGED YET — BUY ADDS THE FITTING TO YOUR INVENTORY, UNFITTED',
+    }),
+    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE FITTING TO YOUR INVENTORY, UNFITTED',
     filterHint: 'Filter by name or effect',
     note: 'POW and MASS are what the fitting costs the vehicle once installed, and MIN is '
       + 'the smallest hull that can take it. The vehicle sheet is where it gets fitted.',
@@ -766,11 +895,10 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
     matches: (w, q) => w.label.toLowerCase().includes(q) || (w.note ?? '').toLowerCase().includes(q),
     // A weapon the book prices as part of a hull rather than over a counter.
     buyable: (w) => w.cost !== undefined,
-    buy: (w) => {
+    buy: (w) => purchase('vehicle_weapons', w.id, w.label, w.cost ?? 0, () => {
       addToInventory(w.label, '', (item) => item.name === w.label);
-      count(w.id);
-    },
-    notice: 'NOTHING IS CHARGED YET — BUY ADDS THE WEAPON TO YOUR INVENTORY, UNMOUNTED',
+    }),
+    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE WEAPON TO YOUR INVENTORY, UNMOUNTED',
     filterHint: 'Filter by name or note',
     note: 'A line with no price is not sold separately — it comes with the hull. Mounting '
       + 'happens on the vehicle sheet, against its hardpoints and power.',
@@ -861,6 +989,19 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
           {rows.length} LINE{rows.length === 1 ? '' : 'S'}
           {/* The book page, so a price can be checked without hunting for the table. */}
           {shelf && catalogueById(shelf.id) && ` · CWN P${catalogueById(shelf.id)!.page}`}
+          {/* What you can spend, where you are about to spend it. A shop that charges an
+              account without showing it is asking people to shop blind. */}
+          {account && (
+            <>
+              {' · '}
+              <span style={{ color: account.balance < 0 ? 'var(--danger)' : undefined }}>
+                {credits(account.balance)}
+              </span>
+              {account.debt > 0 && (
+                <span style={{ color: 'var(--warning)' }}> · {credits(account.debt)} OWED</span>
+              )}
+            </>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -932,6 +1073,57 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
                 {refused && (
                   <div style={{ ...mono(10), color: 'var(--danger)', marginBottom: 6, letterSpacing: 0 }}>
                     {refused}
+                  </div>
+                )}
+
+                {/*
+                  Short of the price, with the house rule on.
+
+                  Asked rather than decided, because taking on debt and letting an account
+                  go under are different problems with different consequences, and which
+                  one a player wants is not something a shop can infer. Cancel is a real
+                  third answer and is listed with the others rather than hidden in a
+                  corner - nothing has been charged at this point.
+                */}
+                {asking && (
+                  <div
+                    role="alertdialog"
+                    aria-label="Not enough credits"
+                    style={{
+                      ...mono(10), letterSpacing: 0, marginBottom: 8, padding: '6px 8px',
+                      border: '1px solid var(--warning)', color: 'var(--warning)',
+                    }}
+                  >
+                    <div style={{ marginBottom: 6 }}>
+                      {asking.label.toUpperCase()} costs {credits(asking.price)} and you have{' '}
+                      {credits(account?.balance ?? 0)}. How do you want to cover the{' '}
+                      {credits(asking.price - (account?.balance ?? 0))} short?
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="utility-btn"
+                        onClick={() => answerAsking(SETTLE_DEBT)}
+                        title="Spend what you have and borrow the rest"
+                        style={{ ...mono(10), padding: '2px 10px' }}
+                      >TAKE DEBT</button>
+                      <button
+                        type="button"
+                        className="utility-btn"
+                        onClick={() => answerAsking(SETTLE_BALANCE)}
+                        title="Let the balance go below zero"
+                        style={{ ...mono(10), padding: '2px 10px' }}
+                      >GO NEGATIVE</button>
+                      <button
+                        type="button"
+                        className="utility-btn"
+                        onClick={() => {
+                          pending.current.delete(pendingKey(asking.catalogue, asking.itemId));
+                          setAsking(null);
+                        }}
+                        style={{ ...mono(10), padding: '2px 10px' }}
+                      >CANCEL</button>
+                    </div>
                   </div>
                 )}
                 <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>

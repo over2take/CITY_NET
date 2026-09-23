@@ -23,6 +23,7 @@ import { CWN_ARMOR_MODS, CWN_WEAPON_MODS } from '../cwnGearMods';
 import { VEHICLE_PRESETS } from '../vehiclePresets';
 import { VEHICLE_FITTINGS } from '../vehicleFittings';
 import { VEHICLE_WEAPONS } from '../vehicleWeapons';
+import { OVERDRAFT_RULE, SETTLE_BALANCE, SETTLE_DEBT } from '../../data/shopRules';
 
 const prices = createRequire(import.meta.url)('../../../../backend/shops/prices.js');
 
@@ -75,6 +76,16 @@ describe('what the shelf says and what the bank charges', () => {
       }
     }
     expect(extra).toEqual([]);
+  });
+
+  it('names the house rule and the settlement modes the same way the server does', () => {
+    // Three strings that have to agree across the wire: the key the admin toggle writes
+    // and the server reads, and the two words the shop sends to say how a shortfall was
+    // covered. A typo in any of them fails silently as "rule is off" or "no choice made".
+    const purchase = createRequire(import.meta.url)('../../../../backend/shops/purchase.js');
+    expect(OVERDRAFT_RULE).toBe(purchase.OVERDRAFT_RULE);
+    expect(SETTLE_BALANCE).toBe(purchase.SETTLE_BALANCE);
+    expect(SETTLE_DEBT).toBe(purchase.SETTLE_DEBT);
   });
 
   it('answers null for something that is not on any shelf', () => {
