@@ -14,10 +14,11 @@ import { CWN_GEAR, encText, ENC_FOOTNOTE, type GearItem } from '../sheets/cwnGea
 import { CWN_ARMOR_MODS, CWN_WEAPON_MODS, type GearMod } from '../sheets/cwnGearMods';
 import { VEHICLE_FITTINGS, type VehicleFitting } from '../sheets/vehicleFittings';
 import { VEHICLE_WEAPONS, type VehicleWeapon } from '../sheets/vehicleWeapons';
+import { VEHICLE_PRESETS, presetFields, type VehiclePreset } from '../sheets/vehiclePresets';
 import {
   INVENTORY_FIELD, readInventory, writeInventory, blankItem, type InventoryItem,
 } from '../sheets/inventory';
-import { CWN_WEAPON_ROWS } from '../sheets/templates/cities_without_number';
+import { CWN_WEAPON_ROWS, CWN_VEHICLE_ROWS } from '../sheets/templates/cities_without_number';
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
 
 // A shop: what the building carries, and a way to take a piece away with you.
@@ -616,6 +617,98 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
 
   // --------------------------------------------------------------- vehicles
 
+  /**
+   * The first vehicle slot with nothing in it, or null when all six are full.
+   *
+   * A slot is free when it has no name. The sheet writes the preset's label into the name
+   * on selection, so "has a name" and "has a vehicle" are the same question.
+   */
+  const firstFreeVehicle = (data: Record<string, unknown>): number | null => {
+    for (let i = 1; i <= CWN_VEHICLE_ROWS; i += 1) {
+      if (!String(data[`vehicle${i}_name`] ?? '').trim()) return i;
+    }
+    return null;
+  };
+
+  /** How many of a preset the character already has parked, by type rather than by name. */
+  const ownedVehicles = (preset: VehiclePreset): number => {
+    if (!sheet) return 0;
+    const data = sheet.data as Record<string, unknown>;
+    let n = 0;
+    for (let i = 1; i <= CWN_VEHICLE_ROWS; i += 1) {
+      if (String(data[`vehicle${i}_type`] ?? '') === preset.id) n += 1;
+    }
+    return n;
+  };
+
+  /**
+   * A bought vehicle fills a vehicle slot on the sheet.
+   *
+   * This shelf was left out of the first pass on the grounds that a vehicle is its own
+   * sheet rather than a row - which was wrong. It is the same move the gun shop already
+   * makes: find the first free numbered slot and write the block into it. `presetFields`
+   * is the sheet's own function for exactly this, the one the TYPE dropdown calls, so the
+   * shop cannot fill a vehicle in differently from the sheet.
+   *
+   * The * and ** vehicles carry an immunity instead of an Armour Rating, and the note is
+   * where that rule lives. A Tank bought without it would silently lose the line that says
+   * small arms cannot hurt it.
+   */
+  const buyVehicle = (preset: VehiclePreset) => {
+    if (!sheet) { setRefused('No character sheet loaded.'); return; }
+    const data = (sheet.data ?? {}) as Record<string, unknown>;
+    const slot = firstFreeVehicle(data);
+    if (slot === null) {
+      setRefused(
+        `No free vehicle slot — all ${CWN_VEHICLE_ROWS} are full. Clear one on the sheet first.`,
+      );
+      return;
+    }
+    const fields = presetFields(slot, preset);
+    if (preset.note) fields[`vehicle${slot}_notes`] = preset.note;
+    setRefused(null);
+    count(preset.id);
+    handleFieldsChange?.(fields);
+  };
+
+  const vehicleShelf: Shelf<VehiclePreset> = {
+    id: 'vehicles',
+    rows: VEHICLE_PRESETS,
+    rowKey: (v) => v.id,
+    columns: {
+      name: { label: 'NAME', value: (v) => v.label, first: 'asc' },
+      price: { label: 'PRICE', value: (v) => v.cost, numeric: true, first: 'desc', align: 'right', render: (v) => credits(v.cost) },
+      spd: { label: 'SPD', value: (v) => v.spd, numeric: true, first: 'desc', align: 'right' },
+      // Null armor is an immunity rather than a zero - the note column carries the rule.
+      armor: {
+        label: 'AR', value: (v) => (v.armor === null ? '' : v.armor), numeric: true,
+        first: 'desc', align: 'right', render: (v) => (v.armor === null ? '*' : v.armor),
+      },
+      ac: { label: 'AC', value: (v) => v.ac, numeric: true, first: 'desc', align: 'right' },
+      hp: { label: 'HP', value: (v) => v.hp, numeric: true, first: 'desc', align: 'right' },
+      tt: { label: 'TT', value: (v) => v.tt, numeric: true, first: 'desc', align: 'right' },
+      crew: { label: 'CREW', value: (v) => v.crew, numeric: true, first: 'desc', align: 'right' },
+      // Hardpoints are not gunners: a Tank is crew 3 with 3 mounts and can never drive and
+      // man every gun at once. Worth seeing before you buy one.
+      hrdpt: { label: 'HRD', value: (v) => v.hrdpt, numeric: true, first: 'desc', align: 'right' },
+      // What the hull has to spend on the fittings and mounts sold on the next tab along.
+      pow: { label: 'POW', value: (v) => v.pow, numeric: true, first: 'desc', align: 'right' },
+      mass: { label: 'MASS', value: (v) => v.mass, numeric: true, first: 'desc', align: 'right' },
+      size: { label: 'SIZE', value: (v) => v.size, first: 'asc' },
+      owned: {
+        label: 'OWNED', value: ownedVehicles, numeric: true, first: 'desc',
+        align: 'right', render: (v) => (ownedVehicles(v) > 0 ? `x${ownedVehicles(v)}` : ''),
+      },
+    },
+    matches: (v, q) => v.label.toLowerCase().includes(q) || v.art.includes(q) || v.size.toLowerCase() === q,
+    buy: buyVehicle,
+    notice: `NOTHING IS CHARGED YET — BUY FILLS ONE OF YOUR ${CWN_VEHICLE_ROWS} VEHICLE SLOTS`,
+    filterHint: 'Filter by name, kind or size',
+    note: 'AR shown as * is an immunity rather than a rating — the rule goes into that '
+      + "vehicle's notes when you buy it. POW and MASS are the budget its fittings and "
+      + 'mounts spend, and HRD is how many Heavy weapons it can mount, not how many it can crew.',
+  };
+
   const fittingShelf: Shelf<VehicleFitting> = {
     id: 'vehicle_fittings',
     rows: VEHICLE_FITTINGS,
@@ -693,6 +786,7 @@ export function ShopWindow({ name, buildingType, socket, userName, onClose }: Pr
     armor: armorShelf,
     armor_mods: modShelf('armor_mods', CWN_ARMOR_MODS, 'Fix'),
     pharmaceuticals: pharmaShelf,
+    vehicles: vehicleShelf,
     vehicle_fittings: fittingShelf,
     vehicle_weapons: vehicleWeaponShelf,
     gear: gearShelf,

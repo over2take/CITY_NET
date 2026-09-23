@@ -93,11 +93,12 @@ describe('the vocabulary', () => {
   });
 
   it('keeps the unshelved catalogues honest', () => {
-    // These three are unshelved for reasons written down beside them - a percentage price,
-    // a cross product, and a vehicle being its own sheet. If one gets a shelf, this is the
-    // line that says the note above it is now stale.
+    // These two are unshelved for reasons written down beside them - a price that is a
+    // percentage of something else, and a cross product rather than a table. If one gets a
+    // shelf, this is the line that says the note above it is now stale. That is exactly
+    // what happened to vehicles, which used to be on this list.
     const unshelved = types.CATALOGUES.filter((c) => !c.shelved).map((c) => c.id);
-    expect(unshelved.sort()).toEqual(['cyber_mods', 'skillplugs', 'vehicles']);
+    expect(unshelved.sort()).toEqual(['cyber_mods', 'skillplugs']);
   });
 });
 

@@ -614,6 +614,80 @@ describe('showing one kind of weapon', () => {
   });
 });
 
+describe('the garage sells vehicles', () => {
+  /**
+   * A second route to a vehicle, not a replacement for the first.
+   *
+   * The sheet's TYPE dropdown has always filled a vehicle slot from a preset, and still
+   * does. The shop reaches the same place through the same function, so a car bought over
+   * a counter cannot end up shaped differently from one picked on the sheet.
+   */
+  it('carries the whole book table', () => {
+    show('garage');
+    expect(screen.getByRole('tab', { name: 'VEHICLES' })).toBeInTheDocument();
+    expect(screen.getByText('MOTORCYCLE')).toBeInTheDocument();
+    expect(screen.getByText('TANK')).toBeInTheDocument();
+  });
+
+  it('fills the first free vehicle slot with the whole stat block', async () => {
+    show('garage');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy MOTORCYCLE' }));
+
+    const written = handleFieldsChange.mock.calls[0][0];
+    // The sheet's own preset function, so these are the sheet's own field names.
+    expect(written).toMatchObject({
+      vehicle1_name: 'MOTORCYCLE',
+      vehicle1_type: 'motorcycle',
+      vehicle1_hp: 10,
+      vehicle1_hp_max: 10,
+      vehicle1_crew: 1,
+      vehicle1_armor: 4,
+    });
+  });
+
+  it('takes the next slot when the first is occupied', async () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { vehicle1_name: 'Betty', vehicle2_name: 'Spare' },
+    };
+    show('garage');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy MOTORCYCLE' }));
+    expect(handleFieldsChange.mock.calls[0][0]).toHaveProperty('vehicle3_name', 'MOTORCYCLE');
+  });
+
+  it('carries the immunity rule into the notes, not an invented armor number', async () => {
+    // The * and ** vehicles have no Armour Rating at all. A Tank bought without its note
+    // would silently lose the line saying small arms cannot touch it.
+    show('garage');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy TANK' }));
+
+    const written = handleFieldsChange.mock.calls[0][0];
+    expect(written).not.toHaveProperty('vehicle1_armor');
+    expect(String(written.vehicle1_notes)).toMatch(/Traumatic Hits/);
+  });
+
+  it('refuses when every slot is full, rather than dropping the car', async () => {
+    const full: Record<string, string> = {};
+    for (let i = 1; i <= 6; i += 1) full[`vehicle${i}_name`] = `Car ${i}`;
+    sheetState.sheet = { system: 'cities_without_number', data: full };
+    show('garage');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy MOTORCYCLE' }));
+
+    expect(handleFieldsChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/No free vehicle slot/)).toBeInTheDocument();
+  });
+
+  it('shows what you already have parked', async () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { vehicle1_name: 'Betty', vehicle1_type: 'motorcycle' },
+    };
+    show('garage');
+    const row = screen.getByText('MOTORCYCLE').closest('tr')!;
+    expect(within(row).getByText('x1')).toBeInTheDocument();
+  });
+});
+
 describe('the clinic sells pharmaceuticals', () => {
   it('carries the whole book table', () => {
     show('clinic');

@@ -20,7 +20,7 @@
  *
  * `page` is the book page, so anyone checking a price knows where to look.
  *
- * `shelved` says whether a shop can actually show this catalogue today. The three that
+ * `shelved` says whether a shop can actually show this catalogue today. The two that
  * cannot are each blocked on something real, and the reason matters more than the flag:
  *
  *   cyber_mods (p74) - "Cyberware mod costs are expressed as a percentage cost of the
@@ -30,9 +30,11 @@
  *   skillplugs (p64) - priced, but a plug is a skill crossed with a level rather than a
  *                      row in a table, so a shelf means generating the cross product. A
  *                      deliberate omission, not an oversight.
- *   vehicles (p82)   - transcribed and priced, but buying one is not adding a row: a
- *                      vehicle is its own sheet with its own token. Its fittings and
- *                      weapons sell fine, because those ARE parts.
+ *
+ * Vehicles were on this list too, on the grounds that buying one is not adding a row
+ * because a vehicle is its own sheet. That was wrong. The sheet already keeps six numbered
+ * vehicle slots and already has the function that fills one from a preset, so a garage
+ * does exactly what the gun shop does with weapon rows.
  *
  * Cyberdecks (p75) and drones (p76) are absent entirely: both were set aside to be handled
  * outside CITY_NET, so they are not a gap here to be closed.
@@ -46,7 +48,7 @@ const CATALOGUES = [
   { id: 'armor', label: 'Armor', page: 53, shelved: true },
   { id: 'armor_mods', label: 'Armor Mods', page: 58, shelved: true },
   { id: 'pharmaceuticals', label: 'Pharmaceuticals', page: 60, shelved: true },
-  { id: 'vehicles', label: 'Vehicles', page: 82, shelved: false },
+  { id: 'vehicles', label: 'Vehicles', page: 82, shelved: true },
   { id: 'vehicle_fittings', label: 'Vehicle Fittings', page: 84, shelved: true },
   { id: 'vehicle_weapons', label: 'Vehicle Weapons', page: 84, shelved: true },
   { id: 'gear', label: 'Operator Gear', page: 50, shelved: true },
@@ -57,7 +59,7 @@ const CATALOGUE_BY_ID = new Map(CATALOGUES.map((c) => [c.id, c]));
 /**
  * What each storefront trades in.
  *
- * **`sells` is what the BOOK says the shop deals in, not what CITY_NET can draw yet.** Three
+ * **`sells` is what the BOOK says the shop deals in, not what CITY_NET can draw yet.** Two
  * of the twelve catalogues have no shelf behind them, for the reasons listed above. A type
  * listing one anyway is the point: the gap is written down where the next person will see
  * it, `shelved` is what the shop window actually reads, and a test holds the two together
