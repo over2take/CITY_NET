@@ -1739,35 +1739,59 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       db.run('UPDATE player_banks SET high_roller_done = 1 WHERE username = ?', [data.username]);
     });
 
+    /**
+     * Whose account a player-facing money handler may touch: their own, and only their own.
+     *
+     * These three used to read `data.username` - whatever name arrived in the message -
+     * and act on that account. Nothing checked that the sender was that person, and the
+     * socket middleware above only filters spectators, so any connected client could move
+     * money in anybody's account by naming them.
+     *
+     * The identity comes from `userSockets`, which is populated at `identify` only after
+     * the token is verified. `data.username` is now ignored rather than rejected, because
+     * the bank window still sends it and the two behave identically for the only case
+     * that was ever legitimate: a player acting on themselves.
+     *
+     * This is not the admin path. Admins move other people's money through
+     * adminUpdateBank and adminPayPlayers, both of which verify an admin token.
+     */
+    const ownAccount = () => {
+      const info = userSockets.get(socket.id);
+      return info && info.userName ? info.userName : null;
+    };
+
     socket.on('withdrawFunds', (data) => {
-      if (!data || !data.username || !data.amount) return;
+      const username = ownAccount();
+      if (!username || !data || !data.amount) return;
       const amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      db.run('UPDATE player_banks SET balance = balance - ? WHERE username = ?', [amount, data.username], (err) => {
-        if (!err) sendBankUpdate(data.username);
+      db.run('UPDATE player_banks SET balance = balance - ? WHERE username = ?', [amount, username], (err) => {
+        if (!err) sendBankUpdate(username);
       });
     });
 
     socket.on('borrowFunds', (data) => {
-      if (!data || !data.username || !data.amount) return;
+      const username = ownAccount();
+      if (!username || !data || !data.amount) return;
       const amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      db.run('UPDATE player_banks SET debt = debt + ? WHERE username = ?', [amount, data.username], (err) => {
-        if (!err) sendBankUpdate(data.username);
+      db.run('UPDATE player_banks SET debt = debt + ? WHERE username = ?', [amount, username], (err) => {
+        if (!err) sendBankUpdate(username);
       });
     });
 
     socket.on('payDebt', (data) => {
-      if (!data || !data.username || !data.amount) return;
+      const username = ownAccount();
+      if (!username || !data || !data.amount) return;
       let amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      db.get('SELECT balance, debt FROM player_banks WHERE username = ?', [data.username], (err, row) => {
+      db.get('SELECT balance, debt FROM player_banks WHERE username = ?', [username], (err, row) => {
         if (err || !row) return;
         if (amount > row.balance) amount = row.balance;
         if (amount > row.debt) amount = row.debt;
         if (amount <= 0) return;
-        db.run('UPDATE player_banks SET balance = balance - ?, debt = debt - ? WHERE username = ?', [amount, amount, data.username], (err2) => {
-          if (!err2) sendBankUpdate(data.username);
+        db.run('UPDATE player_banks SET balance = balance - ?, debt = debt - ? WHERE username = ?', [amount, amount, username], (err2) => {
+          if (!err2) sendBankUpdate(username);
         });
       });
     });
