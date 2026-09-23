@@ -14,7 +14,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { exampleFor, columnsFor } from '../catalogueSchema';
+import { exampleFor, columnsFor, currentFor } from '../catalogueSchema';
 import { CATALOGUES, type ShopStock } from '../../data/buildingTypes';
 
 const { parseCatalogue } = createRequire(import.meta.url)('../../../../backend/shops/catalogueParse.js');
@@ -122,5 +122,63 @@ describe('a section this system cannot type properly', () => {
     const out = parseCatalogue(exampleFor('shadowrun_6e', ['vehicles'] as ShopStock[]));
     expect(out.problems).toEqual([]);
     expect(Object.keys(out.sections)).toContain('vehicles');
+  });
+});
+
+describe('downloading what you already have', () => {
+  /**
+   * The trap this avoids: a file listing every book item would, on re-upload, turn all 216
+   * of them into overrides - and the book would stop tracking the app. Book rows are
+   * written behind a #, so the file is a complete picture that changes nothing unless a GM
+   * deliberately uncomments a line.
+   */
+  const entries = {
+    weapons: [
+      { id: 'heavy_pistol', name: 'Heavy Pistol', price: 200, source: 'book' as const },
+      { id: 'zip_gun', name: 'Zip Gun', price: 15, fields: { dmg: '1d4' }, source: 'uploaded' as const },
+    ],
+  };
+
+  it('brings back only what was uploaded, not the book', () => {
+    const text = currentFor('cities_without_number', entries, ['weapons']);
+    const out = parseCatalogue(text);
+    expect(out.problems).toEqual([]);
+    expect((out.sections.weapons || []).map((r: any) => r.name)).toEqual(['Zip Gun']);
+  });
+
+  it('still shows the book rows, so they can be read and copied', () => {
+    const text = currentFor('cities_without_number', entries, ['weapons']);
+    expect(text).toMatch(/#\s+Heavy Pistol\s*,\s*200/);
+  });
+
+  it('overrides a book row the moment its # is removed', () => {
+    // The deliberate act. Uncomment, change the price, upload.
+    const text = currentFor('cities_without_number', entries, ['weapons'])
+      .split('\n')
+      .map((l) => (/^#\s+Heavy Pistol/.test(l) ? l.replace(/^#\s+/, '').replace('200', '250') : l))
+      .join('\n');
+    const out = parseCatalogue(text);
+    expect(out.problems).toEqual([]);
+    const hit = (out.sections.weapons || []).find((r: any) => r.name === 'Heavy Pistol');
+    expect(hit.price).toBe(250);
+  });
+
+  it('round-trips an uploaded row with its sheet fields intact', () => {
+    const out = parseCatalogue(currentFor('cities_without_number', entries, ['weapons']));
+    const zip = (out.sections.weapons || []).find((r: any) => r.name === 'Zip Gun');
+    expect(zip).toMatchObject({ price: 15 });
+    expect(zip.fields.dmg).toBe('1d4');
+  });
+
+  it('says in the file itself what the # rows mean', () => {
+    const text = currentFor('cities_without_number', entries, ['weapons']);
+    expect(text).toMatch(/came with the app/);
+    expect(text).toMatch(/delete its # and edit it/);
+  });
+
+  it('is empty of live rows for a system with nothing uploaded', () => {
+    const out = parseCatalogue(currentFor('cyberpunk_red', {}, ['weapons']));
+    expect(out.problems).toEqual([]);
+    expect(out.sections.weapons || []).toEqual([]);
   });
 });

@@ -202,21 +202,41 @@ const pad = (s: string, n: number) => s + ' '.repeat(Math.max(0, n - s.length));
 const csvCell = (value: string): string =>
   /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 
+/** One row on its way into a file. `commented` writes it out for reference only. */
+export interface OutRow {
+  values: Record<string, string>;
+  /**
+   * Written behind a `#`, so it is visible but does not come back in.
+   *
+   * This is what keeps "download what I have" from being a trap. A file listing all 216
+   * book items would, on re-upload, turn every one of them into an override - and the
+   * book would stop tracking the app. Commented, they are there to read and to copy, and
+   * uncommenting one is the deliberate act of overriding it.
+   */
+  commented?: boolean;
+}
+
 /**
- * The example a GM downloads: every catalogue this system's shops can sell, one section
- * each, pre-filled with real rows.
+ * Write a catalogue file: every catalogue as its own section, in the columns this system
+ * actually has.
  *
  * Sections are marked `[catalogue_id]` and headed with a comment naming the storefronts
  * that sell them, so somebody stocking a gun shop can find the part they care about
  * without knowing the internal names. Comment lines and blank lines are ignored on the way
  * back in, so the whole thing can be edited in place and re-uploaded.
  */
-export const exampleFor = (system: string, catalogues?: ShopStock[]): string => {
+export const writeCatalogueFile = (
+  system: string,
+  rowsFor: (catalogue: ShopStock) => OutRow[],
+  catalogues?: ShopStock[],
+  preamble: string[] = [],
+): string => {
   const wanted = catalogues ?? CATALOGUES.map((c) => c.id);
   const out: string[] = [
     '# CITY_NET storefront catalogue',
     `# system: ${system}`,
     '#',
+    ...preamble.map((l) => (l ? `# ${l}` : '#')),
     '# Each [section] is one catalogue. Edit the rows, add your own, delete what you do',
     '# not want. Lines starting with # are ignored, and so are blank lines.',
     '#',
@@ -240,20 +260,72 @@ export const exampleFor = (system: string, catalogues?: ShopStock[]): string => 
     }
     out.push(`[${catalogue}]`);
 
-    const rows = DEMOS[catalogue] ?? [];
-    // Widths make the example readable in a text editor. A spreadsheet trims them, and so
+    const rows = rowsFor(catalogue);
+    // Widths make the file readable in a text editor. A spreadsheet trims them, and so
     // does the parser, so nothing depends on the padding.
     const widths = spec.columns.map((col) => Math.max(
       col.length,
-      ...rows.map((r) => csvCell(r[col] ?? '').length),
+      ...rows.map((r) => csvCell(r.values[col] ?? '').length),
     ));
     const line = (cells: string[]) =>
       cells.map((c, i) => pad(c, widths[i])).join(', ').replace(/\s+$/, '');
 
     out.push(line(spec.columns));
-    for (const row of rows) out.push(line(spec.columns.map((c) => csvCell(row[c] ?? ''))));
+    for (const row of rows) {
+      const text = line(spec.columns.map((c) => csvCell(row.values[c] ?? '')));
+      out.push(row.commented ? `# ${text}` : text);
+    }
     out.push('');
   }
 
   return out.join('\n');
 };
+
+/** The example a GM downloads to start from: the shape, with a few real rows in it. */
+export const exampleFor = (system: string, catalogues?: ShopStock[]): string =>
+  writeCatalogueFile(
+    system,
+    (catalogue) => (DEMOS[catalogue] ?? []).map((values) => ({ values })),
+    catalogues,
+  );
+
+/** One entry as the server describes it, book or uploaded. */
+export interface StoredEntry {
+  id: string;
+  name: string;
+  price: number;
+  fields?: Record<string, string>;
+  source: 'book' | 'uploaded';
+}
+
+/**
+ * Everything a system currently sells, as a file to edit and send back.
+ *
+ * Uploaded rows are live; the ones that came with the app are written behind a `#`. That
+ * way the file is a complete picture — a GM can see what a Heavy Pistol costs and change
+ * it by uncommenting the line — while re-uploading it untouched changes nothing at all.
+ */
+export const currentFor = (
+  system: string,
+  entries: Partial<Record<ShopStock, StoredEntry[]>>,
+  catalogues?: ShopStock[],
+): string =>
+  writeCatalogueFile(
+    system,
+    (catalogue) => (entries[catalogue] ?? []).map((e) => ({
+      commented: e.source === 'book',
+      values: {
+        name: e.name,
+        price: String(e.price),
+        ...(e.fields ?? {}),
+      },
+    })),
+    catalogues,
+    [
+      'This is what your shops currently sell.',
+      '',
+      'Rows behind a # came with the app. They are here to read, and re-uploading this',
+      'file leaves them exactly as they are. To change one, delete its # and edit it -',
+      'that is what tells CITY_NET you meant to override it.',
+    ],
+  );
