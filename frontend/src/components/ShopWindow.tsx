@@ -456,7 +456,7 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
       w.name.toLowerCase().includes(q) || w.note.toLowerCase().includes(q)
       || w.category.includes(q),
     buy: buyWeapon,
-    notice: 'BUY CHARGES YOUR ACCOUNT AND PUTS THE WEAPON IN A WEAPON SLOT, STOWED',
+    notice: 'GOES INTO A WEAPON SLOT, STOWED',
     filterHint: 'Filter by name, note or kind',
     // RANGE and MAG are shown and not bought: the sheet has no field for either, and
     // picking a rifle without knowing its range is not a choice. Said here rather than
@@ -545,7 +545,7 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
     buy: (p) => purchase('pharmaceuticals', p.id, p.label, p.cost, () => {
       addToInventory(p.label, '', (item) => pharmaByName(item.name)?.id === p.id);
     }),
-    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS A DOSE TO YOUR INVENTORY, STOWED',
+    notice: 'A DOSE GOES INTO YOUR INVENTORY, STOWED',
     filterHint: 'Filter by name or effect',
     // Said on the shelf, because the table sells sixteen and the sheet rolls with three.
     // A player choosing Psycho should know what they are getting.
@@ -585,7 +585,7 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
       });
       handleFieldChange(CYBERWARE_FIELD, [...readRows(sheet.data), row] as never);
     }),
-    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE PIECE TO YOUR AUGMENTS, UNPLACED',
+    notice: 'GOES INTO YOUR AUGMENTS, UNPLACED — BUYING IS NOT SURGERY',
     filterHint: 'Filter by name or effect',
   };
 
@@ -656,7 +656,7 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
     buy: (a) => purchase('armor', a.id, a.label, a.cost, () => {
       addToInventory(a.label, String(a.enc), (item) => item.name === a.label);
     }),
-    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE ARMOR TO YOUR INVENTORY, STOWED',
+    notice: 'GOES INTO YOUR INVENTORY, STOWED — IT DOES NOT SET YOUR AC',
     filterHint: 'Filter by name or kind',
     note: (
       <>
@@ -691,7 +691,7 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
       // rather than as a zero somebody would later mistake for a measurement.
       addToInventory(g.label, g.encNote ? '' : String(g.enc), (item) => item.name === g.label);
     }),
-    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE ITEM TO YOUR INVENTORY, STOWED',
+    notice: 'GOES INTO YOUR INVENTORY, STOWED',
     filterHint: 'Filter by name or what it does',
     note: ENC_FOOTNOTE,
   };
@@ -737,7 +737,7 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
     buy: (m) => purchase(id, m.id, m.label, m.cost, () => {
       addToInventory(m.label, '', (item) => item.name === m.label);
     }),
-    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE MOD TO YOUR INVENTORY, UNFITTED',
+    notice: 'GOES INTO YOUR INVENTORY, UNFITTED',
     filterHint: 'Filter by name or effect',
     note: `Buying a mod is not fitting it — that is a ${fits} check at a bench, and the `
       + 'sheet is where a fitted mod goes. A given mod can only be added once to any one item.',
@@ -832,7 +832,7 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
     },
     matches: (v, q) => v.label.toLowerCase().includes(q) || v.art.includes(q) || v.size.toLowerCase() === q,
     buy: buyVehicle,
-    notice: `BUY CHARGES YOUR ACCOUNT AND FILLS ONE OF YOUR ${CWN_VEHICLE_ROWS} VEHICLE SLOTS`,
+    notice: `FILLS ONE OF YOUR ${CWN_VEHICLE_ROWS} VEHICLE SLOTS`,
     filterHint: 'Filter by name, kind or size',
     note: 'AR shown as * is an immunity rather than a rating — the rule goes into that '
       + "vehicle's notes when you buy it. POW and MASS are the budget its fittings and "
@@ -859,7 +859,7 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
     buy: (f) => purchase('vehicle_fittings', f.id, f.label, f.cost, () => {
       addToInventory(f.label, '', (item) => item.name === f.label);
     }),
-    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE FITTING TO YOUR INVENTORY, UNFITTED',
+    notice: 'GOES INTO YOUR INVENTORY, UNFITTED',
     filterHint: 'Filter by name or effect',
     note: 'POW and MASS are what the fitting costs the vehicle once installed, and MIN is '
       + 'the smallest hull that can take it. The vehicle sheet is where it gets fitted.',
@@ -898,7 +898,7 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
     buy: (w) => purchase('vehicle_weapons', w.id, w.label, w.cost ?? 0, () => {
       addToInventory(w.label, '', (item) => item.name === w.label);
     }),
-    notice: 'BUY CHARGES YOUR ACCOUNT AND ADDS THE WEAPON TO YOUR INVENTORY, UNMOUNTED',
+    notice: 'GOES INTO YOUR INVENTORY, UNMOUNTED',
     filterHint: 'Filter by name or note',
     note: 'A line with no price is not sold separately — it comes with the hull. Mounting '
       + 'happens on the vehicle sheet, against its hardpoints and power.',
@@ -1033,10 +1033,25 @@ export function ShopWindow({ name, locationId, buildingType, socket, userName, o
               </div>
             )}
 
-            {/* Said plainly rather than left to be discovered by a player whose money does
-                not move. A button that quietly does half of what it says is worse than one
-                that says which half. */}
-            <div style={{ ...mono(9), color: 'var(--warning)', marginBottom: 8, letterSpacing: 0 }}>
+            {/*
+              Where a bought thing lands.
+
+              This used to lead with what BUY did about money - first that it did nothing,
+              then that it charged you. Both have stopped being worth saying: the first was
+              a disclaimer for an unfinished feature, and the second told people a BUY
+              button takes their money. What is left is the part nobody can guess, which is
+              that a weapon arrives stowed rather than in hand and an augment arrives owned
+              rather than installed.
+
+              Amber only when there is no sheet, because that is the one case that is
+              actually a warning. The rest is a label and is drawn like one.
+            */}
+            <div
+              style={{
+                ...mono(9), marginBottom: 8, letterSpacing: 0,
+                color: sheet ? 'var(--grid-section)' : 'var(--warning)',
+              }}
+            >
               {!sheet
                 ? 'NO CHARACTER SHEET LOADED — NOTHING TO BUY ONTO'
                 : shelf?.notice ?? ''}

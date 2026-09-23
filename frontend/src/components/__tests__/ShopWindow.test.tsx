@@ -126,12 +126,19 @@ describe('a ripperdoc', () => {
     expect(screen.getAllByText('0.25').length).toBeGreaterThan(0);
   });
 
-  it('says out loud what pressing BUY will do', () => {
-    // A button that quietly does half of what it says is worse than one that says which.
+  it('says where a bought piece lands, which is the part nobody can guess', () => {
+    /**
+     * This line has been rewritten twice as the feature caught up with it. It read
+     * "NOTHING IS CHARGED YET" while BUY was inert, then "BUY CHARGES YOUR ACCOUNT" once
+     * the bank was wired up - and that second one was not worth saying either, because a
+     * BUY button taking your money is not news.
+     *
+     * What survives is the half a player cannot work out: owning a piece of chrome and
+     * having it installed are different things, and buying only does the first.
+     */
     show('ripperdoc');
-    // This used to read "NOTHING IS CHARGED YET", which stopped being true the day the
-    // bank was wired up. A notice that lies about money is worse than no notice.
-    expect(screen.getByText(/BUY CHARGES YOUR ACCOUNT/)).toBeInTheDocument();
+    expect(screen.getByText(/GOES INTO YOUR AUGMENTS, UNPLACED/)).toBeInTheDocument();
+    expect(screen.queryByText(/CHARGES YOUR ACCOUNT/)).toBeNull();
   });
 
   it('filters the stock by name', async () => {
@@ -387,6 +394,27 @@ describe('buying a piece', () => {
     expect(screen.getByLabelText('Buy Cranial Jack')).toBeDisabled();
     expect(screen.getByText(/NO CHARACTER SHEET LOADED/)).toBeInTheDocument();
   });
+
+  it('raises its voice only when something is actually wrong', () => {
+    /**
+     * The same line does two jobs, and they are not equally urgent. "No sheet loaded"
+     * means nothing on this shelf will work; "goes into your augments, unplaced" is a
+     * label. Both used to be amber, which spends a warning colour on a caption and leaves
+     * nothing louder for the real problem.
+     */
+    sheetState.sheet = null;
+    const { unmount } = show('ripperdoc');
+    expect(screen.getByText(/NO CHARACTER SHEET LOADED/)).toHaveStyle({
+      color: 'var(--warning)',
+    });
+    unmount();
+
+    sheetState.sheet = { system: 'cities_without_number', data: {} };
+    show('ripperdoc');
+    expect(screen.getByText(/GOES INTO YOUR AUGMENTS/)).toHaveStyle({
+      color: 'var(--grid-section)',
+    });
+  });
 });
 
 describe('buying a weapon', () => {
@@ -436,10 +464,11 @@ describe('buying a weapon', () => {
     expect(handleFieldsChange).not.toHaveBeenCalled();
   });
 
-  it('says that it charges, and where the weapon went', () => {
+  it('says where the weapon went, and that it is not in your hands', () => {
+    // Stowed rather than Readied is a real distinction on the sheet, and the only place
+    // it gets said is here.
     show('gun_shop');
-    expect(screen.getByText(/CHARGES YOUR ACCOUNT AND PUTS THE WEAPON IN A WEAPON SLOT, STOWED/))
-      .toBeInTheDocument();
+    expect(screen.getByText(/GOES INTO A WEAPON SLOT, STOWED/)).toBeInTheDocument();
   });
 
   it('prints range and magazine, and says they will not be kept', () => {
@@ -891,10 +920,9 @@ describe('the clinic sells pharmaceuticals', () => {
     expect(screen.getByText('TRAUMA PATCH')).toBeInTheDocument();
   });
 
-  it('says that it charges and where a dose lands', () => {
+  it('says where a dose lands', () => {
     show('clinic');
-    expect(screen.getByText(/CHARGES YOUR ACCOUNT AND ADDS A DOSE TO YOUR INVENTORY, STOWED/))
-      .toBeInTheDocument();
+    expect(screen.getByText(/A DOSE GOES INTO YOUR INVENTORY, STOWED/)).toBeInTheDocument();
   });
 
   it('says which three actually change a number', () => {
