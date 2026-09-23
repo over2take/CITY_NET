@@ -22,7 +22,10 @@ const vehicleSystems = require('../sheets/vehicleSystems');
 const ram = require('../sheets/ram');
 const enemyVehicles = require('../sheets/enemyVehicles');
 const buildingTypes = require('../buildingTypes');
-const shopPrices = require('../shops/prices');
+// The merged catalogue: what the app ships with, plus whatever a GM uploaded.
+const shopPrices = require('../shops/catalogueStore');
+const catalogueDb = require('../shops/catalogueDb');
+const catalogueParse = require('../shops/catalogueParse');
 const shopPurchase = require('../shops/purchase');
 const shopSell = require('../shops/sell');
 const shopBuyback = require('../shops/buyback');
@@ -63,6 +66,28 @@ const formatMeasurementPayload = (data, userName, socketId) => ({
 
 module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   registerInitiativeHandlers(io, db);
+
+  /**
+   * Bring the running system's uploaded catalogues into memory.
+   *
+   * Done once at boot and again whenever the game system changes, because the store holds
+   * one system at a time - only one game is being played, and carrying every system's
+   * uploads would mean threading a system id through every price lookup for a distinction
+   * nothing can observe.
+   *
+   * A failure is deliberately quiet. The store falls back to the tables that ship with the
+   * app, so shops still work; they just do not carry what the GM added, which is a better
+   * way to be wrong than refusing to open.
+   */
+  const loadCatalogues = () => {
+    db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (err, row) => {
+      const system = (!err && row && row.value) || sheetTemplates.DEFAULT_SYSTEM;
+      catalogueDb.refresh(db, system, (refreshErr) => {
+        if (refreshErr) console.warn('Uploaded catalogues could not be read:', refreshErr.message);
+      });
+    });
+  };
+  loadCatalogues();
   // Streamer mode: last director state, replayed to spectators when they join.
   let directorState = null;
 
@@ -1992,6 +2017,84 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           },
         );
       });
+    });
+
+    /**
+     * Read a catalogue a GM pasted or uploaded, and say what would happen.
+     *
+     * Nothing is stored. The same parser that would save it runs here, so what a GM is
+     * shown in the preview is literally what they would get - a preview built from a
+     * second, gentler implementation would be a preview that can lie.
+     */
+    socket.on('previewCatalogue', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.isAdmin) return;
+      const parsed = catalogueParse.parseCatalogue(data && data.text);
+
+      // An id that already exists in the book is an override rather than an addition, and
+      // the GM should be told before they save rather than after.
+      const summary = Object.entries(parsed.sections).map(([catalogue, entries]) => ({
+        catalogue,
+        count: entries.length,
+        overrides: shopPrices.overridesIn(catalogue, entries),
+      }));
+
+      socket.emit('cataloguePreview', {
+        format: parsed.format,
+        sections: parsed.sections,
+        problems: parsed.problems,
+        summary,
+      });
+    });
+
+    /**
+     * Store a catalogue.
+     *
+     * Wholesale per catalogue, because re-uploading is how a GM removes a line. Only the
+     * uploaded rows are touched: the tables the app ships with stay in code, so an update
+     * still improves them.
+     */
+    socket.on('saveCatalogue', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.isAdmin) return;
+      const refuse = (reason) => socket.emit('catalogueSaved', { ok: false, reason });
+
+      getGameSystem((sysErr, system) => {
+        if (sysErr) return refuse('no_system');
+        const parsed = catalogueParse.parseCatalogue(data && data.text);
+        const wanted = Object.keys(parsed.sections);
+        if (!wanted.length) return refuse('empty');
+
+        let left = wanted.length;
+        let failed = null;
+        for (const catalogue of wanted) {
+          catalogueDb.replaceCatalogue(db, system, catalogue, parsed.sections[catalogue], (err) => {
+            if (err && !failed) failed = err;
+            left -= 1;
+            if (left > 0) return;
+            if (failed) return refuse('write');
+            // Back into memory, then out to everybody - the shop windows draw their
+            // shelves from this and would otherwise show yesterday's catalogue.
+            catalogueDb.refresh(db, system, () => {
+              io.emit('cataloguesChanged', { system });
+              socket.emit('catalogueSaved', {
+                ok: true,
+                saved: wanted.map((c) => ({ catalogue: c, count: parsed.sections[c].length })),
+                problems: parsed.problems,
+              });
+            });
+          });
+        }
+      });
+    });
+
+    /** Everything the shops currently sell, so a GM can download and edit it. */
+    socket.on('requestCatalogues', () => {
+      const info = userSockets.get(socket.id);
+      if (!info) return;
+      const out = {};
+      for (const c of buildingTypes.CATALOGUES) out[c.id] = shopPrices.entriesIn(c.id);
+      socket.emit('catalogues', { entries: out });
     });
 
     socket.on('adminPayPlayers', (data) => {

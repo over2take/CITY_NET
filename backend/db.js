@@ -283,6 +283,27 @@ db.serialize(() => {
     value TEXT NOT NULL
   )`);
 
+  /**
+   * Storefront catalogues a GM uploaded.
+   *
+   * One row per item, keyed by the system it belongs to, the catalogue it sits in and an
+   * id slugged from its name. Only UPLOADED items live here - the tables that ship with
+   * the app stay in code, so an app update still improves them, and these are added on top.
+   *
+   * `fields` is the JSON an item writes onto a character sheet when it is bought. Which
+   * columns are meaningful depends on the system, so it is stored as given rather than
+   * split into columns that would differ per ruleset.
+   */
+  db.run(`CREATE TABLE IF NOT EXISTS shop_catalogues (
+    system TEXT NOT NULL,
+    catalogue TEXT NOT NULL,
+    id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    price REAL NOT NULL DEFAULT 0,
+    fields TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY (system, catalogue, id)
+  )`);
+
   db.run(`CREATE TABLE IF NOT EXISTS player_banks (
     username TEXT PRIMARY KEY,
     balance REAL DEFAULT 0.00,

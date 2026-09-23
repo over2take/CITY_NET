@@ -23,7 +23,9 @@
 // same thing are one line reading x2, and so are two weapon slots holding the same gun.
 
 const cyberware = require('../sheets/cyberware');
-const prices = require('./prices');
+// Reads the MERGED catalogue - what the app ships with plus whatever a GM uploaded -
+// so a character carrying an uploaded item is seen to own it, and can sell it.
+const prices = require('./catalogueStore');
 
 /** Matches the frontend's own constants. Six of each, in the CWN template. */
 const WEAPON_ROWS = 6;

@@ -9,7 +9,9 @@
 // here touches a database or a socket, so every rule below can be argued with in a test.
 
 const owned = require('./owned');
-const prices = require('./prices');
+// The merged catalogue: built-in tables plus whatever a GM uploaded. An uploaded item
+// sells for its uploaded price, the same way it was bought for it.
+const prices = require('./catalogueStore');
 const buyback = require('./buyback');
 
 /** Every field one carried weapon row owns. Cleared together or not at all. */
