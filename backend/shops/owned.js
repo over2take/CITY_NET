@@ -101,10 +101,12 @@ const ownedItems = (data) => {
   // ── inventory rows ──────────────────────────────────────────────────────────
   readJsonRows(sheet[INVENTORY_FIELD]).forEach((item, index) => {
     if (!item || typeof item !== 'object') return;
+    // No carry state here on purpose. Selling takes a thing whether it is readied,
+    // stowed or in a locker, so it is not needed to remove one - and leaving it out is
+    // one less normalisation that has to match the window's reader exactly.
     tally(lines, item.name, SOURCES.INVENTORY, {
       index,
       qty: Math.max(1, Math.floor(Number(item.qty) || 1)),
-      carry: item.carry,
     });
   });
 
