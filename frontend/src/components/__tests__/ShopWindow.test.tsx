@@ -28,7 +28,9 @@ vi.mock('../../hooks/usePlayerSheet', () => ({
     encumbranceEnforced: sheetState.encumbranceEnforced,
   }),
 }));
-import { BUILDING_TYPES, isShop, buildingTypeById, shopsAvailable } from '../../data/buildingTypes';
+import {
+  BUILDING_TYPES, CATALOGUES, isShop, buildingTypeById, shopsAvailable, shelvedCatalogues,
+} from '../../data/buildingTypes';
 import { CWN_WEAPON_ROWS } from '../../sheets/templates/cities_without_number';
 import { CWN_CYBERWARE } from '../../sheets/cwnCyberwarePresets';
 
@@ -88,10 +90,15 @@ describe('a ripperdoc', () => {
 });
 
 describe('a shop with no catalogue built yet', () => {
+  /**
+   * This used to be the gun shop, then the clinic, then the garage - each one lost the
+   * role as its shelf got written. Every shop type now carries at least one catalogue, so
+   * the only thing that reaches the empty branch is a building that does not trade at all.
+   * The branch is kept, and kept tested, because `sells` is allowed to name a catalogue
+   * with no shelf behind it and one day will again.
+   */
   it('says so rather than showing an empty table', () => {
-    // The gun shop was the example here, then the clinic. Both have shelves now, so the
-    // garage is what is left: armour and vehicles are the stock lists nobody has written.
-    show('garage');
+    show('bar');
     expect(screen.getByText(/NO CATALOGUE FOR THIS SHOP YET/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Filter stock')).not.toBeInTheDocument();
   });
@@ -101,11 +108,92 @@ describe('a shop with no catalogue built yet', () => {
     expect(screen.queryByText(/NO CATALOGUE FOR THIS SHOP YET/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Buy Heavy Pistol' })).toBeInTheDocument();
   });
+
+  it('leaves no shop with an empty shelf', () => {
+    // The assertion the three rewrites above were converging on. If a new storefront is
+    // added with nothing it can show, this is what says so.
+    for (const t of BUILDING_TYPES.filter((x) => x.shop)) {
+      expect(shelvedCatalogues(t.id), `${t.id} has nothing to sell`).not.toEqual([]);
+    }
+  });
+});
+
+describe('one tab per catalogue', () => {
+  it('draws no tab row for a shop that carries one catalogue', () => {
+    // A lone tab is a label wearing a button's clothes.
+    show('clinic');
+    expect(screen.queryByRole('tablist')).toBeNull();
+  });
+
+  it('draws a tab for each catalogue a shop carries', () => {
+    show('gun_shop');
+    const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['WEAPONS', 'WEAPON MODS']);
+  });
+
+  it('opens on the first catalogue, and switches to the one picked', async () => {
+    show('gun_shop');
+    expect(screen.getByRole('button', { name: 'Buy Heavy Pistol' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'WEAPON MODS' }));
+
+    // The weapons are gone and the mods are there: a switch, not an append.
+    expect(screen.queryByRole('button', { name: 'Buy Heavy Pistol' })).toBeNull();
+    expect(screen.getByText('EXTENDED MAG')).toBeInTheDocument();
+  });
+
+  it('clears a filter that belonged to the shelf being left', async () => {
+    // Otherwise the new shelf opens already narrowed by something typed about another list.
+    show('gun_shop');
+    await userEvent.type(screen.getByLabelText('Filter stock'), 'pistol');
+    await userEvent.click(screen.getByRole('tab', { name: 'WEAPON MODS' }));
+    expect(screen.getByLabelText('Filter stock')).toHaveValue('');
+  });
+
+  /**
+   * App.tsx renders this with no `key`, so clicking a second shop without closing the
+   * first re-renders in place rather than remounting - the case below.
+   *
+   * Caught in a browser rather than here: the open shelf used to be state kept in step by
+   * an effect, and the switch rendered one frame of the PREVIOUS shop's shelf, a general
+   * store headed "CWN P50" over fourteen rows of armor. **This test does not catch that
+   * frame** - `rerender` flushes effects inside `act`, so the effect version passes it
+   * too, which was confirmed by putting the effect back. What makes the flash impossible
+   * is that the shelf is now derived during the render and there is no state left to go
+   * stale. What this pins is the end state, which is still worth pinning.
+   */
+  it('shows the new shelf when the window is pointed at another shop', () => {
+    const { rerender } = show('armorer');
+    expect(screen.getByText('War Harness')).toBeInTheDocument();
+
+    rerender(<ShopWindow name="Doc Wu" buildingType="general_store"
+      socket={{ on: vi.fn(), off: vi.fn(), emit: vi.fn() }} userName="JADE" onClose={vi.fn()} />);
+
+    expect(screen.queryByText('War Harness')).toBeNull();
+    expect(screen.getByText('Climbing kit')).toBeInTheDocument();
+    // The header has to agree with the table under it - that mismatch was the tell.
+    expect(screen.getByText(/CWN P50/)).toBeInTheDocument();
+  });
+
+  it('gives the armorer both of its tables, which it had neither of', () => {
+    show('armorer');
+    const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['ARMOR', 'ARMOR MODS']);
+  });
 });
 
 describe('the vocabulary the map is labelled with', () => {
   it('only lets shops declare stock', () => {
-    for (const t of BUILDING_TYPES) if (!t.shop) expect(t.sells).toBeNull();
+    // Empty rather than null since `sells` became a list: a shop can carry several
+    // catalogues, and a bar carries none.
+    for (const t of BUILDING_TYPES) if (!t.shop) expect(t.sells).toEqual([]);
+  });
+
+  it('never names a catalogue the book does not have', () => {
+    const known = new Set(CATALOGUES.map((c) => c.id));
+    for (const t of BUILDING_TYPES) {
+      for (const s of t.sells) expect(known, `${t.id} sells ${s}`).toContain(s);
+    }
   });
 
   it('knows which types trade', () => {
@@ -130,6 +218,19 @@ describe('the vocabulary the map is labelled with', () => {
     // rather than a copy of the list.
     const backend = await import('../../../../backend/buildingTypes.js');
     expect(BUILDING_TYPES).toEqual(backend.default.BUILDING_TYPES);
+    // The catalogue list is mirrored too, and it carries the book pages a price can be
+    // checked against - two copies of a page number is exactly the kind of thing that
+    // drifts silently.
+    expect(CATALOGUES).toEqual(backend.default.CATALOGUES);
+  });
+
+  it('agrees with the server about what is on a shelf', async () => {
+    // Not just the data but the derivation: the window hides a catalogue the server would
+    // still name in `sells`, and the two have to draw that line in the same place.
+    const backend = await import('../../../../backend/buildingTypes.js');
+    for (const t of BUILDING_TYPES) {
+      expect(shelvedCatalogues(t.id), t.id).toEqual(backend.default.shelvedCatalogues(t.id));
+    }
   });
 });
 

@@ -71,7 +71,33 @@ describe('the vocabulary', () => {
 
   it('only lets a shop declare stock', () => {
     // A bar with a catalogue would be a contradiction the UI would have to resolve.
-    for (const t of types.BUILDING_TYPES) if (!t.shop) expect(t.sells).toBeNull();
+    // Empty rather than null since `sells` became a list: the rules do not sort into one
+    // table per shop, so a gun shop carries guns and the mods that go on them.
+    for (const t of types.BUILDING_TYPES) if (!t.shop) expect(t.sells).toEqual([]);
+  });
+
+  it('never names a catalogue that is not on the list', () => {
+    const known = new Set(types.CATALOGUES.map((c) => c.id));
+    for (const t of types.BUILDING_TYPES) {
+      for (const s of t.sells) expect(known, `${t.id} sells ${s}`).toContain(s);
+    }
+  });
+
+  it('gives every shop something it can actually put on a shelf', () => {
+    // `sells` is what the BOOK says the shop deals in, which is deliberately wider than
+    // what can be drawn. A storefront where NOTHING can be drawn is a different thing: a
+    // shop button that opens an empty window.
+    for (const t of types.BUILDING_TYPES) {
+      if (t.shop) expect(types.shelvedCatalogues(t.id), t.id).not.toEqual([]);
+    }
+  });
+
+  it('keeps the unshelved catalogues honest', () => {
+    // These three are unshelved for reasons written down beside them - a percentage price,
+    // a cross product, and a vehicle being its own sheet. If one gets a shelf, this is the
+    // line that says the note above it is now stale.
+    const unshelved = types.CATALOGUES.filter((c) => !c.shelved).map((c) => c.id);
+    expect(unshelved.sort()).toEqual(['cyber_mods', 'skillplugs', 'vehicles']);
   });
 });
 
