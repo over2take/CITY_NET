@@ -430,6 +430,28 @@ export function ShopWindow({
     return n + installed;
   }, 0);
 
+  /**
+   * Take the implants back off the sell list, and keep the rest of it.
+   *
+   * The whole point of the warning is that the player may not have realised, and the only
+   * answer available until now was to cancel the lot and start again. Each line is trimmed
+   * to however many of that thing are NOT in a body - which works because boxed pieces are
+   * listed before installed ones, so what survives is exactly the ones nobody has to be
+   * opened up for.
+   */
+  const keepImplants = () => {
+    setConfirming(false);
+    setBasket((b) => {
+      const next: Record<string, number> = {};
+      for (const s of staging) {
+        const loose = s.line.at.reduce((n, at) => n + (at.placed ? 0 : at.qty), 0);
+        const keep = Math.min(s.qty, loose);
+        if (keep > 0) next[s.line.key] = keep;
+      }
+      return next;
+    });
+  };
+
   const commitSale = () => {
     if (!staging.length) return;
     setConfirming(false);
@@ -1452,7 +1474,8 @@ export function ShopWindow({
                         <div style={{ color: 'var(--danger)', marginBottom: 4 }}>
                           ⚕ {stagedFromBody === 1 ? 'One piece' : `${stagedFromBody} pieces`} of
                           this is installed cyberware. It comes straight out with no surgery
-                          roll — ask your GM how they want to handle that.
+                          roll — ask your GM how they want to handle that, or keep it and sell
+                          the rest.
                         </div>
                       )}
                       <div style={{ color: 'var(--grid-section)', marginBottom: 6 }}>
@@ -1465,6 +1488,18 @@ export function ShopWindow({
                           onClick={commitSale}
                           style={{ ...mono(10), padding: '2px 10px' }}
                         >CONFIRM</button>
+                        {/* A way out of the implants alone. Cancelling the whole basket
+                            was the only answer before, which is a poor one when the
+                            surgery is a surprise and the rest of the list is fine. */}
+                        {stagedFromBody > 0 && (
+                          <button
+                            type="button"
+                            className="utility-btn"
+                            onClick={keepImplants}
+                            title="Take the installed cyberware off the list and keep the rest of the sale"
+                            style={{ ...mono(10), padding: '2px 10px' }}
+                          >KEEP IMPLANTS</button>
+                        )}
                         <button
                           type="button"
                           className="utility-btn"

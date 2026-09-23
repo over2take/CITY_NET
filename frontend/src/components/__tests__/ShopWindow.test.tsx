@@ -1254,3 +1254,105 @@ describe('selling chrome out of a body', () => {
     expect(screen.getByText(/surgery roll/i)).toBeInTheDocument();
   });
 });
+
+describe('backing out of the implants alone', () => {
+  /**
+   * The warning exists because the surgery may be a surprise. Until now the only answer
+   * was to cancel the whole basket, which is a poor one when the rest of the list is fine.
+   */
+  const openSell = async () => {
+    show('ripperdoc');
+    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+  };
+
+  it('keeps the installed one and sells the boxed one', async () => {
+    // Two Cyberlimbs, one in a leg and one in a bag.
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { cyberware: [{ name: 'Cyberlimb', placed: true }, { name: 'Cyberlimb', placed: false }] },
+    };
+    await openSell();
+    const add = () => screen.getByRole('button', { name: 'Add Cyberlimb to the sell list' });
+    await userEvent.click(add());
+    await userEvent.click(add());
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+
+    // Both staged, so one of them needs a surgeon.
+    expect(screen.getByText(/One piece of this is installed/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'KEEP IMPLANTS' }));
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+
+    // The warning is gone, because what is left is the one in the bag.
+    expect(screen.queryByText(/installed cyberware/)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+    expect(sold[0].items).toEqual([
+      { catalogue: 'cyberware', id: 'cyberlimb', label: 'Cyberlimb', qty: 1 },
+    ]);
+  });
+
+  it('drops the line entirely when every one of them is installed', async () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { cyberware: [{ name: 'Cranial Jack', placed: true }] },
+    };
+    await openSell();
+    await userEvent.click(screen.getByRole('button', { name: 'Add Cranial Jack to the sell list' }));
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'KEEP IMPLANTS' }));
+
+    expect(screen.getByText(/NOTHING ON THE SELL LIST YET/)).toBeInTheDocument();
+    expect(sold).toHaveLength(0);
+  });
+
+  it('leaves everything that was never in a body alone', async () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: {
+        cyberware: [{ name: 'Cranial Jack', placed: true }, { name: 'Skinmod', placed: false }],
+      },
+    };
+    await openSell();
+    await userEvent.click(screen.getByRole('button', { name: 'Add Cranial Jack to the sell list' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Skinmod to the sell list' }));
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'KEEP IMPLANTS' }));
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+
+    expect(sold[0].items).toEqual([
+      { catalogue: 'cyberware', id: 'skinmod', label: 'Skinmod', qty: 1 },
+    ]);
+  });
+
+  it('is not offered when nothing on the list is installed', async () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { cyberware: [{ name: 'Skinmod', placed: false }] },
+    };
+    await openSell();
+    await userEvent.click(screen.getByRole('button', { name: 'Add Skinmod to the sell list' }));
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+    expect(screen.queryByRole('button', { name: 'KEEP IMPLANTS' })).toBeNull();
+  });
+});
+
+describe('which one gets sold when you own two', () => {
+  it('sells the one in the bag before the one in the body', async () => {
+    /**
+     * Places are consumed in the order ownedItems lists them, so the order is a rule
+     * rather than an accident: a spare in a pocket goes before anybody is opened up.
+     */
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { cyberware: [{ name: 'Cyberlimb', placed: true }, { name: 'Cyberlimb', placed: false }] },
+    };
+    show('ripperdoc');
+    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Cyberlimb to the sell list' }));
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+
+    // One of two staged, and it is not the installed one, so no surgery is involved.
+    expect(screen.queryByText(/installed cyberware/)).toBeNull();
+  });
+});

@@ -122,12 +122,22 @@ const ownedItems = (data) => {
   });
 
   // ── cyberware, installed or not ─────────────────────────────────────────────
+  //
   // Both sell. Taking installed chrome out is surgery in the book, and the app does not
   // model that on the way out yet - a decision made deliberately rather than missed.
-  cyberware.rows(sheet).forEach((row, index) => {
-    if (!row) return;
-    tally(lines, row.name, SOURCES.CYBERWARE, { index, placed: !!row.placed });
-  });
+  //
+  // **Boxed pieces are listed before installed ones**, and that ordering does real work.
+  // Places are consumed in the order they appear here, so somebody who owns a spare
+  // Cranial Jack in a bag and another in their skull, and sells one, sells the one in the
+  // bag. Sheet order would have picked whichever happened to be first, which could mean
+  // opening someone's head while a spare sat in their pocket.
+  cyberware.rows(sheet)
+    .map((row, index) => ({ row, index }))
+    .filter((e) => e.row)
+    .sort((a, b) => Number(!!a.row.placed) - Number(!!b.row.placed))
+    .forEach(({ row, index }) => {
+      tally(lines, row.name, SOURCES.CYBERWARE, { index, placed: !!row.placed });
+    });
 
   // ── vehicle slots ───────────────────────────────────────────────────────────
   // Keyed by the type id rather than the name, because a vehicle somebody has called

@@ -45,6 +45,12 @@ const SHEETS: { name: string; data: Record<string, unknown> }[] = [
   },
   { name: 'installed chrome', data: { cyberware: [{ name: 'Cranial Jack', placed: true }] } },
   { name: 'unplaced chrome', data: { cyberware: [{ name: 'Cranial Jack', placed: false }] } },
+  {
+    // The case the boxed-first ordering exists for, and the one that was missing: two of
+    // the same piece, one in a bag and one in a body.
+    name: 'one boxed and one installed of the same piece',
+    data: { cyberware: [{ name: 'Cyberlimb', placed: true }, { name: 'Cyberlimb', placed: false }] },
+  },
   { name: 'renamed vehicle', data: { vehicle1_type: 'motorcycle', vehicle1_name: 'Betty' } },
   { name: 'two of a model', data: { vehicle1_type: 'car', vehicle1_name: 'Car', vehicle3_type: 'car', vehicle3_name: 'Spare' } },
   { name: 'homebrew', data: { inventory: JSON.stringify([{ name: "Betty's lucky knife", qty: 1 }]) } },
@@ -92,6 +98,23 @@ describe('the window and the server agree on what you own', () => {
       const mine = ownedItems(data).sort((a, b) => a.key.localeCompare(b.key));
       const theirs = backend.ownedItems(data).sort((a: OwnedLine, b: OwnedLine) => a.key.localeCompare(b.key));
       expect(mine.map((l) => l.at), name).toEqual(theirs.map((l: OwnedLine) => l.at));
+    }
+  });
+});
+
+describe('which one gets sold first', () => {
+  it('lists a boxed piece before an installed one, on both sides', () => {
+    /**
+     * Places are consumed in the order they are listed, so this ordering is a rule rather
+     * than an accident: somebody who owns a spare Cranial Jack in a bag and another in
+     * their skull, and sells one, sells the one in the bag. Sheet order would have picked
+     * whichever happened to come first.
+     */
+    const data = {
+      cyberware: [{ name: 'Cyberlimb', placed: true }, { name: 'Cyberlimb', placed: false }],
+    };
+    for (const [who, list] of [['window', ownedItems(data)], ['server', backend.ownedItems(data)]] as const) {
+      expect((list as OwnedLine[])[0].at.map((a) => a.placed), who).toEqual([false, true]);
     }
   });
 });

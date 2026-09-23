@@ -162,11 +162,22 @@ export const ownedItems = (data: Record<string, unknown> | null | undefined): Ow
 
   readStash(sheet).forEach((w, index) => tally(lines, w.name, 'stash', { index }));
 
-  // Installed chrome sells too. Taking it out is surgery in the book, and the app does
-  // not model that on the way out yet - deliberately, rather than by omission.
-  readCyberRows(sheet).forEach((row, index) => {
-    tally(lines, row.name, 'cyberware', { index, placed: !!row.placed });
-  });
+  /**
+   * Installed chrome sells too. Taking it out is surgery in the book, and the app does
+   * not model that on the way out yet - deliberately, rather than by omission.
+   *
+   * **Boxed pieces are listed before installed ones**, and that ordering does real work.
+   * Places are consumed in order, so somebody who owns a spare Cranial Jack in a bag and
+   * another in their skull, and sells one, sells the one in the bag. Sheet order would
+   * have picked whichever came first, which could mean opening someone's head while a
+   * spare sat in their pocket.
+   */
+  readCyberRows(sheet)
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => Number(!!a.row.placed) - Number(!!b.row.placed))
+    .forEach(({ row, index }) => {
+      tally(lines, row.name, 'cyberware', { index, placed: !!row.placed });
+    });
 
   // Keyed by type rather than by name: a vehicle somebody has called "Betty" is still a
   // Motorcycle and still worth what one is worth.
