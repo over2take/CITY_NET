@@ -8,6 +8,7 @@ import {
   type Settle, type RefusalReason,
 } from '../data/shopRules';
 import { ownedItems, sellableAt } from '../sheets/ownedItems';
+import { uploadedIn } from '../sheets/uploadedCatalogues';
 import { CWN_CYBERWARE, type CwnCyberPreset } from '../sheets/cwnCyberwarePresets';
 import { CYBERWARE_FIELD, readRows, normaliseRow } from '../sheets/cyberwareRows';
 import { CWN_WEAPONS, weaponToStashed, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
@@ -1049,7 +1050,48 @@ export function ShopWindow({
     gear: gearShelf,
   };
 
-  const shelf: Shelf<any> | undefined = shelfId ? SHELVES[shelfId] : undefined;
+  const base: Shelf<any> | undefined = shelfId ? SHELVES[shelfId] : undefined;
+
+  /**
+   * The shelf, with whatever the GM uploaded added to it.
+   *
+   * Appended rather than merged into the catalogue modules, because the built-in tables are
+   * compiled in and an upload is a separate thing that sits on top. An uploaded row with
+   * the same id as a book one replaces it on the shelf, the same way the server prices it -
+   * otherwise a house-ruled Heavy Pistol would be listed twice at two prices.
+   *
+   * The columns are whatever this shelf already draws. An uploaded entry carries its sheet
+   * fields under the same names, so `dmg` lands in the DMG column with no mapping.
+   */
+  /**
+   * Worked out on every render, and NOT memoised.
+   *
+   * A shelf carries its own `buy`, and that closure captures the balance, the sheet and
+   * the handlers from the render it was made in. Memoising on the rows - which are a
+   * stable module constant - handed back the first render's shelf forever, and the first
+   * render happens before the balance has arrived. Every purchase then saw a zero balance
+   * and refused. Filtering and sorting a few dozen rows is not worth that.
+   */
+  const shelf: Shelf<any> | undefined = (() => {
+    if (!base) return base;
+    const extra = uploadedIn(base.id);
+    if (!extra.length) return base;
+
+    const asRow = (e: { id: string; name: string; price: number; fields: Record<string, string> }) => ({
+      id: e.id,
+      // Both spellings, because the shelves are not consistent about it: weapons and
+      // cyberware use `name`, everything newer uses `label`.
+      name: e.name,
+      label: e.name,
+      price: e.price,
+      cost: e.price,
+      ...e.fields,
+    });
+
+    const byId = new Map(base.rows.map((r: any) => [base.rowKey(r), r]));
+    for (const e of extra) byId.set(e.id, asRow(e));
+    return { ...base, rows: [...byId.values()] };
+  })();
 
   /** The open shelf, filtered and sorted. Small lists, so done plainly on each render. */
   const rows: any[] = (() => {

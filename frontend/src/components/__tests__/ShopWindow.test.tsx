@@ -39,6 +39,7 @@ import {
 } from '../../data/buildingTypes';
 import { CWN_WEAPON_ROWS } from '../../sheets/templates/cities_without_number';
 import { CWN_CYBERWARE } from '../../sheets/cwnCyberwarePresets';
+import { loadUploaded, clearUploaded } from '../../sheets/uploadedCatalogues';
 
 /**
  * A socket that answers the way the server does.
@@ -1354,5 +1355,92 @@ describe('which one gets sold when you own two', () => {
 
     // One of two staged, and it is not the installed one, so no surgery is involved.
     expect(screen.queryByText(/installed cyberware/)).toBeNull();
+  });
+});
+
+describe('items a GM uploaded', () => {
+  /**
+   * The server prices and sells these from its own copy; this is purely about the window
+   * SHOWING them. A shop that charges correctly for something it never lists is not much
+   * of a shop.
+   */
+  const ZIP_GUN = { id: 'zip_gun', name: 'Zip Gun', price: 15, fields: { dmg: '1d4', skill: 'shoot' } };
+
+  beforeEach(() => clearUploaded());
+
+  it('appears on the shelf beside the book ones', () => {
+    loadUploaded({ weapons: [ZIP_GUN] });
+    show('gun_shop');
+    expect(screen.getByText('Zip Gun')).toBeInTheDocument();
+    // And nothing the app ships with has gone anywhere.
+    expect(screen.getByText('Heavy Pistol')).toBeInTheDocument();
+  });
+
+  it('shows the price the GM set, in the shelf\'s own columns', () => {
+    loadUploaded({ weapons: [ZIP_GUN] });
+    show('gun_shop');
+    const row = screen.getByText('Zip Gun').closest('tr')!;
+    expect(within(row).getByText('15cr')).toBeInTheDocument();
+    // Its sheet fields land in the columns of the same name, with no mapping.
+    expect(within(row).getByText('1d4')).toBeInTheDocument();
+  });
+
+  it('can be bought, and asks the server by id like anything else', async () => {
+    loadUploaded({ weapons: [ZIP_GUN] });
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ catalogue: 'weapons', itemId: 'zip_gun' });
+    // Still no price in the message: the server decides what it costs.
+    expect(sent[0]).not.toHaveProperty('price');
+  });
+
+  it('replaces the book row it overrides, rather than listing it twice', () => {
+    // A house-ruled Heavy Pistol at two different prices would be unreadable.
+    loadUploaded({ weapons: [{ id: 'heavy_pistol', name: 'Heavy Pistol', price: 250, fields: {} }] });
+    show('gun_shop');
+    expect(screen.getAllByText('Heavy Pistol')).toHaveLength(1);
+    const row = screen.getByText('Heavy Pistol').closest('tr')!;
+    expect(within(row).getByText('250cr')).toBeInTheDocument();
+  });
+
+  it('only shows up at a shop that deals in its catalogue', () => {
+    loadUploaded({ weapons: [ZIP_GUN] });
+    show('clinic');
+    expect(screen.queryByText('Zip Gun')).toBeNull();
+  });
+
+  it('can be sold back, once the player owns one', async () => {
+    loadUploaded({ weapons: [ZIP_GUN] });
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { weapon1_name: 'Zip Gun' },
+    };
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+
+    // Listed, and priced at the shop's buy-back rate on the GM's price: 15 at 45% is 6.
+    const row = screen.getByText('Zip Gun').closest('tr')!;
+    expect(within(row).getByText('6cr')).toBeInTheDocument();
+  });
+
+  it('leaves the shelf alone when nothing has been uploaded', () => {
+    show('gun_shop');
+    expect(screen.queryByText('Zip Gun')).toBeNull();
+    expect(screen.getByText(/32 LINES/)).toBeInTheDocument();
+  });
+
+  it('buys correctly on the first click, before anything has re-rendered', async () => {
+    /**
+     * A regression guard. Memoising the shelf froze the first render's `buy` closure,
+     * which had captured the balance as null - so every purchase saw zero credits and was
+     * refused. Clicking immediately after mount is exactly the case that broke.
+     */
+    loadUploaded({ weapons: [ZIP_GUN] });
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+    expect(screen.queryByText(/Not enough credits/)).toBeNull();
+    expect(handleFieldsChange).toHaveBeenCalled();
   });
 });

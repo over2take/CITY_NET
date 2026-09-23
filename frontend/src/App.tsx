@@ -39,6 +39,7 @@ import { VehiclesWindow } from './components/VehiclesWindow';
 import { EnemyVehiclesWindow } from './components/EnemyVehiclesWindow';
 import { vehicleLook as cwnVehicleLook } from './sheets/vehiclePresets';
 import { buybackPct, BUYBACK_SETTING } from './data/shopRules';
+import { loadUploaded } from './sheets/uploadedCatalogues';
 import { archetypeLook } from './sheets/vehicleArchetypes';
 import { VehicleBadgeButton } from './components/VehicleBadgeButton';
 import { useVehicleRoster } from './hooks/useVehicleRoster';
@@ -943,6 +944,43 @@ function App() {
     const s = socketRef.current;
     s.on('gameSystemChanged', fetchGlobalSettings);
     return () => { s.off('gameSystemChanged', fetchGlobalSettings); };
+  }, [socketRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Catalogues a GM uploaded, kept in step with the server.
+   *
+   * The server prices and sells from its own copy, so this is purely so the shelves and
+   * the SELL tab can SHOW what it would sell - a shop that charges correctly for something
+   * it never lists is not much of a shop.
+   *
+   * Asked for on connect and again whenever they change or the game system does, since the
+   * server holds one system's uploads at a time.
+   */
+  const [catalogueRevision, setCatalogueRevision] = useState(0);
+  useEffect(() => {
+    if (!socketRef.current) return;
+    const s = socketRef.current;
+    const onCatalogues = (payload: { entries?: Record<string, any[]> }) => {
+      // Only the uploaded ones: the built-in tables are already compiled in, and taking
+      // the server's copy of those would mean two sources for the same shelf.
+      const uploadedOnly: Record<string, any[]> = {};
+      for (const [catalogue, entries] of Object.entries(payload?.entries ?? {})) {
+        uploadedOnly[catalogue] = (entries ?? []).filter((e) => e?.source === 'uploaded');
+      }
+      loadUploaded(uploadedOnly as never);
+      setCatalogueRevision((n) => n + 1);
+    };
+    const ask = () => s.emit('requestCatalogues');
+
+    s.on('catalogues', onCatalogues);
+    s.on('cataloguesChanged', ask);
+    s.on('gameSystemChanged', ask);
+    ask();
+    return () => {
+      s.off('catalogues', onCatalogues);
+      s.off('cataloguesChanged', ask);
+      s.off('gameSystemChanged', ask);
+    };
   }, [socketRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initiative Tracker ────────────────────────────────────────────────────────

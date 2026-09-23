@@ -23,6 +23,8 @@ import { VEHICLE_FITTINGS } from './vehicleFittings';
 import { VEHICLE_WEAPONS } from './vehicleWeapons';
 import { CWN_WEAPON_ROWS, CWN_VEHICLE_ROWS } from './templates/cities_without_number';
 import type { ShopStock } from '../data/buildingTypes';
+import { CATALOGUES as CATALOGUE_LIST } from '../data/buildingTypes';
+import { uploadedIn, uploadedEntry } from './uploadedCatalogues';
 
 /** Where a thing lives, which decides how it is taken away again. */
 export type OwnedSource = 'inventory' | 'weapon' | 'stash' | 'cyberware' | 'vehicle';
@@ -99,17 +101,44 @@ for (const { catalogue, rows } of CATALOGUES) {
   }
 }
 
-/** Which catalogue entry a thing on a sheet came from, or null for anything unrecognised. */
+/**
+ * Which catalogue entry a thing on a sheet came from, or null for anything unrecognised.
+ *
+ * The book is searched first and whatever a GM uploaded second - the opposite order from
+ * `priceOf` below, and deliberately so, matching the server. A name lookup answers "what is
+ * this thing the player owns", and a character carrying a Heavy Pistol bought before any
+ * upload is still carrying the book's.
+ */
 export const findByName = (name: unknown): { catalogue: ShopStock; id: string } | null => {
   const hit = BY_NAME.get(normaliseName(name));
-  return hit ? { catalogue: hit.catalogue, id: hit.id } : null;
+  if (hit) return { catalogue: hit.catalogue, id: hit.id };
+
+  const wanted = normaliseName(name);
+  if (!wanted) return null;
+  for (const { id: catalogue } of CATALOGUE_LIST) {
+    for (const entry of uploadedIn(catalogue)) {
+      if (normaliseName(entry.name) === wanted) return { catalogue, id: entry.id };
+    }
+  }
+  return null;
 };
 
-export const priceOf = (catalogue: ShopStock, id: string): number | null =>
-  BY_ID.get(`${catalogue}/${id}`)?.price ?? null;
+/**
+ * What one costs.
+ *
+ * Uploaded first: a GM who typed a price for something the book also carries meant it.
+ */
+export const priceOf = (catalogue: ShopStock, id: string): number | null => {
+  const mine = uploadedEntry(catalogue, id);
+  if (mine) return Number.isFinite(mine.price) ? mine.price : null;
+  return BY_ID.get(`${catalogue}/${id}`)?.price ?? null;
+};
 
-export const labelOf = (catalogue: ShopStock, id: string): string | null =>
-  BY_ID.get(`${catalogue}/${id}`)?.label ?? null;
+export const labelOf = (catalogue: ShopStock, id: string): string | null => {
+  const mine = uploadedEntry(catalogue, id);
+  if (mine) return mine.name;
+  return BY_ID.get(`${catalogue}/${id}`)?.label ?? null;
+};
 
 /** Add one owned thing to the tally, merging onto a line that is already there. */
 const tally = (
