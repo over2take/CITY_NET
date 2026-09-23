@@ -30,17 +30,20 @@ import {
 const prices = createRequire(import.meta.url)('../../../../backend/shops/prices.js');
 
 /** Every shelf, as { catalogue, id, price the window shows }. */
-const SHELVES: { catalogue: string; rows: { id: string; price: number | undefined }[] }[] = [
-  { catalogue: 'cyberware', rows: CWN_CYBERWARE.map((c) => ({ id: c.id, price: c.price })) },
-  { catalogue: 'weapons', rows: CWN_WEAPONS.map((w) => ({ id: w.id, price: w.price })) },
-  { catalogue: 'armor', rows: CWN_ARMOR.map((a) => ({ id: a.id, price: a.cost })) },
-  { catalogue: 'gear', rows: CWN_GEAR.map((g) => ({ id: g.id, price: g.cost })) },
-  { catalogue: 'pharmaceuticals', rows: CWN_PHARMACEUTICALS.map((p) => ({ id: p.id, price: p.cost })) },
-  { catalogue: 'armor_mods', rows: CWN_ARMOR_MODS.map((m) => ({ id: m.id, price: m.cost })) },
-  { catalogue: 'weapon_mods', rows: CWN_WEAPON_MODS.map((m) => ({ id: m.id, price: m.cost })) },
-  { catalogue: 'vehicles', rows: VEHICLE_PRESETS.map((v) => ({ id: v.id, price: v.cost })) },
-  { catalogue: 'vehicle_fittings', rows: VEHICLE_FITTINGS.map((f) => ({ id: f.id, price: f.cost })) },
-  { catalogue: 'vehicle_weapons', rows: VEHICLE_WEAPONS.map((w) => ({ id: w.id, price: w.cost })) },
+const SHELVES: {
+  catalogue: string;
+  rows: { id: string; label: string; price: number | undefined }[];
+}[] = [
+  { catalogue: 'cyberware', rows: CWN_CYBERWARE.map((c) => ({ id: c.id, label: c.name, price: c.price })) },
+  { catalogue: 'weapons', rows: CWN_WEAPONS.map((w) => ({ id: w.id, label: w.name, price: w.price })) },
+  { catalogue: 'armor', rows: CWN_ARMOR.map((a) => ({ id: a.id, label: a.label, price: a.cost })) },
+  { catalogue: 'gear', rows: CWN_GEAR.map((g) => ({ id: g.id, label: g.label, price: g.cost })) },
+  { catalogue: 'pharmaceuticals', rows: CWN_PHARMACEUTICALS.map((p) => ({ id: p.id, label: p.label, price: p.cost })) },
+  { catalogue: 'armor_mods', rows: CWN_ARMOR_MODS.map((m) => ({ id: m.id, label: m.label, price: m.cost })) },
+  { catalogue: 'weapon_mods', rows: CWN_WEAPON_MODS.map((m) => ({ id: m.id, label: m.label, price: m.cost })) },
+  { catalogue: 'vehicles', rows: VEHICLE_PRESETS.map((v) => ({ id: v.id, label: v.label, price: v.cost })) },
+  { catalogue: 'vehicle_fittings', rows: VEHICLE_FITTINGS.map((f) => ({ id: f.id, label: f.label, price: f.cost })) },
+  { catalogue: 'vehicle_weapons', rows: VEHICLE_WEAPONS.map((w) => ({ id: w.id, label: w.label, price: w.cost })) },
 ];
 
 describe('what the shelf says and what the bank charges', () => {
@@ -64,6 +67,60 @@ describe('what the shelf says and what the bank charges', () => {
     }
     // Named rather than counted, so a failure says which line drifted.
     expect(wrong).toEqual([]);
+  });
+
+  it('calls everything the same thing the shelf calls it', () => {
+    /**
+     * Labels matter as much as prices now that selling exists. A sheet records what
+     * somebody owns by NAME, so the server matches "Heavy Pistol" on a weapon slot back
+     * to a catalogue entry using its own copy of that label. A drift means an item a
+     * player plainly owns cannot be sold, or - worse - matches the wrong entry and pays
+     * out the wrong amount.
+     */
+    const wrong: string[] = [];
+    for (const { catalogue, rows } of SHELVES) {
+      for (const row of rows) {
+        if (row.price === undefined) continue;
+        const label = prices.labelOf(catalogue, row.id);
+        if (label !== row.label) {
+          wrong.push(`${catalogue}/${row.id}: shelf "${row.label}", server "${label}"`);
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it('finds a catalogue entry from the name a sheet would store', () => {
+    // Every sellable line has to be findable by its own label, or it cannot be sold.
+    const lost: string[] = [];
+    for (const { catalogue, rows } of SHELVES) {
+      for (const row of rows) {
+        if (row.price === undefined) continue;
+        const hit = prices.findByName(row.label);
+        // Two catalogues can legitimately share a name, so this checks that SOMETHING
+        // was found and that it prices the same, not that it picked this exact table.
+        if (!hit) { lost.push(`${catalogue}/${row.id}: "${row.label}" finds nothing`); continue; }
+        if (prices.priceOf(hit.catalogue, hit.id) !== row.price) {
+          lost.push(`${catalogue}/${row.id}: "${row.label}" finds a differently priced entry`);
+        }
+      }
+    }
+    expect(lost).toEqual([]);
+  });
+
+  it('finds nothing for a name no catalogue carries', () => {
+    // Null is a normal answer: players rename things, write in homebrew and carry quest
+    // items. Those have no book price, and the shop pays nothing for them.
+    expect(prices.findByName("Betty's lucky knife")).toBeNull();
+    expect(prices.findByName('')).toBeNull();
+    expect(prices.findByName(null)).toBeNull();
+    expect(prices.findByName(undefined)).toBeNull();
+  });
+
+  it('matches a name through the mangling an import puts it through', () => {
+    // Sheet names have been through a PDF, an importer, or somebody's typing.
+    expect(prices.findByName('  heavy   pistol ')).toEqual({ catalogue: 'weapons', id: 'heavy_pistol' });
+    expect(prices.findByName('HEAVY PISTOL')).toEqual({ catalogue: 'weapons', id: 'heavy_pistol' });
   });
 
   it('knows nothing it should not sell', () => {
