@@ -51,7 +51,10 @@ function makeTestDb() {
         has_sidewalk INTEGER DEFAULT 1,
         has_signage INTEGER DEFAULT 1,
         vehicle_state TEXT,
-        building_type TEXT
+        building_type TEXT,
+        -- Nullable with no default on purpose: NULL means "use the global buy-back rate",
+        -- which is a different thing from 0, a shop that buys nothing back.
+        buyback_pct REAL
       )`);
 
       db.run(`CREATE TABLE districts (

@@ -25,7 +25,8 @@ import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
 import { ShopWindow } from './components/ShopWindow';
-import { buildingTypeById, isShop, shopsAvailable } from './data/buildingTypes';
+import { CatalogueWindow } from './components/CatalogueWindow';
+import { buildingTypeById, isShop, shopsAvailable, typeLabel } from './data/buildingTypes';
 import { HitPointsMenu, HealthReviewWindow } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
@@ -38,6 +39,8 @@ import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { VehiclesWindow } from './components/VehiclesWindow';
 import { EnemyVehiclesWindow } from './components/EnemyVehiclesWindow';
 import { vehicleLook as cwnVehicleLook } from './sheets/vehiclePresets';
+import { buybackPct, BUYBACK_SETTING } from './data/shopRules';
+import { loadUploaded } from './sheets/uploadedCatalogues';
 import { archetypeLook } from './sheets/vehicleArchetypes';
 import { VehicleBadgeButton } from './components/VehicleBadgeButton';
 import { useVehicleRoster } from './hooks/useVehicleRoster';
@@ -334,6 +337,9 @@ function App() {
   const [isAdminPayOpen, setIsAdminPayOpen] = useState(false);
   const [isAdminXpOpen, setIsAdminXpOpen] = useState(false);
   const [adminXpPos, setAdminXpPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
+  // Where a GM adds to what the shops sell. Opened from the GAME tab, under the buy-back rate.
+  const [isCatalogueOpen, setIsCatalogueOpen] = useState(false);
+  const [cataloguePos, setCataloguePos] = useState(() => ({ x: window.innerWidth / 2 - 280, y: 80 }));
   const [adminPayPos, setAdminPayPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
   useEffect(() => {
     const handleClear = () => { (window as any).hasUnsavedChanges = false; };
@@ -942,6 +948,43 @@ function App() {
     const s = socketRef.current;
     s.on('gameSystemChanged', fetchGlobalSettings);
     return () => { s.off('gameSystemChanged', fetchGlobalSettings); };
+  }, [socketRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Catalogues a GM uploaded, kept in step with the server.
+   *
+   * The server prices and sells from its own copy, so this is purely so the shelves and
+   * the SELL tab can SHOW what it would sell - a shop that charges correctly for something
+   * it never lists is not much of a shop.
+   *
+   * Asked for on connect and again whenever they change or the game system does, since the
+   * server holds one system's uploads at a time.
+   */
+  const [catalogueRevision, setCatalogueRevision] = useState(0);
+  useEffect(() => {
+    if (!socketRef.current) return;
+    const s = socketRef.current;
+    const onCatalogues = (payload: { entries?: Record<string, any[]> }) => {
+      // Only the uploaded ones: the built-in tables are already compiled in, and taking
+      // the server's copy of those would mean two sources for the same shelf.
+      const uploadedOnly: Record<string, any[]> = {};
+      for (const [catalogue, entries] of Object.entries(payload?.entries ?? {})) {
+        uploadedOnly[catalogue] = (entries ?? []).filter((e) => e?.source === 'uploaded');
+      }
+      loadUploaded(uploadedOnly as never);
+      setCatalogueRevision((n) => n + 1);
+    };
+    const ask = () => s.emit('requestCatalogues');
+
+    s.on('catalogues', onCatalogues);
+    s.on('cataloguesChanged', ask);
+    s.on('gameSystemChanged', ask);
+    ask();
+    return () => {
+      s.off('catalogues', onCatalogues);
+      s.off('cataloguesChanged', ask);
+      s.off('gameSystemChanged', ask);
+    };
   }, [socketRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initiative Tracker ────────────────────────────────────────────────────────
@@ -1754,6 +1797,7 @@ function App() {
                 isAdmin={isAdmin}
                 setIsAdminPayOpen={setIsAdminPayOpen}
                 setIsAdminXpOpen={setIsAdminXpOpen}
+                setIsCatalogueOpen={setIsCatalogueOpen}
                 isPrimaryAdmin={isPrimaryAdmin}
                 setShowBattleMapManager={setShowBattleMapManager}
                 isPlantingTrees={isPlantingTrees} setIsPlantingTrees={setIsPlantingTrees}
@@ -1924,6 +1968,15 @@ function App() {
                   targetUser={adminBankPlayer}
                   socket={socketRef.current}
                   token={token}
+              />
+            )}
+            {isCatalogueOpen && isAdmin && (
+              <CatalogueWindow
+                  pos={cataloguePos}
+                  setPos={setCataloguePos}
+                  onClose={() => setIsCatalogueOpen(false)}
+                  socket={socketRef.current}
+                  system={gameSystem}
               />
             )}
             {isAdminXpOpen && (
@@ -2099,7 +2152,14 @@ function App() {
             {shopLocation && shopsAvailable(gameSystem) && isShop(shopLocation.building_type) && (
               <ShopWindow
                 name={shopLocation.name}
+                locationId={shopLocation.id}
                 buildingType={shopLocation.building_type || ''}
+                system={gameSystem}
+                isAdmin={isAdmin}
+                onOpenCatalogues={() => setIsCatalogueOpen(true)}
+                // This shop's own rate if it has one, otherwise the global, otherwise the
+                // default. Resolved here for display; the server works it out again to pay.
+                buybackPct={buybackPct(shopLocation.buyback_pct, globalSettings[BUYBACK_SETTING])}
                 socket={socketRef.current}
                 userName={userName}
                 onClose={() => setShopLocation(null)}
@@ -2364,7 +2424,7 @@ function App() {
                           <p><strong>DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
                           <p><strong>RESIDENTS:</strong> {selectedLocation.npcs || 'UNKNOWN'}</p>
 
-                          {/* Shops are Cities Without Number only for now. The gate is on
+                          {/* Shops exist under every system with a sheet. The gate is on
                               the server too - this just keeps a control off screens where
                               pressing it would only ever return a refusal. */}
                           {shopsAvailable(gameSystem) && (
@@ -2373,7 +2433,7 @@ function App() {
                                   beside the building's other properties, not in the panel
                                   a player opens to look at it. */}
                               {buildingTypeById(selectedLocation.building_type) && (
-                                <p><strong>TYPE:</strong> {buildingTypeById(selectedLocation.building_type)!.label}</p>
+                                <p><strong>TYPE:</strong> {typeLabel(selectedLocation.building_type, gameSystem)}</p>
                               )}
 
                               {isShop(selectedLocation.building_type) && (

@@ -71,7 +71,34 @@ describe('the vocabulary', () => {
 
   it('only lets a shop declare stock', () => {
     // A bar with a catalogue would be a contradiction the UI would have to resolve.
-    for (const t of types.BUILDING_TYPES) if (!t.shop) expect(t.sells).toBeNull();
+    // Empty rather than null since `sells` became a list: the rules do not sort into one
+    // table per shop, so a gun shop carries guns and the mods that go on them.
+    for (const t of types.BUILDING_TYPES) if (!t.shop) expect(t.sells).toEqual([]);
+  });
+
+  it('never names a catalogue that is not on the list', () => {
+    const known = new Set(types.CATALOGUES.map((c) => c.id));
+    for (const t of types.BUILDING_TYPES) {
+      for (const s of t.sells) expect(known, `${t.id} sells ${s}`).toContain(s);
+    }
+  });
+
+  it('gives every shop something it can actually put on a shelf', () => {
+    // `sells` is what the BOOK says the shop deals in, which is deliberately wider than
+    // what can be drawn. A storefront where NOTHING can be drawn is a different thing: a
+    // shop button that opens an empty window.
+    for (const t of types.BUILDING_TYPES) {
+      if (t.shop) expect(types.shelvedCatalogues(t.id), t.id).not.toEqual([]);
+    }
+  });
+
+  it('keeps the unshelved catalogues honest', () => {
+    // These two are unshelved for reasons written down beside them - a price that is a
+    // percentage of something else, and a cross product rather than a table. If one gets a
+    // shelf, this is the line that says the note above it is now stale. That is exactly
+    // what happened to vehicles, which used to be on this list.
+    const unshelved = types.CATALOGUES.filter((c) => !c.shelved).map((c) => c.id);
+    expect(unshelved.sort()).toEqual(['cyber_mods', 'skillplugs']);
   });
 });
 
@@ -88,8 +115,22 @@ describe('the system gate', () => {
       .toBe('ripperdoc');
   });
 
-  it('refuses under another system, rather than only hiding the control', async () => {
-    await setSystem(db, 'cyberpunk_red');
+  it('sets one under every system the shops know the sheet of', async () => {
+    // Shops opened to every system once buying and selling read each one's own rows.
+    for (const system of ['cyberpunk_red', 'shadowrun_6e', 'generic']) {
+      await setSystem(db, system);
+      const res = await request(app)
+        .patch(`/api/locations/${locId}/building-type`)
+        .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+        .send({ building_type: 'gun_shop' });
+      expect(res.status, system).toBe(200);
+      expect((await request(app).get('/api/locations/building-types')).status, system).toBe(200);
+    }
+  });
+
+  it('refuses under a system it knows nothing about, rather than only hiding the control', async () => {
+    // Selling there would not know which fields a gun takes with it.
+    await setSystem(db, 'dnd_5e');
     const res = await request(app)
       .patch(`/api/locations/${locId}/building-type`)
       .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
@@ -100,8 +141,8 @@ describe('the system gate', () => {
       .toBeNull();
   });
 
-  it('will not list the types under another system either', async () => {
-    await setSystem(db, 'cyberpunk_red');
+  it('will not list the types under an unknown system either', async () => {
+    await setSystem(db, 'dnd_5e');
     expect((await request(app).get('/api/locations/building-types')).status).toBe(409);
   });
 
@@ -133,6 +174,56 @@ describe('setting a type', () => {
     expect(res.status).toBe(200);
     expect((await get(db, 'SELECT building_type FROM locations WHERE id = ?', [locId])).building_type)
       .toBeNull();
+  });
+
+  /**
+   * The per-shop buy-back rate rides along with the building type, because that is the
+   * moment it is decided: you give a building a storefront and say what it pays.
+   */
+  describe('what this shop pays for second-hand goods', () => {
+    const setType = (body) => request(app)
+      .patch(`/api/locations/${locId}/building-type`)
+      .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+      .send(body);
+
+    const stored = async () =>
+      (await get(db, 'SELECT buyback_pct FROM locations WHERE id = ?', [locId])).buyback_pct;
+
+    it('leaves the rate alone when the request does not mention it', async () => {
+      // Setting a building type is not a statement about prices.
+      await setType({ building_type: 'gun_shop', buyback_pct: 30 });
+      const res = await setType({ building_type: 'clinic' });
+      expect(res.status).toBe(200);
+      expect(await stored()).toBe(30);
+    });
+
+    it('stores an override', async () => {
+      const res = await setType({ building_type: 'gun_shop', buyback_pct: 30 });
+      expect(res.status).toBe(200);
+      expect(res.body.buyback_pct).toBe(30);
+      expect(await stored()).toBe(30);
+    });
+
+    it('clears back to the global rate on a blank', async () => {
+      // The only way back once an override is set, which is why blank cannot mean zero.
+      await setType({ building_type: 'gun_shop', buyback_pct: 30 });
+      await setType({ building_type: 'gun_shop', buyback_pct: '' });
+      expect(await stored()).toBeNull();
+    });
+
+    it('keeps a deliberate zero, which is a shop that buys nothing back', async () => {
+      await setType({ building_type: 'gun_shop', buyback_pct: 0 });
+      expect(await stored()).toBe(0);
+    });
+
+    it('treats an unusable rate as blank rather than failing the whole save', async () => {
+      // A mistyped percentage should not stop the building type being set.
+      const res = await setType({ building_type: 'gun_shop', buyback_pct: 'forty' });
+      expect(res.status).toBe(200);
+      expect(await stored()).toBeNull();
+      expect((await get(db, 'SELECT building_type FROM locations WHERE id = ?', [locId])).building_type)
+        .toBe('gun_shop');
+    });
   });
 
   it('needs an admin', async () => {

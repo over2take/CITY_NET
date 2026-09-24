@@ -21,6 +21,14 @@ const vehicleState = require('../sheets/vehicleState');
 const vehicleSystems = require('../sheets/vehicleSystems');
 const ram = require('../sheets/ram');
 const enemyVehicles = require('../sheets/enemyVehicles');
+const buildingTypes = require('../buildingTypes');
+// The merged catalogue: what the app ships with, plus whatever a GM uploaded.
+const shopPrices = require('../shops/catalogueStore');
+const catalogueDb = require('../shops/catalogueDb');
+const catalogueParse = require('../shops/catalogueParse');
+const shopPurchase = require('../shops/purchase');
+const shopSell = require('../shops/sell');
+const shopBuyback = require('../shops/buyback');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -58,6 +66,28 @@ const formatMeasurementPayload = (data, userName, socketId) => ({
 
 module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   registerInitiativeHandlers(io, db);
+
+  /**
+   * Bring the running system's uploaded catalogues into memory.
+   *
+   * Done once at boot and again whenever the game system changes, because the store holds
+   * one system at a time - only one game is being played, and carrying every system's
+   * uploads would mean threading a system id through every price lookup for a distinction
+   * nothing can observe.
+   *
+   * A failure is deliberately quiet. The store falls back to the tables that ship with the
+   * app, so shops still work; they just do not carry what the GM added, which is a better
+   * way to be wrong than refusing to open.
+   */
+  const loadCatalogues = () => {
+    db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (err, row) => {
+      const system = (!err && row && row.value) || sheetTemplates.DEFAULT_SYSTEM;
+      catalogueDb.refresh(db, system, (refreshErr) => {
+        if (refreshErr) console.warn('Uploaded catalogues could not be read:', refreshErr.message);
+      });
+    });
+  };
+  loadCatalogues();
   // Streamer mode: last director state, replayed to spectators when they join.
   let directorState = null;
 
@@ -238,6 +268,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data), system);
           }
         });
+        // The shop catalogues, for the same reason as the roster: the window asks when
+        // its socket connects, before it is identified, and that request is dropped.
+        // Outside CWN the uploads are all a shop has, so a player who was never sent
+        // them walked into every shop and found it empty.
+        sendCatalogues();
       }
 
       db.all('SELECT * FROM chat_logs ORDER BY timestamp DESC LIMIT 50', (err, rows) => {
@@ -764,6 +799,24 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     const getGameSystem = (cb) => {
       db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (err, row) => {
         cb(err, row ? row.value : sheetTemplates.DEFAULT_SYSTEM);
+      });
+    };
+
+    /**
+     * The running system, with the catalogues in memory known to be that system's.
+     *
+     * The store holds one system at a time and is reloaded when the system changes, but a
+     * price is money, so the shop handlers check rather than trust that the reload landed.
+     * A mismatch reloads before anything is priced: pricing a Cyberpunk RED purchase from
+     * the CWN book would charge a real balance for an item that game never had.
+     */
+    const getShopSystem = (cb) => {
+      getGameSystem((err, system) => {
+        if (err) return cb(err);
+        if (shopPrices.systemLoaded() === system) return cb(null, system);
+        // A failed read still loads the system with nothing uploaded, so carrying on is
+        // safe: the shop is emptier than it should be, never wrong.
+        catalogueDb.refresh(db, system, () => cb(null, system));
       });
     };
 
@@ -1736,37 +1789,352 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       db.run('UPDATE player_banks SET high_roller_done = 1 WHERE username = ?', [data.username]);
     });
 
+    /**
+     * Whose account a player-facing money handler may touch: their own, and only their own.
+     *
+     * These three used to read `data.username` - whatever name arrived in the message -
+     * and act on that account. Nothing checked that the sender was that person, and the
+     * socket middleware above only filters spectators, so any connected client could move
+     * money in anybody's account by naming them.
+     *
+     * The identity comes from `userSockets`, which is populated at `identify` only after
+     * the token is verified. `data.username` is now ignored rather than rejected, because
+     * the bank window still sends it and the two behave identically for the only case
+     * that was ever legitimate: a player acting on themselves.
+     *
+     * This is not the admin path. Admins move other people's money through
+     * adminUpdateBank and adminPayPlayers, both of which verify an admin token.
+     */
+    const ownAccount = () => {
+      const info = userSockets.get(socket.id);
+      return info && info.userName ? info.userName : null;
+    };
+
     socket.on('withdrawFunds', (data) => {
-      if (!data || !data.username || !data.amount) return;
+      const username = ownAccount();
+      if (!username || !data || !data.amount) return;
       const amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      db.run('UPDATE player_banks SET balance = balance - ? WHERE username = ?', [amount, data.username], (err) => {
-        if (!err) sendBankUpdate(data.username);
+      db.run('UPDATE player_banks SET balance = balance - ? WHERE username = ?', [amount, username], (err) => {
+        if (!err) sendBankUpdate(username);
       });
     });
 
     socket.on('borrowFunds', (data) => {
-      if (!data || !data.username || !data.amount) return;
+      const username = ownAccount();
+      if (!username || !data || !data.amount) return;
       const amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      db.run('UPDATE player_banks SET debt = debt + ? WHERE username = ?', [amount, data.username], (err) => {
-        if (!err) sendBankUpdate(data.username);
+      db.run('UPDATE player_banks SET debt = debt + ? WHERE username = ?', [amount, username], (err) => {
+        if (!err) sendBankUpdate(username);
       });
     });
 
     socket.on('payDebt', (data) => {
-      if (!data || !data.username || !data.amount) return;
+      const username = ownAccount();
+      if (!username || !data || !data.amount) return;
       let amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      db.get('SELECT balance, debt FROM player_banks WHERE username = ?', [data.username], (err, row) => {
+      db.get('SELECT balance, debt FROM player_banks WHERE username = ?', [username], (err, row) => {
         if (err || !row) return;
         if (amount > row.balance) amount = row.balance;
         if (amount > row.debt) amount = row.debt;
         if (amount <= 0) return;
-        db.run('UPDATE player_banks SET balance = balance - ?, debt = debt - ? WHERE username = ?', [amount, amount, data.username], (err2) => {
-          if (!err2) sendBankUpdate(data.username);
+        db.run('UPDATE player_banks SET balance = balance - ?, debt = debt - ? WHERE username = ?', [amount, amount, username], (err2) => {
+          if (!err2) sendBankUpdate(username);
         });
       });
+    });
+
+    /**
+     * Buy something from a shop, and charge it to the buyer's own account.
+     *
+     * Three things are deliberately not taken from the client. **Who is paying** comes
+     * from the verified socket identity, never from a username in the payload - the older
+     * money handlers above take `data.username` and will hand anyone anyone else's
+     * account, which is worth fixing but is not this handler's to repeat. **What it
+     * costs** comes from shops/prices.js. **Whether the shop sells it** comes from
+     * buildingTypes.js, so a player cannot buy a Tank from a clinic by asking nicely.
+     *
+     * The item itself is placed by the window once this confirms, because the sheet
+     * writing - a weapon row, a vehicle slot, an unplaced augment, an inventory line -
+     * already lives there and is tested there. The gap that leaves is a disconnect
+     * between the charge landing and the item arriving, which loses the player the item
+     * rather than the money. Refunding it needs the reverse of every one of those writes,
+     * so for now the money moves first and the receipt says what was paid.
+     */
+    socket.on('buyFromShop', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      if (!data || data.locationId === undefined) return;
+
+      const username = info.userName;
+      const catalogue = String(data.catalogue || '');
+      const itemId = String(data.itemId || '');
+      const refuse = (reason, extra) =>
+        socket.emit('shopPurchase', { ok: false, reason, itemId, catalogue, ...(extra || {}) });
+
+      getShopSystem((sysErr) => {
+        if (sysErr) return refuse('no_system');
+
+        db.get('SELECT building_type FROM locations WHERE id = ?', [data.locationId], (err, loc) => {
+          if (err || !loc) return refuse('no_shop');
+          // Shelved rather than merely sold: `sells` names what the book says the storefront
+          // deals in, which is deliberately wider than what can be bought today.
+          if (!buildingTypes.shelvedCatalogues(loc.building_type).includes(catalogue)) {
+            return refuse('not_sold');
+          }
+
+          const price = shopPrices.priceOf(catalogue, itemId);
+          if (price === null) return refuse('price');
+
+          db.get(
+            'SELECT value FROM global_settings WHERE key = ?',
+            [shopPurchase.OVERDRAFT_RULE],
+            (rErr, rRow) => {
+              const overdraftAllowed = !rErr && rRow && rRow.value === '1';
+
+              db.get(
+                'SELECT balance, debt FROM player_banks WHERE username = ?',
+                [username],
+                (bErr, bank) => {
+                  if (bErr) return refuse('no_account');
+                  // No row yet is a real state - an account is created on first read - and
+                  // it means nothing saved rather than an error.
+                  const balance = bank ? Number(bank.balance) || 0 : 0;
+                  const debt = bank ? Number(bank.debt) || 0 : 0;
+
+                  const plan = shopPurchase.planPurchase({
+                    balance, debt, price, overdraftAllowed, settle: data.settle,
+                  });
+                  if (!plan.ok) return refuse(plan.reason, { price, balance, debt });
+
+                  const write = bank
+                    ? ['UPDATE player_banks SET balance = ?, debt = ? WHERE username = ?',
+                      [plan.balance, plan.debt, username]]
+                    : ['INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)',
+                      [username, plan.balance, plan.debt]];
+
+                  db.run(write[0], write[1], (wErr) => {
+                    if (wErr) return refuse('write');
+                    sendBankUpdate(username);
+                    // The window waits for this before putting anything on the sheet.
+                    socket.emit('shopPurchase', {
+                      ok: true,
+                      catalogue,
+                      itemId,
+                      price,
+                      settled: plan.settled,
+                      balance: plan.balance,
+                      debt: plan.debt,
+                    });
+                  });
+                },
+              );
+            },
+          );
+        });
+      });
+    });
+
+    /**
+     * Sell a basket of things back to a shop.
+     *
+     * The mirror image of buyFromShop, and deliberately stricter in one way: buying lets
+     * the window place the item once the charge lands, because the failure mode there is
+     * losing the item. Here the failure mode is being paid AND keeping the goods, so the
+     * server does both halves itself - the sheet is emptied and the bank credited on this
+     * side, and the window is told afterwards.
+     *
+     * Nothing about what a basket is worth comes from the message. Who is selling comes
+     * from the verified socket identity, what they own is re-derived from their sheet,
+     * and the payout is the book price times the shop's rate.
+     */
+    socket.on('sellToShop', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      if (!data || data.locationId === undefined) return;
+
+      const username = info.userName;
+      const refuse = (reason, extra) =>
+        socket.emit('shopSale', { ok: false, reason, ...(extra || {}) });
+
+      getShopSystem((sysErr, system) => {
+        if (sysErr) return refuse('no_system');
+
+        db.get(
+          'SELECT building_type, buyback_pct FROM locations WHERE id = ?',
+          [data.locationId],
+          (err, loc) => {
+            if (err || !loc) return refuse('no_shop');
+            const catalogues = buildingTypes.shelvedCatalogues(loc.building_type);
+            if (!catalogues.length) return refuse('not_sold');
+
+            db.get(
+              'SELECT value FROM global_settings WHERE key = ?',
+              [shopBuyback.BUYBACK_SETTING],
+              (rErr, rRow) => {
+                const globalPct = rErr || !rRow ? null : rRow.value;
+
+                db.get(
+                  `SELECT id, data FROM character_sheets
+                   WHERE username = ? AND system = ? AND is_npc = 0`,
+                  [username, system],
+                  (sErr, sheetRow) => {
+                    if (sErr || !sheetRow) return refuse('no_sheet');
+
+                    let sheetData;
+                    try { sheetData = JSON.parse(sheetRow.data || '{}'); } catch { return refuse('no_sheet'); }
+
+                    const plan = shopSell.planSale({
+                      data: sheetData,
+                      items: Array.isArray(data.items) ? data.items : [],
+                      catalogues,
+                      locationPct: loc.buyback_pct,
+                      globalPct,
+                      system,
+                    });
+                    if (!plan.ok) return refuse(plan.reason, { itemId: plan.itemId });
+
+                    // The sheet first. Being paid for goods still on the sheet is the one
+                    // outcome worth ordering against.
+                    patchSheet(db, sheetRow.id, plan.patch, (pErr) => {
+                      if (pErr) return refuse('write');
+
+                      db.get(
+                        'SELECT balance FROM player_banks WHERE username = ?',
+                        [username],
+                        (bErr, bank) => {
+                          if (bErr) return refuse('write');
+                          const balance = (bank ? Number(bank.balance) || 0 : 0) + plan.payout;
+                          const sql = bank
+                            ? 'UPDATE player_banks SET balance = ? WHERE username = ?'
+                            : 'INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, 0)';
+                          const args = bank ? [balance, username] : [username, balance];
+
+                          db.run(sql, args, (wErr) => {
+                            if (wErr) return refuse('write');
+                            sendBankUpdate(username);
+                            /**
+                             * Broadcast, not sent back down this one socket.
+                             *
+                             * A player can have the sheet open in the standalone tab as
+                             * well as the game window, and every other handler that
+                             * changes a sheet uses io.emit for exactly that reason.
+                             * Telling only the socket that sold would leave the other
+                             * view showing an item that is no longer there.
+                             */
+                            io.emit('sheetUpdated', { username, system });
+                            socket.emit('shopSale', {
+                              ok: true,
+                              payout: plan.payout,
+                              pct: plan.pct,
+                              sold: plan.sold,
+                              // Chrome that came out of a body. The window warns about
+                              // surgery; the app does not model it.
+                              fromBody: plan.fromBody,
+                            });
+                          });
+                        },
+                      );
+                    });
+                  },
+                );
+              },
+            );
+          },
+        );
+      });
+    });
+
+    /**
+     * Read a catalogue a GM pasted or uploaded, and say what would happen.
+     *
+     * Nothing is stored. The same parser that would save it runs here, so what a GM is
+     * shown in the preview is literally what they would get - a preview built from a
+     * second, gentler implementation would be a preview that can lie.
+     */
+    socket.on('previewCatalogue', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.isAdmin) return;
+      const parsed = catalogueParse.parseCatalogue(data && data.text);
+
+      // An id that already exists in the book is an override rather than an addition, and
+      // the GM should be told before they save rather than after.
+      const summary = Object.entries(parsed.sections).map(([catalogue, entries]) => ({
+        catalogue,
+        count: entries.length,
+        overrides: shopPrices.overridesIn(catalogue, entries),
+      }));
+
+      socket.emit('cataloguePreview', {
+        format: parsed.format,
+        sections: parsed.sections,
+        problems: parsed.problems,
+        summary,
+      });
+    });
+
+    /**
+     * Store a catalogue.
+     *
+     * Wholesale per catalogue, because re-uploading is how a GM removes a line. Only the
+     * uploaded rows are touched: the tables the app ships with stay in code, so an update
+     * still improves them.
+     */
+    socket.on('saveCatalogue', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.isAdmin) return;
+      const refuse = (reason) => socket.emit('catalogueSaved', { ok: false, reason });
+
+      getGameSystem((sysErr, system) => {
+        if (sysErr) return refuse('no_system');
+        const parsed = catalogueParse.parseCatalogue(data && data.text);
+        const wanted = Object.keys(parsed.sections);
+        if (!wanted.length) return refuse('empty');
+
+        let left = wanted.length;
+        let failed = null;
+        for (const catalogue of wanted) {
+          catalogueDb.replaceCatalogue(db, system, catalogue, parsed.sections[catalogue], (err) => {
+            if (err && !failed) failed = err;
+            left -= 1;
+            if (left > 0) return;
+            if (failed) return refuse('write');
+            // Back into memory, then out to everybody - the shop windows draw their
+            // shelves from this and would otherwise show yesterday's catalogue.
+            catalogueDb.refresh(db, system, () => {
+              io.emit('cataloguesChanged', { system });
+              socket.emit('catalogueSaved', {
+                ok: true,
+                saved: wanted.map((c) => ({ catalogue: c, count: parsed.sections[c].length })),
+                problems: parsed.problems,
+              });
+            });
+          });
+        }
+      });
+    });
+
+    /** Everything the shops currently sell, so a GM can download and edit it. */
+    /**
+     * Every catalogue as the running system's shops sell it, to this one socket.
+     *
+     * Through getShopSystem so the store is known to hold this system before it is read -
+     * the same check a purchase makes, for the same reason.
+     */
+    const sendCatalogues = () => {
+      getShopSystem((err) => {
+        if (err) return;
+        const out = {};
+        for (const c of buildingTypes.CATALOGUES) out[c.id] = shopPrices.entriesIn(c.id);
+        socket.emit('catalogues', { entries: out });
+      });
+    };
+
+    socket.on('requestCatalogues', () => {
+      if (!userSockets.get(socket.id)) return;
+      sendCatalogues();
     });
 
     socket.on('adminPayPlayers', (data) => {

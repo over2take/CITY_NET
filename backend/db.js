@@ -200,6 +200,13 @@ db.serialize(() => {
   // recognises would put a SHOP button on a building that cannot sell anything.
   db.run(`ALTER TABLE locations ADD COLUMN building_type TEXT`, (err) => {});
 
+  // What this shop pays for something sold back to it, as a percentage of the book price.
+  //
+  // NULL means "no opinion, use the global rate" - which is why it is nullable and has no
+  // default. A shop set to 0 is a different thing entirely: one that buys nothing back.
+  // Collapsing those two would make it impossible to stop overriding once you started.
+  db.run(`ALTER TABLE locations ADD COLUMN buyback_pct REAL`, (err) => {});
+
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN melee_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN ranged_ac INTEGER`, (err) => {});
 
@@ -274,6 +281,27 @@ db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS global_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+  )`);
+
+  /**
+   * Storefront catalogues a GM uploaded.
+   *
+   * One row per item, keyed by the system it belongs to, the catalogue it sits in and an
+   * id slugged from its name. Only UPLOADED items live here - the tables that ship with
+   * the app stay in code, so an app update still improves them, and these are added on top.
+   *
+   * `fields` is the JSON an item writes onto a character sheet when it is bought. Which
+   * columns are meaningful depends on the system, so it is stored as given rather than
+   * split into columns that would differ per ruleset.
+   */
+  db.run(`CREATE TABLE IF NOT EXISTS shop_catalogues (
+    system TEXT NOT NULL,
+    catalogue TEXT NOT NULL,
+    id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    price REAL NOT NULL DEFAULT 0,
+    fields TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY (system, catalogue, id)
   )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS player_banks (

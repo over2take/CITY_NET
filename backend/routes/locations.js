@@ -6,6 +6,8 @@ const identity = require('../sheets/identity');
 const { mutateSheet, patchSheet } = require('../sheets/mutate');
 const { DEFAULT_SYSTEM } = require('../sheets/templates');
 const { BUILDING_TYPES, isValidType } = require('../buildingTypes');
+const { readPct } = require('../shops/buyback');
+const sheetSlots = require('../shops/sheetSlots');
 
 const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY', 'LANDMARK', 'MARKETS', 'CUSTOM']);
 const isUserDefinedName = (name) => !!name && name.trim() !== '' && !ZONE_TYPE_NAMES.has(name.trim());
@@ -117,20 +119,28 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   /**
-   * Shops are Cities Without Number only, for now.
+   * The systems shops exist under: every one whose sheet shape the shops know.
    *
-   * Gated on the server rather than only hidden in the client: a button nobody can see is
-   * not a rule, and the point of starting with one system is that the others genuinely do
-   * not have this yet. Widening it later means adding to this set.
+   * Read from sheetSlots rather than listed, because that table is what a sale empties -
+   * a system missing from it is one where selling a gun would not know which fields to
+   * clear, and a shop there would be worse than none.
+   *
+   * CWN was the only entry for a while, on purpose: buying and selling were CWN-shaped, and
+   * a Cyberpunk RED gun would have been written with CWN's fields and lost its `rof`. Both
+   * now read each system's own rows, and outside CWN a shop sells only what that GM
+   * uploaded.
+   *
+   * Still gated on the server rather than only hidden in the client: a button nobody can see
+   * is not a rule, and an unrecognised system is still refused.
    */
-  const SHOP_SYSTEMS = new Set(['cities_without_number']);
+  const SHOP_SYSTEMS = new Set(Object.keys(sheetSlots.SLOTS));
 
   const withShopSystem = (res, next) => {
     db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       const system = (row && row.value) || DEFAULT_SYSTEM;
       if (!SHOP_SYSTEMS.has(system)) {
-        return res.status(409).json({ error: 'Building types are only available under Cities Without Number' });
+        return res.status(409).json({ error: `Building types are not available under ${system}` });
       }
       next();
     });
@@ -148,19 +158,43 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
    * also leaves building_type alone, so the two do not fight.
    */
   router.patch('/:id/building-type', authenticate, (req, res) => withShopSystem(res, () => {
-    const { building_type } = req.body;
+    const { building_type, buyback_pct } = req.body;
     // A value nobody recognises would put a SHOP button on a building that cannot sell
     // anything, so it is refused rather than stored and puzzled over later.
     if (!isValidType(building_type)) return res.status(400).json({ error: 'Unknown building type' });
 
     const next = building_type === '' || building_type === undefined ? null : building_type;
+
+    /**
+     * What this shop pays for second-hand goods, or nothing to say.
+     *
+     * Blank clears the override and returns the shop to the global rate, which is the
+     * only way back once one has been set - so an empty box has to mean "unset" rather
+     * than "zero". `readPct` already draws that line and refuses anything unusable; a
+     * value it rejects is treated as blank rather than refused, because a mistyped rate
+     * should not also block the building type being saved.
+     */
+    const pct = buyback_pct === undefined ? undefined : readPct(buyback_pct);
+
     db.get('SELECT id FROM locations WHERE id = ?', [req.params.id], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'Not found' });
-      db.run('UPDATE locations SET building_type = ? WHERE id = ?', [next, req.params.id], (err2) => {
+
+      const sql = pct === undefined
+        ? 'UPDATE locations SET building_type = ? WHERE id = ?'
+        : 'UPDATE locations SET building_type = ?, buyback_pct = ? WHERE id = ?';
+      const args = pct === undefined
+        ? [next, req.params.id]
+        : [next, pct, req.params.id];
+
+      db.run(sql, args, (err2) => {
         if (err2) return res.status(500).json({ error: err2.message });
         emitUpdate();
-        res.json({ id: Number(req.params.id), building_type: next });
+        res.json({
+          id: Number(req.params.id),
+          building_type: next,
+          ...(pct === undefined ? {} : { buyback_pct: pct }),
+        });
       });
     });
   }));

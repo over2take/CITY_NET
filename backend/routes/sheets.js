@@ -1,4 +1,5 @@
 const express = require('express');
+const catalogueDb = require('../shops/catalogueDb');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -74,8 +75,15 @@ module.exports = (db, io) => {
       [system],
       (err) => {
         if (err) return res.status(500).json({ error: err.message });
-        io.emit('gameSystemChanged', { system });
-        res.json({ message: 'Game system updated', system });
+        /**
+         * The uploaded catalogues in memory belong to the system that was running a
+         * moment ago. Left alone they would price the new game's shops from the old
+         * game's list, so they are swapped before anybody is told the system changed.
+         */
+        catalogueDb.refresh(db, system, () => {
+          io.emit('gameSystemChanged', { system });
+          res.json({ message: 'Game system updated', system });
+        });
       }
     );
   });

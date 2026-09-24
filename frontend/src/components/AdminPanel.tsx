@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { BUILDING_TYPES, shopsAvailable } from '../data/buildingTypes';
+import { BUILDING_TYPES, shopsAvailable, isShop, typeLabel } from '../data/buildingTypes';
+import { EmptyShopSteps } from './EmptyShopSteps';
+import { OVERDRAFT_RULE, BUYBACK_SETTING, DEFAULT_BUYBACK_PCT } from '../data/shopRules';
 import { xpAvailable } from './XpWindow';
 import { createPortal } from 'react-dom';
 import * as THREE from 'three';
@@ -46,7 +48,7 @@ import { parseGrant, describeGrant } from '../utils/tokenControl';
 function BattleAdminPanel({
   token, isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly,
   tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, locations, refreshLocations,
-  handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen, secureModeEnabled, onLogout,
+  handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen, secureModeEnabled, onLogout,
   globalSettings, fetchGlobalSettings, onOpenNpcLibrary, activeUsers,
 }: any) {
   const [tab, setTab] = useState<'battle_map' | 'game'>('battle_map');
@@ -184,7 +186,7 @@ export function AdminPanel({
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
-    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen, setIsAdminXpOpen,
+    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
@@ -201,7 +203,7 @@ export function AdminPanel({
         tempBattleMapScale={tempBattleMapScale} setTempBattleMapScale={setTempBattleMapScale}
         activeBattleMapData={activeBattleMapData} locations={locations} refreshLocations={refreshLocations}
         handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
-        setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
+        setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} setIsCatalogueOpen={setIsCatalogueOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
         globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings}
         onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers}
       />
@@ -506,7 +508,13 @@ export function AdminPanel({
           await fetch(`/api/locations/${editId}/building-type`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ building_type: editData.building_type || '' }),
+            // buyback_pct rides along: it is decided in the same breath as the storefront
+            // and the route leaves it alone if the field is absent. `?? ''` rather than
+            // `|| ''` so a deliberate 0 - a shop that buys nothing back - survives.
+            body: JSON.stringify({
+              building_type: editData.building_type || '',
+              buyback_pct: editData.buyback_pct ?? '',
+            }),
           });
         }
         setAdminAlert("CHANGES_SAVED"); targetObject.scale.set(1, 1, 1); refreshLocations(); setView('list');
@@ -1064,6 +1072,25 @@ export function AdminPanel({
                   button whose only outcome is a window saying no. */}
               {xpAvailable(globalSettings['game_system']) && (
                 <button onClick={() => setIsAdminXpOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>AWARD_EXPERIENCE</button>
+              )}
+              {/* What shops pay for second-hand goods. Beside the other two money controls
+                  because it is the same kind of decision: how much the party is worth. */}
+              {shopsAvailable(globalSettings['game_system']) && (
+                <>
+                  <BuybackPanel
+                    token={token}
+                    globalSettings={globalSettings}
+                    fetchGlobalSettings={fetchGlobalSettings}
+                  />
+                  {/* Beside the buy-back rate because both are about what shops trade in.
+                      Its own window, because a paste box and a preview table do not fit in
+                      a panel this narrow. */}
+                  <button
+                    onClick={() => setIsCatalogueOpen?.(true)}
+                    className="utility-btn"
+                    style={{ width: '100%', marginTop: '8px' }}
+                  >SHOP_CATALOGUES</button>
+                </>
               )}
               <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
               <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
@@ -1868,9 +1895,9 @@ export function AdminPanel({
                     )}
 
                     {/* What the building is for, which is what puts a SHOP button in the
-                        info window. Cities Without Number only for now, and the server
-                        refuses it under anything else — this just keeps a control off
-                        screens where using it would only ever return a refusal. */}
+                        info window. Available under every system with a sheet, and the
+                        server refuses it under anything else — this just keeps a control
+                        off screens where using it would only ever return a refusal. */}
                     {editData.shape !== 'enemy_rhombus' && editData.shape !== 'friendly_rhombus' && editData.shape !== 'rhombus' && editData.shape !== 'none' && shopsAvailable(globalSettings['game_system']) && (
                       <div style={{marginTop: '8px', marginBottom: '10px'}}>
                         <label>BUILDING TYPE</label>
@@ -1882,9 +1909,63 @@ export function AdminPanel({
                         >
                           <option value="">— NONE —</option>
                           {BUILDING_TYPES.map((t) => (
-                            <option key={t.id} value={t.id}>{t.label}{t.shop ? ' (shop)' : ''}</option>
+                            <option key={t.id} value={t.id}>{typeLabel(t.id, globalSettings['game_system'])}{t.shop ? ' (shop)' : ''}</option>
                           ))}
                         </select>
+
+                        {/*
+                          What THIS shop pays for second-hand goods.
+
+                          Only for a building that can actually trade, since a rate on a
+                          bar is a number nothing will ever read. Blank shows the global as
+                          a placeholder and means "no opinion" - which is the only way back
+                          once a rate has been set, and why blank cannot mean zero. A shop
+                          deliberately set to 0 buys nothing back.
+                        */}
+                        {isShop(editData.building_type) && (
+                          <div style={{ marginTop: '8px' }}>
+                            <label
+                              htmlFor="loc-buyback"
+                              style={{
+                                fontSize: '0.75rem', display: 'flex', alignItems: 'center',
+                                justifyContent: 'center', gap: '5px', marginBottom: '5px',
+                              }}
+                            >
+                              BUY-BACK RATE
+                              <Hint text={`What this shop pays for something sold back to it. Leave blank to use the global rate of ${globalSettings[BUYBACK_SETTING] ?? DEFAULT_BUYBACK_PCT}%. Set it to 0 for a shop that buys nothing back.`} />
+                            </label>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                              <input
+                                id="loc-buyback"
+                                type="number"
+                                min={0}
+                                max={1000}
+                                value={editData.buyback_pct ?? ''}
+                                // The global shown as a placeholder, so an empty box reads
+                                // as "uses that" rather than as nothing set.
+                                placeholder={String(globalSettings[BUYBACK_SETTING] ?? DEFAULT_BUYBACK_PCT)}
+                                onChange={e => setEditData({
+                                  ...editData,
+                                  buyback_pct: e.target.value === '' ? null : e.target.value,
+                                })}
+                                aria-label="Buy-back rate for this shop"
+                                style={{ width: '80px', padding: '4px 6px', textAlign: 'center' }}
+                              />
+                              <span style={{ fontSize: '0.7rem' }}>%</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* A shop with nothing to sell, and how to change that. Only ever
+                            outside CWN, where shops carry what the GM uploads and nothing
+                            else - and said here, where the shop is being set up. */}
+                        {isShop(editData.building_type) && (
+                          <EmptyShopSteps
+                            buildingType={editData.building_type}
+                            system={globalSettings['game_system']}
+                            onOpenCatalogues={setIsCatalogueOpen ? () => setIsCatalogueOpen(true) : undefined}
+                          />
+                        )}
                       </div>
                     )}
                 </>
@@ -2120,6 +2201,13 @@ const GLOBAL_HOUSE_RULES: HouseRuleDef[] = [
     label: 'INITIATIVE FOLLOWS BUILDING (ALL FLOORS SHARE ONE TRACKER)',
     title: 'When enabled, all floors of the same building share a single initiative tracker. Players moving between floors stay in the same combat order. Each building and the city map still have their own separate initiatives.',
   },
+  {
+    // Universal rather than per-system: every ruleset in the app has money, and whether
+    // you can spend what you have not got is a table decision, not a ruleset one.
+    settingKey: OVERDRAFT_RULE,
+    label: 'BUY WITH MONEY YOU DO NOT HAVE',
+    title: "House rule: a player who cannot afford something in a shop is asked how to cover it - take the shortfall as debt, or let the balance go negative - instead of being refused. Off by default, which refuses the purchase. What happens to someone carrying a negative balance is yours to decide; the app records the hole, it does not collect on it.",
+  },
 ];
 
 const CPR_HOUSE_RULES: HouseRuleDef[] = [
@@ -2350,6 +2438,103 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: str
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A `?` that explains a control without standing next to it taking up room.
+ *
+ * Uses the browser's own tooltip rather than a floating panel of our own, which is what
+ * the house-rule toggles and the shop's sortable headers already do. It also sidesteps
+ * the thing that bites floating UI in this app: anything portalled has to go into
+ * `themeRoot()` or it renders in Classic green outside the theme class. A title attribute
+ * has no such problem.
+ *
+ * Focusable, so the text is reachable without a mouse.
+ */
+function Hint({ text }: { text: string }) {
+  return (
+    <span
+      title={text}
+      aria-label={text}
+      role="note"
+      tabIndex={0}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: '14px', height: '14px', borderRadius: '50%',
+        border: '1px solid var(--grid-section)', color: 'var(--grid-section)',
+        fontSize: '0.6rem', lineHeight: 1, cursor: 'help', flexShrink: 0,
+      }}
+    >?</span>
+  );
+}
+
+/**
+ * What shops pay for second-hand goods, across the whole map.
+ *
+ * A percentage rather than a second price list, because the book prices what things cost
+ * and says nothing about what a fence gives you for a used deck. Individual storefronts
+ * can be set to their own rate where the building type is chosen; this is what the rest
+ * of them use.
+ *
+ * Saved on blur rather than on a button, matching the other settings in this tab - and
+ * the server is the thing that decides what a sale is worth either way, so a rate that
+ * never reaches it simply means shops keep paying the old one.
+ */
+function BuybackPanel({ token, globalSettings, fetchGlobalSettings }: { token: string; globalSettings: any; fetchGlobalSettings: () => void }) {
+  const [value, setValue] = useState('');
+
+  useEffect(() => {
+    if (!globalSettings) return;
+    setValue(String(globalSettings[BUYBACK_SETTING] ?? DEFAULT_BUYBACK_PCT));
+  }, [globalSettings]);
+
+  const save = async () => {
+    // A blank box means "back to the default" rather than "shops pay nothing" - the same
+    // distinction the per-shop override draws, and the same trap if it is not drawn.
+    const next = value.trim() === '' ? String(DEFAULT_BUYBACK_PCT) : value.trim();
+    setValue(next);
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ key: BUYBACK_SETTING, value: next }),
+    });
+    fetchGlobalSettings();
+  };
+
+  return (
+    <div style={{ marginTop: '10px' }}>
+      {/* Centred to sit with CURRENCY_ICON, PAY_PLAYERS and AWARD_EXPERIENCE above it,
+          which are all centred full-width blocks. */}
+      <label
+        htmlFor="buyback-pct"
+        style={{
+          fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: '5px', marginBottom: '5px',
+        }}
+      >
+        SHOP_BUY_BACK
+        <Hint text={`What every shop pays for something sold back to it, unless that storefront has been given its own rate. Default ${DEFAULT_BUYBACK_PCT}%.`} />
+      </label>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+        <input
+          id="buyback-pct"
+          type="number"
+          min={0}
+          max={1000}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onBlur={save}
+          aria-label="Shop buy-back percentage"
+          style={{ width: '80px', padding: '4px 6px', textAlign: 'center' }}
+        />
+        {/* The book only exists on CWN. Everywhere else the price is whatever the GM
+            uploaded, which is the price on the shelf. */}
+        <span style={{ fontSize: '0.7rem' }}>
+          % OF {globalSettings?.game_system === 'cities_without_number' ? 'BOOK' : 'SHELF'} PRICE
+        </span>
+      </div>
     </div>
   );
 }

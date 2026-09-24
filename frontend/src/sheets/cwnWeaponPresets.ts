@@ -124,15 +124,27 @@ export const weaponById = (id: unknown): CwnWeaponPreset | null =>
  * of a shop holding a bag, and where the thing goes is the player's decision. It also
  * means a shop can never fail for want of a free row.
  */
+/**
+ * Every field blank rather than missing.
+ *
+ * The book's own presets fill all of these, but a weapon a GM uploaded need not: most
+ * people will type a name, a price and a damage die and leave the rest. Without this,
+ * those columns reach the sheet as `undefined`, which is not a value a character sheet
+ * field can hold - it survives as the word "undefined" or vanishes depending on which way
+ * it is written, and neither is a blank.
+ */
+const orBlank = (value: unknown): string =>
+  (value === undefined || value === null ? '' : String(value));
+
 export const weaponToStashed = (w: CwnWeaponPreset, location = '') => ({
-  name: w.name,
-  dmg: w.dmg,
-  skill: w.skill,
-  attr: w.attr,
-  trauma: w.trauma,
-  shock: w.shock,
+  name: orBlank(w.name),
+  dmg: orBlank(w.dmg),
+  skill: orBlank(w.skill),
+  attr: orBlank(w.attr),
+  trauma: orBlank(w.trauma),
+  shock: orBlank(w.shock),
   atk: 0,
-  enc: w.enc,
+  enc: orBlank(w.enc),
   mods: '',
   location,
 });

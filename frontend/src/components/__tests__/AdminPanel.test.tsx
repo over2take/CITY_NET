@@ -147,6 +147,19 @@ describe('AdminPanel list view', () => {
     expect(props.setIsAdminPayOpen).toHaveBeenCalledWith(true);
   });
 
+  it('says what the buy-back rate is a percentage of, in this game', async () => {
+    // A book price only exists on CWN; elsewhere it is whatever the GM put on the shelf.
+    const { unmount } = render(<AdminPanel {...baseProps()} globalSettings={{ game_system: 'cities_without_number' }} />);
+    await userEvent.click(screen.getByText('GAME'));
+    expect(screen.getByText(/% OF BOOK PRICE/)).toBeInTheDocument();
+    unmount();
+
+    render(<AdminPanel {...baseProps()} globalSettings={{ game_system: 'cyberpunk_red' }} />);
+    await userEvent.click(screen.getByText('GAME'));
+    expect(screen.getByText(/% OF SHELF PRICE/)).toBeInTheDocument();
+    expect(screen.queryByText(/BOOK PRICE/)).toBeNull();
+  });
+
   it('shows SAVE_DEFAULT and LOAD_DEFAULT buttons in battle_map view', () => {
     render(<AdminPanel {...baseProps()} view="battle_map" />);
     expect(screen.getByText('SAVE_DEFAULT')).toBeInTheDocument();
@@ -1169,10 +1182,38 @@ describe('the building type control', () => {
     expect(screen.queryByRole('option', { name: 'Bar (shop)' })).not.toBeInTheDocument();
   });
 
-  it('is absent under another system', () => {
+  it('is there under every system, named the way that game names them', () => {
+    editView({ globalSettings: { game_system: 'shadowrun_6e' } });
+    expect(screen.getByLabelText('Building type')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Street Doc (shop)' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Ripperdoc (shop)' })).not.toBeInTheDocument();
+  });
+
+  it('tells the GM how to stock a shop that has nothing to sell', async () => {
+    // Outside CWN a new shop is empty until the GM uploads something, and this is where
+    // the shop is being set up - so this is where they are told how.
+    const setIsCatalogueOpen = vi.fn();
+    editView({
+      globalSettings: { game_system: 'cyberpunk_red' },
+      editData: { building_type: 'gun_shop' },
+      props: { setIsCatalogueOpen },
+    });
+    expect(screen.getByRole('note', { name: 'How to stock this shop' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'OPEN IT' }));
+    expect(setIsCatalogueOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('says nothing about stocking a CWN shop, or a building that does not trade', () => {
+    editView({ editData: { building_type: 'gun_shop' } });
+    expect(screen.queryByRole('note', { name: 'How to stock this shop' })).toBeNull();
+    editView({ globalSettings: { game_system: 'cyberpunk_red' }, editData: { building_type: 'bar' } });
+    expect(screen.queryByRole('note', { name: 'How to stock this shop' })).toBeNull();
+  });
+
+  it('is absent under a system nothing knows', () => {
     // The server refuses it too; this only keeps the control off screens where using it
     // would return a refusal.
-    editView({ globalSettings: { game_system: 'cyberpunk_red' } });
+    editView({ globalSettings: { game_system: 'dnd_5e' } });
     expect(screen.queryByLabelText('Building type')).not.toBeInTheDocument();
   });
 

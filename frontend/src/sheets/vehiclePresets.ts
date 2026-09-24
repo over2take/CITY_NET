@@ -143,21 +143,31 @@ export const isPresetName = (name: string) =>
  * inventing one would be worse than the GM reading the note and ruling.
  */
 export const presetFields = (i: number, preset: VehiclePreset): Record<string, string | number> => {
+  /**
+   * A field a preset does not carry is written blank, not undefined.
+   *
+   * The book's own presets fill every column; one a GM uploaded need not, and most will
+   * not. `undefined` is not a value a sheet field can hold - it survives as the word
+   * "undefined" or vanishes, depending on which way it is written.
+   */
+  const v = (value: unknown): string | number =>
+    (value === undefined || value === null ? '' : value as string | number);
+
   const out: Record<string, string | number> = {
-    [`vehicle${i}_name`]: preset.label,
-    [`vehicle${i}_type`]: preset.id,
-    [`vehicle${i}_hp`]: preset.hp,
-    [`vehicle${i}_hp_max`]: preset.hp,
-    [`vehicle${i}_ac`]: preset.ac,
-    [`vehicle${i}_spd`]: preset.spd,
-    [`vehicle${i}_tt`]: preset.tt,
-    [`vehicle${i}_crew`]: preset.crew,
-    [`vehicle${i}_hrdpt`]: preset.hrdpt,
-    [`vehicle${i}_pow`]: preset.pow,
-    [`vehicle${i}_mass`]: preset.mass,
-    [`vehicle${i}_cost`]: preset.cost,
-    [`vehicle${i}_size`]: preset.size,
+    [`vehicle${i}_name`]: v(preset.label),
+    [`vehicle${i}_type`]: v(preset.id),
+    [`vehicle${i}_hp`]: v(preset.hp),
+    [`vehicle${i}_hp_max`]: v(preset.hp),
+    [`vehicle${i}_ac`]: v(preset.ac),
+    [`vehicle${i}_spd`]: v(preset.spd),
+    [`vehicle${i}_tt`]: v(preset.tt),
+    [`vehicle${i}_crew`]: v(preset.crew),
+    [`vehicle${i}_hrdpt`]: v(preset.hrdpt),
+    [`vehicle${i}_pow`]: v(preset.pow),
+    [`vehicle${i}_mass`]: v(preset.mass),
+    [`vehicle${i}_cost`]: v(preset.cost),
+    [`vehicle${i}_size`]: v(preset.size),
   };
-  if (preset.armor !== null) out[`vehicle${i}_armor`] = preset.armor;
+  if (preset.armor !== null && preset.armor !== undefined) out[`vehicle${i}_armor`] = preset.armor;
   return out;
 };

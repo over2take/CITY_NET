@@ -9,6 +9,142 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.14.0] - 2026-09-24
+
+Shops open in every game system.
+
+### Added
+
+- **Shops work in Cyberpunk RED, Shadowrun and generic games.** Building types, the
+  buy-back rate and SHOP_CATALOGUES are now available in every system. Outside Cities
+  Without Number a shop sells only what its GM uploads; the CWN book's items stay in CWN.
+
+  Bought items land in that game's own sheet rows. A Cyberpunk RED gun keeps its ROF, and a
+  Shadowrun gun gets its DV and AR. Cyberware goes into the cyberware table on sheets that
+  have one (CWN and Cyberpunk RED) and into the inventory on those that do not. A purchase
+  with nowhere to go, such as a full weapon rack, is refused before any money moves. Selling
+  clears exactly what that sheet's row holds, so nothing is left half-sold.
+
+- **Shop names that fit the game.** A Ripperdoc is a **Street Doc** in Shadowrun and a
+  **Cyber Clinic** in generic games, and outside CWN "Operator Gear" is just **Gear**. The
+  building types themselves are the same everywhere, so shops stay where they are when you
+  switch systems.
+
+- **A new shop tells the GM how to stock it.** Set a building to a shop that has nothing to
+  sell and the edit window lists the steps: open SHOP_CATALOGUES (an **OPEN IT** button
+  goes straight there), download the example, fill in the sections this shop sells, then
+  upload it or type the lines into the box, preview and save. It shows the exact header line
+  for that shop's section in your game. A GM opening an empty shop sees the same steps; a
+  player is told the GM adds the stock.
+
+### Changed
+
+- **The buy-back rate says "shelf price" outside CWN.** It read "% of book price" in every
+  game, and only CWN has a book. The SELL tab says the same.
+
+- **An empty shelf says so.** It used to read NOTHING MATCHES THAT, as if a filter had
+  found nothing. It now says the shelves are empty and that the GM adds stock in
+  SHOP_CATALOGUES.
+
+### Fixed
+
+- **Players never saw the items a GM uploaded after loading the page.** The window asked
+  for them before the player had signed in, the server ignored the request, and nothing
+  asked again. In CWN the built-in items hid it; in any other game every shop looked empty.
+  They are now sent as soon as a player signs in.
+
+- **Selling a CWN vehicle left half of it on the sheet.** The sale cleared mount columns a
+  vehicle does not have and missed the ones it does, along with its fittings. Selling now
+  clears exactly the fields the sheet draws for that row, read from the sheet itself.
+
+---
+
+## [1.13.0] - 2026-09-24
+
+Shops that take your money, and buy your old gear back.
+
+### Added
+
+- **Every priced table in the Cities Without Number book now has a storefront.** Armor
+  (p53) and Common Operator Gear (p50) had never been transcribed at all, and now are. Two
+  new shop types sell them, the **Armorer** and the **General Store**. The **Garage**
+  sells vehicles, fittings and vehicle weapons, and the gun shop and armorer sell the mods
+  that go on what they stock. A shop that carries more than one table shows a tab for each.
+
+- **Buying charges your bank account.** What you buy only turns up on your sheet once the
+  payment has gone through. The price comes from the server rather than your screen, so the
+  number you see is the number you pay. Each shop shows your balance, in red when it is
+  below zero, with any debt beside it.
+
+- **New house rule: BUY WITH MONEY YOU DO NOT HAVE.** It is off by default, which refuses a
+  purchase you cannot afford. With it on, you are asked how to cover the shortfall: **take
+  debt**, **go negative**, or **cancel**. Nothing penalises a negative balance
+  automatically; that is left to the GM. The rule applies to every game system.
+
+- **Selling.** The SELL tab lists what you own that this shop deals in: a gun shop buys
+  guns, a ripperdoc buys chrome. Add things to a sell list, check the total, and confirm
+  once. What you sell leaves your sheet, the money reaches your bank, and a line vanishes
+  when you sell the last of it. It covers inventory, weapons (carried or stashed),
+  vehicles, and cyberware.
+
+  **Selling installed cyberware warns you first.** The book calls for surgery and a
+  complications roll to take chrome out, and CITY_NET does not model either. So an
+  installed piece is flagged on its row, in the confirmation and on the receipt, with a
+  reminder to square the surgery with your GM. **KEEP IMPLANTS** takes the installed pieces
+  off the list and leaves the rest of the sale alone. If you own a spare boxed piece and an
+  installed one, selling one sells the spare.
+
+  Items no catalogue recognises, such as renamed rows, homebrew and quest items, sell for
+  nothing, and the GM settles up directly.
+
+- **Buy-back rate.** What a shop pays for second-hand goods, as a percentage of the book
+  price. Set it for the whole game in the GAME tab under AWARD_EXPERIENCE (45% by default).
+  Give a single shop its own rate where you set its building type. Leave that box blank to
+  use the global rate; setting it to 0 makes a shop that buys nothing.
+
+- **GMs can add their own items to the shops.** SHOP_CATALOGUES, in the GAME tab under the
+  buy-back rate, opens a window where you can:
+  - download an **example** file shaped for your game system, with a few real rows to copy
+  - download the **current list** of everything already on sale
+  - paste a table or upload a file, then **preview** it: rows read, problems by line
+    number, and anything that would replace a built-in price
+  - save it
+
+  Your items are **added** to the ones that come with the app and never replace them. A
+  row with the same name as a built-in item house-rules that one price, and the preview
+  says so first. In the downloaded current list, the built-in rows are commented out with
+  #, so uploading it again unchanged changes nothing. Delete a row's # to override it.
+  CSV, tab-separated and JSON are all accepted, and so are names containing commas, Excel's
+  semicolons and a leading byte-order mark.
+
+### Changed
+
+- **Dropdowns across the whole app now match your theme.** Every one of them was drawing
+  the browser's own grey control. Now they follow whichever of the seven themes you use.
+
+- **Shop notices say where a purchase lands, not that BUY costs money.** For example: a
+  weapon goes into a weapon slot stowed, an augment arrives owned but not installed, and
+  armor goes into your inventory without changing your AC. The line only turns amber when
+  something is actually wrong.
+
+- **Shops are still Cities Without Number only, on purpose.** Uploaded catalogues work for
+  any system. Buying and selling, though, still assume a CWN sheet: a Cyberpunk RED weapon
+  would be written with the wrong fields and lose its ROF. The note at the shop gate says
+  what has to change before it opens to the other systems.
+
+### Fixed
+
+- **Anyone connected could move money in anybody's bank account.** Withdrawing, borrowing
+  and paying off debt all acted on whichever account name arrived with the request, and
+  nothing checked that the sender owned it. Each now acts only on the signed-in player's own
+  account. Nothing changes for legitimate use, because the bank window only ever asked about
+  your own account.
+
+- **Selling updated only the window you sold from.** If your sheet was also open in its own
+  browser tab, that tab kept showing the item you had sold. It now updates everywhere.
+
+---
+
 ## [1.12.1] - 2026-09-17
 
 A structure now saves at the angle you actually turned it to.

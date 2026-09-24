@@ -30,6 +30,8 @@ export interface Location {
    * which is the mesh a custom structure is drawn from. See data/buildingTypes.
    */
   building_type?: string | null;
+  /** What this shop pays for second-hand goods. Null means "use the global rate". */
+  buyback_pct?: number | null;
   polyCount: number;
   battle_map_id: number | null;
   floor_index: number | null;

@@ -1151,7 +1151,7 @@ button:hover, .upload-btn:hover, .utility-btn:hover {
   border-left: 2px solid var(--green);
 }
 
-input, button, textarea {
+input, button, textarea, select {
   background: var(--black);
   border: 1px solid var(--green);
   color: var(--green);
@@ -1159,6 +1159,37 @@ input, button, textarea {
   font-family: inherit;
   outline: none;
   pointer-events: all;
+}
+
+/**
+ * Dropdowns, themed like everything else.
+ *
+ * `select` was simply missing from the rule above, so all thirty-odd dropdowns in the app
+ * drew the browser's own grey control - a Windows widget sitting in the middle of a green
+ * terminal. Fixed here rather than on the one dropdown somebody noticed, because they were
+ * all wrong in the same way for the same reason.
+ *
+ * `color-scheme: dark` is what themes the parts CSS cannot reach: the arrow the browser
+ * draws and the option list it pops up, both of which are chrome rather than page. It is
+ * safe on every theme because all seven are dark - the lightest background in themes.ts is
+ * #100800. A light theme would need this reconsidered rather than inherited.
+ *
+ * Nothing here is a fixed colour, so a theme switch carries the dropdowns with it.
+ */
+select {
+  color-scheme: dark;
+  cursor: pointer;
+}
+
+/**
+ * The popup list, for the browsers that let a page style it.
+ *
+ * Firefox honours this; Chrome mostly draws its own. Harmless where it is ignored, and the
+ * colour-scheme above already keeps that case dark rather than white.
+ */
+select option {
+  background: var(--black);
+  color: var(--green);
 }
 
 .utility-btn {
