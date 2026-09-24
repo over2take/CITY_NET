@@ -36,6 +36,7 @@ vi.mock('../../hooks/usePlayerSheet', () => ({
 }));
 import {
   BUILDING_TYPES, CATALOGUES, isShop, buildingTypeById, shopsAvailable, shelvedCatalogues,
+  typeLabel, catalogueLabel,
 } from '../../data/buildingTypes';
 import { CWN_WEAPON_ROWS } from '../../sheets/templates/cities_without_number';
 import { CWN_CYBERWARE } from '../../sheets/cwnCyberwarePresets';
@@ -1719,5 +1720,40 @@ describe('a shop in another system\'s game', () => {
     expect(screen.getByText(/THIS SHOP PAYS 45% OF THE SHELF PRICE/)).toBeInTheDocument();
     expect(screen.getByText('×1')).toBeInTheDocument();
     expect(screen.getByText('45cr')).toBeInTheDocument();
+  });
+});
+
+describe("a storefront's name in each game", () => {
+  /**
+   * Same ids everywhere, so a location keeps its type across a system switch; only what it
+   * is called changes. "Ripperdoc" is a word from the CWN and Cyberpunk RED street, not
+   * Shadowrun's.
+   */
+  it('keeps the CWN names on CWN', () => {
+    for (const t of BUILDING_TYPES) expect(typeLabel(t.id, 'cities_without_number')).toBe(t.label);
+    for (const c of CATALOGUES) expect(catalogueLabel(c.id, 'cities_without_number')).toBe(c.label);
+  });
+
+  it('calls a ripperdoc what each game calls it', () => {
+    expect(typeLabel('ripperdoc', 'cyberpunk_red')).toBe('Ripperdoc');
+    expect(typeLabel('ripperdoc', 'shadowrun_6e')).toBe('Street Doc');
+    expect(typeLabel('ripperdoc', 'generic')).toBe('Cyber Clinic');
+  });
+
+  it("drops the CWN book's own table name outside CWN", () => {
+    expect(catalogueLabel('gear', 'cyberpunk_red')).toBe('Gear');
+    expect(catalogueLabel('weapons', 'cyberpunk_red')).toBe('Weapons');
+  });
+
+  it('is blank for a type that does not exist, in any game', () => {
+    expect(typeLabel('speakeasy', 'shadowrun_6e')).toBe('');
+    expect(typeLabel(null, 'generic')).toBe('');
+  });
+
+  it("heads the shop window with this game's name", () => {
+    sheetState.sheet = { system: 'shadowrun_6e', data: {} };
+    show('ripperdoc', 'Doc', 'shadowrun_6e');
+    expect(screen.getByText(/STREET DOC ·/)).toBeInTheDocument();
+    expect(screen.queryByText(/RIPPERDOC/)).toBeNull();
   });
 });

@@ -132,6 +132,41 @@ export const shelvedCatalogues = (id: string | null | undefined): ShopStock[] =>
 export const catalogueById = (id: ShopStock): Catalogue | undefined => CATALOGUE_BY_ID.get(id);
 
 /**
+ * What a storefront is called in each game, where it is not what CWN calls it.
+ *
+ * **Same ids everywhere, only the name changes.** A location stores its type, and a GM who
+ * switches systems keeps every shop on the map where it was - a Ripperdoc in one game is the
+ * Street Doc in the next, selling from the same catalogue. Only what differs is listed;
+ * anything missing falls back to the CWN name, which for most of these is plain English.
+ */
+const TYPE_NAMES: Record<string, Record<string, string>> = {
+  shadowrun_6e: { ripperdoc: 'Street Doc' },
+  generic: { ripperdoc: 'Cyber Clinic' },
+};
+
+/**
+ * Catalogue names that are CWN's own jargon, and what every other game calls them.
+ *
+ * "Operator Gear" is the title of a table in the CWN book. A Cyberpunk RED shop selling rope
+ * has no reason to borrow it.
+ */
+const PLAIN_CATALOGUE_NAMES: Partial<Record<ShopStock, string>> = {
+  gear: 'Gear',
+};
+
+const BOOK_SYSTEM = 'cities_without_number';
+
+/** A building type's name in this game. Blank for an id that is not on the list. */
+export const typeLabel = (id: string | null | undefined, system: string | null | undefined): string =>
+  TYPE_NAMES[String(system ?? '')]?.[String(id ?? '')] ?? buildingTypeById(id)?.label ?? '';
+
+/** A catalogue's name in this game, for a shelf tab or a section of the catalogue file. */
+export const catalogueLabel = (id: ShopStock, system: string | null | undefined): string => {
+  const label = catalogueById(id)?.label ?? id;
+  return system === BOOK_SYSTEM ? label : PLAIN_CATALOGUE_NAMES[id] ?? label;
+};
+
+/**
  * The systems shops exist under.
  *
  * Cities Without Number only for now, which is a deliberate first step rather than an

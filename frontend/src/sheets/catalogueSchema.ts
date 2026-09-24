@@ -20,7 +20,7 @@
 
 import { getTemplate } from './index';
 import type { ShopStock } from '../data/buildingTypes';
-import { BUILDING_TYPES, CATALOGUES } from '../data/buildingTypes';
+import { BUILDING_TYPES, CATALOGUES, typeLabel, catalogueLabel } from '../data/buildingTypes';
 
 /** Columns every catalogue carries, whatever its shape. */
 const NAME = 'name';
@@ -170,9 +170,9 @@ export const columnsFor = (system: string, catalogue: ShopStock): CatalogueColum
   };
 };
 
-/** Which storefronts sell a given catalogue, for labelling a section. */
-export const shopsSelling = (catalogue: ShopStock): string[] =>
-  BUILDING_TYPES.filter((t) => t.shop && t.sells.includes(catalogue)).map((t) => t.label);
+/** Which storefronts sell a given catalogue, by this game's names, for labelling a section. */
+export const shopsSelling = (catalogue: ShopStock, system: string): string[] =>
+  BUILDING_TYPES.filter((t) => t.shop && t.sells.includes(catalogue)).map((t) => typeLabel(t.id, system));
 
 /**
  * A few real rows per catalogue, so the example is something to edit rather than a blank
@@ -266,11 +266,10 @@ export const writeCatalogueFile = (
 
   for (const catalogue of wanted) {
     const spec = columnsFor(system, catalogue);
-    const shops = shopsSelling(catalogue);
-    const book = CATALOGUES.find((c) => c.id === catalogue);
+    const shops = shopsSelling(catalogue, system);
 
     out.push(`# ${'─'.repeat(70)}`);
-    out.push(`# ${(book?.label ?? catalogue).toUpperCase()}`);
+    out.push(`# ${catalogueLabel(catalogue, system).toUpperCase()}`);
     if (shops.length) out.push(`# sold by: ${shops.join(', ')}`);
     else out.push('# sold by: no storefront yet');
     if (spec.unavailable) out.push(`# note: ${spec.unavailable}`);

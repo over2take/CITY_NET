@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import {
-  buildingTypeById, shelvedCatalogues, catalogueById, type ShopStock,
+  buildingTypeById, shelvedCatalogues, catalogueById, typeLabel, catalogueLabel, type ShopStock,
 } from '../data/buildingTypes';
 import {
   SETTLE_BALANCE, SETTLE_DEBT, REFUSAL_TEXT, buybackValue,
@@ -1252,7 +1252,7 @@ export function ShopWindow({
     >
       <div className="content" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ ...mono(9), color: 'var(--cyan)', marginBottom: 6 }}>
-          {type ? type.label.toUpperCase() : 'UNKNOWN'} ·{' '}
+          {type ? typeLabel(type.id, system).toUpperCase() : 'UNKNOWN'} ·{' '}
           {rows.length} LINE{rows.length === 1 ? '' : 'S'}
           {/* The book page, so a price can be checked without hunting for the table. */}
           {book && shelf && catalogueById(shelf.id) && ` · CWN P${catalogueById(shelf.id)!.page}`}
@@ -1295,7 +1295,7 @@ export function ShopWindow({
                     aria-selected={shelfId === id}
                     onClick={() => openShelf(id)}
                     style={{ ...mono(10), padding: '2px 10px', letterSpacing: 1, flex: 1 }}
-                  >{(catalogueById(id)?.label ?? id).toUpperCase()}</button>
+                  >{catalogueLabel(id, system).toUpperCase()}</button>
                 ))}
               </div>
             )}
@@ -1329,7 +1329,7 @@ export function ShopWindow({
                 NO CATALOGUE FOR THIS SHOP YET.
                 {/* Named, so the answer to "why is this empty" is on the screen. */}
                 {type?.sells.length
-                  ? ` The book has ${type.sells.map((s) => catalogueById(s)?.label ?? s).join(' and ')} for this
+                  ? ` The book has ${type.sells.map((s) => catalogueLabel(s, system)).join(' and ')} for this
                       storefront, but nothing here can put it on a shelf yet.`
                   : ' This building type does not trade.'}
               </div>

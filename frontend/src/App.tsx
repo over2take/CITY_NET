@@ -26,7 +26,7 @@ import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
 import { ShopWindow } from './components/ShopWindow';
 import { CatalogueWindow } from './components/CatalogueWindow';
-import { buildingTypeById, isShop, shopsAvailable } from './data/buildingTypes';
+import { buildingTypeById, isShop, shopsAvailable, typeLabel } from './data/buildingTypes';
 import { HitPointsMenu, HealthReviewWindow } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
@@ -2431,7 +2431,7 @@ function App() {
                                   beside the building's other properties, not in the panel
                                   a player opens to look at it. */}
                               {buildingTypeById(selectedLocation.building_type) && (
-                                <p><strong>TYPE:</strong> {buildingTypeById(selectedLocation.building_type)!.label}</p>
+                                <p><strong>TYPE:</strong> {typeLabel(selectedLocation.building_type, gameSystem)}</p>
                               )}
 
                               {isShop(selectedLocation.building_type) && (

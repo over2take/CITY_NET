@@ -109,9 +109,21 @@ describe('the columns for a catalogue', () => {
 
 describe('which shops sell what', () => {
   it('names the storefronts, so a GM can find their section', () => {
-    expect(shopsSelling('weapons')).toEqual(['Gun Shop']);
-    expect(shopsSelling('armor_mods')).toEqual(['Armorer']);
-    expect(shopsSelling('vehicle_fittings')).toEqual(['Garage']);
+    expect(shopsSelling('weapons', 'cities_without_number')).toEqual(['Gun Shop']);
+    expect(shopsSelling('armor_mods', 'cities_without_number')).toEqual(['Armorer']);
+    expect(shopsSelling('vehicle_fittings', 'cities_without_number')).toEqual(['Garage']);
+  });
+
+  it('names them the way this game does', () => {
+    expect(shopsSelling('cyberware', 'cities_without_number')).toEqual(['Ripperdoc']);
+    expect(shopsSelling('cyberware', 'shadowrun_6e')).toEqual(['Street Doc']);
+    expect(shopsSelling('cyberware', 'generic')).toEqual(['Cyber Clinic']);
+  });
+
+  it('heads a section with the catalogue this game would call it', () => {
+    expect(exampleFor('cities_without_number')).toMatch(/^# OPERATOR GEAR$/m);
+    expect(exampleFor('cyberpunk_red')).toMatch(/^# GEAR$/m);
+    expect(exampleFor('cyberpunk_red')).not.toMatch(/OPERATOR GEAR/);
   });
 });
 

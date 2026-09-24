@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BUILDING_TYPES, shopsAvailable, isShop } from '../data/buildingTypes';
+import { BUILDING_TYPES, shopsAvailable, isShop, typeLabel } from '../data/buildingTypes';
 import { OVERDRAFT_RULE, BUYBACK_SETTING, DEFAULT_BUYBACK_PCT } from '../data/shopRules';
 import { xpAvailable } from './XpWindow';
 import { createPortal } from 'react-dom';
@@ -1908,7 +1908,7 @@ export function AdminPanel({
                         >
                           <option value="">— NONE —</option>
                           {BUILDING_TYPES.map((t) => (
-                            <option key={t.id} value={t.id}>{t.label}{t.shop ? ' (shop)' : ''}</option>
+                            <option key={t.id} value={t.id}>{typeLabel(t.id, globalSettings['game_system'])}{t.shop ? ' (shop)' : ''}</option>
                           ))}
                         </select>
 
