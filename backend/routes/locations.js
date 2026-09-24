@@ -122,7 +122,15 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
    *
    * Gated on the server rather than only hidden in the client: a button nobody can see is
    * not a rule, and the point of starting with one system is that the others genuinely do
-   * not have this yet. Widening it later means adding to this set.
+   * not have this yet.
+   *
+   * **Do not widen this by adding a system here and nothing else.** Uploaded catalogues
+   * already work for any system, so it looks like a one-line change - but buying and
+   * selling are still CWN-shaped. ShopWindow places a bought weapon with CWN's fields over
+   * CWN's six rows, and shops/sell.js clears CWN's ten weapon fields. On a Cyberpunk RED
+   * sheet that writes fields it does not have, drops `rof`, and leaves `rof` behind on a
+   * sale. Make placement and removal read the system's own row groups first
+   * (rowGroupsOf in frontend/src/sheets/catalogueSchema.ts), then widen this.
    */
   const SHOP_SYSTEMS = new Set(['cities_without_number']);
 

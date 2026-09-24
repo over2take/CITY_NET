@@ -137,6 +137,10 @@ export const catalogueById = (id: ShopStock): Catalogue | undefined => CATALOGUE
  * Cities Without Number only for now, which is a deliberate first step rather than an
  * oversight: the catalogue that makes a shop worth opening is the CWN one. Widening this
  * means adding to the set here and to SHOP_SYSTEMS on the server.
+ *
+ * **Not yet, and not by itself.** Buying and selling still assume CWN's sheet - a
+ * Cyberpunk RED weapon would be written with CWN's fields and lose its `rof`. The note on
+ * SHOP_SYSTEMS in backend/routes/locations.js says what has to change first.
  */
 export const SHOP_SYSTEMS = new Set(['cities_without_number']);
 
