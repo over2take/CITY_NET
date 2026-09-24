@@ -1894,9 +1894,9 @@ export function AdminPanel({
                     )}
 
                     {/* What the building is for, which is what puts a SHOP button in the
-                        info window. Cities Without Number only for now, and the server
-                        refuses it under anything else — this just keeps a control off
-                        screens where using it would only ever return a refusal. */}
+                        info window. Available under every system with a sheet, and the
+                        server refuses it under anything else — this just keeps a control
+                        off screens where using it would only ever return a refusal. */}
                     {editData.shape !== 'enemy_rhombus' && editData.shape !== 'friendly_rhombus' && editData.shape !== 'rhombus' && editData.shape !== 'none' && shopsAvailable(globalSettings['game_system']) && (
                       <div style={{marginTop: '8px', marginBottom: '10px'}}>
                         <label>BUILDING TYPE</label>

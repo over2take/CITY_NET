@@ -115,8 +115,22 @@ describe('the system gate', () => {
       .toBe('ripperdoc');
   });
 
-  it('refuses under another system, rather than only hiding the control', async () => {
-    await setSystem(db, 'cyberpunk_red');
+  it('sets one under every system the shops know the sheet of', async () => {
+    // Shops opened to every system once buying and selling read each one's own rows.
+    for (const system of ['cyberpunk_red', 'shadowrun_6e', 'generic']) {
+      await setSystem(db, system);
+      const res = await request(app)
+        .patch(`/api/locations/${locId}/building-type`)
+        .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+        .send({ building_type: 'gun_shop' });
+      expect(res.status, system).toBe(200);
+      expect((await request(app).get('/api/locations/building-types')).status, system).toBe(200);
+    }
+  });
+
+  it('refuses under a system it knows nothing about, rather than only hiding the control', async () => {
+    // Selling there would not know which fields a gun takes with it.
+    await setSystem(db, 'dnd_5e');
     const res = await request(app)
       .patch(`/api/locations/${locId}/building-type`)
       .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
@@ -127,8 +141,8 @@ describe('the system gate', () => {
       .toBeNull();
   });
 
-  it('will not list the types under another system either', async () => {
-    await setSystem(db, 'cyberpunk_red');
+  it('will not list the types under an unknown system either', async () => {
+    await setSystem(db, 'dnd_5e');
     expect((await request(app).get('/api/locations/building-types')).status).toBe(409);
   });
 

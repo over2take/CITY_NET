@@ -7,6 +7,7 @@ const { mutateSheet, patchSheet } = require('../sheets/mutate');
 const { DEFAULT_SYSTEM } = require('../sheets/templates');
 const { BUILDING_TYPES, isValidType } = require('../buildingTypes');
 const { readPct } = require('../shops/buyback');
+const sheetSlots = require('../shops/sheetSlots');
 
 const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY', 'LANDMARK', 'MARKETS', 'CUSTOM']);
 const isUserDefinedName = (name) => !!name && name.trim() !== '' && !ZONE_TYPE_NAMES.has(name.trim());
@@ -118,28 +119,28 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   /**
-   * Shops are Cities Without Number only, for now.
+   * The systems shops exist under: every one whose sheet shape the shops know.
    *
-   * Gated on the server rather than only hidden in the client: a button nobody can see is
-   * not a rule, and the point of starting with one system is that the others genuinely do
-   * not have this yet.
+   * Read from sheetSlots rather than listed, because that table is what a sale empties -
+   * a system missing from it is one where selling a gun would not know which fields to
+   * clear, and a shop there would be worse than none.
    *
-   * **Do not widen this by adding a system here and nothing else.** Uploaded catalogues
-   * already work for any system, so it looks like a one-line change - but buying and
-   * selling are still CWN-shaped. ShopWindow places a bought weapon with CWN's fields over
-   * CWN's six rows, and shops/sell.js clears CWN's ten weapon fields. On a Cyberpunk RED
-   * sheet that writes fields it does not have, drops `rof`, and leaves `rof` behind on a
-   * sale. Make placement and removal read the system's own row groups first
-   * (rowGroupsOf in frontend/src/sheets/catalogueSchema.ts), then widen this.
+   * CWN was the only entry for a while, on purpose: buying and selling were CWN-shaped, and
+   * a Cyberpunk RED gun would have been written with CWN's fields and lost its `rof`. Both
+   * now read each system's own rows, and outside CWN a shop sells only what that GM
+   * uploaded.
+   *
+   * Still gated on the server rather than only hidden in the client: a button nobody can see
+   * is not a rule, and an unrecognised system is still refused.
    */
-  const SHOP_SYSTEMS = new Set(['cities_without_number']);
+  const SHOP_SYSTEMS = new Set(Object.keys(sheetSlots.SLOTS));
 
   const withShopSystem = (res, next) => {
     db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       const system = (row && row.value) || DEFAULT_SYSTEM;
       if (!SHOP_SYSTEMS.has(system)) {
-        return res.status(409).json({ error: 'Building types are only available under Cities Without Number' });
+        return res.status(409).json({ error: `Building types are not available under ${system}` });
       }
       next();
     });

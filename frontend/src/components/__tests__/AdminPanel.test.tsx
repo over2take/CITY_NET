@@ -1169,10 +1169,17 @@ describe('the building type control', () => {
     expect(screen.queryByRole('option', { name: 'Bar (shop)' })).not.toBeInTheDocument();
   });
 
-  it('is absent under another system', () => {
+  it('is there under every system, named the way that game names them', () => {
+    editView({ globalSettings: { game_system: 'shadowrun_6e' } });
+    expect(screen.getByLabelText('Building type')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Street Doc (shop)' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Ripperdoc (shop)' })).not.toBeInTheDocument();
+  });
+
+  it('is absent under a system nothing knows', () => {
     // The server refuses it too; this only keeps the control off screens where using it
     // would return a refusal.
-    editView({ globalSettings: { game_system: 'cyberpunk_red' } });
+    editView({ globalSettings: { game_system: 'dnd_5e' } });
     expect(screen.queryByLabelText('Building type')).not.toBeInTheDocument();
   });
 

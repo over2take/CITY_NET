@@ -2422,7 +2422,7 @@ function App() {
                           <p><strong>DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
                           <p><strong>RESIDENTS:</strong> {selectedLocation.npcs || 'UNKNOWN'}</p>
 
-                          {/* Shops are Cities Without Number only for now. The gate is on
+                          {/* Shops exist under every system with a sheet. The gate is on
                               the server too - this just keeps a control off screens where
                               pressing it would only ever return a refusal. */}
                           {shopsAvailable(gameSystem) && (

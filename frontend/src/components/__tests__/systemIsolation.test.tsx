@@ -126,12 +126,17 @@ describe('the augmentation window speaks each system on its own terms', () => {
   });
 });
 
-describe('shops are Cities Without Number only', () => {
-  it('is unavailable everywhere else', () => {
-    expect(shopsAvailable('cities_without_number')).toBe(true);
-    for (const s of ['cyberpunk_red', 'shadowrun_6e', 'generic', '', null]) {
-      expect(shopsAvailable(s)).toBe(false);
+describe('shops open under every system, but only the CWN book is CWN', () => {
+  /**
+   * Shops were CWN-only until buying and selling read each system's own rows. What stays
+   * CWN's is the book: its 216 priced items appear in no other system's shops - see
+   * shopPlacement.test.ts and ownedItems.test.ts for that half.
+   */
+  it('is available under every system with a sheet, and nowhere else', () => {
+    for (const s of ['cities_without_number', 'cyberpunk_red', 'shadowrun_6e', 'generic']) {
+      expect(shopsAvailable(s), s).toBe(true);
     }
+    for (const s of ['', null, 'dnd_5e']) expect(shopsAvailable(s), String(s)).toBe(false);
   });
 });
 

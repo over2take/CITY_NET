@@ -8,6 +8,8 @@
 // A ripperdoc and a noodle bar can share a shape; what separates them is what you can do
 // inside.
 
+import { TEMPLATES } from '../sheets';
+
 /**
  * A catalogue a shop can deal in - one per priced table in the book.
  *
@@ -167,17 +169,17 @@ export const catalogueLabel = (id: ShopStock, system: string | null | undefined)
 };
 
 /**
- * The systems shops exist under.
+ * The systems shops exist under: every system the app has a sheet for.
  *
- * Cities Without Number only for now, which is a deliberate first step rather than an
- * oversight: the catalogue that makes a shop worth opening is the CWN one. Widening this
- * means adding to the set here and to SHOP_SYSTEMS on the server.
+ * CWN was the only one for a while, on purpose - buying and selling were CWN-shaped, and a
+ * Cyberpunk RED gun would have been written with CWN's fields and lost its `rof`. Both now
+ * read each system's own rows (sheets/shopPlacement.ts on the way in, backend/shops/sell.js
+ * on the way out), and outside CWN a shop sells only what that GM uploaded.
  *
- * **Not yet, and not by itself.** Buying and selling still assume CWN's sheet - a
- * Cyberpunk RED weapon would be written with CWN's fields and lose its `rof`. The note on
- * SHOP_SYSTEMS in backend/routes/locations.js says what has to change first.
+ * Mirrors SHOP_SYSTEMS in backend/routes/locations.js, which is read from the server's
+ * copy of the sheet shapes; a test holds the two together.
  */
-export const SHOP_SYSTEMS = new Set(['cities_without_number']);
+export const SHOP_SYSTEMS = new Set(Object.keys(TEMPLATES));
 
 export const shopsAvailable = (gameSystem: string | null | undefined): boolean =>
   SHOP_SYSTEMS.has(String(gameSystem ?? ''));

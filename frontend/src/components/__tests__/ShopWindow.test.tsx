@@ -36,7 +36,7 @@ vi.mock('../../hooks/usePlayerSheet', () => ({
 }));
 import {
   BUILDING_TYPES, CATALOGUES, isShop, buildingTypeById, shopsAvailable, shelvedCatalogues,
-  typeLabel, catalogueLabel,
+  typeLabel, catalogueLabel, SHOP_SYSTEMS,
 } from '../../data/buildingTypes';
 import { CWN_WEAPON_ROWS } from '../../sheets/templates/cities_without_number';
 import { CWN_CYBERWARE } from '../../sheets/cwnCyberwarePresets';
@@ -297,10 +297,19 @@ describe('the vocabulary the map is labelled with', () => {
     expect(buildingTypeById('speakeasy')).toBeUndefined();
   });
 
-  it('offers shops under CWN only, for now', () => {
-    expect(shopsAvailable('cities_without_number')).toBe(true);
-    expect(shopsAvailable('cyberpunk_red')).toBe(false);
+  it('offers shops under every system with a sheet, and nothing else', () => {
+    for (const s of ['cities_without_number', 'cyberpunk_red', 'shadowrun_6e', 'generic']) {
+      expect(shopsAvailable(s), s).toBe(true);
+    }
+    expect(shopsAvailable('dnd_5e')).toBe(false);
     expect(shopsAvailable(null)).toBe(false);
+  });
+
+  it('opens under the same systems the server does', async () => {
+    // The server's gate is the systems whose sheet shapes it knows how to empty on a sale.
+    // A system this side offered and that side refused would be a picker that only errors.
+    const slots = await import('../../../../backend/shops/sheetSlots.js');
+    expect([...SHOP_SYSTEMS].sort()).toEqual(Object.keys(slots.default.SLOTS).sort());
   });
 
   it('matches the list the server owns', async () => {
