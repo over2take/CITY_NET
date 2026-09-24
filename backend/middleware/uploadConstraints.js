@@ -34,6 +34,9 @@ const LIMITS = {
   battle_map: 250 * MB,
   music: 25 * MB,
   portrait: 8 * MB,
+  // A photo of a building, shown in a box a couple of hundred pixels wide. Generous for a
+  // phone picture; anything larger is a scan nobody needs at that size.
+  building_photo: 10 * MB,
   font: 5 * MB,
 };
 

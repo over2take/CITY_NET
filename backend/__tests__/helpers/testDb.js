@@ -54,7 +54,15 @@ function makeTestDb() {
         building_type TEXT,
         -- Nullable with no default on purpose: NULL means "use the global buy-back rate",
         -- which is a different thing from 0, a shop that buys nothing back.
-        buyback_pct REAL
+        buyback_pct REAL,
+        photo_url TEXT
+      )`);
+
+      // Its own table, never a column on locations - see db.js for why.
+      db.run(`CREATE TABLE location_gm_notes (
+        location_id INTEGER PRIMARY KEY,
+        notes TEXT NOT NULL DEFAULT '',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
       db.run(`CREATE TABLE districts (
@@ -88,6 +96,7 @@ function makeTestDb() {
         overpasses_data TEXT,
         water_bodies_data TEXT,
         signs_data TEXT,
+        gm_notes_data TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 

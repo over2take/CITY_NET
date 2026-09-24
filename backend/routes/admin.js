@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { authenticate } = require('../middleware/auth');
+const { insertLocations } = require('../buildings/locationRows');
 
 const SECRET = process.env.JWT_SECRET;
 let currentController = 'GM';
@@ -74,11 +75,11 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           const placeholders = payload.ids.map(() => '?').join(',');
           db.run(`DELETE FROM locations WHERE id IN (${placeholders})`, payload.ids, finishUndo);
         } else if (action.type === 'location_delete') {
-          const stmt = db.prepare(`INSERT INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, isFavorite, isDanger, owner, rotation, rotation_x, rotation_z, classification, polyCount, map_scale_multiplier) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-          payload.data.forEach(loc => {
-            stmt.run([loc.id, loc.name, loc.description, loc.npcs, loc.x, loc.y, loc.z, loc.width, loc.height, loc.depth, loc.shape, loc.color, loc.district_name, loc.district_color, loc.parent_id, loc.isFavorite, loc.isDanger, loc.owner, loc.rotation, loc.rotation_x, loc.rotation_z, loc.classification, loc.polyCount, loc.map_scale_multiplier]);
-          });
-          stmt.finalize(finishUndo);
+          // Every column the building had, not a hand-kept list of them. The list this
+          // replaced predated building types, buy-back rates, AC, photos and more, and an
+          // undone delete came back without all of them. GM notes are kept through a
+          // single delete for exactly this, so they are already waiting under the same id.
+          insertLocations(db, payload.data, {}, finishUndo);
         } else if (action.type === 'location_update') {
           const d = payload.old_data;
           const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=?, map_scale_multiplier=? WHERE id=?`;
