@@ -112,7 +112,19 @@ describe('selling something', () => {
     handlers['sellToShop']({ locationId: gunShop, items: [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }] });
     await waitResult(emitted);
 
-    const update = [...emitted].reverse().find((e) => e.event === 'bankUpdate');
+    /**
+     * Waited for, not read straight after the reply. sendBankUpdate reads the account
+     * back out of the database before it broadcasts, so this lands AFTER the purchase
+     * reply rather than with it. Reading it immediately passed on its own and lost the
+     * race under a full, loaded suite run.
+     */
+    // And waited for the one carrying the NEW balance, since an earlier broadcast from
+    // before the purchase would otherwise satisfy "any bankUpdate" immediately.
+    const update = await untilValue(
+      () => [...emitted].reverse().find((e) => e.event === 'bankUpdate'),
+      (u) => Boolean(u) && u.data.balance === 90,
+      { label: 'a bankUpdate carrying the new balance' },
+    );
     expect(update.data).toMatchObject({ username: 'GHOST', balance: 90 });
   });
 
