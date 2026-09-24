@@ -7,6 +7,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+Shops open in every game system.
+
+### Added
+
+- **Shops work in Cyberpunk RED, Shadowrun and generic games.** Building types, the
+  buy-back rate and SHOP_CATALOGUES are now available in every system. Outside Cities
+  Without Number a shop sells only what its GM uploads; the CWN book's items stay in CWN.
+
+  Bought items land in that game's own sheet rows. A Cyberpunk RED gun keeps its ROF, and a
+  Shadowrun gun gets its DV and AR. Cyberware goes into the cyberware table on sheets that
+  have one (CWN and Cyberpunk RED) and into the inventory on those that do not. A purchase
+  with nowhere to go, such as a full weapon rack, is refused before any money moves. Selling
+  clears exactly what that sheet's row holds, so nothing is left half-sold.
+
+- **Shop names that fit the game.** A Ripperdoc is a **Street Doc** in Shadowrun and a
+  **Cyber Clinic** in generic games, and outside CWN "Operator Gear" is just **Gear**. The
+  building types themselves are the same everywhere, so shops stay where they are when you
+  switch systems.
+
+- **A new shop tells the GM how to stock it.** Set a building to a shop that has nothing to
+  sell and the edit window lists the steps: open SHOP_CATALOGUES (an **OPEN IT** button
+  goes straight there), download the example, fill in the sections this shop sells, then
+  upload it or type the lines into the box, preview and save. It shows the exact header line
+  for that shop's section in your game. A GM opening an empty shop sees the same steps; a
+  player is told the GM adds the stock.
+
+### Changed
+
+- **The buy-back rate says "shelf price" outside CWN.** It read "% of book price" in every
+  game, and only CWN has a book. The SELL tab says the same.
+
+- **An empty shelf says so.** It used to read NOTHING MATCHES THAT, as if a filter had
+  found nothing. It now says the shelves are empty and that the GM adds stock in
+  SHOP_CATALOGUES.
+
+### Fixed
+
+- **Players never saw the items a GM uploaded after loading the page.** The window asked
+  for them before the player had signed in, the server ignored the request, and nothing
+  asked again. In CWN the built-in items hid it; in any other game every shop looked empty.
+  They are now sent as soon as a player signs in.
+
+- **Selling a CWN vehicle left half of it on the sheet.** The sale cleared mount columns a
+  vehicle does not have and missed the ones it does, along with its fittings. Selling now
+  clears exactly the fields the sheet draws for that row, read from the sheet itself.
+
 ---
 
 ## [1.13.0] - 2026-09-24
