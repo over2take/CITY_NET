@@ -43,12 +43,16 @@ const read = (db, system, cb) => {
  * Load the running system's catalogues into memory.
  *
  * Called at boot and whenever something changes them. A failure leaves the store holding
- * only the built-in tables, which is the safe way to be wrong: shops still work, they just
- * do not carry what the GM added.
+ * nothing uploaded, which is the safe way to be wrong: shops still work, they just do not
+ * carry what the GM added.
+ *
+ * It still records WHICH system failed to load, rather than clearing back to the default.
+ * The default is CWN, and a Cyberpunk RED game whose read failed would otherwise start
+ * selling the CWN book.
  */
 const refresh = (db, system, cb = () => {}) => {
   read(db, system, (err, catalogues) => {
-    if (err) { store.clear(); return cb(err); }
+    if (err) { store.load(system, {}); return cb(err); }
     store.load(system, catalogues);
     cb(null, catalogues);
   });

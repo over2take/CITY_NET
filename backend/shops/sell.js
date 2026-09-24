@@ -14,34 +14,22 @@ const owned = require('./owned');
 const prices = require('./catalogueStore');
 const buyback = require('./buyback');
 
-/** Every field one carried weapon row owns. Cleared together or not at all. */
-const WEAPON_FIELDS = (i) => [
-  `weapon${i}_name`, `weapon${i}_dmg`, `weapon${i}_skill`, `weapon${i}_attr`,
-  `weapon${i}_trauma`, `weapon${i}_shock`, `weapon${i}_atk`, `weapon${i}_enc`,
-  `weapon${i}_mods`, `weapon${i}_carry`,
-];
+const sheetSlots = require('./sheetSlots');
 
 /**
- * Every field one vehicle slot owns, its weapon mounts included.
+ * Every field one weapon or vehicle row owns, for the system this sheet belongs to.
  *
- * The mounts matter: selling the car and leaving three mounted guns behind would leave a
- * sheet describing weapons bolted to nothing.
+ * Read from sheetSlots.js, which is generated from the sheet templates, rather than written
+ * down here. The hand-written list this replaced was CWN-only and wrong even for CWN: it
+ * cleared mount columns a vehicle does not have (range, mag, notes), missed the ones it does
+ * (type, skill, atk) and missed the fittings, so selling a car left half of it on the sheet.
+ * A Cyberpunk RED weapon has a `rof` no CWN list would ever have cleared.
+ *
+ * Cleared together or not at all, and a vehicle takes its mounted guns with it - a sheet
+ * describing weapons bolted to nothing is worse than either.
  */
-const VEHICLE_MOUNT_ROWS = 3;
-const VEHICLE_FIELDS = (i) => {
-  const base = [
-    'name', 'type', 'hp', 'hp_max', 'armor', 'ac', 'spd', 'tt', 'crew', 'hrdpt',
-    'pow', 'mass', 'cost', 'size', 'notes', 'moving',
-  ].map((f) => `vehicle${i}_${f}`);
-  for (let w = 1; w <= VEHICLE_MOUNT_ROWS; w += 1) {
-    base.push(
-      `vehicle${i}_weapon${w}_name`, `vehicle${i}_weapon${w}_dmg`,
-      `vehicle${i}_weapon${w}_trauma`, `vehicle${i}_weapon${w}_range`,
-      `vehicle${i}_weapon${w}_mag`, `vehicle${i}_weapon${w}_notes`,
-    );
-  }
-  return base;
-};
+const weaponFields = (system, i) => sheetSlots.rowFields(system, 'weapon', i);
+const vehicleFields = (system, i) => sheetSlots.rowFields(system, 'vehicle', i);
 
 /**
  * What one line is worth, and what emptying it does to the sheet.
@@ -65,7 +53,7 @@ const takeFrom = (line, wanted, state) => {
       if (next <= 0) state.inventoryDropped.add(at.index);
       else row.qty = next;
     } else if (at.source === owned.SOURCES.WEAPON) {
-      WEAPON_FIELDS(at.slot).forEach((f) => { state.patch[f] = ''; });
+      weaponFields(state.system, at.slot).forEach((f) => { state.patch[f] = ''; });
     } else if (at.source === owned.SOURCES.STASH) {
       state.stashDropped.add(at.index);
     } else if (at.source === owned.SOURCES.CYBERWARE) {
@@ -81,7 +69,7 @@ const takeFrom = (line, wanted, state) => {
        */
       if (at.placed) state.fromBody += take;
     } else if (at.source === owned.SOURCES.VEHICLE) {
-      VEHICLE_FIELDS(at.slot).forEach((f) => { state.patch[f] = ''; });
+      vehicleFields(state.system, at.slot).forEach((f) => { state.patch[f] = ''; });
     }
 
     left -= take;
@@ -97,6 +85,7 @@ const takeFrom = (line, wanted, state) => {
  * already takes.
  *
  * `reason` is one of:
+ *   'no_system' - no known game system, so nobody can say which fields a row owns
  *   'empty'     - nothing in the basket
  *   'not_sold'  - this shop does not deal in that catalogue
  *   'not_owned' - they do not have that many of it
@@ -105,14 +94,23 @@ const takeFrom = (line, wanted, state) => {
  * rather than refused. That is a deliberate call: the player gets it off their sheet and
  * the GM settles up directly, which is what a GM would do at a table anyway.
  */
-const planSale = ({ data, items, catalogues, locationPct, globalPct }) => {
+const planSale = ({ data, items, catalogues, locationPct, globalPct, system }) => {
+  /**
+   * The system is required, not defaulted.
+   *
+   * It decides which fields a sold weapon or vehicle takes with it. Guessing CWN for a
+   * Cyberpunk RED sheet would clear CWN's ten weapon fields and leave `rof` behind, which is
+   * exactly the half-deleted row this module exists to prevent. Better to refuse.
+   */
+  if (!sheetSlots.SLOTS[String(system || '')]) return { ok: false, reason: 'no_system' };
   if (!Array.isArray(items) || items.length === 0) return { ok: false, reason: 'empty' };
 
   const pct = buyback.buybackPct(locationPct, globalPct);
-  const lines = owned.ownedItems(data);
+  const lines = owned.ownedItems(data, system);
   const byKey = new Map(lines.map((l) => [l.key, l]));
 
   const state = {
+    system,
     patch: {},
     inventory: owned.readJsonRows(data && data[owned.INVENTORY_FIELD])
       .map((r) => (r && typeof r === 'object' ? { ...r } : r)),
@@ -199,4 +197,4 @@ const planSale = ({ data, items, catalogues, locationPct, globalPct }) => {
   };
 };
 
-module.exports = { planSale, WEAPON_FIELDS, VEHICLE_FIELDS, VEHICLE_MOUNT_ROWS };
+module.exports = { planSale, weaponFields, vehicleFields };

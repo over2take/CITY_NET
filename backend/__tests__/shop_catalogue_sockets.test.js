@@ -271,6 +271,80 @@ describe('buying and selling something a GM added', () => {
   });
 });
 
+describe('a shop in another system\'s game', () => {
+  /**
+   * The CWN book is CWN's. A Cyberpunk RED gun shop carries only what that GM uploaded,
+   * and it is priced and emptied by Cyberpunk RED's sheet, not CWN's.
+   */
+  const UNITY = [
+    '[weapons]',
+    'name, price, dmg, skill, rof',
+    'Militech Unity, 100, 3d6, Handgun, 2',
+  ].join('\n');
+
+  beforeEach(async () => {
+    await run(db, `UPDATE global_settings SET value = 'cyberpunk_red' WHERE key = 'game_system'`);
+  });
+
+  const seedRed = (data, username = 'GHOST') => run(db,
+    `INSERT INTO character_sheets (username, system, data, is_npc)
+     VALUES (?, 'cyberpunk_red', ?, 0)`, [username, JSON.stringify(data)]);
+
+  it('will not sell a gun out of the CWN book', async () => {
+    await seedRed({});
+    await fund('GHOST', 1000);
+    const { handlers, emitted } = await player();
+
+    handlers['buyFromShop']({ locationId: gunShop, catalogue: 'weapons', itemId: 'heavy_pistol' });
+    expect((await waitFor(emitted, 'shopPurchase')).data).toMatchObject({ ok: false, reason: 'price' });
+    expect((await bank()).balance).toBe(1000);
+  });
+
+  it('reloads rather than pricing from whatever system is in memory', async () => {
+    // The store is back on CWN, as if the system change's reload never landed. The
+    // handler has to notice, not charge 200 for the CWN book's Heavy Pistol.
+    await seedRed({});
+    await fund('GHOST', 1000);
+    const { handlers, emitted } = await player();
+    store.clear();
+
+    handlers['buyFromShop']({ locationId: gunShop, catalogue: 'weapons', itemId: 'heavy_pistol' });
+    expect((await waitFor(emitted, 'shopPurchase')).data).toMatchObject({ ok: false, reason: 'price' });
+    expect(store.systemLoaded()).toBe('cyberpunk_red');
+  });
+
+  it('buys and sells what that GM uploaded, clearing the whole row', async () => {
+    const gm = await admin();
+    gm.handlers['saveCatalogue']({ text: UNITY });
+    await waitFor(gm.emitted, 'catalogueSaved');
+    expect(await get(db, `SELECT system FROM shop_catalogues WHERE id = 'militech_unity'`))
+      .toMatchObject({ system: 'cyberpunk_red' });
+
+    await seedRed({
+      weapon4_name: 'Militech Unity', weapon4_dmg: '3d6', weapon4_skill: 'Handgun', weapon4_rof: '2',
+    });
+    await fund('GHOST', 1000);
+    const { handlers, emitted } = await player();
+
+    handlers['buyFromShop']({ locationId: gunShop, catalogue: 'weapons', itemId: 'militech_unity' });
+    expect((await waitFor(emitted, 'shopPurchase')).data).toMatchObject({ ok: true, price: 100 });
+    expect((await bank()).balance).toBe(900);
+
+    handlers['sellToShop']({
+      locationId: gunShop,
+      items: [{ catalogue: 'weapons', id: 'militech_unity', qty: 1 }],
+    });
+    expect((await waitFor(emitted, 'shopSale')).data).toMatchObject({ ok: true, payout: 45 });
+    await untilValue(() => bank(), (b) => b && b.balance === 945, { label: 'credited' });
+
+    const sheet = JSON.parse((await get(db,
+      `SELECT data FROM character_sheets WHERE username = 'GHOST' AND system = 'cyberpunk_red'`)).data);
+    for (const f of ['weapon4_name', 'weapon4_dmg', 'weapon4_skill', 'weapon4_rof']) {
+      expect(sheet[f], f).toBe('');
+    }
+  });
+});
+
 describe('what a GM can download', () => {
   it('lists the book and the uploaded rows, each saying which it is', async () => {
     const booted = await admin();

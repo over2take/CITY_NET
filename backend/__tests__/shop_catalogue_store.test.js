@@ -113,7 +113,43 @@ describe('re-uploading', () => {
     upload({ weapons: [{ id: 'zip_gun', name: 'Zip Gun', price: 15 }] });
     store.clear();
     expect(store.hasUploads('weapons')).toBe(false);
-    expect(store.systemLoaded()).toBeNull();
+    expect(store.systemLoaded()).toBe(store.BOOK_SYSTEM);
+  });
+});
+
+describe('the book belongs to CWN', () => {
+  /**
+   * The built-in tables are the Cities Without Number book. Every other system's shops
+   * start empty and carry only what that GM uploaded - a Cyberpunk RED gun shop selling
+   * CWN guns at CWN prices would be wrong in a way nobody at the table could see.
+   */
+  for (const system of ['cyberpunk_red', 'shadowrun_6e', 'generic']) {
+    it(`sells nothing from it on ${system}`, () => {
+      upload({}, system);
+      expect(store.bookApplies()).toBe(false);
+      expect(store.priceOf('weapons', 'heavy_pistol')).toBeNull();
+      expect(store.labelOf('weapons', 'heavy_pistol')).toBeNull();
+      expect(store.findByName('Heavy Pistol')).toBeNull();
+      expect(store.entriesIn('weapons')).toEqual([]);
+    });
+  }
+
+  it('still sells what that GM uploaded', () => {
+    upload({ weapons: [{ id: 'unity', name: 'Militech Unity', price: 100 }] }, 'cyberpunk_red');
+    expect(store.priceOf('weapons', 'unity')).toBe(100);
+    expect(store.findByName('Militech Unity')).toEqual({ catalogue: 'weapons', id: 'unity' });
+    expect(store.entriesIn('weapons').map((e) => e.id)).toEqual(['unity']);
+  });
+
+  it('calls nothing an override where there is no book to override', () => {
+    upload({}, 'cyberpunk_red');
+    expect(store.overridesIn('weapons', [{ id: 'heavy_pistol', name: 'Heavy Pistol' }])).toEqual([]);
+  });
+
+  it('comes back when the game returns to CWN', () => {
+    upload({}, 'cyberpunk_red');
+    upload({}, 'cities_without_number');
+    expect(store.priceOf('weapons', 'heavy_pistol')).toBe(200);
   });
 });
 

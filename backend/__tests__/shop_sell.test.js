@@ -8,19 +8,22 @@
  * basket that fails half way must not have emptied anything.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
-const { planSale, WEAPON_FIELDS, VEHICLE_FIELDS } = require_('../shops/sell');
+const { planSale, weaponFields, vehicleFields } = require_('../shops/sell');
 const owned = require_('../shops/owned');
+const store = require_('../shops/catalogueStore');
+
+const CWN = 'cities_without_number';
 
 /** Every catalogue, for the cases where the shop is not what is being tested. */
 const ALL = ['cyberware', 'weapons', 'armor', 'gear', 'vehicles', 'vehicle_fittings',
   'vehicle_weapons', 'pharmaceuticals', 'armor_mods', 'weapon_mods'];
 
 const sell = (data, items, over = {}) =>
-  planSale({ data, items, catalogues: ALL, locationPct: null, globalPct: null, ...over });
+  planSale({ data, items, catalogues: ALL, locationPct: null, globalPct: null, system: CWN, ...over });
 
 /** The inventory a patch would leave behind. */
 const inventoryAfter = (out) => JSON.parse(out.patch[owned.INVENTORY_FIELD] ?? '[]');
@@ -104,7 +107,7 @@ describe('what leaves the sheet', () => {
       weapon1_enc: '1', weapon1_carry: 'readied',
     };
     const out = sell(data, [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }]);
-    for (const f of WEAPON_FIELDS(1)) expect(out.patch[f], f).toBe('');
+    for (const f of weaponFields(CWN, 1)) expect(out.patch[f], f).toBe('');
   });
 
   it('sells a weapon even though it is readied', () => {
@@ -134,7 +137,7 @@ describe('what leaves the sheet', () => {
       vehicle1_weapon1_name: 'Autocannon',
     };
     const out = sell(data, [{ catalogue: 'vehicles', id: 'motorcycle', qty: 1 }]);
-    for (const f of VEHICLE_FIELDS(1)) expect(out.patch[f], f).toBe('');
+    for (const f of vehicleFields(CWN, 1)) expect(out.patch[f], f).toBe('');
   });
 
   it('empties two places when one line spans both', () => {
@@ -264,5 +267,92 @@ describe('things no catalogue carries', () => {
   it('still cannot be sold in numbers they do not have', () => {
     const out = sell(data, [{ catalogue: null, id: null, label: "Betty's lucky knife", qty: 9 }]);
     expect(out).toMatchObject({ ok: false, reason: 'not_owned' });
+  });
+});
+
+describe('other systems\' sheets', () => {
+  /**
+   * The rows a sale empties come from each system's own sheet template, not from CWN's.
+   * A Cyberpunk RED gun has a rate of fire no CWN list would clear, and a Shadowrun sheet
+   * has four weapon rows and nowhere to keep a vehicle at all.
+   *
+   * These sheets carry nothing from the CWN book, so the items are uploaded first, the way
+   * a GM running that game would.
+   */
+  const load = (system, catalogues) => store.load(system, catalogues);
+  afterEach(() => store.clear());
+
+  const sellAs = (system, data, items, over = {}) => sell(data, items, { system, ...over });
+
+  it('clears a Cyberpunk RED weapon row down to its rate of fire', () => {
+    load('cyberpunk_red', { weapons: [{ id: 'unity', name: 'Militech Unity', price: 100 }] });
+    const data = {
+      weapon3_name: 'Militech Unity', weapon3_dmg: '3d6', weapon3_skill: 'Handgun', weapon3_rof: '2',
+    };
+    const out = sellAs('cyberpunk_red', data, [{ catalogue: 'weapons', id: 'unity', qty: 1 }]);
+    expect(out).toMatchObject({ ok: true, payout: 45 });
+    expect(out.patch).toEqual({
+      weapon3_name: '', weapon3_dmg: '', weapon3_skill: '', weapon3_rof: '',
+    });
+  });
+
+  it('reads only the rows a Cyberpunk RED sheet has', () => {
+    // A stray weapon5 left over from a CWN sheet is not a fifth gun: the sheet draws four.
+    load('cyberpunk_red', { weapons: [{ id: 'unity', name: 'Militech Unity', price: 100 }] });
+    const out = sellAs('cyberpunk_red', { weapon5_name: 'Militech Unity' },
+      [{ catalogue: 'weapons', id: 'unity', qty: 1 }]);
+    expect(out).toMatchObject({ ok: false, reason: 'not_owned' });
+  });
+
+  it('clears a Cyberpunk RED vehicle row by its own fields', () => {
+    load('cyberpunk_red', { vehicles: [{ id: 'yaiba', name: 'Yaiba Kusanagi', price: 1000 }] });
+    const data = { vehicle2_name: 'Yaiba Kusanagi', vehicle2_type: 'Bike', vehicle2_hp: '35' };
+    const out = sellAs('cyberpunk_red', data, [{ catalogue: 'vehicles', id: 'yaiba', qty: 1 }]);
+    expect(out.ok).toBe(true);
+    for (const f of vehicleFields('cyberpunk_red', 2)) expect(out.patch[f], f).toBe('');
+    expect(out.patch.vehicle2_crew).toBe('');
+    // Nothing from the CWN vehicle: no mounts, no fittings.
+    expect(out.patch.vehicle2_weapon1_name).toBeUndefined();
+    expect(out.patch.vehicle2_fittings).toBeUndefined();
+  });
+
+  it('never looks for a vehicle on a Shadowrun sheet', () => {
+    load('shadowrun_6e', { vehicles: [{ id: 'dodge', name: 'Dodge Scoot', price: 3000 }] });
+    const out = sellAs('shadowrun_6e', { vehicle1_name: 'Dodge Scoot' },
+      [{ catalogue: 'vehicles', id: 'dodge', qty: 1 }]);
+    expect(out).toMatchObject({ ok: false, reason: 'not_owned' });
+  });
+
+  it('sells a generic sheet\'s inventory, which is all it has', () => {
+    load('generic', { gear: [{ id: 'rope', name: 'Rope', price: 20 }] });
+    const data = { inventory: JSON.stringify([{ name: 'Rope', qty: 2 }]), weapon1_name: 'Rope' };
+    // Two owned, not three: weapon1_name is not a slot on a generic sheet.
+    expect(sellAs('generic', data, [{ catalogue: 'gear', id: 'rope', qty: 3 }]))
+      .toMatchObject({ ok: false, reason: 'not_owned' });
+    const out = sellAs('generic', data, [{ catalogue: 'gear', id: 'rope', qty: 2 }]);
+    expect(out).toMatchObject({ ok: true, payout: 9 * 2 });
+    expect(inventoryAfter(out)).toEqual([]);
+  });
+
+  it('does not price anything from the CWN book', () => {
+    // A Heavy Pistol on a Cyberpunk RED sheet is that game's gun, not CWN's at CWN's price.
+    load('cyberpunk_red', {});
+    const data = { weapon1_name: 'Heavy Pistol' };
+    expect(sellAs('cyberpunk_red', data, [{ catalogue: 'weapons', id: 'heavy_pistol', qty: 1 }]))
+      .toMatchObject({ ok: false, reason: 'not_owned' });
+    // Still sellable as an unpriced thing, for nothing, like any homebrew.
+    const out = sellAs('cyberpunk_red', data,
+      [{ catalogue: null, id: null, label: 'Heavy Pistol', qty: 1 }]);
+    expect(out).toMatchObject({ ok: true, payout: 0 });
+    expect(out.patch.weapon1_name).toBe('');
+  });
+
+  it('refuses rather than guessing when it does not know the system', () => {
+    // Guessing CWN would clear CWN's fields off somebody else's sheet.
+    for (const system of [undefined, null, '', 'dnd_5e']) {
+      expect(sellAs(system, { weapon1_name: 'Rifle' },
+        [{ catalogue: 'weapons', id: 'rifle', qty: 1 }]), String(system))
+        .toMatchObject({ ok: false, reason: 'no_system' });
+    }
   });
 });

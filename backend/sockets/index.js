@@ -797,6 +797,24 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     };
 
+    /**
+     * The running system, with the catalogues in memory known to be that system's.
+     *
+     * The store holds one system at a time and is reloaded when the system changes, but a
+     * price is money, so the shop handlers check rather than trust that the reload landed.
+     * A mismatch reloads before anything is priced: pricing a Cyberpunk RED purchase from
+     * the CWN book would charge a real balance for an item that game never had.
+     */
+    const getShopSystem = (cb) => {
+      getGameSystem((err, system) => {
+        if (err) return cb(err);
+        if (shopPrices.systemLoaded() === system) return cb(null, system);
+        // A failed read still loads the system with nothing uploaded, so carrying on is
+        // safe: the shop is emptier than it should be, never wrong.
+        catalogueDb.refresh(db, system, () => cb(null, system));
+      });
+    };
+
     // Linked fields (declared per-template) live in other systems: token HP
     // in locations, cash in player_banks. Overlay their live values onto the
     // sheet data at read time - they are never stored in the sheet's JSON.
@@ -1851,62 +1869,66 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const refuse = (reason, extra) =>
         socket.emit('shopPurchase', { ok: false, reason, itemId, catalogue, ...(extra || {}) });
 
-      db.get('SELECT building_type FROM locations WHERE id = ?', [data.locationId], (err, loc) => {
-        if (err || !loc) return refuse('no_shop');
-        // Shelved rather than merely sold: `sells` names what the book says the storefront
-        // deals in, which is deliberately wider than what can be bought today.
-        if (!buildingTypes.shelvedCatalogues(loc.building_type).includes(catalogue)) {
-          return refuse('not_sold');
-        }
+      getShopSystem((sysErr) => {
+        if (sysErr) return refuse('no_system');
 
-        const price = shopPrices.priceOf(catalogue, itemId);
-        if (price === null) return refuse('price');
+        db.get('SELECT building_type FROM locations WHERE id = ?', [data.locationId], (err, loc) => {
+          if (err || !loc) return refuse('no_shop');
+          // Shelved rather than merely sold: `sells` names what the book says the storefront
+          // deals in, which is deliberately wider than what can be bought today.
+          if (!buildingTypes.shelvedCatalogues(loc.building_type).includes(catalogue)) {
+            return refuse('not_sold');
+          }
 
-        db.get(
-          'SELECT value FROM global_settings WHERE key = ?',
-          [shopPurchase.OVERDRAFT_RULE],
-          (rErr, rRow) => {
-            const overdraftAllowed = !rErr && rRow && rRow.value === '1';
+          const price = shopPrices.priceOf(catalogue, itemId);
+          if (price === null) return refuse('price');
 
-            db.get(
-              'SELECT balance, debt FROM player_banks WHERE username = ?',
-              [username],
-              (bErr, bank) => {
-                if (bErr) return refuse('no_account');
-                // No row yet is a real state - an account is created on first read - and
-                // it means nothing saved rather than an error.
-                const balance = bank ? Number(bank.balance) || 0 : 0;
-                const debt = bank ? Number(bank.debt) || 0 : 0;
+          db.get(
+            'SELECT value FROM global_settings WHERE key = ?',
+            [shopPurchase.OVERDRAFT_RULE],
+            (rErr, rRow) => {
+              const overdraftAllowed = !rErr && rRow && rRow.value === '1';
 
-                const plan = shopPurchase.planPurchase({
-                  balance, debt, price, overdraftAllowed, settle: data.settle,
-                });
-                if (!plan.ok) return refuse(plan.reason, { price, balance, debt });
+              db.get(
+                'SELECT balance, debt FROM player_banks WHERE username = ?',
+                [username],
+                (bErr, bank) => {
+                  if (bErr) return refuse('no_account');
+                  // No row yet is a real state - an account is created on first read - and
+                  // it means nothing saved rather than an error.
+                  const balance = bank ? Number(bank.balance) || 0 : 0;
+                  const debt = bank ? Number(bank.debt) || 0 : 0;
 
-                const write = bank
-                  ? ['UPDATE player_banks SET balance = ?, debt = ? WHERE username = ?',
-                    [plan.balance, plan.debt, username]]
-                  : ['INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)',
-                    [username, plan.balance, plan.debt]];
-
-                db.run(write[0], write[1], (wErr) => {
-                  if (wErr) return refuse('write');
-                  sendBankUpdate(username);
-                  // The window waits for this before putting anything on the sheet.
-                  socket.emit('shopPurchase', {
-                    ok: true,
-                    catalogue,
-                    itemId,
-                    price,
-                    settled: plan.settled,
-                    balance: plan.balance,
-                    debt: plan.debt,
+                  const plan = shopPurchase.planPurchase({
+                    balance, debt, price, overdraftAllowed, settle: data.settle,
                   });
-                });
-              },
-            );
-          },
-        );
+                  if (!plan.ok) return refuse(plan.reason, { price, balance, debt });
+
+                  const write = bank
+                    ? ['UPDATE player_banks SET balance = ?, debt = ? WHERE username = ?',
+                      [plan.balance, plan.debt, username]]
+                    : ['INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)',
+                      [username, plan.balance, plan.debt]];
+
+                  db.run(write[0], write[1], (wErr) => {
+                    if (wErr) return refuse('write');
+                    sendBankUpdate(username);
+                    // The window waits for this before putting anything on the sheet.
+                    socket.emit('shopPurchase', {
+                      ok: true,
+                      catalogue,
+                      itemId,
+                      price,
+                      settled: plan.settled,
+                      balance: plan.balance,
+                      debt: plan.debt,
+                    });
+                  });
+                },
+              );
+            },
+          );
+        });
       });
     });
 
@@ -1932,7 +1954,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const refuse = (reason, extra) =>
         socket.emit('shopSale', { ok: false, reason, ...(extra || {}) });
 
-      getGameSystem((sysErr, system) => {
+      getShopSystem((sysErr, system) => {
         if (sysErr) return refuse('no_system');
 
         db.get(
@@ -1965,6 +1987,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       catalogues,
                       locationPct: loc.buyback_pct,
                       globalPct,
+                      system,
                     });
                     if (!plan.ok) return refuse(plan.reason, { itemId: plan.itemId });
 

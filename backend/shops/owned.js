@@ -15,9 +15,13 @@
 // Four shapes, because a sheet genuinely stores these differently:
 //
 //   inventory  - JSON rows with a quantity. Gear, armor, mods, fittings, doses.
-//   weapons    - six numbered slots, plus a stash. One each, no quantity.
+//   weapons    - numbered slots, plus a stash on CWN. One each, no quantity.
 //   cyberware  - JSON rows, placed (installed) or not. Both sell.
-//   vehicles   - six numbered slots, keyed by type id rather than by name.
+//   vehicles   - numbered slots, keyed by type id rather than by name.
+//
+// How many slots, and whether a system has them at all, comes from sheetSlots.js rather
+// than from here: six of each on CWN, four on Cyberpunk RED, four weapons and no vehicles
+// on Shadowrun, none on generic.
 //
 // Quantity is the reason they cannot simply be concatenated: two inventory rows of the
 // same thing are one line reading x2, and so are two weapon slots holding the same gun.
@@ -27,9 +31,17 @@ const cyberware = require('../sheets/cyberware');
 // so a character carrying an uploaded item is seen to own it, and can sell it.
 const prices = require('./catalogueStore');
 
-/** Matches the frontend's own constants. Six of each, in the CWN template. */
-const WEAPON_ROWS = 6;
-const VEHICLE_ROWS = 6;
+const sheetSlots = require('./sheetSlots');
+
+/**
+ * The system a sheet belongs to when a caller does not say.
+ *
+ * Cities Without Number, because for a long time it was the only system with shops at
+ * all and its tests call this without one. Every server caller passes the real system:
+ * the row counts differ - CWN has six weapon rows, Cyberpunk RED and Shadowrun four - and
+ * the stash is a CWN thing that other sheets never have.
+ */
+const DEFAULT_SYSTEM = 'cities_without_number';
 
 const INVENTORY_FIELD = 'inventory';
 const STASH_FIELD = 'weapons_stash';
@@ -96,8 +108,10 @@ const tally = (into, name, source, extra) => {
  * has neither - but the inventory and cyberware are read regardless, because those exist
  * wherever they are filled in.
  */
-const ownedItems = (data) => {
+const ownedItems = (data, system = DEFAULT_SYSTEM) => {
   const sheet = data && typeof data === 'object' ? data : {};
+  const weaponRows = sheetSlots.rowCount(system, 'weapon');
+  const vehicleRows = sheetSlots.rowCount(system, 'vehicle');
   const lines = new Map();
 
   // ── inventory rows ──────────────────────────────────────────────────────────
@@ -113,7 +127,7 @@ const ownedItems = (data) => {
   });
 
   // ── carried weapon slots ────────────────────────────────────────────────────
-  for (let i = 1; i <= WEAPON_ROWS; i += 1) {
+  for (let i = 1; i <= weaponRows; i += 1) {
     tally(lines, sheet[`weapon${i}_name`], SOURCES.WEAPON, { slot: i });
   }
 
@@ -144,7 +158,7 @@ const ownedItems = (data) => {
   // ── vehicle slots ───────────────────────────────────────────────────────────
   // Keyed by the type id rather than the name, because a vehicle somebody has called
   // "Betty" is still a Motorcycle and still worth what one is worth.
-  for (let i = 1; i <= VEHICLE_ROWS; i += 1) {
+  for (let i = 1; i <= vehicleRows; i += 1) {
     const typeId = String(sheet[`vehicle${i}_type`] ?? '').trim();
     const name = String(sheet[`vehicle${i}_name`] ?? '').trim();
     if (!typeId && !name) continue;
@@ -156,10 +170,10 @@ const ownedItems = (data) => {
 };
 
 /** One line by catalogue and id, or undefined. Null catalogue means unpriced. */
-const ownedLine = (data, catalogue, itemId) =>
-  ownedItems(data).find((l) => l.catalogue === catalogue && l.id === itemId);
+const ownedLine = (data, catalogue, itemId, system = DEFAULT_SYSTEM) =>
+  ownedItems(data, system).find((l) => l.catalogue === catalogue && l.id === itemId);
 
 module.exports = {
-  ownedItems, ownedLine, SOURCES, WEAPON_ROWS, VEHICLE_ROWS,
+  ownedItems, ownedLine, SOURCES, DEFAULT_SYSTEM,
   INVENTORY_FIELD, STASH_FIELD, readJsonRows,
 };

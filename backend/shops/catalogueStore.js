@@ -20,8 +20,24 @@ const builtIn = require('./prices');
 
 /** catalogue id -> id -> { id, name, price, fields }. Replaced wholesale by `load`. */
 let uploaded = {};
-/** Which system the rows in `uploaded` belong to, so a stale load can be spotted. */
-let loadedSystem = null;
+/**
+ * The system whose catalogues are held, and so whether the book applies at all.
+ *
+ * **The built-in tables are the Cities Without Number book, and only CWN shops sell from
+ * them.** Every other system's shops start empty and carry only what that GM uploaded -
+ * a Cyberpunk RED gun shop selling CWN guns at CWN prices would be wrong in a way nobody at
+ * the table could see. The book is consulted only while this is CWN.
+ *
+ * Starts as CWN because for a long time it was the only system with shops, and boot
+ * replaces it with the running system within the first database read. The socket
+ * handlers also check it against the system they are pricing for and reload on a
+ * mismatch, so a purchase can never be priced from the wrong system's list.
+ */
+const BOOK_SYSTEM = 'cities_without_number';
+let loadedSystem = BOOK_SYSTEM;
+
+/** Whether the built-in book applies to the system that is loaded. */
+const bookApplies = () => loadedSystem === BOOK_SYSTEM;
 
 /**
  * Replace everything uploaded for the running system.
@@ -31,7 +47,7 @@ let loadedSystem = null;
  * untouched either way - this only ever holds the uploaded ones.
  */
 const load = (system, catalogues) => {
-  loadedSystem = system || null;
+  loadedSystem = system || BOOK_SYSTEM;
   uploaded = {};
   for (const [catalogue, entries] of Object.entries(catalogues || {})) {
     const table = {};
@@ -49,7 +65,7 @@ const load = (system, catalogues) => {
 };
 
 /** Forget everything. Used when the game system changes out from under us. */
-const clear = () => { uploaded = {}; loadedSystem = null; };
+const clear = () => { uploaded = {}; loadedSystem = BOOK_SYSTEM; };
 
 const systemLoaded = () => loadedSystem;
 
@@ -69,14 +85,14 @@ const hasUploads = (catalogue) => uploadedIn(catalogue).length > 0;
 const priceOf = (catalogue, itemId) => {
   const mine = (uploaded[String(catalogue || '')] || {})[String(itemId || '')];
   if (mine) return Number.isFinite(mine.price) ? mine.price : null;
-  return builtIn.priceOf(catalogue, itemId);
+  return bookApplies() ? builtIn.priceOf(catalogue, itemId) : null;
 };
 
 /** What a catalogue entry is called. Uploaded first, then the book. */
 const labelOf = (catalogue, itemId) => {
   const mine = (uploaded[String(catalogue || '')] || {})[String(itemId || '')];
   if (mine) return mine.name;
-  return builtIn.labelOf(catalogue, itemId);
+  return bookApplies() ? builtIn.labelOf(catalogue, itemId) : null;
 };
 
 /** The sheet fields an uploaded entry fills when bought. Empty for a built-in one. */
@@ -97,7 +113,7 @@ const fieldsOf = (catalogue, itemId) => {
  * pass is for.
  */
 const findByName = (name) => {
-  const hit = builtIn.findByName(name);
+  const hit = bookApplies() ? builtIn.findByName(name) : null;
   if (hit) return hit;
   const wanted = builtIn.normaliseName(name);
   if (!wanted) return null;
@@ -116,7 +132,7 @@ const findByName = (name) => {
  */
 const entriesIn = (catalogue) => {
   const out = new Map();
-  const book = builtIn.CATALOGUE[String(catalogue || '')] || {};
+  const book = bookApplies() ? (builtIn.CATALOGUE[String(catalogue || '')] || {}) : {};
   for (const [id, [name, price]] of Object.entries(book)) {
     out.set(id, { id, name, price, fields: {}, source: 'book' });
   }
@@ -128,11 +144,13 @@ const entriesIn = (catalogue) => {
 
 /** Which uploaded ids would sit on top of a built-in entry, for a preview to say so. */
 const overridesIn = (catalogue, entries) => {
-  const book = builtIn.CATALOGUE[String(catalogue || '')] || {};
+  // Outside CWN there is no book to override, so nothing is ever an override there.
+  const book = bookApplies() ? (builtIn.CATALOGUE[String(catalogue || '')] || {}) : {};
   return (entries || []).filter((e) => e && e.id && book[e.id]).map((e) => e.name);
 };
 
 module.exports = {
+  BOOK_SYSTEM, bookApplies,
   load, clear, systemLoaded, uploadedIn, hasUploads, entriesIn, overridesIn,
   priceOf, labelOf, fieldsOf, findByName,
   normaliseName: builtIn.normaliseName,
