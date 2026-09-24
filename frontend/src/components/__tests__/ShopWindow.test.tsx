@@ -12,7 +12,8 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createRequire } from 'module';
 import { render, screen, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ShopWindow } from '../ShopWindow';
@@ -1764,5 +1765,90 @@ describe("a storefront's name in each game", () => {
     show('ripperdoc', 'Doc', 'shadowrun_6e');
     expect(screen.getByText(/STREET DOC ·/)).toBeInTheDocument();
     expect(screen.queryByText(/RIPPERDOC/)).toBeNull();
+  });
+});
+
+describe('a CWN catalogue file, bought through the window and sold back', () => {
+  /**
+   * The CWN half of sheets/__tests__/csvToSale.test.ts. CWN places uploaded items through
+   * its own book shelves - a gun arrives Stowed - rather than the generic writer, so the
+   * chain has to run through the window: a CSV is parsed by the server's parser, the
+   * window buys from it, and what the window wrote is sold by the server's planner.
+   */
+  const require_ = createRequire(import.meta.url);
+  const { parseCatalogue } = require_('../../../../backend/shops/catalogueParse.js');
+  const store = require_('../../../../backend/shops/catalogueStore.js');
+  const { planSale } = require_('../../../../backend/shops/sell.js');
+
+  const FILE = [
+    '[weapons]',
+    'name, price, dmg, skill, attr, trauma, shock, enc',
+    // A new gun, and one house-ruling a book price.
+    'Zip Gun, 15, 1d4, shoot, dex, 1d6/x2, , 1',
+    'Heavy Pistol, "1,000", 1d8, shoot, dex, 1d8/x2, 2/15, 1',
+    '',
+    '[gear]',
+    'name, price, enc, description',
+    'Signal Flare, 30, 1, "Burns red, for an hour"',
+  ].join('\n');
+
+  afterEach(() => { store.clear(); clearUploaded(); });
+
+  it('lands every column, and leaves nothing behind when sold', async () => {
+    const parsed = parseCatalogue(FILE);
+    expect(parsed.problems).toEqual([]);
+    store.load('cities_without_number', parsed.sections);
+    loadUploaded(parsed.sections);
+
+    // Buy both guns, then the flare, the way a player would walk between shops.
+    let sheet: Record<string, unknown> = {};
+    const collect = () => {
+      for (const [patch] of handleFieldsChange.mock.calls) sheet = { ...sheet, ...patch };
+      for (const [field, value] of handleFieldChange.mock.calls) sheet = { ...sheet, [field]: value };
+      handleFieldsChange.mockClear();
+      handleFieldChange.mockClear();
+      sheetState.sheet = { system: 'cities_without_number', data: sheet };
+    };
+
+    const gunShop = show('gun_shop', 'Vic');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+    collect();
+    gunShop.unmount();
+    const again = show('gun_shop', 'Vic');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Heavy Pistol' }));
+    collect();
+    again.unmount();
+    show('general_store', 'Sal');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Signal Flare' }));
+    collect();
+
+    // The GM's columns, in the GM's words, and the CWN rules on top.
+    expect(sheet).toMatchObject({
+      weapon1_name: 'Zip Gun', weapon1_dmg: '1d4', weapon1_trauma: '1d6/x2', weapon1_carry: 'stowed',
+      weapon2_name: 'Heavy Pistol', weapon2_shock: '2/15',
+    });
+    expect(JSON.parse(String(sheet.inventory))).toEqual([expect.objectContaining({ name: 'Signal Flare', qty: 1, enc: '1' })]);
+    // Each purchase named the parsed id, which is what the server prices from.
+    expect(sent.map((s) => s.itemId)).toEqual(['zip_gun', 'heavy_pistol', 'signal_flare']);
+
+    const sale = planSale({
+      data: sheet,
+      items: [
+        { catalogue: 'weapons', id: 'zip_gun', qty: 1 },
+        { catalogue: 'weapons', id: 'heavy_pistol', qty: 1 },
+        { catalogue: 'gear', id: 'signal_flare', qty: 1 },
+      ],
+      catalogues: ['weapons', 'gear'],
+      locationPct: 50,
+      globalPct: null,
+      system: 'cities_without_number',
+    });
+    // 7 + 500 + 15: the uploaded prices, including the house rule, halved and rounded down.
+    expect(sale).toMatchObject({ ok: true, payout: 7 + 500 + 15 });
+
+    const after: Record<string, unknown> = { ...sheet, ...sale.patch };
+    for (const [key, value] of Object.entries(after)) {
+      expect(value === '' || value === '[]', `${key} = ${JSON.stringify(value)}`).toBe(true);
+    }
   });
 });
