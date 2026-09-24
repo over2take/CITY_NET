@@ -1547,3 +1547,84 @@ describe('an uploaded item actually arriving on the sheet', () => {
     ]);
   });
 });
+
+describe('a shop with its own buy-back rate', () => {
+  /**
+   * Every other test here hands the window 45%, so none of them would notice if the rate
+   * were ignored entirely. What the window is given has already been resolved - this
+   * shop's own rate, then the global, then the default - and all this has to prove is that
+   * it is actually used rather than a default being assumed somewhere below.
+   */
+  const withKit = () => {
+    sheetState.sheet = {
+      system: 'cities_without_number',
+      data: { inventory: JSON.stringify([{ name: 'Climbing kit', qty: 2 }]) },
+    };
+  };
+
+  const showAt = (pct: number) => {
+    const result = render(<ShopWindow name="Doc Wu" locationId={7} buildingType="general_store"
+      buybackPct={pct} socket={makeSocket()} userName="JADE" onClose={vi.fn()} />);
+    act(() => (live.bankUpdate || []).forEach((f) => f({ username: 'JADE', ...bank })));
+    return result;
+  };
+
+  const openSell = async (pct: number) => {
+    withKit();
+    showAt(pct);
+    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+  };
+
+  it('says what it pays, in its own words', async () => {
+    await openSell(80);
+    expect(screen.getByText(/THIS SHOP PAYS 80% OF THE BOOK PRICE/)).toBeInTheDocument();
+  });
+
+  it('prices a line at its rate rather than the default', async () => {
+    // Climbing kit is 150. At 80% that is 120, not the 67 a default shop would pay.
+    await openSell(80);
+    const row = screen.getByText('Climbing kit').closest('tr')!;
+    expect(within(row).getByText('120cr')).toBeInTheDocument();
+    expect(within(row).queryByText('67cr')).toBeNull();
+  });
+
+  it('adds the list up at its rate', async () => {
+    await openSell(80);
+    await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the sell list' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the sell list' }));
+    expect(screen.getByRole('button', { name: /SELL · 240cr/ })).toBeInTheDocument();
+  });
+
+  it('pays face value at a hundred percent', async () => {
+    // A pawn shop a GM set to buy at cost.
+    await openSell(100);
+    const row = screen.getByText('Climbing kit').closest('tr')!;
+    expect(within(row).getByText('150cr')).toBeInTheDocument();
+  });
+
+  it('offers things it will pay nothing for, at a shop set to zero', async () => {
+    /**
+     * A storefront that buys nothing back is a real decision, not a broken setting. The
+     * items still list - a player is entitled to see that the answer is nothing - and
+     * selling one still takes it off the sheet.
+     */
+    await openSell(0);
+    expect(screen.getByText(/THIS SHOP PAYS 0%/)).toBeInTheDocument();
+    const row = screen.getByText('Climbing kit').closest('tr')!;
+    expect(within(row).getByText('N/A')).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: /Add Climbing kit/ })).toBeEnabled();
+  });
+
+  it('still sends no price, whatever its rate', async () => {
+    // The rate shown here is a courtesy. The server resolves it again and pays from that.
+    await openSell(80);
+    await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the sell list' }));
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+
+    expect(sold[0].items).toEqual([
+      { catalogue: 'gear', id: 'climbing_kit', label: 'Climbing kit', qty: 1 },
+    ]);
+    expect(JSON.stringify(sold[0])).not.toMatch(/price|pct|payout|each/);
+  });
+});
