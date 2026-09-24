@@ -47,7 +47,7 @@ import { parseGrant, describeGrant } from '../utils/tokenControl';
 function BattleAdminPanel({
   token, isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly,
   tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, locations, refreshLocations,
-  handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen, secureModeEnabled, onLogout,
+  handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen, secureModeEnabled, onLogout,
   globalSettings, fetchGlobalSettings, onOpenNpcLibrary, activeUsers,
 }: any) {
   const [tab, setTab] = useState<'battle_map' | 'game'>('battle_map');
@@ -185,7 +185,7 @@ export function AdminPanel({
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
-    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen, setIsAdminXpOpen,
+    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
@@ -202,7 +202,7 @@ export function AdminPanel({
         tempBattleMapScale={tempBattleMapScale} setTempBattleMapScale={setTempBattleMapScale}
         activeBattleMapData={activeBattleMapData} locations={locations} refreshLocations={refreshLocations}
         handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
-        setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
+        setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} setIsCatalogueOpen={setIsCatalogueOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
         globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings}
         onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers}
       />
@@ -1075,11 +1075,21 @@ export function AdminPanel({
               {/* What shops pay for second-hand goods. Beside the other two money controls
                   because it is the same kind of decision: how much the party is worth. */}
               {shopsAvailable(globalSettings['game_system']) && (
-                <BuybackPanel
-                  token={token}
-                  globalSettings={globalSettings}
-                  fetchGlobalSettings={fetchGlobalSettings}
-                />
+                <>
+                  <BuybackPanel
+                    token={token}
+                    globalSettings={globalSettings}
+                    fetchGlobalSettings={fetchGlobalSettings}
+                  />
+                  {/* Beside the buy-back rate because both are about what shops trade in.
+                      Its own window, because a paste box and a preview table do not fit in
+                      a panel this narrow. */}
+                  <button
+                    onClick={() => setIsCatalogueOpen?.(true)}
+                    className="utility-btn"
+                    style={{ width: '100%', marginTop: '8px' }}
+                  >SHOP_CATALOGUES</button>
+                </>
               )}
               <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
               <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>

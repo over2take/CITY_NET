@@ -25,6 +25,7 @@ import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
 import { ShopWindow } from './components/ShopWindow';
+import { CatalogueWindow } from './components/CatalogueWindow';
 import { buildingTypeById, isShop, shopsAvailable } from './data/buildingTypes';
 import { HitPointsMenu, HealthReviewWindow } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
@@ -336,6 +337,9 @@ function App() {
   const [isAdminPayOpen, setIsAdminPayOpen] = useState(false);
   const [isAdminXpOpen, setIsAdminXpOpen] = useState(false);
   const [adminXpPos, setAdminXpPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
+  // Where a GM adds to what the shops sell. Opened from the GAME tab, under the buy-back rate.
+  const [isCatalogueOpen, setIsCatalogueOpen] = useState(false);
+  const [cataloguePos, setCataloguePos] = useState(() => ({ x: window.innerWidth / 2 - 280, y: 80 }));
   const [adminPayPos, setAdminPayPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
   useEffect(() => {
     const handleClear = () => { (window as any).hasUnsavedChanges = false; };
@@ -1793,6 +1797,7 @@ function App() {
                 isAdmin={isAdmin}
                 setIsAdminPayOpen={setIsAdminPayOpen}
                 setIsAdminXpOpen={setIsAdminXpOpen}
+                setIsCatalogueOpen={setIsCatalogueOpen}
                 isPrimaryAdmin={isPrimaryAdmin}
                 setShowBattleMapManager={setShowBattleMapManager}
                 isPlantingTrees={isPlantingTrees} setIsPlantingTrees={setIsPlantingTrees}
@@ -1963,6 +1968,15 @@ function App() {
                   targetUser={adminBankPlayer}
                   socket={socketRef.current}
                   token={token}
+              />
+            )}
+            {isCatalogueOpen && isAdmin && (
+              <CatalogueWindow
+                  pos={cataloguePos}
+                  setPos={setCataloguePos}
+                  onClose={() => setIsCatalogueOpen(false)}
+                  socket={socketRef.current}
+                  system={gameSystem}
               />
             )}
             {isAdminXpOpen && (
