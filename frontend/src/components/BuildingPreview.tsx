@@ -1,4 +1,4 @@
-import { useContext, useMemo, useRef, useState } from 'react';
+import { useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { ThemeContext } from '../theme/themes';
@@ -50,7 +50,8 @@ function Spinning({ location, parts, color }: { location: any; parts: any[]; col
   // eye away from the text beside it.
   useFrame((_, delta) => { if (group.current) group.current.rotation.y += delta * 0.3; });
 
-  const fit = 2.6 / built.size;
+  // Leaves a margin all round, so a building turning its long side to the camera still fits.
+  const fit = 2.1 / built.size;
   return (
     <group ref={group} scale={[fit, fit, fit]}>
       <group position={[-built.center[0], -built.center[1], -built.center[2]]}>
@@ -67,6 +68,21 @@ function Spinning({ location, parts, color }: { location: any; parts: any[]; col
 
 export function BuildingPreview({ location, parts = [], width = 180, height = 150 }: Props) {
   const theme = useContext(ThemeContext);
+  /**
+   * The wireframe's colour, read from the theme's CSS variable where the preview sits.
+   *
+   * Not from ThemeContext alone: the info windows render outside that provider in App, so
+   * the context answers with its default and every theme drew the building in classic
+   * green. The CSS variable is what the window's own borders and text use, so reading it
+   * makes the building match them in all seven themes. The context stays as the fallback.
+   */
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [cssColor, setCssColor] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (!frameRef.current) return;
+    const v = getComputedStyle(frameRef.current).getPropertyValue('--green').trim();
+    if (v && v !== cssColor) setCssColor(v);
+  });
   /** Set when the photo fails to load, so a dead link falls through to the render. */
   const [photoFailed, setPhotoFailed] = useState<string | null>(null);
   const photo = location?.photo_url && photoFailed !== location.photo_url ? location.photo_url : null;
@@ -99,14 +115,17 @@ export function BuildingPreview({ location, parts = [], width = 180, height = 15
   }
 
   return (
-    <div style={frame} data-testid="building-preview" data-kind="render" aria-label={`${location.name || 'Building'}, turning`} role="img">
+    <div ref={frameRef} style={frame} data-testid="building-preview" data-kind="render" aria-label={`${location.name || 'Building'}, turning`} role="img">
+      {/* `flat`: no tone mapping, so the lines are the theme's colour exactly rather than
+          the washed-out version the default mapping makes of a bright unlit colour. */}
       <Canvas
-        camera={{ position: [0, 1.2, 4.2], fov: 40, near: 0.1, far: 50 }}
+        flat
+        camera={{ position: [0, 0.9, 4.6], fov: 40, near: 0.1, far: 50 }}
         gl={{ antialias: true, alpha: true }}
         style={{ width: '100%', height: '100%' }}
         onCreated={({ camera }) => camera.lookAt(0, 0, 0)}
       >
-        <Spinning location={location} parts={parts} color={theme.primary} />
+        <Spinning location={location} parts={parts} color={cssColor || theme.primary} />
       </Canvas>
     </div>
   );

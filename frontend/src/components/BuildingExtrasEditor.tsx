@@ -45,7 +45,12 @@ export function BuildingExtrasEditor({ locationId, token, photoUrl }: Props) {
         const body = await r.json().catch(() => ({}));
         if (!live) return;
         if (!r.ok) { setNotesMsg(body.error || 'Could not load the notes.'); return; }
-        setNotes(String(body.notes ?? '')); setSavedNotes(String(body.notes ?? ''));
+        // An old server answers with the app's page: a 200 that would read as "no notes".
+        if (typeof body.notes !== 'string') {
+          setNotesMsg('The server did not answer for the notes. If it was just updated, restart the backend.');
+          return;
+        }
+        setNotes(body.notes); setSavedNotes(body.notes);
       })
       .catch(() => { if (live) setNotesMsg('Could not load the notes.'); });
     return () => { live = false; };
@@ -69,6 +74,13 @@ export function BuildingExtrasEditor({ locationId, token, photoUrl }: Props) {
       });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) { setPhotoMsg(body.error || 'The photo was not saved.'); return; }
+      // A 200 is not proof. A server running code from before this route existed answers
+      // any unknown address with the app's own page, which is a 200 with no photo in it -
+      // and this used to call that saved.
+      if (typeof body.photo_url !== 'string') {
+        setPhotoMsg('The server did not take the photo. If it was just updated, restart the backend.');
+        return;
+      }
       setPhoto(body.photo_url);
       setPhotoMsg('PHOTO SAVED');
     } catch {
@@ -106,6 +118,11 @@ export function BuildingExtrasEditor({ locationId, token, photoUrl }: Props) {
       });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) { setNotesMsg(body.error || 'The notes were not saved.'); return; }
+      // Same check as the photo: an old server's 200 carries no notes back.
+      if (typeof body.notes !== 'string') {
+        setNotesMsg('The server did not take the notes. If it was just updated, restart the backend.');
+        return;
+      }
       setSavedNotes(String(body.notes ?? ''));
       setNotesMsg('NOTES SAVED');
     } catch {
@@ -121,7 +138,7 @@ export function BuildingExtrasEditor({ locationId, token, photoUrl }: Props) {
     <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
         <label style={label}>BUILDING PHOTO</label>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
           {photo && (
             <img
               src={photo}
@@ -160,7 +177,7 @@ export function BuildingExtrasEditor({ locationId, token, photoUrl }: Props) {
           placeholder="Only you see these."
           style={{ width: '100%', height: 90, boxSizing: 'border-box' }}
         />
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}>
           <button type="button" className="utility-btn" disabled={busy || !dirty} onClick={saveNotes} style={small}>
             SAVE NOTES
           </button>

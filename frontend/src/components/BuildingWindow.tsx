@@ -92,7 +92,9 @@ export function BuildingWindow({
         tabIndex={0}
         onKeyDown={onKeyDown}
         aria-label={`${title} information`}
-        style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}
+        // Left-aligned like a terminal. The shared window content centres its text, which
+        // suits a short notice and not a page of prose.
+        style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}
       >
         <div style={{ display: 'flex', gap: 14, alignItems: 'stretch' }}>
           {/* Left: the building, then the folders. */}

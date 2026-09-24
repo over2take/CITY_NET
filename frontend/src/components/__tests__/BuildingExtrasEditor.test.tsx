@@ -70,6 +70,29 @@ describe('the photo', () => {
   });
 });
 
+describe('a server that has not been restarted onto these routes', () => {
+  /**
+   * It answers any unknown address with the app's own page - a 200 with no photo and no
+   * notes in it. That used to read as PHOTO SAVED, with nothing saved.
+   */
+  beforeEach(() => {
+    fetchMock.mockImplementation(async () => ({ ok: true, json: async () => { throw new SyntaxError('not JSON'); } }));
+  });
+
+  it('says the photo was not taken, rather than that it was saved', async () => {
+    show();
+    await userEvent.upload(screen.getByLabelText('Building photo file'), new File(['x'], 'front.png', { type: 'image/png' }));
+    expect(await screen.findByText(/did not take the photo.*restart the backend/)).toBeInTheDocument();
+    expect(screen.queryByText('PHOTO SAVED')).toBeNull();
+    expect(screen.getByRole('button', { name: 'UPLOAD PHOTO' })).toBeInTheDocument();
+  });
+
+  it('says the notes could not be read, rather than showing them as empty', async () => {
+    show();
+    expect(await screen.findByText(/did not answer for the notes/)).toBeInTheDocument();
+  });
+});
+
 describe('the notes', () => {
   it('load the building\'s own notes, which are not in the location data', async () => {
     show();
