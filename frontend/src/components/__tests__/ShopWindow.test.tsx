@@ -100,9 +100,9 @@ const makeSocket = () => {
   return socket;
 };
 
-const show = (buildingType: string, name = 'Doc Wu') => {
+const show = (buildingType: string, name = 'Doc Wu', system = 'cities_without_number') => {
   const result = render(<ShopWindow name={name} locationId={7} buildingType={buildingType}
-    buybackPct={45} socket={makeSocket()} userName="JADE" onClose={vi.fn()} />);
+    system={system} buybackPct={45} socket={makeSocket()} userName="JADE" onClose={vi.fn()} />);
   // The server broadcasts the balance in answer to the window's request. Delivered here,
   // after mount, because that is when a state update actually lands.
   act(() => (live.bankUpdate || []).forEach((f) => f({ username: 'JADE', ...bank })));
@@ -255,7 +255,7 @@ describe('one tab per catalogue', () => {
     expect(screen.getByText('War Harness')).toBeInTheDocument();
 
     rerender(<ShopWindow name="Doc Wu" locationId={7} buildingType="general_store"
-      buybackPct={45} socket={{ on: vi.fn(), off: vi.fn(), emit: vi.fn() }}
+      system="cities_without_number" buybackPct={45} socket={{ on: vi.fn(), off: vi.fn(), emit: vi.fn() }}
       userName="JADE" onClose={vi.fn()} />);
 
     expect(screen.queryByText('War Harness')).toBeNull();
@@ -1564,7 +1564,7 @@ describe('a shop with its own buy-back rate', () => {
 
   const showAt = (pct: number) => {
     const result = render(<ShopWindow name="Doc Wu" locationId={7} buildingType="general_store"
-      buybackPct={pct} socket={makeSocket()} userName="JADE" onClose={vi.fn()} />);
+      system="cities_without_number" buybackPct={pct} socket={makeSocket()} userName="JADE" onClose={vi.fn()} />);
     act(() => (live.bankUpdate || []).forEach((f) => f({ username: 'JADE', ...bank })));
     return result;
   };
@@ -1626,5 +1626,98 @@ describe('a shop with its own buy-back rate', () => {
       { catalogue: 'gear', id: 'climbing_kit', label: 'Climbing kit', qty: 1 },
     ]);
     expect(JSON.stringify(sold[0])).not.toMatch(/price|pct|payout|each/);
+  });
+});
+
+describe('a shop in another system\'s game', () => {
+  /**
+   * The CWN book is CWN's. A Cyberpunk RED gun shop carries only what that GM uploaded,
+   * shows it in the columns the Cyberpunk RED file has, and puts a bought gun into a
+   * Cyberpunk RED weapon row - four of them, with a rate of fire and no carry state.
+   */
+  const RED = 'cyberpunk_red';
+  const UNITY = {
+    id: 'militech_unity', name: 'Militech Unity', price: 100,
+    fields: { dmg: '3d6', skill: 'Handgun', rof: '2' },
+  };
+
+  beforeEach(() => {
+    clearUploaded();
+    sheetState.sheet = { system: RED, data: {} };
+  });
+
+  it('has nothing on the shelves until the GM adds some', () => {
+    show('gun_shop', 'Vic', RED);
+    expect(screen.queryByText('Heavy Pistol')).toBeNull();
+    expect(screen.getByText(/Nothing on the shelves yet — the GM adds stock in SHOP_CATALOGUES/))
+      .toBeInTheDocument();
+    // No page reference into a book this game does not use.
+    expect(screen.queryByText(/CWN P/)).toBeNull();
+  });
+
+  it('shows what the GM uploaded, in that system\'s columns', () => {
+    loadUploaded({ weapons: [UNITY] });
+    show('gun_shop', 'Vic', RED);
+    expect(screen.getByText('Militech Unity')).toBeInTheDocument();
+    expect(screen.getByText('100cr')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /Sort by ROF/ })).toBeInTheDocument();
+    // CWN's columns are not this sheet's.
+    expect(screen.queryByRole('columnheader', { name: /Sort by MAG/ })).toBeNull();
+    expect(screen.getByText('GOES INTO ONE OF YOUR 4 WEAPON SLOTS')).toBeInTheDocument();
+  });
+
+  it('puts a bought gun into a Cyberpunk RED weapon row, once paid for', async () => {
+    loadUploaded({ weapons: [UNITY] });
+    sheetState.sheet = { system: RED, data: { weapon1_name: 'Taken' } };
+    show('gun_shop', 'Vic', RED);
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Militech Unity' }));
+
+    expect(sent).toEqual([{ locationId: 7, catalogue: 'weapons', itemId: 'militech_unity', settle: undefined }]);
+    expect(handleFieldsChange).toHaveBeenCalledWith({
+      weapon2_dmg: '3d6', weapon2_skill: 'Handgun', weapon2_rof: '2', weapon2_name: 'Militech Unity',
+    });
+  });
+
+  it('writes nothing when the purchase is refused', async () => {
+    loadUploaded({ weapons: [UNITY] });
+    refuseWith = 'price';
+    show('gun_shop', 'Vic', RED);
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Militech Unity' }));
+    expect(handleFieldsChange).not.toHaveBeenCalled();
+    expect(handleFieldChange).not.toHaveBeenCalled();
+  });
+
+  it('refuses before charging when all four rows are full', async () => {
+    loadUploaded({ weapons: [UNITY] });
+    sheetState.sheet = {
+      system: RED,
+      data: { weapon1_name: 'a', weapon2_name: 'b', weapon3_name: 'c', weapon4_name: 'd' },
+    };
+    show('gun_shop', 'Vic', RED);
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Militech Unity' }));
+    expect(sent).toEqual([]);
+    expect(screen.getByText(/No free weapon slot — all 4 are full/)).toBeInTheDocument();
+  });
+
+  it('puts bought chrome in the cyberware table, unplaced', async () => {
+    loadUploaded({
+      cyberware: [{ id: 'jack', name: 'Neural Link', price: 500, fields: { strain: '7', effect: 'Jacks in' } }],
+    });
+    show('ripperdoc', 'Doc', RED);
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Neural Link' }));
+    const [field, rows] = handleFieldChange.mock.calls[0];
+    expect(field).toBe('cyberware');
+    expect(rows).toEqual([expect.objectContaining({ name: 'Neural Link', placed: false, hl: 7, cost: 500 })]);
+  });
+
+  it('sells from the rows this sheet has, at the shelf price', async () => {
+    loadUploaded({ weapons: [UNITY] });
+    // weapon5 is not a Cyberpunk RED row, so only one of these is for sale.
+    sheetState.sheet = { system: RED, data: { weapon1_name: 'Militech Unity', weapon5_name: 'Militech Unity' } };
+    show('gun_shop', 'Vic', RED);
+    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    expect(screen.getByText(/THIS SHOP PAYS 45% OF THE SHELF PRICE/)).toBeInTheDocument();
+    expect(screen.getByText('×1')).toBeInTheDocument();
+    expect(screen.getByText('45cr')).toBeInTheDocument();
   });
 });

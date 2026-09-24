@@ -7,8 +7,10 @@ import {
   SETTLE_BALANCE, SETTLE_DEBT, REFUSAL_TEXT, buybackValue,
   type Settle, type RefusalReason,
 } from '../data/shopRules';
-import { ownedItems, sellableAt } from '../sheets/ownedItems';
-import { uploadedIn } from '../sheets/uploadedCatalogues';
+import { ownedItems, sellableAt, BOOK_SYSTEM } from '../sheets/ownedItems';
+import { uploadedIn, type UploadedEntry } from '../sheets/uploadedCatalogues';
+import { placeUploaded, destinationOf } from '../sheets/shopPlacement';
+import { columnsFor } from '../sheets/catalogueSchema';
 import { CWN_CYBERWARE, type CwnCyberPreset } from '../sheets/cwnCyberwarePresets';
 import { CYBERWARE_FIELD, readRows, normaliseRow } from '../sheets/cyberwareRows';
 import { CWN_WEAPONS, weaponToStashed, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
@@ -72,6 +74,14 @@ interface Props {
    */
   buybackPct: number;
   buildingType: string;
+  /**
+   * The game being played, which decides what is on the shelves and where it lands.
+   *
+   * Cities Without Number shops sell from the book, with its own rules for where things go
+   * - a weapon arrives Stowed, a Tank carries its immunity note. Every other system's shops
+   * carry only what the GM uploaded, placed into that system's own sheet rows.
+   */
+  system: string;
   /** The shopper's own sheet: where a bought piece lands, and what a sold one comes from. */
   socket: any;
   userName: string | null;
@@ -193,8 +203,10 @@ interface Shelf<T> {
 }
 
 export function ShopWindow({
-  name, locationId, buildingType, buybackPct: pct, socket, userName, onClose,
+  name, locationId, buildingType, system, buybackPct: pct, socket, userName, onClose,
 }: Props) {
+  /** Whether this game's shops sell from the CWN book. Nobody else's do. */
+  const book = system === BOOK_SYSTEM;
   const [pos, setPos] = useState({ x: 140, y: 90 });
   const [tab, setTab] = useState<Tab>('buy');
   const [filter, setFilter] = useState('');
@@ -203,6 +215,14 @@ export function ShopWindow({
 
   const { sheet, handleFieldChange, handleFieldsChange, encumbranceEnforced, overdraftAllowed } =
     usePlayerSheet(socket, userName);
+  /**
+   * The sheet as it is now, for a placement that runs when a receipt arrives.
+   *
+   * A purchase is placed after a round trip, and the render that sent it may be several
+   * sheet changes old by then - two quick buys would otherwise both see the same free row.
+   */
+  const sheetNow = React.useRef(sheet);
+  sheetNow.current = sheet;
 
   /**
    * What the buyer has, straight from the server's own broadcast.
@@ -374,7 +394,7 @@ export function ShopWindow({
    * same list from the same sheet when it pays, which is what stops the two disagreeing -
    * see the note at the top of ownedItems.ts.
    */
-  const owned = sheet ? ownedItems(sheet.data as Record<string, unknown>) : [];
+  const owned = sheet ? ownedItems(sheet.data as Record<string, unknown>, system) : [];
   const sellable = sellableAt(owned, catalogues);
 
   /** How many of each line are on the sell list, by line key. */
@@ -1034,10 +1054,83 @@ export function ShopWindow({
       + 'happens on the vehicle sheet, against its hardpoints and power.',
   };
 
+  // ------------------------------------------------------- any other system
+
+  /**
+   * Write a placement onto the sheet.
+   *
+   * One field goes through the single-field save, which is the one that takes an array -
+   * the cyberware table is one. Several go as one batch, because a dozen single saves fired
+   * together race and all but the last are lost.
+   */
+  const applyPatch = (patch: Record<string, unknown>) => {
+    const entries = Object.entries(patch);
+    if (entries.length === 1) handleFieldChange?.(entries[0][0], entries[0][1] as never);
+    else if (entries.length) handleFieldsChange?.(patch as Record<string, string | number>);
+  };
+
+  /**
+   * A shelf of whatever the GM uploaded, for a system with no book on this side.
+   *
+   * The columns are the ones the catalogue file has for this system, so the shelf shows
+   * exactly what the GM typed in. Where a bought item goes is `placeUploaded`'s business,
+   * read from the system's own sheet template.
+   */
+  const uploadedShelf = (id: ShopStock): Shelf<UploadedEntry> => {
+    const extra = columnsFor(system, id).columns.slice(2);
+    const rows = uploadedIn(id);
+    const ownedOf = (e: UploadedEntry) => owned.find((l) => l.key === `${id}/${e.id}`)?.qty ?? 0;
+    const columns: Record<string, ShelfColumn<UploadedEntry>> = {
+      name: { label: 'NAME', value: (e) => e.name, first: 'asc' },
+      price: { label: 'PRICE', value: (e) => e.price, numeric: true, first: 'desc', align: 'right', render: (e) => credits(e.price) },
+    };
+    for (const col of extra) {
+      const cells = rows.map((e) => String(e.fields[col] ?? '')).filter(Boolean);
+      // Sorted as numbers only when every filled cell is one - "3d6" is not.
+      const numeric = cells.length > 0 && cells.every((v) => Number.isFinite(Number(v)));
+      columns[col] = {
+        label: col.replace(/_/g, ' ').toUpperCase(),
+        value: (e) => (numeric ? Number(e.fields[col]) || 0 : String(e.fields[col] ?? '')),
+        render: (e) => String(e.fields[col] ?? '') || '—',
+        numeric,
+        first: numeric ? 'desc' : 'asc',
+        ...(numeric ? { align: 'right' as const } : {}),
+        ...(col === 'effect' || col === 'description' ? { clip: 360 } : {}),
+      };
+    }
+    columns.owned = {
+      label: 'OWNED', value: ownedOf, numeric: true, first: 'desc', align: 'right',
+      render: (e) => (ownedOf(e) > 0 ? `x${ownedOf(e)}` : ''),
+    };
+    return {
+      id,
+      rows,
+      columns,
+      rowKey: (e) => e.id,
+      matches: (e, q) => e.name.toLowerCase().includes(q)
+        || Object.values(e.fields).some((v) => String(v).toLowerCase().includes(q)),
+      buy: (e) => {
+        if (!sheet) { setRefused('No character sheet loaded.'); return; }
+        // Checked before the money moves: a full weapon rack is a reason not to sell.
+        const first = placeUploaded(system, id, e, sheet.data as Record<string, unknown>);
+        if (!first.ok) { setRefused(first.reason); return; }
+        purchase(id, e.id, e.name, e.price, () => {
+          const placed = placeUploaded(
+            system, id, e, (sheetNow.current?.data ?? {}) as Record<string, unknown>,
+          );
+          if (placed.ok) applyPatch(placed.patch);
+          else setRefused(`${placed.reason} It was paid for — ask your GM to add it by hand.`);
+        });
+      },
+      notice: destinationOf(system, id),
+      filterHint: 'Filter by name or anything on the line',
+    };
+  };
+
   // ------------------------------------------------------------------------
 
-  /** Every shelf this build knows how to draw, by catalogue. */
-  const SHELVES: Partial<Record<ShopStock, Shelf<any>>> = {
+  /** Every CWN shelf, drawn from the book, by catalogue. */
+  const BOOK_SHELVES: Partial<Record<ShopStock, Shelf<any>>> = {
     cyberware: cyberShelf,
     weapons: weaponShelf,
     weapon_mods: modShelf('weapon_mods', CWN_WEAPON_MODS, 'Fix'),
@@ -1050,7 +1143,9 @@ export function ShopWindow({
     gear: gearShelf,
   };
 
-  const base: Shelf<any> | undefined = shelfId ? SHELVES[shelfId] : undefined;
+  const base: Shelf<any> | undefined = !shelfId
+    ? undefined
+    : book ? BOOK_SHELVES[shelfId] : uploadedShelf(shelfId);
 
   /**
    * The shelf, with whatever the GM uploaded added to it.
@@ -1073,7 +1168,8 @@ export function ShopWindow({
    * and refused. Filtering and sorting a few dozen rows is not worth that.
    */
   const shelf: Shelf<any> | undefined = (() => {
-    if (!base) return base;
+    // Outside CWN the shelf already IS the uploads; there is no book to add them to.
+    if (!base || !book) return base;
     const extra = uploadedIn(base.id);
     if (!extra.length) return base;
 
@@ -1159,7 +1255,7 @@ export function ShopWindow({
           {type ? type.label.toUpperCase() : 'UNKNOWN'} ·{' '}
           {rows.length} LINE{rows.length === 1 ? '' : 'S'}
           {/* The book page, so a price can be checked without hunting for the table. */}
-          {shelf && catalogueById(shelf.id) && ` · CWN P${catalogueById(shelf.id)!.page}`}
+          {book && shelf && catalogueById(shelf.id) && ` · CWN P${catalogueById(shelf.id)!.page}`}
           {/* What you can spend, where you are about to spend it. A shop that charges an
               account without showing it is asking people to shop blind. */}
           {account && (
@@ -1381,8 +1477,12 @@ export function ShopWindow({
                   </table>
                 </div>
                 {rows.length === 0 && (
-                  <div style={{ ...mono(10), color: 'var(--grid-section)', paddingTop: 6 }}>
-                    NOTHING MATCHES THAT
+                  <div style={{ ...mono(10), color: 'var(--grid-section)', paddingTop: 6, letterSpacing: 0 }}>
+                    {/* An empty shelf and a filter that matched nothing are different
+                        answers, and only one of them is somebody else's job to fix. */}
+                    {shelf.rows.length === 0
+                      ? 'Nothing on the shelves yet — the GM adds stock in SHOP_CATALOGUES.'
+                      : 'NOTHING MATCHES THAT'}
                   </div>
                 )}
               </>
@@ -1391,7 +1491,7 @@ export function ShopWindow({
         ) : (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ ...mono(9), color: 'var(--grid-section)', marginBottom: 8, letterSpacing: 0 }}>
-              THIS SHOP PAYS {pct}% OF THE BOOK PRICE · ADD WHAT YOU WANT TO SELL, THEN SELL
+              THIS SHOP PAYS {pct}% OF THE {book ? 'BOOK' : 'SHELF'} PRICE · ADD WHAT YOU WANT TO SELL, THEN SELL
             </div>
 
             {refused && (

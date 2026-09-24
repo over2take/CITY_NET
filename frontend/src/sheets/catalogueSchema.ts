@@ -37,10 +37,26 @@ const ROW_GROUP: Partial<Record<ShopStock, string>> = {
   vehicles: 'vehicle',
 };
 
-/** Catalogues stored as their own list of objects rather than in numbered slots. */
-const ROW_LIST: Partial<Record<ShopStock, string[]>> = {
+/**
+ * Catalogues stored as their own list of objects rather than in numbered slots, and the
+ * section layout a sheet needs to have for that list to exist.
+ */
+const ROW_LIST: Partial<Record<ShopStock, { layout: string; columns: string[] }>> = {
   // Matches cyberwareRows: what the shop already writes when a piece is bought.
-  cyberware: ['type', 'strain', 'conc', 'effect'],
+  cyberware: { layout: 'cyberware', columns: ['type', 'strain', 'conc', 'effect'] },
+};
+
+/**
+ * The section layouts a system's sheet draws.
+ *
+ * Whether a sheet has a cyberware table is a layout, not a field id - the whole table lives
+ * under one array field - so it cannot be read the way the row groups are. Shadowrun keeps
+ * its chrome in a notes box and generic has none, so a bought implant there is an inventory
+ * line rather than a row in a table the sheet never shows.
+ */
+export const layoutsOf = (system: string): Set<string> => {
+  const template = getTemplate(system) as unknown as { sections?: { layout?: string }[] };
+  return new Set((template.sections ?? []).map((s) => s.layout ?? '').filter(Boolean));
 };
 
 /** What an inventory line can actually hold. */
@@ -139,14 +155,17 @@ export const columnsFor = (system: string, catalogue: ShopStock): CatalogueColum
   }
 
   const list = ROW_LIST[catalogue];
-  if (list) return { catalogue, shape: 'list', columns: [NAME, PRICE, ...list] };
+  if (list && layoutsOf(system).has(list.layout)) {
+    return { catalogue, shape: 'list', columns: [NAME, PRICE, ...list.columns] };
+  }
 
+  const missing = group ? `${group} rows` : list ? `${list.layout} table` : null;
   return {
     catalogue,
     shape: 'inventory',
     columns: [NAME, PRICE, ...INVENTORY_COLUMNS],
-    ...(group
-      ? { unavailable: `${system} has no ${group} rows, so these land in the inventory` }
+    ...(missing
+      ? { unavailable: `${system} has no ${missing}, so these land in the inventory` }
       : {}),
   };
 };

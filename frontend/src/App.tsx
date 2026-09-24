@@ -2154,6 +2154,7 @@ function App() {
                 name={shopLocation.name}
                 locationId={shopLocation.id}
                 buildingType={shopLocation.building_type || ''}
+                system={gameSystem}
                 // This shop's own rate if it has one, otherwise the global, otherwise the
                 // default. Resolved here for display; the server works it out again to pay.
                 buybackPct={buybackPct(shopLocation.buyback_pct, globalSettings[BUYBACK_SETTING])}
