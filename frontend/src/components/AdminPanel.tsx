@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BUILDING_TYPES, shopsAvailable, isShop, typeLabel } from '../data/buildingTypes';
 import { EmptyShopSteps } from './EmptyShopSteps';
-import { BuildingExtrasEditor } from './BuildingExtrasEditor';
+import { BuildingExtrasEditor, type BuildingExtrasHandle } from './BuildingExtrasEditor';
 import { OVERDRAFT_RULE, BUYBACK_SETTING, DEFAULT_BUYBACK_PCT } from '../data/shopRules';
 import { xpAvailable } from './XpWindow';
 import { createPortal } from 'react-dom';
@@ -247,6 +247,8 @@ export function AdminPanel({
   }, [socketRef.current]);
 
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  /** The building photo and GM notes below the edit form; UPDATE_DATA_POINT commits them. */
+  const extrasRef = React.useRef<BuildingExtrasHandle>(null);
   const [purgeConfirm, setPurgeConfirm] = useState<{ label: string; onConfirm: () => void } | null>(null);
   const [adminAlert, setAdminAlert] = useState<string | null>(null);
   const [adminTab, setAdminTab] = useState<'city' | 'export' | 'game' | 'players'>('city');
@@ -518,7 +520,11 @@ export function AdminPanel({
             }),
           });
         }
-        setAdminAlert("CHANGES_SAVED"); targetObject.scale.set(1, 1, 1); refreshLocations(); setView('list');
+        // The photo and GM notes staged below the form, saved by this same button. After
+        // the building, so a building that failed to save is not given a photo it never got.
+        const extraProblems = (await extrasRef.current?.commit()) ?? [];
+        setAdminAlert(extraProblems.length ? extraProblems.join(' ') : "CHANGES_SAVED");
+        targetObject.scale.set(1, 1, 1); refreshLocations(); setView('list');
     }
   };
 
@@ -1976,7 +1982,7 @@ export function AdminPanel({
                 neither has anything to do with shops; main admin only, since a granted
                 editor sees this view too and the server refuses them both. */}
             {isAdmin && isPrimaryAdmin && !['enemy_rhombus', 'friendly_rhombus', 'rhombus', 'none'].includes(editData.shape) && (
-              <BuildingExtrasEditor locationId={editId ?? null} token={token} photoUrl={editData.photo_url} />
+              <BuildingExtrasEditor ref={extrasRef} locationId={editId ?? null} token={token} photoUrl={editData.photo_url} />
             )}
 
             {editData.shape === 'friendly_rhombus' && (() => {

@@ -1,17 +1,32 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 // The building photo and the GM's notes, in the admin edit view.
 //
 // Beside the building's other properties because that is where a GM sets a building up -
 // and because, with the admin panel open, the building's own window is not shown at all.
-// Both save straight away on their own buttons rather than riding on UPDATE_DATA_POINT:
-// that save rewrites the whole location row and knows nothing of either.
+//
+// **Nothing here saves on its own.** Choosing a photo, removing one or typing notes only
+// stages the change; UPDATE_DATA_POINT saves it along with everything else in the form, by
+// calling `commit()` once the building itself has saved. One form, one save - a GM who
+// typed notes and pressed UPDATE should not find out later that the notes had a button of
+// their own.
+//
+// They still go to their own routes: the building save rewrites the location row and knows
+// nothing of either, and the notes must never travel in the location data.
 //
 // Main admin only, which the caller decides. A player granted editing rights also sees the
 // edit view, and the server refuses them both of these.
 
-/** What a photo may be. Kept in step with PHOTO_EXT in backend/routes/buildingDetails.js. */
+/** What a photo may be. Kept in step with PHOTO_EXT in backend/buildings/photoTypes.js. */
 export const PHOTO_ACCEPT = '.jpg,.jpeg,.png,.webp,.gif,.avif';
+
+export interface BuildingExtrasHandle {
+  /**
+   * Save whatever was staged. Resolves to the problems, empty when everything saved.
+   * Nothing staged means nothing sent.
+   */
+  commit: () => Promise<string[]>;
+}
 
 interface Props {
   /** Null for a building not saved yet, which has nowhere to hang either. */
@@ -22,39 +37,94 @@ interface Props {
 
 const label: React.CSSProperties = { display: 'block', marginBottom: 5 };
 const small: React.CSSProperties = { fontSize: '0.7rem', padding: '4px 10px' };
+const hint: React.CSSProperties = { fontSize: '0.65rem', opacity: 0.8, marginTop: 4 };
 
-export function BuildingExtrasEditor({ locationId, token, photoUrl }: Props) {
-  const [photo, setPhoto] = useState<string | null>(photoUrl ?? null);
-  const [photoMsg, setPhotoMsg] = useState<string | null>(null);
-  const [notes, setNotes] = useState<string>('');
+/** What a server not yet restarted onto these routes answers: a 200 with nothing in it. */
+const STALE = 'If the backend was just updated, restart it.';
+
+export const BuildingExtrasEditor = forwardRef<BuildingExtrasHandle, Props>(function BuildingExtrasEditor(
+  { locationId, token, photoUrl },
+  ref,
+) {
+  /** A photo chosen but not yet uploaded, and the local preview of it. */
+  const [pending, setPending] = useState<{ file: File; preview: string } | null>(null);
+  /** The current photo marked for removal. */
+  const [removing, setRemoving] = useState(false);
+  const [notes, setNotes] = useState('');
+  /** What the server holds. Null until loaded - and while null, the notes are never sent. */
   const [savedNotes, setSavedNotes] = useState<string | null>(null);
-  const [notesMsg, setNotesMsg] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [loadProblem, setLoadProblem] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setPhoto(photoUrl ?? null); setPhotoMsg(null); }, [photoUrl, locationId]);
+  // A different building, or the same one reloaded, starts clean.
+  useEffect(() => { setPending(null); setRemoving(false); }, [photoUrl, locationId]);
+  useEffect(() => () => { if (pending) URL.revokeObjectURL(pending.preview); }, [pending]);
 
-  // The notes are fetched rather than handed in: they are never part of the location data
-  // the panel already holds.
+  // Fetched rather than handed in: the notes are never part of the location data the panel
+  // already holds.
   useEffect(() => {
-    setNotes(''); setSavedNotes(null); setNotesMsg(null);
+    setNotes(''); setSavedNotes(null); setLoadProblem(null);
     if (locationId == null) return;
     let live = true;
     fetch(`/api/locations/${locationId}/gm-notes`, { headers: { Authorization: `Bearer ${token}` } })
       .then(async (r) => {
         const body = await r.json().catch(() => ({}));
         if (!live) return;
-        if (!r.ok) { setNotesMsg(body.error || 'Could not load the notes.'); return; }
-        // An old server answers with the app's page: a 200 that would read as "no notes".
-        if (typeof body.notes !== 'string') {
-          setNotesMsg('The server did not answer for the notes. If it was just updated, restart the backend.');
-          return;
-        }
+        if (!r.ok) { setLoadProblem(body.error || 'Could not load the notes.'); return; }
+        // An old server answers with the app's page: a 200 that would read as "no notes",
+        // and saving over that would wipe the real ones.
+        if (typeof body.notes !== 'string') { setLoadProblem(`The server did not answer for the notes. ${STALE}`); return; }
         setNotes(body.notes); setSavedNotes(body.notes);
       })
-      .catch(() => { if (live) setNotesMsg('Could not load the notes.'); });
+      .catch(() => { if (live) setLoadProblem('Could not load the notes.'); });
     return () => { live = false; };
   }, [locationId, token]);
+
+  useImperativeHandle(ref, () => ({
+    commit: async () => {
+      if (locationId == null) return [];
+      const problems: string[] = [];
+      const auth = { Authorization: `Bearer ${token}` };
+
+      if (pending) {
+        try {
+          const form = new FormData();
+          form.append('photo', pending.file);
+          const r = await fetch(`/api/locations/${locationId}/photo`, { method: 'POST', headers: auth, body: form });
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) problems.push(body.error || 'The photo was not saved.');
+          // A 200 is not proof: see STALE.
+          else if (typeof body.photo_url !== 'string') problems.push(`The server did not take the photo. ${STALE}`);
+        } catch {
+          problems.push('The photo was not saved.');
+        }
+      } else if (removing) {
+        try {
+          const r = await fetch(`/api/locations/${locationId}/photo`, { method: 'DELETE', headers: auth });
+          if (!r.ok) problems.push((await r.json().catch(() => ({}))).error || 'The photo was not removed.');
+        } catch {
+          problems.push('The photo was not removed.');
+        }
+      }
+
+      if (savedNotes !== null && notes !== savedNotes) {
+        try {
+          const r = await fetch(`/api/locations/${locationId}/gm-notes`, {
+            method: 'PUT',
+            headers: { ...auth, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes }),
+          });
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) problems.push(body.error || 'The GM notes were not saved.');
+          else if (typeof body.notes !== 'string') problems.push(`The server did not take the GM notes. ${STALE}`);
+          else setSavedNotes(body.notes);
+        } catch {
+          problems.push('The GM notes were not saved.');
+        }
+      }
+      return problems;
+    },
+  }), [locationId, token, pending, removing, notes, savedNotes]);
 
   if (locationId == null) {
     return (
@@ -64,84 +134,22 @@ export function BuildingExtrasEditor({ locationId, token, photoUrl }: Props) {
     );
   }
 
-  const upload = async (file: File) => {
-    setBusy(true); setPhotoMsg(null);
-    try {
-      const form = new FormData();
-      form.append('photo', file);
-      const r = await fetch(`/api/locations/${locationId}/photo`, {
-        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
-      });
-      const body = await r.json().catch(() => ({}));
-      if (!r.ok) { setPhotoMsg(body.error || 'The photo was not saved.'); return; }
-      // A 200 is not proof. A server running code from before this route existed answers
-      // any unknown address with the app's own page, which is a 200 with no photo in it -
-      // and this used to call that saved.
-      if (typeof body.photo_url !== 'string') {
-        setPhotoMsg('The server did not take the photo. If it was just updated, restart the backend.');
-        return;
-      }
-      setPhoto(body.photo_url);
-      setPhotoMsg('PHOTO SAVED');
-    } catch {
-      setPhotoMsg('The photo was not saved.');
-    } finally {
-      setBusy(false);
-      if (fileRef.current) fileRef.current.value = '';
-    }
-  };
-
-  const removePhoto = async () => {
-    setBusy(true); setPhotoMsg(null);
-    try {
-      const r = await fetch(`/api/locations/${locationId}/photo`, {
-        method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
-      });
-      const body = await r.json().catch(() => ({}));
-      if (!r.ok) { setPhotoMsg(body.error || 'The photo was not removed.'); return; }
-      setPhoto(null);
-      setPhotoMsg('PHOTO REMOVED');
-    } catch {
-      setPhotoMsg('The photo was not removed.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const saveNotes = async () => {
-    setBusy(true); setNotesMsg(null);
-    try {
-      const r = await fetch(`/api/locations/${locationId}/gm-notes`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ notes }),
-      });
-      const body = await r.json().catch(() => ({}));
-      if (!r.ok) { setNotesMsg(body.error || 'The notes were not saved.'); return; }
-      // Same check as the photo: an old server's 200 carries no notes back.
-      if (typeof body.notes !== 'string') {
-        setNotesMsg('The server did not take the notes. If it was just updated, restart the backend.');
-        return;
-      }
-      setSavedNotes(String(body.notes ?? ''));
-      setNotesMsg('NOTES SAVED');
-    } catch {
-      setNotesMsg('The notes were not saved.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const dirty = savedNotes !== null && notes !== savedNotes;
+  const shown = pending ? pending.preview : (!removing && photoUrl) || null;
+  const photoHint = pending
+    ? 'Uploads when you press UPDATE_DATA_POINT.'
+    : removing
+      ? 'Removed when you press UPDATE_DATA_POINT.'
+      : 'Everyone sees it in the building window, in place of the 3D view.';
+  const notesDirty = savedNotes !== null && notes !== savedNotes;
 
   return (
     <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
         <label style={label}>BUILDING PHOTO</label>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
-          {photo && (
+          {shown && (
             <img
-              src={photo}
+              src={shown}
               alt="Building photo"
               style={{ width: 64, height: 48, objectFit: 'cover', border: '1px solid var(--green)' }}
             />
@@ -152,20 +160,28 @@ export function BuildingExtrasEditor({ locationId, token, photoUrl }: Props) {
             accept={PHOTO_ACCEPT}
             aria-label="Building photo file"
             style={{ display: 'none' }}
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) { setPending({ file: f, preview: URL.createObjectURL(f) }); setRemoving(false); }
+              e.target.value = '';
+            }}
           />
-          <button type="button" className="utility-btn" disabled={busy} onClick={() => fileRef.current?.click()} style={small}>
-            {photo ? 'REPLACE PHOTO' : 'UPLOAD PHOTO'}
+          <button type="button" className="utility-btn" onClick={() => fileRef.current?.click()} style={small}>
+            {shown ? 'REPLACE PHOTO' : 'UPLOAD PHOTO'}
           </button>
-          {photo && (
-            <button type="button" className="utility-btn" disabled={busy} onClick={removePhoto} style={small}>
-              REMOVE
-            </button>
+          {(pending || (photoUrl && !removing)) && (
+            <button
+              type="button"
+              className="utility-btn"
+              onClick={() => { if (pending) setPending(null); else setRemoving(true); }}
+              style={small}
+            >{pending ? 'UNDO' : 'REMOVE'}</button>
+          )}
+          {removing && !pending && (
+            <button type="button" className="utility-btn" onClick={() => setRemoving(false)} style={small}>KEEP</button>
           )}
         </div>
-        <div style={{ fontSize: '0.65rem', opacity: 0.8, marginTop: 4 }}>
-          {photoMsg ?? 'Everyone sees it in the building window, in place of the 3D view.'}
-        </div>
+        <div style={hint}>{photoHint}</div>
       </div>
 
       <div>
@@ -173,19 +189,17 @@ export function BuildingExtrasEditor({ locationId, token, photoUrl }: Props) {
         <textarea
           id="gm-notes-box"
           value={notes}
-          onChange={(e) => { setNotes(e.target.value); setNotesMsg(null); }}
+          onChange={(e) => setNotes(e.target.value)}
+          // Unloaded notes cannot be edited: saving over notes that never arrived would
+          // wipe the real ones.
+          disabled={savedNotes === null}
           placeholder="Only you see these."
           style={{ width: '100%', height: 90, boxSizing: 'border-box' }}
         />
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginTop: 4 }}>
-          <button type="button" className="utility-btn" disabled={busy || !dirty} onClick={saveNotes} style={small}>
-            SAVE NOTES
-          </button>
-          <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>
-            {notesMsg ?? (dirty ? 'UNSAVED' : 'Players never see these.')}
-          </span>
+        <div style={hint}>
+          {loadProblem ?? (notesDirty ? 'Saves when you press UPDATE_DATA_POINT.' : 'Players never see these.')}
         </div>
       </div>
     </div>
   );
-}
+});
