@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [1.14.0] - 2026-09-24
+
 Shops open in every game system.
 
 ### Added
