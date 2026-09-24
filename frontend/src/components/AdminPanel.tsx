@@ -2529,7 +2529,11 @@ function BuybackPanel({ token, globalSettings, fetchGlobalSettings }: { token: s
           aria-label="Shop buy-back percentage"
           style={{ width: '80px', padding: '4px 6px', textAlign: 'center' }}
         />
-        <span style={{ fontSize: '0.7rem' }}>% OF BOOK PRICE</span>
+        {/* The book only exists on CWN. Everywhere else the price is whatever the GM
+            uploaded, which is the price on the shelf. */}
+        <span style={{ fontSize: '0.7rem' }}>
+          % OF {globalSettings?.game_system === 'cities_without_number' ? 'BOOK' : 'SHELF'} PRICE
+        </span>
       </div>
     </div>
   );

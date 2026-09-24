@@ -62,6 +62,9 @@ export function EmptyShopSteps({ buildingType, system, onOpenCatalogues }: Props
       style={{
         ...mono, textAlign: 'left', marginTop: 8, padding: '8px 10px',
         border: '1px solid var(--warning)', color: 'var(--green)',
+        // Solid, because the admin panel is see-through and the map behind it would
+        // otherwise run through the middle of the instructions.
+        background: 'var(--black)',
       }}
     >
       <div style={{ color: 'var(--warning)', marginBottom: 4 }}>

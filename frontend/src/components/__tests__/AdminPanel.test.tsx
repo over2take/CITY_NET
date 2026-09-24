@@ -147,6 +147,19 @@ describe('AdminPanel list view', () => {
     expect(props.setIsAdminPayOpen).toHaveBeenCalledWith(true);
   });
 
+  it('says what the buy-back rate is a percentage of, in this game', async () => {
+    // A book price only exists on CWN; elsewhere it is whatever the GM put on the shelf.
+    const { unmount } = render(<AdminPanel {...baseProps()} globalSettings={{ game_system: 'cities_without_number' }} />);
+    await userEvent.click(screen.getByText('GAME'));
+    expect(screen.getByText(/% OF BOOK PRICE/)).toBeInTheDocument();
+    unmount();
+
+    render(<AdminPanel {...baseProps()} globalSettings={{ game_system: 'cyberpunk_red' }} />);
+    await userEvent.click(screen.getByText('GAME'));
+    expect(screen.getByText(/% OF SHELF PRICE/)).toBeInTheDocument();
+    expect(screen.queryByText(/BOOK PRICE/)).toBeNull();
+  });
+
   it('shows SAVE_DEFAULT and LOAD_DEFAULT buttons in battle_map view', () => {
     render(<AdminPanel {...baseProps()} view="battle_map" />);
     expect(screen.getByText('SAVE_DEFAULT')).toBeInTheDocument();
