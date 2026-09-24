@@ -9,9 +9,12 @@
  * Imported from the real server module, like the price and building-type mirrors.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { createRequire } from 'module';
-import { ownedItems, sellableAt, findByName, normaliseName, type OwnedLine } from '../ownedItems';
+import {
+  ownedItems, sellableAt, findByName, normaliseName, priceOf, labelOf, type OwnedLine,
+} from '../ownedItems';
+import { loadUploaded, clearUploaded } from '../uploadedCatalogues';
 
 const require_ = createRequire(import.meta.url);
 const backend = require_('../../../../backend/shops/owned.js');
@@ -99,6 +102,67 @@ describe('the window and the server agree on what you own', () => {
       const theirs = backend.ownedItems(data).sort((a: OwnedLine, b: OwnedLine) => a.key.localeCompare(b.key));
       expect(mine.map((l) => l.at), name).toEqual(theirs.map((l: OwnedLine) => l.at));
     }
+  });
+});
+
+describe('the window and the server agree on every system', () => {
+  /**
+   * The same comparison on the other sheets. Row counts differ - four weapon rows on
+   * Cyberpunk RED and Shadowrun, no vehicles on Shadowrun, neither on generic - and the CWN
+   * book does not apply, so each side has to leave the same things out as well as find the
+   * same things.
+   *
+   * The uploads are loaded on both sides, the way the server's catalogue broadcast does.
+   */
+  const store = require_('../../../../backend/shops/catalogueStore.js');
+  const UPLOADS = {
+    weapons: [{ id: 'unity', name: 'Militech Unity', price: 100, fields: {} }],
+    vehicles: [{ id: 'yaiba', name: 'Yaiba Kusanagi', price: 1000, fields: {} }],
+    gear: [{ id: 'rope', name: 'Rope', price: 20, fields: {} }],
+  };
+  const OTHER_SHEETS: { name: string; data: Record<string, unknown> }[] = [
+    ...SHEETS,
+    { name: 'an uploaded gun in the last row', data: { weapon4_name: 'Militech Unity' } },
+    { name: 'a fifth weapon row no sheet but CWN has', data: { weapon5_name: 'Militech Unity' } },
+    { name: 'an uploaded vehicle', data: { vehicle2_name: 'Yaiba Kusanagi', vehicle2_type: 'Bike' } },
+    { name: 'uploaded gear', data: { inventory: JSON.stringify([{ name: 'Rope', qty: 3 }]) } },
+  ];
+
+  afterEach(() => { store.clear(); clearUploaded(); });
+
+  for (const system of ['cities_without_number', 'cyberpunk_red', 'shadowrun_6e', 'generic']) {
+    it(`agrees on ${system}`, () => {
+      store.load(system, UPLOADS);
+      loadUploaded(UPLOADS);
+      for (const { name, data } of OTHER_SHEETS) {
+        const mine = ownedItems(data, system);
+        const theirs = backend.ownedItems(data, system);
+        expect(summarise(mine), name).toEqual(summarise(theirs));
+        const byKey = (a: OwnedLine, b: OwnedLine) => a.key.localeCompare(b.key);
+        expect(mine.sort(byKey).map((l) => l.at), name)
+          .toEqual(theirs.sort(byKey).map((l: OwnedLine) => l.at));
+      }
+    });
+  }
+
+  it('sees nothing from the CWN book outside CWN', () => {
+    // A Heavy Pistol on a Cyberpunk RED sheet is unpriced homebrew there, not the book's.
+    store.load('cyberpunk_red', {});
+    const [line] = ownedItems({ weapon1_name: 'Heavy Pistol' }, 'cyberpunk_red');
+    expect(line).toMatchObject({ catalogue: null, id: null, unitPrice: null });
+    expect(findByName('Heavy Pistol', 'cyberpunk_red')).toBeNull();
+    // Nor by id, which is what the server's own priceOf answers for the same system.
+    expect(priceOf('weapons', 'heavy_pistol', 'cyberpunk_red')).toBe(store.priceOf('weapons', 'heavy_pistol'));
+    expect(priceOf('weapons', 'heavy_pistol', 'cyberpunk_red')).toBeNull();
+    expect(labelOf('weapons', 'heavy_pistol', 'cyberpunk_red')).toBeNull();
+  });
+
+  it('reads only the rows each sheet draws', () => {
+    loadUploaded(UPLOADS);
+    const data = { weapon5_name: 'Militech Unity', vehicle1_name: 'Yaiba Kusanagi' };
+    expect(ownedItems(data, 'cyberpunk_red').map((l) => l.label)).toEqual(['Yaiba Kusanagi']);
+    expect(ownedItems(data, 'shadowrun_6e')).toEqual([]);
+    expect(ownedItems(data, 'generic')).toEqual([]);
   });
 });
 

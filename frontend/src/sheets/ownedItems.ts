@@ -21,10 +21,20 @@ import { CWN_ARMOR_MODS, CWN_WEAPON_MODS } from './cwnGearMods';
 import { VEHICLE_PRESETS } from './vehiclePresets';
 import { VEHICLE_FITTINGS } from './vehicleFittings';
 import { VEHICLE_WEAPONS } from './vehicleWeapons';
-import { CWN_WEAPON_ROWS, CWN_VEHICLE_ROWS } from './templates/cities_without_number';
+import { slotsOf } from './sheetSlots';
 import type { ShopStock } from '../data/buildingTypes';
 import { CATALOGUES as CATALOGUE_LIST } from '../data/buildingTypes';
 import { uploadedIn, uploadedEntry } from './uploadedCatalogues';
+
+/**
+ * The system the built-in book belongs to, and the one a caller gets by not saying.
+ *
+ * **Only Cities Without Number shops sell from the book.** Every other system's shops carry
+ * only what that GM uploaded, matching the server - a Heavy Pistol on a Cyberpunk RED sheet
+ * is that game's gun, not CWN's at CWN's price. So the lookups below consult the book only
+ * for this system.
+ */
+export const BOOK_SYSTEM = 'cities_without_number';
 
 /** Where a thing lives, which decides how it is taken away again. */
 export type OwnedSource = 'inventory' | 'weapon' | 'stash' | 'cyberware' | 'vehicle';
@@ -109,8 +119,10 @@ for (const { catalogue, rows } of CATALOGUES) {
  * this thing the player owns", and a character carrying a Heavy Pistol bought before any
  * upload is still carrying the book's.
  */
-export const findByName = (name: unknown): { catalogue: ShopStock; id: string } | null => {
-  const hit = BY_NAME.get(normaliseName(name));
+export const findByName = (
+  name: unknown, system: string = BOOK_SYSTEM,
+): { catalogue: ShopStock; id: string } | null => {
+  const hit = system === BOOK_SYSTEM ? BY_NAME.get(normaliseName(name)) : undefined;
   if (hit) return { catalogue: hit.catalogue, id: hit.id };
 
   const wanted = normaliseName(name);
@@ -128,25 +140,30 @@ export const findByName = (name: unknown): { catalogue: ShopStock; id: string } 
  *
  * Uploaded first: a GM who typed a price for something the book also carries meant it.
  */
-export const priceOf = (catalogue: ShopStock, id: string): number | null => {
+export const priceOf = (
+  catalogue: ShopStock, id: string, system: string = BOOK_SYSTEM,
+): number | null => {
   const mine = uploadedEntry(catalogue, id);
   if (mine) return Number.isFinite(mine.price) ? mine.price : null;
-  return BY_ID.get(`${catalogue}/${id}`)?.price ?? null;
+  return system === BOOK_SYSTEM ? (BY_ID.get(`${catalogue}/${id}`)?.price ?? null) : null;
 };
 
-export const labelOf = (catalogue: ShopStock, id: string): string | null => {
+export const labelOf = (
+  catalogue: ShopStock, id: string, system: string = BOOK_SYSTEM,
+): string | null => {
   const mine = uploadedEntry(catalogue, id);
   if (mine) return mine.name;
-  return BY_ID.get(`${catalogue}/${id}`)?.label ?? null;
+  return system === BOOK_SYSTEM ? (BY_ID.get(`${catalogue}/${id}`)?.label ?? null) : null;
 };
 
 /** Add one owned thing to the tally, merging onto a line that is already there. */
 const tally = (
-  into: Map<string, OwnedLine>, name: unknown, source: OwnedSource, extra: Partial<OwnedAt> = {},
+  into: Map<string, OwnedLine>, system: string,
+  name: unknown, source: OwnedSource, extra: Partial<OwnedAt> = {},
 ) => {
   const label = String(name ?? '').trim();
   if (!label) return;
-  const hit = findByName(label);
+  const hit = findByName(label, system);
   const key = hit ? `${hit.catalogue}/${hit.id}` : `?/${normaliseName(label)}`;
   const qty = Math.max(0, Math.floor(Number(extra.qty) || 1));
   if (qty <= 0) return;
@@ -155,8 +172,8 @@ const tally = (
     key,
     catalogue: hit ? hit.catalogue : null,
     id: hit ? hit.id : null,
-    label: hit ? (labelOf(hit.catalogue, hit.id) ?? label) : label,
-    unitPrice: hit ? priceOf(hit.catalogue, hit.id) : null,
+    label: hit ? (labelOf(hit.catalogue, hit.id, system) ?? label) : label,
+    unitPrice: hit ? priceOf(hit.catalogue, hit.id, system) : null,
     qty: 0,
     at: [],
   };
@@ -172,24 +189,33 @@ const tally = (
  * quantity, weapons and vehicles sit in numbered slots one apiece, and cyberware is a list
  * that may or may not be installed. Quantity is why they cannot simply be concatenated -
  * two slots holding the same gun is one line reading x2.
+ *
+ * How many weapon and vehicle rows there are comes from the system's own sheet template:
+ * six of each on CWN, four on Cyberpunk RED, four weapons and no vehicles on Shadowrun, none
+ * on generic. Inventory and cyberware are read wherever they are filled in.
  */
-export const ownedItems = (data: Record<string, unknown> | null | undefined): OwnedLine[] => {
+export const ownedItems = (
+  data: Record<string, unknown> | null | undefined, system: string = BOOK_SYSTEM,
+): OwnedLine[] => {
   const sheet = data && typeof data === 'object' ? data : {};
+  const slots = slotsOf(system);
   const lines = new Map<string, OwnedLine>();
+  const add = (name: unknown, source: OwnedSource, extra: Partial<OwnedAt> = {}) =>
+    tally(lines, system, name, source, extra);
 
   readInventory(sheet).forEach((item, index) => {
     // No carry state: selling takes a thing whether it is readied, stowed or in a
     // locker, and leaving it out keeps this identical to the server's reader.
-    tally(lines, item.name, 'inventory', {
+    add(item.name, 'inventory', {
       index, qty: Math.max(1, Math.floor(Number(item.qty) || 1)),
     });
   });
 
-  for (let i = 1; i <= CWN_WEAPON_ROWS; i += 1) {
-    tally(lines, sheet[`weapon${i}_name`], 'weapon', { slot: i });
+  for (let i = 1; i <= (slots.weapon?.rows ?? 0); i += 1) {
+    add(sheet[`weapon${i}_name`], 'weapon', { slot: i });
   }
 
-  readStash(sheet).forEach((w, index) => tally(lines, w.name, 'stash', { index }));
+  readStash(sheet).forEach((w, index) => add(w.name, 'stash', { index }));
 
   /**
    * Installed chrome sells too. Taking it out is surgery in the book, and the app does
@@ -205,17 +231,17 @@ export const ownedItems = (data: Record<string, unknown> | null | undefined): Ow
     .map((row, index) => ({ row, index }))
     .sort((a, b) => Number(!!a.row.placed) - Number(!!b.row.placed))
     .forEach(({ row, index }) => {
-      tally(lines, row.name, 'cyberware', { index, placed: !!row.placed });
+      add(row.name, 'cyberware', { index, placed: !!row.placed });
     });
 
   // Keyed by type rather than by name: a vehicle somebody has called "Betty" is still a
   // Motorcycle and still worth what one is worth.
-  for (let i = 1; i <= CWN_VEHICLE_ROWS; i += 1) {
+  for (let i = 1; i <= (slots.vehicle?.rows ?? 0); i += 1) {
     const typeId = String(sheet[`vehicle${i}_type`] ?? '').trim();
     const named = String(sheet[`vehicle${i}_name`] ?? '').trim();
     if (!typeId && !named) continue;
-    const label = typeId ? labelOf('vehicles', typeId) : null;
-    tally(lines, label || named, 'vehicle', { slot: i, named });
+    const label = typeId ? labelOf('vehicles', typeId, system) : null;
+    add(label || named, 'vehicle', { slot: i, named });
   }
 
   return [...lines.values()];
