@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BUILDING_TYPES, shopsAvailable, isShop, typeLabel } from '../data/buildingTypes';
+import { EmptyShopSteps } from './EmptyShopSteps';
 import { OVERDRAFT_RULE, BUYBACK_SETTING, DEFAULT_BUYBACK_PCT } from '../data/shopRules';
 import { xpAvailable } from './XpWindow';
 import { createPortal } from 'react-dom';
@@ -1953,6 +1954,17 @@ export function AdminPanel({
                               <span style={{ fontSize: '0.7rem' }}>%</span>
                             </div>
                           </div>
+                        )}
+
+                        {/* A shop with nothing to sell, and how to change that. Only ever
+                            outside CWN, where shops carry what the GM uploads and nothing
+                            else - and said here, where the shop is being set up. */}
+                        {isShop(editData.building_type) && (
+                          <EmptyShopSteps
+                            buildingType={editData.building_type}
+                            system={globalSettings['game_system']}
+                            onOpenCatalogues={setIsCatalogueOpen ? () => setIsCatalogueOpen(true) : undefined}
+                          />
                         )}
                       </div>
                     )}

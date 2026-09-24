@@ -1176,6 +1176,27 @@ describe('the building type control', () => {
     expect(screen.queryByRole('option', { name: 'Ripperdoc (shop)' })).not.toBeInTheDocument();
   });
 
+  it('tells the GM how to stock a shop that has nothing to sell', async () => {
+    // Outside CWN a new shop is empty until the GM uploads something, and this is where
+    // the shop is being set up - so this is where they are told how.
+    const setIsCatalogueOpen = vi.fn();
+    editView({
+      globalSettings: { game_system: 'cyberpunk_red' },
+      editData: { building_type: 'gun_shop' },
+      props: { setIsCatalogueOpen },
+    });
+    expect(screen.getByRole('note', { name: 'How to stock this shop' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'OPEN IT' }));
+    expect(setIsCatalogueOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('says nothing about stocking a CWN shop, or a building that does not trade', () => {
+    editView({ editData: { building_type: 'gun_shop' } });
+    expect(screen.queryByRole('note', { name: 'How to stock this shop' })).toBeNull();
+    editView({ globalSettings: { game_system: 'cyberpunk_red' }, editData: { building_type: 'bar' } });
+    expect(screen.queryByRole('note', { name: 'How to stock this shop' })).toBeNull();
+  });
+
   it('is absent under a system nothing knows', () => {
     // The server refuses it too; this only keeps the control off screens where using it
     // would return a refusal.

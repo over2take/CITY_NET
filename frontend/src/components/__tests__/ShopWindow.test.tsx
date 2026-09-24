@@ -1852,3 +1852,30 @@ describe('a CWN catalogue file, bought through the window and sold back', () => 
     }
   });
 });
+
+describe('an empty shop, opened by the GM', () => {
+  beforeEach(() => {
+    clearUploaded();
+    sheetState.sheet = { system: 'cyberpunk_red', data: {} };
+  });
+
+  const render_ = (isAdmin: boolean, onOpenCatalogues = vi.fn()) => render(
+    <ShopWindow name="Vic" locationId={7} buildingType="gun_shop" system="cyberpunk_red"
+      isAdmin={isAdmin} onOpenCatalogues={onOpenCatalogues}
+      buybackPct={45} socket={makeSocket()} userName="JADE" onClose={vi.fn()} />,
+  );
+
+  it('shows the GM the steps, with a way straight to SHOP_CATALOGUES', async () => {
+    const open = vi.fn();
+    render_(true, open);
+    expect(screen.getByRole('note', { name: 'How to stock this shop' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'OPEN IT' }));
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it('shows a player only that the GM stocks it', () => {
+    render_(false);
+    expect(screen.queryByRole('note', { name: 'How to stock this shop' })).toBeNull();
+    expect(screen.getByText(/the GM adds stock in SHOP_CATALOGUES/)).toBeInTheDocument();
+  });
+});

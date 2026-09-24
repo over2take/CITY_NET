@@ -11,6 +11,7 @@ import { ownedItems, sellableAt, BOOK_SYSTEM } from '../sheets/ownedItems';
 import { uploadedIn, type UploadedEntry } from '../sheets/uploadedCatalogues';
 import { placeUploaded, destinationOf } from '../sheets/shopPlacement';
 import { columnsFor } from '../sheets/catalogueSchema';
+import { EmptyShopSteps } from './EmptyShopSteps';
 import { CWN_CYBERWARE, type CwnCyberPreset } from '../sheets/cwnCyberwarePresets';
 import { CYBERWARE_FIELD, readRows, normaliseRow } from '../sheets/cyberwareRows';
 import { CWN_WEAPONS, weaponToStashed, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
@@ -82,6 +83,13 @@ interface Props {
    * carry only what the GM uploaded, placed into that system's own sheet rows.
    */
   system: string;
+  /**
+   * Whether the viewer runs the game. An admin opening an empty shop is told how to stock
+   * it; a player is only told that the GM does.
+   */
+  isAdmin?: boolean;
+  /** Opens SHOP_CATALOGUES, for the admin's stocking steps. */
+  onOpenCatalogues?: () => void;
   /** The shopper's own sheet: where a bought piece lands, and what a sold one comes from. */
   socket: any;
   userName: string | null;
@@ -204,6 +212,7 @@ interface Shelf<T> {
 
 export function ShopWindow({
   name, locationId, buildingType, system, buybackPct: pct, socket, userName, onClose,
+  isAdmin = false, onOpenCatalogues,
 }: Props) {
   /** Whether this game's shops sell from the CWN book. Nobody else's do. */
   const book = system === BOOK_SYSTEM;
@@ -1484,6 +1493,13 @@ export function ShopWindow({
                       ? 'Nothing on the shelves yet — the GM adds stock in SHOP_CATALOGUES.'
                       : 'NOTHING MATCHES THAT'}
                   </div>
+                )}
+                {isAdmin && (
+                  <EmptyShopSteps
+                    buildingType={buildingType}
+                    system={system}
+                    onOpenCatalogues={onOpenCatalogues}
+                  />
                 )}
               </>
             )}
