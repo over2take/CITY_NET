@@ -6,6 +6,7 @@ const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
 const { LIMITS, rejectFormat, uploadErrors } = require('../middleware/uploadConstraints');
 const gmNotes = require('../buildings/gmNotes');
+const { PHOTO_EXT } = require('../buildings/photoTypes');
 
 // The parts of a building's info window that are not plain location fields: its photo,
 // which everyone sees, and the GM's notes, which only the GM does.
@@ -15,13 +16,6 @@ const gmNotes = require('../buildings/gmNotes');
 // rights holds a temporary token that passes that check too, and notes written about
 // the players are exactly what they must not be able to read.
 
-/**
- * What a building photo may be. Stills only, and only what an `<img>` will show.
- *
- * Narrower than a battle map on purpose. There is no call for a looping photo, and SVG,
- * which the battle-map list keeps for floor plans, is a drawing rather than a photograph.
- */
-const PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif']);
 
 /** Refuse anyone but the main admin, the way battle maps do. */
 const mainAdminOnly = (req, res, next) => {
@@ -134,4 +128,3 @@ module.exports = (db, io, { emitUpdate }) => {
   return router;
 };
 
-module.exports.PHOTO_EXT = PHOTO_EXT;

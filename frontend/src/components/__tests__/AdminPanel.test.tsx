@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -1215,6 +1215,33 @@ describe('the building type control', () => {
     // would return a refusal.
     editView({ globalSettings: { game_system: 'dnd_5e' } });
     expect(screen.queryByLabelText('Building type')).not.toBeInTheDocument();
+  });
+
+  describe('the building photo and GM notes', () => {
+    // The controls fetch the building's notes; answer with none.
+    beforeEach(() => {
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ notes: '' }) })));
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('are offered to the main admin, on a building, in any system', () => {
+      // Nothing to do with shops, so not behind the shop gate.
+      editView({ props: { isPrimaryAdmin: true }, globalSettings: { game_system: 'dnd_5e' } });
+      expect(screen.getByText('BUILDING PHOTO')).toBeInTheDocument();
+      expect(screen.getByLabelText('GM NOTES')).toBeInTheDocument();
+    });
+
+    it('are not offered to a player granted editing rights', () => {
+      // They see this view too, and the server refuses them both.
+      editView({ props: { isPrimaryAdmin: false } });
+      expect(screen.queryByText('BUILDING PHOTO')).toBeNull();
+      expect(screen.queryByLabelText('GM NOTES')).toBeNull();
+    });
+
+    it('are not offered on a token', () => {
+      editView({ props: { isPrimaryAdmin: true }, editData: { shape: 'enemy_rhombus' } });
+      expect(screen.queryByText('BUILDING PHOTO')).toBeNull();
+    });
   });
 
   it('is absent on a token rather than a building', () => {

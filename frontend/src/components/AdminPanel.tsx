@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BUILDING_TYPES, shopsAvailable, isShop, typeLabel } from '../data/buildingTypes';
 import { EmptyShopSteps } from './EmptyShopSteps';
+import { BuildingExtrasEditor } from './BuildingExtrasEditor';
 import { OVERDRAFT_RULE, BUYBACK_SETTING, DEFAULT_BUYBACK_PCT } from '../data/shopRules';
 import { xpAvailable } from './XpWindow';
 import { createPortal } from 'react-dom';
@@ -1970,7 +1971,14 @@ export function AdminPanel({
                     )}
                 </>
             )}
-            
+
+            {/* The photo everyone sees and the notes only the GM does. Every system, since
+                neither has anything to do with shops; main admin only, since a granted
+                editor sees this view too and the server refuses them both. */}
+            {isAdmin && isPrimaryAdmin && !['enemy_rhombus', 'friendly_rhombus', 'rhombus', 'none'].includes(editData.shape) && (
+              <BuildingExtrasEditor locationId={editId ?? null} token={token} photoUrl={editData.photo_url} />
+            )}
+
             {editData.shape === 'friendly_rhombus' && (() => {
               // Letting players move a friendly NPC. This grants movement and nothing
               // else, and admins keep control whatever is set here - it shares the token
