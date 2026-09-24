@@ -16,12 +16,17 @@ interface DraggableWindowProps {
   notificationsEnabled?: boolean;
   onToggleNotifications?: () => void;
   titleControls?: React.ReactNode;
+  /**
+   * Extra classes on the window, for a window that wants a different look without every
+   * other window changing with it - the building window's terminal style is the first.
+   */
+  className?: string;
 }
 
 export function DraggableWindow({
   title, centerTitle, children, pos, setPos, onClose,
   windowStyle = {}, contentStyle = {},
-  notificationsEnabled, onToggleNotifications, titleControls,
+  notificationsEnabled, onToggleNotifications, titleControls, className,
 }: DraggableWindowProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -77,7 +82,7 @@ export function DraggableWindow({
   }, [isDragging, dragOffset, setPos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div ref={windowRef} className="win95-window" style={{ left: `${pos.x}px`, top: `${pos.y}px`, zIndex, ...windowStyle }}>
+    <div ref={windowRef} className={className ? `win95-window ${className}` : 'win95-window'} style={{ left: `${pos.x}px`, top: `${pos.y}px`, zIndex, ...windowStyle }}>
       <div className="win95-title-bar" onMouseDown={(e) => { bringToFront(); handleMouseDown(e); }} style={{ position: 'relative' }}>
         <div className="win95-title-text" style={{ fontWeight: 'bold' }}>{title}</div>
         {centerTitle && (

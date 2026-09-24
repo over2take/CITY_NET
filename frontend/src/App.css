@@ -952,6 +952,18 @@ header {
   text-shadow: 0 0 1px currentColor, 0 0 1px currentColor;
 }
 
+/* The terminal look, for windows that ask for it (the building window): a solid title bar
+   in the theme's colour with the name knocked out of it, like an old green-screen header. */
+.terminal-window .win95-title-bar {
+  background: var(--green);
+  color: var(--black);
+  border-bottom: none;
+}
+
+.terminal-window .win95-title-text {
+  text-shadow: none;
+}
+
 .win95-close-btn {
   background: var(--black);
   border: 1px solid var(--green);

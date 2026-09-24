@@ -24,6 +24,7 @@ import type { ThemeName } from './theme/themes';
 import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
+import { BuildingWindow, type BuildingAction } from './components/BuildingWindow';
 import { ShopWindow } from './components/ShopWindow';
 import { CatalogueWindow } from './components/CatalogueWindow';
 import { buildingTypeById, isShop, shopsAvailable, typeLabel } from './data/buildingTypes';
@@ -2341,7 +2342,77 @@ function App() {
               const isAdmin = token !== '';
               const canManage = isRhombus && (isAdmin || (isPlayerRhombus && isOwner));
               
+              /** Mark this spot for everyone. Shared by the building and token windows. */
+              const pingSelected = () => {
+                const loc = selectedLocation;
+                if (loc && socketRef.current) {
+                    let pingX = loc.x;
+                    let pingY = (loc.y || 0) + (loc.height / 2);
+                    let pingZ = loc.z;
+                    
+                    if (targetObject) {
+                        const box = new THREE.Box3().setFromObject(targetObject);
+                        const center = new THREE.Vector3();
+                        box.getCenter(center);
+                        pingX = center.x;
+                        pingY = center.y;
+                        pingZ = center.z;
+                    }
+                    
+                    const size = Math.max(loc.width, loc.height, loc.depth);
+                    socketRef.current.emit('ping_location', {
+                        x: pingX,
+                        y: pingY,
+                        z: pingZ,
+                        color: rhombusState.color || '#00ccff',
+                        size: size,
+                        battle_map_id: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
+                        floor_index: view === 'battle_map' && activeBattleMapData && activeBattleMapData.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
+                    });
+                }
+              };
+
               // Show window if not admin OR if it's a rhombus that needs management OR just to view info
+              if (selectedLocation && (!token || !showAdminPanel || canManage) && !isRhombus) {
+                /**
+                 * Buildings get the terminal window. The buttons are decided here, where the
+                 * state they depend on lives, and handed over as a list: the window lays
+                 * them out and knows nothing about shops, battle maps or the stream camera.
+                 */
+                const actions: BuildingAction[] = [
+                  ...(shopsAvailable(gameSystem) && isShop(selectedLocation.building_type)
+                    ? [{ key: 'shop', label: 'SHOP', tone: 'primary' as const, onClick: () => setShopLocation(selectedLocation) }]
+                    : []),
+                  ...(currentLocBattleMaps.length > 0
+                    ? [{ key: 'battle', label: 'ENTER BATTLE MAP', tone: 'accent' as const, onClick: () => enterBattleMap(selectedLocation.id) }]
+                    : []),
+                  { key: 'ping', label: 'BROADCAST PING', onClick: pingSelected, title: 'Show everyone where this is' },
+                  ...(isAdmin
+                    ? [{ key: 'broadcast', label: 'BROADCAST_THIS', title: 'Point the stream camera at this object', onClick: () => updateDirector({ cameraMode: 'director', target: computeBroadcastFraming(selectedLocation) }) }]
+                    : []),
+                  ...(isAdmin && hasVehicles(gameSystem)
+                    ? [{ key: 'enemy-vehicles', label: 'ENEMY VEHICLES', title: 'Enemy vehicles, kept on NPC sheets between sessions', onClick: () => setIsEnemyVehiclesOpen(true) }]
+                    : []),
+                  ...(!token
+                    ? [{ key: 'request-edit', label: 'REQUEST_EDITING_RIGHTS', onClick: () => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current?.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } } }]
+                    : []),
+                ];
+                return (
+                  <BuildingWindow
+                    location={selectedLocation}
+                    parts={locations.filter((l: any) => l.parent_id === selectedLocation.id)}
+                    title={isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation)}
+                    gameSystem={gameSystem}
+                    pos={infoPanelPos}
+                    setPos={setInfoPanelPos}
+                    onClose={() => setSelectedLocation(null)}
+                    actions={actions}
+                    isPrimaryAdmin={isAdmin && isPrimaryAdmin}
+                    token={token}
+                  />
+                );
+              }
+
               if (selectedLocation && (!token || !showAdminPanel || canManage)) {
                 return (
                   <DraggableWindow 
@@ -2418,37 +2489,7 @@ function App() {
                             )
                           ); })()}
                         </>
-                      ) : (
-                        <>
-                          {selectedLocation.district_name && <p><strong>DISTRICT:</strong> {selectedLocation.district_name}</p>}
-                          <p><strong>DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
-                          <p><strong>RESIDENTS:</strong> {selectedLocation.npcs || 'UNKNOWN'}</p>
-
-                          {/* Shops exist under every system with a sheet. The gate is on
-                              the server too - this just keeps a control off screens where
-                              pressing it would only ever return a refusal. */}
-                          {shopsAvailable(gameSystem) && (
-                            <div style={{ borderTop: '1px solid var(--dark-green)', marginTop: 8, paddingTop: 8 }}>
-                              {/* Read-only here. Setting it belongs in the edit window
-                                  beside the building's other properties, not in the panel
-                                  a player opens to look at it. */}
-                              {buildingTypeById(selectedLocation.building_type) && (
-                                <p><strong>TYPE:</strong> {typeLabel(selectedLocation.building_type, gameSystem)}</p>
-                              )}
-
-                              {isShop(selectedLocation.building_type) && (
-                                <button
-                                  className="upload-btn"
-                                  style={{ width: '100%' }}
-                                  onClick={() => setShopLocation(selectedLocation)}
-                                >
-                                  SHOP
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
+                      ) : null}
                     </div>
                     {/* The GM's enemy cars. Admin-only, since the roster never reaches a
                         player's client at all — which is what keeps enemy pools and armour
@@ -2463,33 +2504,7 @@ function App() {
                         ENEMY VEHICLES
                       </button>
                     )}
-                    <button className="upload-btn" style={{marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: 'var(--blue)', color: '#fff'}} onClick={() => {
-                        if (socketRef.current) {
-                            let pingX = selectedLocation.x;
-                            let pingY = (selectedLocation.y || 0) + (selectedLocation.height / 2);
-                            let pingZ = selectedLocation.z;
-                            
-                            if (targetObject) {
-                                const box = new THREE.Box3().setFromObject(targetObject);
-                                const center = new THREE.Vector3();
-                                box.getCenter(center);
-                                pingX = center.x;
-                                pingY = center.y;
-                                pingZ = center.z;
-                            }
-                            
-                            const size = Math.max(selectedLocation.width, selectedLocation.height, selectedLocation.depth);
-                            socketRef.current.emit('ping_location', {
-                                x: pingX,
-                                y: pingY,
-                                z: pingZ,
-                                color: rhombusState.color || '#00ccff',
-                                size: size,
-                                battle_map_id: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
-                                floor_index: view === 'battle_map' && activeBattleMapData && activeBattleMapData.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
-                            });
-                        }
-                    }}>
+                    <button className="upload-btn" style={{marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: 'var(--blue)', color: '#fff'}} onClick={pingSelected}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/>
                         </svg>
@@ -2672,13 +2687,9 @@ function App() {
                             setIsHitPointsOpen(true);
                         }}>UPDATE_HEALTH</button>
                     )}
-                    {isAdmin && isPrimaryAdmin && !isRhombus && (
-      <></>
-  )}
   {currentLocBattleMaps.length > 0 && (
       <button className="upload-btn" style={{backgroundColor: '#ff00ff', color: 'white'}} onClick={() => enterBattleMap(selectedLocation.id)}>ENTER BATTLE MAP</button>
   )}
-  {!token && !isRhombus && <button className="upload-btn" onClick={() => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current?.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } }}>REQUEST_EDITING_RIGHTS</button>}
                   </DraggableWindow>
                 );
               }
