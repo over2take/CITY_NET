@@ -268,6 +268,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             vehicleState.roster(db, (data) => socket.emit('vehicleRoster', data), system);
           }
         });
+        // The shop catalogues, for the same reason as the roster: the window asks when
+        // its socket connects, before it is identified, and that request is dropped.
+        // Outside CWN the uploads are all a shop has, so a player who was never sent
+        // them walked into every shop and found it empty.
+        sendCatalogues();
       }
 
       db.all('SELECT * FROM chat_logs ORDER BY timestamp DESC LIMIT 50', (err, rows) => {
@@ -2112,12 +2117,24 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     });
 
     /** Everything the shops currently sell, so a GM can download and edit it. */
+    /**
+     * Every catalogue as the running system's shops sell it, to this one socket.
+     *
+     * Through getShopSystem so the store is known to hold this system before it is read -
+     * the same check a purchase makes, for the same reason.
+     */
+    const sendCatalogues = () => {
+      getShopSystem((err) => {
+        if (err) return;
+        const out = {};
+        for (const c of buildingTypes.CATALOGUES) out[c.id] = shopPrices.entriesIn(c.id);
+        socket.emit('catalogues', { entries: out });
+      });
+    };
+
     socket.on('requestCatalogues', () => {
-      const info = userSockets.get(socket.id);
-      if (!info) return;
-      const out = {};
-      for (const c of buildingTypes.CATALOGUES) out[c.id] = shopPrices.entriesIn(c.id);
-      socket.emit('catalogues', { entries: out });
+      if (!userSockets.get(socket.id)) return;
+      sendCatalogues();
     });
 
     socket.on('adminPayPlayers', (data) => {

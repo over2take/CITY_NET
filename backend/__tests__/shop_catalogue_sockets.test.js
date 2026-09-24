@@ -290,6 +290,21 @@ describe('a shop in another system\'s game', () => {
     `INSERT INTO character_sheets (username, system, data, is_npc)
      VALUES (?, 'cyberpunk_red', ?, 0)`, [username, JSON.stringify(data)]);
 
+  it('sends a player the uploads when they sign in, without being asked', async () => {
+    /**
+     * The window asks for catalogues the moment its socket connects - before it has
+     * identified - and that request is dropped. Nothing asked again, so outside CWN, where
+     * the uploads are all a shop has, a player found every shop empty after a fresh load.
+     */
+    const gm = await admin();
+    gm.handlers['saveCatalogue']({ text: UNITY });
+    await waitFor(gm.emitted, 'catalogueSaved');
+
+    const { emitted } = await player();
+    const out = await waitFor(emitted, 'catalogues');
+    expect(out.data.entries.weapons.map((e) => e.name)).toEqual(['Militech Unity']);
+  });
+
   it('will not sell a gun out of the CWN book', async () => {
     await seedRed({});
     await fund('GHOST', 1000);
@@ -352,7 +367,13 @@ describe('what a GM can download', () => {
     await waitFor(booted.emitted, 'catalogueSaved');
 
     booted.handlers['requestCatalogues']();
-    const out = await waitFor(booted.emitted, 'catalogues');
+    // Signing in pushes the catalogues too, from before the save, so wait for the answer
+    // that has the saved row in it rather than whichever arrived first.
+    const out = await untilValue(
+      () => last(booted.emitted, 'catalogues'),
+      (e) => Boolean(e && e.data.entries.weapons.some((w) => w.id === 'zip_gun')),
+      { label: 'catalogues with the upload' },
+    );
     const weapons = out.data.entries.weapons;
 
     const zip = weapons.find((e) => e.id === 'zip_gun');
