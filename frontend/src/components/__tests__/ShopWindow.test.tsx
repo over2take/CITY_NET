@@ -1444,3 +1444,106 @@ describe('items a GM uploaded', () => {
     expect(handleFieldsChange).toHaveBeenCalled();
   });
 });
+
+describe('an uploaded item actually arriving on the sheet', () => {
+  /**
+   * The gap this closes. The server charges and the WINDOW places, so a server-only test
+   * can prove the money moved and prove nothing about the goods - and the frontend tests
+   * only checked that a write happened, not what it wrote. Between the two, nothing
+   * confirmed that a GM's own item reaches a character sheet intact.
+   */
+  beforeEach(() => clearUploaded());
+
+  it('lands in a weapon slot with the fields the GM gave it', async () => {
+    loadUploaded({
+      weapons: [{
+        id: 'zip_gun',
+        name: 'Zip Gun',
+        price: 15,
+        fields: { dmg: '1d4', skill: 'shoot', attr: 'dex', enc: '1' },
+      }],
+    });
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+
+    const written = handleFieldsChange.mock.calls[0][0];
+    expect(written.weapon1_name).toBe('Zip Gun');
+    expect(written.weapon1_dmg).toBe('1d4');
+    expect(written.weapon1_skill).toBe('shoot');
+    expect(written.weapon1_attr).toBe('dex');
+    expect(written.weapon1_enc).toBe('1');
+    // Bought weapons arrive stowed, uploaded or not.
+    expect(written.weapon1_carry).toBe('stowed');
+  });
+
+  it('leaves a column the GM did not fill blank rather than undefined', async () => {
+    // A sparse upload is the normal case: most GMs will not fill every column. Writing
+    // undefined into a sheet field would store the string "undefined".
+    loadUploaded({
+      weapons: [{ id: 'zip_gun', name: 'Zip Gun', price: 15, fields: { dmg: '1d4' } }],
+    });
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+
+    const written = handleFieldsChange.mock.calls[0][0];
+    for (const [field, value] of Object.entries(written)) {
+      expect(String(value), field).not.toBe('undefined');
+    }
+  });
+
+  it('lands in the inventory for a catalogue with no typed row', async () => {
+    // Gear has no row group anywhere, so an uploaded gas mask is an inventory line.
+    loadUploaded({
+      gear: [{ id: 'flare', name: 'Signal Flare', price: 30, fields: { enc: '1' } }],
+    });
+    show('general_store');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Signal Flare' }));
+
+    const [field, value] = handleFieldChange.mock.calls[0];
+    expect(field).toBe('inventory');
+    const items = JSON.parse(value as string);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ name: 'Signal Flare', qty: 1 });
+  });
+
+  it('is then owned, and offered back to the shop at the buy-back rate', async () => {
+    /**
+     * The round trip a player actually makes: buy it, own it, sell it. Driven through the
+     * sheet rather than asserted about, so the name the purchase wrote is the same name
+     * ownedItems has to match on afterwards.
+     */
+    loadUploaded({
+      weapons: [{ id: 'zip_gun', name: 'Zip Gun', price: 15, fields: { dmg: '1d4' } }],
+    });
+    const { unmount } = show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+    const written = handleFieldsChange.mock.calls[0][0];
+    unmount();
+
+    // The sheet as it stands after that purchase.
+    sheetState.sheet = { system: 'cities_without_number', data: written };
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+
+    const row = screen.getByText('Zip Gun').closest('tr')!;
+    // 15 at the default 45% is 6, rounded down from 6.75.
+    expect(within(row).getByText('6cr')).toBeInTheDocument();
+    expect(within(row).getByText('×1')).toBeInTheDocument();
+  });
+
+  it('sells back by the id the shop knows it under', async () => {
+    loadUploaded({
+      weapons: [{ id: 'zip_gun', name: 'Zip Gun', price: 15, fields: {} }],
+    });
+    sheetState.sheet = { system: 'cities_without_number', data: { weapon1_name: 'Zip Gun' } };
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Zip Gun to the sell list' }));
+    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+
+    expect(sold[0].items).toEqual([
+      { catalogue: 'weapons', id: 'zip_gun', label: 'Zip Gun', qty: 1 },
+    ]);
+  });
+});
