@@ -7,6 +7,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+The building window, redone as a terminal.
+
+### Added
+
+- **A new building window.** Clicking a building opens a terminal-style window: folders
+  down the left, the open folder's text on the right, and the building in the top corner.
+  **INFO** holds the description, headed with the shop type and district. **RESIDENTS**
+  holds the NPC list. Switch folders by clicking or with the up and down arrow keys. The
+  buttons along the bottom (SHOP, ENTER BATTLE MAP, BROADCAST PING and the rest) are the ones
+  each viewer had before, and wrap onto a second row when there are many. Line breaks in a
+  description or residents list are kept now, instead of running together.
+
+- **The building, turning, in the corner of its window.** It's drawn from its own parts as a
+  wireframe in your theme's color. If this machine can't draw 3D, the CITY_NET badge shows
+  instead.
+
+- **Building photos.** A GM can give a building a photo, and everyone then sees it in place
+  of the turning building. Upload it in the admin edit view under BUILDING PHOTO.
+
+- **GM notes on buildings.** A **GM NOTES** folder, visible only to the main admin, holds
+  what the players shouldn't know. Players never receive the notes at all, and neither do
+  players who have been granted editing rights. Edit them in the folder itself, or in the
+  admin edit view.
+
+- **UPDATE_DATA_POINT saves the photo and GM notes too.** In the admin edit view, choosing a
+  photo, removing one or typing notes is saved along with the rest of the building. If any of
+  it fails, the alert says what failed instead of CHANGES_SAVED.
+
+### Changed
+
+- **Saved maps carry the GM notes.** Loading a map brings back the notes written for its
+  buildings, and never leaves one map's notes on another map's buildings.
+
+### Fixed
+
+- **Loading a saved map lost every building's shop type and buy-back rate.** It also lost
+  their AC, sidewalk and signage settings, and whether they were hidden. A loaded map now
+  brings back everything each building was saved with.
+
+- **Undoing a building delete brought it back without those settings too.** It now restores
+  everything the building had, and its GM notes are still there.
+
 ---
 
 ## [1.14.0] - 2026-09-24
