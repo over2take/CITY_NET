@@ -180,11 +180,28 @@ describe('a ripperdoc', () => {
 });
 
 describe('looking like the windows it opens from', () => {
-  it('has the terminal title bar, and is as tall as what it holds', () => {
+  it('is a terminal window: BUY and SELL down the left, the list on the right', async () => {
     const { container } = show('ripperdoc');
-    const win = container.querySelector('.win95-window') as HTMLElement;
-    expect(win).toHaveClass('terminal-window');
-    expect(win.style.height).toBe('auto');
+    expect(container.querySelector('.win95-window')).toHaveClass('terminal-window');
+    const folders = within(screen.getByRole('tablist', { name: 'Folders' })).getAllByRole('tab');
+    expect(folders.map((f) => f.textContent)).toEqual(['BUY', 'SELL']);
+    // The filter is part of the BUY list, not the window.
+    expect(within(screen.getByRole('tabpanel')).getByLabelText('Filter stock')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
+    expect(screen.queryByLabelText('Filter stock')).toBeNull();
+  });
+
+  it('keeps the filter and shelf tabs still while the list scrolls under them', () => {
+    show('gun_shop');
+    // The panel no longer scrolls as a whole; the table's own box does.
+    expect(screen.getByRole('tabpanel').style.overflowY).toBe('hidden');
+    expect(screen.getByRole('table').parentElement!.style.overflowY).toBe('auto');
+  });
+
+  it('shows the building in the corner when given one', () => {
+    render(<ShopWindow name="Vic" locationId={7} buildingType="gun_shop" system="cities_without_number"
+      buybackPct={45} socket={makeSocket()} userName="JADE" onClose={vi.fn()} preview={<div>VIC'S BUILDING</div>} />);
+    expect(screen.getByText("VIC'S BUILDING")).toBeInTheDocument();
   });
 
   it('puts an empty shelf\'s message straight under the header, not at the bottom', async () => {
@@ -233,12 +250,12 @@ describe('one tab per catalogue', () => {
   it('draws no tab row for a shop that carries one catalogue', () => {
     // A lone tab is a label wearing a button's clothes.
     show('clinic');
-    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByRole('tablist', { name: 'Catalogue' })).toBeNull();
   });
 
   it('draws a tab for each catalogue a shop carries', () => {
     show('gun_shop');
-    const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
+    const tabs = within(screen.getByRole('tablist', { name: 'Catalogue' })).getAllByRole('tab');
     expect(tabs.map((t) => t.textContent)).toEqual(['WEAPONS', 'WEAPON MODS']);
   });
 
@@ -289,7 +306,7 @@ describe('one tab per catalogue', () => {
 
   it('gives the armorer both of its tables, which it had neither of', () => {
     show('armorer');
-    const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
+    const tabs = within(screen.getByRole('tablist', { name: 'Catalogue' })).getAllByRole('tab');
     expect(tabs.map((t) => t.textContent)).toEqual(['ARMOR', 'ARMOR MODS']);
   });
 });
@@ -358,8 +375,8 @@ describe('the vocabulary the map is labelled with', () => {
 describe('buying and selling are separate tabs', () => {
   it('opens on buying', () => {
     show('ripperdoc');
-    expect(screen.getByRole('button', { name: 'BUY' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'SELL' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('tab', { name: 'BUY' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'SELL' })).toHaveAttribute('aria-selected', 'false');
   });
 
   it('keeps selling off the stock list', async () => {
@@ -372,13 +389,13 @@ describe('buying and selling are separate tabs', () => {
   it('says so plainly when there is nothing this shop would buy', async () => {
     // Used to assert "SELLING IS NOT WIRED UP YET", which stopped being true.
     show('ripperdoc');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
     expect(screen.getByText(/NOTHING HERE THIS SHOP WOULD BUY/)).toBeInTheDocument();
   });
 
   it('puts the stock away while selling', async () => {
     show('ripperdoc');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
     expect(screen.queryByLabelText('Buy Cranial Jack')).not.toBeInTheDocument();
   });
 });
@@ -1094,7 +1111,7 @@ describe('the sell tab', () => {
 
   const openSell = async (type: string) => {
     show(type);
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
   };
 
   const addKit = () => screen.getByRole('button', { name: 'Add Climbing kit to the sell list' });
@@ -1107,6 +1124,18 @@ describe('the sell tab', () => {
     expect(screen.getByText('Heavy Pistol')).toBeInTheDocument();
     expect(screen.queryByText('Climbing kit')).toBeNull();
     expect(screen.queryByText('Cranial Jack')).toBeNull();
+  });
+
+  it('has a filter on top of the list, like the buy side', async () => {
+    loaded();
+    await openSell('gun_shop');
+    const filter = screen.getByLabelText('Filter what you can sell');
+    await userEvent.type(filter, 'heavy');
+    expect(screen.getByText('Heavy Pistol')).toBeInTheDocument();
+    await userEvent.clear(filter);
+    await userEvent.type(filter, 'zzz');
+    expect(screen.queryByText('Heavy Pistol')).toBeNull();
+    expect(screen.getByTestId('sell-empty')).toHaveTextContent('NOTHING MATCHES THAT');
   });
 
   it('shows another shop a different half of the same character', async () => {
@@ -1240,7 +1269,7 @@ describe('selling chrome out of a body', () => {
 
   const openSell = async () => {
     show('ripperdoc');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
   };
 
   const addJack = () => screen.getByRole('button', { name: 'Add Cranial Jack to the sell list' });
@@ -1295,7 +1324,7 @@ describe('backing out of the implants alone', () => {
    */
   const openSell = async () => {
     show('ripperdoc');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
   };
 
   it('keeps the installed one and sells the boxed one', async () => {
@@ -1381,7 +1410,7 @@ describe('which one gets sold when you own two', () => {
       data: { cyberware: [{ name: 'Cyberlimb', placed: true }, { name: 'Cyberlimb', placed: false }] },
     };
     show('ripperdoc');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add Cyberlimb to the sell list' }));
     await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
 
@@ -1450,7 +1479,7 @@ describe('items a GM uploaded', () => {
       data: { weapon1_name: 'Zip Gun' },
     };
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
 
     // Listed, and priced at the shop's buy-back rate on the GM's price: 15 at 45% is 6.
     const row = screen.getByText('Zip Gun').closest('tr')!;
@@ -1555,7 +1584,7 @@ describe('an uploaded item actually arriving on the sheet', () => {
     // The sheet as it stands after that purchase.
     sheetState.sheet = { system: 'cities_without_number', data: written };
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
 
     const row = screen.getByText('Zip Gun').closest('tr')!;
     // 15 at the default 45% is 6, rounded down from 6.75.
@@ -1569,7 +1598,7 @@ describe('an uploaded item actually arriving on the sheet', () => {
     });
     sheetState.sheet = { system: 'cities_without_number', data: { weapon1_name: 'Zip Gun' } };
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add Zip Gun to the sell list' }));
     await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
     await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
@@ -1604,7 +1633,7 @@ describe('a shop with its own buy-back rate', () => {
   const openSell = async (pct: number) => {
     withKit();
     showAt(pct);
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
   };
 
   it('says what it pays, in its own words', async () => {
@@ -1747,7 +1776,7 @@ describe('a shop in another system\'s game', () => {
     // weapon5 is not a Cyberpunk RED row, so only one of these is for sale.
     sheetState.sheet = { system: RED, data: { weapon1_name: 'Militech Unity', weapon5_name: 'Militech Unity' } };
     show('gun_shop', 'Vic', RED);
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
     expect(screen.getByText(/THIS SHOP PAYS 45% OF THE SHELF PRICE/)).toBeInTheDocument();
     expect(screen.getByText('×1')).toBeInTheDocument();
     expect(screen.getByText('45cr')).toBeInTheDocument();

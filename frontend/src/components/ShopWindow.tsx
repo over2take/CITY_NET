@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { DraggableWindow } from './DraggableWindow';
+import { TerminalWindow } from './TerminalWindow';
 import {
   buildingTypeById, shelvedCatalogues, catalogueById, typeLabel, catalogueLabel, type ShopStock,
 } from '../data/buildingTypes';
@@ -94,6 +94,8 @@ interface Props {
   socket: any;
   userName: string | null;
   onClose: () => void;
+  /** The building's picture for the corner, as its own window shows it. */
+  preview?: React.ReactNode;
 }
 
 type Tab = 'buy' | 'sell';
@@ -212,13 +214,15 @@ interface Shelf<T> {
 
 export function ShopWindow({
   name, locationId, buildingType, system, buybackPct: pct, socket, userName, onClose,
-  isAdmin = false, onOpenCatalogues,
+  isAdmin = false, onOpenCatalogues, preview,
 }: Props) {
   /** Whether this game's shops sell from the CWN book. Nobody else's do. */
   const book = system === BOOK_SYSTEM;
   const [pos, setPos] = useState({ x: 140, y: 90 });
   const [tab, setTab] = useState<Tab>('buy');
   const [filter, setFilter] = useState('');
+  /** Narrows the sell list, the way the buy side's filter narrows a shelf. */
+  const [sellFilter, setSellFilter] = useState('');
   /** How many of each line has been taken this visit, so a press has visible effect. */
   const [taken, setTaken] = useState<Record<string, number>>({});
 
@@ -405,6 +409,9 @@ export function ShopWindow({
    */
   const owned = sheet ? ownedItems(sheet.data as Record<string, unknown>, system) : [];
   const sellable = sellableAt(owned, catalogues);
+  const sellQuery = sellFilter.trim().toLowerCase();
+  /** The sell list as shown: narrowed by its filter. Totals still count the whole list. */
+  const shownSellable = sellQuery ? sellable.filter((l) => l.label.toLowerCase().includes(sellQuery)) : sellable;
 
   /** How many of each line are on the sell list, by line key. */
   const [basket, setBasket] = useState<Record<string, number>>({});
@@ -1213,31 +1220,6 @@ export function ShopWindow({
   })();
 
   /**
-   * Resizable, following the chat and sheet windows, and as tall as what it holds.
-   *
-   * A shop is a long list read down while comparing prices, and a fixed height meant
-   * scrolling sixty lines through a 320px slot on a monitor with room to spare - so a long
-   * shop grows to nearly the screen, and the flex column makes the table take that height
-   * and scroll inside it. A short or empty one stays short instead of opening onto a
-   * screenful of nothing, the way the terminal windows beside it do.
-   */
-  const windowStyle: React.CSSProperties = {
-    width: '780px', height: 'auto',
-    minWidth: '420px', maxWidth: '95vw', minHeight: '260px', maxHeight: '92vh',
-    resize: 'both', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-  };
-
-  const tabButton = (id: Tab, label: string) => (
-    <button
-      type="button"
-      className={`utility-btn ${tab === id ? 'active' : ''}`}
-      aria-pressed={tab === id}
-      onClick={() => setTab(id)}
-      style={{ flex: 1 }}
-    >{label}</button>
-  );
-
-  /**
    * Switching shelves clears the sort and the filter.
    *
    * A sort key belongs to the columns it was set on - "MAG, descending" means nothing on
@@ -1252,19 +1234,23 @@ export function ShopWindow({
   };
 
   return (
-    <DraggableWindow
+    // The layout of the building and token windows it opens from: the building in the
+    // corner, BUY and SELL down the left, the open one's list on the right with its filter
+    // and shelf tabs on top. Wider than they are, because a shelf is a table.
+    <TerminalWindow
       title={`SHOP · ${name || 'UNNAMED'}`}
       pos={pos}
       setPos={setPos}
       onClose={onClose}
-      // The solid title bar the building and token windows have, so a shop opened from
-      // one looks like it belongs to it.
-      className="terminal-window"
-      windowStyle={windowStyle}
-      contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column' }}
-    >
-      <div className="content" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ ...mono(9), color: 'var(--cyan)', marginBottom: 6 }}>
+      preview={preview}
+      folders={[{ id: 'buy' as Tab, label: 'BUY' }, { id: 'sell' as Tab, label: 'SELL' }]}
+      open={tab}
+      onOpen={setTab}
+      panelMode="list"
+      width={980}
+      label={`${name || 'Shop'} shop`}
+      header={(
+        <span style={{ color: 'var(--cyan)' }}>
           {type ? typeLabel(type.id, system).toUpperCase() : 'UNKNOWN'} ·{' '}
           {rows.length} LINE{rows.length === 1 ? '' : 'S'}
           {/* The book page, so a price can be checked without hunting for the table. */}
@@ -1282,13 +1268,9 @@ export function ShopWindow({
               )}
             </>
           )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-          {tabButton('buy', 'BUY')}
-          {tabButton('sell', 'SELL')}
-        </div>
-
+        </span>
+      )}
+    >
         {tab === 'buy' ? (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             {/* One tab per catalogue, and none at all for a shop that carries one. A lone
@@ -1356,7 +1338,7 @@ export function ShopWindow({
                   style={{
                     background: 'var(--black)', border: '1px solid var(--dark-green)',
                     color: 'var(--green)', fontFamily: 'monospace', fontSize: 11,
-                    padding: '3px 5px', width: '100%', marginBottom: 6,
+                    padding: '3px 5px', width: '100%', boxSizing: 'border-box', marginBottom: 6,
                   }}
                 />
                 {shelf.controls}
@@ -1455,7 +1437,9 @@ export function ShopWindow({
                                 style={{
                                   ...cell,
                                   textAlign: col.align ?? 'left',
-                                  ...(colKey === 'name' ? { whiteSpace: 'nowrap' } : {}),
+                                  // Names, numbers and ranges read as one piece; only the prose wraps.
+                                  ...(colKey === 'name' || colKey === 'dmg' || colKey === 'range' || col.align === 'right'
+                                    ? { whiteSpace: 'nowrap' } : {}),
                                   ...(colKey === 'effect' || colKey === 'note'
                                     ? { color: 'var(--grid-section)' } : {}),
                                   ...(colKey === 'owned' ? { color: 'var(--cyan)' } : {}),
@@ -1541,7 +1525,18 @@ export function ShopWindow({
               </div>
             ) : (
               <>
-                <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                <input
+                  value={sellFilter}
+                  onChange={(e) => setSellFilter(e.target.value)}
+                  placeholder="Filter by name"
+                  aria-label="Filter what you can sell"
+                  style={{
+                    background: 'var(--black)', border: '1px solid var(--dark-green)',
+                    color: 'var(--green)', fontFamily: 'monospace', fontSize: 11,
+                    padding: '3px 5px', width: '100%', boxSizing: 'border-box', marginBottom: 6,
+                  }}
+                />
+                <div className="cyber-scroll" style={{ flex: shownSellable.length === 0 ? '0 0 auto' : 1, minHeight: 0, overflowY: 'auto' }}>
                   <table style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
                     <thead>
                       <tr style={{ color: 'var(--grid-section)' }}>
@@ -1553,7 +1548,7 @@ export function ShopWindow({
                       </tr>
                     </thead>
                     <tbody>
-                      {sellable.map((l) => {
+                      {shownSellable.map((l) => {
                         const staged = basket[l.key] ?? 0;
                         const left = l.qty - staged;
                         const each = buybackValue(l.unitPrice, pct);
@@ -1612,6 +1607,11 @@ export function ShopWindow({
                     </tbody>
                   </table>
                 </div>
+                {shownSellable.length === 0 && (
+                  <div data-testid="sell-empty" style={{ ...mono(11), color: 'var(--green)', padding: '10px 0', letterSpacing: 0 }}>
+                    NOTHING MATCHES THAT
+                  </div>
+                )}
 
                 {/*
                   The sell list, and one confirmation for the lot.
@@ -1696,7 +1696,6 @@ export function ShopWindow({
             )}
           </div>
         )}
-      </div>
-    </DraggableWindow>
+    </TerminalWindow>
   );
 }

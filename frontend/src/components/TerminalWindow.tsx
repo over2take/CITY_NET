@@ -58,8 +58,12 @@ interface Props<Id extends string> {
   header?: React.ReactNode;
   /** What the open folder holds. */
   children: React.ReactNode;
-  /** Prose keeps its line breaks; a panel of controls may want normal wrapping. */
-  panelMode?: 'text' | 'controls';
+  /**
+   * Prose keeps its line breaks; a panel of controls may want normal wrapping. A list does
+   * its own scrolling - the panel stops scrolling and lays its content out as a column, so a
+   * filter and tabs at the top stay put while the table under them scrolls.
+   */
+  panelMode?: 'text' | 'controls' | 'list';
   actions?: TerminalAction[];
   /** Anything between the panel and the buttons that belongs to the whole window. */
   footer?: React.ReactNode;
@@ -167,7 +171,9 @@ export function TerminalWindow<Id extends string>({
                 ...mono, letterSpacing: 0, fontSize: 12, lineHeight: 1.6, flex: 1,
                 // As tall as what it holds - no taller than the folder column beside it
                 // unless it has to be, and scrolling past a screenful.
-                maxHeight: 'min(62vh, 560px)', overflowY: 'auto', padding: '8px 10px',
+                maxHeight: panelMode === 'list' ? 'min(66vh, 680px)' : 'min(62vh, 560px)',
+                overflowY: panelMode === 'list' ? 'hidden' : 'auto', padding: '8px 10px',
+                ...(panelMode === 'list' ? { display: 'flex', flexDirection: 'column', minHeight: 0 } : {}),
                 border: '1px solid var(--green)', color: 'var(--green)',
                 overflowWrap: 'anywhere',
                 ...(panelMode === 'text' ? { whiteSpace: 'pre-wrap' } : {}),

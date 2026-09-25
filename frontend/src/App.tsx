@@ -29,7 +29,8 @@ import { TokenWindow, type TokenFolder } from './components/TokenWindow';
 import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
 import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
-import type { TerminalAction } from './components/TerminalWindow';
+import { TERMINAL_PREVIEW, type TerminalAction } from './components/TerminalWindow';
+import { BuildingPreview } from './components/BuildingPreview';
 import { ShopWindow } from './components/ShopWindow';
 import { CatalogueWindow } from './components/CatalogueWindow';
 import { buildingTypeById, isShop, shopsAvailable, typeLabel } from './data/buildingTypes';
@@ -2138,6 +2139,14 @@ function App() {
                 socket={socketRef.current}
                 userName={userName}
                 onClose={() => setShopLocation(null)}
+                preview={(
+                  <BuildingPreview
+                    location={shopLocation}
+                    parts={locations.filter((l: any) => l.parent_id === shopLocation.id)}
+                    width={TERMINAL_PREVIEW.width}
+                    height={TERMINAL_PREVIEW.height}
+                  />
+                )}
               />
             )}
 
