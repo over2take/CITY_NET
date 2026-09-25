@@ -24,8 +24,8 @@ const BloodSVG = ({ color = 'currentColor', size = 18 }: { color?: string; size?
 );
 
 // Health, two ways: the panel that changes it (your own token, or any token for the GM) and
-// the panel that only shows how someone is doing (another player's token). The token window
-// shows each inline; the sidebar's windows below wrap the same bodies.
+// the panel that only shows how someone is doing (anyone else's token). The token window
+// shows each in its HEALTH folder; the sidebar's HIT_POINTS window wraps the first.
 
 const BODY_PARTS = ['head', 'right_arm', 'torso', 'left_arm', 'right_leg', 'left_leg'] as const;
 type BodyPart = typeof BODY_PARTS[number];
@@ -434,27 +434,5 @@ export function HealthReviewPanel({ location, socket, gameSystem, onRolled }: He
 
       {injuriesOpen && <InjuryMap injuries={injuries} />}
     </div>
-  );
-}
-
-interface HealthReviewWindowProps extends HealthReviewPanelProps {
-  pos: { x: number; y: number };
-  setPos: (p: { x: number; y: number }) => void;
-  onClose: () => void;
-}
-
-/** The sidebar's health check on another player: the same panel in a window of its own. */
-export function HealthReviewWindow({ pos, setPos, onClose, ...rest }: HealthReviewWindowProps) {
-  return (
-    <DraggableWindow
-      title={`HEALTH: ${(rest.location.owner || 'UNKNOWN').toUpperCase()}`}
-      pos={pos} setPos={setPos} onClose={onClose}
-      windowStyle={{ width: '280px' }}
-      contentStyle={{ overflowY: 'visible' }}
-    >
-      <div style={{ padding: '10px' }}>
-        <HealthReviewPanel {...rest} />
-      </div>
-    </DraggableWindow>
   );
 }

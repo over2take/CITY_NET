@@ -33,7 +33,7 @@ import type { TerminalAction } from './components/TerminalWindow';
 import { ShopWindow } from './components/ShopWindow';
 import { CatalogueWindow } from './components/CatalogueWindow';
 import { buildingTypeById, isShop, shopsAvailable, typeLabel } from './data/buildingTypes';
-import { HitPointsMenu, HealthReviewWindow, HitPointsPanel, HealthReviewPanel } from './components/HitPoints';
+import { HitPointsMenu, HitPointsPanel, HealthReviewPanel } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
 import { CityDataBaseMenu } from './components/CityDatabase';
@@ -264,8 +264,6 @@ function App() {
   const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
   const [hitPointsPos, setHitPointsPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
 
-  const [reviewHealthOwner, setReviewHealthOwner] = useState<string | null>(null);
-  const [reviewHealthPos, setReviewHealthPos] = useState(() => ({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 }));
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
   const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string; locationId?: number } | null>(null);
@@ -745,11 +743,9 @@ function App() {
           }
           return next;
         });
-      } else if (loc.shape === 'rhombus' && loc.owner !== userName && !token) {
-        // Non-admin player clicking another player's token â€” open read-only health review
-        setReviewHealthOwner(prev => prev === loc.owner ? null : loc.owner);
-        setReviewHealthPos({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 });
       } else {
+        // Every token opens its window - another player's too, whose HEALTH folder there
+        // is the same numberless view the separate health window used to be.
         setSelectedLocation(prev => prev?.id === loc.id ? null : loc);
       }
   };
@@ -1455,7 +1451,6 @@ function App() {
     setIsChatOpen(false);
     setIsDiceTrayOpen(false);
     setIsHitPointsOpen(false);
-    setReviewHealthOwner(null);
     setActiveSidebarMenu('none');
     setSelectedLocation(null);
     setTargetObject(null);
@@ -2220,26 +2215,6 @@ function App() {
                 gameSystem={gameSystem}
               />
             )}
-            {reviewHealthOwner && (() => {
-              const rhombusShapes = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];
-              // Owner fallback must prefer the actual player token: generated
-              // enemy/friendly tokens stamp their creator as owner, and an
-              // older enemy row would otherwise shadow the player's rhombus.
-              const reviewLoc = locations.find((l: any) => l.shape === 'rhombus' && l.owner === reviewHealthOwner)
-                ?? locations.find((l: any) => rhombusShapes.includes(l.shape) && l.owner === reviewHealthOwner)
-                ?? (selectedLocation?.owner === reviewHealthOwner ? selectedLocation : null);
-              return reviewLoc ? (
-                <HealthReviewWindow
-                  location={reviewLoc}
-                  pos={reviewHealthPos}
-                  setPos={setReviewHealthPos}
-                  onClose={() => setReviewHealthOwner(null)}
-                  socket={socketRef.current}
-                  gameSystem={gameSystem}
-                  onRolled={() => setIsDiceTrayOpen(true)}
-                />
-              ) : null;
-            })()}
             {isNpcLibraryOpen && token && (
               <NpcLibrary
                 token={token}
