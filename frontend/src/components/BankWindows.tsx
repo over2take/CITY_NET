@@ -770,7 +770,7 @@ export const balanceBias = (change: number): number => {
 };
 
 export function generateNextCandle(prev: Candle, biasDelta: number): Candle {
-  const drift = biasDelta * 0.012 + (Math.random() - 0.48) * 4.5;
+  const drift = balanceBias(biasDelta) + (Math.random() - 0.48) * 4.5;
   const bodySize = 1.5 + Math.random() * 5;
   const open = prev.close;
   const close = open + drift + (Math.random() - 0.5) * bodySize;
