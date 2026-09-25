@@ -27,6 +27,7 @@ const shopPrices = require('../shops/catalogueStore');
 const catalogueDb = require('../shops/catalogueDb');
 const catalogueParse = require('../shops/catalogueParse');
 const shopPurchase = require('../shops/purchase');
+const shopCheckout = require('../shops/checkout');
 const shopSell = require('../shops/sell');
 const shopBuyback = require('../shops/buyback');
 const systemDice = require('../dice/systemDice');
@@ -2038,6 +2039,132 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         },
                       );
                     });
+                  },
+                );
+              },
+            );
+          },
+        );
+      });
+    });
+
+    /**
+     * Check out a shop cart: everything bought and sold there, settled as one.
+     *
+     * Built from the two handlers above and held to both. Who is paying comes from the
+     * verified socket, what things cost from the server's own prices, what the player owns
+     * from their stored sheet. The account moves ONCE, by the difference between what is
+     * bought and what is sold, and nothing moves unless every line is good - see
+     * shops/checkout.js.
+     *
+     * Order of writes as in sellToShop: the sheet loses what was sold before the bank
+     * changes, since being paid and keeping the goods is the outcome worth ordering against.
+     * What was bought is placed by the window once this confirms, as buyFromShop's is.
+     */
+    socket.on('checkoutShop', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName) return;
+      if (!data || data.locationId === undefined) return;
+
+      const username = info.userName;
+      const refuse = (reason, extra) =>
+        socket.emit('shopCheckout', { ok: false, reason, ...(extra || {}) });
+      const sells = Array.isArray(data.sells) ? data.sells : [];
+
+      getShopSystem((sysErr, system) => {
+        if (sysErr) return refuse('no_system');
+
+        db.get(
+          'SELECT building_type, buyback_pct FROM locations WHERE id = ?',
+          [data.locationId],
+          (err, loc) => {
+            if (err || !loc) return refuse('no_shop');
+            const catalogues = buildingTypes.shelvedCatalogues(loc.building_type);
+            if (!catalogues.length) return refuse('not_sold');
+
+            db.all(
+              'SELECT key, value FROM global_settings WHERE key IN (?, ?)',
+              [shopPurchase.OVERDRAFT_RULE, shopBuyback.BUYBACK_SETTING],
+              (rErr, rows) => {
+                const setting = (key) => {
+                  const row = !rErr && rows ? rows.find((r) => r.key === key) : null;
+                  return row ? row.value : null;
+                };
+                const overdraftAllowed = setting(shopPurchase.OVERDRAFT_RULE) === '1';
+                const globalPct = setting(shopBuyback.BUYBACK_SETTING);
+
+                db.get(
+                  `SELECT id, data FROM character_sheets
+                   WHERE username = ? AND system = ? AND is_npc = 0`,
+                  [username, system],
+                  (sErr, sheetRow) => {
+                    // A sheet is needed to sell from; buying alone never needed one here.
+                    let sale = null;
+                    if (sells.length) {
+                      if (sErr || !sheetRow) return refuse('no_sheet');
+                      let sheetData;
+                      try { sheetData = JSON.parse(sheetRow.data || '{}'); } catch { return refuse('no_sheet'); }
+                      sale = shopSell.planSale({
+                        data: sheetData, items: sells, catalogues,
+                        locationPct: loc.buyback_pct, globalPct, system,
+                      });
+                      if (!sale.ok) return refuse(sale.reason, { itemId: sale.itemId });
+                    }
+
+                    db.get(
+                      'SELECT balance, debt FROM player_banks WHERE username = ?',
+                      [username],
+                      (bErr, bank) => {
+                        if (bErr) return refuse('no_account');
+                        const plan = shopCheckout.planCheckout({
+                          buys: data.buys,
+                          priceOf: shopPrices.priceOf,
+                          shelved: catalogues,
+                          sale,
+                          balance: bank ? Number(bank.balance) || 0 : 0,
+                          debt: bank ? Number(bank.debt) || 0 : 0,
+                          overdraftAllowed,
+                          settle: data.settle,
+                          expectedNet: data.expectedNet,
+                        });
+                        if (!plan.ok) {
+                          const { ok, ...why } = plan;
+                          return refuse(plan.reason, why);
+                        }
+
+                        const payBank = () => {
+                          const write = bank
+                            ? ['UPDATE player_banks SET balance = ?, debt = ? WHERE username = ?',
+                              [plan.balance, plan.debt, username]]
+                            : ['INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)',
+                              [username, plan.balance, plan.debt]];
+                          db.run(write[0], write[1], (wErr) => {
+                            if (wErr) return refuse('write');
+                            sendBankUpdate(username);
+                            if (sale) io.emit('sheetUpdated', { username, system });
+                            // The window places what was bought once it reads this.
+                            socket.emit('shopCheckout', {
+                              ok: true,
+                              buys: plan.lines,
+                              buyTotal: plan.buyTotal,
+                              payout: plan.payout,
+                              net: plan.net,
+                              settled: plan.settled,
+                              balance: plan.balance,
+                              debt: plan.debt,
+                              sold: sale ? sale.sold : [],
+                              fromBody: sale ? sale.fromBody : 0,
+                            });
+                          });
+                        };
+
+                        if (!sale) return payBank();
+                        patchSheet(db, sheetRow.id, sale.patch, (pErr) => {
+                          if (pErr) return refuse('write');
+                          payBank();
+                        });
+                      },
+                    );
                   },
                 );
               },

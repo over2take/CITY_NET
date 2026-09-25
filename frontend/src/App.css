@@ -748,6 +748,11 @@ header {
   animation: chat-alert 1s infinite;
 }
 
+/* A terminal folder with something new in it - the shop's CART after adding to it. */
+.terminal-folder-attention {
+  animation: chat-alert 1s infinite;
+}
+
 .rail-bottom .rail-btn {
   color: var(--green);
   opacity: 0.7;

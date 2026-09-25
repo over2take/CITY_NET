@@ -17,6 +17,8 @@ export interface TerminalFolder<Id extends string = string> {
   label: React.ReactNode;
   /** Words for screen readers and tests when the label is not plain text. */
   name?: string;
+  /** Something changed in there that wants looking at: the folder blinks until opened. */
+  attention?: boolean;
 }
 
 /** A button along the bottom. The caller decides which apply; the window only lays them out. */
@@ -134,6 +136,7 @@ export function TerminalWindow<Id extends string>({
                     role="tab"
                     aria-selected={active}
                     aria-label={f.name}
+                    className={f.attention && !active ? 'terminal-folder-attention' : undefined}
                     onClick={() => onOpen(f.id)}
                     style={{
                       ...mono, position: 'relative', textAlign: 'left', fontSize: 11,

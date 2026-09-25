@@ -81,7 +81,9 @@ export const buybackValue = (price: number | null | undefined, pct: number): num
 export type RefusalReason =
   | 'no_shop' | 'not_sold' | 'price' | 'funds' | 'needs_choice' | 'no_account' | 'write'
   // Selling adds its own: nothing staged, nothing owned, or no sheet to sell from.
-  | 'empty' | 'not_owned' | 'no_sheet' | 'no_system';
+  | 'empty' | 'not_owned' | 'no_sheet' | 'no_system'
+  // The cart adds a count the server will not take.
+  | 'qty';
 
 /**
  * What to tell the player when the server says no.
@@ -108,4 +110,5 @@ export const REFUSAL_TEXT: Record<RefusalReason, string> = {
   not_owned: 'You do not have all of that any more. Nothing was sold — check the list.',
   no_sheet: 'No character sheet to sell from.',
   no_system: 'Could not tell which game is running.',
+  qty: 'A quantity in the cart is more than the shop will sell at once. Nothing was charged.',
 };
