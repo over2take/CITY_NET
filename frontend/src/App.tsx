@@ -25,6 +25,10 @@ import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
 import { BuildingWindow, type BuildingAction } from './components/BuildingWindow';
+import { TokenWindow } from './components/TokenWindow';
+import { buildTokenActions } from './components/tokenActions';
+import { buildBuildingActions } from './components/buildingActions';
+import type { TerminalAction } from './components/TerminalWindow';
 import { ShopWindow } from './components/ShopWindow';
 import { CatalogueWindow } from './components/CatalogueWindow';
 import { buildingTypeById, isShop, shopsAvailable, typeLabel } from './data/buildingTypes';
@@ -47,7 +51,6 @@ import { VehicleBadgeButton } from './components/VehicleBadgeButton';
 import { useVehicleRoster } from './hooks/useVehicleRoster';
 import { useEnemyVehicles } from './hooks/useEnemyVehicles';
 import { hasVehicles } from './sheets/vehicleSystems';
-import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
 import { TvPortrait } from './components/TvPortrait';
@@ -260,20 +263,15 @@ function App() {
 
   const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
   const [hitPointsPos, setHitPointsPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
-  const [acEdit, setAcEdit] = useState<{ melee: string; ranged: string } | null>(null);
 
   const [reviewHealthOwner, setReviewHealthOwner] = useState<string | null>(null);
   // Track the reviewed token by id so the window follows live HP updates
   // (NPC tokens share owner names; selectedLocation is a stale snapshot)
   const [reviewHealthLocId, setReviewHealthLocId] = useState<number | null>(null);
   const [reviewHealthPos, setReviewHealthPos] = useState(() => ({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 }));
-  // QuickSheetCard is opened explicitly (not auto-opened with CHECK_HEALTH)
-  const [quickSheetOwner, setQuickSheetOwner] = useState<string | null>(null);
-  const [quickSheetPos, setQuickSheetPos] = useState(() => ({ x: window.innerWidth / 2 + 170, y: window.innerHeight / 2 - 100 }));
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
   const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string; locationId?: number } | null>(null);
-  const [manualInitScore, setManualInitScore] = useState<string>('');
   // NPC sheet linked to the currently selected token (admin) - drives
   // GENERATE_SHEET vs OPEN_SHEET on the token menu
   const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; system?: string; npc_label: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null; portrait_shadow_filter?: number | null } | null>(null);
@@ -506,7 +504,6 @@ function App() {
     }
   }, [selectedLocation?.id]);
 
-  useEffect(() => { setAcEdit(null); }, [selectedLocation?.id]);
 
   // Auto-clear attack result after 4 seconds; resets if a new result arrives
   useEffect(() => {
@@ -2259,15 +2256,6 @@ function App() {
                 />
               ) : null;
             })()}
-            {quickSheetOwner && (
-              <QuickSheetCard
-                username={quickSheetOwner}
-                socket={socketRef.current}
-                pos={quickSheetPos}
-                setPos={setQuickSheetPos}
-                onClose={() => setQuickSheetOwner(null)}
-              />
-            )}
             {isNpcLibraryOpen && token && (
               <NpcLibrary
                 token={token}
@@ -2379,24 +2367,25 @@ function App() {
                  * state they depend on lives, and handed over as a list: the window lays
                  * them out and knows nothing about shops, battle maps or the stream camera.
                  */
-                const actions: BuildingAction[] = [
-                  ...(shopsAvailable(gameSystem) && isShop(selectedLocation.building_type)
-                    ? [{ key: 'shop', label: 'SHOP', tone: 'primary' as const, onClick: () => setShopLocation(selectedLocation) }]
-                    : []),
-                  ...(currentLocBattleMaps.length > 0
-                    ? [{ key: 'battle', label: 'ENTER BATTLE MAP', tone: 'accent' as const, onClick: () => enterBattleMap(selectedLocation.id) }]
-                    : []),
-                  { key: 'ping', label: 'BROADCAST PING', onClick: pingSelected, title: 'Show everyone where this is' },
-                  ...(isAdmin
-                    ? [{ key: 'broadcast', label: 'BROADCAST_THIS', title: 'Point the stream camera at this object', onClick: () => updateDirector({ cameraMode: 'director', target: computeBroadcastFraming(selectedLocation) }) }]
-                    : []),
-                  ...(isAdmin && hasVehicles(gameSystem)
-                    ? [{ key: 'enemy-vehicles', label: 'ENEMY VEHICLES', title: 'Enemy vehicles, kept on NPC sheets between sessions', onClick: () => setIsEnemyVehiclesOpen(true) }]
-                    : []),
-                  ...(!token
-                    ? [{ key: 'request-edit', label: 'REQUEST_EDITING_RIGHTS', onClick: () => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current?.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } } }]
-                    : []),
-                ];
+                const actions: BuildingAction[] = buildBuildingActions({
+                  shopHere: shopsAvailable(gameSystem) && isShop(selectedLocation.building_type),
+                  hasBattleMaps: currentLocBattleMaps.length > 0,
+                  isAdmin,
+                  systemHasVehicles: hasVehicles(gameSystem),
+                }, {
+                  location: selectedLocation,
+                  userName,
+                  emit: (event, payload) => socketRef.current?.emit(event, payload),
+                  someoneEditing: isSomeoneEditing,
+                  notify: setNotification,
+                  open: {
+                    shop: (loc) => setShopLocation(loc),
+                    battleMap: (id) => enterBattleMap(id),
+                    enemyVehicles: () => setIsEnemyVehiclesOpen(true),
+                  },
+                  ping: pingSelected,
+                  broadcast: () => updateDirector({ cameraMode: 'director', target: computeBroadcastFraming(selectedLocation) }),
+                });
                 return (
                   <BuildingWindow
                     location={selectedLocation}
@@ -2414,11 +2403,63 @@ function App() {
               }
 
               if (selectedLocation && (!token || !showAdminPanel || canManage)) {
+                /**
+                 * Player and NPC tokens get the terminal window too. Every button below
+                 * shows for exactly the people it showed for in the old window - the
+                 * conditions are carried over one for one - and the window only lays them out.
+                 */
+                const isNpc = selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus';
+                const linked = tokenSheetLink?.location_id === selectedLocation.id;
+                const sheetHere = linked && tokenSheetLink?.system === gameSystem;
+                const template = getTemplate(gameSystem);
+                const tiers = template.npcTiers;
+                const canAttack = isLoggedIn && !isOwner;
+                const attackingThis = attackPending?.targetId === selectedLocation.id;
+                const canAddToInit = isAdmin && isNpc && !!initiative.state
+                  && !initiative.state.combatants.some((c: any) => c.id === `npc:${selectedLocation.id}`);
+                // Who gets which button, and what each one does, is in tokenActions.ts, where
+                // both are tested; this hands over what the buttons reach for.
+                const tokenActions: TerminalAction[] = buildTokenActions({
+                  isAdmin, isOwner, isLoggedIn, isPlayerToken: isPlayerRhombus, hasOwner: !!selectedLocation.owner,
+                  sheetHere, linked, attackPending: !!attackPending, sheetCombat: hasSheetCombat(gameSystem),
+                  canManage, hasRoster: vehicleRoster.hasVehicles, systemHasVehicles: hasVehicles(gameSystem),
+                  hasBattleMaps: currentLocBattleMaps.length > 0,
+                }, {
+                  location: selectedLocation,
+                  authToken: token,
+                  emit: (event, payload) => socketRef.current?.emit(event, payload),
+                  fetch: (url, init) => fetch(url, init),
+                  panelPos: infoPanelPos,
+                  viewportWidth: window.innerWidth,
+                  knownLocations: locations,
+                  refreshLocations: fetchLocations,
+                  sheetLink: linked && tokenSheetLink ? { sheet_id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label } : null,
+                  tier: tiers && tiers.length > 0 ? (genTier || tiers[0].id) : undefined,
+                  isOwner,
+                  open: {
+                    reviewHealth: (owner, pos, locationId) => { setReviewHealthOwner(owner); setReviewHealthPos(pos); setReviewHealthLocId(locationId); },
+                    hitPoints: (pos) => { setHitPointsPos(pos); setIsHitPointsOpen(true); },
+                    ownSheet: () => setIsSheetOpen(true),
+                    playerSheet: (owner) => setOpenPlayerSheetUser(owner),
+                    npcSheet: (sheet) => setOpenNpcSheet(sheet),
+                    editLocation: (loc) => { setIsEditModalOpen(true); setActiveEditLocation(loc); setEditData({ ...loc, name: loc.name || '', description: loc.description || '', npcs: loc.npcs || '', owner: loc.owner || '', baseWidth: loc.width, baseHeight: loc.height, baseDepth: loc.depth, isFavorite: !!loc.isFavorite, isDanger: !!loc.isDanger }); },
+                    vehicles: () => setIsVehiclesOpen(true),
+                    bank: (owner) => setAdminBankPlayer(owner),
+                    enemyVehicles: () => setIsEnemyVehiclesOpen(true),
+                    battleMap: (id) => enterBattleMap(id),
+                  },
+                  ping: pingSelected,
+                  broadcast: () => updateDirector({ cameraMode: 'director', target: computeBroadcastFraming(selectedLocation) }),
+                  clearSelection: () => setSelectedLocation(null),
+                });
+
+                const defLabel = template.tokenDefense?.label ?? 'AC';
                 return (
-                  <DraggableWindow 
-                    title={isRhombus ? `ID: ${tokenSheetLink?.sheet_name || selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}` : (isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation))}
-                    pos={infoPanelPos} 
-                    setPos={setInfoPanelPos} 
+                  <TokenWindow
+                    location={selectedLocation}
+                    title={`ID: ${tokenSheetLink?.sheet_name || selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}`}
+                    pos={infoPanelPos}
+                    setPos={setInfoPanelPos}
                     onClose={() => setSelectedLocation(null)}
                     titleControls={
                       selectedLocation.shape === 'rhombus' && selectedLocation.owner
@@ -2439,258 +2480,63 @@ function App() {
                         )
                         : undefined
                     }
-                  >
-                    <div className="content">
-                      {isRhombus ? (
-                        <>
-                          {tokenSheetLink?.portrait_url && (
-                            <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
-                              <div style={{ position: 'relative', width: '120px', height: '120px', border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 60%, transparent)', overflow: 'hidden' }}>
-                                <TvPortrait src={tokenSheetLink.portrait_url} silhouette={Number(tokenSheetLink.portrait_shadow_filter ?? 0) !== 0} />
-                              </div>
-                            </div>
-                          )}
-                          <p><strong>DATA_DESCRIPTION:</strong> {tokenSheetLink?.sheet_description || selectedLocation.description || 'NO_DATA'}</p>
-                          {/* Defense display (AC or DV per game system) — admin can edit; owner can view their own; other players see nothing */}
-                          {(isAdmin || isOwner) && (() => { const defLabel = getTemplate(gameSystem).tokenDefense?.label ?? 'AC'; return (
-                            isAdmin && acEdit ? (
-                              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <strong style={{ minWidth: '90px' }}>MELEE_{defLabel}:</strong>
-                                  <input type="number" min="0" value={acEdit.melee} onChange={e => setAcEdit(a => a ? { ...a, melee: e.target.value } : a)} style={{ width: '60px' }} />
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <strong style={{ minWidth: '90px' }}>RANGED_{defLabel}:</strong>
-                                  <input type="number" min="0" value={acEdit.ranged} onChange={e => setAcEdit(a => a ? { ...a, ranged: e.target.value } : a)} style={{ width: '60px' }} />
-                                  <span title={`Leave blank to use Melee ${defLabel}`} style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
-                                </div>
-                                <div style={{ display: 'flex', gap: '6px' }}>
-                                  <button className="upload-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={async () => {
-                                    const meleeVal = acEdit.melee === '' ? null : parseInt(acEdit.melee, 10);
-                                    const rangedVal = acEdit.ranged === '' ? null : parseInt(acEdit.ranged, 10);
-                                    const loc = selectedLocation;
-                                    await fetch(`/api/locations/${loc.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...loc, melee_ac: meleeVal, ranged_ac: rangedVal }) });
-                                    fetchLocations();
-                                    // selectedLocation is a snapshot - refresh it so the new values show immediately
-                                    setSelectedLocation((prev: any) => prev && prev.id === loc.id ? { ...prev, melee_ac: meleeVal, ranged_ac: rangedVal } : prev);
-                                    setAcEdit(null);
-                                  }}>SAVE</button>
-                                  <button className="utility-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => setAcEdit(null)}>CANCEL</button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div style={{ marginTop: '8px' }}>
-                                <p><strong>MELEE_{defLabel}:</strong> {selectedLocation.melee_ac ?? 10}</p>
-                                <p><strong>RANGED_{defLabel}:</strong> {selectedLocation.ranged_ac != null ? selectedLocation.ranged_ac : <span style={{ color: 'var(--text-muted, #888)' }}>{selectedLocation.melee_ac ?? 10} (melee)</span>}</p>
-                                {isAdmin && (
-                                  <button className="utility-btn" style={{ marginTop: '4px', padding: '3px 10px', fontSize: '11px' }} onClick={() => setAcEdit({ melee: String(selectedLocation.melee_ac ?? 10), ranged: selectedLocation.ranged_ac != null ? String(selectedLocation.ranged_ac) : '' })}>EDIT_{defLabel}</button>
-                                )}
-                              </div>
-                            )
-                          ); })()}
-                        </>
-                      ) : null}
-                    </div>
-                    {/* The GM's enemy cars. Admin-only, since the roster never reaches a
-                        player's client at all — which is what keeps enemy pools and armour
-                        from being a question about what players may see. */}
-                    {isAdmin && hasVehicles(gameSystem) && (
-                      <button
-                        className="upload-btn"
-                        style={{ marginTop: '10px', fontSize: '0.7rem' }}
-                        title="Enemy vehicles, kept on NPC sheets between sessions"
-                        onClick={() => setIsEnemyVehiclesOpen(true)}
-                      >
-                        ENEMY VEHICLES
-                      </button>
-                    )}
-                    <button className="upload-btn" style={{marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: 'var(--blue)', color: '#fff'}} onClick={pingSelected}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/>
-                        </svg>
-                        BROADCAST PING
-                    </button>
-                    {isAdmin && (
-                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#ff00aa', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}} title="Point the stream camera at this object" onClick={() => {
-                          updateDirector({ cameraMode: 'director', target: computeBroadcastFraming(selectedLocation) });
-                      }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                        </svg>
-                        BROADCAST_THIS
-                      </button>
-                    )}
-                    {isAdmin && isPlayerRhombus && (
-                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#00ff66', color: '#000'}} onClick={() => {
-                          setAdminBankPlayer(selectedLocation.owner);
-                      }}>VIEW_BANK</button>
-                    )}
-                    {canManage && (
-                      <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={async () => {
-                        const res = await fetch(`/api/locations/${selectedLocation.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-                        if (res.ok) { setSelectedLocation(null); fetchLocations(); }
-                      }}>PURGE_DATA_POINT</button>
-                    )}
-                    {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && tokenSheetLink?.location_id !== selectedLocation.id && (
-                      <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
-                    )}
-                    {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
-                      tokenSheetLink?.location_id === selectedLocation.id && tokenSheetLink?.system === gameSystem ? (
-                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
-                          setOpenNpcSheet({ id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label, token_shape: selectedLocation.shape, locationId: selectedLocation.id });
-                        }}>OPEN_SHEET</button>
-                      ) : (() => {
-                        const tiers = getTemplate(gameSystem).npcTiers;
-                        return (
-                          <div style={{ marginTop: '10px', display: 'flex', gap: '6px', alignItems: 'center' }}>
-                            {tiers && tiers.length > 0 && (
-                              <select
-                                aria-label="NPC tier"
-                                value={genTier || tiers[0].id}
-                                onChange={(e) => setGenTier(e.target.value)}
-                                style={{ background: 'color-mix(in srgb, var(--black) 70%, transparent)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.7rem', padding: '0 4px', height: '26px', boxSizing: 'border-box', marginTop: '15px' }}
-                              >
-                                {tiers.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                              </select>
-                            )}
-                            <button className="upload-btn" style={{ flex: 1, backgroundColor: '#2200aa', height: '28px', boxSizing: 'border-box' }} onClick={() => {
-                              socketRef.current?.emit('generateNpcSheet', {
-                                location_id: selectedLocation.id,
-                                tier: tiers && tiers.length > 0 ? (genTier || tiers[0].id) : undefined,
-                              });
-                            }}>GENERATE_SHEET</button>
-                          </div>
-                        );
-                      })()
-                    )}
-                    {/* Sheetless NPC manual initiative roll */}
-                    {isAdmin && initiative.state && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && !initiative.state.combatants.some((c: any) => c.id === `npc:${selectedLocation.id}`) && (
-                      <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '10px' }}>
-                        <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', letterSpacing: '1px', marginBottom: '6px' }}>INITIATIVE SCORE</div>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <input
-                            type="number"
-                            min="1"
-                            max="99"
-                            placeholder="SCORE"
-                            value={manualInitScore}
-                            onChange={e => setManualInitScore(e.target.value)}
-                            style={{ flex: 1, background: 'transparent', border: '1px solid var(--dark-green)', color: 'var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '4px 6px', width: '60px' }}
-                          />
-                          <button
-                            className="upload-btn"
-                            style={{ flex: 2 }}
-                            disabled={!manualInitScore || isNaN(Number(manualInitScore)) || Number(manualInitScore) < 1}
-                            onClick={() => {
-                              const score = Number(manualInitScore);
-                              const npcName = selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? `ENEMY_${selectedLocation.id}` : `FRIENDLY_${selectedLocation.id}`);
-                              initiative.submitRoll({
-                                id: `npc:${selectedLocation.id}`,
-                                name: npcName,
-                                portraitUrl: (selectedLocation as any).portrait_url ?? undefined,
-                                score,
-                                breakdown: `MANUAL(${score}) = ${score}`,
-                                diceResults: {},
-                                isNpc: true,
-                                isFriendly: selectedLocation.shape === 'friendly_rhombus',
-                                floorIndex: activeBattleMapData?.currentFloorIndex,
-                              });
-                              setManualInitScore('');
-                            }}
-                          >
-                            ADD TO INIT
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {/* The shared seating window. Only where there is something to seat
-                        anyone in — an empty roster means the button says nothing. */}
-                    {isRhombus && vehicleRoster.hasVehicles && (
-                      <button
-                        className="upload-btn"
-                        style={{ marginTop: '10px', width: '100%' }}
-                        onClick={() => setIsVehiclesOpen(true)}
-                      >
-                        VEHICLES
-                      </button>
-                    )}
-                    {/* Player token sheet: owner opens their own; admin opens any player's */}
-                    {selectedLocation.shape === 'rhombus' && selectedLocation.owner && (isOwner || isAdmin) && (
-                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
-                        if (isOwner) setIsSheetOpen(true);
-                        else setOpenPlayerSheetUser(selectedLocation.owner);
-                      }}>OPEN_SHEET</button>
-                    )}
-                    {/* ATTACK — visible to any logged-in player not attacking their own rhombus */}
-                    {isRhombus && isLoggedIn && !isOwner && (
-                      <div style={{ marginTop: '10px' }}>
-                        {attackPending?.targetId === selectedLocation.id ? (
-                          <div style={{ fontSize: '12px', color: 'var(--green)', border: '1px solid var(--green)', padding: '6px 10px' }}>
-                            {hasSheetCombat(gameSystem)
+                    // An NPC's portrait only ever comes through its sheet link, silhouette and
+                    // all, so a hidden face is never shown by another route. A player's is
+                    // public - it is on their ID card.
+                    portrait={isNpc
+                      ? (tokenSheetLink?.portrait_url ? { src: tokenSheetLink.portrait_url, silhouette: Number(tokenSheetLink.portrait_shadow_filter ?? 0) !== 0 } : null)
+                      : (selectedLocation.portrait_url ? { src: selectedLocation.portrait_url, silhouette: false } : null)}
+                    description={tokenSheetLink?.sheet_description || selectedLocation.description || ''}
+                    actions={tokenActions}
+                    playerUsername={isPlayerRhombus && selectedLocation.owner ? selectedLocation.owner : null}
+                    socket={socketRef.current}
+                    // AC or DV: the GM edits it; the owner sees their own; other players see nothing.
+                    defense={isAdmin || isOwner
+                      ? { label: defLabel, melee: selectedLocation.melee_ac ?? 10, ranged: selectedLocation.ranged_ac ?? null }
+                      : null}
+                    canEditDefense={isAdmin}
+                    onSaveDefense={async (meleeVal, rangedVal) => {
+                      const loc = selectedLocation;
+                      await fetch(`/api/locations/${loc.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...loc, melee_ac: meleeVal, ranged_ac: rangedVal }) });
+                      fetchLocations();
+                      // selectedLocation is a snapshot - refresh it so the new values show immediately
+                      setSelectedLocation((prev: any) => prev && prev.id === loc.id ? { ...prev, melee_ac: meleeVal, ranged_ac: rangedVal } : prev);
+                    }}
+                    combat={canAttack || canAddToInit
+                      ? {
+                        active: canAttack && attackingThis,
+                        status: !canAttack ? null
+                          : attackingThis
+                            ? (hasSheetCombat(gameSystem)
                               ? 'SELECT_WEAPON — DICE_ROLLER'
-                              : <>AWAITING_ROLL — {attackPending.attackType.toUpperCase()}{token ? ` vs ${getTemplate(gameSystem).tokenDefense?.label ?? 'AC'} ${attackPending.ac}` : ''}</>}
-                          </div>
-                        ) : (
-                          <>
-                            {attackPending ? (
-                              <div style={{ fontSize: '11px', color: '#888' }}>Attack in progress vs {attackPending.targetName}</div>
-                            ) : hasSheetCombat(gameSystem) ? (
-                              // Sheet-driven systems: the weapon decides melee vs
-                              // ranged - one button, pick the weapon in the dice menu
-                              <button className="upload-btn" style={{ width: '100%', backgroundColor: '#cc2200', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'melee' }); }}>⚔ ATTACK</button>
-                            ) : (
-                              <div style={{ display: 'flex', gap: '6px' }}>
-                                <button className="upload-btn" style={{ flex: 1, backgroundColor: '#cc2200', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'melee' }); }}>⚔ MELEE</button>
-                                <button className="upload-btn" style={{ flex: 1, backgroundColor: '#884400', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'ranged' }); }}>🏹 RANGED</button>
-                              </div>
-                            )}
-                            {lastAttackResult && lastAttackResult.targetName === selectedLocation.name && (
-                              <div style={{ marginTop: '6px', fontSize: '12px', color: lastAttackResult.hit ? '#00ff66' : '#ff4444', border: `1px solid ${lastAttackResult.hit ? '#00ff66' : '#ff4444'}`, padding: '6px 10px' }}>
-                                {lastAttackResult.hit ? 'HIT!' : 'MISS'} — rolled {lastAttackResult.roll}
-                                {lastAttackResult.damage !== undefined && (
-                                  <> · DMG {lastAttackResult.damage}{lastAttackResult.through !== undefined && ` (${lastAttackResult.through} through armor)`}</>
-                                )}
-                                {(lastAttackResult.shieldAbsorbed ?? 0) > 0 && <> · SHIELD −{lastAttackResult.shieldAbsorbed}</>}
-                                {lastAttackResult.criticalInjury && <> · CRIT INJURY!</>}
-                                {lastAttackResult.targetDown && <> · TARGET DOWN</>}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {isRhombus && !isAdmin && !isOwner && (
-                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
-                            setReviewHealthOwner(selectedLocation.owner);
-                            setReviewHealthPos({ x: infoPanelPos.x + 320 > window.innerWidth - 300 ? Math.max(0, infoPanelPos.x - 320) : infoPanelPos.x + 320, y: infoPanelPos.y });
-                            setReviewHealthLocId(selectedLocation.id);
-                            // QuickSheetCard is NOT opened from CHECK_HEALTH — health window only
-                        }}>CHECK_HEALTH</button>
-                    )}
-                    {isRhombus && (isAdmin || (isPlayerRhombus && selectedLocation.owner === userName)) && (
-                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--green)', color: '#000'}} onClick={async () => {
-                            let newX = infoPanelPos.x + 320;
-                            if (newX + 300 > window.innerWidth) newX = Math.max(0, infoPanelPos.x - 320);
-                            setHitPointsPos({ x: newX, y: infoPanelPos.y });
-                            // If no real rhombus exists yet (synthetic location), create a default one
-                            if (selectedLocation.id === -1 && selectedLocation.owner) {
-                                const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === selectedLocation.owner);
-                                if (!existing) {
-                                    await fetch('/api/locations', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                        body: JSON.stringify({ name: selectedLocation.owner, description: '', shape: 'rhombus', owner: selectedLocation.owner, x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1, hp_current: 100, hp_max: 100, hp_temp: 0, battle_map_id: -1, floor_index: -1 })
-                                    });
-                                    await fetchLocations();
-                                }
-                            }
-                            setIsHitPointsOpen(true);
-                        }}>UPDATE_HEALTH</button>
-                    )}
-  {currentLocBattleMaps.length > 0 && (
-      <button className="upload-btn" style={{backgroundColor: '#ff00ff', color: 'white'}} onClick={() => enterBattleMap(selectedLocation.id)}>ENTER BATTLE MAP</button>
-  )}
-                  </DraggableWindow>
+                              : <>AWAITING_ROLL — {attackPending!.attackType.toUpperCase()}{token ? ` vs ${defLabel} ${attackPending!.ac}` : ''}</>)
+                            : attackPending ? `Attack in progress vs ${attackPending.targetName}` : null,
+                        lastResult: lastAttackResult && lastAttackResult.targetName === selectedLocation.name ? lastAttackResult : null,
+                        onAddToInit: canAddToInit
+                          ? (score: number) => {
+                            const npcName = selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? `ENEMY_${selectedLocation.id}` : `FRIENDLY_${selectedLocation.id}`);
+                            initiative.submitRoll({
+                              id: `npc:${selectedLocation.id}`,
+                              name: npcName,
+                              portraitUrl: (selectedLocation as any).portrait_url ?? undefined,
+                              score,
+                              breakdown: `MANUAL(${score}) = ${score}`,
+                              diceResults: {},
+                              isNpc: true,
+                              isFriendly: selectedLocation.shape === 'friendly_rhombus',
+                              floorIndex: activeBattleMapData?.currentFloorIndex,
+                            });
+                          }
+                          : undefined,
+                      }
+                      : null}
+                    // GM notes on NPC tokens: the main admin only, never a granted editor, and
+                    // never a player's token - what the GM knows about a player is not this.
+                    gmNotesToken={isAdmin && isPrimaryAdmin && isNpc ? token : undefined}
+                    tierPicker={isAdmin && isNpc && !sheetHere && tiers && tiers.length > 0
+                      ? { tiers, value: genTier, onChange: setGenTier }
+                      : undefined}
+                  />
                 );
               }
               return null;
