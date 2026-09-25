@@ -5,6 +5,63 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.14.2] - 2026-09-25
+
+The shop, on the terminal layout, with a cart.
+
+### Added
+
+- **A cart in every shop.** + CART on the BUY or SELL list puts things in a **CART**
+  folder, which blinks until you open it and shows how many things are in it. Open it and
+  press CHECK OUT to buy and sell everything at once.
+
+- **The cart is itemized.** Something bought twice is one line with ×2, and − / + / ✕ to
+  change it. Each thing sold is its own line, shown as minus money. Installed cyberware
+  says so on its line: it comes out with no surgery roll. CLEAR CART empties it. Closing
+  the shop, or opening another one, starts a fresh cart.
+
+- **One total, in words.** "YOU PAY 420cr" or "THE SHOP PAYS YOU 90cr", with your balance
+  after. Your bank moves once, by the difference between what you buy and what you sell.
+
+- **What you'd be carrying (CWN).** The cart shows your Readied and Stowed load after
+  checkout, and turns red past your limit. It only stops the checkout when the
+  encumbrance house rule is on.
+
+- **A receipt.** After checking out, the cart shows a receipt: the shop, the date and
+  time, what was bought and sold, the total, where the money went and your new balance.
+  It goes away when you open BUY or SELL.
+
+- **A filter on the SELL list,** like the one on BUY.
+
+### Changed
+
+- **The shop window looks like the building and token windows.** The building in the
+  corner, BUY / SELL / CART down the left, and the shop line (type, lines, your balance)
+  on top. The shelf tabs and the filter stay at the top of the list while it scrolls. The
+  window is as tall as what it holds. Prices and ranges no longer wrap in the middle.
+
+- **Checking out is all or nothing.** If any line can't go through, nothing is charged and
+  nothing leaves your sheet, and the cart stays as it was. Short of credits with overdraft
+  allowed, you're asked once for the whole cart whether to take debt or go negative. If a
+  price changed while things sat in the cart, nothing is charged and the new total is
+  shown to check out again.
+
+- **BUY and SELL no longer charge or pay on their own.** Everything goes through the cart.
+
+### Fixed
+
+- **Buying two of the same weapon at once can no longer put both in one row.** Bought
+  things are placed one at a time after checkout, each seeing the one before.
+
+- **A checkout the server never answers stops waiting after 15 seconds,** keeps your cart,
+  and says to check your balance before trying again.
+
+- **A big balance change no longer flattens the bank's chart.** A 150,000cr sale used to
+  jump the ticker by about 1,800 and squash every other candle into a line for a minute.
+  Big changes now make a tall candle, and small ones still a small tick.
+
+---
+
 ## [1.14.1] - 2026-09-25
 
 The building and token windows, redone as terminals.
