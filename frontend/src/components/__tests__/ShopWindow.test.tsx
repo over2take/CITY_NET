@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import { render, screen, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ShopWindow } from '../ShopWindow';
+import { ShopWindow, CHECKOUT_TIMEOUT_MS } from '../ShopWindow';
 
 // The hook is the sheet's own business; what matters here is what the shop does with it.
 const sheetState: { sheet: any; encumbranceEnforced: boolean; overdraftAllowed: boolean } = {
@@ -64,6 +64,8 @@ let refuseWith: string | null = null;
 let sold: any[] = [];
 /** Every checkoutShop, whole. */
 let checkouts: any[] = [];
+/** A server that never answers a checkout - one still running code from before the cart. */
+let silentServer = false;
 /** What the fake server says a sale came to. */
 let salePayout = 0;
 let saleFromBody = 0;
@@ -98,6 +100,7 @@ const makeSocket = () => {
        */
       if (ev === 'checkoutShop') {
         checkouts.push(payload);
+        if (silentServer) return;
         for (const b of payload.buys) {
           for (let i = 0; i < b.qty; i += 1) {
             sent.push({ locationId: payload.locationId, catalogue: b.catalogue, itemId: b.itemId, settle: payload.settle });
@@ -168,6 +171,7 @@ beforeEach(() => {
   sent = [];
   sold = [];
   checkouts = [];
+  silentServer = false;
   refuseWith = null;
   salePayout = 0;
   saleFromBody = 0;
@@ -1370,6 +1374,25 @@ describe('the cart', () => {
     await checkOut();
     expect(handleFieldsChange).not.toHaveBeenCalled();
     expect(screen.getByText(/Not enough credits/)).toBeInTheDocument();
+  });
+
+  it('stops waiting for a server that never answers, and says to look before retrying', async () => {
+    silentServer = true;
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await openFolder('CART');
+    vi.useFakeTimers();
+    try {
+      act(() => { screen.getByRole('button', { name: 'CHECK OUT' }).click(); });
+      expect(screen.getByRole('button', { name: 'CHECKING OUT…' })).toBeDisabled();
+      act(() => { vi.advanceTimersByTime(CHECKOUT_TIMEOUT_MS); });
+      expect(screen.getByRole('button', { name: 'CHECK OUT' })).toBeEnabled();
+      expect(screen.getByText(/did not answer/)).toBeInTheDocument();
+      // Nothing was placed, and the cart is still there to try again.
+      expect(screen.getByTestId('cart-buy')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('changes a line with − and +, and drops it at none', async () => {

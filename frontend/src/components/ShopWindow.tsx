@@ -117,6 +117,9 @@ const cell: React.CSSProperties = {
 /** Prices are printed the same way on every shelf, whatever the shelf is selling. */
 const credits = (n: number): string => (n === 0 ? 'N/A' : `${n.toLocaleString()}cr`);
 
+/** How long a checkout waits for the server before saying it got no answer. */
+export const CHECKOUT_TIMEOUT_MS = 15_000;
+
 /** Credits with a sign, for the cart: a total can be nothing, or the shop paying you. */
 const money = (n: number): string => `${n < 0 ? '-' : ''}${Math.abs(n).toLocaleString()}cr`;
 
@@ -512,6 +515,8 @@ export function ShopWindow({
   const [receipt, setReceipt] = useState<CartReceipt | null>(null);
   /** Bought things still to be written onto the sheet, one per render so each sees the last. */
   const [placing, setPlacing] = useState<Array<() => void>>([]);
+  const checkoutTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (checkoutTimer.current) clearTimeout(checkoutTimer.current); }, []);
   const cartNow = React.useRef({ buys: cartBuys, sells: cartSells });
   cartNow.current = { buys: cartBuys, sells: cartSells };
 
@@ -539,6 +544,17 @@ export function ShopWindow({
     setRefused(null);
     setReceipt(null);
     setBusy(true);
+    /**
+     * No answer at all is its own case. A server still running code from before the cart
+     * has no checkout to answer with, and the window used to sit on CHECKING OUT forever.
+     * It cannot know whether anything was charged, so it says to look rather than guess.
+     */
+    if (checkoutTimer.current) clearTimeout(checkoutTimer.current);
+    checkoutTimer.current = setTimeout(() => {
+      checkoutTimer.current = null;
+      setBusy(false);
+      setRefused('The shop did not answer. Check your balance before trying again — if the server was just updated, it needs restarting.');
+    }, CHECKOUT_TIMEOUT_MS);
     socket?.emit('checkoutShop', {
       locationId,
       buys: cartBuys.map(({ catalogue, itemId, qty }) => ({ catalogue, itemId, qty })),
@@ -561,6 +577,7 @@ export function ShopWindow({
       payout?: number; balance?: number; debt?: number; settled?: Settle; fromBody?: number;
       buys?: { catalogue: string; itemId: string; qty: number; price: number }[];
     }) => {
+      if (checkoutTimer.current) { clearTimeout(checkoutTimer.current); checkoutTimer.current = null; }
       setBusy(false);
       if (!res.ok) {
         if (res.reason === 'total_changed') {
