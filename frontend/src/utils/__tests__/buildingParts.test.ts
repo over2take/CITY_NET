@@ -1,7 +1,7 @@
 /**
  * A building's parts in its own frame, for the info window's turning preview.
  *
- * The preview draws the building alone, centred and fitted to a small box, so the numbers
+ * The preview draws the building alone, centered and fitted to a small box, so the numbers
  * that matter are where each part sits relative to the building, how big the whole thing
  * is, and that a turned building's parts are turned with it.
  */

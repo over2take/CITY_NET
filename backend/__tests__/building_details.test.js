@@ -210,7 +210,7 @@ describe('saved maps', () => {
   });
 
   it('do not leave one map\'s notes on another map\'s building with the same id', async () => {
-    // A map saved before notes travelled has none; loading it must not keep ours.
+    // A map saved before notes traveled has none; loading it must not keep ours.
     await run(db,
       `INSERT INTO saved_maps (name, locations_data) VALUES ('old-map', ?)`,
       [JSON.stringify([{ id: bar, name: 'Somewhere Else', x: 0, y: 0, z: 0, shape: 'box' }])]);

@@ -69,7 +69,7 @@ function Spinning({ location, parts, color }: { location: any; parts: any[]; col
 export function BuildingPreview({ location, parts = [], width = 180, height = 150 }: Props) {
   const theme = useContext(ThemeContext);
   /**
-   * The wireframe's colour, read from the theme's CSS variable where the preview sits.
+   * The wireframe's color, read from the theme's CSS variable where the preview sits.
    *
    * Not from ThemeContext alone: the info windows render outside that provider in App, so
    * the context answers with its default and every theme drew the building in classic
@@ -116,8 +116,8 @@ export function BuildingPreview({ location, parts = [], width = 180, height = 15
 
   return (
     <div ref={frameRef} style={frame} data-testid="building-preview" data-kind="render" aria-label={`${location.name || 'Building'}, turning`} role="img">
-      {/* `flat`: no tone mapping, so the lines are the theme's colour exactly rather than
-          the washed-out version the default mapping makes of a bright unlit colour. */}
+      {/* `flat`: no tone mapping, so the lines are the theme's color exactly rather than
+          the washed-out version the default mapping makes of a bright unlit color. */}
       <Canvas
         flat
         camera={{ position: [0, 0.9, 4.6], fov: 40, near: 0.1, far: 50 }}

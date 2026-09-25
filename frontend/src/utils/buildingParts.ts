@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // A building's parts, placed relative to the building rather than the world.
 //
 // The same arithmetic Buildings.tsx does to draw a structure in the city - the root and
-// every child part, each offset from the group's centre and turned into the root's frame -
+// every child part, each offset from the group's center and turned into the root's frame -
 // pulled out so something else can draw the building on its own. The info window's preview
 // spins it in a box a couple of hundred pixels wide, so it also needs to know how big the
 // whole thing is in order to fit it.
@@ -39,11 +39,11 @@ const num = (v: unknown, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-/** The root and its children, in the root's own frame, centred for a preview. */
+/** The root and its children, in the root's own frame, centered for a preview. */
 export const buildingParts = (root: PartRow, children: PartRow[] = []): LocalBuilding => {
   const all = [root, ...children].filter(Boolean);
 
-  // The group's origin: centred on the footprint, standing on the lowest part. The same
+  // The group's origin: centered on the footprint, standing on the lowest part. The same
   // point Buildings.tsx puts the group at, so the parts come out where the city draws them.
   let minX = Infinity; let maxX = -Infinity; let minZ = Infinity; let maxZ = -Infinity; let minY = Infinity;
   for (const p of all) {

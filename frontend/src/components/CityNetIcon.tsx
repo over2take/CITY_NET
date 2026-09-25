@@ -1,9 +1,9 @@
 // The CITY_NET badge - the hex, the skyline and the rhombus gem from assets/citynet-logo.svg
-// - drawn in the current theme's colours rather than the logo's fixed green.
+// - drawn in the current theme's colors rather than the logo's fixed green.
 //
 // Used where something needs a picture and has none: a building with no photo on a machine
 // that cannot draw it in 3D. Strokes are currentColor and fills the theme's black, so it
-// follows all seven themes without a colour of its own.
+// follows all seven themes without a color of its own.
 
 export function CityNetIcon({ size = 120, title = 'CITY_NET' }: { size?: number; title?: string }) {
   const fill = 'var(--black)';

@@ -97,7 +97,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       const overpasses = JSON.parse(row.overpasses_data || '[]');
       const waterBodies = JSON.parse(row.water_bodies_data || '[]');
       const signs = JSON.parse(row.signs_data || '[]');
-      // Null for a map saved before notes travelled with it. That map had none to carry,
+      // Null for a map saved before notes traveled with it. That map had none to carry,
       // so whatever is in the table now belongs to a different map and goes.
       const notes = JSON.parse(row.gm_notes_data || '[]');
 

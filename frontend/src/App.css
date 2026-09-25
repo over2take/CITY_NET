@@ -953,7 +953,7 @@ header {
 }
 
 /* The terminal look, for windows that ask for it (the building window): a solid title bar
-   in the theme's colour with the name knocked out of it, like an old green-screen header. */
+   in the theme's color with the name knocked out of it, like an old green-screen header. */
 .terminal-window .win95-title-bar {
   background: var(--green);
   color: var(--black);
