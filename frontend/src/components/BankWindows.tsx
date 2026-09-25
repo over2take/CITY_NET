@@ -749,12 +749,27 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
 
 // ── CANDLE CHART ──────────────────────────────────────────────────────────────
 
-interface Candle { open: number; close: number; high: number; low: number; }
+export interface Candle { open: number; close: number; high: number; low: number; }
 
 const CANDLE_COUNT = 28;
 const CANDLE_INTERVAL_MS = 2500;
 
-function generateNextCandle(prev: Candle, biasDelta: number): Candle {
+/**
+ * How far a change in the balance nudges the next candle.
+ *
+ * By the size of the change rather than the amount: it was `change * 0.012`, tuned for
+ * everyday sums, so +500cr was a green tick of 6 but a 150,000cr sale was a jump of 1,800
+ * on a chart that sits near 100 - one spike, and the rescale flattened every other candle
+ * into a line for a minute. On a log scale 500cr is still about 6, 50,000cr about 10, and
+ * nothing goes past the cap. Money in is up, money out is down, as before.
+ */
+export const BALANCE_BIAS_CAP = 14;
+export const balanceBias = (change: number): number => {
+  if (!Number.isFinite(change) || change === 0) return 0;
+  return Math.sign(change) * Math.min(BALANCE_BIAS_CAP, Math.log10(1 + Math.abs(change)) * 2.2);
+};
+
+export function generateNextCandle(prev: Candle, biasDelta: number): Candle {
   const drift = biasDelta * 0.012 + (Math.random() - 0.48) * 4.5;
   const bodySize = 1.5 + Math.random() * 5;
   const open = prev.close;
