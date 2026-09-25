@@ -31,21 +31,22 @@ const makeSocket = () => {
   };
 };
 
+const baseProps = (): React.ComponentProps<typeof TokenWindow> => ({
+  location: player,
+  title: 'ID: GHOST',
+  pos: { x: 0, y: 0 },
+  setPos: vi.fn(),
+  onClose: vi.fn(),
+  portrait: null,
+  description: 'Netrunner.',
+  actions: [],
+  operator: null,
+  socket: makeSocket(),
+  health: <div>HEALTH PANEL</div>,
+});
+
 const show = (over: Partial<React.ComponentProps<typeof TokenWindow>> = {}) => render(
-  <TokenWindow
-    location={player}
-    title="ID: GHOST"
-    pos={{ x: 0, y: 0 }}
-    setPos={vi.fn()}
-    onClose={vi.fn()}
-    portrait={null}
-    description="Netrunner."
-    actions={[]}
-    operator={null}
-    socket={makeSocket()}
-    health={<div>HEALTH PANEL</div>}
-    {...over}
-  />,
+  <TokenWindow {...baseProps()} {...over} />,
 );
 
 const tabs = () => screen.getAllByRole('tab').map((t) => t.textContent);
@@ -219,5 +220,31 @@ describe('the picture', () => {
     show({ location: enemy });
     expect(screen.getByTestId('token-preview')).toHaveAttribute('data-kind', 'token');
     expect(screen.getByRole('img', { name: 'Token' }).style.color).toBe('var(--danger)');
+  });
+});
+
+describe('opening a folder on request', () => {
+  it('opens HEALTH when HIT_POINTS asks, and again after switching away', () => {
+    const props = { ...baseProps() };
+    const { rerender } = render(<TokenWindow {...props} folderRequest={{ folder: 'health', seq: 1 }} />);
+    expect(screen.getByRole('tab', { name: 'HEALTH' })).toHaveAttribute('aria-selected', 'true');
+    openTab('INFO');
+    rerender(<TokenWindow {...props} folderRequest={{ folder: 'health', seq: 2 }} />);
+    expect(screen.getByRole('tab', { name: 'HEALTH' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('wins over the reset to INFO when the request comes with another token', () => {
+    const props = { ...baseProps() };
+    const { rerender } = render(<TokenWindow {...props} />);
+    rerender(<TokenWindow {...props} location={enemy} folderRequest={{ folder: 'health', seq: 1 }} />);
+    expect(screen.getByRole('tab', { name: 'HEALTH' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('says which folder is open, so the sidebar can light HIT_POINTS', () => {
+    const onFolderChange = vi.fn();
+    render(<TokenWindow {...baseProps()} onFolderChange={onFolderChange} />);
+    expect(onFolderChange).toHaveBeenLastCalledWith('info');
+    openTab('HEALTH');
+    expect(onFolderChange).toHaveBeenLastCalledWith('health');
   });
 });

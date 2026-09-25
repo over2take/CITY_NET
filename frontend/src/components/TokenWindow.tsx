@@ -64,11 +64,17 @@ interface Props {
     value: string;
     onChange: (id: string) => void;
   };
+
+  /** Open this folder - HIT_POINTS asks for HEALTH. A new `seq` asks again. */
+  folderRequest?: { folder: TokenFolder; seq: number } | null;
+  /** Told which folder is open, so the sidebar can light HIT_POINTS while HEALTH shows. */
+  onFolderChange?: (folder: TokenFolder) => void;
 }
 
 export function TokenWindow({
   location, title, pos, setPos, onClose, titleControls, portrait, description, actions,
   operator, socket, health, gmHealth, quickActions, attackStatus, gmNotesToken, tierPicker,
+  folderRequest, onFolderChange,
 }: Props) {
   const folders: TerminalFolder<TokenFolder>[] = [
     { id: 'info', label: 'INFO' },
@@ -77,6 +83,11 @@ export function TokenWindow({
     ...(gmNotesToken ? [{ id: 'gm' as const, label: 'GM NOTES' }] : []),
   ];
   const [open, setOpen] = useFolder(folders, location?.id);
+  // After useFolder's own reset, so a request that comes with a new token still wins.
+  useEffect(() => {
+    if (folderRequest) setOpen(folderRequest.folder);
+  }, [folderRequest?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onFolderChange?.(open); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const kind = location?.shape === 'enemy_rhombus' ? 'ENEMY' : location?.shape === 'friendly_rhombus' ? 'FRIENDLY' : 'PLAYER';
 

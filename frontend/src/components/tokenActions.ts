@@ -197,3 +197,34 @@ export async function createPlayerTokenRow(
   });
   await c.refreshLocations();
 }
+
+const TOKEN_SHAPES = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];
+
+export const isTokenShape = (shape: unknown) => TOKEN_SHAPES.includes(shape as string);
+
+/**
+ * Whose health the sidebar's HIT_POINTS button opens, in the token window's HEALTH folder.
+ *
+ * A player's own token - or, before they have placed one, the stand-in quick access shows,
+ * where HEALTH offers to make the record. The GM's is the selected token, and with none
+ * selected there is nothing to open.
+ */
+export function hitPointsTarget(c: {
+  isGm: boolean;
+  selected: any;
+  locations: any[];
+  userName: string | null;
+}): { token: any } | { notice: string } | null {
+  if (c.isGm) {
+    return c.selected && isTokenShape(c.selected.shape) ? { token: c.selected } : { notice: 'SELECT_A_TOKEN_FIRST' };
+  }
+  if (!c.userName) return null;
+  const own = c.locations.find((l) => l.shape === 'rhombus' && l.owner === c.userName);
+  return {
+    token: own ?? {
+      id: -1, shape: 'rhombus', owner: c.userName, name: c.userName,
+      description: 'OPERATOR_ONLINE — beacon not yet deployed',
+      x: 0, y: 0, z: 0, width: 0, height: 0, depth: 0,
+    },
+  };
+}

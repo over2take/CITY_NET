@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { tokenActionKeys, tokenView, type TokenViewer } from '../tokenActions';
+import { hitPointsTarget, tokenActionKeys, tokenView, type TokenViewer } from '../tokenActions';
 
 const base: TokenViewer = {
   isAdmin: false, isPrimaryAdmin: false, isOwner: false, isLoggedIn: true, isPlayerToken: true, hasOwner: true,
@@ -102,5 +102,41 @@ describe('which folders a viewer gets', () => {
 
   it('a granted editor never reads the GM notes', () => {
     expect(view({ ...npc, isAdmin: true, isPrimaryAdmin: false }).gmNotes).toBe(false);
+  });
+});
+
+describe('whose health HIT_POINTS opens', () => {
+  const sgg = { id: 5, shape: 'rhombus', owner: 'ghost' };
+  const ganger = { id: 9, shape: 'enemy_rhombus', owner: 'gm' };
+  const bar = { id: 2, shape: 'box', owner: null };
+  const locations = [ganger, sgg, bar];
+
+  it("a player's own token, whatever is selected", () => {
+    expect(hitPointsTarget({ isGm: false, selected: ganger, locations, userName: 'ghost' })).toEqual({ token: sgg });
+  });
+
+  it('a stand-in for a player who has not placed one, which HEALTH can make real', () => {
+    const found = hitPointsTarget({ isGm: false, selected: null, locations, userName: 'viper' });
+    expect(found).toMatchObject({ token: { id: -1, shape: 'rhombus', owner: 'viper' } });
+  });
+
+  it("an NPC the player made is not the player's token", () => {
+    const own = { id: 11, shape: 'friendly_rhombus', owner: 'ghost' };
+    expect(hitPointsTarget({ isGm: false, selected: null, locations: [own], userName: 'ghost' }))
+      .toMatchObject({ token: { id: -1 } });
+  });
+
+  it('nothing before signing in', () => {
+    expect(hitPointsTarget({ isGm: false, selected: null, locations, userName: null })).toBeNull();
+  });
+
+  it("the GM's selected token - player or NPC", () => {
+    expect(hitPointsTarget({ isGm: true, selected: ganger, locations, userName: 'gm' })).toEqual({ token: ganger });
+    expect(hitPointsTarget({ isGm: true, selected: sgg, locations, userName: 'gm' })).toEqual({ token: sgg });
+  });
+
+  it('asks the GM to select a token when none, or a building, is selected', () => {
+    expect(hitPointsTarget({ isGm: true, selected: null, locations, userName: 'gm' })).toEqual({ notice: 'SELECT_A_TOKEN_FIRST' });
+    expect(hitPointsTarget({ isGm: true, selected: bar, locations, userName: 'gm' })).toEqual({ notice: 'SELECT_A_TOKEN_FIRST' });
   });
 });

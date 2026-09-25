@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { DraggableWindow } from './DraggableWindow';
 import type { Location } from '../types';
 // Inline SVGs so we can tint them with CSS `color` (currentColor)
 export const PersonSVG = ({ color = 'currentColor', style }: { color?: string; style?: React.CSSProperties }) => (
@@ -24,8 +23,8 @@ const BloodSVG = ({ color = 'currentColor', size = 18 }: { color?: string; size?
 );
 
 // Health, two ways: the panel that changes it (your own token, or any token for the GM) and
-// the panel that only shows how someone is doing (anyone else's token). The token window
-// shows each in its HEALTH folder; the sidebar's HIT_POINTS window wraps the first.
+// the panel that only shows how someone is doing (anyone else's token). Both live in the
+// token window's HEALTH folder, which is also where the sidebar's HIT_POINTS button goes.
 
 const BODY_PARTS = ['head', 'right_arm', 'torso', 'left_arm', 'right_leg', 'left_leg'] as const;
 type BodyPart = typeof BODY_PARTS[number];
@@ -269,28 +268,6 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
         </div>
       </div>
     </div>
-  );
-}
-
-interface HitPointsMenuProps extends HitPointsPanelProps {
-  targetRhombus: Location | null;
-  pos: { x: number; y: number };
-  setPos: (pos: { x: number; y: number }) => void;
-  onClose: () => void;
-}
-
-/** The sidebar's HIT_POINTS window: the same panel in a window of its own. */
-export function HitPointsMenu({ targetRhombus, pos, setPos, onClose, ...rest }: Omit<HitPointsMenuProps, 'target'>) {
-  return (
-    <DraggableWindow
-      title={targetRhombus ? `HP: ${targetRhombus.name || 'UNKNOWN'}` : 'HIT_POINTS'}
-      pos={pos} setPos={setPos} onClose={onClose}
-      windowStyle={{ width: '300px' }}
-    >
-      <div style={{ padding: '10px' }}>
-        <HitPointsPanel target={targetRhombus} {...rest} />
-      </div>
-    </DraggableWindow>
   );
 }
 

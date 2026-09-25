@@ -25,15 +25,15 @@ import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
 import { BuildingWindow, type BuildingAction } from './components/BuildingWindow';
-import { TokenWindow } from './components/TokenWindow';
-import { buildTokenActions, createPlayerTokenRow, tokenView, type TokenViewer } from './components/tokenActions';
+import { TokenWindow, type TokenFolder } from './components/TokenWindow';
+import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
 import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
 import type { TerminalAction } from './components/TerminalWindow';
 import { ShopWindow } from './components/ShopWindow';
 import { CatalogueWindow } from './components/CatalogueWindow';
 import { buildingTypeById, isShop, shopsAvailable, typeLabel } from './data/buildingTypes';
-import { HitPointsMenu, HitPointsPanel, HealthReviewPanel } from './components/HitPoints';
+import { HitPointsPanel, HealthReviewPanel } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
 import { CityDataBaseMenu } from './components/CityDatabase';
@@ -261,8 +261,10 @@ function App() {
 
   useEffect(() => { localStorage.setItem('musicVolume', String(musicVolume)); }, [musicVolume]);
 
-  const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
-  const [hitPointsPos, setHitPointsPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
+  // Which folder the token window has open, and a request to open one - HIT_POINTS opens
+  // HEALTH. The sequence number makes asking twice for the same folder still count.
+  const [tokenFolder, setTokenFolder] = useState<TokenFolder>('info');
+  const [tokenFolderRequest, setTokenFolderRequest] = useState<{ folder: TokenFolder; seq: number } | null>(null);
 
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
@@ -310,20 +312,6 @@ function App() {
   const [infoPanelPos, setInfoPanelPos] = useState(() => ({ x: window.innerWidth / 2 - 175, y: window.innerHeight / 2 - 200 }));
   const [diceTrayPos, setDiceTrayPos] = useState(() => ({ x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 250 }));
   
-  // Prevent HitPointsMenu and InfoWindow from overlapping when opened
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (isHitPointsOpen && selectedLocation) {
-        const dx = Math.abs(hitPointsPos.x - infoPanelPos.x);
-        const dy = Math.abs(hitPointsPos.y - infoPanelPos.y);
-        if (dx < 320 && dy < 300) {
-            let newX = infoPanelPos.x + 320;
-            if (newX + 300 > window.innerWidth) newX = Math.max(0, infoPanelPos.x - 320);
-            setHitPointsPos({ x: newX, y: infoPanelPos.y });
-        }
-    }
-  }, [isHitPointsOpen, selectedLocation]);
-
   const [chatPos, setChatPos] = useState(() => ({ x: window.innerWidth / 2 - 300, y: window.innerHeight / 2 - 200 }));
   const [bankPos, setBankPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: window.innerHeight / 2 - 150 }));
   const [adminBankPlayer, setAdminBankPlayer] = useState<string | null>(null);
@@ -1446,11 +1434,20 @@ function App() {
     setPendingResets(prev => prev.filter(r => r.requestId !== requestId));
   };
 
+  /** HIT_POINTS: the token window, open on HEALTH - whose, hitPointsTarget() decides. */
+  const openHealth = () => {
+    const found = hitPointsTarget({ isGm: token !== '', selected: selectedLocation, locations, userName });
+    if (!found) return;
+    if ('notice' in found) { setNotification(found.notice); return; }
+    if (selectedLocation?.id !== found.token.id) setSelectedLocation(found.token);
+    setTokenFolderRequest((r) => ({ folder: 'health', seq: (r?.seq ?? 0) + 1 }));
+  };
+  const healthShowing = !!selectedLocation && isTokenShape(selectedLocation.shape) && tokenFolder === 'health';
+
   const handleLogout = () => {
     // 1. Immediately close all UI elements for a clean fade-out
     setIsChatOpen(false);
     setIsDiceTrayOpen(false);
-    setIsHitPointsOpen(false);
     setActiveSidebarMenu('none');
     setSelectedLocation(null);
     setTargetObject(null);
@@ -1633,8 +1630,8 @@ function App() {
               syncRhombusToDB={syncRhombusToDB}
               view={view}
               activeBattleMapData={activeBattleMapData}
-              isHitPointsOpen={isHitPointsOpen}
-              setIsHitPointsOpen={setIsHitPointsOpen}
+              isHitPointsOpen={healthShowing}
+              setIsHitPointsOpen={(open) => (open ? openHealth() : setSelectedLocation(null))}
               activeUsers={activeUsers}
               setIsDiceTrayOpen={setIsDiceTrayOpen}
               customDice={customDice}
@@ -2010,7 +2007,7 @@ function App() {
                 onOpenLink={(source) => {
                   // Linked fields jump to the window that owns the value
                   if (source === 'bank_balance') setIsBankOpen(true);
-                  else setIsHitPointsOpen(true);
+                  else openHealth();
                 }}
                 onRolled={() => setIsDiceTrayOpen(true)}
                 onOpenVehicles={() => setIsVehiclesOpen(true)}
@@ -2194,25 +2191,6 @@ function App() {
                 directorState={directorState}
                 updateDirector={updateDirector}
                 spectatorCount={spectatorCount}
-              />
-            )}
-            {isHitPointsOpen && (
-              <HitPointsMenu
-                targetRhombus={(() => {
-                  if (selectedLocation && selectedLocation.id !== -1) {
-                    return locations.find((l: any) => l.id === selectedLocation.id) ?? null;
-                  }
-                  if (selectedLocation?.owner) {
-                    return locations.find((l: any) => l.shape === 'rhombus' && l.owner === selectedLocation.owner) ?? null;
-                  }
-                  return locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName) ?? null;
-                })()}
-                token={token}
-                refreshLocations={fetchLocations}
-                pos={hitPointsPos}
-                setPos={setHitPointsPos}
-                onClose={() => setIsHitPointsOpen(false)}
-                gameSystem={gameSystem}
               />
             )}
             {isNpcLibraryOpen && token && (
@@ -2509,6 +2487,8 @@ function App() {
                           : <>AWAITING_ROLL — {attackPending!.attackType.toUpperCase()}{token ? ` vs ${defLabel} ${attackPending!.ac}` : ''}</>)
                         : attackPending ? `Attack in progress vs ${attackPending.targetName}` : null}
                     gmNotesToken={tokenFolders.gmNotes ? token : undefined}
+                    folderRequest={tokenFolderRequest}
+                    onFolderChange={setTokenFolder}
                     tierPicker={isAdmin && isNpc && !sheetHere && tiers && tiers.length > 0
                       ? { tiers, value: genTier, onChange: setGenTier }
                       : undefined}
