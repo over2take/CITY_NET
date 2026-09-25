@@ -179,6 +179,27 @@ describe('a ripperdoc', () => {
   });
 });
 
+describe('looking like the windows it opens from', () => {
+  it('has the terminal title bar, and is as tall as what it holds', () => {
+    const { container } = show('ripperdoc');
+    const win = container.querySelector('.win95-window') as HTMLElement;
+    expect(win).toHaveClass('terminal-window');
+    expect(win.style.height).toBe('auto');
+  });
+
+  it('puts an empty shelf\'s message straight under the header, not at the bottom', async () => {
+    show('ripperdoc');
+    const box = () => screen.getByRole('table').parentElement as HTMLElement;
+    // A full shelf's table takes the height and scrolls in it.
+    expect(box().style.flex).not.toBe('0 0 auto');
+    await userEvent.type(screen.getByLabelText('Filter stock'), 'zzzz');
+    // An empty one does not, so the message follows the header instead of the window's foot.
+    expect(box().style.flex).toBe('0 0 auto');
+    expect(box().nextElementSibling).toBe(screen.getByTestId('shelf-empty'));
+    expect(screen.getByTestId('shelf-empty').style.color).toBe('var(--green)');
+  });
+});
+
 describe('a shop with no catalogue built yet', () => {
   /**
    * This used to be the gun shop, then the clinic, then the garage - each one lost the

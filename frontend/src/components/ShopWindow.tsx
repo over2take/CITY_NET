@@ -1213,15 +1213,16 @@ export function ShopWindow({
   })();
 
   /**
-   * Resizable, following the chat and sheet windows.
+   * Resizable, following the chat and sheet windows, and as tall as what it holds.
    *
    * A shop is a long list read down while comparing prices, and a fixed height meant
-   * scrolling sixty lines through a 320px slot on a monitor with room to spare. The flex
-   * column is what makes the table take the height rather than the window growing round a
-   * fixed-height list.
+   * scrolling sixty lines through a 320px slot on a monitor with room to spare - so a long
+   * shop grows to nearly the screen, and the flex column makes the table take that height
+   * and scroll inside it. A short or empty one stays short instead of opening onto a
+   * screenful of nothing, the way the terminal windows beside it do.
    */
   const windowStyle: React.CSSProperties = {
-    width: '780px', height: '520px',
+    width: '780px', height: 'auto',
     minWidth: '420px', maxWidth: '95vw', minHeight: '260px', maxHeight: '92vh',
     resize: 'both', overflow: 'hidden', display: 'flex', flexDirection: 'column',
   };
@@ -1256,6 +1257,9 @@ export function ShopWindow({
       pos={pos}
       setPos={setPos}
       onClose={onClose}
+      // The solid title bar the building and token windows have, so a shop opened from
+      // one looks like it belongs to it.
+      className="terminal-window"
       windowStyle={windowStyle}
       contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column' }}
     >
@@ -1417,7 +1421,7 @@ export function ShopWindow({
                     </div>
                   </div>
                 )}
-                <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                <div className="cyber-scroll" style={{ flex: rows.length === 0 ? '0 0 auto' : 1, minHeight: 0, overflowY: 'auto' }}>
                   <table style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
                     <thead>
                       <tr style={{ color: 'var(--grid-section)' }}>
@@ -1486,7 +1490,7 @@ export function ShopWindow({
                   </table>
                 </div>
                 {rows.length === 0 && (
-                  <div style={{ ...mono(10), color: 'var(--grid-section)', paddingTop: 6, letterSpacing: 0 }}>
+                  <div data-testid="shelf-empty" style={{ ...mono(11), color: 'var(--green)', padding: '10px 0', letterSpacing: 0 }}>
                     {/* An empty shelf and a filter that matched nothing are different
                         answers, and only one of them is somebody else's job to fix. */}
                     {shelf.rows.length === 0
@@ -1530,7 +1534,7 @@ export function ShopWindow({
             )}
 
             {sellable.length === 0 ? (
-              <div style={{ ...mono(10), color: 'var(--grid-section)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
+              <div style={{ ...mono(11), color: 'var(--green)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
                 {!sheet
                   ? 'NO CHARACTER SHEET LOADED — NOTHING TO SELL.'
                   : 'NOTHING HERE THIS SHOP WOULD BUY. A shop only takes the kinds of thing it sells.'}
