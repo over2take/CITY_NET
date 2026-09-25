@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TerminalWindow, useFolder, type TerminalAction, type TerminalFolder } from './TerminalWindow';
+import { TerminalWindow, TERMINAL_PREVIEW, useFolder, type TerminalAction, type TerminalFolder } from './TerminalWindow';
 import { TvPortrait } from './TvPortrait';
 import { GmNotes } from './GmNotes';
 
@@ -7,12 +7,12 @@ import { GmNotes } from './GmNotes';
 // the building window: the portrait in the corner, folders down the left, the open folder
 // on the right, and the things you can do along the bottom.
 //
-// It shows what the old token window showed, to the same people. Every rule about who sees
-// what lives with the caller, which decides the buttons and which folders exist; this lays
-// them out. The only rules kept here are the ones that were always the window's own: the AC
-// edit belongs to the GM, and a player's ID comes from the server's public fields.
+// INFO says who it is, HEALTH how they are, QUICK ACTIONS (your own token) holds your rolls,
+// and GM NOTES (the main admin, on NPCs) what only the GM knows. Which folders a viewer gets
+// and which health panel they see is decided by the caller - tokenView() in tokenActions.ts,
+// where it is tested - and handed over as slots; this lays them out.
 
-export type TokenFolder = 'info' | 'id' | 'defense' | 'combat' | 'gm';
+export type TokenFolder = 'info' | 'health' | 'quick' | 'gm';
 
 export interface TokenDefense {
   /** AC or DV, per game system. */
@@ -20,17 +20,6 @@ export interface TokenDefense {
   melee: number;
   /** Null means "same as melee", shown as such rather than as a number nobody set. */
   ranged: number | null;
-}
-
-/** The last attack roll against this token, as the server reported it. */
-export interface TokenAttackResult {
-  hit: boolean;
-  roll: number;
-  damage?: number;
-  through?: number;
-  shieldAbsorbed?: number;
-  criticalInjury?: boolean;
-  targetDown?: boolean;
 }
 
 interface Props {
@@ -45,25 +34,23 @@ interface Props {
   description: string;
   actions: TerminalAction[];
 
-  /** A player's token, which has an ID card to show. Null for NPCs. */
-  playerUsername: string | null;
+  /** The player behind a player's token, whose handle and role INFO shows. Null for NPCs. */
+  operator: string | null;
   socket: any;
 
-  /** Shown to the GM and the token's owner; edited only by the GM. Null hides the folder. */
-  defense: TokenDefense | null;
-  canEditDefense: boolean;
-  onSaveDefense?: (melee: number | null, ranged: number | null) => Promise<void> | void;
-
-  /** Null when there is no combat folder for this viewer. */
-  combat: {
-    /** An attack against this token is in flight; the window opens COMBAT to show it. */
-    active: boolean;
-    /** What the attack in flight says, if there is one. */
-    status: React.ReactNode | null;
-    lastResult: TokenAttackResult | null;
-    /** The GM's manual initiative entry for a sheetless NPC. */
+  /** The HEALTH folder's body: the panel that changes health, or the one that only watches it. */
+  health: React.ReactNode;
+  /** The GM's sections under HEALTH: defense to edit, and a manual initiative entry. */
+  gmHealth?: {
+    defense: TokenDefense;
+    onSaveDefense: (melee: number | null, ranged: number | null) => Promise<void> | void;
+    /** For a sheetless NPC not yet in the initiative order. */
     onAddToInit?: (score: number) => void;
-  } | null;
+  };
+  /** Your own token's QUICK ACTIONS. Absent, there is no such folder. */
+  quickActions?: React.ReactNode;
+  /** An attack this viewer is setting up, one line above the buttons while it lasts. */
+  attackStatus?: React.ReactNode;
 
   /**
    * The admin token, handed over only for the main admin on an NPC token - which is what
@@ -81,22 +68,15 @@ interface Props {
 
 export function TokenWindow({
   location, title, pos, setPos, onClose, titleControls, portrait, description, actions,
-  playerUsername, socket, defense, canEditDefense, onSaveDefense, combat, gmNotesToken, tierPicker,
+  operator, socket, health, gmHealth, quickActions, attackStatus, gmNotesToken, tierPicker,
 }: Props) {
   const folders: TerminalFolder<TokenFolder>[] = [
     { id: 'info', label: 'INFO' },
-    ...(playerUsername ? [{ id: 'id' as const, label: 'ID' }] : []),
-    ...(defense ? [{ id: 'defense' as const, label: 'DEFENSE' }] : []),
-    ...(combat ? [{ id: 'combat' as const, label: 'COMBAT' }] : []),
+    { id: 'health', label: 'HEALTH' },
+    ...(quickActions ? [{ id: 'quick' as const, label: 'QUICK ACTIONS' }] : []),
     ...(gmNotesToken ? [{ id: 'gm' as const, label: 'GM NOTES' }] : []),
   ];
   const [open, setOpen] = useFolder(folders, location?.id);
-
-  // An attack just started against this token: show where its result will land.
-  const attacking = !!combat?.active;
-  useEffect(() => {
-    if (attacking) setOpen('combat');
-  }, [attacking]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const kind = location?.shape === 'enemy_rhombus' ? 'ENEMY' : location?.shape === 'friendly_rhombus' ? 'FRIENDLY' : 'PLAYER';
 
@@ -112,38 +92,36 @@ export function TokenWindow({
       open={open}
       onOpen={setOpen}
       actions={actions}
-      panelMode={open === 'info' || open === 'gm' ? 'text' : 'controls'}
+      panelMode={open === 'gm' ? 'text' : 'controls'}
       header={(
         <>
-          {open === 'info' && `${kind} · DATA`}
-          {open === 'id' && 'IDENT · PUBLIC RECORD'}
-          {open === 'defense' && `${defense?.label ?? 'AC'} · ${canEditDefense ? 'GM CAN EDIT' : 'YOUR TOKEN'}`}
-          {open === 'combat' && 'COMBAT'}
+          {open === 'info' && `${operator ? operator.toUpperCase() : kind} · DATA`}
+          {open === 'health' && 'VITALS · LIVE'}
+          {open === 'quick' && 'YOUR TOKEN · ROLLS GO TO THE DICE TRAY'}
           {open === 'gm' && 'GM ONLY · PLAYERS NEVER SEE THIS'}
         </>
       )}
+      footer={attackStatus ? (
+        <div data-testid="attack-status" style={{ fontFamily: 'monospace', fontSize: 11, padding: '4px 10px', border: '1px solid var(--green)', color: 'var(--green)' }}>
+          {attackStatus}
+        </div>
+      ) : undefined}
     >
       {open === 'info' && (
         <>
-          {description || 'NO_DATA'}
-          {tierPicker && (
-            <TierPicker {...tierPicker} />
-          )}
+          {operator && <IdLines username={operator} socket={socket} />}
+          <div style={{ whiteSpace: 'pre-wrap' }}>{description || 'NO_DATA'}</div>
+          {tierPicker && <TierPicker {...tierPicker} />}
         </>
       )}
-      {open === 'id' && playerUsername && <IdCard username={playerUsername} socket={socket} />}
-      {open === 'defense' && defense && (
-        <DefensePanel
-          key={location?.id}
-          defense={defense}
-          canEdit={canEditDefense}
-          onSave={onSaveDefense}
-        />
+      {open === 'health' && (
+        <>
+          {health}
+          {gmHealth && <GmHealth key={location?.id} {...gmHealth} />}
+        </>
       )}
+      {open === 'quick' && quickActions}
       {open === 'gm' && gmNotesToken && <GmNotes locationId={location?.id} token={gmNotesToken} />}
-      {open === 'combat' && combat && (
-        <CombatPanel key={location?.id} status={combat.status} lastResult={combat.lastResult} onAddToInit={combat.onAddToInit} />
-      )}
     </TerminalWindow>
   );
 }
@@ -151,7 +129,7 @@ export function TokenWindow({
 /** The portrait, or a token drawn in the color of its side when there is none. */
 function TokenPreview({ portrait, shape }: { portrait: { src: string; silhouette: boolean } | null; shape?: string }) {
   const frame: React.CSSProperties = {
-    width: 180, height: 140, flexShrink: 0, overflow: 'hidden', position: 'relative',
+    width: TERMINAL_PREVIEW.width, height: TERMINAL_PREVIEW.height, flexShrink: 0, overflow: 'hidden', position: 'relative',
     border: '1px solid var(--green)', background: 'var(--black)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   };
@@ -204,13 +182,14 @@ function TierPicker({ tiers, value, onChange }: { tiers: { id: string; label: st
 }
 
 /**
- * A player's ID card: handle, role and blurb from their sheet's public fields.
+ * A player's handle and role, from their sheet's public fields - INFO's first lines.
  *
- * What the quick sheet card used to show in a window of its own, until nothing could open
- * it. Asked of the server rather than read off anything the viewer holds: `requestQuickSheet`
+ * Asked of the server rather than read off anything the viewer holds: `requestQuickSheet`
  * returns only fields the server marks public, which is why stream spectators may ask too.
+ * Nothing shows until it answers, and nothing when there is no sheet: the header already
+ * names the player.
  */
-function IdCard({ username, socket }: { username: string; socket: any }) {
+function IdLines({ username, socket }: { username: string; socket: any }) {
   const [data, setData] = useState<{ exists: boolean; fields?: Record<string, unknown> } | null>(null);
   useEffect(() => {
     setData(null);
@@ -221,130 +200,98 @@ function IdCard({ username, socket }: { username: string; socket: any }) {
     return () => { socket.off?.('quickSheetData', handler); };
   }, [socket, username]);
 
-  if (!data) return <span style={{ opacity: 0.7 }}>FETCHING_IDENT…</span>;
-  if (!data.exists) {
-    return (
-      <div>
-        <div style={row}><span style={key}>OPERATOR</span>{username.toUpperCase()}</div>
-        <div style={{ opacity: 0.7 }}>NO_IDENT_ON_FILE</div>
-      </div>
-    );
-  }
+  if (!data?.exists) return null;
   const f = data.fields ?? {};
   const text = (v: unknown) => (v == null || v === '' ? null : String(v));
   const handle = text(f.handle);
   const name = text(f.name);
   const role = text(f.role);
-  const blurb = text(f.description);
+  const shown = handle || name;
+  if (!shown && !role) return null;
   return (
-    <div>
-      <div style={row}><span style={key}>HANDLE</span>{(handle || name || username).toUpperCase()}</div>
+    <div data-testid="id-lines" style={{ marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--dark-green)' }}>
+      {shown && <div style={row}><span style={key}>HANDLE</span>{shown.toUpperCase()}</div>}
       {handle && name && <div style={row}><span style={key}>NAME</span>{name}</div>}
       {role && <div style={row}><span style={key}>ROLE</span>{role.toUpperCase()}</div>}
-      <div style={row}><span style={key}>OPERATOR</span>{username.toUpperCase()}</div>
-      {blurb && (
-        <div style={{ whiteSpace: 'pre-wrap', borderTop: '1px solid var(--dark-green)', paddingTop: 8, marginTop: 4 }}>
-          {blurb}
-        </div>
-      )}
     </div>
   );
 }
 
-/** AC or DV: the GM edits it here; the token's owner sees it; nobody else gets this folder. */
-function DefensePanel({ defense, canEdit, onSave }: {
-  defense: TokenDefense; canEdit: boolean; onSave?: (melee: number | null, ranged: number | null) => Promise<void> | void;
-}) {
-  const [edit, setEdit] = useState<{ melee: string; ranged: string } | null>(null);
-  const [saving, setSaving] = useState(false);
+/** AC or DV as it stands, ranged shown as the melee value when none is set. */
+export function DefenseReadout({ defense }: { defense: TokenDefense }) {
   const L = defense.label;
-
-  if (canEdit && edit) {
-    const save = async () => {
-      setSaving(true);
-      try {
-        await onSave?.(edit.melee === '' ? null : parseInt(edit.melee, 10), edit.ranged === '' ? null : parseInt(edit.ranged, 10));
-        setEdit(null);
-      } finally {
-        setSaving(false);
-      }
-    };
-    return (
-      <div>
-        <label style={row}>
-          <span style={key}>MELEE_{L}</span>
-          <input type="number" min="0" aria-label={`Melee ${L}`} value={edit.melee}
-            onChange={(e) => setEdit({ ...edit, melee: e.target.value })} style={field} />
-        </label>
-        <label style={row}>
-          <span style={key}>RANGED_{L}</span>
-          <input type="number" min="0" aria-label={`Ranged ${L}`} value={edit.ranged}
-            onChange={(e) => setEdit({ ...edit, ranged: e.target.value })} style={field} />
-          <span title={`Leave blank to use Melee ${L}`} style={{ cursor: 'help' }}>?</span>
-        </label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" className="utility-btn" disabled={saving} onClick={save} style={small}>
-            {saving ? 'SAVING…' : 'SAVE'}
-          </button>
-          <button type="button" className="utility-btn" disabled={saving} onClick={() => setEdit(null)} style={small}>CANCEL</button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div>
+    <>
       <div style={row}><span style={key}>MELEE_{L}</span>{defense.melee}</div>
       <div style={row}>
         <span style={key}>RANGED_{L}</span>
         {defense.ranged != null ? defense.ranged : <span style={{ opacity: 0.7 }}>{defense.melee} (melee)</span>}
       </div>
-      {canEdit && (
-        <button
-          type="button"
-          className="utility-btn"
-          style={small}
-          onClick={() => setEdit({ melee: String(defense.melee), ranged: defense.ranged != null ? String(defense.ranged) : '' })}
-        >EDIT_{L}</button>
-      )}
-    </div>
+    </>
   );
 }
 
-/** Where an attack stands, how the last one went, and the GM's manual initiative entry. */
-function CombatPanel({ status, lastResult, onAddToInit }: {
-  status: React.ReactNode | null; lastResult: TokenAttackResult | null; onAddToInit?: (score: number) => void;
-}) {
+const sectionHead: React.CSSProperties = { fontSize: 10, opacity: 0.8, letterSpacing: 1, marginBottom: 6 };
+const divider: React.CSSProperties = { borderTop: '1px solid var(--dark-green)', marginTop: 12, paddingTop: 10 };
+
+/** The GM's part of HEALTH: defense to edit, and a sheetless NPC's initiative by hand. */
+function GmHealth({ defense, onSaveDefense, onAddToInit }: NonNullable<Props['gmHealth']>) {
+  const [edit, setEdit] = useState<{ melee: string; ranged: string } | null>(null);
+  const [saving, setSaving] = useState(false);
   const [score, setScore] = useState('');
-  const valid = score !== '' && !Number.isNaN(Number(score)) && Number(score) >= 1;
+  const L = defense.label;
+  const validScore = score !== '' && !Number.isNaN(Number(score)) && Number(score) >= 1;
+
+  const save = async () => {
+    if (!edit) return;
+    setSaving(true);
+    try {
+      await onSaveDefense(edit.melee === '' ? null : parseInt(edit.melee, 10), edit.ranged === '' ? null : parseInt(edit.ranged, 10));
+      setEdit(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {status && (
-        <div style={{ border: '1px solid var(--green)', padding: '6px 10px' }}>{status}</div>
-      )}
-      {lastResult ? (
-        <div
-          data-testid="attack-result"
-          style={{
-            padding: '6px 10px',
-            color: lastResult.hit ? 'var(--green)' : 'var(--danger)',
-            border: `1px solid ${lastResult.hit ? 'var(--green)' : 'var(--danger)'}`,
-          }}
-        >
-          {lastResult.hit ? 'HIT!' : 'MISS'} — rolled {lastResult.roll}
-          {lastResult.damage !== undefined && (
-            <> · DMG {lastResult.damage}{lastResult.through !== undefined && ` (${lastResult.through} through armor)`}</>
-          )}
-          {(lastResult.shieldAbsorbed ?? 0) > 0 && <> · SHIELD −{lastResult.shieldAbsorbed}</>}
-          {lastResult.criticalInjury && <> · CRIT INJURY!</>}
-          {lastResult.targetDown && <> · TARGET DOWN</>}
-        </div>
-      ) : !status && (
-        <div style={{ opacity: 0.7 }}>NO ATTACKS AGAINST THIS TOKEN YET</div>
-      )}
+    <>
+      <div style={divider}>
+        <div style={sectionHead}>{L} · GM</div>
+        {edit ? (
+          <>
+            <label style={row}>
+              <span style={key}>MELEE_{L}</span>
+              <input type="number" min="0" aria-label={`Melee ${L}`} value={edit.melee}
+                onChange={(e) => setEdit({ ...edit, melee: e.target.value })} style={field} />
+            </label>
+            <label style={row}>
+              <span style={key}>RANGED_{L}</span>
+              <input type="number" min="0" aria-label={`Ranged ${L}`} value={edit.ranged}
+                onChange={(e) => setEdit({ ...edit, ranged: e.target.value })} style={field} />
+              <span title={`Leave blank to use Melee ${L}`} style={{ cursor: 'help' }}>?</span>
+            </label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="utility-btn" disabled={saving} onClick={save} style={small}>
+                {saving ? 'SAVING…' : 'SAVE'}
+              </button>
+              <button type="button" className="utility-btn" disabled={saving} onClick={() => setEdit(null)} style={small}>CANCEL</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <DefenseReadout defense={defense} />
+            <button
+              type="button"
+              className="utility-btn"
+              style={small}
+              onClick={() => setEdit({ melee: String(defense.melee), ranged: defense.ranged != null ? String(defense.ranged) : '' })}
+            >EDIT_{L}</button>
+          </>
+        )}
+      </div>
       {onAddToInit && (
-        <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: 10 }}>
-          <div style={{ fontSize: 10, opacity: 0.8, marginBottom: 6 }}>INITIATIVE SCORE</div>
+        <div style={divider}>
+          <div style={sectionHead}>INITIATIVE SCORE</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
               type="number" min="1" max="99" placeholder="SCORE" aria-label="Initiative score"
@@ -353,13 +300,13 @@ function CombatPanel({ status, lastResult, onAddToInit }: {
             <button
               type="button"
               className="utility-btn"
-              disabled={!valid}
+              disabled={!validScore}
               onClick={() => { onAddToInit(Number(score)); setScore(''); }}
               style={small}
             >ADD TO INIT</button>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

@@ -1,13 +1,13 @@
-// Which buttons a token's window offers, to whom.
+// Which buttons and folders a token's window offers, to whom.
 //
 // Pure, and apart from the handlers, so the rules can be read in one place and tested for
-// every kind of viewer. They are the old token window's conditions carried over one for one:
-// changing the window's look was not a reason to change who can purge a token or open a
-// sheet, and a test holds each of them.
+// every kind of viewer. The buttons are the old token window's conditions carried over one
+// for one: changing the window's look was not a reason to change who can purge a token or
+// open a sheet, and a test holds each of them. Health moved from two buttons into a folder,
+// with the same split: the old UPDATE_HEALTH viewers change it, CHECK_HEALTH viewers watch it.
 
 export type TokenActionKey =
   | 'attack' | 'melee' | 'ranged'
-  | 'check-health' | 'update-health'
   | 'player-sheet' | 'npc-sheet' | 'generate-sheet' | 'edit'
   | 'vehicles' | 'bank' | 'enemy-vehicles' | 'battle'
   | 'ping' | 'broadcast' | 'purge';
@@ -15,6 +15,8 @@ export type TokenActionKey =
 export interface TokenViewer {
   /** Signed in as the GM (main or granted). */
   isAdmin: boolean;
+  /** The main admin, not a granted editor. */
+  isPrimaryAdmin: boolean;
   /** This viewer owns this token. */
   isOwner: boolean;
   /** Past the login screen at all. */
@@ -49,9 +51,6 @@ export function tokenActionKeys(v: TokenViewer): TokenActionKey[] {
   if (v.isLoggedIn && !v.isOwner && !v.attackPending) {
     keys.push(...(v.sheetCombat ? ['attack' as const] : ['melee' as const, 'ranged' as const]));
   }
-  // Another player's health is looked at; your own, or anyone's for the GM, is changed.
-  if (!v.isAdmin && !v.isOwner) keys.push('check-health');
-  if (v.isAdmin || (v.isPlayerToken && v.isOwner)) keys.push('update-health');
   // A player's sheet: its owner, or the GM.
   if (v.isPlayerToken && v.hasOwner && (v.isOwner || v.isAdmin)) keys.push('player-sheet');
   // An NPC's sheet, and what the GM does before it has one.
@@ -69,13 +68,34 @@ export function tokenActionKeys(v: TokenViewer): TokenActionKey[] {
   return keys;
 }
 
-// ── What each button does ───────────────────────────────────────────────────
+// ── Which folders ───────────────────────────────────────────────────────────
 
-/** A window to the side of the info panel: right of it, or left when there is no room. */
-export const besidePanel = (panel: { x: number; y: number }, viewportWidth: number) => ({
-  x: panel.x + 320 + 300 > viewportWidth ? Math.max(0, panel.x - 320) : panel.x + 320,
-  y: panel.y,
-});
+export interface TokenView {
+  /**
+   * Change health - the numbers, HEAL, DAMAGE, injuries - or only watch it: the heart
+   * monitor and the injury map, never a number, for someone else's token.
+   */
+  health: 'edit' | 'watch';
+  /** The GM's defense edit and manual initiative entry, under HEALTH. */
+  gmSections: boolean;
+  /** Your own token: your defense, and rolls straight off your sheet. */
+  quickActions: boolean;
+  /** Notes only the main admin reads, on NPC tokens. */
+  gmNotes: boolean;
+}
+
+export function tokenView(v: TokenViewer): TokenView {
+  const ownPlayerToken = v.isPlayerToken && v.isOwner;
+  return {
+    health: v.isAdmin || ownPlayerToken ? 'edit' : 'watch',
+    gmSections: v.isAdmin,
+    quickActions: ownPlayerToken,
+    // What the GM knows about a player is not this, and a granted editor never reads it.
+    gmNotes: v.isAdmin && v.isPrimaryAdmin && !v.isPlayerToken,
+  };
+}
+
+// ── What each button does ───────────────────────────────────────────────────
 
 /**
  * Everything the buttons reach for, handed in rather than imported, so a test can press every
@@ -87,11 +107,6 @@ export interface TokenActionContext {
   authToken: string;
   emit: (event: string, payload: unknown) => void;
   fetch: (url: string, init?: RequestInit) => Promise<{ ok: boolean }>;
-  /** Where the info window is, so health windows open beside it. */
-  panelPos: { x: number; y: number };
-  viewportWidth: number;
-  /** Every location the client holds, to tell a synthetic player token from a real one. */
-  knownLocations: any[];
   refreshLocations: () => unknown;
   /** The linked NPC sheet, when there is one. */
   sheetLink: { sheet_id: number; npc_label: string } | null;
@@ -99,8 +114,6 @@ export interface TokenActionContext {
   tier: string | undefined;
   isOwner: boolean;
   open: {
-    reviewHealth: (owner: string, pos: { x: number; y: number }, locationId: number) => void;
-    hitPoints: (pos: { x: number; y: number }) => void;
     ownSheet: () => void;
     playerSheet: (owner: string) => void;
     npcSheet: (sheet: { id: number; npc_label: string; token_shape: string; locationId: number }) => void;
@@ -118,7 +131,6 @@ export interface TokenActionContext {
 
 const LABEL: Record<TokenActionKey, string> = {
   attack: '⚔ ATTACK', melee: '⚔ MELEE', ranged: '🏹 RANGED',
-  'check-health': 'CHECK_HEALTH', 'update-health': 'UPDATE_HEALTH',
   'player-sheet': 'OPEN_SHEET', 'npc-sheet': 'OPEN_SHEET', 'generate-sheet': 'GENERATE_SHEET', edit: 'EDIT_DATA_POINT',
   vehicles: 'VEHICLES', bank: 'VIEW_BANK', 'enemy-vehicles': 'ENEMY VEHICLES', battle: 'ENTER BATTLE MAP',
   ping: 'BROADCAST PING', broadcast: 'BROADCAST_THIS', purge: 'PURGE_DATA_POINT',
@@ -141,24 +153,6 @@ export function buildTokenActions(viewer: TokenViewer, c: TokenActionContext): B
     attack: { tone: 'primary', onClick: () => attack('melee') },
     melee: { tone: 'primary', onClick: () => attack('melee') },
     ranged: { tone: 'primary', onClick: () => attack('ranged') },
-    'check-health': { onClick: () => c.open.reviewHealth(loc.owner, besidePanel(c.panelPos, c.viewportWidth), loc.id) },
-    'update-health': {
-      onClick: async () => {
-        const pos = besidePanel(c.panelPos, c.viewportWidth);
-        // A player who has never placed their token is shown one that does not exist yet
-        // (id -1). Health needs a real row, so one is made on the spot - before the window
-        // opens, so it finds the row.
-        if (loc.id === -1 && loc.owner && !c.knownLocations.some((l) => l.shape === 'rhombus' && l.owner === loc.owner)) {
-          await c.fetch('/api/locations', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.authToken}` },
-            body: JSON.stringify({ name: loc.owner, description: '', shape: 'rhombus', owner: loc.owner, x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1, hp_current: 100, hp_max: 100, hp_temp: 0, battle_map_id: -1, floor_index: -1 }),
-          });
-          await c.refreshLocations();
-        }
-        c.open.hitPoints(pos);
-      },
-    },
     'player-sheet': { onClick: () => (c.isOwner ? c.open.ownSheet() : c.open.playerSheet(loc.owner)) },
     'npc-sheet': {
       onClick: () => {
@@ -183,4 +177,20 @@ export function buildTokenActions(viewer: TokenViewer, c: TokenActionContext): B
   };
 
   return tokenActionKeys(viewer).map((key) => ({ key, label: LABEL[key], ...does[key] }));
+}
+
+/**
+ * A player who has never placed their token is shown one that does not exist yet (id -1).
+ * Health needs a real row, so the HEALTH folder offers to make one; this is what it makes.
+ */
+export async function createPlayerTokenRow(
+  c: Pick<TokenActionContext, 'fetch' | 'authToken' | 'refreshLocations'>,
+  owner: string,
+) {
+  await c.fetch('/api/locations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.authToken}` },
+    body: JSON.stringify({ name: owner, description: '', shape: 'rhombus', owner, x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1, hp_current: 100, hp_max: 100, hp_temp: 0, battle_map_id: -1, floor_index: -1 }),
+  });
+  await c.refreshLocations();
 }

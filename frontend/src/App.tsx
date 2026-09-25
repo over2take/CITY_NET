@@ -26,13 +26,14 @@ import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
 import { BuildingWindow, type BuildingAction } from './components/BuildingWindow';
 import { TokenWindow } from './components/TokenWindow';
-import { buildTokenActions } from './components/tokenActions';
+import { buildTokenActions, createPlayerTokenRow, tokenView, type TokenViewer } from './components/tokenActions';
+import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
 import type { TerminalAction } from './components/TerminalWindow';
 import { ShopWindow } from './components/ShopWindow';
 import { CatalogueWindow } from './components/CatalogueWindow';
 import { buildingTypeById, isShop, shopsAvailable, typeLabel } from './data/buildingTypes';
-import { HitPointsMenu, HealthReviewWindow } from './components/HitPoints';
+import { HitPointsMenu, HealthReviewWindow, HitPointsPanel, HealthReviewPanel } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
 import { CityDataBaseMenu } from './components/CityDatabase';
@@ -242,7 +243,6 @@ function App() {
     setEditingCustomDie(null);
   }, [setCustomDiceError]);
 
-  const [lastAttackResult, setLastAttackResult] = useState<{ hit: boolean; roll: number; ac: number; targetName: string; damage?: number; through?: number; targetDown?: boolean; criticalInjury?: boolean; shieldAbsorbed?: number } | null>(null);
   const [attackAnimations, setAttackAnimations] = useState<{ id: string; hit: boolean; attackType: 'melee' | 'ranged'; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number }; targetId: number; isBattleMap: boolean }[]>([]);
 
   // Radio Feed
@@ -265,9 +265,6 @@ function App() {
   const [hitPointsPos, setHitPointsPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
 
   const [reviewHealthOwner, setReviewHealthOwner] = useState<string | null>(null);
-  // Track the reviewed token by id so the window follows live HP updates
-  // (NPC tokens share owner names; selectedLocation is a stale snapshot)
-  const [reviewHealthLocId, setReviewHealthLocId] = useState<number | null>(null);
   const [reviewHealthPos, setReviewHealthPos] = useState(() => ({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 }));
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
@@ -504,13 +501,6 @@ function App() {
     }
   }, [selectedLocation?.id]);
 
-
-  // Auto-clear attack result after 4 seconds; resets if a new result arrives
-  useEffect(() => {
-    if (!lastAttackResult) return;
-    const t = setTimeout(() => setLastAttackResult(null), 4000);
-    return () => clearTimeout(t);
-  }, [lastAttackResult]);
 
   const enterBattleMap = (locId: number) => {
     if (currentLocBattleMaps.length === 0) return;
@@ -859,13 +849,8 @@ function App() {
     },
     onAttackResult: (data) => {
       setAttackPending(null);
-      // Delay result reveal and animation until after the dice tray's 5-second roll display finishes
+      // Delay the animation until after the dice tray's 5-second roll display finishes
       setTimeout(() => {
-        setLastAttackResult({
-          hit: data.hit, roll: data.roll, ac: data.ac, targetName: data.targetName,
-          damage: (data as any).damage, through: (data as any).through, targetDown: (data as any).targetDown,
-          criticalInjury: (data as any).criticalInjury, shieldAbsorbed: (data as any).shieldAbsorbed,
-        });
         // Skip animation if the target rhombus isn't rendered in this client's current view
         if (!(window as any).activeRhombuses?.[data.targetId]) return;
         setAttackAnimations(prev => [...prev, {
@@ -1664,7 +1649,7 @@ function App() {
               measureMode={measureMode}
               setMeasureMode={setMeasureMode}
               attackPending={attackPending}
-              onCancelAttack={() => { setAttackPending(null); setLastAttackResult(null); }}
+              onCancelAttack={() => setAttackPending(null)}
               isRadioOpen={isAdmin ? isRadioFeedOpen : isRadioPlayerOpen}
               onToggleRadio={() => {
                 if (isAdmin) {
@@ -2240,8 +2225,7 @@ function App() {
               // Owner fallback must prefer the actual player token: generated
               // enemy/friendly tokens stamp their creator as owner, and an
               // older enemy row would otherwise shadow the player's rhombus.
-              const reviewLoc = (reviewHealthLocId !== null ? locations.find((l: any) => l.id === reviewHealthLocId) : null)
-                ?? locations.find((l: any) => l.shape === 'rhombus' && l.owner === reviewHealthOwner)
+              const reviewLoc = locations.find((l: any) => l.shape === 'rhombus' && l.owner === reviewHealthOwner)
                 ?? locations.find((l: any) => rhombusShapes.includes(l.shape) && l.owner === reviewHealthOwner)
                 ?? (selectedLocation?.owner === reviewHealthOwner ? selectedLocation : null);
               return reviewLoc ? (
@@ -2249,7 +2233,7 @@ function App() {
                   location={reviewLoc}
                   pos={reviewHealthPos}
                   setPos={setReviewHealthPos}
-                  onClose={() => { setReviewHealthOwner(null); setReviewHealthLocId(null); }}
+                  onClose={() => setReviewHealthOwner(null)}
                   socket={socketRef.current}
                   gameSystem={gameSystem}
                   onRolled={() => setIsDiceTrayOpen(true)}
@@ -2417,28 +2401,26 @@ function App() {
                 const attackingThis = attackPending?.targetId === selectedLocation.id;
                 const canAddToInit = isAdmin && isNpc && !!initiative.state
                   && !initiative.state.combatants.some((c: any) => c.id === `npc:${selectedLocation.id}`);
-                // Who gets which button, and what each one does, is in tokenActions.ts, where
-                // both are tested; this hands over what the buttons reach for.
-                const tokenActions: TerminalAction[] = buildTokenActions({
-                  isAdmin, isOwner, isLoggedIn, isPlayerToken: isPlayerRhombus, hasOwner: !!selectedLocation.owner,
+                // Who gets which button and folder, and what each button does, is in
+                // tokenActions.ts, where all of it is tested; this hands over what they reach for.
+                const viewer: TokenViewer = {
+                  isAdmin, isPrimaryAdmin: isAdmin && isPrimaryAdmin, isOwner, isLoggedIn,
+                  isPlayerToken: isPlayerRhombus, hasOwner: !!selectedLocation.owner,
                   sheetHere, linked, attackPending: !!attackPending, sheetCombat: hasSheetCombat(gameSystem),
                   canManage, hasRoster: vehicleRoster.hasVehicles, systemHasVehicles: hasVehicles(gameSystem),
                   hasBattleMaps: currentLocBattleMaps.length > 0,
-                }, {
+                };
+                const tokenFolders = tokenView(viewer);
+                const tokenActions: TerminalAction[] = buildTokenActions(viewer, {
                   location: selectedLocation,
                   authToken: token,
                   emit: (event, payload) => socketRef.current?.emit(event, payload),
                   fetch: (url, init) => fetch(url, init),
-                  panelPos: infoPanelPos,
-                  viewportWidth: window.innerWidth,
-                  knownLocations: locations,
                   refreshLocations: fetchLocations,
                   sheetLink: linked && tokenSheetLink ? { sheet_id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label } : null,
                   tier: tiers && tiers.length > 0 ? (genTier || tiers[0].id) : undefined,
                   isOwner,
                   open: {
-                    reviewHealth: (owner, pos, locationId) => { setReviewHealthOwner(owner); setReviewHealthPos(pos); setReviewHealthLocId(locationId); },
-                    hitPoints: (pos) => { setHitPointsPos(pos); setIsHitPointsOpen(true); },
                     ownSheet: () => setIsSheetOpen(true),
                     playerSheet: (owner) => setOpenPlayerSheetUser(owner),
                     npcSheet: (sheet) => setOpenNpcSheet(sheet),
@@ -2454,6 +2436,27 @@ function App() {
                 });
 
                 const defLabel = template.tokenDefense?.label ?? 'AC';
+                const defense = { label: defLabel, melee: selectedLocation.melee_ac ?? 10, ranged: selectedLocation.ranged_ac ?? null };
+                // Health reads the live row, not the snapshot taken on click. A player who has
+                // never placed a token is shown one with id -1; theirs is found by owner.
+                const liveToken = selectedLocation.id !== -1
+                  ? locations.find((l: any) => l.id === selectedLocation.id) ?? null
+                  : locations.find((l: any) => l.shape === 'rhombus' && l.owner === selectedLocation.owner) ?? null;
+                const healthPanel = tokenFolders.health === 'edit'
+                  ? (
+                    <HitPointsPanel
+                      target={liveToken}
+                      token={token}
+                      refreshLocations={fetchLocations}
+                      gameSystem={gameSystem}
+                      onCreate={selectedLocation.id === -1 && selectedLocation.owner
+                        ? () => createPlayerTokenRow({ fetch: (url, init) => fetch(url, init), authToken: token, refreshLocations: fetchLocations }, selectedLocation.owner as string)
+                        : undefined}
+                    />
+                  )
+                  : (liveToken
+                    ? <HealthReviewPanel location={liveToken} socket={socketRef.current} gameSystem={gameSystem} onRolled={() => setIsDiceTrayOpen(true)} />
+                    : <div style={{ opacity: 0.7 }}>NO VITALS · NOT ON THE MAP</div>);
                 return (
                   <TokenWindow
                     location={selectedLocation}
@@ -2488,30 +2491,21 @@ function App() {
                       : (selectedLocation.portrait_url ? { src: selectedLocation.portrait_url, silhouette: false } : null)}
                     description={tokenSheetLink?.sheet_description || selectedLocation.description || ''}
                     actions={tokenActions}
-                    playerUsername={isPlayerRhombus && selectedLocation.owner ? selectedLocation.owner : null}
+                    operator={isPlayerRhombus && selectedLocation.owner ? selectedLocation.owner : null}
                     socket={socketRef.current}
-                    // AC or DV: the GM edits it; the owner sees their own; other players see nothing.
-                    defense={isAdmin || isOwner
-                      ? { label: defLabel, melee: selectedLocation.melee_ac ?? 10, ranged: selectedLocation.ranged_ac ?? null }
-                      : null}
-                    canEditDefense={isAdmin}
-                    onSaveDefense={async (meleeVal, rangedVal) => {
-                      const loc = selectedLocation;
-                      await fetch(`/api/locations/${loc.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...loc, melee_ac: meleeVal, ranged_ac: rangedVal }) });
-                      fetchLocations();
-                      // selectedLocation is a snapshot - refresh it so the new values show immediately
-                      setSelectedLocation((prev: any) => prev && prev.id === loc.id ? { ...prev, melee_ac: meleeVal, ranged_ac: rangedVal } : prev);
-                    }}
-                    combat={canAttack || canAddToInit
+                    health={healthPanel}
+                    // AC or DV: the GM edits it under HEALTH; the owner reads theirs in QUICK
+                    // ACTIONS; other players never see it.
+                    gmHealth={tokenFolders.gmSections
                       ? {
-                        active: canAttack && attackingThis,
-                        status: !canAttack ? null
-                          : attackingThis
-                            ? (hasSheetCombat(gameSystem)
-                              ? 'SELECT_WEAPON — DICE_ROLLER'
-                              : <>AWAITING_ROLL — {attackPending!.attackType.toUpperCase()}{token ? ` vs ${defLabel} ${attackPending!.ac}` : ''}</>)
-                            : attackPending ? `Attack in progress vs ${attackPending.targetName}` : null,
-                        lastResult: lastAttackResult && lastAttackResult.targetName === selectedLocation.name ? lastAttackResult : null,
+                        defense,
+                        onSaveDefense: async (meleeVal, rangedVal) => {
+                          const loc = selectedLocation;
+                          await fetch(`/api/locations/${loc.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...loc, melee_ac: meleeVal, ranged_ac: rangedVal }) });
+                          fetchLocations();
+                          // selectedLocation is a snapshot - refresh it so the new values show immediately
+                          setSelectedLocation((prev: any) => prev && prev.id === loc.id ? { ...prev, melee_ac: meleeVal, ranged_ac: rangedVal } : prev);
+                        },
                         onAddToInit: canAddToInit
                           ? (score: number) => {
                             const npcName = selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? `ENEMY_${selectedLocation.id}` : `FRIENDLY_${selectedLocation.id}`);
@@ -2529,10 +2523,17 @@ function App() {
                           }
                           : undefined,
                       }
-                      : null}
-                    // GM notes on NPC tokens: the main admin only, never a granted editor, and
-                    // never a player's token - what the GM knows about a player is not this.
-                    gmNotesToken={isAdmin && isPrimaryAdmin && isNpc ? token : undefined}
+                      : undefined}
+                    quickActions={tokenFolders.quickActions
+                      ? <QuickActions socket={socketRef.current} userName={userName} defense={defense} onRolled={() => setIsDiceTrayOpen(true)} />
+                      : undefined}
+                    attackStatus={!canAttack ? null
+                      : attackingThis
+                        ? (hasSheetCombat(gameSystem)
+                          ? 'SELECT_WEAPON — DICE_ROLLER'
+                          : <>AWAITING_ROLL — {attackPending!.attackType.toUpperCase()}{token ? ` vs ${defLabel} ${attackPending!.ac}` : ''}</>)
+                        : attackPending ? `Attack in progress vs ${attackPending.targetName}` : null}
+                    gmNotesToken={tokenFolders.gmNotes ? token : undefined}
                     tierPicker={isAdmin && isNpc && !sheetHere && tiers && tiers.length > 0
                       ? { tiers, value: genTier, onChange: setGenTier }
                       : undefined}

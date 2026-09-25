@@ -1,4 +1,4 @@
-import { TerminalWindow, useFolder, type TerminalAction, type TerminalFolder } from './TerminalWindow';
+import { TerminalWindow, TERMINAL_PREVIEW, useFolder, type TerminalAction, type TerminalFolder } from './TerminalWindow';
 import { BuildingPreview } from './BuildingPreview';
 import { buildingTypeById, typeLabel } from '../data/buildingTypes';
 import { GmNotes } from './GmNotes';
@@ -57,7 +57,7 @@ export function BuildingWindow({
       pos={pos}
       setPos={setPos}
       onClose={onClose}
-      preview={<BuildingPreview location={location} parts={parts} width={180} height={140} />}
+      preview={<BuildingPreview location={location} parts={parts} width={TERMINAL_PREVIEW.width} height={TERMINAL_PREVIEW.height} />}
       folders={folders}
       open={open}
       onOpen={setOpen}

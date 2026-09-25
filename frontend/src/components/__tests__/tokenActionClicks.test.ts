@@ -7,10 +7,10 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { buildTokenActions, besidePanel, type TokenActionContext, type TokenViewer } from '../tokenActions';
+import { buildTokenActions, createPlayerTokenRow, type TokenActionContext, type TokenViewer } from '../tokenActions';
 
 const everyone: TokenViewer = {
-  isAdmin: true, isOwner: false, isLoggedIn: true, isPlayerToken: true, hasOwner: true,
+  isAdmin: true, isPrimaryAdmin: true, isOwner: false, isLoggedIn: true, isPlayerToken: true, hasOwner: true,
   sheetHere: false, linked: false, attackPending: false, sheetCombat: false, canManage: true,
   hasRoster: true, systemHasVehicles: true, hasBattleMaps: true,
 };
@@ -20,15 +20,12 @@ const context = (over: Partial<TokenActionContext> = {}): TokenActionContext => 
   authToken: 'tok',
   emit: vi.fn(),
   fetch: vi.fn(async () => ({ ok: true })),
-  panelPos: { x: 100, y: 50 },
-  viewportWidth: 1600,
-  knownLocations: [],
   refreshLocations: vi.fn(),
   sheetLink: { sheet_id: 7, npc_label: 'Ganger' },
   tier: 'mook',
   isOwner: false,
   open: {
-    reviewHealth: vi.fn(), hitPoints: vi.fn(), ownSheet: vi.fn(), playerSheet: vi.fn(), npcSheet: vi.fn(),
+    ownSheet: vi.fn(), playerSheet: vi.fn(), npcSheet: vi.fn(),
     editLocation: vi.fn(), vehicles: vi.fn(), bank: vi.fn(), enemyVehicles: vi.fn(), battleMap: vi.fn(),
   },
   ping: vi.fn(),
@@ -64,46 +61,30 @@ describe('attacks', () => {
 });
 
 describe('health', () => {
-  it("CHECK_HEALTH opens the owner's health beside the window", async () => {
-    const c = context();
-    await press('check-health', c, { isAdmin: false });
-    expect(c.open.reviewHealth).toHaveBeenCalledWith('ghost', { x: 420, y: 50 }, 42);
+  it('is a folder now, not a button, for every viewer', () => {
+    const keys = [
+      ...buildTokenActions(everyone, context()),
+      ...buildTokenActions({ ...everyone, isAdmin: false, isOwner: true }, context()),
+      ...buildTokenActions({ ...everyone, isAdmin: false }, context()),
+    ].map((a) => a.key as string);
+    expect(keys).not.toContain('update-health');
+    expect(keys).not.toContain('check-health');
   });
 
-  it('opens health on the left when there is no room on the right', () => {
-    expect(besidePanel({ x: 1200, y: 10 }, 1600)).toEqual({ x: 880, y: 10 });
-    expect(besidePanel({ x: 100, y: 10 }, 300)).toEqual({ x: 0, y: 10 });
-  });
-
-  it('UPDATE_HEALTH opens the health window and makes nothing for a real token', async () => {
-    const c = context();
-    await press('update-health', c);
-    expect(c.open.hitPoints).toHaveBeenCalledWith({ x: 420, y: 50 });
-    expect(c.fetch).not.toHaveBeenCalled();
-  });
-
-  it('UPDATE_HEALTH makes the row first for a player who never placed a token', async () => {
+  it('CREATE HEALTH RECORD makes the row for a player who never placed a token, then reloads', async () => {
     const order: string[] = [];
     const c = context({
-      location: { id: -1, shape: 'rhombus', owner: 'ghost' },
       fetch: vi.fn(async () => { order.push('create'); return { ok: true }; }),
       refreshLocations: vi.fn(async () => { order.push('refresh'); }),
     });
-    mockOf(c.open.hitPoints).mockImplementation(() => { order.push('open'); });
-    await press('update-health', c);
+    await createPlayerTokenRow(c, 'ghost');
     const [url, init] = mockOf(c.fetch).mock.calls[0];
     expect(url).toBe('/api/locations');
+    expect(init.method).toBe('POST');
     expect(init.headers.Authorization).toBe('Bearer tok');
-    expect(JSON.parse(init.body)).toMatchObject({ shape: 'rhombus', owner: 'ghost', hp_max: 100 });
-    // The window opens onto a row that exists.
-    expect(order).toEqual(['create', 'refresh', 'open']);
-  });
-
-  it('UPDATE_HEALTH makes no second row when the player already has one', async () => {
-    const c = context({ location: { id: -1, shape: 'rhombus', owner: 'ghost' }, knownLocations: [{ shape: 'rhombus', owner: 'ghost' }] });
-    await press('update-health', c);
-    expect(c.fetch).not.toHaveBeenCalled();
-    expect(c.open.hitPoints).toHaveBeenCalled();
+    expect(JSON.parse(init.body)).toMatchObject({ shape: 'rhombus', owner: 'ghost', name: 'ghost', hp_current: 100, hp_max: 100 });
+    // The panel shows the row once it is in the list.
+    expect(order).toEqual(['create', 'refresh']);
   });
 });
 

@@ -68,7 +68,9 @@ interface Props<Id extends string> {
   label?: string;
 }
 
-const FOLDER_W = 180;
+/** The picture above the folders: callers draw their preview at this size. */
+export const TERMINAL_PREVIEW = { width: 160, height: 124 };
+const FOLDER_W = TERMINAL_PREVIEW.width;
 const mono: React.CSSProperties = { fontFamily: 'monospace', letterSpacing: 1 };
 
 const toneStyle = (tone: TerminalAction['tone']): React.CSSProperties => {
@@ -116,10 +118,9 @@ export function TerminalWindow<Id extends string>({
       >
         <div style={{ display: 'flex', gap: 14, alignItems: 'stretch' }}>
           {/* Left: the picture, then the folders. */}
-          <div style={{ width: FOLDER_W, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ width: FOLDER_W, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {preview}
-            <div style={{ ...mono, fontSize: 10, color: 'var(--green)', opacity: 0.8 }}>FOLDERS</div>
-            <div role="tablist" aria-orientation="vertical" aria-label="Folders" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div role="tablist" aria-orientation="vertical" aria-label="Folders" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {folders.map((f) => {
                 const active = f.id === open;
                 return (
@@ -132,7 +133,7 @@ export function TerminalWindow<Id extends string>({
                     onClick={() => onOpen(f.id)}
                     style={{
                       ...mono, position: 'relative', textAlign: 'left', fontSize: 11,
-                      padding: '10px 8px', minHeight: 44, cursor: 'pointer',
+                      padding: '6px 8px', minHeight: 30, cursor: 'pointer',
                       background: active ? 'color-mix(in srgb, var(--green) 14%, var(--black))' : 'var(--black)',
                       color: 'var(--green)', border: '1px solid var(--green)',
                     }}
@@ -152,9 +153,9 @@ export function TerminalWindow<Id extends string>({
           </div>
 
           {/* Right: what the open folder holds. */}
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {header !== undefined && (
-              <div style={{ ...mono, fontSize: 11, padding: '8px 10px', border: '1px solid var(--green)', color: 'var(--green)' }}>
+              <div style={{ ...mono, fontSize: 10, color: 'var(--green)', opacity: 0.8 }}>
                 {header}
               </div>
             )}
@@ -164,7 +165,9 @@ export function TerminalWindow<Id extends string>({
               className="cyber-scroll"
               style={{
                 ...mono, letterSpacing: 0, fontSize: 12, lineHeight: 1.6, flex: 1,
-                minHeight: 260, maxHeight: 320, overflowY: 'auto', padding: '10px 12px',
+                // As tall as what it holds - no taller than the folder column beside it
+                // unless it has to be, and scrolling past a screenful.
+                maxHeight: 'min(62vh, 560px)', overflowY: 'auto', padding: '8px 10px',
                 border: '1px solid var(--green)', color: 'var(--green)',
                 overflowWrap: 'anywhere',
                 ...(panelMode === 'text' ? { whiteSpace: 'pre-wrap' } : {}),
