@@ -133,7 +133,7 @@ const LABEL: Record<TokenActionKey, string> = {
   attack: '⚔ ATTACK', melee: '⚔ MELEE', ranged: '🏹 RANGED',
   'player-sheet': 'OPEN_SHEET', 'npc-sheet': 'OPEN_SHEET', 'generate-sheet': 'GENERATE_SHEET', edit: 'EDIT_DATA_POINT',
   vehicles: 'VEHICLES', bank: 'VIEW_BANK', 'enemy-vehicles': 'ENEMY VEHICLES', battle: 'ENTER BATTLE MAP',
-  ping: 'BROADCAST PING', broadcast: 'BROADCAST_THIS', purge: 'PURGE_DATA_POINT',
+  ping: 'BROADCAST PING', broadcast: 'BROADCAST_THIS', purge: 'REMOVE_TOKEN',
 };
 
 export interface BuiltTokenAction {
@@ -176,7 +176,10 @@ export function buildTokenActions(viewer: TokenViewer, c: TokenActionContext): B
     },
   };
 
-  return tokenActionKeys(viewer).map((key) => ({ key, label: LABEL[key], ...does[key] }));
+  // Worded like the sidebar's own remove buttons: your token is yours to take off the map.
+  const label = (key: TokenActionKey) =>
+    key === 'purge' && viewer.isPlayerToken && viewer.isOwner ? 'REMOVE_MY_TOKEN' : LABEL[key];
+  return tokenActionKeys(viewer).map((key) => ({ key, label: label(key), ...does[key] }));
 }
 
 /**

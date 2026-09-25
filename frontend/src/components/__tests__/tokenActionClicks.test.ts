@@ -140,7 +140,7 @@ describe('the rest', () => {
     expect(c.broadcast).toHaveBeenCalled();
   });
 
-  it('PURGE_DATA_POINT deletes the token and closes its window', async () => {
+  it('REMOVE_TOKEN deletes the token and closes its window', async () => {
     const c = context();
     await press('purge', c);
     expect(c.fetch).toHaveBeenCalledWith('/api/locations/42', { method: 'DELETE', headers: { Authorization: 'Bearer tok' } });
@@ -148,7 +148,7 @@ describe('the rest', () => {
     expect(c.refreshLocations).toHaveBeenCalled();
   });
 
-  it('PURGE_DATA_POINT leaves the window open when the server refuses', async () => {
+  it('REMOVE_TOKEN leaves the window open when the server refuses', async () => {
     const c = context({ fetch: vi.fn(async () => ({ ok: false })) });
     await press('purge', c);
     expect(c.clearSelection).not.toHaveBeenCalled();
@@ -158,5 +158,15 @@ describe('the rest', () => {
     const all = buildTokenActions(everyone, context());
     for (const a of all) expect(a.label, a.key).toBeTruthy();
     expect(all.find((a) => a.key === 'purge')?.tone).toBe('danger');
+  });
+
+  it("says REMOVE_MY_TOKEN on a player's own token and REMOVE_TOKEN on anyone else's", () => {
+    const purge = (viewer: Partial<TokenViewer>) =>
+      buildTokenActions({ ...everyone, ...viewer }, context()).find((a) => a.key === 'purge')?.label;
+    expect(purge({ isAdmin: false, isOwner: true })).toBe('REMOVE_MY_TOKEN');
+    expect(purge({})).toBe('REMOVE_TOKEN');
+    expect(purge({ isPlayerToken: false, hasOwner: false })).toBe('REMOVE_TOKEN');
+    // Owning an NPC token does not make it "my token".
+    expect(purge({ isPlayerToken: false, isOwner: true })).toBe('REMOVE_TOKEN');
   });
 });
