@@ -1433,6 +1433,34 @@ describe('the cart', () => {
     expect(cartTab()).toBe('CART');
   });
 
+  it('drops the receipt on going back to a shelf', async () => {
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await openFolder('CART');
+    await checkOut();
+    expect(screen.getByTestId('cart-receipt')).toBeInTheDocument();
+    await openFolder('SELL');
+    await openFolder('CART');
+    expect(screen.queryByTestId('cart-receipt')).toBeNull();
+    expect(screen.getByTestId('cart-empty')).toBeInTheDocument();
+  });
+
+  it('starts clean when another shop opens in the same window', async () => {
+    const { rerender } = show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await openFolder('CART');
+    await checkOut();
+    await openFolder('BUY');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await openFolder('CART');
+    expect(screen.getByTestId('cart-buy')).toBeInTheDocument();
+    rerender(<ShopWindow name="Mama's" locationId={8} buildingType="gun_shop"
+      system="cities_without_number" buybackPct={45} socket={makeSocket()} userName="JADE" onClose={vi.fn()} />);
+    expect(screen.queryByTestId('cart-buy')).toBeNull();
+    expect(screen.queryByTestId('cart-receipt')).toBeNull();
+    expect(cartTab()).toBe('CART');
+  });
+
   it('marks installed chrome on its line, and on the receipt', async () => {
     saleFromBody = 1;
     sheetState.sheet = { system: 'cities_without_number', data: { cyberware: [{ name: 'Cranial Jack', placed: true }] } };

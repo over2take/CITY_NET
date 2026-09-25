@@ -513,6 +513,21 @@ export function ShopWindow({
   const [repriced, setRepriced] = useState<number | null>(null);
   /** What the last checkout came to, itemised, until something else happens. */
   const [receipt, setReceipt] = useState<CartReceipt | null>(null);
+  /**
+   * Another shop opened into this same window starts clean. Its shelves are different, so a
+   * cart from the last one would only be refused at checkout, and its receipt is not this
+   * shop's. Closing the window does the same by throwing the state away.
+   */
+  const shopSeen = React.useRef(locationId);
+  useEffect(() => {
+    if (shopSeen.current === locationId) return;
+    shopSeen.current = locationId;
+    setCartBuys([]);
+    setCartSells([]);
+    setReceipt(null);
+    setCartNews(false);
+    setRefused(null);
+  }, [locationId]);
   /** Bought things still to be written onto the sheet, one per render so each sees the last. */
   const [placing, setPlacing] = useState<Array<() => void>>([]);
   const checkoutTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1505,7 +1520,12 @@ export function ShopWindow({
         { id: 'cart' as Tab, label: cartCount ? `CART · ${cartCount}` : 'CART', name: 'CART', attention: cartNews },
       ]}
       open={tab}
-      onOpen={(id) => { setTab(id); if (id === 'cart') setCartNews(false); }}
+      onOpen={(id) => {
+        setTab(id);
+        // The receipt answers the checkout just made; walking off to a shelf is moving on.
+        if (id === 'cart') setCartNews(false);
+        else setReceipt(null);
+      }}
       panelMode="list"
       width={980}
       label={`${name || 'Shop'} shop`}
