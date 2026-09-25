@@ -5,9 +5,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [1.14.1] - 2026-09-25
 
-The building window, redone as a terminal.
+The building and token windows, redone as terminals.
 
 ### Added
 
@@ -35,10 +35,50 @@ The building window, redone as a terminal.
   photo, removing one or typing notes is saved along with the rest of the building. If any of
   it fails, the alert says what failed instead of CHANGES_SAVED.
 
+- **A new token window.** Clicking a token opens the same terminal-style window, with the
+  portrait (or a token in its side's color) in the corner. **INFO** is headed with the
+  player's name and starts with their handle and role. **HEALTH** is where health lives now.
+  The buttons along the bottom are the ones each viewer had before.
+
+- **HEALTH on your own token, and on any token for the GM:** the numbers, HEAL, DAMAGE,
+  TEMP HP, the injury map and STIM_HEAL in CWN, under a live heart monitor. The GM also gets
+  MAX HP, the token's AC or DV to edit, and ADD TO INIT for an NPC without a sheet.
+
+- **HEALTH on anyone else's token is a picture, not numbers.** A live heart monitor that
+  beats, changes color as they get hurt and flatlines when they go down, plus the injury
+  map. Temp HP shows as a shield, and Shadowrun stun as a bar, with no figures.
+
+- **QUICK ACTIONS on your own token.** Your AC or DV, and rolls straight off your sheet
+  without opening it: CWN's saves, CP:R's stats, Shadowrun's initiative and composure, and
+  a skill picker for every system. They are the sheet's own rolls, with the same penalties,
+  and land in the dice tray.
+
+- **GM notes on NPC tokens.** The same **GM NOTES** folder buildings have, on enemy and
+  friendly tokens, for the main admin only.
+
 ### Changed
+
+- **Clicking another player's token opens its window.** It used to open a separate health
+  window. Now it is the token window, with INFO and HEALTH, the same as an NPC.
+
+- **HIT_POINTS opens the token window on HEALTH.** A player gets their own token. A player
+  who hasn't placed one gets a CREATE HEALTH RECORD button there. The GM gets the selected
+  token. The sheet's linked HP field goes to the same place.
+
+- **The token's remove button says REMOVE_MY_TOKEN or REMOVE_TOKEN,** like the sidebar,
+  instead of PURGE_DATA_POINT.
 
 - **Saved maps carry the GM notes.** Loading a map brings back the notes written for its
   buildings, and never leaves one map's notes on another map's buildings.
+
+### Removed
+
+- **The token window's ID and COMBAT tabs.** Handle and role moved to INFO. An attack you
+  are setting up shows as a line above the buttons. The last attack's result is no longer
+  repeated there: the dice tray and the map already show it.
+
+- **The UPDATE_HEALTH and CHECK_HEALTH buttons, and the separate HIT_POINTS and health
+  windows.** All of it is the token window's HEALTH folder now.
 
 ### Fixed
 
