@@ -175,7 +175,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
   return (
     <>
     <DraggableWindow
-      title={playerUsername ? `CHARACTER_SHEET // ${playerUsername.toUpperCase()} [ADMIN]` : `NPC_SHEET // ${npcLabel.toUpperCase()}`}
+      title={playerUsername ? `SHEET.EXE · ${playerUsername.toUpperCase()} [ADMIN]` : `NPC_SHEET.EXE · ${npcLabel.toUpperCase()}`}
       pos={pos}
       setPos={setPos}
       onClose={onClose}

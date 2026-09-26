@@ -48,10 +48,10 @@ describe('RadioFeed render', () => {
     expect(() => render(<RadioFeed {...defaultProps} />)).not.toThrow();
   });
 
-  it('shows RADIO_FEED as window title', () => {
+  it('shows RADIO_LIBRARY.EXE as window title', () => {
     global.fetch = vi.fn().mockResolvedValue({ json: async () => [] });
     render(<RadioFeed {...defaultProps} />);
-    expect(screen.getByTestId('window-title').textContent).toBe('RADIO_FEED');
+    expect(screen.getByTestId('window-title').textContent).toBe('RADIO_LIBRARY.EXE');
   });
 
   it('shows NO_TRACKS when library is empty', async () => {

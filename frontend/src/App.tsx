@@ -2336,7 +2336,7 @@ function App() {
                   <BuildingWindow
                     location={selectedLocation}
                     parts={locations.filter((l: any) => l.parent_id === selectedLocation.id)}
-                    title={isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation)}
+                    title={`SITE.EXE · ${isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation)}`}
                     gameSystem={gameSystem}
                     pos={infoPanelPos}
                     setPos={setInfoPanelPos}
@@ -2422,7 +2422,7 @@ function App() {
                 return (
                   <TokenWindow
                     location={selectedLocation}
-                    title={`ID: ${tokenSheetLink?.sheet_name || selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}`}
+                    title={`ID.EXE · ${tokenSheetLink?.sheet_name || selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}`}
                     pos={infoPanelPos}
                     setPos={setInfoPanelPos}
                     onClose={() => setSelectedLocation(null)}

@@ -179,7 +179,7 @@ describe('CharacterSheetWindow', () => {
     render(<CharacterSheetWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} userName="GHOST" />);
     const onSheetData = socket.on.mock.calls.find((c: any) => c[0] === 'sheetData')[1];
     act(() => onSheetData({ id: 1, username: 'GHOST', system: 'cyberpunk_red', data: { name: 'GHOST' }, portrait_url: null, is_npc: 0 }));
-    expect(screen.getByTestId('window-title').textContent).toBe('CHARACTER_SHEET // GHOST');
+    expect(screen.getByTestId('window-title').textContent).toBe('SHEET.EXE · GHOST');
     expect(screen.getByTestId('title-controls').textContent).toContain('CYBERPUNK RED');
     expect(screen.getByLabelText('Handle')).toHaveValue('GHOST');
   });

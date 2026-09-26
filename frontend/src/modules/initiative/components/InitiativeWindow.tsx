@@ -54,7 +54,7 @@ export function InitiativeWindow({
     setDragOverIndex(null);
   };
 
-  const headerLabel = 'Initiative.exe';
+  const headerLabel = 'INITIATIVE.EXE';
   const systemDef = getInitiativeSystem(activeSystem);
 
   const content = (

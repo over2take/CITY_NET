@@ -189,7 +189,7 @@ export function ChatWindow({ pos, setPos, onClose, messages, activeUsers, userNa
   return (
     <div style={{ display: isChatOpen ? 'block' : 'none' }}>
       <DraggableWindow
-        title="CITY_NET // COMMS"
+        title="COMMS.EXE"
         pos={pos}
         setPos={setPos}
         onClose={onClose}

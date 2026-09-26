@@ -41,10 +41,10 @@ describe('ChatWindow', () => {
     expect(container.firstChild).toHaveStyle('display: none');
   });
 
-  it('renders CITY_NET // COMMS title', () => {
+  it('renders COMMS.EXE title', () => {
     const socket = makeSocket();
     render(<ChatWindow {...baseProps} socket={socket} />);
-    expect(screen.getByTestId('window-title').textContent).toBe('CITY_NET // COMMS');
+    expect(screen.getByTestId('window-title').textContent).toBe('COMMS.EXE');
   });
 
   it('shows GLOBAL tab by default', () => {

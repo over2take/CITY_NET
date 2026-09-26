@@ -47,7 +47,7 @@ describe('AdminBankWindow', () => {
   it('renders with correct title', () => {
     const socket = makeSocket();
     render(<AdminBankWindow pos={basePos} setPos={setPos} onClose={onClose} targetUser="GHOST" socket={socket} token="tok" />);
-    expect(screen.getByTestId('window-title').textContent).toBe('ADMIN BANK: GHOST');
+    expect(screen.getByTestId('window-title').textContent).toBe('BANK_ADMIN.EXE · GHOST');
   });
 
   it('requests bank balance on mount', () => {
@@ -91,7 +91,7 @@ describe('AdminPayWindow', () => {
   it('renders the window title', () => {
     const socket = makeSocket();
     render(<AdminPayWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} token="tok" activeUsers={activeUsers} />);
-    expect(screen.getByTestId('window-title').textContent).toBe('ADMIN // PAY_PLAYERS');
+    expect(screen.getByTestId('window-title').textContent).toBe('PAYROLL.EXE');
   });
 
   it('excludes NPCs and primary admins from user list', () => {

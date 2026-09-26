@@ -226,7 +226,7 @@ describe('a ripperdoc', () => {
 
   it('names the building it belongs to', () => {
     show('ripperdoc', 'Doc Wu');
-    expect(screen.getByText(/SHOP · Doc Wu/)).toBeInTheDocument();
+    expect(screen.getByText(/SHOP\.EXE · Doc Wu/)).toBeInTheDocument();
   });
 });
 

@@ -187,7 +187,7 @@ export function VehiclesWindow({ pos, setPos, onClose, socket, userName, isAdmin
 
   return (
     <DraggableWindow
-      title="VEHICLES"
+      title="VEHICLES.EXE"
       pos={pos}
       setPos={setPos}
       onClose={onClose}

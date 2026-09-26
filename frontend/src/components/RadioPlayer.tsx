@@ -90,7 +90,7 @@ export function RadioPlayer({
 
   return (
     <DraggableWindow
-      title="RADIO_FEED"
+      title="RADIO.EXE"
       pos={pos}
       setPos={setPos}
       onClose={onClose}

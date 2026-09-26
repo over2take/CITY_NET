@@ -52,7 +52,7 @@ describe('ImportSheetDialog', () => {
     fireEvent.click(screen.getByText('PREVIEW'));
 
     await waitFor(() => expect(screen.getAllByTestId('window-title').map(n => n.textContent))
-      .toContain('IMPORT_PREVIEW'));
+      .toContain('IMPORT_PREVIEW.EXE'));
     fireEvent.click(screen.getByText(/REPLACE SHEET WITH 1 FIELDS/));
     await waitFor(() => expect(onApply).toHaveBeenCalledWith({ ref: 7 }, { replace: true }));
     await waitFor(() => expect(screen.getByText('✓ APPLIED')).toBeTruthy());

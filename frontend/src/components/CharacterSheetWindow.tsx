@@ -45,7 +45,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
   return (
     <>
     <DraggableWindow
-      title={`CHARACTER_SHEET // ${userName.toUpperCase()}`}
+      title={`SHEET.EXE · ${userName.toUpperCase()}`}
       pos={pos}
       setPos={setPos}
       onClose={onClose}

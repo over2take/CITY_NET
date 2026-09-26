@@ -118,7 +118,7 @@ export function CustomDieBuilder({ pos, setPos, onClose, onCreate, onUpdate, exi
 
   return (
     <DraggableWindow
-      title={isEditing ? 'CUSTOM_DIE.EXE — EDIT' : 'CUSTOM_DIE.EXE'}
+      title={isEditing ? 'CUSTOM_DIE.EXE · EDIT' : 'CUSTOM_DIE.EXE'}
       pos={pos}
       setPos={setPos}
       onClose={onClose}

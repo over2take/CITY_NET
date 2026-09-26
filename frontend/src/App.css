@@ -972,6 +972,13 @@ header {
   text-shadow: none;
 }
 
+/* The windows behind the focused one: an outlined bar, so the one in front is obvious. */
+.win95-window.inactive .win95-title-bar {
+  background: var(--black);
+  color: var(--green);
+  border-bottom: 1px solid var(--dark-green);
+}
+
 .win95-close-btn {
   background: var(--black);
   border: 1px solid var(--green);

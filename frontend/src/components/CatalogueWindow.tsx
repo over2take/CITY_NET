@@ -150,7 +150,7 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
 
   return (
     <DraggableWindow
-      title="ADMIN // SHOP CATALOGUES"
+      title="CATALOGUES.EXE"
       pos={pos}
       setPos={setPos}
       onClose={onClose}

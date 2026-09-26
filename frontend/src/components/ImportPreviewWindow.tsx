@@ -76,7 +76,7 @@ export function ImportPreviewWindow({ pos, setPos, preview, currentData, busy, a
 
   return (
     <DraggableWindow
-      title="IMPORT_PREVIEW"
+      title="IMPORT_PREVIEW.EXE"
       pos={pos}
       setPos={setPos}
       onClose={onCancel}

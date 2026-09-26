@@ -1509,7 +1509,7 @@ export function ShopWindow({
     // corner, BUY and SELL down the left, the open one's list on the right with its filter
     // and shelf tabs on top. Wider than they are, because a shelf is a table.
     <TerminalWindow
-      title={`SHOP · ${name || 'UNNAMED'}`}
+      title={`SHOP.EXE · ${name || 'UNNAMED'}`}
       pos={pos}
       setPos={setPos}
       onClose={onClose}
