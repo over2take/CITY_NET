@@ -67,8 +67,10 @@ The shop, on the terminal layout, with a cart.
   ID.EXE for a token, SITE.EXE for a building, and so on.
 
 - **The startup sound plays as the login window appears,** after the boot, instead of on
-  logging in. The ambient hum now comes in a few seconds later and eases up slowly, and is a
-  quarter quieter than before.
+  logging in. The ambient hum eases up slowly after the boot, or quickly on a refresh, and is
+  a quarter quieter than before.
+
+- **The login screen has the CRT scanlines** over it, like the rest of the app.
 
 - **The version on the login screen sits below the THEMES button** instead of beside it,
   where it was starting to run into it.
@@ -80,6 +82,13 @@ The shop, on the terminal layout, with a cart.
 
 - **A checkout the server never answers stops waiting after 15 seconds,** keeps your cart,
   and says to check your balance before trying again.
+
+- **Moving the volume slider no longer restarts the ambient hum.** It changes its volume in
+  place, and muting and unmuting pick it up where it was.
+
+- **After a refresh, the hum starts on your first key press or click.** It used to stay
+  silent until you muted and unmuted, and never started at all if you logged in with the
+  keyboard. (Browsers keep a page silent until you touch it, Firefox on every load.)
 
 - **A big balance change no longer flattens the bank's chart.** A 150,000cr sale used to
   jump the ticker by about 1,800 and squash every other candle into a line for a minute.
