@@ -96,7 +96,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
   const verb = n < 0 ? 'TAKE' : 'AWARD';
 
   return (
-    <DraggableWindow title="ADMIN // EXPERIENCE" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+    <DraggableWindow title="XP.EXE" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
       <div style={{ padding: '10px' }}>
         {!supported ? (
           // Cyberpunk RED spends Improvement Points and Shadowrun spends Karma. Both are

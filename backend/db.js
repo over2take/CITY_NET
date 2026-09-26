@@ -207,6 +207,23 @@ db.serialize(() => {
   // Collapsing those two would make it impossible to stop overriding once you started.
   db.run(`ALTER TABLE locations ADD COLUMN buyback_pct REAL`, (err) => {});
 
+  // A picture of the building, shown to everyone in its info window in place of the
+  // spinning render. NULL means none, and every building starts that way - adding the
+  // column changes nothing about an existing one.
+  db.run(`ALTER TABLE locations ADD COLUMN photo_url TEXT`, (err) => {});
+
+  // What the GM knows about a building and the players do not.
+  //
+  // Its own table rather than a column on `locations`, and that is the whole point: every
+  // player downloads every location row (GET /api/locations is public, SELECT l.*), so a
+  // column there would reach every browser however carefully the window hid it. Here it is
+  // read only through a route that checks for the main admin.
+  db.run(`CREATE TABLE IF NOT EXISTS location_gm_notes (
+    location_id INTEGER PRIMARY KEY,
+    notes TEXT NOT NULL DEFAULT '',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN melee_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN ranged_ac INTEGER`, (err) => {});
 
@@ -257,6 +274,10 @@ db.serialize(() => {
   db.run(`ALTER TABLE saved_maps ADD COLUMN overpasses_data TEXT`, () => {});
   db.run(`ALTER TABLE saved_maps ADD COLUMN water_bodies_data TEXT`, () => {});
   db.run(`ALTER TABLE saved_maps ADD COLUMN signs_data TEXT`, () => {});
+  // GM notes travel with the map they were written for. Location ids are reused when a map
+  // is loaded, so notes left behind in their own table would land on whatever building of
+  // the next map happened to get the same id.
+  db.run(`ALTER TABLE saved_maps ADD COLUMN gm_notes_data TEXT`, () => {});
   db.run(`ALTER TABLE overpasses ADD COLUMN ramp_length_start REAL`, () => {});
   db.run(`ALTER TABLE overpasses ADD COLUMN ramp_length_end REAL`, () => {});
 

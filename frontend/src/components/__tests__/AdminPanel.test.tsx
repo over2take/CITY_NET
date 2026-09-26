@@ -1,6 +1,7 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import * as THREE from 'three';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../../utils/locationHelpers', () => ({
@@ -1215,6 +1216,66 @@ describe('the building type control', () => {
     // would return a refusal.
     editView({ globalSettings: { game_system: 'dnd_5e' } });
     expect(screen.queryByLabelText('Building type')).not.toBeInTheDocument();
+  });
+
+  describe('the building photo and GM notes', () => {
+    // The controls fetch the building's notes; answer with none.
+    beforeEach(() => {
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ notes: '' }) })));
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('are offered to the main admin, on a building, in any system', () => {
+      // Nothing to do with shops, so not behind the shop gate.
+      editView({ props: { isPrimaryAdmin: true }, globalSettings: { game_system: 'dnd_5e' } });
+      expect(screen.getByText('BUILDING PHOTO')).toBeInTheDocument();
+      expect(screen.getByLabelText('GM NOTES')).toBeInTheDocument();
+    });
+
+    it('are not offered to a player granted editing rights', () => {
+      // They see this view too, and the server refuses them both.
+      editView({ props: { isPrimaryAdmin: false } });
+      expect(screen.queryByText('BUILDING PHOTO')).toBeNull();
+      expect(screen.queryByLabelText('GM NOTES')).toBeNull();
+    });
+
+    it('are saved by UPDATE_DATA_POINT, after the building itself', async () => {
+      // One form, one save: the notes have no button of their own.
+      const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/gm-notes') && !init?.method) return { ok: true, json: async () => ({ notes: 'Old' }) };
+        if (url.endsWith('/gm-notes')) return { ok: true, json: async () => JSON.parse(String(init!.body)) };
+        return { ok: true, json: async () => ({}) };
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      editView({ props: { isPrimaryAdmin: true, targetObject: new THREE.Group() } });
+
+      await userEvent.type(await screen.findByDisplayValue('Old'), ' and new');
+      await userEvent.click(screen.getByRole('button', { name: 'UPDATE_DATA_POINT' }));
+
+      await waitFor(() => expect(screen.getByText('CHANGES_SAVED')).toBeInTheDocument());
+      const writes = fetchMock.mock.calls.filter(([, i]) => i?.method).map(([u, i]) => `${i!.method} ${u}`);
+      expect(writes[0]).toBe('PUT /api/locations/7');
+      expect(writes).toContain('PUT /api/locations/7/gm-notes');
+      expect(writes.indexOf('PUT /api/locations/7/gm-notes')).toBeGreaterThan(0);
+    });
+
+    it('says what did not save instead of CHANGES_SAVED', async () => {
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/gm-notes') && !init?.method) return { ok: true, json: async () => ({ notes: 'Old' }) };
+        if (url.endsWith('/gm-notes')) return { ok: false, json: async () => ({ error: 'Notes are limited to 20,000 characters.' }) };
+        return { ok: true, json: async () => ({}) };
+      }));
+      editView({ props: { isPrimaryAdmin: true, targetObject: new THREE.Group() } });
+      await userEvent.type(await screen.findByDisplayValue('Old'), '!');
+      await userEvent.click(screen.getByRole('button', { name: 'UPDATE_DATA_POINT' }));
+      expect(await screen.findByText('Notes are limited to 20,000 characters.')).toBeInTheDocument();
+      expect(screen.queryByText('CHANGES_SAVED')).toBeNull();
+    });
+
+    it('are not offered on a token', () => {
+      editView({ props: { isPrimaryAdmin: true }, editData: { shape: 'enemy_rhombus' } });
+      expect(screen.queryByText('BUILDING PHOTO')).toBeNull();
+    });
   });
 
   it('is absent on a token rather than a building', () => {

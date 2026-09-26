@@ -53,10 +53,10 @@ describe('DiceTrayWindow', () => {
   const setPos = vi.fn();
   const onClose = vi.fn();
 
-  it('renders DICE_TRAY.exe title', () => {
+  it('renders DICE_TRAY.EXE title', () => {
     const socketRef = makeSocketRef();
     render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);
-    expect(screen.getByTestId('window-title').textContent).toBe('DICE_TRAY.exe');
+    expect(screen.getByTestId('window-title').textContent).toBe('DICE_TRAY.EXE');
   });
 
   it('requests dice history on mount', () => {

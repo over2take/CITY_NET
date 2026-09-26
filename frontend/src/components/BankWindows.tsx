@@ -56,7 +56,7 @@ export function AdminBankWindow({ pos, setPos, onClose, targetUser, socket, toke
   };
 
   return (
-    <DraggableWindow title={`ADMIN BANK: ${targetUser}`} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+    <DraggableWindow title={`BANK_ADMIN.EXE · ${targetUser}`} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
       <div style={{ padding: '10px' }}>
         <div style={{ marginBottom: '10px' }}>
           <label style={{ color: '#00ff66', display: 'block', marginBottom: '5px' }}>Balance</label>
@@ -111,7 +111,7 @@ export function AdminPayWindow({ pos, setPos, onClose, socket, token, activeUser
   };
 
   return (
-    <DraggableWindow title="ADMIN // PAY_PLAYERS" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+    <DraggableWindow title="PAYROLL.EXE" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
       <div style={{ padding: '10px' }}>
         <label style={{ display: 'block', marginBottom: '5px', color: '#00ff66' }}>TOTAL_AMOUNT</label>
         <input type="number" step="1" min="1" value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '15px', background: '#000', color: '#fff', border: '1px solid #333' }} />
@@ -522,7 +522,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
   const debtColor = roundedDebt > 0 ? '#ff0044' : '#fff';
 
   return (
-    <DraggableWindow title="CITY_NET // BANK" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '420px' }} contentStyle={{ overflow: 'hidden', maxHeight: 'none', minHeight: '220px' }}>
+    <DraggableWindow title="BANK.EXE" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '420px' }} contentStyle={{ overflow: 'hidden', maxHeight: 'none', minHeight: '220px' }}>
       <div style={{ display: 'flex', gap: '20px', padding: '10px' }}>
         <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>BALANCE</div>
@@ -749,13 +749,28 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
 
 // ── CANDLE CHART ──────────────────────────────────────────────────────────────
 
-interface Candle { open: number; close: number; high: number; low: number; }
+export interface Candle { open: number; close: number; high: number; low: number; }
 
 const CANDLE_COUNT = 28;
 const CANDLE_INTERVAL_MS = 2500;
 
-function generateNextCandle(prev: Candle, biasDelta: number): Candle {
-  const drift = biasDelta * 0.012 + (Math.random() - 0.48) * 4.5;
+/**
+ * How far a change in the balance nudges the next candle.
+ *
+ * By the size of the change rather than the amount: it was `change * 0.012`, tuned for
+ * everyday sums, so +500cr was a green tick of 6 but a 150,000cr sale was a jump of 1,800
+ * on a chart that sits near 100 - one spike, and the rescale flattened every other candle
+ * into a line for a minute. On a log scale 500cr is still about 6, 50,000cr about 10, and
+ * nothing goes past the cap. Money in is up, money out is down, as before.
+ */
+export const BALANCE_BIAS_CAP = 14;
+export const balanceBias = (change: number): number => {
+  if (!Number.isFinite(change) || change === 0) return 0;
+  return Math.sign(change) * Math.min(BALANCE_BIAS_CAP, Math.log10(1 + Math.abs(change)) * 2.2);
+};
+
+export function generateNextCandle(prev: Candle, biasDelta: number): Candle {
+  const drift = balanceBias(biasDelta) + (Math.random() - 0.48) * 4.5;
   const bodySize = 1.5 + Math.random() * 5;
   const open = prev.close;
   const close = open + drift + (Math.random() - 0.5) * bodySize;

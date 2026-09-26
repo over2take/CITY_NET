@@ -1,8 +1,9 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DraggableWindow } from '../DraggableWindow';
+import { windowKey } from '../windowFocus';
 
 const baseProps = {
   title: 'TEST_WINDOW',
@@ -93,5 +94,78 @@ describe('DraggableWindow', () => {
     fireEvent.mouseMove(window, { clientX: 200, clientY: 200 });
 
     expect(setPos).not.toHaveBeenCalled();
+  });
+});
+
+describe('like a desktop', () => {
+  beforeEach(() => { try { localStorage.clear(); } catch { /* no storage */ } });
+
+  const two = (onCloseA = vi.fn(), onCloseB = vi.fn()) => {
+    render(
+      <>
+        <DraggableWindow {...baseProps} title="A.EXE" onClose={onCloseA}><input aria-label="field" /></DraggableWindow>
+        <DraggableWindow {...baseProps} title="B.EXE" onClose={onCloseB}><p>b</p></DraggableWindow>
+      </>,
+    );
+    const win = (t: string) => screen.getByText(t).closest('.win95-window') as HTMLElement;
+    return { win, onCloseA, onCloseB };
+  };
+
+  it('has one focused window, the newest, and draws the rest inactive', () => {
+    const { win } = two();
+    expect(win('B.EXE')).not.toHaveClass('inactive');
+    expect(win('A.EXE')).toHaveClass('inactive');
+  });
+
+  it('focuses a window clicked anywhere in it', () => {
+    const { win } = two();
+    fireEvent.mouseDown(screen.getByLabelText('field'));
+    expect(win('A.EXE')).not.toHaveClass('inactive');
+    expect(win('B.EXE')).toHaveClass('inactive');
+  });
+
+  it('closes only the focused window on Esc', () => {
+    const { onCloseA, onCloseB } = two();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onCloseB).toHaveBeenCalledTimes(1);
+    expect(onCloseA).not.toHaveBeenCalled();
+  });
+
+  it('leaves Esc to a field being typed in', () => {
+    const { onCloseA, onCloseB } = two();
+    const field = screen.getByLabelText('field');
+    fireEvent.mouseDown(field);
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(onCloseA).not.toHaveBeenCalled();
+    expect(onCloseB).not.toHaveBeenCalled();
+  });
+
+  it('hands focus to the next window down when the focused one closes', () => {
+    const { rerender } = render(
+      <>
+        <DraggableWindow {...baseProps} title="A.EXE"><p>a</p></DraggableWindow>
+        <DraggableWindow {...baseProps} title="B.EXE"><p>b</p></DraggableWindow>
+      </>,
+    );
+    rerender(<><DraggableWindow {...baseProps} title="A.EXE"><p>a</p></DraggableWindow></>);
+    expect(screen.getByText('A.EXE').closest('.win95-window')).not.toHaveClass('inactive');
+  });
+
+  it('opens where that kind of window was last left', () => {
+    const first = vi.fn();
+    const { unmount } = render(<DraggableWindow {...baseProps} title="SHOP.EXE · VIC" setPos={first}><span /></DraggableWindow>);
+    fireEvent.mouseDown(document.querySelector('.win95-title-bar') as HTMLElement, { clientX: 110, clientY: 210 });
+    fireEvent.mouseUp(window);
+    unmount();
+    // Another shop - the same program - opens where that one was left.
+    const second = vi.fn();
+    render(<DraggableWindow {...baseProps} title="SHOP.EXE · DOC WU" setPos={second}><span /></DraggableWindow>);
+    expect(second).toHaveBeenCalledWith({ x: 100, y: 200 });
+  });
+
+  it('knows a window by the program name at the front of its title', () => {
+    expect(windowKey("SHOP.EXE · VIC'S ARMS")).toBe('SHOP.EXE');
+    expect(windowKey('CUSTOM_DIE.EXE · EDIT')).toBe('CUSTOM_DIE.EXE');
+    expect(windowKey('BANK.EXE')).toBe('BANK.EXE');
   });
 });

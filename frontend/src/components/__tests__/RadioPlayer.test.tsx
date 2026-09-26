@@ -65,9 +65,9 @@ describe('RadioPlayer render', () => {
     expect(() => render(<RadioPlayer {...defaultProps} />)).not.toThrow();
   });
 
-  it('shows RADIO_FEED as window title', () => {
+  it('shows RADIO.EXE as window title', () => {
     render(<RadioPlayer {...defaultProps} />);
-    expect(screen.getByTestId('window-title').textContent).toBe('RADIO_FEED');
+    expect(screen.getByTestId('window-title').textContent).toBe('RADIO.EXE');
   });
 
   it('shows the track name', () => {

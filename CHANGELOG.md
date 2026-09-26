@@ -5,7 +5,180 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [1.14.2] - 2026-09-25
+
+The shop, on the terminal layout, with a cart.
+
+### Added
+
+- **A cart in every shop.** + CART on the BUY or SELL list puts things in a **CART**
+  folder, which blinks until you open it and shows how many things are in it. Open it and
+  press CHECK OUT to buy and sell everything at once.
+
+- **The cart is itemized.** Something bought twice is one line with ×2, and − / + / ✕ to
+  change it. Each thing sold is its own line, shown as minus money. Installed cyberware
+  says so on its line: it comes out with no surgery roll. CLEAR CART empties it. Closing
+  the shop, or opening another one, starts a fresh cart.
+
+- **One total, in words.** "YOU PAY 420cr" or "THE SHOP PAYS YOU 90cr", with your balance
+  after. Your bank moves once, by the difference between what you buy and what you sell.
+
+- **What you'd be carrying (CWN).** The cart shows your Readied and Stowed load after
+  checkout, and turns red past your limit. It only stops the checkout when the
+  encumbrance house rule is on.
+
+- **A receipt.** After checking out, the cart shows a receipt: the shop, the date and
+  time, what was bought and sold, the total, where the money went and your new balance.
+  It goes away when you open BUY or SELL.
+
+- **A filter on the SELL list,** like the one on BUY.
+
+- **Windows behave like a desktop's.** The window in front is the focused one and keeps the
+  solid title bar; the others dim to an outlined bar. Click anywhere in a window to bring it
+  to the front. **Esc** closes the window in front, except while you are typing in a field.
+
+- **Windows remember where you left them.** Each kind of window opens where you last dragged
+  it, in your browser: every shop in one spot, every token window in another.
+
+- **A boot screen.** Opening the app shows a BIOS-style self test typing out before the login
+  window fades in. It shows once per browser tab, and the SKIP button in the corner skips it.
+  If the page has been clicked, you hear the PC speaker's beep and the drive clicking as each
+  line prints (browsers keep a page silent until it is clicked).
+
+### Changed
+
+- **The shop window looks like the building and token windows.** The building in the
+  corner, BUY / SELL / CART down the left, and the shop line (type, lines, your balance)
+  on top. The shelf tabs and the filter stay at the top of the list while it scrolls. The
+  window is as tall as what it holds. Prices and ranges no longer wrap in the middle.
+
+- **Checking out is all or nothing.** If any line can't go through, nothing is charged and
+  nothing leaves your sheet, and the cart stays as it was. Short of credits with overdraft
+  allowed, you're asked once for the whole cart whether to take debt or go negative. If a
+  price changed while things sat in the cart, nothing is charged and the new total is
+  shown to check out again.
+
+- **BUY and SELL no longer charge or pay on their own.** Everything goes through the cart.
+
+- **Every window has the solid title bar** the building, token and shop windows have: the
+  theme's color with the window's name in black. The update notice matches.
+
+- **Windows are named like programs:** SHOP.EXE · VIC'S ARMS, BANK.EXE, SHEET.EXE · GHOST,
+  ID.EXE for a token, SITE.EXE for a building, and so on.
+
+- **The startup sound plays as the login window appears,** after the boot, instead of on
+  logging in. The ambient hum eases up slowly after the boot, or quickly on a refresh, and is
+  a quarter quieter than before.
+
+- **The login screen has the CRT scanlines** over it, like the rest of the app.
+
+- **The version on the login screen sits below the THEMES button** instead of beside it,
+  where it was starting to run into it.
+
+### Fixed
+
+- **Buying two of the same weapon at once can no longer put both in one row.** Bought
+  things are placed one at a time after checkout, each seeing the one before.
+
+- **A checkout the server never answers stops waiting after 15 seconds,** keeps your cart,
+  and says to check your balance before trying again.
+
+- **Moving the volume slider no longer restarts the ambient hum.** It changes its volume in
+  place, and muting and unmuting pick it up where it was.
+
+- **After a refresh, the hum starts on your first key press or click.** It used to stay
+  silent until you muted and unmuted, and never started at all if you logged in with the
+  keyboard. (Browsers keep a page silent until you touch it, Firefox on every load.)
+
+- **A big balance change no longer flattens the bank's chart.** A 150,000cr sale used to
+  jump the ticker by about 1,800 and squash every other candle into a line for a minute.
+  Big changes now make a tall candle, and small ones still a small tick.
+
+---
+
+## [1.14.1] - 2026-09-25
+
+The building and token windows, redone as terminals.
+
+### Added
+
+- **A new building window.** Clicking a building opens a terminal-style window: folders
+  down the left, the open folder's text on the right, and the building in the top corner.
+  **INFO** holds the description, headed with the shop type and district. **RESIDENTS**
+  holds the NPC list. Switch folders by clicking or with the up and down arrow keys. The
+  buttons along the bottom (SHOP, ENTER BATTLE MAP, BROADCAST PING and the rest) are the ones
+  each viewer had before, and wrap onto a second row when there are many. Line breaks in a
+  description or residents list are kept now, instead of running together.
+
+- **The building, turning, in the corner of its window.** It's drawn from its own parts as a
+  wireframe in your theme's color. If this machine can't draw 3D, the CITY_NET badge shows
+  instead.
+
+- **Building photos.** A GM can give a building a photo, and everyone then sees it in place
+  of the turning building. Upload it in the admin edit view under BUILDING PHOTO.
+
+- **GM notes on buildings.** A **GM NOTES** folder, visible only to the main admin, holds
+  what the players shouldn't know. Players never receive the notes at all, and neither do
+  players who have been granted editing rights. Edit them in the folder itself, or in the
+  admin edit view.
+
+- **UPDATE_DATA_POINT saves the photo and GM notes too.** In the admin edit view, choosing a
+  photo, removing one or typing notes is saved along with the rest of the building. If any of
+  it fails, the alert says what failed instead of CHANGES_SAVED.
+
+- **A new token window.** Clicking a token opens the same terminal-style window, with the
+  portrait (or a token in its side's color) in the corner. **INFO** is headed with the
+  player's name and starts with their handle and role. **HEALTH** is where health lives now.
+  The buttons along the bottom are the ones each viewer had before.
+
+- **HEALTH on your own token, and on any token for the GM:** the numbers, HEAL, DAMAGE,
+  TEMP HP, the injury map and STIM_HEAL in CWN, under a live heart monitor. The GM also gets
+  MAX HP, the token's AC or DV to edit, and ADD TO INIT for an NPC without a sheet.
+
+- **HEALTH on anyone else's token is a picture, not numbers.** A live heart monitor that
+  beats, changes color as they get hurt and flatlines when they go down, plus the injury
+  map. Temp HP shows as a shield, and Shadowrun stun as a bar, with no figures.
+
+- **QUICK ACTIONS on your own token.** Your AC or DV, and rolls straight off your sheet
+  without opening it: CWN's saves, CP:R's stats, Shadowrun's initiative and composure, and
+  a skill picker for every system. They are the sheet's own rolls, with the same penalties,
+  and land in the dice tray.
+
+- **GM notes on NPC tokens.** The same **GM NOTES** folder buildings have, on enemy and
+  friendly tokens, for the main admin only.
+
+### Changed
+
+- **Clicking another player's token opens its window.** It used to open a separate health
+  window. Now it is the token window, with INFO and HEALTH, the same as an NPC.
+
+- **HIT_POINTS opens the token window on HEALTH.** A player gets their own token. A player
+  who hasn't placed one gets a CREATE HEALTH RECORD button there. The GM gets the selected
+  token. The sheet's linked HP field goes to the same place.
+
+- **The token's remove button says REMOVE_MY_TOKEN or REMOVE_TOKEN,** like the sidebar,
+  instead of PURGE_DATA_POINT.
+
+- **Saved maps carry the GM notes.** Loading a map brings back the notes written for its
+  buildings, and never leaves one map's notes on another map's buildings.
+
+### Removed
+
+- **The token window's ID and COMBAT tabs.** Handle and role moved to INFO. An attack you
+  are setting up shows as a line above the buttons. The last attack's result is no longer
+  repeated there: the dice tray and the map already show it.
+
+- **The UPDATE_HEALTH and CHECK_HEALTH buttons, and the separate HIT_POINTS and health
+  windows.** All of it is the token window's HEALTH folder now.
+
+### Fixed
+
+- **Loading a saved map lost every building's shop type and buy-back rate.** It also lost
+  their AC, sidewalk and signage settings, and whether they were hidden. A loaded map now
+  brings back everything each building was saved with.
+
+- **Undoing a building delete brought it back without those settings too.** It now restores
+  everything the building had, and its GM notes are still there.
 
 ---
 

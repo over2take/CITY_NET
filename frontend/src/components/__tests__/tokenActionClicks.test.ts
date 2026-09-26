@@ -1,0 +1,172 @@
+/**
+ * What each button in a token's window does when pressed.
+ *
+ * tokenActions.test.ts checks who gets which button; this presses every one of them against
+ * fakes and checks exactly what it sent, fetched or opened - the attack it starts, the row
+ * it deletes, the window it opens and where.
+ */
+
+import { describe, it, expect, vi } from 'vitest';
+import { buildTokenActions, createPlayerTokenRow, type TokenActionContext, type TokenViewer } from '../tokenActions';
+
+const everyone: TokenViewer = {
+  isAdmin: true, isPrimaryAdmin: true, isOwner: false, isLoggedIn: true, isPlayerToken: true, hasOwner: true,
+  sheetHere: false, linked: false, attackPending: false, sheetCombat: false, canManage: true,
+  hasRoster: true, systemHasVehicles: true, hasBattleMaps: true,
+};
+
+const context = (over: Partial<TokenActionContext> = {}): TokenActionContext => ({
+  location: { id: 42, name: 'GHOST', shape: 'rhombus', owner: 'ghost', width: 1, height: 1, depth: 1 },
+  authToken: 'tok',
+  emit: vi.fn(),
+  fetch: vi.fn(async () => ({ ok: true })),
+  refreshLocations: vi.fn(),
+  sheetLink: { sheet_id: 7, npc_label: 'Ganger' },
+  tier: 'mook',
+  isOwner: false,
+  open: {
+    ownSheet: vi.fn(), playerSheet: vi.fn(), npcSheet: vi.fn(),
+    editLocation: vi.fn(), vehicles: vi.fn(), bank: vi.fn(), enemyVehicles: vi.fn(), battleMap: vi.fn(),
+  },
+  ping: vi.fn(),
+  broadcast: vi.fn(),
+  clearSelection: vi.fn(),
+  ...over,
+});
+
+/** Press the button with this key, from the list built for this viewer. */
+const press = async (key: string, c: TokenActionContext, viewer: Partial<TokenViewer> = {}) => {
+  const action = buildTokenActions({ ...everyone, ...viewer }, c).find((a) => a.key === key);
+  if (!action) throw new Error(`no ${key} button for this viewer`);
+  await action.onClick();
+  return action;
+};
+
+const mockOf = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
+
+describe('attacks', () => {
+  it('ATTACK starts an attack on this token and lets the sheet pick the weapon', async () => {
+    const c = context();
+    await press('attack', c, { sheetCombat: true });
+    expect(c.emit).toHaveBeenCalledWith('initiateAttack', { targetId: 42, attackType: 'melee' });
+  });
+
+  it('MELEE and RANGED start that kind of attack', async () => {
+    const c = context();
+    await press('melee', c);
+    await press('ranged', c);
+    expect(c.emit).toHaveBeenNthCalledWith(1, 'initiateAttack', { targetId: 42, attackType: 'melee' });
+    expect(c.emit).toHaveBeenNthCalledWith(2, 'initiateAttack', { targetId: 42, attackType: 'ranged' });
+  });
+});
+
+describe('health', () => {
+  it('is a folder now, not a button, for every viewer', () => {
+    const keys = [
+      ...buildTokenActions(everyone, context()),
+      ...buildTokenActions({ ...everyone, isAdmin: false, isOwner: true }, context()),
+      ...buildTokenActions({ ...everyone, isAdmin: false }, context()),
+    ].map((a) => a.key as string);
+    expect(keys).not.toContain('update-health');
+    expect(keys).not.toContain('check-health');
+  });
+
+  it('CREATE HEALTH RECORD makes the row for a player who never placed a token, then reloads', async () => {
+    const order: string[] = [];
+    const c = context({
+      fetch: vi.fn(async () => { order.push('create'); return { ok: true }; }),
+      refreshLocations: vi.fn(async () => { order.push('refresh'); }),
+    });
+    await createPlayerTokenRow(c, 'ghost');
+    const [url, init] = mockOf(c.fetch).mock.calls[0];
+    expect(url).toBe('/api/locations');
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe('Bearer tok');
+    expect(JSON.parse(init.body)).toMatchObject({ shape: 'rhombus', owner: 'ghost', name: 'ghost', hp_current: 100, hp_max: 100 });
+    // The panel shows the row once it is in the list.
+    expect(order).toEqual(['create', 'refresh']);
+  });
+});
+
+describe('sheets', () => {
+  it("OPEN_SHEET opens your own sheet on your token, and the player's for the GM", async () => {
+    const own = context({ isOwner: true });
+    await press('player-sheet', own, { isOwner: true });
+    expect(own.open.ownSheet).toHaveBeenCalled();
+    expect(own.open.playerSheet).not.toHaveBeenCalled();
+
+    const gm = context();
+    await press('player-sheet', gm);
+    expect(gm.open.playerSheet).toHaveBeenCalledWith('ghost');
+  });
+
+  it("OPEN_SHEET on an NPC opens its linked sheet", async () => {
+    const c = context({ location: { id: 9, shape: 'enemy_rhombus', owner: null } });
+    await press('npc-sheet', c, { isPlayerToken: false, sheetHere: true, linked: true });
+    expect(c.open.npcSheet).toHaveBeenCalledWith({ id: 7, npc_label: 'Ganger', token_shape: 'enemy_rhombus', locationId: 9 });
+  });
+
+  it('GENERATE_SHEET asks the server for a sheet at the chosen tier', async () => {
+    const c = context({ location: { id: 9, shape: 'enemy_rhombus', owner: null } });
+    await press('generate-sheet', c, { isPlayerToken: false });
+    expect(c.emit).toHaveBeenCalledWith('generateNpcSheet', { location_id: 9, tier: 'mook' });
+  });
+
+  it('EDIT_DATA_POINT opens the edit window on this token', async () => {
+    const c = context({ location: { id: 9, shape: 'enemy_rhombus', owner: null } });
+    await press('edit', c, { isPlayerToken: false });
+    expect(c.open.editLocation).toHaveBeenCalledWith(c.location);
+  });
+});
+
+describe('the rest', () => {
+  it('VEHICLES, VIEW_BANK, ENEMY VEHICLES and ENTER BATTLE MAP open their windows', async () => {
+    const c = context();
+    await press('vehicles', c);
+    await press('bank', c);
+    await press('enemy-vehicles', c);
+    await press('battle', c);
+    expect(c.open.vehicles).toHaveBeenCalled();
+    expect(c.open.bank).toHaveBeenCalledWith('ghost');
+    expect(c.open.enemyVehicles).toHaveBeenCalled();
+    expect(c.open.battleMap).toHaveBeenCalledWith(42);
+  });
+
+  it('BROADCAST PING and BROADCAST_THIS do what they say', async () => {
+    const c = context();
+    await press('ping', c);
+    await press('broadcast', c);
+    expect(c.ping).toHaveBeenCalled();
+    expect(c.broadcast).toHaveBeenCalled();
+  });
+
+  it('REMOVE_TOKEN deletes the token and closes its window', async () => {
+    const c = context();
+    await press('purge', c);
+    expect(c.fetch).toHaveBeenCalledWith('/api/locations/42', { method: 'DELETE', headers: { Authorization: 'Bearer tok' } });
+    expect(c.clearSelection).toHaveBeenCalled();
+    expect(c.refreshLocations).toHaveBeenCalled();
+  });
+
+  it('REMOVE_TOKEN leaves the window open when the server refuses', async () => {
+    const c = context({ fetch: vi.fn(async () => ({ ok: false })) });
+    await press('purge', c);
+    expect(c.clearSelection).not.toHaveBeenCalled();
+  });
+
+  it('labels every button, and marks the dangerous one', () => {
+    const all = buildTokenActions(everyone, context());
+    for (const a of all) expect(a.label, a.key).toBeTruthy();
+    expect(all.find((a) => a.key === 'purge')?.tone).toBe('danger');
+  });
+
+  it("says REMOVE_MY_TOKEN on a player's own token and REMOVE_TOKEN on anyone else's", () => {
+    const purge = (viewer: Partial<TokenViewer>) =>
+      buildTokenActions({ ...everyone, ...viewer }, context()).find((a) => a.key === 'purge')?.label;
+    expect(purge({ isAdmin: false, isOwner: true })).toBe('REMOVE_MY_TOKEN');
+    expect(purge({})).toBe('REMOVE_TOKEN');
+    expect(purge({ isPlayerToken: false, hasOwner: false })).toBe('REMOVE_TOKEN');
+    // Owning an NPC token does not make it "my token".
+    expect(purge({ isPlayerToken: false, isOwner: true })).toBe('REMOVE_TOKEN');
+  });
+});

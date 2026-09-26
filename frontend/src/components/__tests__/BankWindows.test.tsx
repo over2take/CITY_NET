@@ -2,7 +2,10 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from '../BankWindows';
+import {
+  AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue,
+  balanceBias, generateNextCandle, BALANCE_BIAS_CAP,
+} from '../BankWindows';
 
 vi.mock('../DraggableWindow', () => ({
   DraggableWindow: ({ children, title }: any) => (
@@ -44,7 +47,7 @@ describe('AdminBankWindow', () => {
   it('renders with correct title', () => {
     const socket = makeSocket();
     render(<AdminBankWindow pos={basePos} setPos={setPos} onClose={onClose} targetUser="GHOST" socket={socket} token="tok" />);
-    expect(screen.getByTestId('window-title').textContent).toBe('ADMIN BANK: GHOST');
+    expect(screen.getByTestId('window-title').textContent).toBe('BANK_ADMIN.EXE · GHOST');
   });
 
   it('requests bank balance on mount', () => {
@@ -88,7 +91,7 @@ describe('AdminPayWindow', () => {
   it('renders the window title', () => {
     const socket = makeSocket();
     render(<AdminPayWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} token="tok" activeUsers={activeUsers} />);
-    expect(screen.getByTestId('window-title').textContent).toBe('ADMIN // PAY_PLAYERS');
+    expect(screen.getByTestId('window-title').textContent).toBe('PAYROLL.EXE');
   });
 
   it('excludes NPCs and primary admins from user list', () => {
@@ -187,5 +190,38 @@ describe('BankWindow', () => {
     await userEvent.click(screen.getByText('WITHDRAW'));
     await userEvent.click(screen.getByText('CONFIRM')); // empty input
     expect(socket.emit).not.toHaveBeenCalledWith('withdrawFunds', expect.anything());
+  });
+});
+
+describe('the chart follows the balance without being thrown by it', () => {
+  it('nudges up for money in and down for money out, and not at all for none', () => {
+    expect(balanceBias(0)).toBe(0);
+    expect(balanceBias(500)).toBeGreaterThan(0);
+    expect(balanceBias(-500)).toBe(-balanceBias(500));
+  });
+
+  it('keeps an everyday sum about where it was, a small green tick', () => {
+    // The old nudge was change * 0.012: 500cr gave 6.
+    expect(balanceBias(500)).toBeCloseTo(6, 0);
+  });
+
+  it('grows with the size of the change, but a fortune is capped', () => {
+    expect(balanceBias(50_000)).toBeGreaterThan(balanceBias(500));
+    expect(balanceBias(150_000)).toBeGreaterThan(balanceBias(50_000));
+    // The old nudge made 150,000cr a jump of 1,800 on a chart that sits near 100.
+    expect(balanceBias(150_000)).toBeLessThanOrEqual(BALANCE_BIAS_CAP);
+    expect(balanceBias(1e12)).toBe(BALANCE_BIAS_CAP);
+    expect(balanceBias(-1e12)).toBe(-BALANCE_BIAS_CAP);
+  });
+
+  it('draws a big sale as one tall candle, not one that flattens the chart', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      const c = generateNextCandle({ open: 100, close: 100, high: 101, low: 99 }, 154_536);
+      expect(c.close).toBeGreaterThan(100);
+      expect(c.close - 100).toBeLessThan(BALANCE_BIAS_CAP + 5);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });

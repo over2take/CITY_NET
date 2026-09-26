@@ -32,6 +32,14 @@ export interface Location {
   building_type?: string | null;
   /** What this shop pays for second-hand goods. Null means "use the global rate". */
   buyback_pct?: number | null;
+  /** A building's photo, which everyone sees in its info window. Null means none. */
+  photo_url?: string | null;
+  /**
+   * A token's portrait, joined in by the location list from the linked sheet. For an NPC
+   * this skips the sheet's silhouette setting, so NPC windows take the portrait from the
+   * sheet link instead - only a player's is read from here.
+   */
+  portrait_url?: string | null;
   polyCount: number;
   battle_map_id: number | null;
   floor_index: number | null;

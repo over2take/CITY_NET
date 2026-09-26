@@ -24,10 +24,20 @@ import type { ThemeName } from './theme/themes';
 import { StatusLogDisplay, StatusBarText } from './components/StatusDisplay';
 import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
+import { BuildingWindow, type BuildingAction } from './components/BuildingWindow';
+import { TokenWindow, type TokenFolder } from './components/TokenWindow';
+import { BootScreen } from './components/BootScreen';
+import { createBootSounds, type BootSounds } from './sounds/bootSounds';
+import { useAmbientHum } from './sounds/useAmbientHum';
+import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
+import { QuickActions } from './components/QuickActions';
+import { buildBuildingActions } from './components/buildingActions';
+import { TERMINAL_PREVIEW, type TerminalAction } from './components/TerminalWindow';
+import { BuildingPreview } from './components/BuildingPreview';
 import { ShopWindow } from './components/ShopWindow';
 import { CatalogueWindow } from './components/CatalogueWindow';
 import { buildingTypeById, isShop, shopsAvailable, typeLabel } from './data/buildingTypes';
-import { HitPointsMenu, HealthReviewWindow } from './components/HitPoints';
+import { HitPointsPanel, HealthReviewPanel } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
 import { CityDataBaseMenu } from './components/CityDatabase';
@@ -46,7 +56,6 @@ import { VehicleBadgeButton } from './components/VehicleBadgeButton';
 import { useVehicleRoster } from './hooks/useVehicleRoster';
 import { useEnemyVehicles } from './hooks/useEnemyVehicles';
 import { hasVehicles } from './sheets/vehicleSystems';
-import { QuickSheetCard } from './components/QuickSheetCard';
 import { NpcLibrary } from './components/NpcLibrary';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
 import { TvPortrait } from './components/TvPortrait';
@@ -238,7 +247,6 @@ function App() {
     setEditingCustomDie(null);
   }, [setCustomDiceError]);
 
-  const [lastAttackResult, setLastAttackResult] = useState<{ hit: boolean; roll: number; ac: number; targetName: string; damage?: number; through?: number; targetDown?: boolean; criticalInjury?: boolean; shieldAbsorbed?: number } | null>(null);
   const [attackAnimations, setAttackAnimations] = useState<{ id: string; hit: boolean; attackType: 'melee' | 'ranged'; attackerPos: { x: number; z: number } | null; targetPos: { x: number; z: number }; targetId: number; isBattleMap: boolean }[]>([]);
 
   // Radio Feed
@@ -257,22 +265,14 @@ function App() {
 
   useEffect(() => { localStorage.setItem('musicVolume', String(musicVolume)); }, [musicVolume]);
 
-  const [isHitPointsOpen, setIsHitPointsOpen] = useState(false);
-  const [hitPointsPos, setHitPointsPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
-  const [acEdit, setAcEdit] = useState<{ melee: string; ranged: string } | null>(null);
+  // Which folder the token window has open, and a request to open one - HIT_POINTS opens
+  // HEALTH. The sequence number makes asking twice for the same folder still count.
+  const [tokenFolder, setTokenFolder] = useState<TokenFolder>('info');
+  const [tokenFolderRequest, setTokenFolderRequest] = useState<{ folder: TokenFolder; seq: number } | null>(null);
 
-  const [reviewHealthOwner, setReviewHealthOwner] = useState<string | null>(null);
-  // Track the reviewed token by id so the window follows live HP updates
-  // (NPC tokens share owner names; selectedLocation is a stale snapshot)
-  const [reviewHealthLocId, setReviewHealthLocId] = useState<number | null>(null);
-  const [reviewHealthPos, setReviewHealthPos] = useState(() => ({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 }));
-  // QuickSheetCard is opened explicitly (not auto-opened with CHECK_HEALTH)
-  const [quickSheetOwner, setQuickSheetOwner] = useState<string | null>(null);
-  const [quickSheetPos, setQuickSheetPos] = useState(() => ({ x: window.innerWidth / 2 + 170, y: window.innerHeight / 2 - 100 }));
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
   const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string; locationId?: number } | null>(null);
-  const [manualInitScore, setManualInitScore] = useState<string>('');
   // NPC sheet linked to the currently selected token (admin) - drives
   // GENERATE_SHEET vs OPEN_SHEET on the token menu
   const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; system?: string; npc_label: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null; portrait_shadow_filter?: number | null } | null>(null);
@@ -316,20 +316,6 @@ function App() {
   const [infoPanelPos, setInfoPanelPos] = useState(() => ({ x: window.innerWidth / 2 - 175, y: window.innerHeight / 2 - 200 }));
   const [diceTrayPos, setDiceTrayPos] = useState(() => ({ x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 250 }));
   
-  // Prevent HitPointsMenu and InfoWindow from overlapping when opened
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (isHitPointsOpen && selectedLocation) {
-        const dx = Math.abs(hitPointsPos.x - infoPanelPos.x);
-        const dy = Math.abs(hitPointsPos.y - infoPanelPos.y);
-        if (dx < 320 && dy < 300) {
-            let newX = infoPanelPos.x + 320;
-            if (newX + 300 > window.innerWidth) newX = Math.max(0, infoPanelPos.x - 320);
-            setHitPointsPos({ x: newX, y: infoPanelPos.y });
-        }
-    }
-  }, [isHitPointsOpen, selectedLocation]);
-
   const [chatPos, setChatPos] = useState(() => ({ x: window.innerWidth / 2 - 300, y: window.innerHeight / 2 - 200 }));
   const [bankPos, setBankPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: window.innerHeight / 2 - 150 }));
   const [adminBankPlayer, setAdminBankPlayer] = useState<string | null>(null);
@@ -505,14 +491,6 @@ function App() {
     }
   }, [selectedLocation?.id]);
 
-  useEffect(() => { setAcEdit(null); }, [selectedLocation?.id]);
-
-  // Auto-clear attack result after 4 seconds; resets if a new result arrives
-  useEffect(() => {
-    if (!lastAttackResult) return;
-    const t = setTimeout(() => setLastAttackResult(null), 4000);
-    return () => clearTimeout(t);
-  }, [lastAttackResult]);
 
   const enterBattleMap = (locId: number) => {
     if (currentLocBattleMaps.length === 0) return;
@@ -757,16 +735,68 @@ function App() {
           }
           return next;
         });
-      } else if (loc.shape === 'rhombus' && loc.owner !== userName && !token) {
-        // Non-admin player clicking another player's token â€” open read-only health review
-        setReviewHealthOwner(prev => prev === loc.owner ? null : loc.owner);
-        setReviewHealthPos({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 100 });
       } else {
+        // Every token opens its window - another player's too, whose HEALTH folder there
+        // is the same numberless view the separate health window used to be.
         setSelectedLocation(prev => prev?.id === loc.id ? null : loc);
       }
   };
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  /**
+   * The boot screen before the login screen, once per browser session - a refresh mid-game
+   * does not make anybody sit through it again. Storage refused means it is skipped.
+   */
+  const [bootDone, setBootDone] = useState(() => {
+    try { return sessionStorage.getItem('citynet_booted') === '1'; } catch { return true; }
+  });
+  /** The login window fades in once, right after the boot; not on a later logout. */
+  const [loginFadeIn, setLoginFadeIn] = useState(false);
+  const audioEnabledRef = useRef(audioEnabled);
+  audioEnabledRef.current = audioEnabled;
+  const bootDoneRef = useRef(bootDone);
+  /**
+   * The boot's sounds: the POST beep, and the drive clicking as each line appears. Silent
+   * until the browser allows sound - a click on the boot screen does (sounds/bootSounds.ts).
+   */
+  const bootSounds = useRef<BootSounds | null>(null);
+  useEffect(() => {
+    if (bootDone || IS_SPECTATOR || !audioEnabledRef.current || bootSounds.current) return;
+    bootSounds.current = createBootSounds(0.35 * ((window as any).masterVolume ?? 0.5));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const bootLine = React.useCallback((i: number) => {
+    if (i === 0) bootSounds.current?.beep();
+    else bootSounds.current?.seek();
+  }, []);
+  const bootTouch = React.useCallback(() => bootSounds.current?.wake(), []);
+  /**
+   * The ambient hum: one sound for the session. Its first start - after the boot, or on the
+   * first click - waits a few seconds and eases in; the slider and mute adjust it in place
+   * (sounds/useAmbientHum.ts). 0.01 at full until the user asked for 25% less.
+   */
+  const { startHum } = useAmbientHum({
+    src: '/Loop_seamless_fixed.mp3', level: 0.0075, enabled: audioEnabled, masterVolume,
+    delayMs: 3000, fadeMs: 8000,
+  });
+  // A refresh that goes straight to the login page has no boot to hand over from, so the
+  // hum starts from here - at once, with only a one-second fade so it does not pop in; a
+  // long wait there was just silence while people logged in. Where the browser holds sound
+  // back until a click, the first click tries again, just as quick.
+  useEffect(() => {
+    if (bootDoneRef.current && !IS_SPECTATOR) startHum({ delayMs: 0, fadeMs: 1000 });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const endBoot = React.useCallback(() => {
+    // Once: the skip key and the fade can both arrive.
+    if (bootDoneRef.current) return;
+    bootDoneRef.current = true;
+    setBootDone(true);
+    setLoginFadeIn(true);
+    bootSounds.current?.close();
+    bootSounds.current = null;
+    startHum();
+    playStartupRef.current();
+    try { sessionStorage.setItem('citynet_booted', '1'); } catch { /* storage refused */ }
+  }, []);
 
   // Streamer mode: on the admin this is the source of truth (edited via director
   // panel / BROADCAST_THIS); on the spectator it's received via directorUpdate.
@@ -861,13 +891,8 @@ function App() {
     },
     onAttackResult: (data) => {
       setAttackPending(null);
-      // Delay result reveal and animation until after the dice tray's 5-second roll display finishes
+      // Delay the animation until after the dice tray's 5-second roll display finishes
       setTimeout(() => {
-        setLastAttackResult({
-          hit: data.hit, roll: data.roll, ac: data.ac, targetName: data.targetName,
-          damage: (data as any).damage, through: (data as any).through, targetDown: (data as any).targetDown,
-          criticalInjury: (data as any).criticalInjury, shieldAbsorbed: (data as any).shieldAbsorbed,
-        });
         // Skip animation if the target rhombus isn't rendered in this client's current view
         if (!(window as any).activeRhombuses?.[data.targetId]) return;
         setAttackAnimations(prev => [...prev, {
@@ -1229,13 +1254,7 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem('audioEnabled', JSON.stringify(audioEnabled));
-    const loopSound = new Audio('/Loop_seamless_fixed.mp3');
-    loopSound.loop = true; loopSound.volume = 0.01 * ((window as any).masterVolume ?? 0.5);
-    const playAudio = async () => { if (audioEnabled) { try { await loopSound.play(); } catch (e) {} } };
-    if (!audioEnabled) loopSound.pause();
-    document.addEventListener('click', playAudio, { once: true });
-    return () => { document.removeEventListener('click', playAudio); loopSound.pause(); };
-  }, [audioEnabled, masterVolume]);
+  }, [audioEnabled]);
 
   const [isGeneratingMap, setIsGeneratingMap] = useState(false);
 
@@ -1428,8 +1447,31 @@ function App() {
     setUserName(name);
     setIsLoggedIn(true);
     if (socketRef.current) socketRef.current.emit('identify', token ? { userName: name, playerToken: token } : name);
-    if (audioEnabled) { const s = new Audio('/StartUp.mp3'); s.volume = 0.20 * ((window as any).masterVolume ?? 0.5); s.play().catch(() => {}); }
   };
+
+  /**
+   * The startup sound, as the login window fades in after the boot.
+   *
+   * Browsers refuse sound until the page has been clicked or typed in, and the boot needs
+   * neither. So it is tried straight away, and if refused it plays on the first click or key
+   * instead - usually the first letter of the operator's name.
+   */
+  const playStartup = () => {
+    if (!audioEnabledRef.current) return;
+    const s = new Audio('/StartUp.mp3');
+    s.volume = 0.20 * ((window as any).masterVolume ?? 0.5);
+    s.play().catch(() => {
+      const retry = () => {
+        window.removeEventListener('pointerdown', retry);
+        window.removeEventListener('keydown', retry);
+        s.play().catch(() => {});
+      };
+      window.addEventListener('pointerdown', retry);
+      window.addEventListener('keydown', retry);
+    });
+  };
+  const playStartupRef = useRef(playStartup);
+  playStartupRef.current = playStartup;
 
   const handleApprovePlayer = async (username: string) => {
     await fetch(`/api/player/admin/players/${username}/approve`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
@@ -1467,12 +1509,20 @@ function App() {
     setPendingResets(prev => prev.filter(r => r.requestId !== requestId));
   };
 
+  /** HIT_POINTS: the token window, open on HEALTH - whose, hitPointsTarget() decides. */
+  const openHealth = () => {
+    const found = hitPointsTarget({ isGm: token !== '', selected: selectedLocation, locations, userName });
+    if (!found) return;
+    if ('notice' in found) { setNotification(found.notice); return; }
+    if (selectedLocation?.id !== found.token.id) setSelectedLocation(found.token);
+    setTokenFolderRequest((r) => ({ folder: 'health', seq: (r?.seq ?? 0) + 1 }));
+  };
+  const healthShowing = !!selectedLocation && isTokenShape(selectedLocation.shape) && tokenFolder === 'health';
+
   const handleLogout = () => {
     // 1. Immediately close all UI elements for a clean fade-out
     setIsChatOpen(false);
     setIsDiceTrayOpen(false);
-    setIsHitPointsOpen(false);
-    setReviewHealthOwner(null);
     setActiveSidebarMenu('none');
     setSelectedLocation(null);
     setTargetObject(null);
@@ -1546,7 +1596,9 @@ function App() {
           }}
         />
       )}
-      {!isLoggedIn && !IS_SPECTATOR && (
+      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onDone={endBoot} onLine={bootLine} onTouch={bootTouch} />}
+      {!isLoggedIn && !IS_SPECTATOR && bootDone && (
+        <div className={loginFadeIn ? 'login-layer login-fade-in' : 'login-layer'}>
         <SecureLogin
           secureModeEnabled={secureModeEnabled}
           audioEnabled={audioEnabled}
@@ -1568,6 +1620,7 @@ function App() {
           onThemeChange={setCurrentTheme}
           currentTheme={currentTheme}
         />
+        </div>
       )}
       {isLoggedIn && (
         <>
@@ -1655,8 +1708,8 @@ function App() {
               syncRhombusToDB={syncRhombusToDB}
               view={view}
               activeBattleMapData={activeBattleMapData}
-              isHitPointsOpen={isHitPointsOpen}
-              setIsHitPointsOpen={setIsHitPointsOpen}
+              isHitPointsOpen={healthShowing}
+              setIsHitPointsOpen={(open) => (open ? openHealth() : setSelectedLocation(null))}
               activeUsers={activeUsers}
               setIsDiceTrayOpen={setIsDiceTrayOpen}
               customDice={customDice}
@@ -1666,7 +1719,7 @@ function App() {
               measureMode={measureMode}
               setMeasureMode={setMeasureMode}
               attackPending={attackPending}
-              onCancelAttack={() => { setAttackPending(null); setLastAttackResult(null); }}
+              onCancelAttack={() => setAttackPending(null)}
               isRadioOpen={isAdmin ? isRadioFeedOpen : isRadioPlayerOpen}
               onToggleRadio={() => {
                 if (isAdmin) {
@@ -2032,7 +2085,7 @@ function App() {
                 onOpenLink={(source) => {
                   // Linked fields jump to the window that owns the value
                   if (source === 'bank_balance') setIsBankOpen(true);
-                  else setIsHitPointsOpen(true);
+                  else openHealth();
                 }}
                 onRolled={() => setIsDiceTrayOpen(true)}
                 onOpenVehicles={() => setIsVehiclesOpen(true)}
@@ -2163,6 +2216,14 @@ function App() {
                 socket={socketRef.current}
                 userName={userName}
                 onClose={() => setShopLocation(null)}
+                preview={(
+                  <BuildingPreview
+                    location={shopLocation}
+                    parts={locations.filter((l: any) => l.parent_id === shopLocation.id)}
+                    width={TERMINAL_PREVIEW.width}
+                    height={TERMINAL_PREVIEW.height}
+                  />
+                )}
               />
             )}
 
@@ -2216,55 +2277,6 @@ function App() {
                 directorState={directorState}
                 updateDirector={updateDirector}
                 spectatorCount={spectatorCount}
-              />
-            )}
-            {isHitPointsOpen && (
-              <HitPointsMenu
-                targetRhombus={(() => {
-                  if (selectedLocation && selectedLocation.id !== -1) {
-                    return locations.find((l: any) => l.id === selectedLocation.id) ?? null;
-                  }
-                  if (selectedLocation?.owner) {
-                    return locations.find((l: any) => l.shape === 'rhombus' && l.owner === selectedLocation.owner) ?? null;
-                  }
-                  return locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName) ?? null;
-                })()}
-                token={token}
-                refreshLocations={fetchLocations}
-                pos={hitPointsPos}
-                setPos={setHitPointsPos}
-                onClose={() => setIsHitPointsOpen(false)}
-                gameSystem={gameSystem}
-              />
-            )}
-            {reviewHealthOwner && (() => {
-              const rhombusShapes = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];
-              // Owner fallback must prefer the actual player token: generated
-              // enemy/friendly tokens stamp their creator as owner, and an
-              // older enemy row would otherwise shadow the player's rhombus.
-              const reviewLoc = (reviewHealthLocId !== null ? locations.find((l: any) => l.id === reviewHealthLocId) : null)
-                ?? locations.find((l: any) => l.shape === 'rhombus' && l.owner === reviewHealthOwner)
-                ?? locations.find((l: any) => rhombusShapes.includes(l.shape) && l.owner === reviewHealthOwner)
-                ?? (selectedLocation?.owner === reviewHealthOwner ? selectedLocation : null);
-              return reviewLoc ? (
-                <HealthReviewWindow
-                  location={reviewLoc}
-                  pos={reviewHealthPos}
-                  setPos={setReviewHealthPos}
-                  onClose={() => { setReviewHealthOwner(null); setReviewHealthLocId(null); }}
-                  socket={socketRef.current}
-                  gameSystem={gameSystem}
-                  onRolled={() => setIsDiceTrayOpen(true)}
-                />
-              ) : null;
-            })()}
-            {quickSheetOwner && (
-              <QuickSheetCard
-                username={quickSheetOwner}
-                socket={socketRef.current}
-                pos={quickSheetPos}
-                setPos={setQuickSheetPos}
-                onClose={() => setQuickSheetOwner(null)}
               />
             )}
             {isNpcLibraryOpen && token && (
@@ -2341,13 +2353,155 @@ function App() {
               const isAdmin = token !== '';
               const canManage = isRhombus && (isAdmin || (isPlayerRhombus && isOwner));
               
+              /** Mark this spot for everyone. Shared by the building and token windows. */
+              const pingSelected = () => {
+                const loc = selectedLocation;
+                if (loc && socketRef.current) {
+                    let pingX = loc.x;
+                    let pingY = (loc.y || 0) + (loc.height / 2);
+                    let pingZ = loc.z;
+                    
+                    if (targetObject) {
+                        const box = new THREE.Box3().setFromObject(targetObject);
+                        const center = new THREE.Vector3();
+                        box.getCenter(center);
+                        pingX = center.x;
+                        pingY = center.y;
+                        pingZ = center.z;
+                    }
+                    
+                    const size = Math.max(loc.width, loc.height, loc.depth);
+                    socketRef.current.emit('ping_location', {
+                        x: pingX,
+                        y: pingY,
+                        z: pingZ,
+                        color: rhombusState.color || '#00ccff',
+                        size: size,
+                        battle_map_id: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
+                        floor_index: view === 'battle_map' && activeBattleMapData && activeBattleMapData.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
+                    });
+                }
+              };
+
               // Show window if not admin OR if it's a rhombus that needs management OR just to view info
-              if (selectedLocation && (!token || !showAdminPanel || canManage)) {
+              if (selectedLocation && (!token || !showAdminPanel || canManage) && !isRhombus) {
+                /**
+                 * Buildings get the terminal window. The buttons are decided here, where the
+                 * state they depend on lives, and handed over as a list: the window lays
+                 * them out and knows nothing about shops, battle maps or the stream camera.
+                 */
+                const actions: BuildingAction[] = buildBuildingActions({
+                  shopHere: shopsAvailable(gameSystem) && isShop(selectedLocation.building_type),
+                  hasBattleMaps: currentLocBattleMaps.length > 0,
+                  isAdmin,
+                  systemHasVehicles: hasVehicles(gameSystem),
+                }, {
+                  location: selectedLocation,
+                  userName,
+                  emit: (event, payload) => socketRef.current?.emit(event, payload),
+                  someoneEditing: isSomeoneEditing,
+                  notify: setNotification,
+                  open: {
+                    shop: (loc) => setShopLocation(loc),
+                    battleMap: (id) => enterBattleMap(id),
+                    enemyVehicles: () => setIsEnemyVehiclesOpen(true),
+                  },
+                  ping: pingSelected,
+                  broadcast: () => updateDirector({ cameraMode: 'director', target: computeBroadcastFraming(selectedLocation) }),
+                });
                 return (
-                  <DraggableWindow 
-                    title={isRhombus ? `ID: ${tokenSheetLink?.sheet_name || selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}` : (isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation))}
-                    pos={infoPanelPos} 
-                    setPos={setInfoPanelPos} 
+                  <BuildingWindow
+                    location={selectedLocation}
+                    parts={locations.filter((l: any) => l.parent_id === selectedLocation.id)}
+                    title={`SITE.EXE · ${isUserDefinedName(selectedLocation.name) ? selectedLocation.name : getStructLabel(selectedLocation)}`}
+                    gameSystem={gameSystem}
+                    pos={infoPanelPos}
+                    setPos={setInfoPanelPos}
+                    onClose={() => setSelectedLocation(null)}
+                    actions={actions}
+                    isPrimaryAdmin={isAdmin && isPrimaryAdmin}
+                    token={token}
+                  />
+                );
+              }
+
+              if (selectedLocation && (!token || !showAdminPanel || canManage)) {
+                /**
+                 * Player and NPC tokens get the terminal window too. Every button below
+                 * shows for exactly the people it showed for in the old window - the
+                 * conditions are carried over one for one - and the window only lays them out.
+                 */
+                const isNpc = selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus';
+                const linked = tokenSheetLink?.location_id === selectedLocation.id;
+                const sheetHere = linked && tokenSheetLink?.system === gameSystem;
+                const template = getTemplate(gameSystem);
+                const tiers = template.npcTiers;
+                const canAttack = isLoggedIn && !isOwner;
+                const attackingThis = attackPending?.targetId === selectedLocation.id;
+                const canAddToInit = isAdmin && isNpc && !!initiative.state
+                  && !initiative.state.combatants.some((c: any) => c.id === `npc:${selectedLocation.id}`);
+                // Who gets which button and folder, and what each button does, is in
+                // tokenActions.ts, where all of it is tested; this hands over what they reach for.
+                const viewer: TokenViewer = {
+                  isAdmin, isPrimaryAdmin: isAdmin && isPrimaryAdmin, isOwner, isLoggedIn,
+                  isPlayerToken: isPlayerRhombus, hasOwner: !!selectedLocation.owner,
+                  sheetHere, linked, attackPending: !!attackPending, sheetCombat: hasSheetCombat(gameSystem),
+                  canManage, hasRoster: vehicleRoster.hasVehicles, systemHasVehicles: hasVehicles(gameSystem),
+                  hasBattleMaps: currentLocBattleMaps.length > 0,
+                };
+                const tokenFolders = tokenView(viewer);
+                const tokenActions: TerminalAction[] = buildTokenActions(viewer, {
+                  location: selectedLocation,
+                  authToken: token,
+                  emit: (event, payload) => socketRef.current?.emit(event, payload),
+                  fetch: (url, init) => fetch(url, init),
+                  refreshLocations: fetchLocations,
+                  sheetLink: linked && tokenSheetLink ? { sheet_id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label } : null,
+                  tier: tiers && tiers.length > 0 ? (genTier || tiers[0].id) : undefined,
+                  isOwner,
+                  open: {
+                    ownSheet: () => setIsSheetOpen(true),
+                    playerSheet: (owner) => setOpenPlayerSheetUser(owner),
+                    npcSheet: (sheet) => setOpenNpcSheet(sheet),
+                    editLocation: (loc) => { setIsEditModalOpen(true); setActiveEditLocation(loc); setEditData({ ...loc, name: loc.name || '', description: loc.description || '', npcs: loc.npcs || '', owner: loc.owner || '', baseWidth: loc.width, baseHeight: loc.height, baseDepth: loc.depth, isFavorite: !!loc.isFavorite, isDanger: !!loc.isDanger }); },
+                    vehicles: () => setIsVehiclesOpen(true),
+                    bank: (owner) => setAdminBankPlayer(owner),
+                    enemyVehicles: () => setIsEnemyVehiclesOpen(true),
+                    battleMap: (id) => enterBattleMap(id),
+                  },
+                  ping: pingSelected,
+                  broadcast: () => updateDirector({ cameraMode: 'director', target: computeBroadcastFraming(selectedLocation) }),
+                  clearSelection: () => setSelectedLocation(null),
+                });
+
+                const defLabel = template.tokenDefense?.label ?? 'AC';
+                const defense = { label: defLabel, melee: selectedLocation.melee_ac ?? 10, ranged: selectedLocation.ranged_ac ?? null };
+                // Health reads the live row, not the snapshot taken on click. A player who has
+                // never placed a token is shown one with id -1; theirs is found by owner.
+                const liveToken = selectedLocation.id !== -1
+                  ? locations.find((l: any) => l.id === selectedLocation.id) ?? null
+                  : locations.find((l: any) => l.shape === 'rhombus' && l.owner === selectedLocation.owner) ?? null;
+                const healthPanel = tokenFolders.health === 'edit'
+                  ? (
+                    <HitPointsPanel
+                      target={liveToken}
+                      token={token}
+                      refreshLocations={fetchLocations}
+                      gameSystem={gameSystem}
+                      onCreate={selectedLocation.id === -1 && selectedLocation.owner
+                        ? () => createPlayerTokenRow({ fetch: (url, init) => fetch(url, init), authToken: token, refreshLocations: fetchLocations }, selectedLocation.owner as string)
+                        : undefined}
+                    />
+                  )
+                  : (liveToken
+                    ? <HealthReviewPanel location={liveToken} socket={socketRef.current} gameSystem={gameSystem} onRolled={() => setIsDiceTrayOpen(true)} />
+                    : <div style={{ opacity: 0.7 }}>NO VITALS · NOT ON THE MAP</div>);
+                return (
+                  <TokenWindow
+                    location={selectedLocation}
+                    title={`ID.EXE · ${tokenSheetLink?.sheet_name || selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}`}
+                    pos={infoPanelPos}
+                    setPos={setInfoPanelPos}
                     onClose={() => setSelectedLocation(null)}
                     titleControls={
                       selectedLocation.shape === 'rhombus' && selectedLocation.owner
@@ -2368,318 +2522,63 @@ function App() {
                         )
                         : undefined
                     }
-                  >
-                    <div className="content">
-                      {isRhombus ? (
-                        <>
-                          {tokenSheetLink?.portrait_url && (
-                            <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
-                              <div style={{ position: 'relative', width: '120px', height: '120px', border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 60%, transparent)', overflow: 'hidden' }}>
-                                <TvPortrait src={tokenSheetLink.portrait_url} silhouette={Number(tokenSheetLink.portrait_shadow_filter ?? 0) !== 0} />
-                              </div>
-                            </div>
-                          )}
-                          <p><strong>DATA_DESCRIPTION:</strong> {tokenSheetLink?.sheet_description || selectedLocation.description || 'NO_DATA'}</p>
-                          {/* Defense display (AC or DV per game system) — admin can edit; owner can view their own; other players see nothing */}
-                          {(isAdmin || isOwner) && (() => { const defLabel = getTemplate(gameSystem).tokenDefense?.label ?? 'AC'; return (
-                            isAdmin && acEdit ? (
-                              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <strong style={{ minWidth: '90px' }}>MELEE_{defLabel}:</strong>
-                                  <input type="number" min="0" value={acEdit.melee} onChange={e => setAcEdit(a => a ? { ...a, melee: e.target.value } : a)} style={{ width: '60px' }} />
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <strong style={{ minWidth: '90px' }}>RANGED_{defLabel}:</strong>
-                                  <input type="number" min="0" value={acEdit.ranged} onChange={e => setAcEdit(a => a ? { ...a, ranged: e.target.value } : a)} style={{ width: '60px' }} />
-                                  <span title={`Leave blank to use Melee ${defLabel}`} style={{ cursor: 'help', color: 'var(--green)', fontSize: '12px' }}>?</span>
-                                </div>
-                                <div style={{ display: 'flex', gap: '6px' }}>
-                                  <button className="upload-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={async () => {
-                                    const meleeVal = acEdit.melee === '' ? null : parseInt(acEdit.melee, 10);
-                                    const rangedVal = acEdit.ranged === '' ? null : parseInt(acEdit.ranged, 10);
-                                    const loc = selectedLocation;
-                                    await fetch(`/api/locations/${loc.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...loc, melee_ac: meleeVal, ranged_ac: rangedVal }) });
-                                    fetchLocations();
-                                    // selectedLocation is a snapshot - refresh it so the new values show immediately
-                                    setSelectedLocation((prev: any) => prev && prev.id === loc.id ? { ...prev, melee_ac: meleeVal, ranged_ac: rangedVal } : prev);
-                                    setAcEdit(null);
-                                  }}>SAVE</button>
-                                  <button className="utility-btn" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => setAcEdit(null)}>CANCEL</button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div style={{ marginTop: '8px' }}>
-                                <p><strong>MELEE_{defLabel}:</strong> {selectedLocation.melee_ac ?? 10}</p>
-                                <p><strong>RANGED_{defLabel}:</strong> {selectedLocation.ranged_ac != null ? selectedLocation.ranged_ac : <span style={{ color: 'var(--text-muted, #888)' }}>{selectedLocation.melee_ac ?? 10} (melee)</span>}</p>
-                                {isAdmin && (
-                                  <button className="utility-btn" style={{ marginTop: '4px', padding: '3px 10px', fontSize: '11px' }} onClick={() => setAcEdit({ melee: String(selectedLocation.melee_ac ?? 10), ranged: selectedLocation.ranged_ac != null ? String(selectedLocation.ranged_ac) : '' })}>EDIT_{defLabel}</button>
-                                )}
-                              </div>
-                            )
-                          ); })()}
-                        </>
-                      ) : (
-                        <>
-                          {selectedLocation.district_name && <p><strong>DISTRICT:</strong> {selectedLocation.district_name}</p>}
-                          <p><strong>DESCRIPTION:</strong> {selectedLocation.description || 'NO_DATA'}</p>
-                          <p><strong>RESIDENTS:</strong> {selectedLocation.npcs || 'UNKNOWN'}</p>
-
-                          {/* Shops exist under every system with a sheet. The gate is on
-                              the server too - this just keeps a control off screens where
-                              pressing it would only ever return a refusal. */}
-                          {shopsAvailable(gameSystem) && (
-                            <div style={{ borderTop: '1px solid var(--dark-green)', marginTop: 8, paddingTop: 8 }}>
-                              {/* Read-only here. Setting it belongs in the edit window
-                                  beside the building's other properties, not in the panel
-                                  a player opens to look at it. */}
-                              {buildingTypeById(selectedLocation.building_type) && (
-                                <p><strong>TYPE:</strong> {typeLabel(selectedLocation.building_type, gameSystem)}</p>
-                              )}
-
-                              {isShop(selectedLocation.building_type) && (
-                                <button
-                                  className="upload-btn"
-                                  style={{ width: '100%' }}
-                                  onClick={() => setShopLocation(selectedLocation)}
-                                >
-                                  SHOP
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    {/* The GM's enemy cars. Admin-only, since the roster never reaches a
-                        player's client at all — which is what keeps enemy pools and armour
-                        from being a question about what players may see. */}
-                    {isAdmin && hasVehicles(gameSystem) && (
-                      <button
-                        className="upload-btn"
-                        style={{ marginTop: '10px', fontSize: '0.7rem' }}
-                        title="Enemy vehicles, kept on NPC sheets between sessions"
-                        onClick={() => setIsEnemyVehiclesOpen(true)}
-                      >
-                        ENEMY VEHICLES
-                      </button>
-                    )}
-                    <button className="upload-btn" style={{marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: 'var(--blue)', color: '#fff'}} onClick={() => {
-                        if (socketRef.current) {
-                            let pingX = selectedLocation.x;
-                            let pingY = (selectedLocation.y || 0) + (selectedLocation.height / 2);
-                            let pingZ = selectedLocation.z;
-                            
-                            if (targetObject) {
-                                const box = new THREE.Box3().setFromObject(targetObject);
-                                const center = new THREE.Vector3();
-                                box.getCenter(center);
-                                pingX = center.x;
-                                pingY = center.y;
-                                pingZ = center.z;
-                            }
-                            
-                            const size = Math.max(selectedLocation.width, selectedLocation.height, selectedLocation.depth);
-                            socketRef.current.emit('ping_location', {
-                                x: pingX,
-                                y: pingY,
-                                z: pingZ,
-                                color: rhombusState.color || '#00ccff',
-                                size: size,
-                                battle_map_id: view === 'battle_map' && activeBattleMapData ? activeBattleMapData.locationId : null,
-                                floor_index: view === 'battle_map' && activeBattleMapData && activeBattleMapData.currentFloorIndex !== undefined ? activeBattleMapData.currentFloorIndex : null
+                    // An NPC's portrait only ever comes through its sheet link, silhouette and
+                    // all, so a hidden face is never shown by another route. A player's is
+                    // public - it is on their ID card.
+                    portrait={isNpc
+                      ? (tokenSheetLink?.portrait_url ? { src: tokenSheetLink.portrait_url, silhouette: Number(tokenSheetLink.portrait_shadow_filter ?? 0) !== 0 } : null)
+                      : (selectedLocation.portrait_url ? { src: selectedLocation.portrait_url, silhouette: false } : null)}
+                    description={tokenSheetLink?.sheet_description || selectedLocation.description || ''}
+                    actions={tokenActions}
+                    operator={isPlayerRhombus && selectedLocation.owner ? selectedLocation.owner : null}
+                    socket={socketRef.current}
+                    health={healthPanel}
+                    // AC or DV: the GM edits it under HEALTH; the owner reads theirs in QUICK
+                    // ACTIONS; other players never see it.
+                    gmHealth={tokenFolders.gmSections
+                      ? {
+                        defense,
+                        onSaveDefense: async (meleeVal, rangedVal) => {
+                          const loc = selectedLocation;
+                          await fetch(`/api/locations/${loc.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ ...loc, melee_ac: meleeVal, ranged_ac: rangedVal }) });
+                          fetchLocations();
+                          // selectedLocation is a snapshot - refresh it so the new values show immediately
+                          setSelectedLocation((prev: any) => prev && prev.id === loc.id ? { ...prev, melee_ac: meleeVal, ranged_ac: rangedVal } : prev);
+                        },
+                        onAddToInit: canAddToInit
+                          ? (score: number) => {
+                            const npcName = selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? `ENEMY_${selectedLocation.id}` : `FRIENDLY_${selectedLocation.id}`);
+                            initiative.submitRoll({
+                              id: `npc:${selectedLocation.id}`,
+                              name: npcName,
+                              portraitUrl: (selectedLocation as any).portrait_url ?? undefined,
+                              score,
+                              breakdown: `MANUAL(${score}) = ${score}`,
+                              diceResults: {},
+                              isNpc: true,
+                              isFriendly: selectedLocation.shape === 'friendly_rhombus',
+                              floorIndex: activeBattleMapData?.currentFloorIndex,
                             });
-                        }
-                    }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/>
-                        </svg>
-                        BROADCAST PING
-                    </button>
-                    {isAdmin && (
-                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#ff00aa', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}} title="Point the stream camera at this object" onClick={() => {
-                          updateDirector({ cameraMode: 'director', target: computeBroadcastFraming(selectedLocation) });
-                      }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                        </svg>
-                        BROADCAST_THIS
-                      </button>
-                    )}
-                    {isAdmin && isPlayerRhombus && (
-                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: '#00ff66', color: '#000'}} onClick={() => {
-                          setAdminBankPlayer(selectedLocation.owner);
-                      }}>VIEW_BANK</button>
-                    )}
-                    {canManage && (
-                      <button className="upload-btn danger-btn" style={{marginTop: '10px'}} onClick={async () => {
-                        const res = await fetch(`/api/locations/${selectedLocation.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-                        if (res.ok) { setSelectedLocation(null); fetchLocations(); }
-                      }}>PURGE_DATA_POINT</button>
-                    )}
-                    {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && tokenSheetLink?.location_id !== selectedLocation.id && (
-                      <button className="upload-btn" style={{marginTop: '10px'}} onClick={() => { setIsEditModalOpen(true); setActiveEditLocation(selectedLocation); setEditData({ ...selectedLocation, name: selectedLocation.name || '', description: selectedLocation.description || '', npcs: selectedLocation.npcs || '', owner: selectedLocation.owner || '', baseWidth: selectedLocation.width, baseHeight: selectedLocation.height, baseDepth: selectedLocation.depth, isFavorite: !!selectedLocation.isFavorite, isDanger: !!selectedLocation.isDanger }); }}>EDIT_DATA_POINT</button>
-                    )}
-                    {isAdmin && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && (
-                      tokenSheetLink?.location_id === selectedLocation.id && tokenSheetLink?.system === gameSystem ? (
-                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
-                          setOpenNpcSheet({ id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label, token_shape: selectedLocation.shape, locationId: selectedLocation.id });
-                        }}>OPEN_SHEET</button>
-                      ) : (() => {
-                        const tiers = getTemplate(gameSystem).npcTiers;
-                        return (
-                          <div style={{ marginTop: '10px', display: 'flex', gap: '6px', alignItems: 'center' }}>
-                            {tiers && tiers.length > 0 && (
-                              <select
-                                aria-label="NPC tier"
-                                value={genTier || tiers[0].id}
-                                onChange={(e) => setGenTier(e.target.value)}
-                                style={{ background: 'color-mix(in srgb, var(--black) 70%, transparent)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.7rem', padding: '0 4px', height: '26px', boxSizing: 'border-box', marginTop: '15px' }}
-                              >
-                                {tiers.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                              </select>
-                            )}
-                            <button className="upload-btn" style={{ flex: 1, backgroundColor: '#2200aa', height: '28px', boxSizing: 'border-box' }} onClick={() => {
-                              socketRef.current?.emit('generateNpcSheet', {
-                                location_id: selectedLocation.id,
-                                tier: tiers && tiers.length > 0 ? (genTier || tiers[0].id) : undefined,
-                              });
-                            }}>GENERATE_SHEET</button>
-                          </div>
-                        );
-                      })()
-                    )}
-                    {/* Sheetless NPC manual initiative roll */}
-                    {isAdmin && initiative.state && (selectedLocation.shape === 'enemy_rhombus' || selectedLocation.shape === 'friendly_rhombus') && !initiative.state.combatants.some((c: any) => c.id === `npc:${selectedLocation.id}`) && (
-                      <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '10px' }}>
-                        <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', letterSpacing: '1px', marginBottom: '6px' }}>INITIATIVE SCORE</div>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <input
-                            type="number"
-                            min="1"
-                            max="99"
-                            placeholder="SCORE"
-                            value={manualInitScore}
-                            onChange={e => setManualInitScore(e.target.value)}
-                            style={{ flex: 1, background: 'transparent', border: '1px solid var(--dark-green)', color: 'var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '4px 6px', width: '60px' }}
-                          />
-                          <button
-                            className="upload-btn"
-                            style={{ flex: 2 }}
-                            disabled={!manualInitScore || isNaN(Number(manualInitScore)) || Number(manualInitScore) < 1}
-                            onClick={() => {
-                              const score = Number(manualInitScore);
-                              const npcName = selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? `ENEMY_${selectedLocation.id}` : `FRIENDLY_${selectedLocation.id}`);
-                              initiative.submitRoll({
-                                id: `npc:${selectedLocation.id}`,
-                                name: npcName,
-                                portraitUrl: (selectedLocation as any).portrait_url ?? undefined,
-                                score,
-                                breakdown: `MANUAL(${score}) = ${score}`,
-                                diceResults: {},
-                                isNpc: true,
-                                isFriendly: selectedLocation.shape === 'friendly_rhombus',
-                                floorIndex: activeBattleMapData?.currentFloorIndex,
-                              });
-                              setManualInitScore('');
-                            }}
-                          >
-                            ADD TO INIT
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {/* The shared seating window. Only where there is something to seat
-                        anyone in — an empty roster means the button says nothing. */}
-                    {isRhombus && vehicleRoster.hasVehicles && (
-                      <button
-                        className="upload-btn"
-                        style={{ marginTop: '10px', width: '100%' }}
-                        onClick={() => setIsVehiclesOpen(true)}
-                      >
-                        VEHICLES
-                      </button>
-                    )}
-                    {/* Player token sheet: owner opens their own; admin opens any player's */}
-                    {selectedLocation.shape === 'rhombus' && selectedLocation.owner && (isOwner || isAdmin) && (
-                      <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
-                        if (isOwner) setIsSheetOpen(true);
-                        else setOpenPlayerSheetUser(selectedLocation.owner);
-                      }}>OPEN_SHEET</button>
-                    )}
-                    {/* ATTACK — visible to any logged-in player not attacking their own rhombus */}
-                    {isRhombus && isLoggedIn && !isOwner && (
-                      <div style={{ marginTop: '10px' }}>
-                        {attackPending?.targetId === selectedLocation.id ? (
-                          <div style={{ fontSize: '12px', color: 'var(--green)', border: '1px solid var(--green)', padding: '6px 10px' }}>
-                            {hasSheetCombat(gameSystem)
-                              ? 'SELECT_WEAPON — DICE_ROLLER'
-                              : <>AWAITING_ROLL — {attackPending.attackType.toUpperCase()}{token ? ` vs ${getTemplate(gameSystem).tokenDefense?.label ?? 'AC'} ${attackPending.ac}` : ''}</>}
-                          </div>
-                        ) : (
-                          <>
-                            {attackPending ? (
-                              <div style={{ fontSize: '11px', color: '#888' }}>Attack in progress vs {attackPending.targetName}</div>
-                            ) : hasSheetCombat(gameSystem) ? (
-                              // Sheet-driven systems: the weapon decides melee vs
-                              // ranged - one button, pick the weapon in the dice menu
-                              <button className="upload-btn" style={{ width: '100%', backgroundColor: '#cc2200', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'melee' }); }}>⚔ ATTACK</button>
-                            ) : (
-                              <div style={{ display: 'flex', gap: '6px' }}>
-                                <button className="upload-btn" style={{ flex: 1, backgroundColor: '#cc2200', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'melee' }); }}>⚔ MELEE</button>
-                                <button className="upload-btn" style={{ flex: 1, backgroundColor: '#884400', color: '#fff' }} onClick={() => { socketRef.current?.emit('initiateAttack', { targetId: selectedLocation.id, attackType: 'ranged' }); }}>🏹 RANGED</button>
-                              </div>
-                            )}
-                            {lastAttackResult && lastAttackResult.targetName === selectedLocation.name && (
-                              <div style={{ marginTop: '6px', fontSize: '12px', color: lastAttackResult.hit ? '#00ff66' : '#ff4444', border: `1px solid ${lastAttackResult.hit ? '#00ff66' : '#ff4444'}`, padding: '6px 10px' }}>
-                                {lastAttackResult.hit ? 'HIT!' : 'MISS'} — rolled {lastAttackResult.roll}
-                                {lastAttackResult.damage !== undefined && (
-                                  <> · DMG {lastAttackResult.damage}{lastAttackResult.through !== undefined && ` (${lastAttackResult.through} through armor)`}</>
-                                )}
-                                {(lastAttackResult.shieldAbsorbed ?? 0) > 0 && <> · SHIELD −{lastAttackResult.shieldAbsorbed}</>}
-                                {lastAttackResult.criticalInjury && <> · CRIT INJURY!</>}
-                                {lastAttackResult.targetDown && <> · TARGET DOWN</>}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {isRhombus && !isAdmin && !isOwner && (
-                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--dark-green)', color: 'var(--green)', border: '1px solid var(--green)'}} onClick={() => {
-                            setReviewHealthOwner(selectedLocation.owner);
-                            setReviewHealthPos({ x: infoPanelPos.x + 320 > window.innerWidth - 300 ? Math.max(0, infoPanelPos.x - 320) : infoPanelPos.x + 320, y: infoPanelPos.y });
-                            setReviewHealthLocId(selectedLocation.id);
-                            // QuickSheetCard is NOT opened from CHECK_HEALTH — health window only
-                        }}>CHECK_HEALTH</button>
-                    )}
-                    {isRhombus && (isAdmin || (isPlayerRhombus && selectedLocation.owner === userName)) && (
-                        <button className="upload-btn" style={{marginTop: '10px', backgroundColor: 'var(--green)', color: '#000'}} onClick={async () => {
-                            let newX = infoPanelPos.x + 320;
-                            if (newX + 300 > window.innerWidth) newX = Math.max(0, infoPanelPos.x - 320);
-                            setHitPointsPos({ x: newX, y: infoPanelPos.y });
-                            // If no real rhombus exists yet (synthetic location), create a default one
-                            if (selectedLocation.id === -1 && selectedLocation.owner) {
-                                const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === selectedLocation.owner);
-                                if (!existing) {
-                                    await fetch('/api/locations', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                        body: JSON.stringify({ name: selectedLocation.owner, description: '', shape: 'rhombus', owner: selectedLocation.owner, x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1, hp_current: 100, hp_max: 100, hp_temp: 0, battle_map_id: -1, floor_index: -1 })
-                                    });
-                                    await fetchLocations();
-                                }
-                            }
-                            setIsHitPointsOpen(true);
-                        }}>UPDATE_HEALTH</button>
-                    )}
-                    {isAdmin && isPrimaryAdmin && !isRhombus && (
-      <></>
-  )}
-  {currentLocBattleMaps.length > 0 && (
-      <button className="upload-btn" style={{backgroundColor: '#ff00ff', color: 'white'}} onClick={() => enterBattleMap(selectedLocation.id)}>ENTER BATTLE MAP</button>
-  )}
-  {!token && !isRhombus && <button className="upload-btn" onClick={() => { if (isSomeoneEditing) { setNotification("ANOTHER_USER_ACCESSING_DATA_POINTS"); } else { socketRef.current?.emit('requestEditing', { userId: userName, userName, locationId: selectedLocation.id, locationName: selectedLocation.name }); setNotification("REQUEST_SENT_TO_ADMIN"); } }}>REQUEST_EDITING_RIGHTS</button>}
-                  </DraggableWindow>
+                          }
+                          : undefined,
+                      }
+                      : undefined}
+                    quickActions={tokenFolders.quickActions
+                      ? <QuickActions socket={socketRef.current} userName={userName} defense={defense} onRolled={() => setIsDiceTrayOpen(true)} />
+                      : undefined}
+                    attackStatus={!canAttack ? null
+                      : attackingThis
+                        ? (hasSheetCombat(gameSystem)
+                          ? 'SELECT_WEAPON — DICE_ROLLER'
+                          : <>AWAITING_ROLL — {attackPending!.attackType.toUpperCase()}{token ? ` vs ${defLabel} ${attackPending!.ac}` : ''}</>)
+                        : attackPending ? `Attack in progress vs ${attackPending.targetName}` : null}
+                    gmNotesToken={tokenFolders.gmNotes ? token : undefined}
+                    folderRequest={tokenFolderRequest}
+                    onFolderChange={setTokenFolder}
+                    tierPicker={isAdmin && isNpc && !sheetHere && tiers && tiers.length > 0
+                      ? { tiers, value: genTier, onChange: setGenTier }
+                      : undefined}
+                  />
                 );
               }
               return null;

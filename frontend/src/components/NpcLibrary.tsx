@@ -235,7 +235,7 @@ export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId, onOp
 
   return (
     <DraggableWindow
-      title="NPC_LIBRARY"
+      title="NPC_LIBRARY.EXE"
       pos={pos}
       setPos={setPos}
       onClose={onClose}

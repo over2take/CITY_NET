@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { DraggableWindow } from './DraggableWindow';
 import type { Location } from '../types';
 // Inline SVGs so we can tint them with CSS `color` (currentColor)
 export const PersonSVG = ({ color = 'currentColor', style }: { color?: string; style?: React.CSSProperties }) => (
@@ -23,96 +22,166 @@ const BloodSVG = ({ color = 'currentColor', size = 18 }: { color?: string; size?
   </svg>
 );
 
-interface HitPointsMenuProps {
-  targetRhombus: Location | null;
-  token: string;
-  refreshLocations: () => void;
-  pos: { x: number; y: number };
-  setPos: (pos: { x: number; y: number }) => void;
-  onClose: () => void;
-  /** Active game system - CWN shows the STIM_HEAL (+1 STRAIN) button. */
-  gameSystem?: string;
-}
+// Health, two ways: the panel that changes it (your own token, or any token for the GM) and
+// the panel that only shows how someone is doing (anyone else's token). Both live in the
+// token window's HEALTH folder, which is also where the sidebar's HIT_POINTS button goes.
 
 const BODY_PARTS = ['head', 'right_arm', 'torso', 'left_arm', 'right_leg', 'left_leg'] as const;
 type BodyPart = typeof BODY_PARTS[number];
 type StatusFlag = 'blind' | 'bleeding';
-type InjuryMap = Partial<Record<BodyPart | StatusFlag, boolean>>;
+type Injuries = Partial<Record<BodyPart | StatusFlag, boolean>>;
 
-const PART_LABELS: Record<BodyPart, string> = {
-  head:      'HEAD',
-  right_arm: 'R.ARM',
-  torso:     'TORSO',
-  left_arm:  'L.ARM',
-  right_leg: 'R.LEG',
-  left_leg:  'L.LEG',
+export const INJURY_ZONES: Record<string, React.CSSProperties> = {
+  head:      { left: '38%', top: '9%',  width: '24%', height: '20%' },
+  torso:     { left: '33%', top: '29%', width: '34%', height: '35%' },
+  right_arm: { left: '6%',  top: '29%', width: '26%', height: '35%' },
+  left_arm:  { left: '68%', top: '29%', width: '26%', height: '35%' },
+  right_leg: { left: '26%', top: '65%', width: '22%', height: '30%' },
+  left_leg:  { left: '52%', top: '65%', width: '22%', height: '30%' },
 };
 
-const baseBtn: React.CSSProperties = {
-  fontFamily: 'monospace', fontSize: '9px', letterSpacing: '0.5px',
-  cursor: 'pointer', border: '1px solid #333', background: '#111',
-  color: '#666', borderRadius: '3px', padding: '6px 5px',
-  transition: 'all 0.15s', userSelect: 'none',
+const parseInjuries = (raw: unknown): Injuries => {
+  try { return raw ? JSON.parse(String(raw)) : {}; } catch { return {}; }
 };
-const injuredBtn: React.CSSProperties = {
-  ...baseBtn, background: '#3a0000', border: '1px solid var(--danger)',
-  color: 'var(--danger)', textShadow: '0 0 6px var(--danger)',
-};
-const iconBtn = (active: boolean): React.CSSProperties => ({
-  fontFamily: 'monospace', fontSize: '9px', cursor: 'pointer',
-  borderRadius: '3px', userSelect: 'none', transition: 'all 0.15s',
-  display: 'flex', flexDirection: 'column', alignItems: 'center',
-  gap: '4px', padding: '6px 10px',
-  background: active ? '#3a0000' : '#001a00',
-  border: active ? '1px solid var(--danger)' : '1px solid var(--green)',
-  color: active ? 'var(--danger)' : 'var(--green)',
-  textShadow: active ? '0 0 6px var(--danger)' : '0 0 4px var(--green)',
-});
 
-const hitZone = (injured: boolean | undefined): React.CSSProperties => ({
-  position: 'absolute',
-  background: injured ? 'rgba(255,0,0,0.18)' : 'transparent',
-  border: injured ? '1px solid rgba(255,50,50,0.5)' : '1px solid transparent',
-  borderRadius: '3px',
-  cursor: 'pointer',
+const tint = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, var(--black))`;
+const fade = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
+const zoneStyle = (injured: boolean | undefined, clickable: boolean): React.CSSProperties => ({
+  position: 'absolute', padding: 0, borderRadius: '3px',
+  background: injured ? fade('var(--danger)', 22) : 'transparent',
+  border: `1px solid ${injured ? fade('var(--danger)', 60) : 'transparent'}`,
+  cursor: clickable ? 'pointer' : 'default',
   transition: 'background 0.15s, border 0.15s',
 });
 
-export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, setPos, onClose, gameSystem }: HitPointsMenuProps) {
+const flagStyle = (active: boolean, clickable: boolean): React.CSSProperties => ({
+  fontFamily: 'monospace', fontSize: '8px', borderRadius: '3px', userSelect: 'none',
+  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '6px 10px',
+  background: active ? tint('var(--danger)', 20) : tint('var(--green)', 8),
+  border: `1px solid ${active ? 'var(--danger)' : 'var(--green)'}`,
+  color: active ? 'var(--danger)' : 'var(--green)',
+  cursor: clickable ? 'pointer' : 'default',
+});
+
+/**
+ * The body with its hurt parts marked, and the BLIND / BLEED flags beside it. Clicking marks
+ * and unmarks when `onToggle` is given; without it the map is only looked at.
+ */
+function InjuryMap({ injuries, onToggle, onClear }: {
+  injuries: Injuries; onToggle?: (key: BodyPart | StatusFlag) => void; onClear?: () => void;
+}) {
+  const clickable = !!onToggle;
+  return (
+    <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={{ fontSize: '9px', color: 'var(--green)', opacity: 0.6, fontFamily: 'monospace', letterSpacing: '1px', textAlign: 'center' }}>
+        INJURY_MAP
+      </div>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'relative', width: '110px', height: '128px', flexShrink: 0 }}>
+          <PersonSVG color="var(--green)" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.5, pointerEvents: 'none' }} />
+          {BODY_PARTS.map((part) => {
+            const label = part.replace('_', ' ').toUpperCase();
+            const style = { ...zoneStyle(injuries[part], clickable), ...INJURY_ZONES[part] };
+            return clickable
+              ? <button key={part} type="button" title={label} aria-label={label} aria-pressed={!!injuries[part]} onClick={() => onToggle(part)} style={style} />
+              : <div key={part} title={label} data-injured={injuries[part] ? 'yes' : 'no'} style={{ ...style, pointerEvents: 'none' }} />;
+          })}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {(['blind', 'bleeding'] as const).map((flag) => {
+            const active = !!injuries[flag];
+            const color = active ? 'var(--danger)' : 'var(--green)';
+            const inner = (
+              <>
+                {flag === 'blind' ? <EyeSVG color={color} /> : <BloodSVG color={color} />}
+                <span>{flag === 'blind' ? 'BLIND' : 'BLEED'}</span>
+              </>
+            );
+            return clickable
+              ? <button key={flag} type="button" title={flag.toUpperCase()} aria-pressed={active} onClick={() => onToggle(flag)} style={flagStyle(active, true)}>{inner}</button>
+              : <div key={flag} style={flagStyle(active, false)}>{inner}</div>;
+          })}
+        </div>
+      </div>
+      {onClear && Object.values(injuries).some(Boolean) && (
+        <button type="button" className="utility-btn danger-btn" style={{ width: '80%', fontSize: '9px', alignSelf: 'center' }} onClick={onClear}>
+          CLEAR ALL
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** The button that opens and closes the injury map. */
+function InjuryToggle({ open, onClick, size }: { open: boolean; onClick: () => void; size: number }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="INJURIES"
+      aria-label="Injuries"
+      aria-expanded={open}
+      style={{
+        background: open ? 'var(--green)' : 'transparent',
+        border: '1px solid var(--green)', borderRadius: '3px', padding: '4px 6px', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <PersonSVG color={open ? 'var(--black)' : 'var(--green)'} style={{ width: size, height: size, display: 'block' }} />
+    </button>
+  );
+}
+
+// ─── Changing health: your own token, or any for the GM ─────────────────────
+
+interface HitPointsPanelProps {
+  target: Location | null;
+  /** The GM's token. Empty for a player, who may still change their own token's health. */
+  token: string;
+  refreshLocations: () => void;
+  /** Active game system - CWN shows the STIM_HEAL (+1 STRAIN) button. */
+  gameSystem?: string;
+  /** With no token on the map yet, the panel offers to make one - health needs a row. */
+  onCreate?: () => Promise<void> | void;
+}
+
+export function HitPointsPanel({ target, token, refreshLocations, gameSystem, onCreate }: HitPointsPanelProps) {
   const [actionAmount, setActionAmount] = useState(0);
   const [tempAmount, setTempAmount] = useState(0);
   const [maxAmount, setMaxAmount] = useState(0);
   const [injuriesOpen, setInjuriesOpen] = useState(false);
-  const [injuries, setInjuries] = useState<InjuryMap>({});
+  const [injuries, setInjuries] = useState<Injuries>({});
   const [healMsg, setHealMsg] = useState<string | null>(null);
+  const rawInjuries = (target as any)?.injuries;
 
-  useEffect(() => {
-    if (!targetRhombus) return;
-    try {
-      const raw = (targetRhombus as any).injuries;
-      setInjuries(raw ? JSON.parse(raw) : {});
-    } catch { setInjuries({}); }
-  }, [targetRhombus?.id, (targetRhombus as any)?.injuries]);
+  useEffect(() => { setInjuries(parseInjuries(rawInjuries)); }, [target?.id, rawInjuries]);
 
-  const saveInjuries = async (next: InjuryMap) => {
-    if (!targetRhombus) return;
+  if (!target) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '20px' }}>
+        <div style={{ opacity: 0.7 }}>NO_TARGET_ACQUIRED</div>
+        {onCreate && (
+          <button type="button" className="upload-btn" onClick={() => { void onCreate(); }}>CREATE HEALTH RECORD</button>
+        )}
+      </div>
+    );
+  }
+
+  const saveInjuries = async (next: Injuries) => {
     setInjuries(next);
-    await fetch(`/api/locations/${targetRhombus.id}/injuries`, {
+    await fetch(`/api/locations/${target.id}/injuries`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ injuries: next }),
     });
   };
 
-  const toggleInjury = (key: BodyPart | StatusFlag) =>
-    saveInjuries({ ...injuries, [key]: !injuries[key] });
-
   const updateHealth = async (action: string, amount: number) => {
-    if (!targetRhombus) return;
     const bodyData: any = { action, amount };
     if (action === 'set_temp') bodyData.hp_temp = amount;
     if (action === 'set_max') bodyData.hp_max = amount;
-    const res = await fetch(`/api/locations/${targetRhombus.id}/health`, {
+    const res = await fetch(`/api/locations/${target.id}/health`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify(bodyData),
@@ -129,172 +198,84 @@ export function HitPointsMenu({ targetRhombus, token, refreshLocations, pos, set
     refreshLocations();
   };
 
-  const anyInjured = Object.values(injuries).some(Boolean);
-
-
   return (
-    <>
-    <DraggableWindow
-      title={targetRhombus ? `HP: ${targetRhombus.name || 'UNKNOWN'}` : 'HIT_POINTS'}
-      pos={pos} setPos={setPos} onClose={onClose}
-      windowStyle={{ width: '300px', minHeight: '400px', overflow: 'visible' }}
-      contentStyle={{ overflow: 'visible' }}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '10px' }}>
-
-        {!targetRhombus ? (
-          <div style={{ textAlign: 'center', opacity: 0.7, padding: '20px' }}>NO_TARGET_ACQUIRED</div>
-        ) : (<>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-            <div style={{ fontSize: '2rem', color: 'var(--green)', textShadow: 'var(--glow)', fontWeight: 'bold' }}>
-              {targetRhombus.hp_current || 0} / {targetRhombus.hp_max || 0}
-            </div>
-            <button
-              onClick={() => setInjuriesOpen(o => !o)}
-              title="INJURIES"
-              style={{
-                background: injuriesOpen ? 'var(--green)' : 'transparent',
-                border: '1px solid var(--green)',
-                borderRadius: '3px',
-                padding: '4px 6px',
-                cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <PersonSVG color={injuriesOpen ? '#000' : 'var(--green)'} style={{ width: 18, height: 18, display: 'block' }} />
-            </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
+      <HeartMonitor color={hpColorFor(target.hp_current ?? 0, target.hp_max ?? 0)} flatline={(target.hp_current ?? 0) <= 0} />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          <div style={{ fontSize: '2rem', color: 'var(--green)', textShadow: 'var(--glow)', fontWeight: 'bold' }}>
+            {target.hp_current || 0} / {target.hp_max || 0}
           </div>
-            {(targetRhombus.hp_temp ?? 0) > 0 && (
-              <div style={{ color: '#00ccff', fontSize: '0.85rem', textShadow: '0 0 6px #00ccff' }}>+ {targetRhombus.hp_temp} TEMP</div>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <input type="number" placeholder="0" value={actionAmount || ''} onChange={e => setActionAmount(parseInt(e.target.value) || 0)} style={{ width: '100%' }} />
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="upload-btn" onClick={() => updateHealth('heal', actionAmount)} style={{ flex: 1 }}>HEAL</button>
-              <button className="upload-btn danger-btn" onClick={() => updateHealth('damage', actionAmount)} style={{ flex: 1 }}>DAMAGE</button>
-            </div>
-            {gameSystem === 'cities_without_number' && (
-              <button
-                className="upload-btn"
-                title="Field healing (stims, medkits): heals and adds +1 System Strain to the character's sheet. Refused when strain is maxed - no stim benefit. Use HEAL for natural/rest healing."
-                onClick={() => updateHealth('stim_heal', actionAmount)}
-                disabled={!!healMsg}
-                style={{
-                  width: '100%',
-                  color: healMsg?.includes('MAXED') ? 'var(--danger)' : 'var(--warning)',
-                  borderColor: healMsg?.includes('MAXED') ? 'var(--danger)' : 'var(--warning)',
-                }}
-              >
-                {healMsg ?? 'STIM_HEAL (+1 STRAIN)'}
-              </button>
-            )}
-          </div>
-
-          <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {token !== '' && (
-              <div>
-                <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX_HP</label>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <input type="number" placeholder="0" value={maxAmount || ''} onChange={e => setMaxAmount(parseInt(e.target.value) || 0)} style={{ flex: 1 }} />
-                  <button className="upload-btn" style={{ minWidth: 'auto', padding: '0 15px' }} onClick={() => updateHealth('set_max', maxAmount)}>SET</button>
-                </div>
-              </div>
-            )}
-            <div>
-              <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TEMP_HP</label>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <input
-                  type="number" placeholder="0" max="100"
-                  value={tempAmount || ''}
-                  onChange={e => { let val = parseInt(e.target.value) || 0; if (val > 100) val = 100; setTempAmount(val); }}
-                  style={{ flex: 1 }}
-                />
-                <button className="upload-btn" style={{ minWidth: 'auto', padding: '0 15px' }} onClick={() => updateHealth('set_temp', tempAmount)}>SET</button>
-              </div>
-            </div>
-          </div>
-        </>)}
+          <InjuryToggle open={injuriesOpen} onClick={() => setInjuriesOpen((o) => !o)} size={18} />
+        </div>
+        {(target.hp_temp ?? 0) > 0 && (
+          <div style={{ color: 'var(--cyan)', fontSize: '0.85rem', textShadow: '0 0 6px var(--cyan)' }}>+ {target.hp_temp} TEMP</div>
+        )}
       </div>
 
-    </DraggableWindow>
+      {injuriesOpen && (
+        <InjuryMap
+          injuries={injuries}
+          onToggle={(key) => saveInjuries({ ...injuries, [key]: !injuries[key] })}
+          onClear={() => saveInjuries({})}
+        />
+      )}
 
-    {/* Injuries slide-out panel — sibling of DraggableWindow, tracks pos so it moves with dragging */}
-    {injuriesOpen && targetRhombus && (
-      <div style={{
-        position: 'absolute',
-        left: `${pos.x + 298}px`,
-        top: `${pos.y + 2}px`,
-        width: '195px',
-        background: 'var(--black)',
-        border: '2px solid var(--green)',
-        borderLeft: 'none',
-        padding: '8px 8px 6px',
-        display: 'flex', flexDirection: 'column', gap: '4px',
-        boxSizing: 'border-box',
-        zIndex: 999,
-      }}>
-        <div style={{ fontSize: '9px', color: '#555', fontFamily: 'monospace', letterSpacing: '1px', textAlign: 'center' }}>
-          INJURY_MAP
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+        <input type="number" placeholder="0" aria-label="Amount" value={actionAmount || ''} onChange={e => setActionAmount(parseInt(e.target.value) || 0)} style={{ width: '100%', boxSizing: 'border-box' }} />
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="upload-btn" onClick={() => updateHealth('heal', actionAmount)} style={{ flex: 1 }}>HEAL</button>
+          <button className="upload-btn danger-btn" onClick={() => updateHealth('damage', actionAmount)} style={{ flex: 1 }}>DAMAGE</button>
         </div>
-
-        <div style={{ position: 'relative', width: '130px', height: '148px', margin: '0 auto' }}>
-          <PersonSVG color="var(--green)" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.5, pointerEvents: 'none' }} />
-          <button title="HEAD" onClick={() => toggleInjury('head')} style={{ ...hitZone(injuries.head), left: '38%', top: '9%', width: '24%', height: '20%' }} />
-          <button title="TORSO" onClick={() => toggleInjury('torso')} style={{ ...hitZone(injuries.torso), left: '33%', top: '29%', width: '34%', height: '35%' }} />
-          <button title="R.ARM" onClick={() => toggleInjury('right_arm')} style={{ ...hitZone(injuries.right_arm), left: '6%', top: '29%', width: '26%', height: '35%' }} />
-          <button title="L.ARM" onClick={() => toggleInjury('left_arm')} style={{ ...hitZone(injuries.left_arm), left: '68%', top: '29%', width: '26%', height: '35%' }} />
-          <button title="R.LEG" onClick={() => toggleInjury('right_leg')} style={{ ...hitZone(injuries.right_leg), left: '26%', top: '65%', width: '22%', height: '30%' }} />
-          <button title="L.LEG" onClick={() => toggleInjury('left_leg')} style={{ ...hitZone(injuries.left_leg), left: '52%', top: '65%', width: '22%', height: '30%' }} />
-        </div>
-
-        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginTop: '2px' }}>
-          <button style={iconBtn(!!injuries.blind)} onClick={() => toggleInjury('blind')} title="BLIND">
-            <EyeSVG color={injuries.blind ? 'var(--danger)' : 'var(--green)'} />
-            <span style={{ fontSize: '8px' }}>BLIND</span>
-          </button>
-          <button style={iconBtn(!!injuries.bleeding)} onClick={() => toggleInjury('bleeding')} title="BLEEDING">
-            <BloodSVG color={injuries.bleeding ? 'var(--danger)' : 'var(--green)'} />
-            <span style={{ fontSize: '8px' }}>BLEED</span>
-          </button>
-        </div>
-
-        {anyInjured && (
+        {gameSystem === 'cities_without_number' && (
           <button
-            className="utility-btn danger-btn"
-            style={{ width: '80%', fontSize: '9px', marginTop: '2px', alignSelf: 'center' }}
-            onClick={() => saveInjuries({})}
+            className="upload-btn"
+            title="Field healing (stims, medkits): heals and adds +1 System Strain to the character's sheet. Refused when strain is maxed - no stim benefit. Use HEAL for natural/rest healing."
+            onClick={() => updateHealth('stim_heal', actionAmount)}
+            disabled={!!healMsg}
+            style={{
+              width: '100%',
+              color: healMsg?.includes('MAXED') ? 'var(--danger)' : 'var(--warning)',
+              borderColor: healMsg?.includes('MAXED') ? 'var(--danger)' : 'var(--warning)',
+            }}
           >
-            CLEAR ALL
+            {healMsg ?? 'STIM_HEAL (+1 STRAIN)'}
           </button>
         )}
       </div>
-    )}
-    </>
+
+      <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {token !== '' && (
+          <div>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX_HP</label>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <input type="number" placeholder="0" aria-label="Max HP" value={maxAmount || ''} onChange={e => setMaxAmount(parseInt(e.target.value) || 0)} style={{ flex: 1, minWidth: 0 }} />
+              <button className="upload-btn" style={{ width: 'auto', flexShrink: 0, margin: 0, padding: '0 15px' }} onClick={() => updateHealth('set_max', maxAmount)}>SET</button>
+            </div>
+          </div>
+        )}
+        <div>
+          <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TEMP_HP</label>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <input
+              type="number" placeholder="0" max="100" aria-label="Temp HP"
+              value={tempAmount || ''}
+              onChange={e => { let val = parseInt(e.target.value) || 0; if (val > 100) val = 100; setTempAmount(val); }}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <button className="upload-btn" style={{ width: 'auto', flexShrink: 0, margin: 0, padding: '0 15px' }} onClick={() => updateHealth('set_temp', tempAmount)}>SET</button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
-// ─── Read-only health review window ───────────────────────────────────────────
-
-interface HealthReviewWindowProps {
-  location: Location & { injuries?: string };
-  pos: { x: number; y: number };
-  setPos: (p: { x: number; y: number }) => void;
-  onClose: () => void;
-  /** CWN: any player viewing a downed character can attempt to stabilize
-   *  them (an ally's Main Action - the server rolls the CLICKING user's
-   *  Heal skill). Needs the socket and the active system to show. */
-  socket?: any;
-  gameSystem?: string;
-  /** Called after emitting a roll so the app can pop the dice tray. */
-  onRolled?: () => void;
-}
+// ─── Looking at someone else's health ───────────────────────────────────────
 
 export function HeartMonitor({ color, flatline }: { color: string; flatline: boolean }) {
   return (
-    <div style={{ width: '100%', height: '50px', overflow: 'hidden', background: '#000', borderRadius: '3px', border: '1px solid #0a2a0a' }}>
+    <div style={{ width: '100%', height: '50px', overflow: 'hidden', background: 'var(--black)', borderRadius: '3px', border: '1px solid var(--dark-green)' }}>
       <style>{`
         @keyframes ekg-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
         .ekg-live { animation: ekg-scroll 2.4s linear infinite; width: 200%; display: block; }
@@ -318,17 +299,31 @@ export function HeartMonitor({ color, flatline }: { color: string; flatline: boo
   );
 }
 
-export const INJURY_ZONES: Record<string, React.CSSProperties> = {
-  head:      { left: '38%', top: '9%',  width: '24%', height: '20%' },
-  torso:     { left: '33%', top: '29%', width: '34%', height: '35%' },
-  right_arm: { left: '6%',  top: '29%', width: '26%', height: '35%' },
-  left_arm:  { left: '68%', top: '29%', width: '26%', height: '35%' },
-  right_leg: { left: '26%', top: '65%', width: '22%', height: '30%' },
-  left_leg:  { left: '52%', top: '65%', width: '22%', height: '30%' },
+/** The heart monitor's color: how badly hurt, without saying by how much. */
+export const hpColorFor = (hpCurrent: number, hpMax: number) => {
+  const pct = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
+  if (hpCurrent <= 0) return 'var(--danger)';
+  return pct > 0.5 ? 'var(--green)' : pct > 0.25 ? 'var(--warning)' : 'var(--danger)';
 };
 
-export function HealthReviewWindow({ location, pos, setPos, onClose, socket, gameSystem, onRolled }: HealthReviewWindowProps) {
-  const [reviewInjuriesOpen, setReviewInjuriesOpen] = useState(false);
+interface HealthReviewPanelProps {
+  location: Location & { injuries?: string };
+  /** CWN: any player viewing a downed character can attempt to stabilize
+   *  them (an ally's Main Action - the server rolls the CLICKING user's
+   *  Heal skill). Needs the socket and the active system to show. */
+  socket?: any;
+  gameSystem?: string;
+  /** Called after emitting a roll so the app can pop the dice tray. */
+  onRolled?: () => void;
+}
+
+/**
+ * Another player's health, as a picture and never as numbers: the heart monitor's color and
+ * beat, a stun bar's fill, a temp-HP marker, the injury map. How close someone is to going
+ * down is for the table to read, not to count.
+ */
+export function HealthReviewPanel({ location, socket, gameSystem, onRolled }: HealthReviewPanelProps) {
+  const [injuriesOpen, setInjuriesOpen] = useState(false);
   const [stun, setStun] = useState<{ stun_current: number; stun_monitor: number } | null>(null);
 
   // SR6: second damage track - Stun lives on the sheet backing this token.
@@ -358,143 +353,63 @@ export function HealthReviewWindow({ location, pos, setPos, onClose, socket, gam
     return () => { cancelled = true; };
   }, [gameSystem, location.id, socket]);
 
-  const injuries: Record<string, boolean> = (() => {
-    try { return JSON.parse((location as any).injuries || '{}'); } catch { return {}; }
-  })();
-
+  const injuries = parseInjuries(location.injuries);
   const hpCurrent = location.hp_current ?? 0;
-  const hpMax = location.hp_max ?? 0;
-  const hpTemp = location.hp_temp ?? 0;
-  const hpPct = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
   const isDead = hpCurrent <= 0;
-  const hpColor = isDead ? 'var(--danger)' : hpPct > 0.5 ? 'var(--green)' : hpPct > 0.25 ? 'var(--warning)' : 'var(--danger)';
+  const hpColor = hpColorFor(hpCurrent, location.hp_max ?? 0);
 
   return (
-    <DraggableWindow
-      title={`HEALTH: ${(location.owner || 'UNKNOWN').toUpperCase()}`}
-      pos={pos} setPos={setPos} onClose={onClose}
-      windowStyle={{ width: '280px' }}
-      contentStyle={{ overflowY: 'visible' }}
-    >
-      <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-
-        {/* Injury map toggle */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            onClick={() => setReviewInjuriesOpen(o => !o)}
-            title="VIEW INJURIES"
-            style={{
-              background: reviewInjuriesOpen ? 'var(--green)' : 'transparent',
-              border: '1px solid var(--green)',
-              borderRadius: '3px', padding: '4px 6px', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <PersonSVG color={reviewInjuriesOpen ? '#000' : 'var(--green)'} style={{ width: 16, height: 16, display: 'block' }} />
-          </button>
-        </div>
-
-        {/* Heart monitor — flatlines at 0 HP */}
-        <HeartMonitor color={hpColor} flatline={isDead} />
-
-        {/* SR6 Stun track (Physical is the token HP above) */}
-        {stun && (() => {
-          const stunPct = Math.max(0, Math.min(1, stun.stun_current / stun.stun_monitor));
-          const full = stun.stun_current >= stun.stun_monitor;
-          const stunColor = full ? 'var(--danger)' : '#00ccff';
-          return (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontFamily: 'monospace', letterSpacing: '1px', color: stunColor, marginBottom: '2px' }}>
-                <span>STUN{full ? ' — FULL · OVERFLOW → PHYSICAL' : ''}</span>
-                <span>{stun.stun_current} / {stun.stun_monitor}</span>
-              </div>
-              <div style={{ height: '8px', background: '#001a1f', border: `1px solid ${stunColor}`, borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{ width: `${stunPct * 100}%`, height: '100%', background: stunColor, transition: 'width 0.3s ease' }} />
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* CWN: downed player - any viewer can attempt the stabilize check
-            (rolls the viewer's own Heal skill server-side) */}
-        {gameSystem === 'cities_without_number' && isDead && socket && location.shape === 'rhombus' && location.owner && (
-          <button
-            onClick={() => {
-              socket.emit('requestStabilize', { targetUsername: location.owner });
-              onRolled?.();
-            }}
-            title="An ally's Main Action: 2d6 + YOUR Heal + INT mod vs 8 + rounds down. Success: they recover to 1 HP with the Frail condition."
-            style={{
-              alignSelf: 'center', background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)',
-              fontFamily: 'monospace', fontSize: '0.7rem', letterSpacing: '1px', padding: '4px 14px',
-              cursor: 'pointer', animation: 'death-pulse 1.2s ease-in-out infinite',
-            }}
-          >
-            STABILIZE (YOUR HEAL CHECK)
-          </button>
-        )}
-
-        {/* Temp HP */}
-        {hpTemp > 0 && (
-          <div style={{ textAlign: 'center', color: '#00ccff', fontSize: '0.8rem', textShadow: '0 0 6px #00ccff' }}>
-            + {hpTemp} TEMP
-          </div>
-        )}
-
-        {/* Injury map — slides open below, same width as window */}
-        <div style={{
-          overflow: 'hidden',
-          maxHeight: reviewInjuriesOpen ? '400px' : '0px',
-          transition: 'max-height 0.3s ease',
-        }}>
-          <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <div style={{ fontSize: '9px', color: '#555', fontFamily: 'monospace', letterSpacing: '1px', textAlign: 'center' }}>
-              INJURY_MAP
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'center' }}>
-              {/* Body silhouette */}
-              <div style={{ position: 'relative', width: '110px', height: '128px', flexShrink: 0 }}>
-                <PersonSVG color="var(--green)" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.5, pointerEvents: 'none' }} />
-                {Object.keys(INJURY_ZONES).map(zone => (
-                  <div key={zone} title={zone.replace('_', ' ').toUpperCase()} style={{
-                    position: 'absolute',
-                    background: injuries[zone] ? 'rgba(255,0,0,0.25)' : 'transparent',
-                    border: injuries[zone] ? '1px solid rgba(255,50,50,0.6)' : '1px solid transparent',
-                    borderRadius: '3px',
-                    pointerEvents: 'none',
-                    ...INJURY_ZONES[zone],
-                  }} />
-                ))}
-              </div>
-
-              {/* BLIND / BLEED vertically centered alongside body */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {(['blind', 'bleeding'] as const).map(cond => {
-                  const active = !!injuries[cond];
-                  return (
-                    <div key={cond} style={{
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
-                      padding: '6px 10px',
-                      border: `1px solid ${active ? 'var(--danger)' : 'var(--green)'}`,
-                      background: active ? '#3a0000' : '#001a00',
-                      borderRadius: '3px',
-                    }}>
-                      {cond === 'blind'
-                        ? <EyeSVG color={active ? 'var(--danger)' : 'var(--green)'} />
-                        : <BloodSVG color={active ? 'var(--danger)' : 'var(--green)'} />}
-                      <span style={{ fontSize: '8px', color: active ? 'var(--danger)' : 'var(--green)', fontFamily: 'monospace' }}>
-                        {cond === 'blind' ? 'BLIND' : 'BLEED'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <InjuryToggle open={injuriesOpen} onClick={() => setInjuriesOpen((o) => !o)} size={16} />
       </div>
-    </DraggableWindow>
+
+      {/* Heart monitor — flatlines at 0 HP */}
+      <HeartMonitor color={hpColor} flatline={isDead} />
+
+      {/* SR6 Stun track (Physical is the token HP above) */}
+      {stun && (() => {
+        const stunPct = Math.max(0, Math.min(1, stun.stun_current / stun.stun_monitor));
+        const full = stun.stun_current >= stun.stun_monitor;
+        const stunColor = full ? 'var(--danger)' : 'var(--cyan)';
+        return (
+          <div data-testid="stun-track">
+            <div style={{ fontSize: '9px', fontFamily: 'monospace', letterSpacing: '1px', color: stunColor, marginBottom: '2px' }}>
+              STUN{full ? ' — FULL · OVERFLOW → PHYSICAL' : ''}
+            </div>
+            <div style={{ height: '8px', background: tint('var(--cyan)', 10), border: `1px solid ${stunColor}`, borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ width: `${stunPct * 100}%`, height: '100%', background: stunColor, transition: 'width 0.3s ease' }} />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* CWN: downed player - any viewer can attempt the stabilize check
+          (rolls the viewer's own Heal skill server-side) */}
+      {gameSystem === 'cities_without_number' && isDead && socket && location.shape === 'rhombus' && location.owner && (
+        <button
+          onClick={() => {
+            socket.emit('requestStabilize', { targetUsername: location.owner });
+            onRolled?.();
+          }}
+          title="An ally's Main Action: 2d6 + YOUR Heal + INT mod vs 8 + rounds down. Success: they recover to 1 HP with the Frail condition."
+          style={{
+            alignSelf: 'center', background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)',
+            fontFamily: 'monospace', fontSize: '0.7rem', letterSpacing: '1px', padding: '4px 14px',
+            cursor: 'pointer', animation: 'death-pulse 1.2s ease-in-out infinite',
+          }}
+        >
+          STABILIZE (YOUR HEAL CHECK)
+        </button>
+      )}
+
+      {(location.hp_temp ?? 0) > 0 && (
+        <div style={{ textAlign: 'center', color: 'var(--cyan)', fontSize: '0.8rem', textShadow: '0 0 6px var(--cyan)' }}>
+          + TEMP SHIELDING
+        </div>
+      )}
+
+      {injuriesOpen && <InjuryMap injuries={injuries} />}
+    </div>
   );
 }

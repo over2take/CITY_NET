@@ -75,7 +75,7 @@ export function EnemyVehiclesWindow({ pos, setPos, onClose, socket, vehicles, to
 
   return (
     <DraggableWindow
-      title="ENEMY VEHICLES"
+      title="ENEMY_VEHICLES.EXE"
       pos={pos}
       setPos={setPos}
       onClose={onClose}

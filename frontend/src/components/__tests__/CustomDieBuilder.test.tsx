@@ -82,7 +82,7 @@ describe('CustomDieBuilder — edit mode', () => {
 
   it('marks the window as editing', () => {
     renderBuilder({ editingDie: PUNK });
-    expect(screen.getByTestId('window-title').textContent).toBe('CUSTOM_DIE.EXE — EDIT');
+    expect(screen.getByTestId('window-title').textContent).toBe('CUSTOM_DIE.EXE · EDIT');
   });
 
   it('labels the action SAVE rather than CREATE', () => {

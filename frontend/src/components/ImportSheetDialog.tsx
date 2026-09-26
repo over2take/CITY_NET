@@ -150,7 +150,7 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
   return (
     <>
     <DraggableWindow
-      title="IMPORT_SHEET"
+      title="IMPORT.EXE"
       pos={pos}
       setPos={setPos}
       onClose={onClose}

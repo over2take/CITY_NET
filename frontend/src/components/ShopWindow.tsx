@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { DraggableWindow } from './DraggableWindow';
+import { TerminalWindow } from './TerminalWindow';
 import {
   buildingTypeById, shelvedCatalogues, catalogueById, typeLabel, catalogueLabel, type ShopStock,
 } from '../data/buildingTypes';
@@ -16,7 +16,7 @@ import { CWN_CYBERWARE, type CwnCyberPreset } from '../sheets/cwnCyberwarePreset
 import { CYBERWARE_FIELD, readRows, normaliseRow } from '../sheets/cyberwareRows';
 import { CWN_WEAPONS, weaponToStashed, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
 import { readStash, firstFreeRow, stashedToCarried } from '../sheets/cwnWeaponStash';
-import { carriedEnc, encLimits } from '../sheets/cwnEncumbrance';
+import { encLimits } from '../sheets/cwnEncumbrance';
 import { CWN_PHARMACEUTICALS, pharmaByName, type Pharmaceutical } from '../sheets/cwnPharma';
 import { CWN_ARMOR, acText, OBSOLETE_TECH, type ArmorPreset } from '../sheets/cwnArmorPresets';
 import { CWN_GEAR, encText, ENC_FOOTNOTE, type GearItem } from '../sheets/cwnGearPresets';
@@ -29,19 +29,25 @@ import {
 } from '../sheets/inventory';
 import { CWN_WEAPON_ROWS, CWN_VEHICLE_ROWS } from '../sheets/templates/cities_without_number';
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
+import {
+  addBuy, stepBuy, sellCounts, cartTotals, groupSells, slotsWanted, cartCarry,
+  type CartBuy, type CartSell,
+} from './shopCart';
 
 // A shop: what the building carries, and a way to take a piece away with you.
 //
-// **BUY charges the buyer's bank account, and the thing only appears once it is paid for.**
-// The money is the server's business and is not decided here: this window sends a
-// catalogue and an id, and the price is looked up on the other side. It prints prices, but
-// it does not get to name them.
+// **Everything goes through the cart.** + CART on the BUY list or the SELL list only adds a
+// line to it; CHECK OUT settles the lot on the server in one go (backend/shops/checkout.js)
+// - the account moves once, by the difference, and either every line goes through or none
+// does. The money is the server's business: this window sends catalogues, ids and counts,
+// and the prices are looked up on the other side. It prints prices, but it does not get to
+// name them, and if the server's total differs from the one on screen nothing is charged.
 //
-// That makes a purchase a round trip. The sheet write for each shelf is registered when
-// the BUY goes out and run when the receipt comes back, so nothing lands on a sheet that
-// was not paid for. The gap it leaves is the opposite one - a disconnect between the
-// charge and the write loses the item rather than the money - which is the safer way round
-// but is still a gap, and undoing it would mean reversing every kind of sheet write.
+// Bought things are written onto the sheet only once the checkout is paid, one at a time
+// so each placement sees the one before it. The gap that leaves is the opposite one - a
+// disconnect between the charge and the write loses the item rather than the money - which
+// is the safer way round but is still a gap. Sold things are taken off the sheet by the
+// server itself, before it pays.
 //
 // Buying is still not installing. A bought augment lands in the same "not yet placed on
 // the body" list an import lands in, because buying is a transaction and installing is
@@ -49,7 +55,7 @@ import { usePlayerSheet } from '../hooks/usePlayerSheet';
 //
 // No stock is kept: a shop never runs out.
 //
-// Buying and selling are separate tabs rather than two buttons on a row, because they are
+// Buying and selling are separate folders rather than two buttons on a row, because they are
 // not two halves of one list. Buying reads the shop's stock; selling reads what *you* are
 // carrying, which will be more than augments - gear, weapons, a car. A SELL button beside
 // a shop's catalogue would be offering to sell you something you may not own.
@@ -94,9 +100,11 @@ interface Props {
   socket: any;
   userName: string | null;
   onClose: () => void;
+  /** The building's picture for the corner, as its own window shows it. */
+  preview?: React.ReactNode;
 }
 
-type Tab = 'buy' | 'sell';
+type Tab = 'buy' | 'sell' | 'cart';
 
 const mono = (size: number): React.CSSProperties => ({
   fontFamily: 'monospace', fontSize: size, letterSpacing: 1,
@@ -108,6 +116,78 @@ const cell: React.CSSProperties = {
 
 /** Prices are printed the same way on every shelf, whatever the shelf is selling. */
 const credits = (n: number): string => (n === 0 ? 'N/A' : `${n.toLocaleString()}cr`);
+
+/** How long a checkout waits for the server before saying it got no answer. */
+export const CHECKOUT_TIMEOUT_MS = 15_000;
+
+/** Credits with a sign, for the cart: a total can be nothing, or the shop paying you. */
+const money = (n: number): string => `${n < 0 ? '-' : ''}${Math.abs(n).toLocaleString()}cr`;
+
+/** What a checkout came to, kept to show as a receipt. */
+interface CartReceipt {
+  at: Date;
+  buys: { label: string; qty: number; price: number }[];
+  sells: { label: string; each: number; installed: boolean }[];
+  buyTotal: number;
+  payout: number;
+  net: number;
+  balance: number;
+  debt: number;
+  settled?: Settle;
+  fromBody: number;
+}
+
+const stamp = (d: Date) => {
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
+};
+
+/**
+ * A checkout, set out like a receipt: the shop and the time, every line, the total, and
+ * where the money went. Formal on purpose - it is the record of money changing hands.
+ */
+function Receipt({ receipt: r, shop }: { receipt: CartReceipt; shop: string }) {
+  const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12 };
+  const rule: React.CSSProperties = { borderTop: '1px dashed var(--dark-green)', margin: '6px 0' };
+  const where = r.net > 0
+    ? r.settled === 'debt' ? 'PAID FROM YOUR ACCOUNT, THE REST TAKEN AS DEBT' : 'PAID FROM YOUR ACCOUNT'
+    : r.net < 0 ? 'PAID INTO YOUR ACCOUNT' : 'NOTHING CHANGED HANDS';
+  return (
+    <div data-testid="cart-receipt" style={{ ...mono(10), letterSpacing: 0, border: '1px solid var(--green)', padding: '8px 10px', marginBottom: 10, color: 'var(--green)' }}>
+      <div style={{ ...row, fontWeight: 'bold' }}>
+        <span>RECEIPT · {(shop || 'SHOP').toUpperCase()}</span>
+        <span>{stamp(r.at)}</span>
+      </div>
+      <div style={rule} />
+      {r.buys.length > 0 && <div style={{ opacity: 0.8 }}>BOUGHT</div>}
+      {r.buys.map((b) => (
+        <div key={`b-${b.label}`} style={row}>
+          <span>&nbsp;&nbsp;{b.label}{b.qty > 1 ? ` ×${b.qty}` : ''}</span>
+          <span>{money(b.price * b.qty)}</span>
+        </div>
+      ))}
+      {r.sells.length > 0 && <div style={{ opacity: 0.8 }}>SOLD</div>}
+      {r.sells.map((x, i) => (
+        <div key={`s-${i}`} style={row}>
+          <span>&nbsp;&nbsp;{x.label}{x.installed ? ' ⚕' : ''}</span>
+          <span>{money(-x.each)}</span>
+        </div>
+      ))}
+      <div style={rule} />
+      <div style={{ ...row, fontWeight: 'bold' }}><span>TOTAL</span><span>{money(r.net)}</span></div>
+      <div style={{ opacity: 0.8 }}>{where}</div>
+      <div style={{ opacity: 0.8 }}>
+        BALANCE {money(r.balance)}{r.debt > 0 ? ` · DEBT ${money(r.debt)}` : ''}
+      </div>
+      {r.fromBody > 0 && (
+        <div style={{ color: 'var(--warning)', marginTop: 4 }}>
+          ⚕ {r.fromBody === 1 ? 'A piece' : `${r.fromBody} pieces`} of installed cyberware came out.
+          Ask your GM about the surgery roll.
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Sorting a shop's shelf.
@@ -212,15 +292,15 @@ interface Shelf<T> {
 
 export function ShopWindow({
   name, locationId, buildingType, system, buybackPct: pct, socket, userName, onClose,
-  isAdmin = false, onOpenCatalogues,
+  isAdmin = false, onOpenCatalogues, preview,
 }: Props) {
   /** Whether this game's shops sell from the CWN book. Nobody else's do. */
   const book = system === BOOK_SYSTEM;
   const [pos, setPos] = useState({ x: 140, y: 90 });
   const [tab, setTab] = useState<Tab>('buy');
   const [filter, setFilter] = useState('');
-  /** How many of each line has been taken this visit, so a press has visible effect. */
-  const [taken, setTaken] = useState<Record<string, number>>({});
+  /** Narrows the sell list, the way the buy side's filter narrows a shelf. */
+  const [sellFilter, setSellFilter] = useState('');
 
   const { sheet, handleFieldChange, handleFieldsChange, encumbranceEnforced, overdraftAllowed } =
     usePlayerSheet(socket, userName);
@@ -254,51 +334,7 @@ export function ShopWindow({
     return () => { socket.off?.('bankUpdate', onBank); };
   }, [socket, userName]);
 
-  /**
-   * A purchase the player has been asked to make a decision about.
-   *
-   * Held rather than acted on: the shop knows the balance, so it can see a shortfall
-   * coming and ask how to cover it BEFORE spending anything. Nothing has been sent to the
-   * server while this is set.
-   */
-  const [asking, setAsking] = useState<
-    { catalogue: ShopStock; itemId: string; label: string; price: number } | null
-  >(null);
-
-  /**
-   * What each shelf does with a row once it has actually been paid for.
-   *
-   * Registered when the BUY is sent and run when the receipt comes back, because the
-   * sheet write and the charge are two different machines: money is the server's, and
-   * placing a thing on a sheet - a weapon row, a vehicle slot, an unplaced augment - is
-   * this window's and is tested here. Keyed by catalogue and id so two purchases in
-   * flight cannot deliver each other's goods.
-   */
-  const pending = React.useRef(new Map<string, () => void>());
-  const pendingKey = (catalogue: string, itemId: string) => `${catalogue}/${itemId}`;
-
-  useEffect(() => {
-    if (!socket) return;
-    const onPurchase = (res: {
-      ok: boolean; catalogue: string; itemId: string; reason?: RefusalReason;
-      price?: number; settled?: Settle;
-    }) => {
-      const key = pendingKey(res.catalogue, res.itemId);
-      const place = pending.current.get(key);
-      pending.current.delete(key);
-      if (!res.ok) {
-        setRefused(REFUSAL_TEXT[res.reason as RefusalReason] ?? 'The purchase did not go through.');
-        return;
-      }
-      setRefused(null);
-      // Only now does the thing exist. Paid for, then owned.
-      place?.();
-      setTaken((t) => ({ ...t, [res.itemId]: (t[res.itemId] ?? 0) + 1 }));
-    };
-    socket.on('shopPurchase', onPurchase);
-    return () => { socket.off?.('shopPurchase', onPurchase); };
-  }, [socket]);
-  /** Why the last purchase did not happen, cleared as soon as anything else does. */
+  /** Why the last thing tried did not happen, cleared as soon as anything else does. */
   const [refused, setRefused] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState>({ key: '', dir: null });
   /**
@@ -343,8 +379,9 @@ export function ShopWindow({
   const addToInventory = (
     label: string, enc: string, same: (item: InventoryItem) => boolean,
   ) => {
-    if (!sheet) return;
-    const data = (sheet.data ?? {}) as Record<string, unknown>;
+    const current = sheetNow.current;
+    if (!current) return;
+    const data = (current.data ?? {}) as Record<string, unknown>;
     const items = readInventory(data);
     const i = items.findIndex((item) => item.carry !== 'stash' && same(item));
     const next = i >= 0
@@ -354,44 +391,49 @@ export function ShopWindow({
     handleFieldChange?.(INVENTORY_FIELD, writeInventory(next));
   };
 
+  // ────────────────────────────────────────────────────────────────── the cart ───
+
   /**
-   * Send a purchase, and remember what to do when it is paid for.
+   * What is being bought and sold, until CHECK OUT or the window closes.
    *
-   * `settle` is only sent when the player has been asked and answered. The server checks
-   * everything again - the price, the shop, the house rule, the balance - so this is a
-   * courtesy rather than a gate: it exists so the common refusal happens without a round
-   * trip and so a shortfall is a question rather than a rejection.
+   * Nothing moves until checkout: + CART on either list only adds a line here. Kept in the
+   * window rather than anywhere longer-lived, so closing the shop empties it - the simple
+   * rule, and the player's call.
    */
-  const send = (
-    catalogue: ShopStock, itemId: string, place: () => void, settle?: Settle,
-  ) => {
-    pending.current.set(pendingKey(catalogue, itemId), place);
-    setRefused(null);
-    socket?.emit('buyFromShop', { locationId, catalogue, itemId, settle });
+  const [cartBuys, setCartBuys] = useState<CartBuy[]>([]);
+  const [cartSells, setCartSells] = useState<CartSell[]>([]);
+  /** Something went into the cart while it was not open: its folder blinks until it is. */
+  const [cartNews, setCartNews] = useState(false);
+  const nextSellUid = React.useRef(0);
+
+  /** Unique per shelf row, for the "in the cart" count on its button. */
+  const cartKey = (catalogue: string, itemId: string) => `${catalogue}/${itemId}`;
+
+  /** How many weapon rows are empty. */
+  const freeWeaponRows = (data: Record<string, unknown>): number => {
+    let n = 0;
+    for (let i = 1; i <= CWN_WEAPON_ROWS; i += 1) if (!String(data[`weapon${i}_name`] ?? '').trim()) n += 1;
+    return n;
   };
 
   /**
-   * Try to buy one of something.
+   * Put one of something in the cart.
    *
-   * The shelf hands over what to write onto the sheet if this succeeds; nothing is
-   * written here. Three outcomes: it is affordable and goes straight out, it is not and
-   * the house says no, or it is not and the player gets asked how to cover it.
+   * The shelf hands over what to write onto the sheet for one of it; nothing is written
+   * here. It runs once per unit after checkout is paid - paid for, then owned, as buying
+   * one at a time always was.
    */
   const purchase = (
     catalogue: ShopStock, itemId: string, label: string, price: number, place: () => void,
+    extra: { enc?: number; slot?: 'weapon' | 'vehicle' } = {},
   ) => {
     if (!sheet) { setRefused('No character sheet loaded.'); return; }
-    const balance = account?.balance ?? 0;
-    if (price <= balance) return send(catalogue, itemId, place);
-    if (!overdraftAllowed) {
-      setRefused(
-        `Not enough credits — ${label} is ${credits(price)} and you have ${credits(balance)}.`,
-      );
-      return;
-    }
-    // Asked rather than assumed. Debt and a negative balance are different problems.
-    setAsking({ catalogue, itemId, label, price });
-    pending.current.set(pendingKey(catalogue, itemId), place);
+    setRefused(null);
+    setCartBuys((c) => addBuy(c, {
+      key: cartKey(catalogue, itemId), catalogue, itemId, label, price, place,
+      enc: extra.enc ?? 0, slot: extra.slot,
+    }));
+    if (tab !== 'cart') setCartNews(true);
   };
 
   // ─────────────────────────────────────────────────────────────── selling ───
@@ -405,123 +447,193 @@ export function ShopWindow({
    */
   const owned = sheet ? ownedItems(sheet.data as Record<string, unknown>, system) : [];
   const sellable = sellableAt(owned, catalogues);
+  const sellQuery = sellFilter.trim().toLowerCase();
+  /** The sell list as shown: narrowed by its filter. Totals still count the whole list. */
+  const shownSellable = sellQuery ? sellable.filter((l) => l.label.toLowerCase().includes(sellQuery)) : sellable;
 
-  /** How many of each line are on the sell list, by line key. */
-  const [basket, setBasket] = useState<Record<string, number>>({});
-  /** True once SELL is pressed, until it is confirmed or backed out of. */
-  const [confirming, setConfirming] = useState(false);
-  /** What the last sale came to, so the payout and any warning stay on screen. */
-  const [receipt, setReceipt] = useState<{ payout: number; fromBody: number } | null>(null);
+  /** How many of each owned line are in the cart to be sold, by line key. */
+  const basket = sellCounts(cartSells);
 
   /**
-   * Add or remove one, never past what they own.
+   * Put one more of an owned line in the cart to sell, or take the last one back out.
    *
-   * Clamped here as well as on the server because the list is the thing a player reasons
-   * about: a basket that says three when they own two is a question they should never be
-   * asked to answer.
+   * Never past what they own: a cart that says three when they own two is a question they
+   * should never be asked. Each one sold is its own cart line, so installed chrome can be
+   * marked on exactly the piece that is installed.
    */
   const stage = (key: string, delta: number) => {
     const line = sellable.find((l) => l.key === key);
     if (!line) return;
+    setRefused(null);
     setReceipt(null);
-    setBasket((b) => {
-      const next = Math.max(0, Math.min(line.qty, (b[key] ?? 0) + delta));
-      const out = { ...b, [key]: next };
-      if (next === 0) delete out[key];
-      return out;
-    });
-  };
-
-  /** The sell list as lines, in the order the shelf shows them. */
-  const staging = sellable
-    .filter((l) => (basket[l.key] ?? 0) > 0)
-    .map((l) => ({ line: l, qty: basket[l.key], label: l.label }));
-
-  const basketTotal = staging.reduce(
-    (sum, s) => sum + buybackValue(s.line.unitPrice, pct) * s.qty, 0,
-  );
-
-  /**
-   * How much of the sell list is chrome currently in somebody's body.
-   *
-   * Counted from the places a line sits rather than from the line itself, because a
-   * character can own two of a piece with one installed and one still boxed - and only
-   * one of those needs a surgeon.
-   */
-  const stagedFromBody = staging.reduce((n, s) => {
-    let left = s.qty;
-    let installed = 0;
-    for (const at of s.line.at) {
-      if (left <= 0) break;
-      const take = Math.min(left, at.qty);
-      if (at.placed) installed += take;
-      left -= take;
+    if (delta < 0) {
+      setCartSells((c) => {
+        const i = c.map((s) => s.line.key).lastIndexOf(key);
+        return i < 0 ? c : c.filter((_, n) => n !== i);
+      });
+      return;
     }
-    return n + installed;
-  }, 0);
+    const unit = basket[key] ?? 0;
+    if (unit >= line.qty) return;
+    // The server empties a line in the order its places are listed; so does this.
+    let skip = unit;
+    let installed = false;
+    for (const at of line.at) {
+      if (skip < at.qty) { installed = !!at.placed; break; }
+      skip -= at.qty;
+    }
+    nextSellUid.current += 1;
+    const uid = nextSellUid.current;
+    setCartSells((c) => [...c, {
+      uid, line, installed,
+      each: line.unitPrice === null ? 0 : buybackValue(line.unitPrice, pct),
+    }]);
+    if (tab !== 'cart') setCartNews(true);
+  };
 
+  // ────────────────────────────────────────────────────────────────── checkout ───
+
+  const totals = cartTotals(cartBuys, cartSells);
+  const cartCount = cartBuys.reduce((n, l) => n + l.qty, 0) + cartSells.length;
   /**
-   * Take the implants back off the sell list, and keep the rest of it.
-   *
-   * The whole point of the warning is that the player may not have realised, and the only
-   * answer available until now was to cancel the lot and start again. Each line is trimmed
-   * to however many of that thing are NOT in a body - which works because boxed pieces are
-   * listed before installed ones, so what survives is exactly the ones nobody has to be
-   * opened up for.
+   * What the character would carry after checkout. CWN counts encumbrance and nobody else
+   * does, so no other game shows the meter. Past the limit is shown in red always, and
+   * stops the checkout only where the table's house rule enforces it.
    */
-  const keepImplants = () => {
-    setConfirming(false);
-    setBasket((b) => {
-      const next: Record<string, number> = {};
-      for (const s of staging) {
-        const loose = s.line.at.reduce((n, at) => n + (at.placed ? 0 : at.qty), 0);
-        const keep = Math.min(s.qty, loose);
-        if (keep > 0) next[s.line.key] = keep;
+  const carry = book && sheet ? cartCarry(sheet.data as Record<string, unknown>, cartBuys, cartSells) : null;
+  const carryBlocks = !!carry && encumbranceEnforced && carry.over;
+
+  /** Short of the total, overdraft allowed: how to cover it is asked once, here. */
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  /**
+   * A total the server worked out differently from the one on screen, because a price
+   * changed while the cart sat here. Shown to the player; checking out again agrees to it.
+   */
+  const [repriced, setRepriced] = useState<number | null>(null);
+  /** What the last checkout came to, itemised, until something else happens. */
+  const [receipt, setReceipt] = useState<CartReceipt | null>(null);
+  /**
+   * Another shop opened into this same window starts clean. Its shelves are different, so a
+   * cart from the last one would only be refused at checkout, and its receipt is not this
+   * shop's. Closing the window does the same by throwing the state away.
+   */
+  const shopSeen = React.useRef(locationId);
+  useEffect(() => {
+    if (shopSeen.current === locationId) return;
+    shopSeen.current = locationId;
+    setCartBuys([]);
+    setCartSells([]);
+    setReceipt(null);
+    setCartNews(false);
+    setRefused(null);
+  }, [locationId]);
+  /** Bought things still to be written onto the sheet, one per render so each sees the last. */
+  const [placing, setPlacing] = useState<Array<() => void>>([]);
+  const checkoutTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (checkoutTimer.current) clearTimeout(checkoutTimer.current); }, []);
+  const cartNow = React.useRef({ buys: cartBuys, sells: cartSells });
+  cartNow.current = { buys: cartBuys, sells: cartSells };
+
+  // Changing the cart makes an agreed new total meaningless: it is worked out afresh.
+  useEffect(() => { setRepriced(null); setAsking(false); }, [cartBuys, cartSells]);
+
+  const checkout = (settle?: Settle) => {
+    if (!cartCount || busy) return;
+    if (carryBlocks) {
+      setRefused('Too much to carry — take something out of the cart, or sell something with it.');
+      return;
+    }
+    const net = repriced ?? totals.net;
+    const balance = account?.balance ?? 0;
+    if (net > balance && !settle) {
+      if (!overdraftAllowed) {
+        setRefused(`Not enough credits — the cart comes to ${money(net)} and you have ${money(balance)}.`);
+        return;
       }
-      return next;
+      // Asked rather than assumed. Debt and a negative balance are different problems.
+      setAsking(true);
+      return;
+    }
+    setAsking(false);
+    setRefused(null);
+    setReceipt(null);
+    setBusy(true);
+    /**
+     * No answer at all is its own case. A server still running code from before the cart
+     * has no checkout to answer with, and the window used to sit on CHECKING OUT forever.
+     * It cannot know whether anything was charged, so it says to look rather than guess.
+     */
+    if (checkoutTimer.current) clearTimeout(checkoutTimer.current);
+    checkoutTimer.current = setTimeout(() => {
+      checkoutTimer.current = null;
+      setBusy(false);
+      setRefused('The shop did not answer. Check your balance before trying again — if the server was just updated, it needs restarting.');
+    }, CHECKOUT_TIMEOUT_MS);
+    socket?.emit('checkoutShop', {
+      locationId,
+      buys: cartBuys.map(({ catalogue, itemId, qty }) => ({ catalogue, itemId, qty })),
+      sells: groupSells(cartSells),
+      settle,
+      expectedNet: net,
     });
   };
 
-  const commitSale = () => {
-    if (!staging.length) return;
-    setConfirming(false);
-    socket?.emit('sellToShop', {
-      locationId,
-      items: staging.map((s) => ({
-        catalogue: s.line.catalogue,
-        id: s.line.id,
-        // Carried for the unpriced lines, which have no catalogue or id to be found by.
-        label: s.line.label,
-        qty: s.qty,
-      })),
-    });
+  const clearCart = () => {
+    setCartBuys([]);
+    setCartSells([]);
+    setRefused(null);
   };
 
   useEffect(() => {
     if (!socket) return;
-    const onSale = (res: { ok: boolean; reason?: RefusalReason; payout?: number; fromBody?: number }) => {
+    const onCheckout = (res: {
+      ok: boolean; reason?: RefusalReason | 'total_changed'; net?: number; buyTotal?: number;
+      payout?: number; balance?: number; debt?: number; settled?: Settle; fromBody?: number;
+      buys?: { catalogue: string; itemId: string; qty: number; price: number }[];
+    }) => {
+      if (checkoutTimer.current) { clearTimeout(checkoutTimer.current); checkoutTimer.current = null; }
+      setBusy(false);
       if (!res.ok) {
-        setRefused(REFUSAL_TEXT[res.reason as RefusalReason] ?? 'The sale did not go through.');
+        if (res.reason === 'total_changed') {
+          setRepriced(Number(res.net) || 0);
+          setRefused(`Prices changed while this sat in the cart — it now comes to ${money(Number(res.net) || 0)}. Check it, then CHECK OUT again.`);
+        } else {
+          setRefused(REFUSAL_TEXT[res.reason as RefusalReason] ?? 'The checkout did not go through. Nothing was charged.');
+        }
         return;
       }
-      // The sheet has already changed on the server; the list here follows from it as
-      // soon as the refreshed sheet arrives, so the basket just empties.
+      const { buys, sells } = cartNow.current;
+      // Only now does any of it exist. Paid for, then owned.
+      setPlacing(buys.flatMap((l) => Array.from({ length: l.qty }, () => l.place)));
+      setReceipt({
+        at: new Date(),
+        buys: buys.map((l) => ({
+          label: l.label, qty: l.qty,
+          price: res.buys?.find((b) => b.catalogue === l.catalogue && b.itemId === l.itemId)?.price ?? l.price,
+        })),
+        sells: sells.map((s) => ({ label: s.line.label, each: s.each, installed: s.installed })),
+        buyTotal: Number(res.buyTotal) || 0,
+        payout: Number(res.payout) || 0,
+        net: Number(res.net) || 0,
+        balance: Number(res.balance) || 0,
+        debt: Number(res.debt) || 0,
+        settled: res.settled,
+        fromBody: Number(res.fromBody) || 0,
+      });
+      setCartBuys([]);
+      setCartSells([]);
       setRefused(null);
-      setBasket({});
-      setReceipt({ payout: Number(res.payout) || 0, fromBody: Number(res.fromBody) || 0 });
     };
-    socket.on('shopSale', onSale);
-    return () => { socket.off?.('shopSale', onSale); };
+    socket.on('shopCheckout', onCheckout);
+    return () => { socket.off?.('shopCheckout', onCheckout); };
   }, [socket]);
 
-  /** The player answered the shortfall question. Send it with their choice. */
-  const answerAsking = (settle: Settle) => {
-    if (!asking) return;
-    const { catalogue, itemId } = asking;
-    const place = pending.current.get(pendingKey(catalogue, itemId));
-    setAsking(null);
-    if (place) send(catalogue, itemId, place, settle);
-  };
+  useEffect(() => {
+    if (!placing.length) return;
+    placing[0]();
+    setPlacing((p) => p.slice(1));
+  }, [placing]);
 
   // ---------------------------------------------------------------- weapons
 
@@ -551,12 +663,14 @@ export function ShopWindow({
   const refuseReason = (w: CwnWeaponPreset): string | null => {
     if (!sheet) return 'No character sheet loaded.';
     const data = sheet.data as Record<string, unknown>;
-    if (firstFreeRow(data, CWN_WEAPON_ROWS) === null) {
-      return `No free weapon slot — all ${CWN_WEAPON_ROWS} are full. Stash one first.`;
+    // Counting what the cart already wants, or two guns would be sold into one free slot.
+    if (freeWeaponRows(data) - slotsWanted(cartBuys, 'weapon') <= 0) {
+      return `No free weapon slot — all ${CWN_WEAPON_ROWS} are full or already in the cart. Stash one first.`;
     }
     if (encumbranceEnforced) {
-      // It arrives Stowed, so it is the Stowed allowance it has to fit inside.
-      const { stowed: used } = carriedEnc(data, CWN_WEAPON_ROWS);
+      // It arrives Stowed, so it is the Stowed allowance it has to fit inside - after
+      // everything else in the cart has arrived too.
+      const used = cartCarry(data, cartBuys, cartSells).stowed;
       const max = encLimits(data).stowed;
       const cost = Number(w.enc) || 0;
       if (used + cost > max) {
@@ -578,11 +692,11 @@ export function ShopWindow({
     const why = refuseReason(w);
     if (why) { setRefused(why); return; }
     purchase('weapons', w.id, w.name, w.price, () => {
-      const data = (sheet!.data ?? {}) as Record<string, unknown>;
+      const data = (sheetNow.current?.data ?? {}) as Record<string, unknown>;
       const row = firstFreeRow(data, CWN_WEAPON_ROWS);
       if (row === null) return;
       handleFieldsChange?.(stashedToCarried(weaponToStashed(w, name || ''), row));
-    });
+    }, { enc: Number(w.enc) || 0, slot: 'weapon' });
   };
 
   const weaponShelf: Shelf<CwnWeaponPreset> = {
@@ -728,7 +842,8 @@ export function ShopWindow({
     matches: (c, q) => c.name.toLowerCase().includes(q) || c.effect.toLowerCase().includes(q),
     countKey: (c) => c.id,
     buy: (item) => purchase('cyberware', item.id, item.name, item.price, () => {
-      if (!sheet) return;
+      const current = sheetNow.current;
+      if (!current) return;
       // Unplaced: owning a piece and having it in your body are two different facts, and
       // the diagram is the only thing that decides the second.
       const row = normaliseRow({
@@ -742,7 +857,7 @@ export function ShopWindow({
         equipped: true,
         placed: false,
       });
-      handleFieldChange(CYBERWARE_FIELD, [...readRows(sheet.data), row] as never);
+      handleFieldChange(CYBERWARE_FIELD, [...readRows(current.data), row] as never);
     }),
     notice: 'GOES INTO YOUR AUGMENTS, UNPLACED — BUYING IS NOT SURGERY',
     filterHint: 'Filter by name or effect',
@@ -814,7 +929,7 @@ export function ShopWindow({
     matches: (a, q) => a.label.toLowerCase().includes(q) || a.group.includes(q),
     buy: (a) => purchase('armor', a.id, a.label, a.cost, () => {
       addToInventory(a.label, String(a.enc), (item) => item.name === a.label);
-    }),
+    }, { enc: Number(a.enc) || 0 }),
     notice: 'GOES INTO YOUR INVENTORY, STOWED — IT DOES NOT SET YOUR AC',
     filterHint: 'Filter by name or kind',
     note: (
@@ -849,7 +964,7 @@ export function ShopWindow({
       // The symbol rows carry no Encumbrance the sheet can add up, so they go in blank
       // rather than as a zero somebody would later mistake for a measurement.
       addToInventory(g.label, g.encNote ? '' : String(g.enc), (item) => item.name === g.label);
-    }),
+    }, { enc: g.encNote ? 0 : Number(g.enc) || 0 }),
     notice: 'GOES INTO YOUR INVENTORY, STOWED',
     filterHint: 'Filter by name or what it does',
     note: ENC_FOOTNOTE,
@@ -910,6 +1025,13 @@ export function ShopWindow({
    * A slot is free when it has no name. The sheet writes the preset's label into the name
    * on selection, so "has a name" and "has a vehicle" are the same question.
    */
+  /** How many vehicle slots are empty. */
+  const freeVehicleSlots = (data: Record<string, unknown>): number => {
+    let n = 0;
+    for (let i = 1; i <= CWN_VEHICLE_ROWS; i += 1) if (!String(data[`vehicle${i}_name`] ?? '').trim()) n += 1;
+    return n;
+  };
+
   const firstFreeVehicle = (data: Record<string, unknown>): number | null => {
     for (let i = 1; i <= CWN_VEHICLE_ROWS; i += 1) {
       if (!String(data[`vehicle${i}_name`] ?? '').trim()) return i;
@@ -944,20 +1066,20 @@ export function ShopWindow({
   const buyVehicle = (preset: VehiclePreset) => {
     if (!sheet) { setRefused('No character sheet loaded.'); return; }
     // Checked before the money moves, like the weapon rack.
-    if (firstFreeVehicle((sheet.data ?? {}) as Record<string, unknown>) === null) {
+    if (freeVehicleSlots((sheet.data ?? {}) as Record<string, unknown>) - slotsWanted(cartBuys, 'vehicle') <= 0) {
       setRefused(
-        `No free vehicle slot — all ${CWN_VEHICLE_ROWS} are full. Clear one on the sheet first.`,
+        `No free vehicle slot — all ${CWN_VEHICLE_ROWS} are full or already in the cart. Clear one on the sheet first.`,
       );
       return;
     }
     purchase('vehicles', preset.id, preset.label, preset.cost, () => {
-      const data = (sheet.data ?? {}) as Record<string, unknown>;
+      const data = (sheetNow.current?.data ?? {}) as Record<string, unknown>;
       const slot = firstFreeVehicle(data);
       if (slot === null) return;
       const fields = presetFields(slot, preset);
       if (preset.note) fields[`vehicle${slot}_notes`] = preset.note;
       handleFieldsChange?.(fields);
-    });
+    }, { slot: 'vehicle' });
   };
 
   const vehicleShelf: Shelf<VehiclePreset> = {
@@ -1213,30 +1335,6 @@ export function ShopWindow({
   })();
 
   /**
-   * Resizable, following the chat and sheet windows.
-   *
-   * A shop is a long list read down while comparing prices, and a fixed height meant
-   * scrolling sixty lines through a 320px slot on a monitor with room to spare. The flex
-   * column is what makes the table take the height rather than the window growing round a
-   * fixed-height list.
-   */
-  const windowStyle: React.CSSProperties = {
-    width: '780px', height: '520px',
-    minWidth: '420px', maxWidth: '95vw', minHeight: '260px', maxHeight: '92vh',
-    resize: 'both', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-  };
-
-  const tabButton = (id: Tab, label: string) => (
-    <button
-      type="button"
-      className={`utility-btn ${tab === id ? 'active' : ''}`}
-      aria-pressed={tab === id}
-      onClick={() => setTab(id)}
-      style={{ flex: 1 }}
-    >{label}</button>
-  );
-
-  /**
    * Switching shelves clears the sort and the filter.
    *
    * A sort key belongs to the columns it was set on - "MAG, descending" means nothing on
@@ -1250,17 +1348,189 @@ export function ShopWindow({
     setRefused(null);
   };
 
+  /**
+   * The CART folder: every line being bought or sold, what it all comes to, and the one
+   * button that settles it.
+   *
+   * Signs follow the player's account: a plain number is what they pay the shop, a minus
+   * is what the shop pays them. Words sit beside the total too, because a bare minus on
+   * money is easy to misread.
+   */
+  /** One more of a cart line - unless it needs a sheet slot there is no room left for. */
+  const moreOf = (l: CartBuy) => {
+    if (l.slot && sheet) {
+      const data = sheet.data as Record<string, unknown>;
+      const free = l.slot === 'weapon' ? freeWeaponRows(data) : freeVehicleSlots(data);
+      if (free - slotsWanted(cartBuys, l.slot) <= 0) {
+        setRefused(`No free ${l.slot} slot for another ${l.label}.`);
+        return;
+      }
+    }
+    setRefused(null);
+    setCartBuys((c) => stepBuy(c, l.key, 1));
+  };
+  const lineBtn: React.CSSProperties = { padding: '1px 6px', fontSize: 9, marginLeft: 4 };
+  const net = repriced ?? totals.net;
+  const cartPanel = (
+    <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {refused && (
+        <div role="alert" style={{ ...mono(10), color: 'var(--danger)', marginBottom: 6, letterSpacing: 0 }}>{refused}</div>
+      )}
+
+      {receipt && <Receipt receipt={receipt} shop={name} />}
+
+      {cartCount === 0 ? (
+        !receipt && (
+          <div data-testid="cart-empty" style={{ ...mono(11), color: 'var(--green)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
+            THE CART IS EMPTY. + CART on the BUY or SELL list puts things here to check out together.
+          </div>
+        )
+      ) : (
+        <>
+          <table aria-label="Cart" style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
+            <thead>
+              <tr style={{ color: 'var(--grid-section)' }}>
+                <th style={cell}>ITEM</th>
+                <th style={{ ...cell, textAlign: 'right' }}>QTY</th>
+                <th style={{ ...cell, textAlign: 'right' }}>EACH</th>
+                <th style={{ ...cell, textAlign: 'right' }}>LINE</th>
+                <th style={{ ...cell, textAlign: 'right' }}>&nbsp;</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cartBuys.map((l) => (
+                <tr key={l.key} data-testid="cart-buy">
+                  <td style={{ ...cell, whiteSpace: 'nowrap' }}>BUY · {l.label}</td>
+                  <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button type="button" className="utility-btn" aria-label={`One fewer ${l.label}`}
+                      onClick={() => setCartBuys((c) => stepBuy(c, l.key, -1))} style={lineBtn}>−</button>
+                    <span style={{ margin: '0 6px' }}>×{l.qty}</span>
+                    <button type="button" className="utility-btn" aria-label={`One more ${l.label}`}
+                      onClick={() => moreOf(l)}
+                      style={lineBtn}>+</button>
+                  </td>
+                  <td style={{ ...cell, textAlign: 'right' }}>{money(l.price)}</td>
+                  <td style={{ ...cell, textAlign: 'right' }}>{money(l.price * l.qty)}</td>
+                  <td style={{ ...cell, textAlign: 'right' }}>
+                    <button type="button" className="utility-btn" aria-label={`Remove ${l.label} from the cart`}
+                      onClick={() => setCartBuys((c) => stepBuy(c, l.key, -l.qty))} style={lineBtn}>✕</button>
+                  </td>
+                </tr>
+              ))}
+              {cartSells.map((s) => (
+                <tr key={s.uid} data-testid="cart-sell">
+                  <td style={{ ...cell }}>
+                    SELL · {s.line.label}
+                    {s.installed && (
+                      <div style={{ color: 'var(--warning)', fontSize: 9, whiteSpace: 'normal' }}>
+                        ⚕ Installed — it comes out with no surgery roll. Square that with your GM.
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ ...cell, textAlign: 'right' }}>×1</td>
+                  <td style={{ ...cell, textAlign: 'right' }}>{money(-s.each)}</td>
+                  <td style={{ ...cell, textAlign: 'right' }}>{money(-s.each)}</td>
+                  <td style={{ ...cell, textAlign: 'right' }}>
+                    <button type="button" className="utility-btn" aria-label={`Remove ${s.line.label} from the cart`}
+                      onClick={() => setCartSells((c) => c.filter((x) => x.uid !== s.uid))} style={lineBtn}>✕</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {carry && (
+            <div data-testid="cart-carry" style={{ ...mono(10), letterSpacing: 0, marginTop: 8 }}>
+              CARRYING AFTER CHECKOUT ·{' '}
+              <span style={{ color: carry.readied > carry.readiedMax ? 'var(--danger)' : undefined }}>
+                READIED {carry.readied}/{carry.readiedMax}
+              </span>
+              {' · '}
+              <span style={{ color: carry.stowed > carry.stowedMax ? 'var(--danger)' : undefined }}>
+                STOWED {carry.stowed}/{carry.stowedMax}
+              </span>
+              {carry.over && (
+                <span style={{ color: 'var(--danger)' }}>
+                  {encumbranceEnforced ? ' — too much to carry' : ' — over the limit, Move slows'}
+                </span>
+              )}
+            </div>
+          )}
+
+          <div data-testid="cart-total" style={{ ...mono(11), letterSpacing: 0, marginTop: 10, borderTop: '1px solid var(--dark-green)', paddingTop: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>TOTAL</span>
+              <span style={{ fontWeight: 'bold' }}>{money(net)}</span>
+            </div>
+            <div style={{ color: net < 0 ? 'var(--cyan)' : 'var(--green)', textAlign: 'right' }}>
+              {net > 0 ? `YOU PAY ${money(net)}` : net < 0 ? `THE SHOP PAYS YOU ${money(-net)}` : 'IT COMES OUT EVEN'}
+              {account && ` · BALANCE AFTER ${money(account.balance - net)}`}
+            </div>
+            {repriced !== null && (
+              <div style={{ color: 'var(--warning)', textAlign: 'right' }}>PRICES CHANGED — THIS IS THE NEW TOTAL</div>
+            )}
+          </div>
+
+          {asking && (
+            <div
+              role="alertdialog"
+              aria-label="Not enough credits"
+              style={{ ...mono(10), letterSpacing: 0, marginTop: 8, padding: '6px 8px', border: '1px solid var(--warning)', color: 'var(--warning)' }}
+            >
+              <div style={{ marginBottom: 6 }}>
+                The cart comes to {money(net)} and you have {money(account?.balance ?? 0)}. How do you
+                want to cover the {money(net - (account?.balance ?? 0))} short?
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button type="button" className="utility-btn" onClick={() => checkout(SETTLE_DEBT)}
+                  title="Spend what you have and borrow the rest" style={{ ...mono(10), padding: '2px 10px' }}>TAKE DEBT</button>
+                <button type="button" className="utility-btn" onClick={() => checkout(SETTLE_BALANCE)}
+                  title="Let the balance go below zero" style={{ ...mono(10), padding: '2px 10px' }}>GO NEGATIVE</button>
+                <button type="button" className="utility-btn" onClick={() => setAsking(false)}
+                  style={{ ...mono(10), padding: '2px 10px' }}>CANCEL</button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button type="button" className="utility-btn" onClick={clearCart} disabled={busy}
+              style={{ ...mono(11), padding: '4px 12px', flex: 1 }}>CLEAR CART</button>
+            <button type="button" className="utility-btn active" onClick={() => checkout()}
+              disabled={busy || carryBlocks || asking}
+              style={{ ...mono(11), padding: '4px 12px', flex: 2 }}>{busy ? 'CHECKING OUT…' : 'CHECK OUT'}</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   return (
-    <DraggableWindow
-      title={`SHOP · ${name || 'UNNAMED'}`}
+    // The layout of the building and token windows it opens from: the building in the
+    // corner, BUY and SELL down the left, the open one's list on the right with its filter
+    // and shelf tabs on top. Wider than they are, because a shelf is a table.
+    <TerminalWindow
+      title={`SHOP.EXE · ${name || 'UNNAMED'}`}
       pos={pos}
       setPos={setPos}
       onClose={onClose}
-      windowStyle={windowStyle}
-      contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column' }}
-    >
-      <div className="content" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ ...mono(9), color: 'var(--cyan)', marginBottom: 6 }}>
+      preview={preview}
+      folders={[
+        { id: 'buy' as Tab, label: 'BUY' },
+        { id: 'sell' as Tab, label: 'SELL' },
+        { id: 'cart' as Tab, label: cartCount ? `CART · ${cartCount}` : 'CART', name: 'CART', attention: cartNews },
+      ]}
+      open={tab}
+      onOpen={(id) => {
+        setTab(id);
+        // The receipt answers the checkout just made; walking off to a shelf is moving on.
+        if (id === 'cart') setCartNews(false);
+        else setReceipt(null);
+      }}
+      panelMode="list"
+      width={980}
+      label={`${name || 'Shop'} shop`}
+      header={(
+        <span style={{ color: 'var(--cyan)' }}>
           {type ? typeLabel(type.id, system).toUpperCase() : 'UNKNOWN'} ·{' '}
           {rows.length} LINE{rows.length === 1 ? '' : 'S'}
           {/* The book page, so a price can be checked without hunting for the table. */}
@@ -1278,13 +1548,9 @@ export function ShopWindow({
               )}
             </>
           )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-          {tabButton('buy', 'BUY')}
-          {tabButton('sell', 'SELL')}
-        </div>
-
+        </span>
+      )}
+    >
         {tab === 'buy' ? (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             {/* One tab per catalogue, and none at all for a shop that carries one. A lone
@@ -1352,7 +1618,7 @@ export function ShopWindow({
                   style={{
                     background: 'var(--black)', border: '1px solid var(--dark-green)',
                     color: 'var(--green)', fontFamily: 'monospace', fontSize: 11,
-                    padding: '3px 5px', width: '100%', marginBottom: 6,
+                    padding: '3px 5px', width: '100%', boxSizing: 'border-box', marginBottom: 6,
                   }}
                 />
                 {shelf.controls}
@@ -1367,57 +1633,7 @@ export function ShopWindow({
                   </div>
                 )}
 
-                {/*
-                  Short of the price, with the house rule on.
-
-                  Asked rather than decided, because taking on debt and letting an account
-                  go under are different problems with different consequences, and which
-                  one a player wants is not something a shop can infer. Cancel is a real
-                  third answer and is listed with the others rather than hidden in a
-                  corner - nothing has been charged at this point.
-                */}
-                {asking && (
-                  <div
-                    role="alertdialog"
-                    aria-label="Not enough credits"
-                    style={{
-                      ...mono(10), letterSpacing: 0, marginBottom: 8, padding: '6px 8px',
-                      border: '1px solid var(--warning)', color: 'var(--warning)',
-                    }}
-                  >
-                    <div style={{ marginBottom: 6 }}>
-                      {asking.label.toUpperCase()} costs {credits(asking.price)} and you have{' '}
-                      {credits(account?.balance ?? 0)}. How do you want to cover the{' '}
-                      {credits(asking.price - (account?.balance ?? 0))} short?
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        className="utility-btn"
-                        onClick={() => answerAsking(SETTLE_DEBT)}
-                        title="Spend what you have and borrow the rest"
-                        style={{ ...mono(10), padding: '2px 10px' }}
-                      >TAKE DEBT</button>
-                      <button
-                        type="button"
-                        className="utility-btn"
-                        onClick={() => answerAsking(SETTLE_BALANCE)}
-                        title="Let the balance go below zero"
-                        style={{ ...mono(10), padding: '2px 10px' }}
-                      >GO NEGATIVE</button>
-                      <button
-                        type="button"
-                        className="utility-btn"
-                        onClick={() => {
-                          pending.current.delete(pendingKey(asking.catalogue, asking.itemId));
-                          setAsking(null);
-                        }}
-                        style={{ ...mono(10), padding: '2px 10px' }}
-                      >CANCEL</button>
-                    </div>
-                  </div>
-                )}
-                <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                <div className="cyber-scroll" style={{ flex: rows.length === 0 ? '0 0 auto' : 1, minHeight: 0, overflowY: 'auto' }}>
                   <table style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
                     <thead>
                       <tr style={{ color: 'var(--grid-section)' }}>
@@ -1440,6 +1656,7 @@ export function ShopWindow({
                     <tbody>
                       {rows.map((row) => {
                         const key = shelf.rowKey(row);
+                        const inCart = cartBuys.find((l) => l.key === cartKey(shelf.id, key))?.qty ?? 0;
                         const canBuy = shelf.buyable ? shelf.buyable(row) : true;
                         const label = String(shelf.columns.name.value(row));
                         return (
@@ -1451,7 +1668,9 @@ export function ShopWindow({
                                 style={{
                                   ...cell,
                                   textAlign: col.align ?? 'left',
-                                  ...(colKey === 'name' ? { whiteSpace: 'nowrap' } : {}),
+                                  // Names, numbers and ranges read as one piece; only the prose wraps.
+                                  ...(colKey === 'name' || colKey === 'dmg' || colKey === 'range' || col.align === 'right'
+                                    ? { whiteSpace: 'nowrap' } : {}),
                                   ...(colKey === 'effect' || colKey === 'note'
                                     ? { color: 'var(--grid-section)' } : {}),
                                   ...(colKey === 'owned' ? { color: 'var(--cyan)' } : {}),
@@ -1470,11 +1689,11 @@ export function ShopWindow({
                                   type="button"
                                   className="utility-btn"
                                   disabled={!sheet}
-                                  aria-label={`Buy ${label}`}
+                                  aria-label={`Add ${label} to the cart`}
                                   title={sheet ? shelf.notice : 'No character sheet loaded'}
                                   onClick={() => shelf.buy(row)}
                                   style={{ padding: '1px 6px', fontSize: 9 }}
-                                >BUY{taken[key] ? ` ×${taken[key]}` : ''}</button>
+                                >+ CART{inCart ? ` ×${inCart}` : ''}</button>
                               ) : (
                                 <span style={{ color: 'var(--grid-section)' }}>—</span>
                               )}
@@ -1486,7 +1705,7 @@ export function ShopWindow({
                   </table>
                 </div>
                 {rows.length === 0 && (
-                  <div style={{ ...mono(10), color: 'var(--grid-section)', paddingTop: 6, letterSpacing: 0 }}>
+                  <div data-testid="shelf-empty" style={{ ...mono(11), color: 'var(--green)', padding: '10px 0', letterSpacing: 0 }}>
                     {/* An empty shelf and a filter that matched nothing are different
                         answers, and only one of them is somebody else's job to fix. */}
                     {shelf.rows.length === 0
@@ -1504,10 +1723,10 @@ export function ShopWindow({
               </>
             )}
           </div>
-        ) : (
+        ) : tab === 'sell' ? (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ ...mono(9), color: 'var(--grid-section)', marginBottom: 8, letterSpacing: 0 }}>
-              THIS SHOP PAYS {pct}% OF THE {book ? 'BOOK' : 'SHELF'} PRICE · ADD WHAT YOU WANT TO SELL, THEN SELL
+              THIS SHOP PAYS {pct}% OF THE {book ? 'BOOK' : 'SHELF'} PRICE · + CART WHAT YOU WANT TO SELL, THEN CHECK OUT IN THE CART
             </div>
 
             {refused && (
@@ -1516,28 +1735,26 @@ export function ShopWindow({
               </div>
             )}
 
-            {/* What the last sale came to, kept until something else happens. */}
-            {receipt && (
-              <div style={{ ...mono(10), color: 'var(--cyan)', marginBottom: 6, letterSpacing: 0, lineHeight: 1.5 }}>
-                SOLD FOR {credits(receipt.payout)}.
-                {receipt.fromBody > 0 && (
-                  <span style={{ color: 'var(--warning)' }}>
-                    {' '}{receipt.fromBody === 1 ? 'A piece' : `${receipt.fromBody} pieces`} of
-                    installed cyberware came out. Ask your GM about the surgery roll.
-                  </span>
-                )}
-              </div>
-            )}
-
             {sellable.length === 0 ? (
-              <div style={{ ...mono(10), color: 'var(--grid-section)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
+              <div style={{ ...mono(11), color: 'var(--green)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
                 {!sheet
                   ? 'NO CHARACTER SHEET LOADED — NOTHING TO SELL.'
                   : 'NOTHING HERE THIS SHOP WOULD BUY. A shop only takes the kinds of thing it sells.'}
               </div>
             ) : (
               <>
-                <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                <input
+                  value={sellFilter}
+                  onChange={(e) => setSellFilter(e.target.value)}
+                  placeholder="Filter by name"
+                  aria-label="Filter what you can sell"
+                  style={{
+                    background: 'var(--black)', border: '1px solid var(--dark-green)',
+                    color: 'var(--green)', fontFamily: 'monospace', fontSize: 11,
+                    padding: '3px 5px', width: '100%', boxSizing: 'border-box', marginBottom: 6,
+                  }}
+                />
+                <div className="cyber-scroll" style={{ flex: shownSellable.length === 0 ? '0 0 auto' : 1, minHeight: 0, overflowY: 'auto' }}>
                   <table style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
                     <thead>
                       <tr style={{ color: 'var(--grid-section)' }}>
@@ -1549,7 +1766,7 @@ export function ShopWindow({
                       </tr>
                     </thead>
                     <tbody>
-                      {sellable.map((l) => {
+                      {shownSellable.map((l) => {
                         const staged = basket[l.key] ?? 0;
                         const left = l.qty - staged;
                         const each = buybackValue(l.unitPrice, pct);
@@ -1586,17 +1803,16 @@ export function ShopWindow({
                               <button
                                 type="button"
                                 className="utility-btn"
-                                disabled={left <= 0 || confirming}
-                                aria-label={`Add ${l.label} to the sell list`}
+                                disabled={left <= 0}
+                                aria-label={`Add ${l.label} to the cart`}
                                 onClick={() => stage(l.key, 1)}
                                 style={{ padding: '1px 6px', fontSize: 9 }}
-                              >ADD</button>
+                              >+ CART</button>
                               {staged > 0 && (
                                 <button
                                   type="button"
                                   className="utility-btn"
-                                  disabled={confirming}
-                                  aria-label={`Take ${l.label} off the sell list`}
+                                  aria-label={`Take ${l.label} out of the cart`}
                                   onClick={() => stage(l.key, -1)}
                                   style={{ padding: '1px 6px', fontSize: 9, marginLeft: 4 }}
                                 >−</button>
@@ -1608,91 +1824,21 @@ export function ShopWindow({
                     </tbody>
                   </table>
                 </div>
+                {shownSellable.length === 0 && (
+                  <div data-testid="sell-empty" style={{ ...mono(11), color: 'var(--green)', padding: '10px 0', letterSpacing: 0 }}>
+                    NOTHING MATCHES THAT
+                  </div>
+                )}
 
-                {/*
-                  The sell list, and one confirmation for the lot.
-
-                  A basket rather than a button per row: selling is irreversible and this
-                  way there is exactly one moment to look at what is about to go, whatever
-                  its size.
-                */}
-                <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: 6, marginTop: 6 }}>
-                  {staging.length === 0 ? (
-                    <div style={{ ...mono(9), color: 'var(--grid-section)', letterSpacing: 0 }}>
-                      NOTHING ON THE SELL LIST YET
-                    </div>
-                  ) : confirming ? (
-                    <div style={{ ...mono(10), letterSpacing: 0, lineHeight: 1.5 }}>
-                      <div style={{ color: 'var(--warning)', marginBottom: 4 }}>
-                        SELL {staging.reduce((n, s) => n + s.qty, 0)} ITEM
-                        {staging.reduce((n, s) => n + s.qty, 0) === 1 ? '' : 'S'} FOR{' '}
-                        {credits(basketTotal)}? THIS CANNOT BE UNDONE.
-                      </div>
-                      {stagedFromBody > 0 && (
-                        <div style={{ color: 'var(--danger)', marginBottom: 4 }}>
-                          ⚕ {stagedFromBody === 1 ? 'One piece' : `${stagedFromBody} pieces`} of
-                          this is installed cyberware. It comes straight out with no surgery
-                          roll — ask your GM how they want to handle that, or keep it and sell
-                          the rest.
-                        </div>
-                      )}
-                      <div style={{ color: 'var(--grid-section)', marginBottom: 6 }}>
-                        {staging.map((s) => `${s.label} ×${s.qty}`).join(' · ')}
-                      </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          type="button"
-                          className="utility-btn"
-                          onClick={commitSale}
-                          style={{ ...mono(10), padding: '2px 10px' }}
-                        >CONFIRM</button>
-                        {/* A way out of the implants alone. Cancelling the whole basket
-                            was the only answer before, which is a poor one when the
-                            surgery is a surprise and the rest of the list is fine. */}
-                        {stagedFromBody > 0 && (
-                          <button
-                            type="button"
-                            className="utility-btn"
-                            onClick={keepImplants}
-                            title="Take the installed cyberware off the list and keep the rest of the sale"
-                            style={{ ...mono(10), padding: '2px 10px' }}
-                          >KEEP IMPLANTS</button>
-                        )}
-                        <button
-                          type="button"
-                          className="utility-btn"
-                          onClick={() => setConfirming(false)}
-                          style={{ ...mono(10), padding: '2px 10px' }}
-                        >BACK</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ ...mono(10), letterSpacing: 0 }}>
-                      <div style={{ color: 'var(--grid-section)', marginBottom: 6, lineHeight: 1.5 }}>
-                        {staging.map((s) => `${s.label} ×${s.qty}`).join(' · ')}
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <button
-                          type="button"
-                          className="utility-btn"
-                          onClick={() => { setReceipt(null); setConfirming(true); }}
-                          style={{ ...mono(10), padding: '2px 10px' }}
-                        >SELL · {credits(basketTotal)}</button>
-                        <button
-                          type="button"
-                          className="utility-btn"
-                          onClick={() => setBasket({})}
-                          style={{ ...mono(10), padding: '2px 10px' }}
-                        >CLEAR</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                {cartSells.length > 0 && (
+                  <div style={{ ...mono(10), color: 'var(--cyan)', letterSpacing: 0, marginTop: 6 }}>
+                    {cartSells.length} IN THE CART TO SELL · CHECK OUT IN THE CART
+                  </div>
+                )}
               </>
             )}
           </div>
-        )}
-      </div>
-    </DraggableWindow>
+        ) : cartPanel}
+    </TerminalWindow>
   );
 }

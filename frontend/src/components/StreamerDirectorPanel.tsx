@@ -31,7 +31,7 @@ export function StreamerDirectorPanel({ pos, setPos, onClose, directorState, upd
 
   return (
     <DraggableWindow
-      title="BROADCAST_CONTROLS"
+      title="BROADCAST.EXE"
       pos={pos} setPos={setPos} onClose={onClose}
       windowStyle={{ width: '300px' }}
     >

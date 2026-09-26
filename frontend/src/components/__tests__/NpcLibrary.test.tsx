@@ -32,7 +32,7 @@ beforeEach(() => {
 describe('NpcLibrary', () => {
   it('renders title and shows loading then empty state', async () => {
     render(<NpcLibrary token={TOKEN} pos={basePos} setPos={setPos} onClose={onClose} />);
-    expect(screen.getByTestId('window-title').textContent).toBe('NPC_LIBRARY');
+    expect(screen.getByTestId('window-title').textContent).toBe('NPC_LIBRARY.EXE');
     await waitFor(() => expect(screen.getByText(/NO NPC SHEETS/)).toBeTruthy());
   });
 

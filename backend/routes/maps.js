@@ -1,5 +1,7 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
+const gmNotes = require('../buildings/gmNotes');
+const { columnsOf, queueInserts } = require('../buildings/locationRows');
 
 /**
  * Remember which saved map is live, so exports can name their files after it.
@@ -51,20 +53,28 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
                 if (err5) return res.status(500).json({ error: err5.message });
                 db.all('SELECT * FROM signs', (err6, signs) => {
                   if (err6) return res.status(500).json({ error: err6.message });
+                  // The GM's notes on these buildings travel with the map: location ids are
+                  // reused on load, so notes left behind would land on the next map's
+                  // buildings. Only ever read back through the authenticated load below -
+                  // the public listing returns names and timestamps, nothing else.
+                  gmNotes.all(db, (err7, notes) => {
+                    if (err7) return res.status(500).json({ error: err7.message });
 
-                  const sql = `INSERT INTO saved_maps (name, locations_data, districts_data, roads_data, overpasses_data, water_bodies_data, signs_data)
-                               VALUES (?, ?, ?, ?, ?, ?, ?)
-                               ON CONFLICT(name) DO UPDATE SET
-                                 locations_data=excluded.locations_data,
-                                 districts_data=excluded.districts_data,
-                                 roads_data=excluded.roads_data,
-                                 overpasses_data=excluded.overpasses_data,
-                                 water_bodies_data=excluded.water_bodies_data,
-                                 signs_data=excluded.signs_data,
-                                 timestamp=CURRENT_TIMESTAMP`;
-                  db.run(sql, [name, JSON.stringify(locations), JSON.stringify(districts), JSON.stringify(roads), JSON.stringify(overpasses), JSON.stringify(waterBodies), JSON.stringify(signs)], function(err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    res.json({ message: 'Map saved successfully' });
+                    const sql = `INSERT INTO saved_maps (name, locations_data, districts_data, roads_data, overpasses_data, water_bodies_data, signs_data, gm_notes_data)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                 ON CONFLICT(name) DO UPDATE SET
+                                   locations_data=excluded.locations_data,
+                                   districts_data=excluded.districts_data,
+                                   roads_data=excluded.roads_data,
+                                   overpasses_data=excluded.overpasses_data,
+                                   water_bodies_data=excluded.water_bodies_data,
+                                   signs_data=excluded.signs_data,
+                                   gm_notes_data=excluded.gm_notes_data,
+                                   timestamp=CURRENT_TIMESTAMP`;
+                    db.run(sql, [name, JSON.stringify(locations), JSON.stringify(districts), JSON.stringify(roads), JSON.stringify(overpasses), JSON.stringify(waterBodies), JSON.stringify(signs), JSON.stringify(notes)], function(err) {
+                      if (err) return res.status(500).json({ error: err.message });
+                      res.json({ message: 'Map saved successfully' });
+                    });
                   });
                 });
               });
@@ -87,65 +97,75 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       const overpasses = JSON.parse(row.overpasses_data || '[]');
       const waterBodies = JSON.parse(row.water_bodies_data || '[]');
       const signs = JSON.parse(row.signs_data || '[]');
+      // Null for a map saved before notes traveled with it. That map had none to carry,
+      // so whatever is in the table now belongs to a different map and goes.
+      const notes = JSON.parse(row.gm_notes_data || '[]');
 
-      db.serialize(() => {
-        // Delete all locations except live player rhombuses; enemy/friendly tokens are map content and get replaced
-        db.run(`DELETE FROM locations WHERE shape IS NULL OR shape != 'rhombus'`);
-        db.run('DELETE FROM districts');
-        db.run('DELETE FROM roads');
-        db.run('DELETE FROM overpasses');
-        db.run('DELETE FROM water_bodies');
-        db.run('DELETE FROM signs');
+      // The table's columns, looked up before anything is queued so the inserts below keep
+      // their place in the serialized order - the id sequence is reset after them.
+      columnsOf(db, 'locations', (colErr, columns) => {
+        if (colErr) return res.status(500).json({ error: colErr.message });
 
-        if (locations.length > 0) {
-          const stmtL = db.prepare(`INSERT OR IGNORE INTO locations (id, name, description, npcs, x, y, z, width, height, depth, shape, color, district_name, district_color, parent_id, is_target, isFavorite, isDanger, owner, notifications_enabled, rotation, rotation_x, rotation_z, classification, polyCount, battle_map_id, floor_index, hp_current, hp_max, hp_temp, map_scale_multiplier, is_global)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-          locations.forEach(l => {
-            stmtL.run([l.id, l.name, l.description, l.npcs, l.x, l.y, l.z, l.width, l.height, l.depth, l.shape, l.color, l.district_name, l.district_color, l.parent_id, l.is_target, l.isFavorite, l.isDanger, l.owner, l.notifications_enabled, l.rotation, l.rotation_x, l.rotation_z, l.classification, l.polyCount, l.battle_map_id, l.floor_index, l.hp_current !== undefined ? l.hp_current : null, l.hp_max !== undefined ? l.hp_max : null, l.hp_temp !== undefined ? l.hp_temp : null, l.map_scale_multiplier !== undefined ? l.map_scale_multiplier : 5, l.is_global || 0]);
+        db.serialize(() => {
+          // Delete all locations except live player rhombuses; enemy/friendly tokens are map content and get replaced
+          db.run(`DELETE FROM locations WHERE shape IS NULL OR shape != 'rhombus'`);
+          db.run('DELETE FROM districts');
+          db.run('DELETE FROM roads');
+          db.run('DELETE FROM overpasses');
+          db.run('DELETE FROM water_bodies');
+          db.run('DELETE FROM signs');
+
+          // Every column each building was saved with. The hand-kept list this replaced had
+          // fallen behind the table, so a loaded map lost every building's type, buy-back
+          // rate, AC, sidewalk and signage settings and hidden flag. A column the snapshot
+          // predates takes the table's default, as it would for a new building.
+          queueInserts(db, columns, locations, { orIgnore: true });
+
+          if (districts.length > 0) {
+            const stmtD = db.prepare(`INSERT INTO districts (id, name, color) VALUES (?, ?, ?)`);
+            districts.forEach(d => stmtD.run([d.id, d.name, d.color]));
+            stmtD.finalize();
+          }
+
+          if (roads.length > 0) {
+            const stmtR = db.prepare(`INSERT INTO roads (id, x1, z1, x2, z2, width) VALUES (?, ?, ?, ?, ?, ?)`);
+            roads.forEach(r => stmtR.run([r.id, r.x1, r.z1, r.x2, r.z2, r.width]));
+            stmtR.finalize();
+          }
+
+          if (overpasses.length > 0) {
+            const stmtO = db.prepare(`INSERT INTO overpasses (id, points, height, width, ramp_length, ramp_length_start, ramp_length_end, pillar_spacing) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+            overpasses.forEach(o => stmtO.run([o.id, o.points, o.height, o.width, o.ramp_length, o.ramp_length_start ?? null, o.ramp_length_end ?? null, o.pillar_spacing]));
+            stmtO.finalize();
+          }
+
+          db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM locations) WHERE name="locations"');
+          db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM districts) WHERE name="districts"');
+          db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM roads) WHERE name="roads"');
+          db.run('UPDATE sqlite_sequence SET seq = COALESCE((SELECT MAX(id) FROM overpasses), 0) WHERE name="overpasses"');
+
+          if (waterBodies.length > 0) {
+            const stmtW = db.prepare(`INSERT INTO water_bodies (id, points_json, map_scale_multiplier) VALUES (?, ?, ?)`);
+            waterBodies.forEach(w => stmtW.run([w.id, w.points_json, w.map_scale_multiplier]));
+            stmtW.finalize();
+          }
+          db.run('UPDATE sqlite_sequence SET seq = COALESCE((SELECT MAX(id) FROM water_bodies), 0) WHERE name="water_bodies"');
+
+          if (signs.length > 0) {
+            const stmtS = db.prepare(`INSERT INTO signs (id, text, x, y, z, rotation_y, font_size, font_family, image_url, use_tv_filter, lines, filter_intensity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+            signs.forEach(s => stmtS.run([s.id, s.text, s.x, s.y, s.z, s.rotation_y, s.font_size, s.font_family, s.image_url ?? null, s.use_tv_filter ?? 0, s.lines ?? null, s.filter_intensity ?? 1.0]));
+            stmtS.finalize();
+          }
+          db.run('UPDATE sqlite_sequence SET seq = COALESCE((SELECT MAX(id) FROM signs), 0) WHERE name="signs"');
+
+          db.run('SELECT 1', () => {
+            // After the buildings are in, so a note is only restored onto a building the map
+            // actually has.
+            gmNotes.replaceAll(db, notes, () => {
+              emitUpdate();
+              res.json({ message: 'Map loaded successfully' });
+            });
           });
-          stmtL.finalize();
-        }
-
-        if (districts.length > 0) {
-          const stmtD = db.prepare(`INSERT INTO districts (id, name, color) VALUES (?, ?, ?)`);
-          districts.forEach(d => stmtD.run([d.id, d.name, d.color]));
-          stmtD.finalize();
-        }
-
-        if (roads.length > 0) {
-          const stmtR = db.prepare(`INSERT INTO roads (id, x1, z1, x2, z2, width) VALUES (?, ?, ?, ?, ?, ?)`);
-          roads.forEach(r => stmtR.run([r.id, r.x1, r.z1, r.x2, r.z2, r.width]));
-          stmtR.finalize();
-        }
-
-        if (overpasses.length > 0) {
-          const stmtO = db.prepare(`INSERT INTO overpasses (id, points, height, width, ramp_length, ramp_length_start, ramp_length_end, pillar_spacing) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-          overpasses.forEach(o => stmtO.run([o.id, o.points, o.height, o.width, o.ramp_length, o.ramp_length_start ?? null, o.ramp_length_end ?? null, o.pillar_spacing]));
-          stmtO.finalize();
-        }
-
-        db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM locations) WHERE name="locations"');
-        db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM districts) WHERE name="districts"');
-        db.run('UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM roads) WHERE name="roads"');
-        db.run('UPDATE sqlite_sequence SET seq = COALESCE((SELECT MAX(id) FROM overpasses), 0) WHERE name="overpasses"');
-
-        if (waterBodies.length > 0) {
-          const stmtW = db.prepare(`INSERT INTO water_bodies (id, points_json, map_scale_multiplier) VALUES (?, ?, ?)`);
-          waterBodies.forEach(w => stmtW.run([w.id, w.points_json, w.map_scale_multiplier]));
-          stmtW.finalize();
-        }
-        db.run('UPDATE sqlite_sequence SET seq = COALESCE((SELECT MAX(id) FROM water_bodies), 0) WHERE name="water_bodies"');
-
-        if (signs.length > 0) {
-          const stmtS = db.prepare(`INSERT INTO signs (id, text, x, y, z, rotation_y, font_size, font_family, image_url, use_tv_filter, lines, filter_intensity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-          signs.forEach(s => stmtS.run([s.id, s.text, s.x, s.y, s.z, s.rotation_y, s.font_size, s.font_family, s.image_url ?? null, s.use_tv_filter ?? 0, s.lines ?? null, s.filter_intensity ?? 1.0]));
-          stmtS.finalize();
-        }
-        db.run('UPDATE sqlite_sequence SET seq = COALESCE((SELECT MAX(id) FROM signs), 0) WHERE name="signs"');
-
-        db.run('SELECT 1', () => {
-          emitUpdate();
-          res.json({ message: 'Map loaded successfully' });
         });
       });
     });
@@ -168,6 +188,9 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="overpasses"');
       db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="water_bodies"');
       db.run('UPDATE sqlite_sequence SET seq = 0 WHERE name="signs"');
+      // The id sequence was just wound back, so the next building made gets an id a
+      // cleared one had. Its notes must not be waiting for it.
+      gmNotes.pruneOrphans(db);
 
       db.run('SELECT 1', () => {
         emitUpdate();

@@ -45,7 +45,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
   return (
     <>
     <DraggableWindow
-      title={`CHARACTER_SHEET // ${userName.toUpperCase()}`}
+      title={`SHEET.EXE · ${userName.toUpperCase()}`}
       pos={pos}
       setPos={setPos}
       onClose={onClose}
@@ -69,7 +69,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
             IMPORT
           </button>
           {template && (
-            <span style={{ border: '1px solid var(--green)', padding: '0 6px', fontSize: '0.6rem', letterSpacing: '1px' }}>
+            <span style={{ border: '1px solid currentColor', padding: '0 6px', fontSize: '0.6rem', letterSpacing: '1px' }}>
               {template.name.toUpperCase()}
             </span>
           )}

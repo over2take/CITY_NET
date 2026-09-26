@@ -748,6 +748,28 @@ header {
   animation: chat-alert 1s infinite;
 }
 
+/* The login screen, always under the CRT scanlines. Its backdrop is z-index 1000 and the
+   scanlines only 10, so on its own it covered them; its own layer keeps it below. The fade
+   below did this by accident, which is why a refresh - with no fade - lost the scanlines. */
+.login-layer {
+  isolation: isolate;
+}
+
+/* The login window, fading in as the boot screen fades out. */
+.login-fade-in {
+  animation: login-fade-in 0.9s ease both;
+}
+
+@keyframes login-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* A terminal folder with something new in it - the shop's CART after adding to it. */
+.terminal-folder-attention {
+  animation: chat-alert 1s infinite;
+}
+
 .rail-bottom .rail-btn {
   color: var(--green);
   opacity: 0.7;
@@ -950,6 +972,28 @@ header {
   letter-spacing: 1px;
   text-transform: uppercase;
   text-shadow: 0 0 1px currentColor, 0 0 1px currentColor;
+}
+
+/* Every window's title bar is solid: the theme's color with the name knocked out of it,
+   like an old green-screen header. It started as the terminal windows' own look and every
+   window now has it, so the window you are looking at reads the same as the one beside it.
+   Anything placed in the bar (the close button, IMPORT, the vehicle badge) is a black box
+   with its own border, so it stands out against the color. */
+.win95-title-bar {
+  background: var(--green);
+  color: var(--black);
+  border-bottom: none;
+}
+
+.win95-title-text {
+  text-shadow: none;
+}
+
+/* The windows behind the focused one: an outlined bar, so the one in front is obvious. */
+.win95-window.inactive .win95-title-bar {
+  background: var(--black);
+  color: var(--green);
+  border-bottom: 1px solid var(--dark-green);
 }
 
 .win95-close-btn {

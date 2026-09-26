@@ -26,7 +26,7 @@ export function InitiativeRollPrompt({ sceneLabel, userName, userId, portraitUrl
 
   return (
     <DraggableWindow
-      title="INITIATIVE_ROLL"
+      title="INITIATIVE_ROLL.EXE"
       pos={pos}
       setPos={setPos}
       onClose={onClose}

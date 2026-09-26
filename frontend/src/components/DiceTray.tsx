@@ -397,7 +397,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
 
   return (
     <DraggableWindow
-      title="DICE_TRAY.exe"
+      title="DICE_TRAY.EXE"
       pos={pos}
       setPos={setPos}
       onClose={onClose}

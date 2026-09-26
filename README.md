@@ -325,6 +325,10 @@ CITY_NET/
 │   ├── db.js                   # SQLite schema and migrations. Holds the one sheet write that deliberately bypasses sheets/mutate.js — a boot-time migration, documented in place, running before the server listens and before anything exists to race with
 │   ├── updater.js              # In-app self-update — paginated registry tag listing so a run of dev builds cannot hide a stable release; release channels selected by IMAGE_TAG alone, the same variable compose pulls with (X.Y.Z-dev tags with an optional counter, ordered so a release supersedes its own dev builds); preflight (compose file mounted, docker socket, compose project labels) so a stack that cannot update says why instead of hanging, and offers updating from the host as an equal option since running without the socket is a supported posture; one update at a time, refused rather than queued, with a stale-run release so a hung pull does not deaden the button; the helper command passed as argv rather than through `sh -c`, so a compose label containing a command substitution is data and not code; upgrade-only semver check; update log on the data volume; boot id so a restart is detectable without a version change; the registry read goes through net/outbound, and the docker probe behind GET /api/version is asked once per process rather than once per request — execSync holds the event loop, so a probe on an open route was a way to stall the server
 │   ├── buildingTypes.js       # What a building is for, which catalogues it sells, and which of those a shelf can actually show. Distinct from `classification`, which is the mesh a custom structure is drawn from - a ripperdoc and a noodle bar can share a shape
+│   ├── buildings/
+│   │   ├── gmNotes.js          # The GM's notes, in their own table rather than a column every player downloads. Kept through a single delete so undo brings them back; pruned on a map clear and replaced on a map load, the two places location ids are reused
+│   │   ├── locationRows.js     # Putting whole location rows back - a saved map loading, a delete being undone - with every column the table has, read from the table. The hand-kept lists it replaced had fallen behind and dropped building types, buy-back rates, AC and more
+│   │   └── photoTypes.js       # What a building photo may be. Requires nothing, so the frontend test holds the file picker's accept list to it
 │   ├── net/
 │   │   └── outbound.js         # Every request to a host we do not own goes through here. A named destination (exact hostname, never a suffix test), HTTPS, a deadline covering the body as well as the connection, a byte cap, and no redirect following — none of which a caller can opt out of. Two callers, one auditable surface
 │   ├── middleware/
@@ -336,6 +340,7 @@ CITY_NET/
 │   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs; POST /update preflights and returns 409 naming what is missing, GET /update/status reports phase and a stable failure code and nothing anyone said to us — it is unauthenticated by necessity, so the compose output that used to ride along on it now stays in the log file, POST /check-update offers only genuine upgrades from the deployment's own channel; POST /water marks generated water so a regenerate can clear its own river without touching a lake the GM drew
 │   │   ├── locations.js        # Location CRUD; JOIN→CUSTOM classification upserts roots + child parts to custom_structure_library; serves GET /custom-library (CUSTOM-only); GET / includes sheet_data for NPC initiative rolls; POST /purge-region clears one region's generated content in a single transaction, keeping GM-named structures, tokens, battle-map content and hand-drawn water
 │   │   ├── battle_maps.js      # Battle map upload and management. Streams to a temporary file and hashes in chunks rather than buffering, so a 250MB animated map costs disk rather than RAM, then renames to the content hash — the same map on a dozen locations is one file. Sweeps partial uploads left by a process that died mid-transfer, since those are the one case the handler's own cleanup cannot reach. Accepts what the scene can actually draw, stills and loops alike, since a format the renderer cannot decode uploads perfectly and then shows nothing
+│   │   ├── buildingDetails.js  # A building's photo and the GM's notes, mounted under /api/locations/:id. Photo upload and remove, and the notes both ways, are main-admin only - a player granted editing rights holds a token that passes `authenticate` and is refused here. The notes never join the public location list
 │   │   ├── maps.js             # Saved map snapshots (locations, districts, roads, overpasses, water bodies); preserves only rhombus tokens on load/clear; records active_map_name in global_settings so exports can name their files
 │   │   ├── music.js            # Radio Feed — library CRUD + file upload, checked by extension rather than by the Content-Type the uploader claims, since the name is what gets written and what decides how it is served back
 │   │   ├── roads.js            # Road CRUD; DELETE /:id removes a single segment
@@ -384,6 +389,7 @@ CITY_NET/
 │   │   ├── buyback.js          # What a shop pays for something sold back: this storefront's rate, then the global, then 45%. A shop set to 0 is set, not blank
 │   │   ├── owned.js            # What a character owns, derived from the four places a sheet keeps things. Never cached - a manifest would go stale on every path that removes an item. How many weapon and vehicle rows to read comes from sheetSlots, per system
 │   │   ├── sell.js             # Prices a sell basket and builds the sheet patch. A row is emptied of exactly the fields that system's template draws for it (sheetSlots), so a vehicle takes its mounts and fittings with it and a Cyberpunk RED gun its ROF. Refuses without a known system rather than guessing CWN; a basket that fails part way empties nothing
+│   │   ├── checkout.js         # A shop cart, settled as one: prices from the server, the sale through sell.js, the account moved once by the difference, and nothing moved unless every line is good. Refuses a total that changed since the player was shown it
 │   │   ├── sheetSlots.js       # Where each system keeps weapons and vehicles: row counts and every field a row owns, nested mounts included. The server's templates carry no field ids, so this is a copy of what the frontend reads out of its templates, compared entry for entry by a test
 │   │   ├── catalogueParse.js   # Reads a catalogue a GM pasted or uploaded: CSV, TSV or JSON, real RFC-4180 quoting, per-line problems rather than exceptions. The only reader - the preview is a round trip to it
 │   │   ├── catalogueStore.js   # Uploaded catalogues in memory, added on top of the built-in ones, never replacing them. Holds one system at a time, and consults the built-in book only when that system is CWN - every other game's shops carry only what their GM uploaded. Requires nothing, so priceOf stays synchronous and the lot stays importable from a frontend test
@@ -401,6 +407,7 @@ CITY_NET/
 │       │   └── testDb.js               # In-memory SQLite factory for isolated test DBs
 │       ├── admin.test.js               # Admin endpoints (auth, settings, undo access); update routes — 409 with a reason rather than a false success, unauthenticated status, boot id on /version; check-update against a stubbed registry — upgrades only, dev tags per channel, and a prerelease not hiding a stable release
 │       ├── cpr_stats.test.js           # CP:R stat rolls — BODY rollable, MOVE and LUCK not, and every roll button in the template backed by a server-side roll
+│       ├── shop_checkout_sockets.test.js # The cart's checkout over the socket: totals in each direction, every way a line fails taking the whole checkout down with it, a changed total, overdraft asked once, and the payer from the socket
 │       ├── nginx_config.test.js        # The assumptions the app makes about the proxy every request arrives through, which no other test here touches — body ceiling at least the largest upload limit, X-Forwarded-For present, the socket able to upgrade, and every mounted path actually proxied. Two faults in one release lived exactly in that gap
 │       ├── upload_constraints.test.js  # The three questions a refusal has to answer, and the oversized upload that used to come back as HTML. Also asserts the frontend's copy of the cap still equals the server's, read from the source rather than restated
 │       ├── upload_headers.test.js      # Served through a real static mount rather than by calling the helper: a stored .html comes back sandboxed, an SVG likewise, and every file gets the headers rather than the ones something guessed were dangerous
@@ -505,13 +512,16 @@ CITY_NET/
 │   │   │       ├── parkPonds.test.ts   # Pond shape and size, containment in the plot, trees standing back from the water, and identical roads with ponds on or off
 │   │   │       ├── seeds.test.ts       # Same seed rebuilds the same city; typed seeds survive intact; a new seed gives a different one
 │   │   │       └── region.test.ts      # Region membership and counting for REGENERATE
+│   │   ├── sounds/
+│   │   │   ├── bootSounds.ts           # The boot screen's PC-speaker beep and drive head clicks, built in code like the bank's sounds. Plays only while the browser allows sound; nothing is queued before, so a first click does not set it all off at once
+│   │   │   └── useAmbientHum.ts        # The ambient hum as one sound for the session: its first start eases in (slowly after the boot, quickly on a refresh); the volume slider and mute adjust it in place. Only a real 'playing' counts as started, so a start the browser holds back is asked again on the next key or press
 │   │   ├── components/
 │   │   │   ├── AdminPanel.tsx          # GM dashboard — CITY / EXPORT / GAME / PLAYERS tabs; CITY_GENERATOR delegates to cityGen/ and exposes LAYOUT, DRAG_RECT/DRAW_AREA bounds, OVERPASS_DENSITY, WATER, PARK_PONDS, an optional SEED and REGENERATE; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R, CWN, and SR6; SR6 Edge replenishment (reset all / give 1 to player)
 │   │   │   ├── InventorySection.tsx    # The inventory table, on every system. Its own file because SheetRenderer is long enough, and generic: which rows carry an extra button, and what pressing it does, is supplied from outside - so a drug offers CONSUME and a skillplug offers LOAD without either knowing about the other
 │   │   │   ├── PharmaSection.tsx       # What is currently in the bloodstream, drawn in the sheet HEADER rather than a tab: a drug that wears off at the end of a scene and bills System Strain for it is not something to hide behind a tab somebody might not open. Draws nothing at all while a character is on nothing
 │   │   │   ├── XpWindow.tsx            # AWARD_EXPERIENCE — points each rather than a pot to divide, with LEVEL_UP and LEVEL_DOWN for correcting a level on purpose
-│   │   │   ├── HitPoints.tsx           # HP tracking + injury panel + HealthReviewWindow; STIM_HEAL (CWN), STABILIZE button for allies on mortal wound
-│   │   │   ├── BankWindows.tsx         # Player bank UI
+│   │   │   ├── HitPoints.tsx           # The HEALTH folder's two bodies: HitPointsPanel changes health (own token, or any for the GM) under a live heart monitor, with injuries and STIM_HEAL (CWN); HealthReviewPanel only watches someone else's - the monitor, a stun bar and the injury map, never a number - with STABILIZE for an ally on a mortal wound
+│   │   │   ├── BankWindows.tsx         # Player bank UI; the candle chart is nudged by balance changes on a log scale, so a fortune is a tall candle rather than a spike that flattens the rest
 │   │   │   ├── ChatWindow.tsx          # In-game chat
 │   │   │   ├── DiceTray.tsx            # Dice roller; SR6 pool results show a pulsing GLITCH / CRITICAL GLITCH banner; initiative rolls appear with full breakdown; `sidesForKey` picks the 3D shape (custom dice key results by name and carry their side count in `diceSides`)
 │   │   │   ├── CustomDieBuilder.tsx    # CUSTOM_DIE.EXE — draggable build/edit window (name, side count, per-face values); App keys it on the die being edited so switching targets reloads the form
@@ -523,9 +533,11 @@ CITY_NET/
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
 │   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools; initiative button blinks when a roll is needed; exports `hasSheetCombat` + `SheetAttackPanel` (system-agnostic via ATTACK_PANEL_CONFIG)
 │   │   │   ├── SecureLogin.tsx         # Player login, registration, password reset UI; theme picker (saves to localStorage + DB on login); polls registration status until approved
+│   │   │   ├── BootScreen.tsx          # The BIOS-style self test before the login window, once per tab: lines type out, it fades as the login fades in, and only its SKIP button skips it. Reports each line (for the drive clicks) and a click on it (when a browser first allows sound)
 │   │   │   ├── LogoScene.tsx           # Three.js animated login logo (hex badge, wireframe skyline, spinning gem); colour driven by active theme
 │   │   │   ├── CityDatabase.tsx        # Location search/browse
-│   │   │   ├── DraggableWindow.tsx     # Reusable draggable panel wrapper
+│   │   │   ├── DraggableWindow.tsx     # Every window: the solid title bar, dragging kept on screen, and desktop behavior - the front window is focused and the rest drawn inactive, a click anywhere focuses, Esc closes the focused one (not while typing), and each program reopens where it was last left. Titles read PROGRAM.EXE · SUBJECT
+│   │   │   ├── windowFocus.ts          # Which window is in front (a tiny store every window registers its stacking with), and where each program was last left: keyed by the name before ' · ', kept in localStorage
 │   │   │   ├── CursorPing.tsx          # Cursor-position ping broadcast and animation
 │   │   │   ├── AttackAnimations.tsx    # Attack hit/miss animations (swipe, projectile, miss text)
 │   │   │   ├── RadioFeed.tsx           # Admin music library panel (folder tree, upload, delete)
@@ -543,12 +555,22 @@ CITY_NET/
 │   │   │   ├── SheetRenderer.tsx        # Template-driven sheet renderer (any game system); sections may declare groupSize to collapse repeated entries, rowHidden to drop a row of one, and fields may declare presetFill (one select writing a whole stat block, as one save), fullWidth, startsRow or the tag_list type (an add/remove list stored as JSON) — only entries holding data render, plus one blank and a reveal button, so what you filled in comes back after a reload without anything storing that it should; MORTALLY WOUNDED / FRAIL banners, ability_list layout (dynamic add/remove rows with attr dropdown, cost, die, roll), hidden-tab gating
 │   │   │   ├── ImportSheetDialog.tsx    # Sheet import — fillable PDF, a Companion code (Cyberpunk only), or pasted JSON / stat block, plus a download of the blank form that upload expects
 │   │   │   ├── CyberwareWindow.tsx      # The body diagram and the table. Wires are measured from the live layout, since panels grow as chrome is added and where a wire starts is only knowable once laid out. Portalled to the body — rendered in place it inherits the character sheet's bounds and half the diagram is clipped away
-│   │   │   ├── ShopWindow.tsx          # A building that trades. One tab per catalogue the shop sells. CWN shelves come from the book with CWN's own placement rules; every other system's shelves are what the GM uploaded, in that system's columns, placed through shopPlacement. BUY charges the bank and the item appears only once the server confirms it was paid for; short of funds, the overdraft house rule decides whether you are asked to take debt or go negative. SELL lists what you own that this shop buys, into a sell list with one confirmation - installed chrome is flagged, and KEEP IMPLANTS takes it back off the list
+│   │   │   ├── ShopWindow.tsx          # A building that trades, on the terminal layout: BUY, SELL and CART folders, the building in the corner. One shelf tab per catalogue the shop sells, with the filter above the list. CWN shelves come from the book with CWN's own placement rules; every other system's are what the GM uploaded, placed through shopPlacement. + CART on either list fills the cart; CHECK OUT settles it on the server in one go, then places what was bought one at a time and shows a receipt. A checkout nobody answers gives up after 15 seconds
+│   │   │   ├── shopCart.ts             # The cart's arithmetic, pure: one line per thing bought (with a count), one per thing sold, totals both ways and the net, the sell half grouped as the server takes it, and what the character would carry afterwards. What the player is shown - the server works the money out again
+│   │   │   ├── TerminalWindow.tsx      # The shared terminal layout: the picture and folders down the left, the open folder on the right, buttons along the bottom. Folders switch by click or the arrow keys, and one can blink for attention; the panel is as tall as what it holds, or in 'list' mode keeps its top still while a table scrolls under it. What goes in the folders is the caller's
+│   │   │   ├── TokenWindow.tsx         # A token's window on TerminalWindow: INFO (headed with the player's name, their public handle and role first), HEALTH, QUICK ACTIONS on your own token, GM NOTES for the main admin on NPCs. Health panels and the GM's defense and initiative sections come in as slots; which ones a viewer gets is tokenView()
+│   │   │   ├── tokenActions.ts         # Pure rules for the token window, with what they reach for handed in: which buttons each viewer gets and what each does, which folders (tokenView), and whose health HIT_POINTS opens (hitPointsTarget)
+│   │   │   ├── buildingActions.ts      # The same for the building window's buttons
+│   │   │   ├── QuickActions.tsx        # Your own token's QUICK ACTIONS: your AC or DV, a button per save or stat, and a skill picker, each rolled through the sheet's own roll path
+│   │   │   ├── GmNotes.tsx             # The GM NOTES folder, shared by buildings and NPC tokens; fetched with the main admin's token only
+│   │   │   ├── BuildingWindow.tsx      # A building's info window as a terminal: folders down the left (INFO, RESIDENTS, and GM NOTES for the main admin only), the open one's text on the right, the building in the corner. Up and down arrows or a click switch folders; the caller hands over the buttons that apply. Reads exactly the fields the old window did
+│   │   │   ├── BuildingPreview.tsx     # The corner picture: the GM's photo, else the building's own parts turning as a wireframe in its own small canvas, else the CITY_NET badge. The color is read from the theme's CSS variable where it sits - the info windows render outside the ThemeContext provider, so the context alone drew every theme in classic green
+│   │   │   ├── BuildingExtrasEditor.tsx # The photo and GM notes in the admin edit view. Nothing saves on its own: UPDATE_DATA_POINT commits them after the building saves, and a 200 with nothing in it - an old server not yet restarted - is reported rather than called saved
+│   │   │   ├── CityNetIcon.tsx         # The CITY_NET badge from assets/citynet-logo.svg in the theme's colors, for anywhere that needs a picture and has none
 │   │   │   ├── CatalogueWindow.tsx     # Where a GM adds to what shops sell: download an example or the current list, paste or upload, preview, save. SAVE only ever stores text that was previewed, and the preview is the server's own parser, so it cannot show something different from what gets stored
 │   │   │   ├── EmptyShopSteps.tsx      # What a GM is told when a shop has nothing on any shelf, which outside CWN is every new one: the steps to stock it, a button straight to SHOP_CATALOGUES, and the header line for that shop's section in this game. Shown where the building type is set and to an admin opening the shop
 │   │   │   ├── CyberwareSection.tsx     # What the GEAR tab shows: a count, the humanity cost, and the way in. Says when pieces are still unplaced, because an import lands everything unfiled and nothing else would mention it
 │   │   │   ├── ImportPreviewWindow.tsx  # What an import would do, in its own window: what was recognised, what the source never held, and which of your fields a replace would clear. The window is the confirmation — applying replaces the sheet
-│   │   │   ├── QuickSheetCard.tsx       # Public sheet card shown to other players
 │   │   │   ├── EnemyVehiclesWindow.tsx  # The GM's enemy cars: same geometry and hull colours as the player window, keyed by NPC sheet id. Seat pickers offer the GM's tokens on the current map level, friendlies tinted blue so a body on your own side is not put in a hostile driver's seat in a hurry
 │   │   │   ├── VehiclesWindow.tsx       # Who is in which vehicle: a picker across every player's sheet, the wireframe with a dropdown per seat, a MOVING toggle, the car's AC/AR, and a hull bar with REPAIR/DAMAGE for its owner. Seat anchors are generated, so a crew of sixteen works
 │   │   │   ├── VehicleBadgeButton.tsx   # The car badge on the sheet and token menu — inline SVG so it takes the theme; inert on someone else's token rather than hidden
@@ -559,6 +581,7 @@ CITY_NET/
 │   │   │       ├── AdminPanel.test.tsx
 │   │   │       ├── AttackAnimations.test.tsx
 │   │   │       ├── BankWindows.test.tsx
+│   │   │       ├── shopCart.test.ts                 # Cart lines and counts, totals both ways, sells grouped for the server, and the carry projection
 │   │   │       ├── Buildings.test.tsx
 │   │   │       ├── Camera.test.tsx
 │   │   │       ├── ChatWindow.test.tsx
@@ -567,6 +590,7 @@ CITY_NET/
 │   │   │       ├── DiceTray.test.tsx
 │   │   │       ├── CustomDieBuilder.test.tsx  # Create/edit modes, name-clash rules, face preservation, reload-on-target-switch regression
 │   │   │       ├── DraggableWindow.test.tsx
+│   │   │       ├── BootScreen.test.tsx              # Types out by itself and finishes, skips on SKIP and nothing else, reports lines and clicks
 │   │   │       ├── HitPoints.test.tsx
 │   │   │       ├── MapElements.test.tsx
 │   │   │       ├── MeasurementTool.test.tsx
@@ -578,7 +602,12 @@ CITY_NET/
 │   │   │       ├── CharacterSheet.test.tsx   # Template registry, renderer, sheet window, weapon rows, death saves
 │   │   │       ├── NpcLibrary.test.tsx
 │   │   │       ├── ImportSheetDialog.test.tsx
-│   │   │       ├── QuickSheetCard.test.tsx
+│   │   │       ├── TerminalWindow.test.tsx          # Folders by click and arrow keys (not while typing), falling back to the first when one disappears, and the buttons laid out as given
+│   │   │       ├── TokenWindow.test.tsx             # Folders shown exactly as handed over, INFO's handle and role from the server's public card, the GM's defense edit and ADD TO INIT, and opening HEALTH on request
+│   │   │       ├── tokenActions.test.ts             # Every viewer against the full list of buttons and folders it should get, and whose health HIT_POINTS opens
+│   │   │       ├── tokenActionClicks.test.ts        # Presses every token button against fakes: the attack it starts, the row it deletes, the window it opens
+│   │   │       ├── buildingActions.test.ts          # The same for buildings: who gets which button and what each does
+│   │   │       ├── QuickActions.test.tsx            # Every quick roll goes out as the sheet's own roll request, by field id, for each system
 │   │   │       ├── SheetAttackPanel.mounts.test.tsx # Mounts in the weapon picker: keyed by (vehicle, mount) so one does not shadow another, and the mounts of a car you are riding in
 │   │   │       ├── SheetAttackPanel.target.test.tsx # What the attacker is told before firing: the vehicle's name, AC, Armour Rating and whether it is moving
 │   │   │       ├── EnemyVehiclesWindow.test.tsx     # What the GM window sends: sheet-id keyed damage, seating a token, friendlies marked apart, and a passenger who has left the map level staying selectable rather than reading as empty
@@ -679,6 +708,7 @@ CITY_NET/
 │   │   ├── catalogueSchema.ts  # The shape of an uploaded catalogue, read out of each system's own sheet template rather than written down - so the example a GM downloads cannot drift. Also writes the 'download current' file, with the built-in rows behind a #
 │   │   ├── uploadedCatalogues.ts # What the GM uploaded, as the window sees it, so shelves and the SELL tab can show what the server would sell
 │   │   ├── sheetSlots.ts       # Where each system's sheet keeps weapons and vehicles, read out of the templates: rows are the highest numbered name field, fields are everything row 1 declares. The source the server's copy is checked against
+│   │   ├── quickRolls.ts       # What QUICK ACTIONS can roll, read off the sheet template: fields with a roll outside a skills section as buttons, skills grouped for the picker, house-rule-hidden tabs left out
 │   │   ├── shopPlacement.ts    # Where a bought uploaded item lands on any system's sheet: the first free row of its group with only the fields that row has, a new unplaced cyberware row where the sheet draws that table, or an inventory line. Pure, and run twice - to refuse before paying, and again when the receipt arrives
 │   │   ├── cwnWeaponStash.ts   # Weapons you own but are not carrying. No Encumbrance, a location note, and one move each way - the move clears every field including atk, because a zero counts as data and would leave a ghost row
 │   │   ├── cwnEncumbrance.ts   # Readied and Stowed against Strength-derived limits, counted always and charged only where the house rule asks. Being overloaded in CWN costs Move and nothing else, which makes this a much smaller feature than the word usually implies
@@ -698,6 +728,7 @@ CITY_NET/
 │   │       ├── rotation.ts         # The one place that says what the three stored rotation numbers MEAN. Euler angles only exist alongside the order they are applied in, and the readers all build 'YXZ' while the editor's group carried the default 'XYZ' - so a save read one and wrote the other, and a structure came back at an angle nobody chose. Goes through the quaternion, which is the orientation itself with no order to disagree about; reads the source's own order rather than assuming one, since the object is a real Group while editing and a plain stand-in while placing
 │   │       ├── rhombusHelpers.ts   # Player token position math
 │   │       ├── threeHelpers.tsx    # Three.js scene utilities
+│   │       ├── buildingParts.ts    # A building's root and child parts in the root's own frame, centered and measured, so a preview can draw the building alone and fit it to a box - the same arithmetic Buildings.tsx places them with
 │   │       ├── roadHelpers.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry, getClosestPointOnRoads
 │   │       ├── overpassHelpers.ts  # Elevation profile, deck tile subdivision, pillar placement avoiding roads and lower decks
 │   │       ├── fontLoader.ts       # FontFace loader for remote fonts (cached by URL); BUILTIN_FONTS list

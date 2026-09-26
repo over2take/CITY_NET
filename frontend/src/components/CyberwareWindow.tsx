@@ -791,7 +791,7 @@ export function CyberwareWindow({ data, template, readOnly, onFieldChange, onClo
         .cyber-scroll::-webkit-scrollbar-thumb { background: var(--dark-green); border: 1px solid var(--green); }
       `}</style>
     <DraggableWindow
-      title={who ? `AUGMENTATION — ${who.toUpperCase()}` : 'AUGMENTATION'}
+      title={who ? `AUGMENT.EXE · ${who.toUpperCase()}` : 'AUGMENT.EXE'}
       pos={pos}
       setPos={setPos}
       onClose={onClose}

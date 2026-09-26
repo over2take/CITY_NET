@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import { render, screen, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ShopWindow } from '../ShopWindow';
+import { ShopWindow, CHECKOUT_TIMEOUT_MS } from '../ShopWindow';
 
 // The hook is the sheet's own business; what matters here is what the shop does with it.
 const sheetState: { sheet: any; encumbranceEnforced: boolean; overdraftAllowed: boolean } = {
@@ -62,6 +62,10 @@ let sent: any[] = [];
 let refuseWith: string | null = null;
 /** Every sellToShop that went out. */
 let sold: any[] = [];
+/** Every checkoutShop, whole. */
+let checkouts: any[] = [];
+/** A server that never answers a checkout - one still running code from before the cart. */
+let silentServer = false;
 /** What the fake server says a sale came to. */
 let salePayout = 0;
 let saleFromBody = 0;
@@ -89,6 +93,29 @@ const makeSocket = () => {
             : { ok: true, payout: salePayout, fromBody: saleFromBody },
         )));
       }
+      /**
+       * The cart settles everything in one message now. Recorded into the same two lists
+       * the separate buy and sell messages used to fill - one entry per thing bought, one
+       * per sale - so what a test says about what went out still reads the same.
+       */
+      if (ev === 'checkoutShop') {
+        checkouts.push(payload);
+        if (silentServer) return;
+        for (const b of payload.buys) {
+          for (let i = 0; i < b.qty; i += 1) {
+            sent.push({ locationId: payload.locationId, catalogue: b.catalogue, itemId: b.itemId, settle: payload.settle });
+          }
+        }
+        if (payload.sells.length) sold.push({ locationId: payload.locationId, items: payload.sells });
+        act(() => (listeners.shopCheckout || []).forEach((f) => f(
+          refuseWith
+            ? { ok: false, reason: refuseWith }
+            : {
+              ok: true, payout: salePayout, fromBody: saleFromBody, net: payload.expectedNet,
+              settled: payload.settle ?? 'balance', balance: bank.balance - payload.expectedNet, debt: bank.debt,
+            },
+        )));
+      }
       if (ev === 'buyFromShop') {
         sent.push(payload);
         act(() => (listeners.shopPurchase || []).forEach((f) => f(
@@ -111,6 +138,28 @@ const show = (buildingType: string, name = 'Doc Wu', system = 'cities_without_nu
   return result;
 };
 
+const openFolder = (name: string) => userEvent.click(screen.getByRole('tab', { name }));
+
+/** What the CART folder's tab says, which counts what is in it. */
+const cartTab = () => screen.getByRole('tab', { name: 'CART' }).textContent;
+
+/**
+ * Buy one of something the way a player now does: + CART on the shelf, open the CART,
+ * CHECK OUT.
+ *
+ * When + CART refuses - a full weapon rack, too much to carry - the cart does not change,
+ * and this stays on the shelf where the reason is shown rather than walking off to an
+ * empty cart.
+ */
+const buyNow = async (label: string) => {
+  if (!screen.queryByRole('button', { name: `Add ${label} to the cart` })) await openFolder('BUY');
+  const before = cartTab();
+  await userEvent.click(screen.getByRole('button', { name: `Add ${label} to the cart` }));
+  if (cartTab() === before) return;
+  await openFolder('CART');
+  await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
+};
+
 beforeEach(() => {
   handleFieldChange.mockClear();
   handleFieldsChange.mockClear();
@@ -121,6 +170,8 @@ beforeEach(() => {
   bank.debt = 0;
   sent = [];
   sold = [];
+  checkouts = [];
+  silentServer = false;
   refuseWith = null;
   salePayout = 0;
   saleFromBody = 0;
@@ -175,7 +226,45 @@ describe('a ripperdoc', () => {
 
   it('names the building it belongs to', () => {
     show('ripperdoc', 'Doc Wu');
-    expect(screen.getByText(/SHOP · Doc Wu/)).toBeInTheDocument();
+    expect(screen.getByText(/SHOP\.EXE · Doc Wu/)).toBeInTheDocument();
+  });
+});
+
+describe('looking like the windows it opens from', () => {
+  it('is a terminal window: BUY, SELL and CART down the left, the list on the right', async () => {
+    const { container } = show('ripperdoc');
+    expect(container.querySelector('.win95-window')).toHaveClass('terminal-window');
+    const folders = within(screen.getByRole('tablist', { name: 'Folders' })).getAllByRole('tab');
+    expect(folders.map((f) => f.textContent)).toEqual(['BUY', 'SELL', 'CART']);
+    // The filter is part of the BUY list, not the window.
+    expect(within(screen.getByRole('tabpanel')).getByLabelText('Filter stock')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
+    expect(screen.queryByLabelText('Filter stock')).toBeNull();
+  });
+
+  it('keeps the filter and shelf tabs still while the list scrolls under them', () => {
+    show('gun_shop');
+    // The panel no longer scrolls as a whole; the table's own box does.
+    expect(screen.getByRole('tabpanel').style.overflowY).toBe('hidden');
+    expect(screen.getByRole('table').parentElement!.style.overflowY).toBe('auto');
+  });
+
+  it('shows the building in the corner when given one', () => {
+    render(<ShopWindow name="Vic" locationId={7} buildingType="gun_shop" system="cities_without_number"
+      buybackPct={45} socket={makeSocket()} userName="JADE" onClose={vi.fn()} preview={<div>VIC'S BUILDING</div>} />);
+    expect(screen.getByText("VIC'S BUILDING")).toBeInTheDocument();
+  });
+
+  it('puts an empty shelf\'s message straight under the header, not at the bottom', async () => {
+    show('ripperdoc');
+    const box = () => screen.getByRole('table').parentElement as HTMLElement;
+    // A full shelf's table takes the height and scrolls in it.
+    expect(box().style.flex).not.toBe('0 0 auto');
+    await userEvent.type(screen.getByLabelText('Filter stock'), 'zzzz');
+    // An empty one does not, so the message follows the header instead of the window's foot.
+    expect(box().style.flex).toBe('0 0 auto');
+    expect(box().nextElementSibling).toBe(screen.getByTestId('shelf-empty'));
+    expect(screen.getByTestId('shelf-empty').style.color).toBe('var(--green)');
   });
 });
 
@@ -196,7 +285,7 @@ describe('a shop with no catalogue built yet', () => {
   it('sells weapons at the gun shop now, which it did not', () => {
     show('gun_shop');
     expect(screen.queryByText(/NO CATALOGUE FOR THIS SHOP YET/)).toBeNull();
-    expect(screen.getByRole('button', { name: 'Buy Heavy Pistol' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Heavy Pistol to the cart' })).toBeInTheDocument();
   });
 
   it('leaves no shop with an empty shelf', () => {
@@ -212,23 +301,23 @@ describe('one tab per catalogue', () => {
   it('draws no tab row for a shop that carries one catalogue', () => {
     // A lone tab is a label wearing a button's clothes.
     show('clinic');
-    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByRole('tablist', { name: 'Catalogue' })).toBeNull();
   });
 
   it('draws a tab for each catalogue a shop carries', () => {
     show('gun_shop');
-    const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
+    const tabs = within(screen.getByRole('tablist', { name: 'Catalogue' })).getAllByRole('tab');
     expect(tabs.map((t) => t.textContent)).toEqual(['WEAPONS', 'WEAPON MODS']);
   });
 
   it('opens on the first catalogue, and switches to the one picked', async () => {
     show('gun_shop');
-    expect(screen.getByRole('button', { name: 'Buy Heavy Pistol' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Heavy Pistol to the cart' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: 'WEAPON MODS' }));
 
     // The weapons are gone and the mods are there: a switch, not an append.
-    expect(screen.queryByRole('button', { name: 'Buy Heavy Pistol' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add Heavy Pistol to the cart' })).toBeNull();
     expect(screen.getByText('EXTENDED MAG')).toBeInTheDocument();
   });
 
@@ -268,7 +357,7 @@ describe('one tab per catalogue', () => {
 
   it('gives the armorer both of its tables, which it had neither of', () => {
     show('armorer');
-    const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
+    const tabs = within(screen.getByRole('tablist', { name: 'Catalogue' })).getAllByRole('tab');
     expect(tabs.map((t) => t.textContent)).toEqual(['ARMOR', 'ARMOR MODS']);
   });
 });
@@ -337,8 +426,8 @@ describe('the vocabulary the map is labelled with', () => {
 describe('buying and selling are separate tabs', () => {
   it('opens on buying', () => {
     show('ripperdoc');
-    expect(screen.getByRole('button', { name: 'BUY' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'SELL' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('tab', { name: 'BUY' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'SELL' })).toHaveAttribute('aria-selected', 'false');
   });
 
   it('keeps selling off the stock list', async () => {
@@ -351,21 +440,21 @@ describe('buying and selling are separate tabs', () => {
   it('says so plainly when there is nothing this shop would buy', async () => {
     // Used to assert "SELLING IS NOT WIRED UP YET", which stopped being true.
     show('ripperdoc');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
     expect(screen.getByText(/NOTHING HERE THIS SHOP WOULD BUY/)).toBeInTheDocument();
   });
 
   it('puts the stock away while selling', async () => {
     show('ripperdoc');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
-    expect(screen.queryByLabelText('Buy Cranial Jack')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
+    expect(screen.queryByLabelText('Add Cranial Jack to the cart')).not.toBeInTheDocument();
   });
 });
 
 describe('buying a piece', () => {
   const buyFirst = async () => {
     show('ripperdoc');
-    await userEvent.click(screen.getByLabelText('Buy Cranial Jack'));
+    await buyNow('Cranial Jack');
     return handleFieldChange.mock.calls[0];
   };
 
@@ -393,7 +482,7 @@ describe('buying a piece', () => {
 
   it('brings the modifiers with it', async () => {
     show('ripperdoc');
-    await userEvent.click(screen.getByLabelText('Buy Coordination Augment I'));
+    await buyNow('Coordination Augment I');
     const [, rows] = handleFieldChange.mock.calls[0];
     expect(rows[0].mods).toEqual([
       { kind: 'statFloor', target: 'Dexterity', value: 14, bonus: 2 },
@@ -406,21 +495,21 @@ describe('buying a piece', () => {
       data: { cyberware: [{ name: 'Old Chrome', type: 'head', hl: 1, equipped: true, placed: true, mods: [] }] },
     };
     show('ripperdoc');
-    await userEvent.click(screen.getByLabelText('Buy Cranial Jack'));
+    await buyNow('Cranial Jack');
     const [, rows] = handleFieldChange.mock.calls[0];
     expect(rows.map((r: any) => r.name)).toEqual(['Old Chrome', 'Cranial Jack']);
   });
 
   it('shows that the press did something', async () => {
     show('ripperdoc');
-    await userEvent.click(screen.getByLabelText('Buy Cranial Jack'));
-    expect(screen.getByLabelText('Buy Cranial Jack')).toHaveTextContent('×1');
+    await userEvent.click(screen.getByLabelText('Add Cranial Jack to the cart'));
+    expect(screen.getByLabelText('Add Cranial Jack to the cart')).toHaveTextContent('×1');
   });
 
   it('cannot buy with no sheet loaded, and says why', () => {
     sheetState.sheet = null;
     show('ripperdoc');
-    expect(screen.getByLabelText('Buy Cranial Jack')).toBeDisabled();
+    expect(screen.getByLabelText('Add Cranial Jack to the cart')).toBeDisabled();
     expect(screen.getByText(/NO CHARACTER SHEET LOADED/)).toBeInTheDocument();
   });
 
@@ -458,7 +547,7 @@ describe('buying a weapon', () => {
 
   it('puts it in the first free weapon slot', async () => {
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Combat Rifle' }));
+    await buyNow('Combat Rifle');
 
     expect(lastFields()).toMatchObject({
       weapon1_name: 'Combat Rifle', weapon1_dmg: '1d12', weapon1_skill: 'shoot',
@@ -468,7 +557,7 @@ describe('buying a weapon', () => {
 
   it('lands it stowed rather than readied', async () => {
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Knife' }));
+    await buyNow('Knife');
     expect(lastFields().weapon1_carry).toBe('stowed');
   });
 
@@ -478,7 +567,7 @@ describe('buying a weapon', () => {
       data: { weapon1_name: 'gun', weapon2_name: 'knife' },
     };
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Sword' }));
+    await buyNow('Sword');
     expect(lastFields().weapon3_name).toBe('Sword');
   });
 
@@ -487,7 +576,7 @@ describe('buying a weapon', () => {
     for (let i = 1; i <= CWN_WEAPON_ROWS; i += 1) data[`weapon${i}_name`] = 'gun';
     sheetState.sheet = { system: 'cities_without_number', data };
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Knife' }));
+    await buyNow('Knife');
 
     expect(screen.getByText(/No free weapon slot/)).toBeInTheDocument();
     expect(handleFieldsChange).not.toHaveBeenCalled();
@@ -520,7 +609,7 @@ describe('the shelf says how many you own', () => {
       data: { weapon1_name: 'Knife', weapon2_name: 'Knife' },
     };
     show('gun_shop');
-    const row = screen.getByRole('button', { name: 'Buy Knife' }).closest('tr')!;
+    const row = screen.getByRole('button', { name: 'Add Knife to the cart' }).closest('tr')!;
     expect(within(row).getByText('x2')).toBeInTheDocument();
   });
 
@@ -536,14 +625,14 @@ describe('the shelf says how many you own', () => {
       data: { weapons_stash: JSON.stringify([{ name: 'Knife' }, { name: 'Knife' }]) },
     };
     show('gun_shop');
-    const row = screen.getByRole('button', { name: 'Buy Knife' }).closest('tr')!;
+    const row = screen.getByRole('button', { name: 'Add Knife to the cart' }).closest('tr')!;
     expect(within(row).getByText('x2')).toBeInTheDocument();
   });
 
   it('shows nothing against a weapon you do not have', () => {
     sheetState.sheet = { system: 'cities_without_number', data: { weapon1_name: 'Knife' } };
     show('gun_shop');
-    const row = screen.getByRole('button', { name: 'Buy Sword' }).closest('tr')!;
+    const row = screen.getByRole('button', { name: 'Add Sword to the cart' }).closest('tr')!;
     expect(within(row).queryByText(/^x\d/)).toBeNull();
   });
 });
@@ -562,7 +651,7 @@ describe('encumbrance can refuse a sale', () => {
       data: { ...heavy, weapon1_name: 'gun', weapon1_enc: '3', weapon1_carry: 'stowed' },
     };
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Automatic Rifle' }));
+    await buyNow('Automatic Rifle');
 
     expect(screen.getByText(/Too much to carry/)).toBeInTheDocument();
     expect(handleFieldsChange).not.toHaveBeenCalled();
@@ -572,7 +661,7 @@ describe('encumbrance can refuse a sale', () => {
     sheetState.encumbranceEnforced = true;
     sheetState.sheet = { system: 'cities_without_number', data: heavy };
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Knife' }));
+    await buyNow('Knife');
     expect(handleFieldsChange).toHaveBeenCalled();
   });
 
@@ -580,7 +669,7 @@ describe('encumbrance can refuse a sale', () => {
     sheetState.encumbranceEnforced = false;
     sheetState.sheet = { system: 'cities_without_number', data: heavy };
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Automatic Rifle' }));
+    await buyNow('Automatic Rifle');
 
     expect(screen.queryByText(/Too much to carry/)).toBeNull();
     expect(handleFieldsChange).toHaveBeenCalled();
@@ -594,8 +683,8 @@ describe('sorting the shelf', () => {
    * short of closing the window.
    */
   const names = () =>
-    screen.getAllByRole('button', { name: /^Buy / })
-      .map((b) => b.getAttribute('aria-label')!.replace('Buy ', ''));
+    screen.getAllByRole('button', { name: / to the cart$/ })
+      .map((b) => b.getAttribute('aria-label')!.replace(/^Add /, '').replace(/ to the cart$/, ''));
 
   const clickHeader = (label: string) =>
     userEvent.click(screen.getByRole('columnheader', { name: new RegExp(`^Sort by ${label}$`) }));
@@ -674,8 +763,8 @@ describe('showing one kind of weapon', () => {
    * a thrown grenade is not a melee weapon.
    */
   const names = () =>
-    screen.getAllByRole('button', { name: /^Buy / })
-      .map((b) => b.getAttribute('aria-label')!.replace('Buy ', ''));
+    screen.getAllByRole('button', { name: / to the cart$/ })
+      .map((b) => b.getAttribute('aria-label')!.replace(/^Add /, '').replace(/ to the cart$/, ''));
 
   const toggle = (label: string) => userEvent.click(screen.getByRole('button', { name: label }));
 
@@ -738,13 +827,13 @@ describe('showing one kind of weapon', () => {
 });
 
 describe('paying for it', () => {
-  const heavyPistol = () => screen.getByRole('button', { name: 'Buy Heavy Pistol' });
+  const heavyPistol = () => screen.getByRole('button', { name: 'Add Heavy Pistol to the cart' });
 
   it('asks the server to charge, naming the catalogue and the item but never a price', async () => {
     // The price is deliberately absent from the message. The server looks it up, so a
     // crafted client cannot name its own.
     show('gun_shop');
-    await userEvent.click(heavyPistol());
+    await buyNow('Heavy Pistol');
 
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ locationId: 7, catalogue: 'weapons', itemId: 'heavy_pistol' });
@@ -756,7 +845,7 @@ describe('paying for it', () => {
     // told to refuse, and the weapon must not appear.
     refuseWith = 'funds';
     show('gun_shop');
-    await userEvent.click(heavyPistol());
+    await buyNow('Heavy Pistol');
 
     expect(handleFieldsChange).not.toHaveBeenCalled();
     expect(screen.getByText(/Not enough credits/)).toBeInTheDocument();
@@ -764,14 +853,14 @@ describe('paying for it', () => {
 
   it('places the item once the receipt arrives', async () => {
     show('gun_shop');
-    await userEvent.click(heavyPistol());
+    await buyNow('Heavy Pistol');
     expect(handleFieldsChange).toHaveBeenCalled();
   });
 
   it('says why when the server refuses for a reason of its own', async () => {
     refuseWith = 'not_sold';
     show('gun_shop');
-    await userEvent.click(heavyPistol());
+    await buyNow('Heavy Pistol');
     expect(screen.getByText(/does not sell that/i)).toBeInTheDocument();
   });
 
@@ -790,12 +879,12 @@ describe('paying for it', () => {
 });
 
 describe('when you cannot afford it', () => {
-  const heavyPistol = () => screen.getByRole('button', { name: 'Buy Heavy Pistol' });
+  const heavyPistol = () => screen.getByRole('button', { name: 'Add Heavy Pistol to the cart' });
 
   it('refuses outright while the house rule is off, without troubling the server', async () => {
     bank.balance = 5;
     show('gun_shop');
-    await userEvent.click(heavyPistol());
+    await buyNow('Heavy Pistol');
 
     expect(sent).toHaveLength(0);
     expect(screen.getByText(/Not enough credits/)).toBeInTheDocument();
@@ -806,7 +895,7 @@ describe('when you cannot afford it', () => {
     sheetState.overdraftAllowed = true;
     bank.balance = 5;
     show('gun_shop');
-    await userEvent.click(heavyPistol());
+    await buyNow('Heavy Pistol');
 
     const dialog = screen.getByRole('alertdialog');
     expect(within(dialog).getByRole('button', { name: 'TAKE DEBT' })).toBeInTheDocument();
@@ -820,7 +909,7 @@ describe('when you cannot afford it', () => {
     sheetState.overdraftAllowed = true;
     bank.balance = 5;
     show('gun_shop');
-    await userEvent.click(heavyPistol());
+    await buyNow('Heavy Pistol');
     await userEvent.click(screen.getByRole('button', { name: 'TAKE DEBT' }));
 
     expect(sent).toHaveLength(1);
@@ -832,7 +921,7 @@ describe('when you cannot afford it', () => {
     sheetState.overdraftAllowed = true;
     bank.balance = 5;
     show('gun_shop');
-    await userEvent.click(heavyPistol());
+    await buyNow('Heavy Pistol');
     await userEvent.click(screen.getByRole('button', { name: 'GO NEGATIVE' }));
 
     expect(sent[0]).toMatchObject({ settle: 'balance' });
@@ -842,7 +931,7 @@ describe('when you cannot afford it', () => {
     sheetState.overdraftAllowed = true;
     bank.balance = 5;
     show('gun_shop');
-    await userEvent.click(heavyPistol());
+    await buyNow('Heavy Pistol');
     await userEvent.click(screen.getByRole('button', { name: 'CANCEL' }));
 
     expect(sent).toHaveLength(0);
@@ -859,7 +948,7 @@ describe('when you cannot afford it', () => {
     for (let i = 1; i <= CWN_WEAPON_ROWS; i += 1) full[`weapon${i}_name`] = `Gun ${i}`;
     sheetState.sheet = { system: 'cities_without_number', data: full };
     show('gun_shop');
-    await userEvent.click(heavyPistol());
+    await buyNow('Heavy Pistol');
 
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(screen.getByText(/No free weapon slot/)).toBeInTheDocument();
@@ -884,7 +973,7 @@ describe('the garage sells vehicles', () => {
 
   it('fills the first free vehicle slot with the whole stat block', async () => {
     show('garage');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy MOTORCYCLE' }));
+    await buyNow('MOTORCYCLE');
 
     const written = handleFieldsChange.mock.calls[0][0];
     // The sheet's own preset function, so these are the sheet's own field names.
@@ -904,7 +993,7 @@ describe('the garage sells vehicles', () => {
       data: { vehicle1_name: 'Betty', vehicle2_name: 'Spare' },
     };
     show('garage');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy MOTORCYCLE' }));
+    await buyNow('MOTORCYCLE');
     expect(handleFieldsChange.mock.calls[0][0]).toHaveProperty('vehicle3_name', 'MOTORCYCLE');
   });
 
@@ -912,7 +1001,7 @@ describe('the garage sells vehicles', () => {
     // The * and ** vehicles have no Armour Rating at all. A Tank bought without its note
     // would silently lose the line saying small arms cannot touch it.
     show('garage');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy TANK' }));
+    await buyNow('TANK');
 
     const written = handleFieldsChange.mock.calls[0][0];
     expect(written).not.toHaveProperty('vehicle1_armor');
@@ -924,7 +1013,7 @@ describe('the garage sells vehicles', () => {
     for (let i = 1; i <= 6; i += 1) full[`vehicle${i}_name`] = `Car ${i}`;
     sheetState.sheet = { system: 'cities_without_number', data: full };
     show('garage');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy MOTORCYCLE' }));
+    await buyNow('MOTORCYCLE');
 
     expect(handleFieldsChange).not.toHaveBeenCalled();
     expect(screen.getByText(/No free vehicle slot/)).toBeInTheDocument();
@@ -968,7 +1057,7 @@ describe('the clinic sells pharmaceuticals', () => {
 
   it('buys a dose into the inventory', async () => {
     show('clinic');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy BONESHAKER' }));
+    await buyNow('BONESHAKER');
     const [field, value] = handleFieldChange.mock.calls[0];
     expect(field).toBe('inventory');
     expect(JSON.parse(value)).toEqual([
@@ -986,7 +1075,7 @@ describe('the clinic sells pharmaceuticals', () => {
       },
     };
     show('clinic');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy BONESHAKER' }));
+    await buyNow('BONESHAKER');
     const parsed = JSON.parse(handleFieldChange.mock.calls[0][1]);
     expect(parsed).toHaveLength(1);
     expect(parsed[0].qty).toBe(3);
@@ -1002,7 +1091,7 @@ describe('the clinic sells pharmaceuticals', () => {
       },
     };
     show('clinic');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy OLYMPUS' }));
+    await buyNow('OLYMPUS');
     const parsed = JSON.parse(handleFieldChange.mock.calls[0][1]);
     expect(parsed.map((i: { name: string }) => i.name)).toEqual(['Rope', 'OLYMPUS']);
   });
@@ -1029,7 +1118,7 @@ describe('the clinic sells pharmaceuticals', () => {
     sheetState.encumbranceEnforced = true;
     sheetState.sheet = { system: 'cities_without_number', data: { str: 3 } };
     show('clinic');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy RESET' }));
+    await buyNow('RESET');
     expect(handleFieldChange).toHaveBeenCalled();
   });
 
@@ -1073,11 +1162,10 @@ describe('the sell tab', () => {
 
   const openSell = async (type: string) => {
     show(type);
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
   };
 
-  const addKit = () => screen.getByRole('button', { name: 'Add Climbing kit to the sell list' });
-  const sellBtn = () => screen.getByRole('button', { name: /^SELL ·/ });
+  const addKit = () => screen.getByRole('button', { name: 'Add Climbing kit to the cart' });
 
   it('offers only what this shop deals in', async () => {
     // A gun shop buys guns. Not rope, not chrome.
@@ -1086,6 +1174,18 @@ describe('the sell tab', () => {
     expect(screen.getByText('Heavy Pistol')).toBeInTheDocument();
     expect(screen.queryByText('Climbing kit')).toBeNull();
     expect(screen.queryByText('Cranial Jack')).toBeNull();
+  });
+
+  it('has a filter on top of the list, like the buy side', async () => {
+    loaded();
+    await openSell('gun_shop');
+    const filter = screen.getByLabelText('Filter what you can sell');
+    await userEvent.type(filter, 'heavy');
+    expect(screen.getByText('Heavy Pistol')).toBeInTheDocument();
+    await userEvent.clear(filter);
+    await userEvent.type(filter, 'zzz');
+    expect(screen.queryByText('Heavy Pistol')).toBeNull();
+    expect(screen.getByTestId('sell-empty')).toHaveTextContent('NOTHING MATCHES THAT');
   });
 
   it('shows another shop a different half of the same character', async () => {
@@ -1110,86 +1210,59 @@ describe('the sell tab', () => {
     expect(within(row).getByText('67cr')).toBeInTheDocument();
   });
 
-  it('sells nothing until the list is confirmed', async () => {
+  it('sells nothing until the cart is checked out', async () => {
     loaded();
     await openSell('general_store');
     await userEvent.click(addKit());
     expect(sold).toHaveLength(0);
-    await userEvent.click(sellBtn());
+    await openFolder('CART');
     expect(sold).toHaveLength(0);
-    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+    await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
     expect(sold).toHaveLength(1);
   });
 
-  it('sends what was staged, and no price at all', async () => {
+  it('sends what was in the cart, and no price at all', async () => {
     // The payout is the server's to decide, so the message carries no money.
     loaded();
     await openSell('general_store');
     await userEvent.click(addKit());
     await userEvent.click(addKit());
-    await userEvent.click(sellBtn());
-    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+    await openFolder('CART');
+    await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
 
     expect(sold[0]).toMatchObject({ locationId: 7 });
     expect(sold[0].items).toEqual([
       { catalogue: 'gear', id: 'climbing_kit', label: 'Climbing kit', qty: 2 },
     ]);
-    expect(JSON.stringify(sold[0])).not.toMatch(/price|payout|each/);
+    const sells = JSON.stringify(checkouts[0].sells);
+    expect(sells).not.toMatch(/price|payout|each/);
   });
 
-  it('adds up the list before asking', async () => {
-    loaded();
-    await openSell('general_store');
-    await userEvent.click(addKit());
-    await userEvent.click(addKit());
-    expect(screen.getByRole('button', { name: /SELL · 134cr/ })).toBeInTheDocument();
-  });
-
-  it('will not stage more than you have', async () => {
+  it('will not put more in the cart than you have', async () => {
     loaded();
     await openSell('general_store');
     for (let i = 0; i < 6; i += 1) await userEvent.click(addKit());
-    // Three owned, so three staged and the ADD is spent.
-    expect(screen.getByRole('button', { name: /SELL · 201cr/ })).toBeInTheDocument();
+    // Three owned, so three in the cart and the button is spent.
     expect(addKit()).toBeDisabled();
+    expect(cartTab()).toBe('CART · 3');
   });
 
-  it('counts down what is left as things are staged', async () => {
+  it('counts down what is left as things go in the cart', async () => {
     loaded();
     await openSell('general_store');
     await userEvent.click(addKit());
     const row = screen.getByText('Climbing kit').closest('tr')!;
-    // Three owned, one staged, so two are still there to sell.
+    // Three owned, one in the cart, so two are still there to sell.
     expect(within(row).getByText('×2')).toBeInTheDocument();
   });
 
-  it('backs out of the confirmation without selling', async () => {
+  it('takes one back out with −', async () => {
     loaded();
     await openSell('general_store');
     await userEvent.click(addKit());
-    await userEvent.click(sellBtn());
-    await userEvent.click(screen.getByRole('button', { name: 'BACK' }));
-    expect(sold).toHaveLength(0);
-    expect(sellBtn()).toBeInTheDocument();
-  });
-
-  it('clears the list without selling', async () => {
-    loaded();
-    await openSell('general_store');
     await userEvent.click(addKit());
-    await userEvent.click(screen.getByRole('button', { name: 'CLEAR' }));
-    expect(sold).toHaveLength(0);
-    expect(screen.getByText(/NOTHING ON THE SELL LIST YET/)).toBeInTheDocument();
-  });
-
-  it('says what the sale came to', async () => {
-    salePayout = 201;
-    loaded();
-    await openSell('general_store');
-    await userEvent.click(addKit());
-    await userEvent.click(sellBtn());
-    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
-    expect(screen.getByText(/SOLD FOR 201cr/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Take Climbing kit out of the cart' }));
+    expect(cartTab()).toBe('CART · 1');
   });
 
   it('says why when the server refuses', async () => {
@@ -1197,175 +1270,286 @@ describe('the sell tab', () => {
     loaded();
     await openSell('general_store');
     await userEvent.click(addKit());
-    await userEvent.click(sellBtn());
-    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+    await openFolder('CART');
+    await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
     expect(screen.getByText(/do not have/i)).toBeInTheDocument();
+    // Refused whole, so everything is still in the cart to look at.
+    expect(screen.getAllByTestId('cart-sell')).toHaveLength(1);
   });
 });
 
-describe('selling chrome out of a body', () => {
-  /**
-   * The book puts surgery and a complications roll on taking cyberware out, and this app
-   * models neither. That gap is only fillable at the table if the player is told it
-   * exists, so it is flagged on the row, again in the confirmation, and again on the
-   * receipt - before the click, at the click, and after it.
-   */
-  const withChrome = (placed: boolean) => {
+describe('the cart', () => {
+  const loaded = () => {
     sheetState.sheet = {
       system: 'cities_without_number',
-      data: { cyberware: [{ name: 'Cranial Jack', placed }] },
+      data: { str: 10, inventory: JSON.stringify([{ name: 'Climbing kit', qty: 2, enc: '1', carry: 'stowed' }]) },
     };
   };
+  const checkOut = () => userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
 
-  const openSell = async () => {
-    show('ripperdoc');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
-  };
-
-  const addJack = () => screen.getByRole('button', { name: 'Add Cranial Jack to the sell list' });
-
-  it('marks an installed piece on the row', async () => {
-    withChrome(true);
-    await openSell();
-    const row = screen.getByText('Cranial Jack').closest('tr')!;
-    expect(within(row).getByTitle(/surgery roll/i)).toBeInTheDocument();
+  it('blinks when something goes in, and stops once it is opened', async () => {
+    show('gun_shop');
+    const tab = () => screen.getByRole('tab', { name: 'CART' });
+    expect(tab()).not.toHaveClass('terminal-folder-attention');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Heavy Pistol to the cart' }));
+    expect(tab()).toHaveClass('terminal-folder-attention');
+    expect(tab()).toHaveTextContent('CART · 1');
+    await openFolder('CART');
+    expect(tab()).not.toHaveClass('terminal-folder-attention');
   });
 
-  it('leaves a boxed piece unmarked, since no surgeon is involved', async () => {
-    withChrome(false);
-    await openSell();
-    const row = screen.getByText('Cranial Jack').closest('tr')!;
-    expect(within(row).queryByTitle(/surgery roll/i)).toBeNull();
+  it('puts the same thing bought twice on one line, ×2, and totals it', async () => {
+    show('gun_shop');
+    const add = () => screen.getByRole('button', { name: 'Add Heavy Pistol to the cart' });
+    await userEvent.click(add());
+    await userEvent.click(add());
+    expect(add()).toHaveTextContent('+ CART ×2');
+    await openFolder('CART');
+    const lines = screen.getAllByTestId('cart-buy');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toHaveTextContent('×2');
+    expect(lines[0]).toHaveTextContent('400cr');
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('YOU PAY 400cr');
   });
 
-  it('warns in the confirmation, before anything is sold', async () => {
-    withChrome(true);
-    await openSell();
-    await userEvent.click(addJack());
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
-    expect(screen.getByText(/ask your GM/i)).toBeInTheDocument();
-    expect(sold).toHaveLength(0);
+  it('lists each thing sold on a line of its own, as minus money', async () => {
+    loaded();
+    show('general_store');
+    await openFolder('SELL');
+    const add = () => screen.getByRole('button', { name: 'Add Climbing kit to the cart' });
+    await userEvent.click(add());
+    await userEvent.click(add());
+    await openFolder('CART');
+    const lines = screen.getAllByTestId('cart-sell');
+    expect(lines).toHaveLength(2);
+    for (const line of lines) expect(line).toHaveTextContent('-67cr');
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('THE SHOP PAYS YOU 134cr');
   });
 
-  it('does not warn for a boxed piece', async () => {
-    withChrome(false);
-    await openSell();
-    await userEvent.click(addJack());
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
-    expect(screen.queryByText(/ask your GM/i)).toBeNull();
+  it('nets buying against selling, and sends it all in one checkout', async () => {
+    loaded();
+    show('general_store');
+    await openFolder('SELL');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the cart' }));
+    await openFolder('BUY');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the cart' }));
+    await openFolder('CART');
+    // 150 bought, 67 back.
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('YOU PAY 83cr');
+    await checkOut();
+    expect(checkouts).toHaveLength(1);
+    expect(checkouts[0]).toMatchObject({
+      locationId: 7,
+      buys: [{ catalogue: 'gear', itemId: 'climbing_kit', qty: 1 }],
+      sells: [{ catalogue: 'gear', id: 'climbing_kit', qty: 1 }],
+      expectedNet: 83,
+    });
   });
 
-  it('says it again on the receipt', async () => {
+  it('places two of a thing in two rows, each seeing the one before it', async () => {
+    // The sheet here only changes if the fake hook's writer changes it, the way the real
+    // one does - so a placement that read a stale sheet would put both guns in row 1.
+    sheetState.sheet = { system: 'cities_without_number', data: {} };
+    handleFieldsChange.mockImplementation((fields: Record<string, unknown>) => {
+      sheetState.sheet = { ...sheetState.sheet, data: { ...sheetState.sheet.data, ...fields } };
+    });
+    try {
+      show('gun_shop');
+      await userEvent.click(screen.getByRole('button', { name: 'Add Heavy Pistol to the cart' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Add Heavy Pistol to the cart' }));
+      await openFolder('CART');
+      await checkOut();
+      const rows = handleFieldsChange.mock.calls.map(([f]) => Object.keys(f).find((k) => k.endsWith('_name')));
+      expect(rows).toEqual(['weapon1_name', 'weapon2_name']);
+    } finally {
+      handleFieldsChange.mockReset();
+    }
+  });
+
+  it('puts nothing on the sheet when the checkout is refused', async () => {
+    refuseWith = 'funds';
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Heavy Pistol to the cart' }));
+    await openFolder('CART');
+    await checkOut();
+    expect(handleFieldsChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/Not enough credits/)).toBeInTheDocument();
+  });
+
+  it('stops waiting for a server that never answers, and says to look before retrying', async () => {
+    silentServer = true;
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await openFolder('CART');
+    vi.useFakeTimers();
+    try {
+      act(() => { screen.getByRole('button', { name: 'CHECK OUT' }).click(); });
+      expect(screen.getByRole('button', { name: 'CHECKING OUT…' })).toBeDisabled();
+      act(() => { vi.advanceTimersByTime(CHECKOUT_TIMEOUT_MS); });
+      expect(screen.getByRole('button', { name: 'CHECK OUT' })).toBeEnabled();
+      expect(screen.getByText(/did not answer/)).toBeInTheDocument();
+      // Nothing was placed, and the cart is still there to try again.
+      expect(screen.getByTestId('cart-buy')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('changes a line with − and +, and drops it at none', async () => {
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await openFolder('CART');
+    await userEvent.click(screen.getByRole('button', { name: 'One more Knife' }));
+    expect(screen.getByTestId('cart-buy')).toHaveTextContent('×2');
+    await userEvent.click(screen.getByRole('button', { name: 'One fewer Knife' }));
+    await userEvent.click(screen.getByRole('button', { name: 'One fewer Knife' }));
+    expect(screen.queryByTestId('cart-buy')).toBeNull();
+    expect(screen.getByTestId('cart-empty')).toBeInTheDocument();
+  });
+
+  it('removes one line with ✕, and CLEAR CART empties it without charging', async () => {
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Heavy Pistol to the cart' }));
+    await openFolder('CART');
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Knife from the cart' }));
+    expect(screen.getAllByTestId('cart-buy')).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: 'CLEAR CART' }));
+    expect(screen.getByTestId('cart-empty')).toBeInTheDocument();
+    expect(checkouts).toHaveLength(0);
+  });
+
+  it('empties when it checks out, and shows a receipt', async () => {
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await openFolder('CART');
+    await checkOut();
+    const receipt = screen.getByTestId('cart-receipt');
+    expect(receipt).toHaveTextContent(/RECEIPT · DOC WU/);
+    expect(receipt).toHaveTextContent('BOUGHT');
+    expect(receipt).toHaveTextContent('Knife');
+    expect(receipt).toHaveTextContent('PAID FROM YOUR ACCOUNT');
+    expect(screen.queryByTestId('cart-buy')).toBeNull();
+    expect(cartTab()).toBe('CART');
+  });
+
+  it('drops the receipt on going back to a shelf', async () => {
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await openFolder('CART');
+    await checkOut();
+    expect(screen.getByTestId('cart-receipt')).toBeInTheDocument();
+    await openFolder('SELL');
+    await openFolder('CART');
+    expect(screen.queryByTestId('cart-receipt')).toBeNull();
+    expect(screen.getByTestId('cart-empty')).toBeInTheDocument();
+  });
+
+  it('starts clean when another shop opens in the same window', async () => {
+    const { rerender } = show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await openFolder('CART');
+    await checkOut();
+    await openFolder('BUY');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await openFolder('CART');
+    expect(screen.getByTestId('cart-buy')).toBeInTheDocument();
+    rerender(<ShopWindow name="Mama's" locationId={8} buildingType="gun_shop"
+      system="cities_without_number" buybackPct={45} socket={makeSocket()} userName="JADE" onClose={vi.fn()} />);
+    expect(screen.queryByTestId('cart-buy')).toBeNull();
+    expect(screen.queryByTestId('cart-receipt')).toBeNull();
+    expect(cartTab()).toBe('CART');
+  });
+
+  it('marks installed chrome on its line, and on the receipt', async () => {
     saleFromBody = 1;
-    salePayout = 450;
-    withChrome(true);
-    await openSell();
-    await userEvent.click(addJack());
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
-    expect(screen.getByText(/surgery roll/i)).toBeInTheDocument();
-  });
-});
-
-describe('backing out of the implants alone', () => {
-  /**
-   * The warning exists because the surgery may be a surprise. Until now the only answer
-   * was to cancel the whole basket, which is a poor one when the rest of the list is fine.
-   */
-  const openSell = async () => {
+    sheetState.sheet = { system: 'cities_without_number', data: { cyberware: [{ name: 'Cranial Jack', placed: true }] } };
     show('ripperdoc');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
-  };
-
-  it('keeps the installed one and sells the boxed one', async () => {
-    // Two Cyberlimbs, one in a leg and one in a bag.
-    sheetState.sheet = {
-      system: 'cities_without_number',
-      data: { cyberware: [{ name: 'Cyberlimb', placed: true }, { name: 'Cyberlimb', placed: false }] },
-    };
-    await openSell();
-    const add = () => screen.getByRole('button', { name: 'Add Cyberlimb to the sell list' });
-    await userEvent.click(add());
-    await userEvent.click(add());
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
-
-    // Both staged, so one of them needs a surgeon.
-    expect(screen.getByText(/One piece of this is installed/)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'KEEP IMPLANTS' }));
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
-
-    // The warning is gone, because what is left is the one in the bag.
-    expect(screen.queryByText(/installed cyberware/)).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
-    expect(sold[0].items).toEqual([
-      { catalogue: 'cyberware', id: 'cyberlimb', label: 'Cyberlimb', qty: 1 },
-    ]);
+    await openFolder('SELL');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Cranial Jack to the cart' }));
+    await openFolder('CART');
+    expect(screen.getByTestId('cart-sell')).toHaveTextContent(/no surgery roll/i);
+    await checkOut();
+    expect(screen.getByTestId('cart-receipt')).toHaveTextContent(/surgery roll/i);
   });
 
-  it('drops the line entirely when every one of them is installed', async () => {
-    sheetState.sheet = {
-      system: 'cities_without_number',
-      data: { cyberware: [{ name: 'Cranial Jack', placed: true }] },
-    };
-    await openSell();
-    await userEvent.click(screen.getByRole('button', { name: 'Add Cranial Jack to the sell list' }));
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'KEEP IMPLANTS' }));
-
-    expect(screen.getByText(/NOTHING ON THE SELL LIST YET/)).toBeInTheDocument();
-    expect(sold).toHaveLength(0);
+  it('says nothing about surgery for a boxed piece', async () => {
+    sheetState.sheet = { system: 'cities_without_number', data: { cyberware: [{ name: 'Cranial Jack', placed: false }] } };
+    show('ripperdoc');
+    await openFolder('SELL');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Cranial Jack to the cart' }));
+    await openFolder('CART');
+    expect(screen.getByTestId('cart-sell')).not.toHaveTextContent(/surgery/i);
   });
 
-  it('leaves everything that was never in a body alone', async () => {
-    sheetState.sheet = {
-      system: 'cities_without_number',
-      data: {
-        cyberware: [{ name: 'Cranial Jack', placed: true }, { name: 'Skinmod', placed: false }],
-      },
-    };
-    await openSell();
-    await userEvent.click(screen.getByRole('button', { name: 'Add Cranial Jack to the sell list' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add Skinmod to the sell list' }));
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'KEEP IMPLANTS' }));
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
-
-    expect(sold[0].items).toEqual([
-      { catalogue: 'cyberware', id: 'skinmod', label: 'Skinmod', qty: 1 },
-    ]);
-  });
-
-  it('is not offered when nothing on the list is installed', async () => {
-    sheetState.sheet = {
-      system: 'cities_without_number',
-      data: { cyberware: [{ name: 'Skinmod', placed: false }] },
-    };
-    await openSell();
-    await userEvent.click(screen.getByRole('button', { name: 'Add Skinmod to the sell list' }));
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
-    expect(screen.queryByRole('button', { name: 'KEEP IMPLANTS' })).toBeNull();
-  });
-});
-
-describe('which one gets sold when you own two', () => {
   it('sells the one in the bag before the one in the body', async () => {
-    /**
-     * Places are consumed in the order ownedItems lists them, so the order is a rule
-     * rather than an accident: a spare in a pocket goes before anybody is opened up.
-     */
+    // Places are consumed in the order ownedItems lists them: a spare in a pocket goes
+    // before anybody is opened up.
     sheetState.sheet = {
       system: 'cities_without_number',
       data: { cyberware: [{ name: 'Cyberlimb', placed: true }, { name: 'Cyberlimb', placed: false }] },
     };
     show('ripperdoc');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add Cyberlimb to the sell list' }));
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
+    await openFolder('SELL');
+    const add = () => screen.getByRole('button', { name: 'Add Cyberlimb to the cart' });
+    await userEvent.click(add());
+    await openFolder('CART');
+    expect(screen.getByTestId('cart-sell')).not.toHaveTextContent(/surgery/i);
+    await openFolder('SELL');
+    await userEvent.click(add());
+    await openFolder('CART');
+    // The second one is the installed one, and says so.
+    const [first, second] = screen.getAllByTestId('cart-sell');
+    expect(first).not.toHaveTextContent(/surgery/i);
+    expect(second).toHaveTextContent(/surgery/i);
+  });
 
-    // One of two staged, and it is not the installed one, so no surgery is involved.
-    expect(screen.queryByText(/installed cyberware/)).toBeNull();
+  it('shows what will be carried, and turns red past the limit', async () => {
+    // STR 10: 5 Readied, 10 Stowed. Two climbing kits already Stowed at 1 each.
+    loaded();
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Automatic Rifle to the cart' }));
+    await openFolder('CART');
+    const carry = () => screen.getByTestId('cart-carry');
+    expect(carry()).toHaveTextContent('STOWED 6/10');
+    expect(within(carry()).getByText('STOWED 6/10').style.color).toBe('');
+    await userEvent.click(screen.getByRole('button', { name: 'One more Automatic Rifle' }));
+    await userEvent.click(screen.getByRole('button', { name: 'One more Automatic Rifle' }));
+    expect(carry()).toHaveTextContent('STOWED 14/10');
+    expect(within(carry()).getByText('STOWED 14/10').style.color).toBe('var(--danger)');
+  });
+
+  it('stops the checkout for too much to carry only where the house rule enforces it', async () => {
+    loaded();
+    sheetState.encumbranceEnforced = true;
+    show('general_store');
+    // Twelve Enc of gear is past a STR 10 Stowed allowance.
+    for (let i = 0; i < 3; i += 1) {
+      await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the cart' }));
+    }
+    await openFolder('CART');
+    expect(screen.getByRole('button', { name: 'CHECK OUT' })).not.toBeDisabled();
+    for (let i = 0; i < 8; i += 1) {
+      await userEvent.click(screen.getByRole('button', { name: 'One more Climbing kit' }));
+    }
+    expect(screen.getByTestId('cart-carry')).toHaveTextContent(/too much to carry/);
+    expect(screen.getByRole('button', { name: 'CHECK OUT' })).toBeDisabled();
+  });
+
+  it('shows the new total when prices changed, and checks out at it the second time', async () => {
+    show('gun_shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Knife to the cart' }));
+    await openFolder('CART');
+    refuseWith = 'total_changed';
+    const socketReply = live.shopCheckout;
+    // The server answers with its own figure.
+    await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
+    act(() => socketReply.forEach((f) => f({ ok: false, reason: 'total_changed', net: 25 })));
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('25cr');
+    expect(screen.getByTestId('cart-total')).toHaveTextContent(/PRICES CHANGED/);
+    refuseWith = null;
+    await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
+    expect(checkouts.at(-1).expectedNet).toBe(25);
   });
 });
 
@@ -1399,7 +1583,7 @@ describe('items a GM uploaded', () => {
   it('can be bought, and asks the server by id like anything else', async () => {
     loadUploaded({ weapons: [ZIP_GUN] });
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+    await buyNow('Zip Gun');
 
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ catalogue: 'weapons', itemId: 'zip_gun' });
@@ -1429,7 +1613,7 @@ describe('items a GM uploaded', () => {
       data: { weapon1_name: 'Zip Gun' },
     };
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
 
     // Listed, and priced at the shop's buy-back rate on the GM's price: 15 at 45% is 6.
     const row = screen.getByText('Zip Gun').closest('tr')!;
@@ -1450,7 +1634,7 @@ describe('items a GM uploaded', () => {
      */
     loadUploaded({ weapons: [ZIP_GUN] });
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+    await buyNow('Zip Gun');
     expect(screen.queryByText(/Not enough credits/)).toBeNull();
     expect(handleFieldsChange).toHaveBeenCalled();
   });
@@ -1475,7 +1659,7 @@ describe('an uploaded item actually arriving on the sheet', () => {
       }],
     });
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+    await buyNow('Zip Gun');
 
     const written = handleFieldsChange.mock.calls[0][0];
     expect(written.weapon1_name).toBe('Zip Gun');
@@ -1494,7 +1678,7 @@ describe('an uploaded item actually arriving on the sheet', () => {
       weapons: [{ id: 'zip_gun', name: 'Zip Gun', price: 15, fields: { dmg: '1d4' } }],
     });
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+    await buyNow('Zip Gun');
 
     const written = handleFieldsChange.mock.calls[0][0];
     for (const [field, value] of Object.entries(written)) {
@@ -1508,7 +1692,7 @@ describe('an uploaded item actually arriving on the sheet', () => {
       gear: [{ id: 'flare', name: 'Signal Flare', price: 30, fields: { enc: '1' } }],
     });
     show('general_store');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Signal Flare' }));
+    await buyNow('Signal Flare');
 
     const [field, value] = handleFieldChange.mock.calls[0];
     expect(field).toBe('inventory');
@@ -1527,14 +1711,14 @@ describe('an uploaded item actually arriving on the sheet', () => {
       weapons: [{ id: 'zip_gun', name: 'Zip Gun', price: 15, fields: { dmg: '1d4' } }],
     });
     const { unmount } = show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+    await buyNow('Zip Gun');
     const written = handleFieldsChange.mock.calls[0][0];
     unmount();
 
     // The sheet as it stands after that purchase.
     sheetState.sheet = { system: 'cities_without_number', data: written };
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
 
     const row = screen.getByText('Zip Gun').closest('tr')!;
     // 15 at the default 45% is 6, rounded down from 6.75.
@@ -1548,10 +1732,10 @@ describe('an uploaded item actually arriving on the sheet', () => {
     });
     sheetState.sheet = { system: 'cities_without_number', data: { weapon1_name: 'Zip Gun' } };
     show('gun_shop');
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add Zip Gun to the sell list' }));
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Zip Gun to the cart' }));
+    await openFolder('CART');
+    await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
 
     expect(sold[0].items).toEqual([
       { catalogue: 'weapons', id: 'zip_gun', label: 'Zip Gun', qty: 1 },
@@ -1583,7 +1767,7 @@ describe('a shop with its own buy-back rate', () => {
   const openSell = async (pct: number) => {
     withKit();
     showAt(pct);
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
   };
 
   it('says what it pays, in its own words', async () => {
@@ -1599,11 +1783,12 @@ describe('a shop with its own buy-back rate', () => {
     expect(within(row).queryByText('67cr')).toBeNull();
   });
 
-  it('adds the list up at its rate', async () => {
+  it('adds the cart up at its rate', async () => {
     await openSell(80);
-    await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the sell list' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the sell list' }));
-    expect(screen.getByRole('button', { name: /SELL · 240cr/ })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the cart' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the cart' }));
+    await openFolder('CART');
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('THE SHOP PAYS YOU 240cr');
   });
 
   it('pays face value at a hundred percent', async () => {
@@ -1629,14 +1814,14 @@ describe('a shop with its own buy-back rate', () => {
   it('still sends no price, whatever its rate', async () => {
     // The rate shown here is a courtesy. The server resolves it again and pays from that.
     await openSell(80);
-    await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the sell list' }));
-    await userEvent.click(screen.getByRole('button', { name: /^SELL ·/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Climbing kit to the cart' }));
+    await openFolder('CART');
+    await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
 
     expect(sold[0].items).toEqual([
       { catalogue: 'gear', id: 'climbing_kit', label: 'Climbing kit', qty: 1 },
     ]);
-    expect(JSON.stringify(sold[0])).not.toMatch(/price|pct|payout|each/);
+    expect(JSON.stringify(checkouts[0].sells)).not.toMatch(/price|pct|payout|each/);
   });
 });
 
@@ -1681,7 +1866,7 @@ describe('a shop in another system\'s game', () => {
     loadUploaded({ weapons: [UNITY] });
     sheetState.sheet = { system: RED, data: { weapon1_name: 'Taken' } };
     show('gun_shop', 'Vic', RED);
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Militech Unity' }));
+    await buyNow('Militech Unity');
 
     expect(sent).toEqual([{ locationId: 7, catalogue: 'weapons', itemId: 'militech_unity', settle: undefined }]);
     expect(handleFieldsChange).toHaveBeenCalledWith({
@@ -1693,7 +1878,7 @@ describe('a shop in another system\'s game', () => {
     loadUploaded({ weapons: [UNITY] });
     refuseWith = 'price';
     show('gun_shop', 'Vic', RED);
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Militech Unity' }));
+    await buyNow('Militech Unity');
     expect(handleFieldsChange).not.toHaveBeenCalled();
     expect(handleFieldChange).not.toHaveBeenCalled();
   });
@@ -1705,7 +1890,7 @@ describe('a shop in another system\'s game', () => {
       data: { weapon1_name: 'a', weapon2_name: 'b', weapon3_name: 'c', weapon4_name: 'd' },
     };
     show('gun_shop', 'Vic', RED);
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Militech Unity' }));
+    await buyNow('Militech Unity');
     expect(sent).toEqual([]);
     expect(screen.getByText(/No free weapon slot — all 4 are full/)).toBeInTheDocument();
   });
@@ -1715,7 +1900,7 @@ describe('a shop in another system\'s game', () => {
       cyberware: [{ id: 'jack', name: 'Neural Link', price: 500, fields: { strain: '7', effect: 'Jacks in' } }],
     });
     show('ripperdoc', 'Doc', RED);
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Neural Link' }));
+    await buyNow('Neural Link');
     const [field, rows] = handleFieldChange.mock.calls[0];
     expect(field).toBe('cyberware');
     expect(rows).toEqual([expect.objectContaining({ name: 'Neural Link', placed: false, hl: 7, cost: 500 })]);
@@ -1726,7 +1911,7 @@ describe('a shop in another system\'s game', () => {
     // weapon5 is not a Cyberpunk RED row, so only one of these is for sale.
     sheetState.sheet = { system: RED, data: { weapon1_name: 'Militech Unity', weapon5_name: 'Militech Unity' } };
     show('gun_shop', 'Vic', RED);
-    await userEvent.click(screen.getByRole('button', { name: 'SELL' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
     expect(screen.getByText(/THIS SHOP PAYS 45% OF THE SHELF PRICE/)).toBeInTheDocument();
     expect(screen.getByText('×1')).toBeInTheDocument();
     expect(screen.getByText('45cr')).toBeInTheDocument();
@@ -1811,15 +1996,15 @@ describe('a CWN catalogue file, bought through the window and sold back', () => 
     };
 
     const gunShop = show('gun_shop', 'Vic');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Zip Gun' }));
+    await buyNow('Zip Gun');
     collect();
     gunShop.unmount();
     const again = show('gun_shop', 'Vic');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Heavy Pistol' }));
+    await buyNow('Heavy Pistol');
     collect();
     again.unmount();
     show('general_store', 'Sal');
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Signal Flare' }));
+    await buyNow('Signal Flare');
     collect();
 
     // The GM's columns, in the GM's words, and the CWN rules on top.
