@@ -95,4 +95,21 @@ describe('the ambient hum', () => {
     await act(async () => { vi.advanceTimersByTime(3000); });
     expect(hum.paused).toBe(false);
   });
+
+  it('tries again on the first click when the browser refused to start it', async () => {
+    const { result } = renderHook(() => useAmbientHum(base));
+    const hum = FakeAudio.made[0];
+    hum.play = vi.fn(() => Promise.reject(new Error('NotAllowedError'))) as any;
+    act(() => { result.current.startHum(); });
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    expect(hum.paused).toBe(true);
+    // Now the page has been clicked and sound is allowed.
+    hum.play = FakeAudio.prototype.play.bind(hum);
+    act(() => { document.body.click(); });
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    expect(hum.paused).toBe(false);
+    // And it still eases in, rather than starting at full.
+    expect(hum.volume).toBeLessThan(0.005);
+  });
 });
+

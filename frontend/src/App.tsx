@@ -778,6 +778,12 @@ function App() {
     src: '/Loop_seamless_fixed.mp3', level: 0.0075, enabled: audioEnabled, masterVolume,
     delayMs: 3000, fadeMs: 8000,
   });
+  // A refresh that goes straight to the login page has no boot to hand over from, so the
+  // hum eases in from here instead. Where the browser holds sound back until a click, the
+  // first click tries again.
+  useEffect(() => {
+    if (bootDoneRef.current && !IS_SPECTATOR) startHum();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const endBoot = React.useCallback(() => {
     // Once: the skip key and the fade can both arrive.
     if (bootDoneRef.current) return;
