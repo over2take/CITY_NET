@@ -71,7 +71,8 @@ export function BootScreen({ onDone, onLine, onTouch }: {
         position: 'fixed', inset: 0, zIndex: 100000,
         background: 'var(--black)', color: 'var(--green)',
         fontFamily: 'monospace', fontSize: 14, letterSpacing: 1, lineHeight: 1.7,
-        padding: '48px 56px', textShadow: 'var(--glow)',
+        // Left-aligned like a real BIOS screen; the app around it centers its text.
+        padding: '48px 56px', textShadow: 'var(--glow)', textAlign: 'left',
         opacity: fading ? 0 : 1, transition: `opacity ${FADE_MS}ms ease`,
       }}
     >
