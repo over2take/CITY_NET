@@ -1585,7 +1585,7 @@ function App() {
           }}
         />
       )}
-      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onDone={endBoot} />}
+      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onDone={endBoot} onTouch={() => hddRef.current?.resume()} />}
       {!isLoggedIn && !IS_SPECTATOR && bootDone && (
         <div className={loginFadeIn ? 'login-fade-in' : undefined}>
         <SecureLogin

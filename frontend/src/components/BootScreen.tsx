@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 // A BIOS-style boot screen before the login screen, as the "computer" is switched on.
 //
 // It starts by itself: a power-on self test types out, holds a moment, and fades as the
-// login window fades in behind it (App plays the startup sound then). Any key or click
-// skips the rest. Theme colors only, so it boots in the table's own palette.
+// login window fades in behind it (App plays the startup sound then). Only the SKIP button
+// in the corner skips it; a click anywhere else is passed on as `onTouch`, which is when a
+// browser first lets the page make sound. Theme colors only, in the table's own palette.
 
 const LINE_MS = 260;
 const HOLD_MS = 600;
@@ -29,7 +30,11 @@ export const bootLines = (version: string) => [
 /** How long the boot runs start to finish, so its sound can be made the same length. */
 export const BOOT_SECONDS = (bootLines('').length * LINE_MS + HOLD_MS + FADE_MS) / 1000;
 
-export function BootScreen({ onDone }: { onDone: () => void }) {
+export function BootScreen({ onDone, onTouch }: {
+  onDone: () => void;
+  /** The page was clicked during the boot: the moment sound becomes possible. */
+  onTouch?: () => void;
+}) {
   const lines = bootLines(__APP_VERSION__);
   const [shown, setShown] = useState(0);
   const [fading, setFading] = useState(false);
@@ -49,23 +54,15 @@ export function BootScreen({ onDone }: { onDone: () => void }) {
     return () => clearTimeout(t);
   }, [fading, onDone]);
 
-  // Skippable: a key or a click goes straight to the login window.
-  const doneRef = useRef(onDone);
-  doneRef.current = onDone;
-  useEffect(() => {
-    const onKey = () => doneRef.current();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   return (
     <div
       data-testid="boot-screen"
       role="status"
       aria-label="Starting NAV_OS"
-      onMouseDown={onDone}
+      onPointerDown={onTouch}
       style={{
-        position: 'fixed', inset: 0, zIndex: 100000, cursor: 'pointer',
+        position: 'fixed', inset: 0, zIndex: 100000,
         background: 'var(--black)', color: 'var(--green)',
         fontFamily: 'monospace', fontSize: 14, letterSpacing: 1, lineHeight: 1.7,
         padding: '48px 56px', textShadow: 'var(--glow)',
@@ -74,9 +71,12 @@ export function BootScreen({ onDone }: { onDone: () => void }) {
     >
       {lines.slice(0, shown).map((line, i) => <div key={i}>{line}</div>)}
       <span style={{ animation: 'blink 1s steps(2, start) infinite' }}>█</span>
-      <div style={{ position: 'absolute', bottom: 24, right: 32, fontSize: 11, opacity: 0.6 }}>
-        CLICK OR PRESS ANY KEY TO SKIP
-      </div>
+      <button
+        type="button"
+        className="utility-btn"
+        onClick={onDone}
+        style={{ position: 'absolute', bottom: 24, right: 32, fontFamily: 'monospace', fontSize: 12, letterSpacing: 2, padding: '6px 16px' }}
+      >SKIP</button>
     </div>
   );
 }

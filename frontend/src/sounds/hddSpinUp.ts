@@ -6,12 +6,18 @@
 // ambient hum loop takes over.
 //
 // Browsers keep audio suspended until the page has been clicked or typed in. The boot does
-// not wait for either, so where the browser says no this plays nothing - a drive spinning up
-// after the boot is over would make no sense.
+// not wait for either, so it is started suspended and `resume()` is called on the first click
+// during the boot - the drive spins up from then. With no click it plays nothing, since a
+// drive spinning up after the boot is over would make no sense.
 
 export interface HddSound {
   /** Fade out now - the boot was skipped. */
   stop: () => void;
+  /**
+   * The page was clicked: sound is allowed now. A suspended context has not moved its clock,
+   * so the spin-up starts from its beginning rather than halfway through.
+   */
+  resume: () => void;
 }
 
 export function playHddSpinUp(vol = 1, seconds = 4.4): HddSound | null {
@@ -101,9 +107,15 @@ export function playHddSpinUp(vol = 1, seconds = 4.4): HddSound | null {
   }
 
   [motor, hum, air].forEach((s) => { s.start(now); s.stop(end + 0.05); });
-  const close = setTimeout(() => { void ctx.close().catch(() => {}); }, (seconds + 0.3) * 1000);
+  // Closed once it has played out. Counted from when sound actually starts: a context held
+  // suspended until a click has not been playing, so its clock has not moved.
+  const closeIn = () => setTimeout(() => { void ctx.close().catch(() => {}); }, (end - ctx.currentTime + 0.3) * 1000);
+  let close = closeIn();
 
   return {
+    resume: () => {
+      void ctx.resume().then(() => { clearTimeout(close); close = closeIn(); }).catch(() => {});
+    },
     stop: () => {
       const at = ctx.currentTime;
       master.gain.cancelScheduledValues(at);

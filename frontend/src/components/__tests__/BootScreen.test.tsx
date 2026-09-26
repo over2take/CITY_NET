@@ -1,6 +1,7 @@
 /**
- * The boot screen before the login screen: it starts by itself, types its lines out,
- * fades, and a key or click skips it.
+ * The boot screen before the login screen: it starts by itself, types its lines out and
+ * fades. Only its SKIP button skips it; a click anywhere else is the moment sound becomes
+ * possible, and is passed on for that.
  */
 
 import React from 'react';
@@ -22,7 +23,6 @@ describe('the boot screen', () => {
     vi.useFakeTimers();
     const onDone = vi.fn();
     render(<BootScreen onDone={onDone} />);
-    expect(screen.queryByText(/PRESS ANY KEY TO BOOT/)).toBeNull();
     // Each line's timer starts once the line before it is drawn, so time moves a step at a time.
     const step = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
     step(260);
@@ -33,15 +33,21 @@ describe('the boot screen', () => {
     expect(onDone).toHaveBeenCalled();
   });
 
-  it('is skipped by a key or a click', () => {
-    const onKey = vi.fn();
-    const { unmount } = render(<BootScreen onDone={onKey} />);
+  it('is skipped by its SKIP button and nothing else', () => {
+    const onDone = vi.fn();
+    render(<BootScreen onDone={onDone} />);
     fireEvent.keyDown(window, { key: 'Enter' });
-    expect(onKey).toHaveBeenCalled();
-    unmount();
-    const onClick = vi.fn();
-    render(<BootScreen onDone={onClick} />);
+    fireEvent.pointerDown(screen.getByTestId('boot-screen'));
     fireEvent.mouseDown(screen.getByTestId('boot-screen'));
-    expect(onClick).toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'SKIP' }));
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes a click on the screen on, so the drive can be heard from then', () => {
+    const onTouch = vi.fn();
+    render(<BootScreen onDone={vi.fn()} onTouch={onTouch} />);
+    fireEvent.pointerDown(screen.getByTestId('boot-screen'));
+    expect(onTouch).toHaveBeenCalledTimes(1);
   });
 });
