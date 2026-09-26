@@ -748,8 +748,18 @@ function App() {
   const [bootDone, setBootDone] = useState(() => {
     try { return sessionStorage.getItem('citynet_booted') === '1'; } catch { return true; }
   });
+  /** The login window fades in once, right after the boot; not on a later logout. */
+  const [loginFadeIn, setLoginFadeIn] = useState(false);
+  const audioEnabledRef = useRef(audioEnabled);
+  audioEnabledRef.current = audioEnabled;
+  const bootDoneRef = useRef(bootDone);
   const endBoot = React.useCallback(() => {
+    // Once: the skip key and the fade can both arrive.
+    if (bootDoneRef.current) return;
+    bootDoneRef.current = true;
     setBootDone(true);
+    setLoginFadeIn(true);
+    playStartupRef.current();
     try { sessionStorage.setItem('citynet_booted', '1'); } catch { /* storage refused */ }
   }, []);
 
@@ -1410,10 +1420,29 @@ function App() {
     if (socketRef.current) socketRef.current.emit('identify', token ? { userName: name, playerToken: token } : name);
   };
 
-  /** The startup sound, now the boot screen's: it plays on the key that boots. */
+  /**
+   * The startup sound, as the login window fades in after the boot.
+   *
+   * Browsers refuse sound until the page has been clicked or typed in, and the boot needs
+   * neither. So it is tried straight away, and if refused it plays on the first click or key
+   * instead - usually the first letter of the operator's name.
+   */
   const playStartup = () => {
-    if (audioEnabled) { const s = new Audio('/StartUp.mp3'); s.volume = 0.20 * ((window as any).masterVolume ?? 0.5); s.play().catch(() => {}); }
+    if (!audioEnabledRef.current) return;
+    const s = new Audio('/StartUp.mp3');
+    s.volume = 0.20 * ((window as any).masterVolume ?? 0.5);
+    s.play().catch(() => {
+      const retry = () => {
+        window.removeEventListener('pointerdown', retry);
+        window.removeEventListener('keydown', retry);
+        s.play().catch(() => {});
+      };
+      window.addEventListener('pointerdown', retry);
+      window.addEventListener('keydown', retry);
+    });
   };
+  const playStartupRef = useRef(playStartup);
+  playStartupRef.current = playStartup;
 
   const handleApprovePlayer = async (username: string) => {
     await fetch(`/api/player/admin/players/${username}/approve`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
@@ -1538,8 +1567,9 @@ function App() {
           }}
         />
       )}
-      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onStart={playStartup} onDone={endBoot} />}
+      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onDone={endBoot} />}
       {!isLoggedIn && !IS_SPECTATOR && bootDone && (
+        <div className={loginFadeIn ? 'login-fade-in' : undefined}>
         <SecureLogin
           secureModeEnabled={secureModeEnabled}
           audioEnabled={audioEnabled}
@@ -1561,6 +1591,7 @@ function App() {
           onThemeChange={setCurrentTheme}
           currentTheme={currentTheme}
         />
+        </div>
       )}
       {isLoggedIn && (
         <>
