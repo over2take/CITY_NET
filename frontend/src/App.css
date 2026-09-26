@@ -748,6 +748,13 @@ header {
   animation: chat-alert 1s infinite;
 }
 
+/* The login screen, always under the CRT scanlines. Its backdrop is z-index 1000 and the
+   scanlines only 10, so on its own it covered them; its own layer keeps it below. The fade
+   below did this by accident, which is why a refresh - with no fade - lost the scanlines. */
+.login-layer {
+  isolation: isolate;
+}
+
 /* The login window, fading in as the boot screen fades out. */
 .login-fade-in {
   animation: login-fade-in 0.9s ease both;

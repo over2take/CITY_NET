@@ -1598,7 +1598,7 @@ function App() {
       )}
       {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onDone={endBoot} onLine={bootLine} onTouch={bootTouch} />}
       {!isLoggedIn && !IS_SPECTATOR && bootDone && (
-        <div className={loginFadeIn ? 'login-fade-in' : undefined}>
+        <div className={loginFadeIn ? 'login-layer login-fade-in' : 'login-layer'}>
         <SecureLogin
           secureModeEnabled={secureModeEnabled}
           audioEnabled={audioEnabled}
