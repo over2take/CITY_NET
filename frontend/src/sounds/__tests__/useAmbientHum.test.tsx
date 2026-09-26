@@ -111,5 +111,29 @@ describe('the ambient hum', () => {
     // And it still eases in, rather than starting at full.
     expect(hum.volume).toBeLessThan(0.005);
   });
+
+  it('starts at once and fades in quickly when a start asks for that - a refresh', async () => {
+    const { result } = renderHook(() => useAmbientHum(base));
+    const hum = FakeAudio.made[0];
+    act(() => { result.current.startHum({ delayMs: 0, fadeMs: 1000 }); });
+    await act(async () => { vi.advanceTimersByTime(0); });
+    expect(hum.paused).toBe(false);
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    expect(hum.volume).toBeCloseTo(0.005, 6);
+  });
+
+  it('keeps a quick start quick when a click has to retry it', async () => {
+    const { result } = renderHook(() => useAmbientHum(base));
+    const hum = FakeAudio.made[0];
+    hum.play = vi.fn(() => Promise.reject(new Error('NotAllowedError'))) as any;
+    act(() => { result.current.startHum({ delayMs: 0, fadeMs: 1000 }); });
+    await act(async () => { vi.advanceTimersByTime(0); });
+    hum.play = FakeAudio.prototype.play.bind(hum);
+    act(() => { document.body.click(); });
+    await act(async () => { vi.advanceTimersByTime(0); });
+    expect(hum.paused).toBe(false);
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    expect(hum.volume).toBeCloseTo(0.005, 6);
+  });
 });
 

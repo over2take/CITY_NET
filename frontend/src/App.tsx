@@ -779,10 +779,11 @@ function App() {
     delayMs: 3000, fadeMs: 8000,
   });
   // A refresh that goes straight to the login page has no boot to hand over from, so the
-  // hum eases in from here instead. Where the browser holds sound back until a click, the
-  // first click tries again.
+  // hum starts from here - at once, with only a one-second fade so it does not pop in; a
+  // long wait there was just silence while people logged in. Where the browser holds sound
+  // back until a click, the first click tries again, just as quick.
   useEffect(() => {
-    if (bootDoneRef.current && !IS_SPECTATOR) startHum();
+    if (bootDoneRef.current && !IS_SPECTATOR) startHum({ delayMs: 0, fadeMs: 1000 });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const endBoot = React.useCallback(() => {
     // Once: the skip key and the fade can both arrive.

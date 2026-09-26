@@ -28,8 +28,17 @@ export function useAmbientHum({ src, level, enabled, masterVolume, delayMs, fade
   opts.current = { level, enabled, masterVolume, delayMs, fadeMs };
   const full = () => opts.current.level * opts.current.masterVolume;
 
-  /** The first start eases in; it does nothing once the hum has started or is about to. */
-  const startHum = useCallback(() => {
+  /** The timing of the start last asked for, so a click retrying it keeps that timing. */
+  const timing = useRef<{ delayMs: number; fadeMs: number } | null>(null);
+
+  /**
+   * The first start eases in; it does nothing once the hum has started or is about to. A
+   * start can ask for its own timing - a refresh straight to the login page wants it quick -
+   * and otherwise uses the hook's.
+   */
+  const startHum = useCallback((when?: { delayMs: number; fadeMs: number }) => {
+    if (when) timing.current = when;
+    const { delayMs: wait, fadeMs: rise } = timing.current ?? opts.current;
     const a = el.current;
     if (!a || !opts.current.enabled || started.current || waiting.current) return;
     waiting.current = true;
@@ -42,14 +51,14 @@ export function useAmbientHum({ src, level, enabled, masterVolume, delayMs, fade
       b.play().then(() => {
         const t0 = Date.now();
         fading.current = setInterval(() => {
-          const k = Math.min(1, (Date.now() - t0) / opts.current.fadeMs);
+          const k = Math.min(1, (Date.now() - t0) / Math.max(1, rise));
           // Cubed: ears hear loudness on a curve, and a straight ramp sounds as if it arrives
           // at once. Read `full()` each step so the slider still counts mid-fade.
           b.volume = full() * k * k * k;
           if (k >= 1 && fading.current) { clearInterval(fading.current); fading.current = null; }
         }, 50);
       }).catch(() => { started.current = false; b.volume = full(); });
-    }, opts.current.delayMs);
+    }, wait);
   }, []);
 
   // One element for the session, and the first click as a way in where sound was held back.
@@ -58,6 +67,7 @@ export function useAmbientHum({ src, level, enabled, masterVolume, delayMs, fade
     a.loop = true;
     a.volume = full();
     el.current = a;
+    // Retries a start the browser refused, with that start's own timing.
     const onFirstClick = () => startHum();
     document.addEventListener('click', onFirstClick, { once: true });
     return () => {
