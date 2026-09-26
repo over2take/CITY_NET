@@ -28,6 +28,7 @@ import { BuildingWindow, type BuildingAction } from './components/BuildingWindow
 import { TokenWindow, type TokenFolder } from './components/TokenWindow';
 import { BootScreen } from './components/BootScreen';
 import { createBootSounds, type BootSounds } from './sounds/bootSounds';
+import { useAmbientHum } from './sounds/useAmbientHum';
 import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
 import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
@@ -768,43 +769,15 @@ function App() {
     else bootSounds.current?.seek();
   }, []);
   const bootTouch = React.useCallback(() => bootSounds.current?.wake(), []);
-  /** The ambient hum loop, so the boot can hand over to it. */
-  const humRef = useRef<HTMLAudioElement | null>(null);
   /**
-   * Bring the ambient hum in gently, after the startup sound has had its moment: it waits
-   * a few seconds, then eases up from silence over about eight. Cubed rather than straight,
-   * because ears hear loudness on a curve - a straight ramp sounds as if it arrives at once.
-   * Does nothing if it is already playing.
+   * The ambient hum: one sound for the session. Its first start - after the boot, or on the
+   * first click - waits a few seconds and eases in; the slider and mute adjust it in place
+   * (sounds/useAmbientHum.ts). 0.01 at full until the user asked for 25% less.
    */
-  const HUM_DELAY_MS = 3000;
-  /** The hum's loudness at full, before master volume. 0.01 until the user asked for 25% less. */
-  const HUM_LEVEL = 0.0075;
-  const HUM_FADE_MS = 8000;
-  const humFade = useRef<ReturnType<typeof setInterval> | null>(null);
-  const humWaiting = useRef(false);
-  const fadeInHum = () => {
-    const el = humRef.current;
-    if (!el || !audioEnabledRef.current || !el.paused || humWaiting.current) return;
-    humWaiting.current = true;
-    setTimeout(() => {
-      humWaiting.current = false;
-      const now = humRef.current;
-      if (!now || !audioEnabledRef.current || !now.paused) return;
-      const target = HUM_LEVEL * ((window as any).masterVolume ?? 0.5);
-      now.volume = 0;
-      now.play().then(() => {
-        if (humFade.current) clearInterval(humFade.current);
-        const started = Date.now();
-        humFade.current = setInterval(() => {
-          const k = Math.min(1, (Date.now() - started) / HUM_FADE_MS);
-          now.volume = target * k * k * k;
-          if (k >= 1 && humFade.current) { clearInterval(humFade.current); humFade.current = null; }
-        }, 50);
-      }).catch(() => { now.volume = target; });
-    }, HUM_DELAY_MS);
-  };
-  const fadeInHumRef = useRef(fadeInHum);
-  fadeInHumRef.current = fadeInHum;
+  const { startHum } = useAmbientHum({
+    src: '/Loop_seamless_fixed.mp3', level: 0.0075, enabled: audioEnabled, masterVolume,
+    delayMs: 3000, fadeMs: 8000,
+  });
   const endBoot = React.useCallback(() => {
     // Once: the skip key and the fade can both arrive.
     if (bootDoneRef.current) return;
@@ -813,7 +786,7 @@ function App() {
     setLoginFadeIn(true);
     bootSounds.current?.close();
     bootSounds.current = null;
-    fadeInHumRef.current();
+    startHum();
     playStartupRef.current();
     try { sessionStorage.setItem('citynet_booted', '1'); } catch { /* storage refused */ }
   }, []);
@@ -1274,14 +1247,7 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem('audioEnabled', JSON.stringify(audioEnabled));
-    const loopSound = new Audio('/Loop_seamless_fixed.mp3');
-    loopSound.loop = true; loopSound.volume = HUM_LEVEL * ((window as any).masterVolume ?? 0.5);
-    humRef.current = loopSound;
-    const playAudio = () => { if (audioEnabled) fadeInHum(); };
-    if (!audioEnabled) loopSound.pause();
-    document.addEventListener('click', playAudio, { once: true });
-    return () => { document.removeEventListener('click', playAudio); loopSound.pause(); };
-  }, [audioEnabled, masterVolume]);
+  }, [audioEnabled]);
 
   const [isGeneratingMap, setIsGeneratingMap] = useState(false);
 
