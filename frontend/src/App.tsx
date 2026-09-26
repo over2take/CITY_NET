@@ -27,6 +27,7 @@ import { DraggableWindow } from './components/DraggableWindow';
 import { BuildingWindow, type BuildingAction } from './components/BuildingWindow';
 import { TokenWindow, type TokenFolder } from './components/TokenWindow';
 import { BootScreen } from './components/BootScreen';
+import { createBootSounds, type BootSounds } from './sounds/bootSounds';
 import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
 import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
@@ -753,27 +754,52 @@ function App() {
   const audioEnabledRef = useRef(audioEnabled);
   audioEnabledRef.current = audioEnabled;
   const bootDoneRef = useRef(bootDone);
+  /**
+   * The boot's sounds: the POST beep, and the drive clicking as each line appears. Silent
+   * until the browser allows sound - a click on the boot screen does (sounds/bootSounds.ts).
+   */
+  const bootSounds = useRef<BootSounds | null>(null);
+  useEffect(() => {
+    if (bootDone || IS_SPECTATOR || !audioEnabledRef.current || bootSounds.current) return;
+    bootSounds.current = createBootSounds(0.35 * ((window as any).masterVolume ?? 0.5));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const bootLine = React.useCallback((i: number) => {
+    if (i === 0) bootSounds.current?.beep();
+    else bootSounds.current?.seek();
+  }, []);
+  const bootTouch = React.useCallback(() => bootSounds.current?.wake(), []);
   /** The ambient hum loop, so the boot can hand over to it. */
   const humRef = useRef<HTMLAudioElement | null>(null);
   /**
-   * Bring the ambient hum in gently: from silence to its usual level over about three
-   * seconds, rather than all at once. Does nothing if it is already playing.
+   * Bring the ambient hum in gently, after the startup sound has had its moment: it waits
+   * a few seconds, then eases up from silence over about eight. Cubed rather than straight,
+   * because ears hear loudness on a curve - a straight ramp sounds as if it arrives at once.
+   * Does nothing if it is already playing.
    */
+  const HUM_DELAY_MS = 3000;
+  const HUM_FADE_MS = 8000;
   const humFade = useRef<ReturnType<typeof setInterval> | null>(null);
+  const humWaiting = useRef(false);
   const fadeInHum = () => {
     const el = humRef.current;
-    if (!el || !audioEnabledRef.current || !el.paused) return;
-    const target = 0.01 * ((window as any).masterVolume ?? 0.5);
-    el.volume = 0;
-    el.play().then(() => {
-      if (humFade.current) clearInterval(humFade.current);
-      const started = Date.now();
-      humFade.current = setInterval(() => {
-        const k = Math.min(1, (Date.now() - started) / 3000);
-        el.volume = target * k;
-        if (k >= 1 && humFade.current) { clearInterval(humFade.current); humFade.current = null; }
-      }, 50);
-    }).catch(() => { el.volume = target; });
+    if (!el || !audioEnabledRef.current || !el.paused || humWaiting.current) return;
+    humWaiting.current = true;
+    setTimeout(() => {
+      humWaiting.current = false;
+      const now = humRef.current;
+      if (!now || !audioEnabledRef.current || !now.paused) return;
+      const target = 0.01 * ((window as any).masterVolume ?? 0.5);
+      now.volume = 0;
+      now.play().then(() => {
+        if (humFade.current) clearInterval(humFade.current);
+        const started = Date.now();
+        humFade.current = setInterval(() => {
+          const k = Math.min(1, (Date.now() - started) / HUM_FADE_MS);
+          now.volume = target * k * k * k;
+          if (k >= 1 && humFade.current) { clearInterval(humFade.current); humFade.current = null; }
+        }, 50);
+      }).catch(() => { now.volume = target; });
+    }, HUM_DELAY_MS);
   };
   const fadeInHumRef = useRef(fadeInHum);
   fadeInHumRef.current = fadeInHum;
@@ -783,6 +809,8 @@ function App() {
     bootDoneRef.current = true;
     setBootDone(true);
     setLoginFadeIn(true);
+    bootSounds.current?.close();
+    bootSounds.current = null;
     fadeInHumRef.current();
     playStartupRef.current();
     try { sessionStorage.setItem('citynet_booted', '1'); } catch { /* storage refused */ }
@@ -1593,7 +1621,7 @@ function App() {
           }}
         />
       )}
-      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onDone={endBoot} />}
+      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onDone={endBoot} onLine={bootLine} onTouch={bootTouch} />}
       {!isLoggedIn && !IS_SPECTATOR && bootDone && (
         <div className={loginFadeIn ? 'login-fade-in' : undefined}>
         <SecureLogin

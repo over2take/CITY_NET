@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // A BIOS-style boot screen before the login screen, as the "computer" is switched on.
 //
 // It starts by itself: a power-on self test types out, holds a moment, and fades as the
 // login window fades in behind it (App plays the startup sound and fades the hum in then).
-// Only the SKIP button in the corner skips it. Theme colors only, in the table's own palette.
+// Only the SKIP button in the corner skips it. Each line is reported as it appears, for the
+// drive clicks, and a click on the screen is passed on - it is when a browser first lets the
+// page make sound. Theme colors only, in the table's own palette.
 
 const LINE_MS = 260;
 const HOLD_MS = 600;
@@ -26,7 +28,13 @@ export const bootLines = (version: string) => [
   'NAV_OS READY · AWAITING OPERATOR',
 ];
 
-export function BootScreen({ onDone }: { onDone: () => void }) {
+export function BootScreen({ onDone, onLine, onTouch }: {
+  onDone: () => void;
+  /** A line of the self test just appeared - the drive reads for each one. */
+  onLine?: (index: number) => void;
+  /** The page was clicked during the boot: the moment a browser lets it make sound. */
+  onTouch?: () => void;
+}) {
   const lines = bootLines(__APP_VERSION__);
   const [shown, setShown] = useState(0);
   const [fading, setFading] = useState(false);
@@ -40,6 +48,12 @@ export function BootScreen({ onDone }: { onDone: () => void }) {
     return () => clearTimeout(hold);
   }, [shown, lines.length]);
 
+  const onLineRef = useRef(onLine);
+  onLineRef.current = onLine;
+  useEffect(() => {
+    if (shown > 0) onLineRef.current?.(shown - 1);
+  }, [shown]);
+
   useEffect(() => {
     if (!fading) return;
     const t = setTimeout(onDone, FADE_MS);
@@ -52,6 +66,7 @@ export function BootScreen({ onDone }: { onDone: () => void }) {
       data-testid="boot-screen"
       role="status"
       aria-label="Starting NAV_OS"
+      onPointerDown={onTouch}
       style={{
         position: 'fixed', inset: 0, zIndex: 100000,
         background: 'var(--black)', color: 'var(--green)',

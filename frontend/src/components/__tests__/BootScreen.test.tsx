@@ -42,4 +42,21 @@ describe('the boot screen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'SKIP' }));
     expect(onDone).toHaveBeenCalledTimes(1);
   });
+
+  it('reports each line as it appears, for the drive to click along', () => {
+    vi.useFakeTimers();
+    const onLine = vi.fn();
+    render(<BootScreen onDone={vi.fn()} onLine={onLine} />);
+    for (let i = 0; i < 3; i += 1) act(() => { vi.advanceTimersByTime(260); });
+    expect(onLine.mock.calls.map(([i]) => i)).toEqual([0, 1, 2]);
+  });
+
+  it('passes a click on the screen on, when a browser first allows sound', () => {
+    const onTouch = vi.fn();
+    const onDone = vi.fn();
+    render(<BootScreen onDone={onDone} onTouch={onTouch} />);
+    fireEvent.pointerDown(screen.getByTestId('boot-screen'));
+    expect(onTouch).toHaveBeenCalledTimes(1);
+    expect(onDone).not.toHaveBeenCalled();
+  });
 });
