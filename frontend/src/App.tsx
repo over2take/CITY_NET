@@ -777,6 +777,8 @@ function App() {
    * Does nothing if it is already playing.
    */
   const HUM_DELAY_MS = 3000;
+  /** The hum's loudness at full, before master volume. 0.01 until the user asked for 25% less. */
+  const HUM_LEVEL = 0.0075;
   const HUM_FADE_MS = 8000;
   const humFade = useRef<ReturnType<typeof setInterval> | null>(null);
   const humWaiting = useRef(false);
@@ -788,7 +790,7 @@ function App() {
       humWaiting.current = false;
       const now = humRef.current;
       if (!now || !audioEnabledRef.current || !now.paused) return;
-      const target = 0.01 * ((window as any).masterVolume ?? 0.5);
+      const target = HUM_LEVEL * ((window as any).masterVolume ?? 0.5);
       now.volume = 0;
       now.play().then(() => {
         if (humFade.current) clearInterval(humFade.current);
@@ -1273,7 +1275,7 @@ function App() {
   useEffect(() => {
     localStorage.setItem('audioEnabled', JSON.stringify(audioEnabled));
     const loopSound = new Audio('/Loop_seamless_fixed.mp3');
-    loopSound.loop = true; loopSound.volume = 0.01 * ((window as any).masterVolume ?? 0.5);
+    loopSound.loop = true; loopSound.volume = HUM_LEVEL * ((window as any).masterVolume ?? 0.5);
     humRef.current = loopSound;
     const playAudio = () => { if (audioEnabled) fadeInHum(); };
     if (!audioEnabled) loopSound.pause();
