@@ -26,8 +26,7 @@ import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
 import { BuildingWindow, type BuildingAction } from './components/BuildingWindow';
 import { TokenWindow, type TokenFolder } from './components/TokenWindow';
-import { BootScreen, BOOT_SECONDS } from './components/BootScreen';
-import { playHddSpinUp, type HddSound } from './sounds/hddSpinUp';
+import { BootScreen } from './components/BootScreen';
 import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
 import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
@@ -757,21 +756,6 @@ function App() {
   /** The ambient hum loop, so the boot can hand over to it. */
   const humRef = useRef<HTMLAudioElement | null>(null);
   /**
-   * The hard drive spinning up under the boot text. It settles and fades as the boot ends,
-   * and the ambient hum takes over from it. Silent where the browser holds sound back until
-   * the page has been clicked - see sounds/hddSpinUp.ts.
-   */
-  const hddRef = useRef<HddSound | null>(null);
-  const hddStarted = useRef(false);
-  /** Shorter than the boot: the drive is up to speed and settled well before it ends. */
-  const HDD_SECONDS = Math.min(3.2, BOOT_SECONDS);
-  useEffect(() => {
-    if (bootDone || hddStarted.current || IS_SPECTATOR || !audioEnabledRef.current) return;
-    hddStarted.current = true;
-    hddRef.current = playHddSpinUp(0.18 * ((window as any).masterVolume ?? 0.5), HDD_SECONDS);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /**
    * Bring the ambient hum in gently: from silence to its usual level over about three
    * seconds, rather than all at once. Does nothing if it is already playing.
    */
@@ -793,20 +777,12 @@ function App() {
   };
   const fadeInHumRef = useRef(fadeInHum);
   fadeInHumRef.current = fadeInHum;
-
-  /** A click during the boot: the drive can be heard now, and the hum follows it in. */
-  const touchBoot = React.useCallback(() => {
-    if (!hddRef.current) return;
-    hddRef.current.resume();
-    setTimeout(() => fadeInHumRef.current(), (HDD_SECONDS - 0.9) * 1000);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const endBoot = React.useCallback(() => {
     // Once: the skip key and the fade can both arrive.
     if (bootDoneRef.current) return;
     bootDoneRef.current = true;
     setBootDone(true);
     setLoginFadeIn(true);
-    hddRef.current?.stop();
     fadeInHumRef.current();
     playStartupRef.current();
     try { sessionStorage.setItem('citynet_booted', '1'); } catch { /* storage refused */ }
@@ -1617,7 +1593,7 @@ function App() {
           }}
         />
       )}
-      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onDone={endBoot} onTouch={touchBoot} />}
+      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onDone={endBoot} />}
       {!isLoggedIn && !IS_SPECTATOR && bootDone && (
         <div className={loginFadeIn ? 'login-fade-in' : undefined}>
         <SecureLogin

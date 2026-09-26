@@ -1,7 +1,6 @@
 /**
  * The boot screen before the login screen: it starts by itself, types its lines out and
- * fades. Only its SKIP button skips it; a click anywhere else is the moment sound becomes
- * possible, and is passed on for that.
+ * fades. Only its SKIP button skips it.
  */
 
 import React from 'react';
@@ -42,12 +41,5 @@ describe('the boot screen', () => {
     expect(onDone).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'SKIP' }));
     expect(onDone).toHaveBeenCalledTimes(1);
-  });
-
-  it('passes a click on the screen on, so the drive can be heard from then', () => {
-    const onTouch = vi.fn();
-    render(<BootScreen onDone={vi.fn()} onTouch={onTouch} />);
-    fireEvent.pointerDown(screen.getByTestId('boot-screen'));
-    expect(onTouch).toHaveBeenCalledTimes(1);
   });
 });

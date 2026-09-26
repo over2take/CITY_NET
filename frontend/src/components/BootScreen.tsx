@@ -3,9 +3,8 @@ import { useEffect, useState } from 'react';
 // A BIOS-style boot screen before the login screen, as the "computer" is switched on.
 //
 // It starts by itself: a power-on self test types out, holds a moment, and fades as the
-// login window fades in behind it (App plays the startup sound then). Only the SKIP button
-// in the corner skips it; a click anywhere else is passed on as `onTouch`, which is when a
-// browser first lets the page make sound. Theme colors only, in the table's own palette.
+// login window fades in behind it (App plays the startup sound and fades the hum in then).
+// Only the SKIP button in the corner skips it. Theme colors only, in the table's own palette.
 
 const LINE_MS = 260;
 const HOLD_MS = 600;
@@ -27,14 +26,7 @@ export const bootLines = (version: string) => [
   'NAV_OS READY · AWAITING OPERATOR',
 ];
 
-/** How long the boot runs start to finish, so its sound can be made the same length. */
-export const BOOT_SECONDS = (bootLines('').length * LINE_MS + HOLD_MS + FADE_MS) / 1000;
-
-export function BootScreen({ onDone, onTouch }: {
-  onDone: () => void;
-  /** The page was clicked during the boot: the moment sound becomes possible. */
-  onTouch?: () => void;
-}) {
+export function BootScreen({ onDone }: { onDone: () => void }) {
   const lines = bootLines(__APP_VERSION__);
   const [shown, setShown] = useState(0);
   const [fading, setFading] = useState(false);
@@ -60,7 +52,6 @@ export function BootScreen({ onDone, onTouch }: {
       data-testid="boot-screen"
       role="status"
       aria-label="Starting NAV_OS"
-      onPointerDown={onTouch}
       style={{
         position: 'fixed', inset: 0, zIndex: 100000,
         background: 'var(--black)', color: 'var(--green)',
