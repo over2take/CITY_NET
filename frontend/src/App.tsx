@@ -26,7 +26,8 @@ import { CursorPingListener } from './components/CursorPing';
 import { DraggableWindow } from './components/DraggableWindow';
 import { BuildingWindow, type BuildingAction } from './components/BuildingWindow';
 import { TokenWindow, type TokenFolder } from './components/TokenWindow';
-import { BootScreen } from './components/BootScreen';
+import { BootScreen, BOOT_SECONDS } from './components/BootScreen';
+import { playHddSpinUp, type HddSound } from './sounds/hddSpinUp';
 import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
 import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
@@ -753,12 +754,28 @@ function App() {
   const audioEnabledRef = useRef(audioEnabled);
   audioEnabledRef.current = audioEnabled;
   const bootDoneRef = useRef(bootDone);
+  /** The ambient hum loop, so the boot can hand over to it. */
+  const humRef = useRef<HTMLAudioElement | null>(null);
+  /**
+   * The hard drive spinning up under the boot text. It settles and fades as the boot ends,
+   * and the ambient hum takes over from it. Silent where the browser holds sound back until
+   * the page has been clicked - see sounds/hddSpinUp.ts.
+   */
+  const hddRef = useRef<HddSound | null>(null);
+  const hddStarted = useRef(false);
+  useEffect(() => {
+    if (bootDone || hddStarted.current || IS_SPECTATOR || !audioEnabledRef.current) return;
+    hddStarted.current = true;
+    hddRef.current = playHddSpinUp(0.35 * ((window as any).masterVolume ?? 0.5), BOOT_SECONDS);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const endBoot = React.useCallback(() => {
     // Once: the skip key and the fade can both arrive.
     if (bootDoneRef.current) return;
     bootDoneRef.current = true;
     setBootDone(true);
     setLoginFadeIn(true);
+    hddRef.current?.stop();
+    if (audioEnabledRef.current) humRef.current?.play().catch(() => {});
     playStartupRef.current();
     try { sessionStorage.setItem('citynet_booted', '1'); } catch { /* storage refused */ }
   }, []);
@@ -1221,6 +1238,7 @@ function App() {
     localStorage.setItem('audioEnabled', JSON.stringify(audioEnabled));
     const loopSound = new Audio('/Loop_seamless_fixed.mp3');
     loopSound.loop = true; loopSound.volume = 0.01 * ((window as any).masterVolume ?? 0.5);
+    humRef.current = loopSound;
     const playAudio = async () => { if (audioEnabled) { try { await loopSound.play(); } catch (e) {} } };
     if (!audioEnabled) loopSound.pause();
     document.addEventListener('click', playAudio, { once: true });

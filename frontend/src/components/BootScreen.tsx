@@ -26,6 +26,9 @@ export const bootLines = (version: string) => [
   'NAV_OS READY · AWAITING OPERATOR',
 ];
 
+/** How long the boot runs start to finish, so its sound can be made the same length. */
+export const BOOT_SECONDS = (bootLines('').length * LINE_MS + HOLD_MS + FADE_MS) / 1000;
+
 export function BootScreen({ onDone }: { onDone: () => void }) {
   const lines = bootLines(__APP_VERSION__);
   const [shown, setShown] = useState(0);
