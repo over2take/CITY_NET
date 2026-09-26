@@ -48,6 +48,12 @@ The shop, on the terminal layout, with a cart.
 
 - **BUY and SELL no longer charge or pay on their own.** Everything goes through the cart.
 
+- **Every window has the solid title bar** the building, token and shop windows have: the
+  theme's color with the window's name in black. The update notice matches.
+
+- **The version on the login screen sits below the THEMES button** instead of beside it,
+  where it was starting to run into it.
+
 ### Fixed
 
 - **Buying two of the same weapon at once can no longer put both in one row.** Bought
