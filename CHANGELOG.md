@@ -33,6 +33,18 @@ The shop, on the terminal layout, with a cart.
 
 - **A filter on the SELL list,** like the one on BUY.
 
+- **Windows behave like a desktop's.** The window in front is the focused one and keeps the
+  solid title bar; the others dim to an outlined bar. Click anywhere in a window to bring it
+  to the front. **Esc** closes the window in front, except while you are typing in a field.
+
+- **Windows remember where you left them.** Each kind of window opens where you last dragged
+  it, in your browser: every shop in one spot, every token window in another.
+
+- **A boot screen.** Opening the app shows a BIOS-style self test typing out before the login
+  window fades in. It shows once per browser tab, and the SKIP button in the corner skips it.
+  If the page has been clicked, you hear the PC speaker's beep and the drive clicking as each
+  line prints (browsers keep a page silent until it is clicked).
+
 ### Changed
 
 - **The shop window looks like the building and token windows.** The building in the
@@ -50,6 +62,13 @@ The shop, on the terminal layout, with a cart.
 
 - **Every window has the solid title bar** the building, token and shop windows have: the
   theme's color with the window's name in black. The update notice matches.
+
+- **Windows are named like programs:** SHOP.EXE · VIC'S ARMS, BANK.EXE, SHEET.EXE · GHOST,
+  ID.EXE for a token, SITE.EXE for a building, and so on.
+
+- **The startup sound plays as the login window appears,** after the boot, instead of on
+  logging in. The ambient hum now comes in a few seconds later and eases up slowly, and is a
+  quarter quieter than before.
 
 - **The version on the login screen sits below the THEMES button** instead of beside it,
   where it was starting to run into it.

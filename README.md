@@ -512,6 +512,8 @@ CITY_NET/
 │   │   │       ├── parkPonds.test.ts   # Pond shape and size, containment in the plot, trees standing back from the water, and identical roads with ponds on or off
 │   │   │       ├── seeds.test.ts       # Same seed rebuilds the same city; typed seeds survive intact; a new seed gives a different one
 │   │   │       └── region.test.ts      # Region membership and counting for REGENERATE
+│   │   ├── sounds/
+│   │   │   └── bootSounds.ts           # The boot screen's PC-speaker beep and drive head clicks, built in code like the bank's sounds. Plays only while the browser allows sound; nothing is queued before, so a first click does not set it all off at once
 │   │   ├── components/
 │   │   │   ├── AdminPanel.tsx          # GM dashboard — CITY / EXPORT / GAME / PLAYERS tabs; CITY_GENERATOR delegates to cityGen/ and exposes LAYOUT, DRAG_RECT/DRAW_AREA bounds, OVERPASS_DENSITY, WATER, PARK_PONDS, an optional SEED and REGENERATE; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R, CWN, and SR6; SR6 Edge replenishment (reset all / give 1 to player)
 │   │   │   ├── InventorySection.tsx    # The inventory table, on every system. Its own file because SheetRenderer is long enough, and generic: which rows carry an extra button, and what pressing it does, is supplied from outside - so a drug offers CONSUME and a skillplug offers LOAD without either knowing about the other
@@ -530,9 +532,11 @@ CITY_NET/
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
 │   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools; initiative button blinks when a roll is needed; exports `hasSheetCombat` + `SheetAttackPanel` (system-agnostic via ATTACK_PANEL_CONFIG)
 │   │   │   ├── SecureLogin.tsx         # Player login, registration, password reset UI; theme picker (saves to localStorage + DB on login); polls registration status until approved
+│   │   │   ├── BootScreen.tsx          # The BIOS-style self test before the login window, once per tab: lines type out, it fades as the login fades in, and only its SKIP button skips it. Reports each line (for the drive clicks) and a click on it (when a browser first allows sound)
 │   │   │   ├── LogoScene.tsx           # Three.js animated login logo (hex badge, wireframe skyline, spinning gem); colour driven by active theme
 │   │   │   ├── CityDatabase.tsx        # Location search/browse
-│   │   │   ├── DraggableWindow.tsx     # Reusable draggable panel wrapper. An optional className lets one window opt into another look - the terminal style - without every other window changing with it
+│   │   │   ├── DraggableWindow.tsx     # Every window: the solid title bar, dragging kept on screen, and desktop behavior - the front window is focused and the rest drawn inactive, a click anywhere focuses, Esc closes the focused one (not while typing), and each program reopens where it was last left. Titles read PROGRAM.EXE · SUBJECT
+│   │   │   ├── windowFocus.ts          # Which window is in front (a tiny store every window registers its stacking with), and where each program was last left: keyed by the name before ' · ', kept in localStorage
 │   │   │   ├── CursorPing.tsx          # Cursor-position ping broadcast and animation
 │   │   │   ├── AttackAnimations.tsx    # Attack hit/miss animations (swipe, projectile, miss text)
 │   │   │   ├── RadioFeed.tsx           # Admin music library panel (folder tree, upload, delete)
@@ -585,6 +589,7 @@ CITY_NET/
 │   │   │       ├── DiceTray.test.tsx
 │   │   │       ├── CustomDieBuilder.test.tsx  # Create/edit modes, name-clash rules, face preservation, reload-on-target-switch regression
 │   │   │       ├── DraggableWindow.test.tsx
+│   │   │       ├── BootScreen.test.tsx              # Types out by itself and finishes, skips on SKIP and nothing else, reports lines and clicks
 │   │   │       ├── HitPoints.test.tsx
 │   │   │       ├── MapElements.test.tsx
 │   │   │       ├── MeasurementTool.test.tsx
