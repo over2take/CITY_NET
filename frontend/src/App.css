@@ -957,15 +957,18 @@ header {
   text-shadow: 0 0 1px currentColor, 0 0 1px currentColor;
 }
 
-/* The terminal look, for windows that ask for it (the building window): a solid title bar
-   in the theme's color with the name knocked out of it, like an old green-screen header. */
-.terminal-window .win95-title-bar {
+/* Every window's title bar is solid: the theme's color with the name knocked out of it,
+   like an old green-screen header. It started as the terminal windows' own look and every
+   window now has it, so the window you are looking at reads the same as the one beside it.
+   Anything placed in the bar (the close button, IMPORT, the vehicle badge) is a black box
+   with its own border, so it stands out against the color. */
+.win95-title-bar {
   background: var(--green);
   color: var(--black);
   border-bottom: none;
 }
 
-.terminal-window .win95-title-text {
+.win95-title-text {
   text-shadow: none;
 }
 

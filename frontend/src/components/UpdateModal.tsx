@@ -91,12 +91,14 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '8px 12px',
-    borderBottom: '1px solid var(--green, #00ff88)',
+    // The solid bar every window has: the theme's color, the name in black.
+    background: 'var(--green, #00ff88)',
+    color: 'var(--black, #000)',
+    fontWeight: 'bold',
     cursor: 'grab',
     userSelect: 'none',
     fontSize: '0.65rem',
     letterSpacing: '2px',
-    opacity: 0.8,
   };
 
   const bodyStyle: React.CSSProperties = {
@@ -116,7 +118,7 @@ export function UpdateModal({ current, latest, message, token, isDocker, onDismi
     <div ref={modalRef} style={panelStyle}>
       <div style={headerStyle} onMouseDown={onMouseDown}>
         <span>SYSTEM_UPDATE</span>
-        <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: 'var(--green, #00ff88)', cursor: 'pointer', fontSize: '0.8rem', opacity: 0.6 }}>×</button>
+        <button onClick={onDismiss} className="win95-close-btn" style={{ width: '20px', height: '20px' }}>×</button>
       </div>
       <div style={bodyStyle}>
         <div style={{ marginBottom: '8px', opacity: 0.7 }}>{message}</div>
