@@ -741,9 +741,17 @@ function App() {
   };
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  /** The boot screen, shown once as a login plays the startup sound. */
-  const [booting, setBooting] = useState(false);
-  const endBoot = React.useCallback(() => setBooting(false), []);
+  /**
+   * The boot screen before the login screen, once per browser session - a refresh mid-game
+   * does not make anybody sit through it again. Storage refused means it is skipped.
+   */
+  const [bootDone, setBootDone] = useState(() => {
+    try { return sessionStorage.getItem('citynet_booted') === '1'; } catch { return true; }
+  });
+  const endBoot = React.useCallback(() => {
+    setBootDone(true);
+    try { sessionStorage.setItem('citynet_booted', '1'); } catch { /* storage refused */ }
+  }, []);
 
   // Streamer mode: on the admin this is the source of truth (edited via director
   // panel / BROADCAST_THIS); on the spectator it's received via directorUpdate.
@@ -1400,8 +1408,11 @@ function App() {
     setUserName(name);
     setIsLoggedIn(true);
     if (socketRef.current) socketRef.current.emit('identify', token ? { userName: name, playerToken: token } : name);
+  };
+
+  /** The startup sound, now the boot screen's: it plays on the key that boots. */
+  const playStartup = () => {
     if (audioEnabled) { const s = new Audio('/StartUp.mp3'); s.volume = 0.20 * ((window as any).masterVolume ?? 0.5); s.play().catch(() => {}); }
-    setBooting(true);
   };
 
   const handleApprovePlayer = async (username: string) => {
@@ -1527,7 +1538,8 @@ function App() {
           }}
         />
       )}
-      {!isLoggedIn && !IS_SPECTATOR && (
+      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onStart={playStartup} onDone={endBoot} />}
+      {!isLoggedIn && !IS_SPECTATOR && bootDone && (
         <SecureLogin
           secureModeEnabled={secureModeEnabled}
           audioEnabled={audioEnabled}
@@ -2511,7 +2523,6 @@ function App() {
               }
               return null;
             })()}
-            {booting && <BootScreen operator={userName || ''} onDone={endBoot} />}
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
           </div>}
           <ThemeContext.Provider value={THEMES[currentTheme]}>
