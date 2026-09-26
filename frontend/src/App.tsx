@@ -763,10 +763,42 @@ function App() {
    */
   const hddRef = useRef<HddSound | null>(null);
   const hddStarted = useRef(false);
+  /** Shorter than the boot: the drive is up to speed and settled well before it ends. */
+  const HDD_SECONDS = Math.min(3.2, BOOT_SECONDS);
   useEffect(() => {
     if (bootDone || hddStarted.current || IS_SPECTATOR || !audioEnabledRef.current) return;
     hddStarted.current = true;
-    hddRef.current = playHddSpinUp(0.35 * ((window as any).masterVolume ?? 0.5), BOOT_SECONDS);
+    hddRef.current = playHddSpinUp(0.18 * ((window as any).masterVolume ?? 0.5), HDD_SECONDS);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Bring the ambient hum in gently: from silence to its usual level over about three
+   * seconds, rather than all at once. Does nothing if it is already playing.
+   */
+  const humFade = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fadeInHum = () => {
+    const el = humRef.current;
+    if (!el || !audioEnabledRef.current || !el.paused) return;
+    const target = 0.01 * ((window as any).masterVolume ?? 0.5);
+    el.volume = 0;
+    el.play().then(() => {
+      if (humFade.current) clearInterval(humFade.current);
+      const started = Date.now();
+      humFade.current = setInterval(() => {
+        const k = Math.min(1, (Date.now() - started) / 3000);
+        el.volume = target * k;
+        if (k >= 1 && humFade.current) { clearInterval(humFade.current); humFade.current = null; }
+      }, 50);
+    }).catch(() => { el.volume = target; });
+  };
+  const fadeInHumRef = useRef(fadeInHum);
+  fadeInHumRef.current = fadeInHum;
+
+  /** A click during the boot: the drive can be heard now, and the hum follows it in. */
+  const touchBoot = React.useCallback(() => {
+    if (!hddRef.current) return;
+    hddRef.current.resume();
+    setTimeout(() => fadeInHumRef.current(), (HDD_SECONDS - 0.9) * 1000);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const endBoot = React.useCallback(() => {
     // Once: the skip key and the fade can both arrive.
@@ -775,7 +807,7 @@ function App() {
     setBootDone(true);
     setLoginFadeIn(true);
     hddRef.current?.stop();
-    if (audioEnabledRef.current) humRef.current?.play().catch(() => {});
+    fadeInHumRef.current();
     playStartupRef.current();
     try { sessionStorage.setItem('citynet_booted', '1'); } catch { /* storage refused */ }
   }, []);
@@ -1239,7 +1271,7 @@ function App() {
     const loopSound = new Audio('/Loop_seamless_fixed.mp3');
     loopSound.loop = true; loopSound.volume = 0.01 * ((window as any).masterVolume ?? 0.5);
     humRef.current = loopSound;
-    const playAudio = async () => { if (audioEnabled) { try { await loopSound.play(); } catch (e) {} } };
+    const playAudio = () => { if (audioEnabled) fadeInHum(); };
     if (!audioEnabled) loopSound.pause();
     document.addEventListener('click', playAudio, { once: true });
     return () => { document.removeEventListener('click', playAudio); loopSound.pause(); };
@@ -1585,7 +1617,7 @@ function App() {
           }}
         />
       )}
-      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onDone={endBoot} onTouch={() => hddRef.current?.resume()} />}
+      {!isLoggedIn && !IS_SPECTATOR && !bootDone && <BootScreen onDone={endBoot} onTouch={touchBoot} />}
       {!isLoggedIn && !IS_SPECTATOR && bootDone && (
         <div className={loginFadeIn ? 'login-fade-in' : undefined}>
         <SecureLogin
