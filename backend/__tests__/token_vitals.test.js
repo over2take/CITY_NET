@@ -218,13 +218,21 @@ describe('the real startup path', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'citynet-tokens-'));
     const file = path.join(dir, 'city.db');
     try {
-      const sqliteMain = require_.resolve('sqlite3');
+      // The backend's own folder, however the checkout is named. Matching a folder name instead
+      // passed on a Windows checkout under F:\MapSystem and cleared nothing on the CI runner,
+      // whose path has no such name - so the second open got the first, closed connection.
+      const backendDir = path.dirname(require_.resolve('../db.js'));
       const script = `
-        const sqlite3 = require(${JSON.stringify(sqliteMain)});
+        const path = require('path');
+        const backendDir = ${JSON.stringify(backendDir)};
+        const ours = (k) => k.startsWith(backendDir + path.sep) && !k.includes(path.sep + 'node_modules' + path.sep);
         process.env.DB_PATH = ${JSON.stringify(file)};
         console.log = () => {}; console.warn = () => {};
         // First open: a 1.14.4-era database is made, with a token carrying health.
         const first = require(${JSON.stringify(require_.resolve('../db.js'))});
+        // Its own startup work first (the one-time moves run after the tables exist), so
+        // nothing of it is still running when this connection closes.
+        require(${JSON.stringify(require_.resolve('../tokens/vitals.js'))}).whenReady().then(() => {
         first.serialize(() => {
           first.run("DELETE FROM global_settings WHERE key = 'migration_token_vitals'");
           first.run("INSERT OR REPLACE INTO global_settings (key, value) VALUES ('game_system', '${CWN}')");
@@ -234,7 +242,12 @@ describe('the real startup path', () => {
         });
         first.close(() => {
           // Second open, as after updating: the start runs, then a switch keeps the health.
-          for (const k of Object.keys(require.cache)) if (k.includes('MapSystem') && !k.includes('node_modules')) delete require.cache[k];
+          const cleared = Object.keys(require.cache).filter(ours);
+          if (!cleared.some((k) => k.endsWith(path.sep + 'db.js'))) {
+            process.stdout.write(JSON.stringify({ err: 'db.js was not cleared from the module cache' }), () => process.exit(0));
+            return;
+          }
+          for (const k of cleared) delete require.cache[k];
           const db = require(${JSON.stringify(require_.resolve('../db.js'))});
           const vitals = require(${JSON.stringify(require_.resolve('../tokens/vitals.js'))});
           vitals.switchSystem(db, '${CPR}').then(() => {
@@ -242,6 +255,7 @@ describe('the real startup path', () => {
               process.stdout.write(JSON.stringify({ err: err && err.message, row }), () => process.exit(0));
             });
           }, (e) => { process.stdout.write(JSON.stringify({ err: e.message }), () => process.exit(0)); });
+        });
         });`;
       const out = JSON.parse(execFileSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 60000 }));
       expect(out).toEqual({ err: null, row: { hp_current: 7, hp_max: 12, melee_ac: 14 } });
