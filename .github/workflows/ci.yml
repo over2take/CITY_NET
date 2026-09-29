@@ -1,12 +1,13 @@
 name: CI Tests
 
 on:
-  # Runs tests whenever someone opens or updates a Pull Request targeting 'main' or
-  # 'dev' — the integration branch that publishes development images.
+  # Runs tests whenever someone opens or updates a Pull Request, whatever branch it targets.
+  #
+  # This used to be limited to 'main' and 'dev', so a long-running feature branch that takes
+  # its pieces as PRs of its own (feature/system-builder, with sb/* pieces merged into it)
+  # was never tested until the final merge to main. Every PR is a change about to land
+  # somewhere, so every PR gets the suites.
   pull_request:
-    branches:
-      - main
-      - dev
 
   # Runs tests when code is merged or pushed directly to 'main'.
   #
