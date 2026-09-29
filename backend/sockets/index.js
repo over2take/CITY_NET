@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { isMainAdmin } = require('../middleware/auth');
+const bank = require('../bank/accounts');
 const { cryptoRng } = require('../utils/random');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
@@ -158,17 +159,22 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     io.emit('activeUsersUpdated', buildActiveUsers());
   };
 
+  /**
+   * Tell everyone a player's balance, from their account in the running system (bank/accounts.js:
+   * one per player per system). An account that does not exist yet is opened at zero, as before.
+   */
   const sendBankUpdate = (username) => {
-    db.get('SELECT balance, debt, first_pay_done, high_roller_done FROM player_banks WHERE username = ?', [username], (err, row) => {
-      if (!err && row) {
+    bank.activeSystem(db, (sErr, system) => {
+      if (sErr) return;
+      bank.ensure(db, username, system, (err, row) => {
+        if (err || !row) return;
         io.emit('bankUpdate', { username, balance: row.balance, debt: row.debt, firstPayDone: !!row.first_pay_done, highRollerDone: !!row.high_roller_done });
-      } else if (!err && !row) {
-        db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, 0, 0)', [username], () => {
-          io.emit('bankUpdate', { username, balance: 0, debt: 0, firstPayDone: false, highRollerDone: false });
-        });
-      }
+      });
     });
   };
+
+  /** Run `fn(system)` with the running system, the one whose accounts money moves in. */
+  const withBankSystem = (fn) => bank.activeSystem(db, (err, system) => { if (!err) fn(system); });
 
   // Load NPCs from DB on startup
   db.all('SELECT username, isActive FROM fake_users', (err, rows) => {
@@ -843,7 +849,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     };
 
     // Linked fields (declared per-template) live in other systems: token HP
-    // in locations, cash in player_banks. Overlay their live values onto the
+    // in locations, cash in bank_accounts. Overlay their live values onto the
     // sheet data at read time - they are never stored in the sheet's JSON.
     const overlayLinkedData = (username, system, data, cb) => {
       const linked = sheetTemplates.getLinkedFields(system);
@@ -875,9 +881,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           if (source === 'token_ac_ranged') out[fieldId] = tokenRow ? sheetTemplates.rangedAcOf(tokenRow) : null;
         });
         if (!wantsCash) return done(out);
-        db.get(`SELECT balance FROM player_banks WHERE username = ?`, [username], (err, bank) => {
+        // The account in this sheet's own system: a sheet shows the money of its game.
+        bank.get(db, username, system, (err, account) => {
           Object.entries(linked).forEach(([fieldId, source]) => {
-            if (source === 'bank_balance') out[fieldId] = bank ? bank.balance : 0;
+            if (source === 'bank_balance') out[fieldId] = account ? account.balance : 0;
           });
           done(out);
         });
@@ -1803,12 +1810,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
     socket.on('markFirstPayDone', (data) => {
       if (!data || !data.username) return;
-      db.run('UPDATE player_banks SET first_pay_done = 1 WHERE username = ?', [data.username]);
+      withBankSystem((system) => bank.markFlag(db, data.username, system, 'first_pay_done', () => {}));
     });
 
     socket.on('markHighRollerDone', (data) => {
       if (!data || !data.username) return;
-      db.run('UPDATE player_banks SET high_roller_done = 1 WHERE username = ?', [data.username]);
+      withBankSystem((system) => bank.markFlag(db, data.username, system, 'high_roller_done', () => {}));
     });
 
     /**
@@ -1837,9 +1844,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!username || !data || !data.amount) return;
       const amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      db.run('UPDATE player_banks SET balance = balance - ? WHERE username = ?', [amount, username], (err) => {
+      withBankSystem((system) => bank.adjust(db, username, system, { balance: -amount }, (err) => {
         if (!err) sendBankUpdate(username);
-      });
+      }));
     });
 
     socket.on('borrowFunds', (data) => {
@@ -1847,9 +1854,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!username || !data || !data.amount) return;
       const amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      db.run('UPDATE player_banks SET debt = debt + ? WHERE username = ?', [amount, username], (err) => {
+      withBankSystem((system) => bank.adjust(db, username, system, { debt: amount }, (err) => {
         if (!err) sendBankUpdate(username);
-      });
+      }));
     });
 
     socket.on('payDebt', (data) => {
@@ -1857,15 +1864,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!username || !data || !data.amount) return;
       let amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      db.get('SELECT balance, debt FROM player_banks WHERE username = ?', [username], (err, row) => {
+      withBankSystem((system) => bank.get(db, username, system, (err, row) => {
         if (err || !row) return;
         if (amount > row.balance) amount = row.balance;
         if (amount > row.debt) amount = row.debt;
         if (amount <= 0) return;
-        db.run('UPDATE player_banks SET balance = balance - ?, debt = debt - ? WHERE username = ?', [amount, amount, username], (err2) => {
+        bank.adjust(db, username, system, { balance: -amount, debt: -amount }, (err2) => {
           if (!err2) sendBankUpdate(username);
         });
-      });
+      }));
     });
 
     /**
@@ -1933,18 +1940,16 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       if (!sale.ok) return refuse(sale.reason, { itemId: sale.itemId });
                     }
 
-                    db.get(
-                      'SELECT balance, debt FROM player_banks WHERE username = ?',
-                      [username],
-                      (bErr, bank) => {
+                    bank.get(db, username, system,
+                      (bErr, account) => {
                         if (bErr) return refuse('no_account');
                         const plan = shopCheckout.planCheckout({
                           buys: data.buys,
                           priceOf: shopPrices.priceOf,
                           shelved: catalogues,
                           sale,
-                          balance: bank ? Number(bank.balance) || 0 : 0,
-                          debt: bank ? Number(bank.debt) || 0 : 0,
+                          balance: account ? Number(account.balance) || 0 : 0,
+                          debt: account ? Number(account.debt) || 0 : 0,
                           overdraftAllowed,
                           settle: data.settle,
                           expectedNet: data.expectedNet,
@@ -1955,12 +1960,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         }
 
                         const payBank = () => {
-                          const write = bank
-                            ? ['UPDATE player_banks SET balance = ?, debt = ? WHERE username = ?',
-                              [plan.balance, plan.debt, username]]
-                            : ['INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)',
-                              [username, plan.balance, plan.debt]];
-                          db.run(write[0], write[1], (wErr) => {
+                          bank.put(db, username, system, plan.balance, plan.debt, (wErr) => {
                             if (wErr) return refuse('write');
                             sendBankUpdate(username);
                             if (sale) io.emit('sheetUpdated', { username, system });
@@ -2095,15 +2095,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (count === 0) return;
         const amountPerPlayer = Math.ceil((parseFloat(data.totalAmount) / count) * 100) / 100;
         if (isNaN(amountPerPlayer) || amountPerPlayer <= 0) return;
-        data.usernames.forEach(uname => {
-          db.get('SELECT username FROM player_banks WHERE username = ?', [uname], (err, row) => {
-            if (row) {
-              db.run('UPDATE player_banks SET balance = COALESCE(balance, 0) + ? WHERE username = ?', [amountPerPlayer, uname], () => sendBankUpdate(uname));
-            } else {
-              db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, 0)', [uname, amountPerPlayer], () => sendBankUpdate(uname));
-            }
-          });
-        });
+        withBankSystem((system) => data.usernames.forEach((uname) => {
+          bank.addToBalance(db, uname, system, amountPerPlayer, () => sendBankUpdate(uname));
+        }));
       });
     });
 
@@ -2172,13 +2166,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         const balance = parseFloat(data.balance);
         const debt = parseFloat(data.debt);
         if (isNaN(balance) || isNaN(debt)) return;
-        db.get('SELECT username FROM player_banks WHERE username = ?', [data.username], (err2, row) => {
-          if (row) {
-            db.run('UPDATE player_banks SET balance = ?, debt = ? WHERE username = ?', [balance, debt, data.username], () => sendBankUpdate(data.username));
-          } else {
-            db.run('INSERT INTO player_banks (username, balance, debt) VALUES (?, ?, ?)', [data.username, balance, debt], () => sendBankUpdate(data.username));
-          }
-        });
+        withBankSystem((system) => bank.put(db, data.username, system, balance, debt, () => sendBankUpdate(data.username)));
       });
     });
 

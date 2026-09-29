@@ -63,7 +63,6 @@ beforeEach(async () => {
     results TEXT, color TEXT, historyString TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
-  await run(db, `CREATE TABLE IF NOT EXISTS player_banks (username TEXT PRIMARY KEY, balance REAL, debt REAL)`);
 });
 
 const seedToken = async (shape, owner, controllers = null) => {

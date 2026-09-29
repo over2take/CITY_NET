@@ -46,12 +46,9 @@ function boot(db, id = `bank-sock-${(nextSocket += 1)}`) {
 let db;
 beforeEach(async () => {
   db = await makeTestDb();
-  await run(db, `CREATE TABLE IF NOT EXISTS player_banks (
-    username TEXT PRIMARY KEY, balance REAL, debt REAL,
-    first_pay_done INTEGER DEFAULT 0, high_roller_done INTEGER DEFAULT 0)`);
   await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', 'cities_without_number')`);
-  await run(db, `INSERT INTO player_banks (username, balance, debt) VALUES ('GHOST', 1000, 500)`);
-  await run(db, `INSERT INTO player_banks (username, balance, debt) VALUES ('VICTIM', 8000, 0)`);
+  await run(db, `INSERT INTO bank_accounts (username, system, balance, debt) VALUES ('GHOST', COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic'), 1000, 500)`);
+  await run(db, `INSERT INTO bank_accounts (username, system, balance, debt) VALUES ('VICTIM', COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic'), 8000, 0)`);
 });
 
 const identified = async (name = 'GHOST') => {
@@ -62,7 +59,7 @@ const identified = async (name = 'GHOST') => {
 };
 
 const bank = async (username) =>
-  get(db, 'SELECT balance, debt FROM player_banks WHERE username = ?', [username]);
+  get(db, `SELECT balance, debt FROM bank_accounts WHERE username = ? AND system = COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic')`, [username]);
 
 describe('what these handlers still do, unchanged', () => {
   it('withdraws from the caller\'s own balance', async () => {
@@ -124,7 +121,7 @@ describe('whose account it is', () => {
   });
 
   it('will not spend someone else\'s balance on their debt', async () => {
-    await run(db, `UPDATE player_banks SET debt = 1000 WHERE username = 'VICTIM'`);
+    await run(db, `UPDATE bank_accounts SET debt = 1000 WHERE username = 'VICTIM' AND system = COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic')`);
     const { handlers } = await identified('GHOST');
     handlers['payDebt']({ username: 'VICTIM', amount: 500 });
     await drain(db);

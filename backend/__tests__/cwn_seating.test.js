@@ -59,7 +59,6 @@ beforeEach(async () => {
   await run(db, `CREATE TABLE dice_rolls (
     id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, total INTEGER,
     results TEXT, color TEXT, historyString TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-  await run(db, `CREATE TABLE IF NOT EXISTS player_banks (username TEXT PRIMARY KEY, balance REAL, debt REAL)`);
   await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', 'cities_without_number')`);
 });
 

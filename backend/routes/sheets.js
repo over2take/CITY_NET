@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const multer = require('multer');
 const { authenticate, authenticatePlayer, optionalAuthenticate } = require('../middleware/auth');
 const { canReadNpcSheets, redactTokenCard } = require('../sheets/npcPrivacy');
+const bankAccounts = require('../bank/accounts');
 const {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc,
   TOKEN_SOURCES, rangedAcOf, acColumns,
@@ -136,9 +137,9 @@ module.exports = (db, io) => {
           const done = () => res.json({ ...row, data });
           const overlayCash = () => {
             if (!Object.values(linked).includes('bank_balance')) return done();
-            db.get(`SELECT balance FROM player_banks WHERE username = ?`, [req.params.username], (e3, bank) => {
+            bankAccounts.get(db, req.params.username, system, (e3, account) => {
               Object.entries(linked).forEach(([fieldId, source]) => {
-                if (source === 'bank_balance') data[fieldId] = bank ? bank.balance : 0;
+                if (source === 'bank_balance') data[fieldId] = account ? account.balance : 0;
               });
               done();
             });

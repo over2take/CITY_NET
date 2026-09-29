@@ -244,9 +244,6 @@ describe('sockets: sign-in, chat and editor rights', () => {
 
   beforeEach(async () => {
     db = await makeTestDb();
-    await run(db, `CREATE TABLE IF NOT EXISTS player_banks (
-      username TEXT PRIMARY KEY, balance REAL, debt REAL,
-      first_pay_done INTEGER DEFAULT 0, high_roller_done INTEGER DEFAULT 0)`);
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
@@ -392,16 +389,16 @@ describe('sockets: sign-in, chat and editor rights', () => {
   });
 
   it("a player cannot set anyone's bank balance with their own login; the GM still can", async () => {
-    await run(db, `INSERT INTO player_banks (username, balance, debt) VALUES ('rook', 100, 0)`);
+    await run(db, `INSERT INTO bank_accounts (username, system, balance, debt) VALUES ('rook', COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic'), 100, 0)`);
     const s = server();
     const vex = await s.connect('vex');
     vex.handlers.adminUpdateBank({ token: PLAYER, username: 'rook', balance: 999999, debt: 0 });
     await drain(db);
-    expect((await get(db, `SELECT balance FROM player_banks WHERE username = 'rook'`)).balance).toBe(100);
+    expect((await get(db, `SELECT balance FROM bank_accounts WHERE username = 'rook' AND system = COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic')`)).balance).toBe(100);
 
     const gm = await s.connect({ userName: 'gm', isAdmin: true, token: GM });
     gm.handlers.adminUpdateBank({ token: GM, username: 'rook', balance: 250, debt: 0 });
     await drain(db);
-    expect((await get(db, `SELECT balance FROM player_banks WHERE username = 'rook'`)).balance).toBe(250);
+    expect((await get(db, `SELECT balance FROM bank_accounts WHERE username = 'rook' AND system = COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic')`)).balance).toBe(250);
   });
 });

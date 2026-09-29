@@ -62,9 +62,6 @@ let gunShop;
 
 beforeEach(async () => {
   db = await makeTestDb();
-  await run(db, `CREATE TABLE IF NOT EXISTS player_banks (
-    username TEXT PRIMARY KEY, balance REAL, debt REAL,
-    first_pay_done INTEGER DEFAULT 0, high_roller_done INTEGER DEFAULT 0)`);
   await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', 'cities_without_number')`);
   const r = await run(db,
     `INSERT INTO locations (name, x, y, z, shape, building_type) VALUES ('Vic''s', 0, 0, 0, 'box', 'gun_shop')`);
@@ -79,11 +76,11 @@ const identified = async (name = 'GHOST') => {
 };
 
 const fund = (username, balance, debt = 0) => run(db,
-  'INSERT OR REPLACE INTO player_banks (username, balance, debt) VALUES (?, ?, ?)',
+  `INSERT OR REPLACE INTO bank_accounts (username, system, balance, debt) VALUES (?, COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic'), ?, ?)`,
   [username, balance, debt]);
 
 const bank = async (username = 'GHOST') =>
-  get(db, 'SELECT balance, debt FROM player_banks WHERE username = ?', [username]);
+  get(db, `SELECT balance, debt FROM bank_accounts WHERE username = ? AND system = COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic')`, [username]);
 
 const receipt = (emitted) =>
   [...emitted].reverse().find((e) => e.event === 'shopCheckout');
@@ -283,7 +280,7 @@ describe('when the money is not there', () => {
 
 describe('a player with no account yet', () => {
   it('cannot buy on credit just by never having banked', async () => {
-    // No player_banks row at all reads as nothing saved, not as unlimited.
+    // No bank account at all reads as nothing saved, not as unlimited.
     const { handlers, emitted } = await identified();
     buy(handlers);
     expect((await waitReceipt(emitted)).data).toMatchObject({ ok: false, reason: 'funds' });
