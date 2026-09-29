@@ -92,4 +92,7 @@ const pruneAfterMapChange = (db, cb = () => {}) => {
   );
 };
 
-module.exports = { FIELDS, TOKEN_SHAPES, SHAPES_SQL, setReady, switchSystem, pruneAfterMapChange };
+/** Resolves once the one-time start has finished (never rejects). For startup code and tests. */
+const whenReady = () => ready.then(() => undefined, () => undefined);
+
+module.exports = { FIELDS, TOKEN_SHAPES, SHAPES_SQL, setReady, whenReady, switchSystem, pruneAfterMapChange };
