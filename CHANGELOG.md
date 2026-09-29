@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Security
+
+- **Players can no longer use the GM's tools.** A player's own login worked as a key to the GM's
+  side of the server: with the right request, a signed-in player could delete buildings, edit the
+  map, read GM notes, approve accounts, reset passwords, set anyone's bank balance, give themselves
+  editor rights, or post in chat as anyone. Only the GM, and players the GM has granted editing
+  rights, can now do those things. Nothing a player normally does changes: their sheet, portrait,
+  chat, shops and bank all work as before, and granting, revoking and giving back editor rights
+  work as before.
+
 ### Under the hood
 
 - **The first piece of the system builder.** An engine that works out a sheet's derived

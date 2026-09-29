@@ -75,7 +75,7 @@ const admin = async (name = 'GM') => {
   booted.handlers['identify']({
     userName: name,
     isAdmin: true,
-    token: jwt.sign({ username: name, isTemporary: false }, 'test-secret'),
+    token: jwt.sign({ id: 1, username: name, role: 'admin', isTemporary: false }, 'test-secret'),
   });
   await drain(db);
   return booted;

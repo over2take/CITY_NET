@@ -198,7 +198,7 @@ describe('generateNpcSheet with tier', () => {
       `INSERT INTO locations (name, x, y, z, shape, owner, hp_current, hp_max) VALUES ('Guy', 0, 0, 0, 'enemy_rhombus', 'SYSTEM', 5, 5)`);
     const loc = await get(db, `SELECT id FROM locations WHERE name = 'Guy'`);
     const { handlers, emitted } = boot(db);
-    handlers['identify']({ userName: 'admin', isAdmin: true, token: jwt.sign({ username: 'admin', isTemporary: false }, 'test-secret') });
+    handlers['identify']({ userName: 'admin', isAdmin: true, token: jwt.sign({ id: 1, username: 'admin', role: 'admin', isTemporary: false }, 'test-secret') });
     await flush(50);
 
     handlers['generateNpcSheet']({ location_id: loc.id, tier: 'elite' });

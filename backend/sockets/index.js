@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { isMainAdmin } = require('../middleware/auth');
 const { cryptoRng } = require('../utils/random');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
@@ -218,7 +219,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (info.isAdmin && info.token) {
         try {
           const verified = jwt.verify(info.token, SECRET);
-          if (verified.isTemporary) info.isAdmin = false;
+          // The GM's own login only. A player's login token verifies too, and used to pass
+          // here as "not temporary", which made any player a socket admin.
+          if (!isMainAdmin(verified)) info.isAdmin = false;
         } catch (err) {
           console.warn(`User ${info.userName} claimed admin but provided invalid token.`);
           info.isAdmin = false;
@@ -320,7 +323,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('grantElevatedAccess', (data) => {
       try {
         const verified = jwt.verify(data.adminToken, SECRET);
-        if (verified && !verified.isTemporary) {
+        if (isMainAdmin(verified)) {
           elevatedUsers.add(data.targetUser);
           const tempToken = jwt.sign({ username: data.targetUser, isTemporary: true }, SECRET, { expiresIn: '12h' });
           console.log(`Admin ${verified.username} granted temporary access to ${data.targetUser}`);
@@ -333,7 +336,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('revokeElevatedAccess', (data) => {
       try {
         const verified = jwt.verify(data.adminToken, SECRET);
-        if (verified && !verified.isTemporary) {
+        if (isMainAdmin(verified)) {
           elevatedUsers.delete(data.targetUser);
           console.log(`Admin ${verified.username} revoked temporary access from ${data.targetUser}`);
           io.emit('accessRevoked', { targetUser: data.targetUser });
@@ -357,7 +360,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('createNPC', (data) => {
       try {
         const verified = jwt.verify(data.adminToken, SECRET);
-        if (verified && !verified.isTemporary) {
+        if (isMainAdmin(verified)) {
           db.run('INSERT INTO fake_users (username, isActive) VALUES (?, 1)', [data.npcName], function(err) {
             if (!err) {
               activeNPCs.push({ userName: data.npcName, isActive: true });
@@ -371,7 +374,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('toggleNPCStatus', (data) => {
       try {
         const verified = jwt.verify(data.adminToken, SECRET);
-        if (verified && !verified.isTemporary) {
+        if (isMainAdmin(verified)) {
           db.run('UPDATE fake_users SET isActive = ? WHERE username = ?', [data.isActive ? 1 : 0, data.npcName], function(err) {
             if (!err) {
               const npc = activeNPCs.find(n => n.userName === data.npcName);
@@ -385,7 +388,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('deleteNPC', (data) => {
       try {
         const verified = jwt.verify(data.adminToken, SECRET);
-        if (verified && !verified.isTemporary) {
+        if (isMainAdmin(verified)) {
           db.run('DELETE FROM fake_users WHERE username = ?', [data.npcName], function(err) {
             if (!err) {
               activeNPCs = activeNPCs.filter(n => n.userName !== data.npcName);
@@ -779,7 +782,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('purgeDiceHistory', (data) => {
       if (!data.token) return;
       jwt.verify(data.token, SECRET, (err, decoded) => {
-        if (err || decoded.isTemporary) return;
+        if (err || !isMainAdmin(decoded)) return;
         db.run('DELETE FROM dice_rolls', (err) => {
           if (err) console.error('Error purging dice rolls:', err);
           io.emit('diceRollHistory', []);
@@ -2069,7 +2072,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!data || !data.token || !Array.isArray(data.usernames) || data.totalAmount === undefined) return;
       jwt.verify(data.token, SECRET, (err, decoded) => {
         if (err) return;
-        if (decoded.isTemporary || (decoded.role && decoded.role !== 'admin')) return;
+        if (!isMainAdmin(decoded)) return;
         const count = data.usernames.length;
         if (count === 0) return;
         const amountPerPlayer = Math.ceil((parseFloat(data.totalAmount) / count) * 100) / 100;
@@ -2098,7 +2101,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!data || !data.token || !Array.isArray(data.usernames)) return;
       jwt.verify(data.token, SECRET, (err, decoded) => {
         if (err) return;
-        if (decoded.isTemporary || (decoded.role && decoded.role !== 'admin')) return;
+        if (!isMainAdmin(decoded)) return;
         getGameSystem((sysErr, system) => {
           if (sysErr) return;
           // Which column the table advances on, so the award can carry the level with it.
@@ -2130,7 +2133,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!data || !data.token || !Array.isArray(data.usernames)) return;
       jwt.verify(data.token, SECRET, (err, decoded) => {
         if (err) return;
-        if (decoded.isTemporary || (decoded.role && decoded.role !== 'admin')) return;
+        if (!isMainAdmin(decoded)) return;
         getGameSystem((sysErr, system) => {
           if (sysErr) return;
           awardXpModule.adjustLevel(db, { system, usernames: data.usernames, delta: data.delta }, (reason, results) => {
@@ -2147,7 +2150,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('adminUpdateBank', (data) => {
       if (!data || !data.token || !data.username) return;
       jwt.verify(data.token, SECRET, (err, decoded) => {
-        if (err || decoded.isTemporary) return;
+        if (err || !isMainAdmin(decoded)) return;
         const balance = parseFloat(data.balance);
         const debt = parseFloat(data.debt);
         if (isNaN(balance) || isNaN(debt)) return;

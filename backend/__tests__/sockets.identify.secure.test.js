@@ -32,7 +32,7 @@ const socketsFactory = (await import('../sockets/index.js')).default;
  */
 const flush = () => drain(db);
 
-const ADMIN_TOKEN = jwt.sign({ username: 'admin', isTemporary: false }, SECRET);
+const ADMIN_TOKEN = jwt.sign({ id: 1, username: 'admin', role: 'admin', isTemporary: false }, SECRET); // as routes/admin.js signs it
 const TEMP_ADMIN_TOKEN = jwt.sign({ username: 'helper', isTemporary: true }, SECRET);
 const PLAYER_TOKEN = jwt.sign({ username: 'realplayer', role: 'player' }, SECRET);
 const HELPER_PLAYER_TOKEN = jwt.sign({ username: 'helper', role: 'player' }, SECRET);
