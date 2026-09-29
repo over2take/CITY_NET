@@ -234,6 +234,19 @@ function makeTestDb() {
         PRIMARY KEY (username, system)
       )`);
 
+      // A token's health in the systems that are not running (tokens/vitals.js).
+      db.run(`CREATE TABLE token_vitals (
+        location_id INTEGER NOT NULL,
+        system TEXT NOT NULL,
+        hp_current INTEGER,
+        hp_max INTEGER,
+        hp_temp INTEGER,
+        melee_ac INTEGER,
+        ranged_ac INTEGER,
+        injuries TEXT DEFAULT '{}',
+        PRIMARY KEY (location_id, system)
+      )`);
+
       db.run(`CREATE TABLE IF NOT EXISTS custom_systems (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,

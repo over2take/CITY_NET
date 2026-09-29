@@ -34,6 +34,12 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
 
   router.post('/settings', authenticate, (req, res) => {
     const { key, value } = req.body;
+    // Not through here: the game system changes with every token's health in one transaction
+    // (PUT /api/sheets/system), and the migration markers record one-time moves that must not
+    // be undone by hand.
+    if (key === 'game_system' || String(key || '').startsWith('migration_')) {
+      return res.status(400).json({ error: 'That setting is not changed here' });
+    }
     db.run('INSERT INTO global_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=?', [key, value, value], (err) => {
       if (err) return res.status(500).json({ error: err.message });
       io.emit('settingsUpdated');

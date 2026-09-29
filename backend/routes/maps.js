@@ -1,6 +1,7 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
-const gmNotes = require('../buildings/gmNotes');
+const gmNotes = require('../buildings/gmNotes');
+const tokenVitals = require('../tokens/vitals');
 const { columnsOf, queueInserts } = require('../buildings/locationRows');
 
 /**
@@ -162,8 +163,11 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             // After the buildings are in, so a note is only restored onto a building the map
             // actually has.
             gmNotes.replaceAll(db, notes, () => {
-              emitUpdate();
-              res.json({ message: 'Map loaded successfully' });
+              // The loaded tokens are new here: no other system has seen them.
+              tokenVitals.pruneAfterMapChange(db, () => {
+                emitUpdate();
+                res.json({ message: 'Map loaded successfully' });
+              });
             });
           });
         });
@@ -191,6 +195,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       // The id sequence was just wound back, so the next building made gets an id a
       // cleared one had. Its notes must not be waiting for it.
       gmNotes.pruneOrphans(db);
+      // Likewise a token's health saved under other systems.
+      tokenVitals.pruneAfterMapChange(db);
 
       db.run('SELECT 1', () => {
         emitUpdate();
