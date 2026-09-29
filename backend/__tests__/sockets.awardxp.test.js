@@ -59,7 +59,6 @@ const playerToken = () => jwt.sign({ username: 'bob', role: 'player' }, 'test-se
 let db;
 beforeEach(async () => {
   db = await makeTestDb();
-  await run(db, `CREATE TABLE IF NOT EXISTS player_banks (username TEXT PRIMARY KEY, balance REAL, debt REAL)`);
   await run(db, `INSERT OR REPLACE INTO global_settings (key, value) VALUES ('game_system', 'cities_without_number')`);
   await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('ghost', 'cities_without_number', ?, 0)`,
     [JSON.stringify({ level: 1, xp: 0 })]);

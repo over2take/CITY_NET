@@ -335,6 +335,18 @@ db.serialize(() => {
   // Migrate existing rows that predate the first_pay_done column
   db.run(`ALTER TABLE player_banks ADD COLUMN first_pay_done INTEGER DEFAULT 0`, () => {});
   db.run(`ALTER TABLE player_banks ADD COLUMN high_roller_done INTEGER DEFAULT 0`, () => {});
+  // player_banks above is the old one-bank-per-player table. It is kept, never changed, as the
+  // record of balances before banks became per system; nothing reads it after the one-time move
+  // (startup/bankAccounts.js). Every account now lives here, one per player per system.
+  db.run(`CREATE TABLE IF NOT EXISTS bank_accounts (
+    username TEXT NOT NULL,
+    system TEXT NOT NULL,
+    balance REAL DEFAULT 0,
+    debt REAL DEFAULT 0,
+    first_pay_done INTEGER DEFAULT 0,
+    high_roller_done INTEGER DEFAULT 0,
+    PRIMARY KEY (username, system)
+  )`);
 
   db.run(`CREATE TABLE IF NOT EXISTS water_bodies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -532,6 +544,19 @@ db.serialize(() => {
       db.run(`UPDATE character_sheets SET data = ? WHERE id = ?`, [JSON.stringify(data), row.id]);
     });
   });
+
+  // Move the old per-player banks into per-system accounts, once. It starts last in the queue,
+  // so every table above exists, but bank operations are told to wait for it right now, while
+  // the database is still being opened - before any socket can connect.
+  const banksMoved = new Promise((resolve, reject) => {
+    db.get('SELECT 1', () => {
+      require('./startup/bankAccounts').migrateBankAccounts(db, dbPath).then(resolve, (err) => {
+        console.error('[bank] Moving banks to per-system accounts failed, so the bank is unavailable until the next start:', err.message);
+        reject(err);
+      });
+    });
+  });
+  require('./bank/accounts').setReady(banksMoved);
 });
 
 module.exports = db;

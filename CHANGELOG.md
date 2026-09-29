@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Each game system has its own bank.** A character's money now belongs to the game it was
+  earned in: starting a new campaign on another system opens fresh accounts, and switching
+  back finds the old money exactly where it was. On the first start after updating, every
+  player's current balance, debt and bonuses are copied into each system they have a
+  character in, so nothing looks different in any existing game. A full copy of the
+  database is saved beside it first (when the disk has room), and the old bank records are
+  kept untouched.
+
 ### Security
 
 - **Players can no longer use the GM's tools.** A player's own login worked as a key to the GM's

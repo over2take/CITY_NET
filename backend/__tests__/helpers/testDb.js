@@ -223,6 +223,17 @@ function makeTestDb() {
         FOREIGN KEY(sheet_id) REFERENCES character_sheets(id) ON DELETE CASCADE
       )`);
 
+      // One bank account per player per system (bank/accounts.js).
+      db.run(`CREATE TABLE bank_accounts (
+        username TEXT NOT NULL,
+        system TEXT NOT NULL,
+        balance REAL DEFAULT 0,
+        debt REAL DEFAULT 0,
+        first_pay_done INTEGER DEFAULT 0,
+        high_roller_done INTEGER DEFAULT 0,
+        PRIMARY KEY (username, system)
+      )`);
+
       db.run(`CREATE TABLE IF NOT EXISTS custom_systems (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,

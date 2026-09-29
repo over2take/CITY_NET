@@ -53,9 +53,6 @@ let gunShop;
 
 beforeEach(async () => {
   db = await makeTestDb();
-  await run(db, `CREATE TABLE IF NOT EXISTS player_banks (
-    username TEXT PRIMARY KEY, balance REAL, debt REAL,
-    first_pay_done INTEGER DEFAULT 0, high_roller_done INTEGER DEFAULT 0)`);
   await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', 'cities_without_number')`);
   const r = await run(db,
     `INSERT INTO locations (name, x, y, z, shape, building_type) VALUES ('Vic''s', 0, 0, 0, 'box', 'gun_shop')`);
@@ -68,7 +65,7 @@ const seed = async (data, username = 'GHOST') => run(db,
   [username, JSON.stringify(data)]);
 
 const fund = (username, balance) => run(db,
-  'INSERT OR REPLACE INTO player_banks (username, balance, debt) VALUES (?, ?, 0)',
+  `INSERT OR REPLACE INTO bank_accounts (username, system, balance, debt) VALUES (?, COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic'), ?, 0)`,
   [username, balance]);
 
 const identified = async (name = 'GHOST') => {
@@ -82,7 +79,7 @@ const sheet = async (username = 'GHOST') => JSON.parse((await get(db,
   `SELECT data FROM character_sheets WHERE username = ?`, [username])).data);
 
 const bank = async (username = 'GHOST') =>
-  get(db, 'SELECT balance FROM player_banks WHERE username = ?', [username]);
+  get(db, `SELECT balance FROM bank_accounts WHERE username = ? AND system = COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic')`, [username]);
 
 const result = (emitted) => [...emitted].reverse().find((e) => e.event === 'shopCheckout');
 const waitResult = (emitted) =>

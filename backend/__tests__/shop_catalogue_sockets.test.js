@@ -51,9 +51,6 @@ let gunShop;
 beforeEach(async () => {
   store.clear();
   db = await makeTestDb();
-  await run(db, `CREATE TABLE IF NOT EXISTS player_banks (
-    username TEXT PRIMARY KEY, balance REAL, debt REAL,
-    first_pay_done INTEGER DEFAULT 0, high_roller_done INTEGER DEFAULT 0)`);
   await run(db, `CREATE TABLE IF NOT EXISTS shop_catalogues (
     system TEXT NOT NULL, catalogue TEXT NOT NULL, id TEXT NOT NULL,
     name TEXT NOT NULL, price REAL NOT NULL DEFAULT 0, fields TEXT NOT NULL DEFAULT '{}',
@@ -93,11 +90,11 @@ const seed = (data, username = 'GHOST') => run(db,
    VALUES (?, 'cities_without_number', ?, 0)`, [username, JSON.stringify(data)]);
 
 const fund = (username, balance) => run(db,
-  'INSERT OR REPLACE INTO player_banks (username, balance, debt) VALUES (?, ?, 0)',
+  `INSERT OR REPLACE INTO bank_accounts (username, system, balance, debt) VALUES (?, COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic'), ?, 0)`,
   [username, balance]);
 
 const bank = (username = 'GHOST') =>
-  get(db, 'SELECT balance FROM player_banks WHERE username = ?', [username]);
+  get(db, `SELECT balance FROM bank_accounts WHERE username = ? AND system = COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic')`, [username]);
 
 const last = (emitted, event) => [...emitted].reverse().find((e) => e.event === event);
 const waitFor = (emitted, event) =>
