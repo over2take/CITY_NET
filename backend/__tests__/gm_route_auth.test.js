@@ -206,37 +206,40 @@ describe("a player's own routes", () => {
   });
 });
 
-describe('sockets: sign-in, chat and granting editor rights', () => {
+describe('sockets: sign-in, chat and editor rights', () => {
   let db;
 
-  /** One socket on the real handlers, sharing the auth module's grant list as server.js does. */
-  const boot = () => {
-    const emitted = [];
+  /**
+   * One server on the real handlers, several connections to it, sharing the auth module's
+   * grant list as server.js does. `sent` records every emit with where it went: 'all' for a
+   * broadcast, the socket id for io.to(id), 'self' for a reply down one socket.
+   */
+  const server = () => {
+    const sent = [];
     let connectionCb;
     const ioFake = {
       on: (event, cb) => { if (event === 'connection') connectionCb = cb; },
-      emit: (event, data) => emitted.push({ event, data }),
-      to: () => ({ emit: (event, data) => emitted.push({ event, data }) }),
+      emit: (event, data) => sent.push({ event, data, to: 'all' }),
+      to: (id) => ({ emit: (event, data) => sent.push({ event, data, to: id }) }),
     };
     socketsFactory(ioFake, db, { elevatedUsers, emitUpdate: vi.fn(), recordAction: vi.fn() });
-    const handlers = {};
-    const socket = {
-      id: `auth-${Math.random().toString(36).slice(2)}`,
-      on: (event, fn) => { handlers[event] = fn; },
-      emit: (event, data) => emitted.push({ event, data, direct: true }),
-      broadcast: { emit: () => {} },
-      use: () => {}, join: () => {}, disconnect: vi.fn(),
+    const connect = async (identify) => {
+      const handlers = {};
+      const socket = {
+        id: `auth-${Math.random().toString(36).slice(2)}`,
+        on: (event, fn) => { handlers[event] = fn; },
+        emit: (event, data) => sent.push({ event, data, to: 'self' }),
+        broadcast: { emit: () => {} },
+        use: () => {}, join: () => {}, disconnect: vi.fn(),
+      };
+      connectionCb(socket);
+      handlers.identify(identify);
+      await drain(db);
+      return { id: socket.id, handlers };
     };
-    connectionCb(socket);
-    return { handlers, emitted };
+    return { sent, connect };
   };
-  const signIn = async (payload) => {
-    const s = boot();
-    s.handlers.identify(payload);
-    await drain(db);
-    return s;
-  };
-  const events = (emitted, name) => emitted.filter((e) => e.event === name);
+  const events = (sent, name) => sent.filter((e) => e.event === name);
 
   beforeEach(async () => {
     db = await makeTestDb();
@@ -247,65 +250,155 @@ describe('sockets: sign-in, chat and granting editor rights', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
-  it('a player chats as themselves', async () => {
-    const { handlers, emitted } = await signIn('vex');
-    handlers.sendMessage({ sender: 'vex', text: 'on my way' });
-    await drain(db);
-    expect(events(emitted, 'receiveMessage').at(-1).data).toMatchObject({ sender: 'vex', text: 'on my way' });
+  describe('chat', () => {
+    it('a player chats as themselves', async () => {
+      const s = server();
+      const vex = await s.connect('vex');
+      vex.handlers.sendMessage({ sender: 'vex', text: 'on my way' });
+      await drain(db);
+      expect(events(s.sent, 'receiveMessage').at(-1).data).toMatchObject({ sender: 'vex', text: 'on my way' });
+    });
+
+    it('the GM can speak as someone else', async () => {
+      const s = server();
+      const gm = await s.connect({ userName: 'gm', isAdmin: true, token: GM });
+      gm.handlers.sendMessage({ sender: 'FIXER', text: 'job is on' });
+      await drain(db);
+      expect(events(s.sent, 'receiveMessage').at(-1).data.sender).toBe('FIXER');
+    });
+
+    it('a player claiming to be the GM with their own login still chats as themselves', async () => {
+      const s = server();
+      const vex = await s.connect({ userName: 'vex', isAdmin: true, token: PLAYER });
+      vex.handlers.sendMessage({ sender: 'FIXER', text: 'free money' });
+      await drain(db);
+      expect(events(s.sent, 'receiveMessage').at(-1).data.sender).toBe('vex');
+    });
   });
 
-  it('the GM can speak as someone else in chat', async () => {
-    const { handlers, emitted } = await signIn({ userName: 'gm', isAdmin: true, token: GM });
-    handlers.sendMessage({ sender: 'FIXER', text: 'job is on' });
-    await drain(db);
-    expect(events(emitted, 'receiveMessage').at(-1).data.sender).toBe('FIXER');
+  describe('temporary admin, granted by the GM', () => {
+    it('reaches the player it is for, on every connection they have, and nobody else', async () => {
+      const s = server();
+      const gm = await s.connect({ userName: 'gm', isAdmin: true, token: GM });
+      const ghostGame = await s.connect('ghost');
+      const ghostSheetTab = await s.connect('ghost');
+      const bystander = await s.connect('rook');
+
+      gm.handlers.grantElevatedAccess({ adminToken: GM, targetUser: 'ghost' });
+      // The socket module keeps its list of connections for the life of the process, so
+      // earlier tests' connections are still in it: assert on this test's own.
+      const grants = events(s.sent, 'accessGranted');
+      const to = grants.map((g) => g.to);
+      expect(to).toContain(ghostGame.id);
+      expect(to).toContain(ghostSheetTab.id);
+      expect(to).not.toContain(bystander.id);
+      expect(to).not.toContain(gm.id);
+      expect(to).not.toContain('all');
+      expect(grants.every((g) => g.data.targetUser === 'ghost' && g.data.token)).toBe(true);
+      expect(elevatedUsers.has('ghost')).toBe(true);
+    });
+
+    it('works as a key to the GM routes until it is revoked', async () => {
+      const s = server();
+      const gm = await s.connect({ userName: 'gm', isAdmin: true, token: GM });
+      await s.connect('ghost');
+      gm.handlers.grantElevatedAccess({ adminToken: GM, targetUser: 'ghost' });
+      const token = events(s.sent, 'accessGranted').at(-1).data.token;
+
+      const app = express();
+      app.get('/gm', authenticate, (req, res) => res.json({ ok: true }));
+      expect((await request(app).get('/gm').set(bearer(token))).status).toBe(200);
+
+      gm.handlers.revokeElevatedAccess({ adminToken: GM, targetUser: 'ghost' });
+      expect(elevatedUsers.has('ghost')).toBe(false);
+      // Revoking still tells everyone: it carries no token, and the client only acts on its own.
+      expect(events(s.sent, 'accessRevoked').at(-1)).toMatchObject({ to: 'all', data: { targetUser: 'ghost' } });
+      expect((await request(app).get('/gm').set(bearer(token))).status).toBe(401);
+    });
+
+    it('can be given back by the editor', async () => {
+      elevatedUsers.add('ghost');
+      const s = server();
+      const ghost = await s.connect('ghost');
+      ghost.handlers.surrenderAccess({ token: EDITOR });
+      expect(elevatedUsers.has('ghost')).toBe(false);
+    });
+
+    it('cannot be granted by a player with their own login, to themselves or anyone', async () => {
+      const s = server();
+      const vex = await s.connect({ userName: 'vex', isAdmin: true, token: PLAYER });
+      vex.handlers.grantElevatedAccess({ adminToken: PLAYER, targetUser: 'vex' });
+      expect(elevatedUsers.has('vex')).toBe(false);
+      expect(events(s.sent, 'accessGranted')).toEqual([]);
+    });
   });
 
-  it("a player who claims to be the GM with their own login is not the GM: chat keeps their name", async () => {
-    const { handlers, emitted } = await signIn({ userName: 'vex', isAdmin: true, token: PLAYER });
-    handlers.sendMessage({ sender: 'FIXER', text: 'free money' });
-    await drain(db);
-    expect(events(emitted, 'receiveMessage').at(-1).data.sender).toBe('vex');
-  });
+  describe('editing requests (REQUEST EDIT on a building)', () => {
+    it('the GM approves: the player becomes an editor, and only they get the token', async () => {
+      const s = server();
+      const gm = await s.connect({ userName: 'gm', isAdmin: true, token: GM });
+      const vex = await s.connect('vex');
+      const rook = await s.connect('rook');
+      vex.handlers.requestEditing({ userId: 'vex', userName: 'vex', locationId: 1, locationName: 'BAR' });
+      expect(events(s.sent, 'editingRequested')).toHaveLength(1);
 
-  it('the GM grants editor rights; the editor then passes the GM check; revoking ends it', async () => {
-    const { handlers, emitted } = await signIn({ userName: 'gm', isAdmin: true, token: GM });
-    handlers.grantElevatedAccess({ adminToken: GM, targetUser: 'ghost' });
-    const granted = events(emitted, 'accessGranted').at(-1);
-    expect(granted.data.targetUser).toBe('ghost');
-    expect(elevatedUsers.has('ghost')).toBe(true);
+      gm.handlers.approveEditing({ userId: 'vex', location: { id: 1 } });
+      expect(elevatedUsers.has('vex')).toBe(true);
+      const grants = events(s.sent, 'accessGranted');
+      const to = grants.map((g) => g.to);
+      expect(to).toContain(vex.id);
+      expect(to).not.toContain(rook.id);
+      expect(to).not.toContain(gm.id);
+      expect(to).not.toContain('all');
+      expect(grants.every((g) => g.data.targetUser === 'vex' && g.data.forEditing === true)).toBe(true);
+      expect(events(s.sent, 'editingApproved')).toHaveLength(1);
+    });
 
-    const app = express();
-    app.get('/gm', authenticate, (req, res) => res.json({ ok: true }));
-    expect((await request(app).get('/gm').set(bearer(granted.data.token))).status).toBe(200);
+    it('a granted editor can still approve, as before', async () => {
+      elevatedUsers.add('ghost');
+      const s = server();
+      const ghost = await s.connect('ghost');
+      await s.connect('vex');
+      ghost.handlers.approveEditing({ userId: 'vex' });
+      expect(elevatedUsers.has('vex')).toBe(true);
+    });
 
-    handlers.revokeElevatedAccess({ adminToken: GM, targetUser: 'ghost' });
-    expect(elevatedUsers.has('ghost')).toBe(false);
-    expect((await request(app).get('/gm').set(bearer(granted.data.token))).status).toBe(401);
-  });
+    it('a player cannot approve their own request', async () => {
+      const s = server();
+      const vex = await s.connect('vex');
+      vex.handlers.approveEditing({ userId: 'vex' });
+      expect(elevatedUsers.has('vex')).toBe(false);
+      expect(events(s.sent, 'accessGranted')).toEqual([]);
+    });
 
-  it('an editor can give their rights back', async () => {
-    elevatedUsers.add('ghost');
-    const { handlers } = await signIn('ghost');
-    handlers.surrenderAccess({ token: EDITOR });
-    expect(elevatedUsers.has('ghost')).toBe(false);
-  });
+    it('the GM can deny a request and kick an editor; a player can do neither', async () => {
+      elevatedUsers.add('ghost');
+      const s = server();
+      const gm = await s.connect({ userName: 'gm', isAdmin: true, token: GM });
+      const vex = await s.connect('vex');
 
-  it('a player cannot grant editor rights with their own login, to themselves or anyone', async () => {
-    const { handlers, emitted } = await signIn({ userName: 'vex', isAdmin: true, token: PLAYER });
-    handlers.grantElevatedAccess({ adminToken: PLAYER, targetUser: 'vex' });
-    expect(elevatedUsers.has('vex')).toBe(false);
-    expect(events(emitted, 'accessGranted')).toEqual([]);
+      vex.handlers.revokeEditing({ userId: 'ghost' });
+      vex.handlers.denyEditing({ userId: 'ghost' });
+      expect(elevatedUsers.has('ghost')).toBe(true);
+      expect(events(s.sent, 'editingRevoked')).toEqual([]);
+      expect(events(s.sent, 'editingDenied')).toEqual([]);
+
+      gm.handlers.denyEditing({ userId: 'vex' });
+      gm.handlers.revokeEditing({ userId: 'ghost' });
+      expect(events(s.sent, 'editingDenied')).toHaveLength(1);
+      expect(elevatedUsers.has('ghost')).toBe(false);
+    });
   });
 
   it("a player cannot set anyone's bank balance with their own login; the GM still can", async () => {
     await run(db, `INSERT INTO player_banks (username, balance, debt) VALUES ('rook', 100, 0)`);
-    const player = await signIn('vex');
-    player.handlers.adminUpdateBank({ token: PLAYER, username: 'rook', balance: 999999, debt: 0 });
+    const s = server();
+    const vex = await s.connect('vex');
+    vex.handlers.adminUpdateBank({ token: PLAYER, username: 'rook', balance: 999999, debt: 0 });
     await drain(db);
     expect((await get(db, `SELECT balance FROM player_banks WHERE username = 'rook'`)).balance).toBe(100);
 
-    const gm = await signIn({ userName: 'gm', isAdmin: true, token: GM });
+    const gm = await s.connect({ userName: 'gm', isAdmin: true, token: GM });
     gm.handlers.adminUpdateBank({ token: GM, username: 'rook', balance: 250, debt: 0 });
     await drain(db);
     expect((await get(db, `SELECT balance FROM player_banks WHERE username = 'rook'`)).balance).toBe(250);

@@ -129,6 +129,20 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     return !!info && (info.isAdmin || elevatedUsers.has(info.userName));
   };
 
+  /**
+   * Send to every connection signed in as `username`, and to nobody else.
+   *
+   * For what only that person may see. A grant of editor rights carries a working token, and
+   * it used to go out with io.emit: every connected client received it, and any of them could
+   * copy it and act as the editor. The client only ever used the one addressed to itself, so
+   * sending it there alone changes nothing for the person being granted.
+   */
+  const emitToUser = (username, event, data) => {
+    userSockets.forEach((info, id) => {
+      if (info && info.userName === username) io.to(id).emit(event, data);
+    });
+  };
+
   const buildActiveUsers = () => {
     const userMap = new Map();
     userSockets.forEach((info) => {
@@ -327,7 +341,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           elevatedUsers.add(data.targetUser);
           const tempToken = jwt.sign({ username: data.targetUser, isTemporary: true }, SECRET, { expiresIn: '12h' });
           console.log(`Admin ${verified.username} granted temporary access to ${data.targetUser}`);
-          io.emit('accessGranted', { targetUser: data.targetUser, token: tempToken });
+          emitToUser(data.targetUser, 'accessGranted', { targetUser: data.targetUser, token: tempToken });
           broadcastActiveUsers();
         }
       } catch (err) { console.warn('Unauthorized attempt to grant access:', err.message); }
@@ -444,16 +458,20 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
     socket.on('requestEditing', (data) => { io.emit('editingRequested', data); });
 
+    // Approving, denying and ending an edit are the GM's (or a granted editor's) buttons in the
+    // admin panel. They had no check, so any player could send approveEditing for themselves and
+    // become an editor; the connection's verified sign-in now decides.
     socket.on('approveEditing', (data) => {
+      if (!isAdminSocket(socket) || !data || !data.userId) return;
       elevatedUsers.add(data.userId);
       const tempToken = jwt.sign({ username: data.userId, isTemporary: true }, SECRET, { expiresIn: '12h' });
-      io.emit('accessGranted', { targetUser: data.userId, token: tempToken, forEditing: true });
+      emitToUser(data.userId, 'accessGranted', { targetUser: data.userId, token: tempToken, forEditing: true });
       io.emit('editingStarted', data);
       io.emit('editingApproved', data);
     });
 
-    socket.on('denyEditing', (data) => { io.emit('editingDenied', data); });
-    socket.on('revokeEditing', (data) => { elevatedUsers.delete(data.userId); io.emit('editingStopped'); io.emit('editingRevoked', data); broadcastActiveUsers(); });
+    socket.on('denyEditing', (data) => { if (!isAdminSocket(socket)) return; io.emit('editingDenied', data); });
+    socket.on('revokeEditing', (data) => { if (!isAdminSocket(socket) || !data) return; elevatedUsers.delete(data.userId); io.emit('editingStopped'); io.emit('editingRevoked', data); broadcastActiveUsers(); });
     socket.on('editingFinished', (data) => { if (data?.userId) elevatedUsers.delete(data.userId); io.emit('editingStopped'); });
 
     socket.on('requestRhombusPurge', (data) => {
