@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
-const { authenticate, optionalAuthenticate } = require('../middleware/auth');
+const { authenticate, authenticatePlayer, optionalAuthenticate } = require('../middleware/auth');
 const { canReadNpcSheets, redactTokenCard } = require('../sheets/npcPrivacy');
 const {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc,
@@ -104,7 +104,7 @@ module.exports = (db, io) => {
   });
 
   // Player's own sheet — used by non-admin players to fetch stats (e.g. SR6 initiative roll).
-  router.get('/own', authenticate, (req, res) => {
+  router.get('/own', authenticatePlayer, (req, res) => {
     getGameSystem((err, system) => {
       if (err) return res.status(500).json({ error: err.message });
       db.get(
@@ -621,7 +621,7 @@ module.exports = (db, io) => {
 
   // Portrait upload — player uploads their own portrait; admin can upload
   // for any username via ?username= query param.
-  router.post('/portrait', authenticate, upload.single('portrait'), (req, res) => {
+  router.post('/portrait', authenticatePlayer, upload.single('portrait'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'portrait file required' });
     const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
     const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
