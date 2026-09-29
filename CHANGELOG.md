@@ -31,6 +31,15 @@ NPC sheets and hidden faces stay with the GM.
   one by hand. Their tests now run against the checkout, so every case they covered is
   still checked.
 
+### Under the hood
+
+- **The first piece of the system builder.** An engine that works out a sheet's derived
+  values (modifiers, saves, maximums) from a written description instead of code, with a
+  safe formula language that can only do arithmetic. It is not switched on for anything:
+  every sheet is still worked out exactly as before. It is proven by restating CWN's and
+  Shadowrun's derived values as data and checking the results match the existing code on
+  thousands of generated sheets.
+
 ---
 
 ## [1.14.3] - 2026-09-29

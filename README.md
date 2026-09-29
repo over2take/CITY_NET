@@ -401,6 +401,11 @@ CITY_NET/
 │   │   ├── tokenControl.js     # Who may move a token, in one place because two move handlers ask it. An admin always may; the owner may; a friendly NPC may name players, or open to everyone. Only friendly NPCs can carry a grant, enforced here rather than by the caller, so one that reaches an enemy row through an import or a restore is inert — and anything unreadable in the column means nobody, since a malformed grant must never open a token up
 │   │   ├── index.js            # All Socket.IO event handlers. Every write to a character sheet goes through sheets/mutate.js: rolls, damage, death saves, stabilisation, spell effort and vehicle hulls all touch sheets their owner is very likely looking at, and anything relative is worked out inside the write so two of them landing together both count
 │   │   └── initiative.js       # Initiative tracker socket events (start, roll, next, remove, reorder, end); individual and side-based modes; SR6 pass-decay on wrap; CWN side auto-create, PC-side score derivation, friendly-NPC routing; roll history broadcast
+│   ├── systemBuilder/          # The system builder's engine (Phase 1): derived values from a written definition instead of code. NOT used by the app yet - every sheet is still worked out by sheets/templates.js, and this is held to that code by a parity test before any system moves onto it
+│   │   ├── expression.js       # The formula language, parsed and evaluated with no eval: numbers, @fields, $rules, a fixed list of functions and a system's lookup tables. Length, size and nesting capped; anything infinite or NaN comes out 0
+│   │   ├── derived.js          # Checks a definition (every problem at once, with where it is, loops shown as a path), orders values by what they read, and works them out. apply() keeps the contract of the hand-written recompute functions
+│   │   ├── rules.js            # Code-backed rule values a formula can name as $name, for what arithmetic cannot read (installed armor mods, fitted chrome, adept powers). A GM picks from this list, never adds to it
+│   │   └── definitions.js      # CWN's and Shadowrun's derived values restated as data, entry for entry in the order their functions write them
 │   ├── startup/
 │   │   └── sanity_checks.js    # In-memory DB checks on boot
 │   ├── utils/
@@ -432,6 +437,8 @@ CITY_NET/
 │       ├── sockets.customdice.test.js  # Roll handler: DB vs builtin resolution, numeric summing, count clamp, forged-payload rejection
 │       ├── signs.test.js               # Sign API (GET / POST / PATCH / DELETE, auth, image-only, filter_intensity clamping, XSS)
 │       ├── sheets.test.js              # Sheet routes (system switch, admin access, portraits, derived fields, GET /own player self-fetch)
+│       ├── system_builder_parity.test.js # CWN and Shadowrun as data against cwnRecompute and sr6Recompute over 3,000 seeded sheets each (blank, text, decimal, huge and stale values, broken JSON): same sheet, same changed fields, same order
+│       ├── system_builder_engine.test.js # The formula language (precedence, functions, 0 for NaN, and a list of script-shaped inputs it refuses), limits, and definitions: dependency order, lookups, conditions, rules, and every mistake reported at once
 │       ├── npc_privacy.test.js         # The map list and token card as anonymous, player and revoked-editor callers see them: no NPC sheet, no silhouetted face, even in the raw response text; the GM and a granted editor still get both
 │       ├── npc_sheets.test.js          # NPC library routes (CRUD, links, folders, LUCK reset, HP overlay)
 │       ├── cpr_attack.test.js          # CP:R attack module (to-hit, armor, shield, crits, death saves)
