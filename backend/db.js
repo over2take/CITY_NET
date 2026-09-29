@@ -474,6 +474,19 @@ db.serialize(() => {
   )`);
   db.run(`ALTER TABLE initiative_scene ADD COLUMN sides TEXT NOT NULL DEFAULT '[]'`, () => {});
 
+  // Game systems a GM built: a draft the builder edits and the published copy a game runs.
+  // See systemBuilder/store.js. Nothing in the running game reads it yet.
+  db.run(`CREATE TABLE IF NOT EXISTS custom_systems (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    draft TEXT NOT NULL,
+    published TEXT,
+    version INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    published_at DATETIME
+  )`);
+
   // Migration: CP:R's name field was stored as 'handle'; it is now 'name'
   // (uniform across systems — the sheet is the source of truth for player
   // identity, see backend/sheets/identity.js). Copy handle → name once.

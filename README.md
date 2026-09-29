@@ -352,6 +352,7 @@ CITY_NET/
 │   │   ├── signs.js            # Custom sign CRUD (GET all / POST / PATCH :id / DELETE :id); text optional when image_url set; rotation_x/y/z persisted, non-finite angles rejected
 │   │   ├── fonts.js            # Font file upload/list/delete (.ttf .otf .woff .woff2); served as static under /uploads/fonts/
 │   │   ├── player.js           # Player auth (register, login, forgot, reset, registration status poll)
+│   │   ├── systems.js          # Custom game systems: list, create (from a name or a whole definition), read, save a draft, publish, delete. Main admin only, reading included; delete refused for the running system
 │   │   └── sheets.js           # Character sheets — admin sheet access, NPC library, portraits, LUCK/Edge reset & grant, import preview. The table-wide resets scan to decide who is affected and then work out each value as that sheet is written, rather than writing back a scan that has already gone stale
 │   ├── dice/
 │   │   └── systemDice.js       # Built-in dice manifest keyed by game system (ids namespaced `builtin:`); lives in code, not the DB, so app updates change definitions with no migration and nothing is mutable through the API
@@ -405,7 +406,9 @@ CITY_NET/
 │   │   ├── expression.js       # The formula language, parsed and evaluated with no eval: numbers, @fields, $rules, a fixed list of functions and a system's lookup tables. Length, size and nesting capped; anything infinite or NaN comes out 0
 │   │   ├── derived.js          # Checks a definition (every problem at once, with where it is, loops shown as a path), orders values by what they read, and works them out. apply() keeps the contract of the hand-written recompute functions
 │   │   ├── rules.js            # Code-backed rule values a formula can name as $name, for what arithmetic cannot read (installed armor mods, fitted chrome, adept powers). A GM picks from this list, never adds to it
-│   │   └── definitions.js      # CWN's and Shadowrun's derived values restated as data, entry for entry in the order their functions write them
+│   │   ├── definitions.js      # CWN's and Shadowrun's derived values restated as data, entry for entry in the order their functions write them
+│   │   ├── definition.js       # The system definition format (1: name, description, words, parts, lookups, derived) and its server-side checks. Fatal (cannot be stored: not an object, too large, not JSON) vs ordinary problems (saved in a draft, block publishing), all reported with where they are. Also the app's renamable terms and switchable parts, with wordFor / partOn
+│   │   └── store.js            # `custom_systems`: a draft the builder edits and the published copy a game runs. Ids are sys_ + hex, never a built-in id; publishing refuses a draft with problems; the running system cannot be deleted
 │   ├── startup/
 │   │   └── sanity_checks.js    # In-memory DB checks on boot
 │   ├── utils/
@@ -439,6 +442,7 @@ CITY_NET/
 │       ├── signs.test.js               # Sign API (GET / POST / PATCH / DELETE, auth, image-only, filter_intensity clamping, XSS)
 │       ├── sheets.test.js              # Sheet routes (system switch, admin access, portraits, derived fields, GET /own player self-fetch)
 │       ├── system_builder_parity.test.js # CWN and Shadowrun as data against cwnRecompute and sr6Recompute over 3,000 seeded sheets each (blank, text, decimal, huge and stale values, broken JSON): same sheet, same changed fields, same order
+│       ├── system_builder_store.test.js # The definition checks (every problem at once, fatal vs ordinary, words and parts), and the routes: main admin only, drafts saved with problems but not published, the published copy untouched while the draft moves on, the running system not deletable
 │       ├── system_builder_engine.test.js # The formula language (precedence, functions, 0 for NaN, and a list of script-shaped inputs it refuses), limits, and definitions: dependency order, lookups, conditions, rules, and every mistake reported at once
 │       ├── npc_privacy.test.js         # The map list and token card as anonymous, player and revoked-editor callers see them: no NPC sheet, no silhouetted face, even in the raw response text; the GM and a granted editor still get both
 │       ├── npc_sheets.test.js          # NPC library routes (CRUD, links, folders, LUCK reset, HP overlay)

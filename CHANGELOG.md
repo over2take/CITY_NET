@@ -25,6 +25,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Custom game systems can be stored.** Each one keeps a draft the GM edits and a published
+  copy a game would run. A draft can be saved half-built, but it cannot be published until
+  its problems are fixed, and the system a game is running cannot be deleted. Only the main
+  admin can reach any of it, and nothing in the game uses these yet.
+
 - **The first piece of the system builder.** An engine that works out a sheet's derived
   values (modifiers, saves, maximums) from a written description instead of code, with a
   safe formula language that can only do arithmetic. It is not switched on for anything:
