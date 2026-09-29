@@ -348,6 +348,20 @@ db.serialize(() => {
     PRIMARY KEY (username, system)
   )`);
 
+  // A token's health, defense and injuries in the systems that are NOT running. The running
+  // system's live on the token itself; switching swaps them (tokens/vitals.js).
+  db.run(`CREATE TABLE IF NOT EXISTS token_vitals (
+    location_id INTEGER NOT NULL,
+    system TEXT NOT NULL,
+    hp_current INTEGER,
+    hp_max INTEGER,
+    hp_temp INTEGER,
+    melee_ac INTEGER,
+    ranged_ac INTEGER,
+    injuries TEXT DEFAULT '{}',
+    PRIMARY KEY (location_id, system)
+  )`);
+
   db.run(`CREATE TABLE IF NOT EXISTS water_bodies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     points_json TEXT NOT NULL,
@@ -557,6 +571,15 @@ db.serialize(() => {
     });
   });
   require('./bank/accounts').setReady(banksMoved);
+
+  // Save each token's current health under every system it could be shown in, once; a system
+  // switch waits for it. After the bank move, so the two never share a transaction.
+  const tokensSaved = banksMoved.catch(() => {}).then(() => require('./startup/tokenVitals').migrateTokenVitals(db))
+    .catch((err) => {
+      console.error('[tokens] Saving token health per system failed, so switching systems is unavailable until the next start:', err.message);
+      throw err;
+    });
+  require('./tokens/vitals').setReady(tokensSaved);
 });
 
 module.exports = db;

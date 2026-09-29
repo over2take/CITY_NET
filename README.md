@@ -400,6 +400,8 @@ CITY_NET/
 │   │   ├── catalogueParse.js   # Reads a catalogue a GM pasted or uploaded: CSV, TSV or JSON, real RFC-4180 quoting, per-line problems rather than exceptions. The only reader - the preview is a round trip to it
 │   │   ├── catalogueStore.js   # Uploaded catalogues in memory, added on top of the built-in ones, never replacing them. Holds one system at a time, and consults the built-in book only when that system is CWN - every other game's shops carry only what their GM uploaded. Requires nothing, so priceOf stays synchronous and the lot stays importable from a frontend test
 │   │   └── catalogueDb.js      # The only piece that knows uploaded catalogues live in SQLite. A save replaces one catalogue wholesale, in a transaction
+│   ├── tokens/
+│   │   └── vitals.js           # A token's health, defense and injuries per game system. The token's own columns hold the running system's (so combat and damage are untouched); the others wait in `token_vitals`. switchSystem swaps them and changes `game_system` in one transaction; map clears and loads drop saved values for tokens that are gone
 │   ├── sockets/
 │   │   ├── tokenControl.js     # Who may move a token, in one place because two move handlers ask it. An admin always may; the owner may; a friendly NPC may name players, or open to everyone. Only friendly NPCs can carry a grant, enforced here rather than by the caller, so one that reaches an enemy row through an import or a restore is inert — and anything unreadable in the column means nobody, since a malformed grant must never open a token up
 │   │   ├── index.js            # All Socket.IO event handlers. Every write to a character sheet goes through sheets/mutate.js: rolls, damage, death saves, stabilisation, spell effort and vehicle hulls all touch sheets their owner is very likely looking at, and anything relative is worked out inside the write so two of them landing together both count
@@ -414,6 +416,7 @@ CITY_NET/
 │   ├── startup/
 │   │   ├── backup.js           # A whole copy of the database (VACUUM INTO, beside it) before a migration changes real data; skipped, and logged, when the disk lacks room
 │   │   ├── bankAccounts.js     # The one-time move from one bank per player (`player_banks`, kept untouched) to one per player per system: the database copied first, each balance copied into every system the player has a sheet in plus the running one, in one transaction, with a marker so it never runs twice
+│   │   ├── tokenVitals.js      # The one-time start of per-system token health: each token's current values saved under every system it could be shown in (a player's sheet systems, or every system for enemies and friendlies, plus the running one), so switching shows what it showed before. Adds rows only; a marker so it runs once
 │   │   └── sanity_checks.js    # In-memory DB checks on boot
 │   ├── utils/
 │   │   └── random.js           # cryptoRng — uniform [0,1) from OS entropy (crypto.randomInt); default rng for every roll that decides an outcome
@@ -447,6 +450,7 @@ CITY_NET/
 │       ├── sheets.test.js              # Sheet routes (system switch, admin access, portraits, derived fields, GET /own player self-fetch)
 │       ├── system_builder_parity.test.js # CWN and Shadowrun as data against cwnRecompute and sr6Recompute over 3,000 seeded sheets each (blank, text, decimal, huge and stale values, broken JSON): same sheet, same changed fields, same order
 │       ├── bank_accounts.test.js       # Per-system accounts kept apart; the one-time move (every sheet's system plus the running one, the old table untouched, once only, all or nothing); the database copy and its disk-space check; switching systems in play; and db.js opening a 1.14.4-shaped database file in a child process
+│       ├── token_vitals.test.js        # Switching swaps and restores every token's health (enemies too, buildings untouched), entirely or not at all, and waits for the one-time start; the start's systems and run-once; map clears and loads; the system picker route and the settings route's guard; db.js on a real file
 │       ├── system_builder_store.test.js # The definition checks (every problem at once, fatal vs ordinary, words and parts), and the routes: main admin only, drafts saved with problems but not published, the published copy untouched while the draft moves on, the running system not deletable
 │       ├── system_builder_engine.test.js # The formula language (precedence, functions, 0 for NaN, and a list of script-shaped inputs it refuses), limits, and definitions: dependency order, lookups, conditions, rules, and every mistake reported at once
 │       ├── npc_privacy.test.js         # The map list and token card as anonymous, player and revoked-editor callers see them: no NPC sheet, no silhouetted face, even in the raw response text; the GM and a granted editor still get both

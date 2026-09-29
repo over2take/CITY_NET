@@ -7,6 +7,7 @@ const multer = require('multer');
 const { authenticate, authenticatePlayer, optionalAuthenticate } = require('../middleware/auth');
 const { canReadNpcSheets, redactTokenCard } = require('../sheets/npcPrivacy');
 const bankAccounts = require('../bank/accounts');
+const tokenVitals = require('../tokens/vitals');
 const {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc,
   TOKEN_SOURCES, rangedAcOf, acColumns,
@@ -71,23 +72,25 @@ module.exports = (db, io) => {
   router.put('/system', authenticate, requireAdmin, (req, res) => {
     const { system } = req.body;
     if (!isValidSystem(system)) return res.status(400).json({ error: 'Unknown game system' });
-    db.run(
-      `INSERT INTO global_settings (key, value) VALUES ('game_system', ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      [system],
-      (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        /**
-         * The uploaded catalogues in memory belong to the system that was running a
-         * moment ago. Left alone they would price the new game's shops from the old
-         * game's list, so they are swapped before anybody is told the system changed.
-         */
-        catalogueDb.refresh(db, system, () => {
-          io.emit('gameSystemChanged', { system });
-          res.json({ message: 'Game system updated', system });
-        });
-      }
-    );
+    // Tokens carry each system's health, defense and injuries: the swap and the setting change
+    // are one transaction (tokens/vitals.js).
+    tokenVitals.switchSystem(db, system, { defaultSystem: DEFAULT_SYSTEM }).then((switched) => {
+      /**
+       * The uploaded catalogues in memory belong to the system that was running a
+       * moment ago. Left alone they would price the new game's shops from the old
+       * game's list, so they are swapped before anybody is told the system changed.
+       */
+      catalogueDb.refresh(db, system, () => {
+        io.emit('gameSystemChanged', { system });
+        // Every token's health may have changed with it: have every screen redraw the map.
+        // Rhombus-only, so it does not mark the map as having unsaved changes.
+        if (switched.switched) io.emit('dataUpdated', { isRhombusOnly: true });
+        res.json({ message: 'Game system updated', system });
+      });
+    }, (err) => {
+      console.error('[system switch]', err.message);
+      res.status(500).json({ error: 'Could not switch systems; nothing was changed' });
+    });
   });
 
   // --- Admin sheet access ---

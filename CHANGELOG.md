@@ -17,6 +17,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   database is saved beside it first (when the disk has room), and the old bank records are
   kept untouched.
 
+- **Each game system keeps its own token health.** A token's HP, armor and injuries now belong
+  to the game being played: switching systems puts one game's values away and brings the
+  other's back, and a character who has never been in that game starts fresh. On the first
+  start after updating, every token's current values are saved for each system it could be
+  shown in, so switching looks exactly as it does today for anyone with a character there.
+
 ### Security
 
 - **Players can no longer use the GM's tools.** A player's own login worked as a key to the GM's
