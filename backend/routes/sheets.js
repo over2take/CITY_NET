@@ -8,6 +8,7 @@ const { authenticate, authenticatePlayer, optionalAuthenticate } = require('../m
 const { canReadNpcSheets, redactTokenCard } = require('../sheets/npcPrivacy');
 const bankAccounts = require('../bank/accounts');
 const tokenVitals = require('../tokens/vitals');
+const customSystems = require('../systemBuilder/runtime');
 const {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc,
   TOKEN_SOURCES, rangedAcOf, acColumns,
@@ -65,7 +66,8 @@ module.exports = (db, io) => {
   router.get('/system', (req, res) => {
     getGameSystem((err, system) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ system, systems: Object.entries(TEMPLATES).map(([id, t]) => ({ id, name: t.name })) });
+      // Built-in systems, then published custom ones (systemBuilder/runtime.js).
+      res.json({ system, systems: [...Object.entries(TEMPLATES).map(([id, t]) => ({ id, name: t.name })), ...customSystems.list()] });
     });
   });
 

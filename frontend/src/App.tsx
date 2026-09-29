@@ -18,6 +18,7 @@ import type {
 } from './types';
 import rhombusIcon from './assets/rhombus.svg';
 import { useMapData } from './hooks/useMapData';
+import { useCustomTemplates } from './hooks/useCustomTemplates';
 import { useSocket } from './hooks/useSocket';
 import { THEMES, ThemeContext } from './theme/themes';
 import type { ThemeName } from './theme/themes';
@@ -241,6 +242,9 @@ function App() {
       .then(d => { if (d?.system) setGameSystem(d.system); })
       .catch(() => {});
   }, []);
+  // A published custom system's sheet template, ready before a sheet opens, and a redraw when
+  // one arrives (sheets/customTemplates.ts).
+  useCustomTemplates(gameSystem);
 
   // Custom dice: GM-authored (DB) plus any built-ins the active system ships.
   const { customDice, applyDice, addDie, updateDie, deleteDie, error: customDiceError, setError: setCustomDiceError } = useCustomDice(token, gameSystem);

@@ -41,6 +41,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A published custom game system can run the game.** It appears in the game system picker
+  beside the built-in ones, players' sheets are drawn from its own layout by the same sheet
+  window, and its derived values are worked out on every save. Players' browsers receive the
+  sheet's layout and wording, never its formulas. There is no editor for building one yet.
+
 - **Custom game systems can be stored.** Each one keeps a draft the GM edits and a published
   copy a game would run. A draft can be saved half-built, but it cannot be published until
   its problems are fixed, and the system a game is running cannot be deleted. Only the main

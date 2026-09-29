@@ -1,0 +1,111 @@
+// Custom game systems' sheets, as templates the ordinary SheetRenderer draws.
+//
+// A published custom system comes from the server as a render copy (GET /api/systems/render/:id,
+// built by backend/systemBuilder/runtime.js): its layout and words, never its formulas. This turns
+// that into a SheetTemplate and keeps it, so getTemplate() answers for a custom system exactly as
+// it does for a built-in one. A template not loaded yet is fetched the first time it is asked for;
+// until it arrives the generic one stands in, and a window event tells the app to redraw.
+
+import type { SheetTemplate, SheetSection, SheetField, SheetFieldType, SheetLinkSource, SectionLayout } from './types';
+
+export interface CustomRenderField {
+  id: string;
+  label: string;
+  type: SheetFieldType;
+  visibility?: 'public' | 'private';
+  sensitivity?: 'combat';
+  maxField?: string;
+  hint?: string;
+  placeholder?: string;
+  unit?: string;
+  options?: { value: string; label: string }[];
+  source?: SheetLinkSource;
+}
+
+export interface CustomRender {
+  id: string;
+  name: string;
+  words: Record<string, { singular?: string; plural?: string; short?: string }>;
+  parts: Record<string, { on: boolean }>;
+  derived: string[];
+  sheet: {
+    tabs?: string[];
+    header?: { nameField?: string; subtitleFields?: string[]; hpField?: string; hpMaxField?: string; chips?: { field: string; label: string }[] };
+    sections: { id: string; label: string; layout: SectionLayout; tab?: string; columns?: number; fields: CustomRenderField[] }[];
+  };
+}
+
+/** Fired on window when a custom template has been loaded, so the app can redraw. */
+export const CUSTOM_TEMPLATE_EVENT = 'citynet:custom-template-loaded';
+
+const cache = new Map<string, SheetTemplate>();
+const pending = new Map<string, Promise<SheetTemplate | null>>();
+
+/** Custom systems' ids: sys_ and sixteen hex digits (backend/systemBuilder/store.js). */
+export const isCustomSystem = (id: string | null | undefined): id is string =>
+  typeof id === 'string' && /^sys_[0-9a-f]{16}$/.test(id);
+
+/** A render copy as a template. Derived values read-only; only armor writes through to the token,
+ *  as on the built-in sheets - HP and cash change on the token and in the bank. */
+export const templateFromRender = (render: CustomRender): SheetTemplate => {
+  const derived = new Set(render.derived || []);
+  const sections: SheetSection[] = (render.sheet?.sections || []).map((s) => ({
+    id: s.id,
+    label: s.label,
+    layout: s.layout,
+    ...(s.tab ? { tab: s.tab } : {}),
+    ...(s.columns ? { columns: s.columns } : {}),
+    fields: (s.fields || []).map((f): SheetField => ({
+      id: f.id,
+      label: f.label,
+      type: f.type,
+      ...(f.visibility ? { visibility: f.visibility } : {}),
+      ...(f.sensitivity ? { sensitivity: f.sensitivity } : {}),
+      ...(f.maxField ? { maxField: f.maxField } : {}),
+      ...(f.hint ? { hint: f.hint } : {}),
+      ...(f.placeholder ? { placeholder: f.placeholder } : {}),
+      ...(f.unit ? { unit: f.unit } : {}),
+      ...(f.options ? { options: f.options } : {}),
+      ...(f.source ? { source: f.source, ...(f.source === 'token_ac' ? { sourceWritable: true } : {}) } : {}),
+      ...(derived.has(f.id) ? { derived: true as const } : {}),
+    })),
+  }));
+  const header = render.sheet?.header;
+  return {
+    id: render.id,
+    name: render.name,
+    tabs: render.sheet?.tabs,
+    ...(header && header.nameField ? { header: { ...header, nameField: header.nameField } } : { header: { nameField: 'name' } }),
+    sections,
+  };
+};
+
+/** A loaded custom template, or undefined. */
+export const customTemplate = (id: string): SheetTemplate | undefined => cache.get(id);
+
+/** Put a template in place, e.g. from a render copy already in hand. */
+export const registerCustomTemplate = (render: CustomRender): SheetTemplate => {
+  const template = templateFromRender(render);
+  cache.set(render.id, template);
+  try { window.dispatchEvent(new CustomEvent(CUSTOM_TEMPLATE_EVENT, { detail: { id: render.id } })); } catch { /* no window in some tests */ }
+  return template;
+};
+
+/** Fetch a custom system's template once; later calls share the same request. */
+export const loadCustomTemplate = (id: string, fetcher: typeof fetch = fetch): Promise<SheetTemplate | null> => {
+  if (!isCustomSystem(id)) return Promise.resolve(null);
+  const have = cache.get(id);
+  if (have) return Promise.resolve(have);
+  const inFlight = pending.get(id);
+  if (inFlight) return inFlight;
+  const request = fetcher(`/api/systems/render/${id}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((render: CustomRender | null) => (render ? registerCustomTemplate(render) : null))
+    .catch(() => null)
+    .finally(() => { pending.delete(id); });
+  pending.set(id, request);
+  return request;
+};
+
+/** For tests: forget every loaded template. */
+export const clearCustomTemplates = () => { cache.clear(); pending.clear(); };

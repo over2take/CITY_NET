@@ -325,11 +325,24 @@ const TEMPLATES = {
 
 const DEFAULT_SYSTEM = 'generic';
 
-const isValidSystem = (system) => Object.prototype.hasOwnProperty.call(TEMPLATES, system);
+const isBuiltIn = (system) => Object.prototype.hasOwnProperty.call(TEMPLATES, system);
+
+/**
+ * Published custom systems (systemBuilder/runtime.js), looked up through a hook it sets:
+ * requiring it here would make a circle. Built-in systems are always found first, so nothing
+ * a custom system does can change how a built-in one behaves.
+ */
+let customMeta = () => null;
+const setCustomMeta = (fn) => { customMeta = typeof fn === 'function' ? fn : () => null; };
+
+/** A system's meta: built-in, published custom, or the default's for anything unknown. */
+const metaFor = (system) => (isBuiltIn(system) ? TEMPLATES[system] : customMeta(system) || TEMPLATES[DEFAULT_SYSTEM]);
+
+const isValidSystem = (system) => isBuiltIn(system) || !!customMeta(system);
 
 // Strip a sheet's data down to what non-owners may see.
 const filterPublicData = (system, data) => {
-  const meta = TEMPLATES[system] || TEMPLATES[DEFAULT_SYSTEM];
+  const meta = metaFor(system);
   const parsed = typeof data === 'string' ? JSON.parse(data || '{}') : (data || {});
   const out = {};
   meta.publicFields.forEach((f) => {
@@ -391,12 +404,10 @@ const acColumns = (linked, fields) => {
   return sets.length ? { sets: sets.join(', '), values } : null;
 };
 
-const getLinkedFields = (system) =>
-  (TEMPLATES[system] || TEMPLATES[DEFAULT_SYSTEM]).linkedFields || {};
+const getLinkedFields = (system) => metaFor(system).linkedFields || {};
 
 // Returns a map of maxFieldId → currentFieldId for the system.
-const getMaxPairs = (system) =>
-  (TEMPLATES[system] || TEMPLATES[DEFAULT_SYSTEM]).maxPairs || {};
+const getMaxPairs = (system) => metaFor(system).maxPairs || {};
 
 // Recompute derived fields after a write. Mutates data; returns the ids of
 // fields it changed (empty when the changed field derives nothing).
@@ -405,7 +416,7 @@ const getMaxPairs = (system) =>
 //  - recompute: whole-sheet function for systems whose derived fields have
 //    multiple sources (CWN mods, saves, effort maxes)
 const applyDerived = (system, data, changedFieldId) => {
-  const meta = TEMPLATES[system] || TEMPLATES[DEFAULT_SYSTEM];
+  const meta = metaFor(system);
   const changed = [];
   const rule = (meta.derived || {})[changedFieldId];
   if (rule) {
@@ -420,7 +431,7 @@ const applyDerived = (system, data, changedFieldId) => {
 };
 
 module.exports = {
-  TEMPLATES, DEFAULT_SYSTEM, isValidSystem, filterPublicData, getLinkedFields, getMaxPairs,
+  TEMPLATES, DEFAULT_SYSTEM, isValidSystem, isBuiltIn, metaFor, setCustomMeta, filterPublicData, getLinkedFields, getMaxPairs,
   applyDerived, cwnEffectiveAc, cwnImplantAc, cwnMoveBonus, CWN_BASE_MOVE,
   TOKEN_SOURCES, rangedAcOf, acColumns,
 };

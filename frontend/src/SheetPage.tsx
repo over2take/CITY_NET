@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import './App.css';
 import { SheetRenderer } from './components/SheetRenderer';
 import { usePlayerSheet, uploadSheetPortrait } from './hooks/usePlayerSheet';
+import { useCustomTemplates } from './hooks/useCustomTemplates';
 import { THEMES } from './theme/themes';
 
 // Standalone character-sheet tab (?sheet=true). Gives the player a full
@@ -78,6 +79,8 @@ export default function SheetPage() {
 
   const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, actions } =
     usePlayerSheet(socket, userName);
+  // A custom system's sheet is drawn once its template arrives (sheets/customTemplates.ts).
+  useCustomTemplates(sheet?.system);
 
   const handlePortraitUpload = useCallback(
     (file: File) => uploadSheetPortrait(adminToken || playerToken, file),
