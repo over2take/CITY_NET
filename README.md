@@ -412,6 +412,8 @@ CITY_NET/
 │   │   ├── rules.js            # Code-backed rule values a formula can name as $name, for what arithmetic cannot read (installed armor mods, fitted chrome, adept powers). A GM picks from this list, never adds to it
 │   │   ├── definitions.js      # CWN's and Shadowrun's derived values restated as data, entry for entry in the order their functions write them
 │   │   ├── definition.js       # The system definition format (1: name, description, words, parts, lookups, derived) and its server-side checks. Fatal (cannot be stored: not an object, too large, not JSON) vs ordinary problems (saved in a draft, block publishing), all reported with where they are. Also the app's renamable terms and switchable parts, with wordFor / partOn
+│   │   ├── sheet.js            # A custom system's character sheet as data (tabs, header, sections of text/number/textarea/select fields with visibility, combat sensitivity, max pairs and token/bank links) and its checks; a starter sheet for a system that has none
+│   │   ├── runtime.js          # Published systems in memory for the running game: compiled once into the meta the built-in templates carry (public/combat/linked fields, max pairs, derived recompute), reached by sheets/templates.js through a hook; and the render copy the browser draws from, with no formulas
 │   │   └── store.js            # `custom_systems`: a draft the builder edits and the published copy a game runs. Ids are sys_ + hex, never a built-in id; publishing refuses a draft with problems; the running system cannot be deleted
 │   ├── startup/
 │   │   ├── backup.js           # A whole copy of the database (VACUUM INTO, beside it) before a migration changes real data; skipped, and logged, when the disk lacks room
@@ -451,6 +453,7 @@ CITY_NET/
 │       ├── system_builder_parity.test.js # CWN and Shadowrun as data against cwnRecompute and sr6Recompute over 3,000 seeded sheets each (blank, text, decimal, huge and stale values, broken JSON): same sheet, same changed fields, same order
 │       ├── bank_accounts.test.js       # Per-system accounts kept apart; the one-time move (every sheet's system plus the running one, the old table untouched, once only, all or nothing); the database copy and its disk-space check; switching systems in play; and db.js opening a 1.14.4-shaped database file in a child process
 │       ├── token_vitals.test.js        # Switching swaps and restores every token's health (enemies too, buildings untouched), entirely or not at all, and waits for the one-time start; the start's systems and run-once; map clears and loads; the system picker route and the settings route's guard; db.js on a real file
+│       ├── system_builder_runtime.test.js # The sheet format's checks and starter sheet; a published system known to the game (never a draft), answering the same helpers as the built-ins without changing them, its render copy free of formulas, switched to from the picker, and a player's edit recomputing its derived values
 │       ├── system_builder_store.test.js # The definition checks (every problem at once, fatal vs ordinary, words and parts), and the routes: main admin only, drafts saved with problems but not published, the published copy untouched while the draft moves on, the running system not deletable
 │       ├── system_builder_engine.test.js # The formula language (precedence, functions, 0 for NaN, and a list of script-shaped inputs it refuses), limits, and definitions: dependency order, lookups, conditions, rules, and every mistake reported at once
 │       ├── npc_privacy.test.js         # The map list and token card as anonymous, player and revoked-editor callers see them: no NPC sheet, no silhouetted face, even in the raw response text; the GM and a granted editor still get both
@@ -680,6 +683,7 @@ CITY_NET/
 │   │   │   ├── useSocket.ts        # Socket.IO connection and all event listeners
 │   │   │   ├── useApi.ts           # Fetch helpers
 │   │   │   ├── useMapExport.ts     # PNG/WebM city export — one cached off-screen renderer for the session, shared ortho camera, GPU size clamp, per-frame render loop for video, MediaRecorder with codec fallback; never touches the live camera
+│   │   │   ├── useCustomTemplates.ts # Redraws when a custom system's sheet template arrives, and fetches the running system's ahead of need
 │   │   │   ├── useMapData.ts       # Location/district/road/overpass/water body/sign data fetching. Sends the GM's sign-in with the location list, held in a ref so signing in does not give fetchLocations a new identity
 │   │   │   ├── useCustomDice.ts    # Custom dice state — fetches GM dice and the active system's built-ins, merges them (built-ins first, flagged `locked`), and applies `customDiceUpdated` broadcasts
 │   │   │   ├── useEnemyVehicles.ts # The GM's enemy vehicles, and the tokens on the map level that could fill their seats. Asked for rather than pushed, and refused to anyone but the GM — so a player's client never holds enemy pools or armour at all, which is what keeps "what may players see" from being a question the feature has to answer
@@ -699,7 +703,8 @@ CITY_NET/
 │   │   │   └── shopRules.ts     # The overdraft house rule, the buy-back rate and how it resolves, and the words for every refusal. Mirrored from backend/shops and compared against it value for value, since the window quoting one price and the server paying another is the failure worth fearing
 │   │   ├── sheets/
 │   │   │   ├── types.ts            # Sheet template type system (fields, sections, header, death saves, NPC tiers)
-│   │   │   ├── index.ts            # Template registry, getMaxPairs, GATED_TABS/hiddenTabsFor (house-rule-gated sheet tabs)
+│   │   │   ├── index.ts            # Template registry, getMaxPairs, GATED_TABS/hiddenTabsFor (house-rule-gated sheet tabs). getTemplate also answers for published custom systems
+│   │   │   ├── customTemplates.ts  # Custom systems' sheets: the server's render copy turned into a SheetTemplate for the ordinary SheetRenderer (derived values read-only, only armor writing through to the token), fetched once and cached, with an event the app redraws on
 │   │   │   ├── SheetPage.tsx       # Standalone browser-tab sheet (?sheet=true); reads theme from auth handshake or localStorage; shares logic via usePlayerSheet
 │   │   │   ├── vehiclePresets.ts   # The CWN vehicle table (p.82) — picking a TYPE fills the stat block. Armour left unset on the * and ** vehicles: those are immunities the GM rules on, not numbers
 │   │   │   ├── vehicleWeapons.ts   # The ten weapons a hardpoint can carry (p.81). Damage stored as clean dice; the book's ! rides on the trauma value, since only marked weapons can traumatise a vehicle

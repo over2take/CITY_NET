@@ -1,6 +1,7 @@
 const express = require('express');
 const { authenticate, requireMainAdmin } = require('../middleware/auth');
 const store = require('../systemBuilder/store');
+const runtime = require('../systemBuilder/runtime');
 
 // Custom game systems: the builder's storage (see systemBuilder/store.js).
 //
@@ -35,12 +36,29 @@ module.exports = (db) => {
     store.saveDraft(db, req.params.id, definition, (err, saved) => answer(res, err, saved));
   });
 
+  // Publishing and deleting change what the game can run, so the running copy is reloaded.
   router.post('/:id/publish', gm, (req, res) => {
-    store.publishSystem(db, req.params.id, (err, done) => answer(res, err, done));
+    store.publishSystem(db, req.params.id, (err, done) => {
+      if (err) return answer(res, err);
+      runtime.refresh(db, req.params.id, () => answer(res, null, done));
+    });
   });
 
   router.delete('/:id', gm, (req, res) => {
-    store.deleteSystem(db, req.params.id, (err) => answer(res, err, { deleted: true }));
+    store.deleteSystem(db, req.params.id, (err) => {
+      if (err) return answer(res, err);
+      runtime.refresh(db, req.params.id, () => answer(res, null, { deleted: true }));
+    });
+  });
+
+  /**
+   * What a published system's sheet is drawn from. Public: every player draws their own sheet.
+   * Layout and words only - never the formulas, lookups or rule names (systemBuilder/runtime.js).
+   */
+  router.get('/render/:id', (req, res) => {
+    const render = runtime.render(req.params.id);
+    if (!render) return res.status(404).json({ error: 'No such published system' });
+    res.json(render);
   });
 
   return router;

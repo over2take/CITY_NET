@@ -3,8 +3,10 @@ import { generic } from './templates/generic';
 import { cyberpunkRed } from './templates/cyberpunk_red';
 import { citiesWithoutNumber } from './templates/cities_without_number';
 import { shadowrun6e } from './templates/shadowrun_6e';
+import { isCustomSystem, customTemplate, loadCustomTemplate } from './customTemplates';
 
 export * from './types';
+export { isCustomSystem, loadCustomTemplate, CUSTOM_TEMPLATE_EVENT } from './customTemplates';
 
 export const TEMPLATES: Record<string, SheetTemplate> = {
   generic,
@@ -13,8 +15,21 @@ export const TEMPLATES: Record<string, SheetTemplate> = {
   shadowrun_6e: shadowrun6e,
 };
 
-export const getTemplate = (system: string): SheetTemplate =>
-  TEMPLATES[system] ?? generic;
+/**
+ * A system's sheet template: built-in, or a published custom system's (customTemplates.ts). A
+ * custom one not loaded yet is fetched now and the generic template stands in until it
+ * arrives; the load fires an event the app redraws on.
+ */
+export const getTemplate = (system: string): SheetTemplate => {
+  const builtIn = TEMPLATES[system];
+  if (builtIn) return builtIn;
+  if (isCustomSystem(system)) {
+    const custom = customTemplate(system);
+    if (custom) return custom;
+    void loadCustomTemplate(system);
+  }
+  return generic;
+};
 
 /** House-rule-gated sheet tabs, per system: tab name → the settings key
  *  that unlocks it. Adding a gated tab for a new system is one entry here —

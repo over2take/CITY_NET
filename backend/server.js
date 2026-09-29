@@ -14,6 +14,8 @@ const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
 const db = require('./db');
+// Published custom game systems, into memory for the running game (systemBuilder/runtime.js).
+require('./systemBuilder/runtime').load(db);
 
 const app = express();
 const server = http.createServer(app);
