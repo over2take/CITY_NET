@@ -113,6 +113,7 @@ const MOUNTS = [
   ['/api', '../routes/admin.js', 'full'],
   ['/api/music', '../routes/music.js', 'io'],
   ['/api/sheets', '../routes/sheets.js', 'io'],
+  ['/api/systems', '../routes/systems.js', 'db'],
 ];
 
 const helpers = { emitUpdate: () => {}, recordAction: () => {} };
@@ -124,7 +125,7 @@ const mountAll = (db) => {
   const routes = [];
   for (const [prefix, file, kind] of MOUNTS) {
     const factory = require_(file);
-    const router = kind === 'full' ? factory(db, io, helpers) : factory(db, io);
+    const router = kind === 'full' ? factory(db, io, helpers) : kind === 'db' ? factory(db) : factory(db, io);
     app.use(prefix, router);
     for (const layer of router.stack) {
       if (!layer.route) continue;

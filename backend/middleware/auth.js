@@ -61,6 +61,15 @@ const authenticatePlayer = (req, res, next) => {
 };
 
 /**
+ * After `authenticate`: the GM's own login only, not a granted editor. For what is the GM's
+ * alone (building game systems).
+ */
+const requireMainAdmin = (req, res, next) => {
+  if (isMainAdmin(req.user)) return next();
+  return res.status(403).json({ error: 'Only the main admin can do that' });
+};
+
+/**
  * Public routes that show the GM more: `req.user` is set only for someone `authenticate`
  * would accept. Anyone else, players included, is treated as anonymous.
  */
@@ -72,6 +81,6 @@ const optionalAuthenticate = (req, res, next) => {
 };
 
 module.exports = {
-  authenticate, authenticatePlayer, optionalAuthenticate, elevatedUsers,
+  authenticate, authenticatePlayer, optionalAuthenticate, requireMainAdmin, elevatedUsers,
   isMainAdmin, isGrantedEditor, canEdit, isPlayer,
 };

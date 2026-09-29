@@ -223,6 +223,17 @@ function makeTestDb() {
         FOREIGN KEY(sheet_id) REFERENCES character_sheets(id) ON DELETE CASCADE
       )`);
 
+      db.run(`CREATE TABLE IF NOT EXISTS custom_systems (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        draft TEXT NOT NULL,
+        published TEXT,
+        version INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        published_at DATETIME
+      )`);
+
       db.run(`CREATE TABLE sqlite_sequence (name TEXT, seq INTEGER)`, () => {
         // ignore error — it may already exist
         resolve(db);
