@@ -28,6 +28,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   with a search box and arrow keys. Choosing a different system now asks first, since it
   changes the game for everyone online.
 
+- **The heart monitor's beat follows how hurt someone is.** Its color always changed as a
+  character was hurt; now its rhythm does too. It stays steady over half health, beats twice as
+  fast at half or less, and turns fast, uneven and weak at a quarter or less, before the
+  flatline. It still shows no numbers, in the HEALTH folder and on the stream overlay alike. With
+  reduced motion turned on in the system settings, the trace holds still but keeps its shape.
+
 ### Security
 
 - **Players can no longer use the GM's tools.** A player's own login worked as a key to the GM's

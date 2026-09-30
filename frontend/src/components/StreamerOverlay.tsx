@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DirectorState, Location } from '../types';
 import { HeartMonitor, PersonSVG, INJURY_ZONES } from './HitPoints';
+import { bandOf } from './healthBands';
 
 interface DiceEvent {
   id: string;
@@ -117,9 +118,6 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
               {isRhombus && (() => {
                 const hpCurrent = selectedLocation.hp_current ?? 0;
                 const hpMax = selectedLocation.hp_max ?? 0;
-                const isDead = hpCurrent <= 0;
-                const hpPct = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
-                const hpColor = isDead ? 'var(--danger)' : hpPct > 0.5 ? 'var(--green)' : hpPct > 0.25 ? 'var(--warning)' : 'var(--danger)';
                 const injuries: Record<string, boolean> = (() => {
                   try { return JSON.parse((selectedLocation as any).injuries || '{}'); } catch { return {}; }
                 })();
@@ -127,7 +125,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                 return (
                   <>
                     <div style={{ borderTop: '1px solid #0a2a0a', paddingTop: '8px' }}>
-                      <HeartMonitor color={hpColor} flatline={isDead} />
+                      <HeartMonitor band={bandOf(hpCurrent, hpMax)} />
                     </div>
                     {hasInjuries && (
                       <div style={{ borderTop: '1px solid #0a2a0a', paddingTop: '8px' }}>

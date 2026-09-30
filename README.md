@@ -558,6 +558,7 @@ CITY_NET/
 │   │   │   ├── PharmaSection.tsx       # What is currently in the bloodstream, drawn in the sheet HEADER rather than a tab: a drug that wears off at the end of a scene and bills System Strain for it is not something to hide behind a tab somebody might not open. Draws nothing at all while a character is on nothing
 │   │   │   ├── XpWindow.tsx            # AWARD_EXPERIENCE — points each rather than a pot to divide, with LEVEL_UP and LEVEL_DOWN for correcting a level on purpose
 │   │   │   ├── HitPoints.tsx           # The HEALTH folder's two bodies: HitPointsPanel changes health (own token, or any for the GM) under a live heart monitor, with injuries and STIM_HEAL (CWN); HealthReviewPanel only watches someone else's - the monitor, a stun bar and the injury map, never a number - with STABILIZE for an ally on a mortal wound
+│   │   │   ├── healthBands.ts          # How hurt, as a band the heart monitor draws: its color and its rhythm (steady over half, twice as fast at half or less, fast, uneven and weakening at a quarter or less, flatline when down), on the same thresholds, for every system and the stream overlay
 │   │   │   ├── BankWindows.tsx         # Player bank UI; the candle chart is nudged by balance changes on a log scale, so a fortune is a tall candle rather than a spike that flattens the rest
 │   │   │   ├── ChatWindow.tsx          # In-game chat
 │   │   │   ├── DiceTray.tsx            # Dice roller; SR6 pool results show a pulsing GLITCH / CRITICAL GLITCH banner; initiative rolls appear with full breakdown; `sidesForKey` picks the 3D shape (custom dice key results by name and carry their side count in `diceSides`)
@@ -631,6 +632,7 @@ CITY_NET/
 │   │   │       ├── DraggableWindow.test.tsx
 │   │   │       ├── BootScreen.test.tsx              # Types out by itself and finishes, skips on SKIP and nothing else, reports lines and clicks
 │   │   │       ├── HitPoints.test.tsx
+│   │   │       ├── healthBands.test.tsx             # The bands' thresholds and colors, each rhythm's beats (the steady one unchanged, beats inside their stretch, weak ones drawn smaller), reduced motion, and the same band in the editing panel, the review panel and the stream
 │   │   │       ├── MapElements.test.tsx
 │   │   │       ├── MeasurementTool.test.tsx
 │   │   │       ├── SignRotation.test.tsx   # LAY_FLAT / STAND_UP presets, per-axis sliders, all three axes reaching the PATCH body
