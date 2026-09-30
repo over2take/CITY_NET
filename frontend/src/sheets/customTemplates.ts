@@ -20,6 +20,14 @@ export interface CustomRenderField {
   unit?: string;
   options?: { value: string; label: string }[];
   source?: SheetLinkSource;
+  /** Who changes it: the owner (the default) or only the GM. */
+  edit?: 'player' | 'gm';
+}
+
+export interface CustomRenderSheet {
+  tabs?: string[];
+  header?: { nameField?: string; subtitleFields?: string[]; hpField?: string; hpMaxField?: string; chips?: { field: string; label: string }[] };
+  sections: { id: string; label: string; layout: SectionLayout; tab?: string; columns?: number; fields: CustomRenderField[] }[];
 }
 
 export interface CustomRender {
@@ -28,11 +36,9 @@ export interface CustomRender {
   words: Record<string, { singular?: string; plural?: string; short?: string }>;
   parts: Record<string, { on: boolean }>;
   derived: string[];
-  sheet: {
-    tabs?: string[];
-    header?: { nameField?: string; subtitleFields?: string[]; hpField?: string; hpMaxField?: string; chips?: { field: string; label: string }[] };
-    sections: { id: string; label: string; layout: SectionLayout; tab?: string; columns?: number; fields: CustomRenderField[] }[];
-  };
+  sheet: CustomRenderSheet;
+  /** NPCs' own layout (null: they use the character sheet) and GENERATE_SHEET's tiers. */
+  npc?: { sheet: CustomRenderSheet | null; tiers: { id: string; label: string }[] };
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -45,11 +51,10 @@ const pending = new Map<string, Promise<SheetTemplate | null>>();
 export const isCustomSystem = (id: string | null | undefined): id is string =>
   typeof id === 'string' && /^sys_[0-9a-f]{16}$/.test(id);
 
-/** A render copy as a template. Derived values read-only; only armor writes through to the token,
+/** One layout as a template. Derived values read-only; only armor writes through to the token,
  *  as on the built-in sheets - HP and cash change on the token and in the bank. */
-export const templateFromRender = (render: CustomRender): SheetTemplate => {
-  const derived = new Set(render.derived || []);
-  const sections: SheetSection[] = (render.sheet?.sections || []).map((s) => ({
+const layoutTemplate = (id: string, name: string, sheet: CustomRenderSheet | undefined, derived: Set<string>): SheetTemplate => {
+  const sections: SheetSection[] = (sheet?.sections || []).map((s) => ({
     id: s.id,
     label: s.label,
     layout: s.layout,
@@ -68,17 +73,33 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
       ...(f.options ? { options: f.options } : {}),
       ...(f.source ? { source: f.source, ...(f.source === 'token_ac' ? { sourceWritable: true } : {}) } : {}),
       ...(derived.has(f.id) ? { derived: true as const } : {}),
+      ...(f.edit === 'gm' ? { gmOnly: true as const } : {}),
     })),
   }));
-  const header = render.sheet?.header;
+  const header = sheet?.header;
   return {
-    id: render.id,
-    name: render.name,
-    tabs: render.sheet?.tabs,
+    id,
+    name,
+    tabs: sheet?.tabs,
     ...(header && header.nameField ? { header: { ...header, nameField: header.nameField } } : { header: { nameField: 'name' } }),
     sections,
   };
 };
+
+/** A render copy as a template, with the NPC layout and tiers when the system has them. */
+export const templateFromRender = (render: CustomRender): SheetTemplate => {
+  const derived = new Set(render.derived || []);
+  const tiers = render.npc?.tiers?.length ? { npcTiers: render.npc.tiers } : {};
+  const npcSheet = render.npc?.sheet;
+  return {
+    ...layoutTemplate(render.id, render.name, render.sheet, derived),
+    ...tiers,
+    ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived), ...tiers } } : {}),
+  };
+};
+
+/** The layout an NPC's sheet is drawn with: the system's NPC layout, or the template itself. */
+export const npcTemplateOf = (template: SheetTemplate): SheetTemplate => template.npcLayout ?? template;
 
 /** A loaded custom template, or undefined. */
 export const customTemplate = (id: string): SheetTemplate | undefined => cache.get(id);

@@ -11,7 +11,9 @@
 
 const { compileSystem } = require('./derived');
 const { effectiveSheet, fieldsOf } = require('./sheet');
+const { npcSheetOf, tiersOf } = require('./npc');
 const templates = require('../sheets/templates');
+const npcTiers = require('../sheets/npcTiers');
 
 /** id -> { name, definition, meta, render } */
 const loaded = new Map();
@@ -20,26 +22,52 @@ const parse = (text) => { try { return JSON.parse(text); } catch { return null; 
 
 /** The server-side meta the built-in templates carry, worked out from a definition. */
 const metaOf = (definition) => {
-  const sheet = effectiveSheet(definition);
-  const fields = fieldsOf(sheet);
+  const fields = fieldsOf(effectiveSheet(definition));
+  // The NPC layout's fields too: the server keeps one set of rules per system, and an NPC's
+  // HP lives on its token just as a player's does (npc.js holds the two layouts to agreeing).
+  const both = [...fields, ...fieldsOf(npcSheetOf(definition))];
   const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [] });
   const linkedFields = {};
   const maxPairs = {};
-  for (const f of fields) {
+  for (const f of both) {
     if (f.source) linkedFields[f.id] = f.source;
     if (f.maxField) maxPairs[f.maxField] = f.id;
   }
   return {
     name: definition.name,
     custom: true,
+    // Only the character sheet's: an NPC's sheet is never shown to players (sheets/npcPrivacy.js).
     publicFields: fields.filter((f) => f.visibility === 'public' && f.sensitivity !== 'combat').map((f) => f.id),
-    combatFields: fields.filter((f) => f.sensitivity === 'combat').map((f) => f.id),
+    combatFields: [...new Set(both.filter((f) => f.sensitivity === 'combat').map((f) => f.id))],
+    // Values the owner sees and only the GM changes (sheet.js EDIT).
+    gmFields: fields.filter((f) => f.edit === 'gm').map((f) => f.id),
     linkedFields,
     maxPairs,
     // Derived values on every save, as the built-in recompute functions do. A published
     // definition compiles (publishing refuses one with problems); should one not, nothing is
     // recomputed rather than a save failing.
     recompute: compiled.ok ? (data) => compiled.system.apply(data) : () => [],
+  };
+};
+
+/**
+ * GENERATE_SHEET's tiers for a system, in the shape sheets/npcTiers.js gives the built-in
+ * ones: the options to offer, and a builder for the sheet values, token HP and defense. The
+ * values are run through the system's derived values, so a generated NPC's sheet is
+ * consistent before anybody edits it. Null when the system defines no tiers.
+ */
+const tiersFor = (definition, recompute) => {
+  const tiers = tiersOf(definition);
+  if (!tiers.length) return null;
+  return {
+    options: tiers.map((t) => ({ id: t.id, label: t.label })),
+    build: (tierId) => {
+      const tier = tiers.find((t) => t.id === tierId) || tiers[0];
+      const data = { ...(tier.values || {}) };
+      recompute(data);
+      const defense = tier.defense ?? null;
+      return { tierId: tier.id, data, hp: tier.hp ?? null, dv: { melee: defense, ranged: defense } };
+    },
   };
 };
 
@@ -51,12 +79,21 @@ const renderOf = (id, definition) => ({
   parts: definition.parts || {},
   derived: (Array.isArray(definition.derived) ? definition.derived : []).map((d) => d.id),
   sheet: effectiveSheet(definition),
+  npc: {
+    // Null when NPCs use the character sheet.
+    sheet: definition.npc && definition.npc.sheet ? definition.npc.sheet : null,
+    tiers: tiersOf(definition).map((t) => ({ id: t.id, label: t.label })),
+  },
 });
 
 const put = (id, publishedText, version) => {
   const definition = parse(publishedText);
   if (!definition) { loaded.delete(id); return; }
-  loaded.set(id, { name: definition.name, version: version || 0, definition, meta: metaOf(definition), render: renderOf(id, definition) });
+  const meta = metaOf(definition);
+  loaded.set(id, {
+    name: definition.name, version: version || 0, definition, meta,
+    render: renderOf(id, definition), tiers: tiersFor(definition, meta.recompute),
+  });
 };
 
 /** Load every published system. cb(err, count). */
@@ -84,6 +121,9 @@ const render = (id) => (loaded.has(id) ? loaded.get(id).render : null);
 const list = () => [...loaded.entries()].map(([id, s]) => ({ id, name: s.name, custom: true, version: s.version }))
   .sort((a, b) => a.name.localeCompare(b.name));
 
-templates.setCustomMeta(meta);
+const tiers = (id) => (loaded.has(id) ? loaded.get(id).tiers : null);
 
-module.exports = { load, refresh, meta, render, list, metaOf, renderOf };
+templates.setCustomMeta(meta);
+npcTiers.setCustomTiers(tiers);
+
+module.exports = { load, refresh, meta, render, list, tiers, metaOf, renderOf };

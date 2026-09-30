@@ -109,6 +109,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
           onFieldsChange={handleFieldsChange}
+          gm={!!adminToken}
           onSectionAction={(id) => { if (id === 'vehicles') onOpenVehicles?.(); }}
           onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
           onOpenLink={onOpenLink}
