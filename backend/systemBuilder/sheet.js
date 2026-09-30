@@ -10,6 +10,8 @@
 // server recomputes it on every save. A system with no sheet yet gets a starter one (the
 // generic layout plus its derived values), so a published system can always be drawn.
 
+const { healthLayout } = require('./core');
+
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
 const LIMITS = { sections: 50, fields: 500, perSection: 100, tabs: 12, label: 60, hint: 300, options: 100 };
@@ -147,22 +149,21 @@ const checkSheet = (sheet, derivedIds, problems) => {
 
 /**
  * The sheet a system is drawn with: its own, or a starter one. The starter is the generic
- * layout (name, concept, description, HP, cash, notes) with the system's derived values in a
- * section of their own, so a system that has not designed its sheet yet still has one.
+ * layout (name, concept, description, health, cash, notes) with the system's derived values in
+ * a section of their own, so a system that has not designed its sheet yet still has one. Its
+ * health is shaped by the system's health model (core.js); with none, it is one HP pool.
  */
 const effectiveSheet = (definition) => {
   if (definition && isPlainObject(definition.sheet)) return definition.sheet;
   const derived = Array.isArray(definition && definition.derived) ? definition.derived.filter((d) => d && typeof d.id === 'string') : [];
+  const health = healthLayout(definition && isPlainObject(definition.core) ? definition.core.health : undefined);
   const sections = [
     { id: 'identity', label: 'IDENTITY', layout: 'list', tab: 'STATS', fields: [
       { id: 'name', label: 'Name', type: 'text', visibility: 'public' },
       { id: 'concept', label: 'Concept', type: 'text' },
       { id: 'description', label: 'Description', type: 'textarea', visibility: 'public' },
     ] },
-    { id: 'health', label: 'HEALTH', layout: 'grid', tab: 'STATS', columns: 2, fields: [
-      { id: 'hp', label: 'HP', type: 'number', source: 'token_hp', maxField: 'hp_max' },
-      { id: 'hp_max', label: 'HP MAX', type: 'number', source: 'token_hp_max' },
-    ] },
+    ...health.sections,
   ];
   if (derived.length) {
     sections.push({ id: 'derived', label: 'DERIVED', layout: 'grid', tab: 'STATS', columns: 4,
@@ -173,7 +174,7 @@ const effectiveSheet = (definition) => {
     { id: 'money', label: 'MONEY', layout: 'list', tab: 'GEAR', fields: [{ id: 'cash', label: 'Cash', type: 'number', source: 'bank_balance' }] },
     { id: 'notes', label: 'NOTES', layout: 'notes', tab: 'NOTES', fields: [{ id: 'notes', label: 'Notes', type: 'textarea' }] },
   );
-  return { tabs: ['STATS', 'GEAR', 'NOTES'], header: { nameField: 'name', subtitleFields: ['concept'], hpField: 'hp', hpMaxField: 'hp_max' }, sections };
+  return { tabs: ['STATS', 'GEAR', 'NOTES'], header: { nameField: 'name', subtitleFields: ['concept'], ...health.header }, sections };
 };
 
 /** Every field on a sheet, in order. */
