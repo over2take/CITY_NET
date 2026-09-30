@@ -15,6 +15,17 @@ export const bandOf = (current: number, max: number): HealthBand => {
   return pct > 0.5 ? 'steady' : pct > 0.25 ? 'fast' : 'critical';
 };
 
+/**
+ * Harm levels have no pool: the band is the worst level taken, in thirds of the levels.
+ * With three levels, lesser is steady, moderate fast, severe critical; out is the flatline.
+ */
+export const harmBand = (worst: number, levels: number, out: boolean): HealthBand => {
+  if (out) return 'down';
+  if (worst < 0 || levels <= 0) return 'steady';
+  const pct = (worst + 1) / levels;
+  return pct <= 1 / 3 ? 'steady' : pct <= 2 / 3 ? 'fast' : 'critical';
+};
+
 export const BAND_COLOR: Record<HealthBand, string> = {
   steady: 'var(--green)',
   fast: 'var(--warning)',

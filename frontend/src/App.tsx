@@ -2502,6 +2502,7 @@ function App() {
                       token={token}
                       refreshLocations={fetchLocations}
                       gameSystem={gameSystem}
+                      socket={socketRef.current}
                       onCreate={selectedLocation.id === -1 && selectedLocation.owner
                         ? () => createPlayerTokenRow({ fetch: (url, init) => fetch(url, init), authToken: token, refreshLocations: fetchLocations }, selectedLocation.owner as string)
                         : undefined}

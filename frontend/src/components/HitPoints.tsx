@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import type { Location } from '../types';
 import { bandOf, BAND_COLOR, BAND_WORDS, RHYTHM, beatPoints, type HealthBand } from './healthBands';
+import { useHealthView } from '../hooks/useHealthView';
+import { isCustomSystem } from '../sheets';
+import { ModelHealthEditor, ModelHealthDescription, NoHealthNotice, monitorBandFor, type SendHealth } from './HealthModelPanels';
 // Inline SVGs so we can tint them with CSS `color` (currentColor)
 export const PersonSVG = ({ color = 'currentColor', style }: { color?: string; style?: React.CSSProperties }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill={color} style={style}>
@@ -145,9 +148,11 @@ interface HitPointsPanelProps {
   gameSystem?: string;
   /** With no token on the map yet, the panel offers to make one - health needs a row. */
   onCreate?: () => Promise<void> | void;
+  /** For a custom system's health model: the detail comes over the socket (useHealthView). */
+  socket?: any;
 }
 
-export function HitPointsPanel({ target, token, refreshLocations, gameSystem, onCreate }: HitPointsPanelProps) {
+export function HitPointsPanel({ target, token, refreshLocations, gameSystem, onCreate, socket }: HitPointsPanelProps) {
   const [actionAmount, setActionAmount] = useState(0);
   const [tempAmount, setTempAmount] = useState(0);
   const [maxAmount, setMaxAmount] = useState(0);
@@ -155,6 +160,9 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
   const [injuries, setInjuries] = useState<Injuries>({});
   const [healMsg, setHealMsg] = useState<string | null>(null);
   const rawInjuries = (target as any)?.injuries;
+  // A custom system's health model, as the server lets this viewer see it. Null for the
+  // built-in systems, which keep the panel below exactly as it was.
+  const view = useHealthView(socket, target?.id, isCustomSystem(gameSystem));
 
   useEffect(() => { setInjuries(parseInjuries(rawInjuries)); }, [target?.id, rawInjuries]);
 
@@ -199,6 +207,60 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
     refreshLocations();
   };
 
+  /** A custom model's action, with what the server said back for the panel to report. */
+  const sendHealth: SendHealth = async (action, extra = {}) => {
+    const res = await fetch(`/api/locations/${target.id}/health`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ action, ...extra }),
+    });
+    const body = await res.json().catch(() => null);
+    refreshLocations();
+    return { ok: res.ok, body };
+  };
+
+  const injuryMap = injuriesOpen && (
+    <InjuryMap
+      injuries={injuries}
+      onToggle={(key) => saveInjuries({ ...injuries, [key]: !injuries[key] })}
+      onClear={() => saveInjuries({})}
+    />
+  );
+  const tempRow = (
+    <div>
+      <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TEMP_HP</label>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <input
+          type="number" placeholder="0" max="100" aria-label="Temp HP"
+          value={tempAmount || ''}
+          onChange={e => { let val = parseInt(e.target.value) || 0; if (val > 100) val = 100; setTempAmount(val); }}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <button className="upload-btn" style={{ width: 'auto', flexShrink: 0, margin: 0, padding: '0 15px' }} onClick={() => updateHealth('set_temp', tempAmount)}>SET</button>
+      </div>
+    </div>
+  );
+
+  // A custom model other than one pool: its own editor, as in the approved mockup. The heart
+  // monitor, the injury map and (where the model has a pool) TEMP_HP stay as everywhere else.
+  if (view && view.model !== 'pool') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
+        {view.model === 'none'
+          ? <NoHealthNotice editing />
+          : <HeartMonitor band={monitorBandFor(view, target)} />}
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <InjuryToggle open={injuriesOpen} onClick={() => setInjuriesOpen((o) => !o)} size={18} />
+        </div>
+        {injuryMap}
+        <ModelHealthEditor key={`${target.id}:${view.model}`} view={view} target={target} send={sendHealth} gm={token !== ''} />
+        {(view.model === 'tracks' || view.model === 'locations') && (
+          <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>{tempRow}</div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
       <HeartMonitor band={bandOf(target.hp_current ?? 0, target.hp_max ?? 0)} />
@@ -209,18 +271,16 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
           </div>
           <InjuryToggle open={injuriesOpen} onClick={() => setInjuriesOpen((o) => !o)} size={18} />
         </div>
+        {/* A custom one-pool system's own word for health. */}
+        {view && view.label && (
+          <div style={{ fontSize: '0.6rem', letterSpacing: '2px', opacity: 0.75 }}>{view.label}</div>
+        )}
         {(target.hp_temp ?? 0) > 0 && (
           <div style={{ color: 'var(--cyan)', fontSize: '0.85rem', textShadow: '0 0 6px var(--cyan)' }}>+ {target.hp_temp} TEMP</div>
         )}
       </div>
 
-      {injuriesOpen && (
-        <InjuryMap
-          injuries={injuries}
-          onToggle={(key) => saveInjuries({ ...injuries, [key]: !injuries[key] })}
-          onClear={() => saveInjuries({})}
-        />
-      )}
+      {injuryMap}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
         <input type="number" placeholder="0" aria-label="Amount" value={actionAmount || ''} onChange={e => setActionAmount(parseInt(e.target.value) || 0)} style={{ width: '100%', boxSizing: 'border-box' }} />
@@ -255,18 +315,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
             </div>
           </div>
         )}
-        <div>
-          <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TEMP_HP</label>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <input
-              type="number" placeholder="0" max="100" aria-label="Temp HP"
-              value={tempAmount || ''}
-              onChange={e => { let val = parseInt(e.target.value) || 0; if (val > 100) val = 100; setTempAmount(val); }}
-              style={{ flex: 1, minWidth: 0 }}
-            />
-            <button className="upload-btn" style={{ width: 'auto', flexShrink: 0, margin: 0, padding: '0 15px' }} onClick={() => updateHealth('set_temp', tempAmount)}>SET</button>
-          </div>
-        </div>
+        {tempRow}
       </div>
     </div>
   );
@@ -327,6 +376,8 @@ interface HealthReviewPanelProps {
 export function HealthReviewPanel({ location, socket, gameSystem, onRolled }: HealthReviewPanelProps) {
   const [injuriesOpen, setInjuriesOpen] = useState(false);
   const [stun, setStun] = useState<{ stun_current: number; stun_monitor: number } | null>(null);
+  // A custom system's health model, described: never a number or a note.
+  const view = useHealthView(socket, location.id, isCustomSystem(gameSystem));
 
   // SR6: second damage track - Stun lives on the sheet backing this token.
   // Refetches on sheet/token updates so damage shows live.
@@ -366,7 +417,12 @@ export function HealthReviewPanel({ location, socket, gameSystem, onRolled }: He
       </div>
 
       {/* Heart monitor — flatlines at 0 HP */}
-      <HeartMonitor band={bandOf(hpCurrent, location.hp_max ?? 0)} />
+      {view?.model === 'none'
+        ? <NoHealthNotice editing={false} />
+        : <HeartMonitor band={view ? monitorBandFor(view, location) : bandOf(hpCurrent, location.hp_max ?? 0)} />}
+
+      {/* A custom model's own description: a second track, light and heavy, the worst harm... */}
+      {view && <ModelHealthDescription view={view} target={location} />}
 
       {/* SR6 Stun track (Physical is the token HP above) */}
       {stun && (() => {

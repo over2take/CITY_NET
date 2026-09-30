@@ -179,8 +179,10 @@ const applyHealthAction = (health, token, sheet, action) => {
   // A second track's maximum lives on the sheet; every other maximum is the token's own.
   if (action.kind === 'set_max' && health.model !== 'tracks') return fail('This maximum is set on the token');
   const amount = whole(action.amount);
-  // Harm is a note, not a number; every other model needs an amount.
-  if (health.model !== 'harm' && amount <= 0) return fail('An amount above 0');
+  // Harm is a note, not a number; every other model needs an amount. Except clearing a hit
+  // location's note, which is a heal of nothing to the pool.
+  const clearingLocation = health.model === 'locations' && action.kind === 'heal' && action.location !== undefined;
+  if (health.model !== 'harm' && amount <= 0 && !clearingLocation) return fail('An amount above 0');
   const a = { ...action, amount };
   const t = { current: num(token && token.current), max: num(token && token.max), temp: whole(token && token.temp) };
   const s = sheet && typeof sheet === 'object' ? sheet : {};

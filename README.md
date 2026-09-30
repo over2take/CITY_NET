@@ -560,7 +560,8 @@ CITY_NET/
 │   │   │   ├── PharmaSection.tsx       # What is currently in the bloodstream, drawn in the sheet HEADER rather than a tab: a drug that wears off at the end of a scene and bills System Strain for it is not something to hide behind a tab somebody might not open. Draws nothing at all while a character is on nothing
 │   │   │   ├── XpWindow.tsx            # AWARD_EXPERIENCE — points each rather than a pot to divide, with LEVEL_UP and LEVEL_DOWN for correcting a level on purpose
 │   │   │   ├── HitPoints.tsx           # The HEALTH folder's two bodies: HitPointsPanel changes health (own token, or any for the GM) under a live heart monitor, with injuries and STIM_HEAL (CWN); HealthReviewPanel only watches someone else's - the monitor, a stun bar and the injury map, never a number - with STABILIZE for an ally on a mortal wound
-│   │   │   ├── healthBands.ts          # How hurt, as a band the heart monitor draws: its color and its rhythm (steady over half, twice as fast at half or less, fast, uneven and weakening at a quarter or less, flatline when down), on the same thresholds, for every system and the stream overlay
+│   │   │   ├── healthBands.ts          # How hurt, as a band the heart monitor draws: its color and its rhythm (steady over half, twice as fast at half or less, fast, uneven and weakening at a quarter or less, flatline when down), on the same thresholds, for every system and the stream overlay; harm levels read their worst level instead
+│   │   │   ├── HealthModelPanels.tsx   # The HEALTH folder under a custom system's health model (not one pool): each model's editor (track, damage type, harm level and hit location pickers, harm notes, wound pips and penalty, the GM's SET rows) saying what happened, and what other players see instead of numbers; HitPoints.tsx keeps the monitor, injury map and TEMP_HP around it
 │   │   │   ├── BankWindows.tsx         # Player bank UI; the candle chart is nudged by balance changes on a log scale, so a fortune is a tall candle rather than a spike that flattens the rest
 │   │   │   ├── ChatWindow.tsx          # In-game chat
 │   │   │   ├── DiceTray.tsx            # Dice roller; SR6 pool results show a pulsing GLITCH / CRITICAL GLITCH banner; initiative rolls appear with full breakdown; `sidesForKey` picks the 3D shape (custom dice key results by name and carry their side count in `diceSides`)
@@ -634,6 +635,7 @@ CITY_NET/
 │   │   │       ├── DraggableWindow.test.tsx
 │   │   │       ├── BootScreen.test.tsx              # Types out by itself and finishes, skips on SKIP and nothing else, reports lines and clicks
 │   │   │       ├── HitPoints.test.tsx
+│   │   │       ├── HealthModelPanels.test.tsx       # Each model's editor sending what the server expects and reporting it (spills, boxes turning heavier, harm moving up, out, refusals), the GM-only SET rows, other players seeing no numbers or notes, and the built-in systems' folder untouched and never asking
 │   │   │       ├── healthBands.test.tsx             # The bands' thresholds and colors, each rhythm's beats (the steady one unchanged, beats inside their stretch, weak ones drawn smaller), reduced motion, and the same band in the editing panel, the review panel and the stream
 │   │   │       ├── MapElements.test.tsx
 │   │   │       ├── MeasurementTool.test.tsx
@@ -698,6 +700,7 @@ CITY_NET/
 │   │   │   ├── useApi.ts           # Fetch helpers
 │   │   │   ├── useMapExport.ts     # PNG/WebM city export — one cached off-screen renderer for the session, shared ortho camera, GPU size clamp, per-frame render loop for video, MediaRecorder with codec fallback; never touches the live camera
 │   │   │   ├── useCustomTemplates.ts # Redraws when a custom system's sheet template arrives, and fetches the running system's ahead of need
+│   │   │   ├── useHealthView.ts    # A token's health under a custom model, as the server lets this viewer see it: asked over the socket (requestHealthView), again on every sheet or map change
 │   │   │   ├── useMapData.ts       # Location/district/road/overpass/water body/sign data fetching. Sends the GM's sign-in with the location list, held in a ref so signing in does not give fetchLocations a new identity
 │   │   │   ├── useCustomDice.ts    # Custom dice state — fetches GM dice and the active system's built-ins, merges them (built-ins first, flagged `locked`), and applies `customDiceUpdated` broadcasts
 │   │   │   ├── useEnemyVehicles.ts # The GM's enemy vehicles, and the tokens on the map level that could fill their seats. Asked for rather than pushed, and refused to anyone but the GM — so a player's client never holds enemy pools or armour at all, which is what keeps "what may players see" from being a question the feature has to answer

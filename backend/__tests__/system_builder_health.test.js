@@ -143,6 +143,13 @@ describe('hit locations', () => {
     expect(applyHealthAction(LOCATIONS, token(7, 10), {}, damage(1)).sheetPatch).toEqual({});
   });
 
+  it('clears a location\'s note with a heal of nothing, leaving the pool, but wants an amount otherwise', () => {
+    expect(applyHealthAction(LOCATIONS, token(7, 10), { head: 'Graze' }, heal(0, { location: 'head' })))
+      .toMatchObject({ ok: true, token: token(7, 10), sheetPatch: { head: '' } });
+    expect(applyHealthAction(LOCATIONS, token(7, 10), {}, heal(0))).toEqual({ ok: false, error: 'An amount above 0' });
+    expect(applyHealthAction(LOCATIONS, token(7, 10), {}, damage(0, { location: 'head' }))).toEqual({ ok: false, error: 'An amount above 0' });
+  });
+
   it('clears the location it heals, and knows its own locations', () => {
     expect(applyHealthAction(LOCATIONS, token(7, 10), { head: 'Graze' }, heal(2, { location: 'head' })))
       .toMatchObject({ token: token(9, 10), sheetPatch: { head: '' } });
