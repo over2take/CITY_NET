@@ -10,6 +10,7 @@
 //     format: 1,
 //     name: 'Vault Knights',                        // what the system picker shows
 //     description: '...',                            // optional
+//     author: '...', license: '...',                 // optional, free text; a shared file's cover
 //     words:   { hp: { singular: 'WOUND', plural: 'WOUNDS', short: 'W' }, ... },  // Layer 1
 //     parts:   { vehicles: { on: false }, ... },                               // Layer 2
 //     lookups: { ... }, derived: [ ... ],            // Layer 3, the Phase 1 engine's format
@@ -39,6 +40,9 @@ const LIMITS = {
   bytes: 512 * 1024,
   name: 80,
   description: 2000,
+  /** Free text: there are no accounts across servers, so an author is whatever they type. */
+  author: 80,
+  license: 200,
   /** One glossary word. */
   word: 40,
 };
@@ -70,7 +74,7 @@ const PARTS = [
   'death', 'luck', 'xp', 'npc_tiers', 'sheet_import',
 ];
 
-const SECTIONS = new Set(['format', 'name', 'description', 'words', 'parts', 'lookups', 'derived', 'sheet', 'npc', 'core']);
+const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'lookups', 'derived', 'sheet', 'npc', 'core']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -147,6 +151,8 @@ const checkDefinition = (definition) => {
   }
   checkText(definition.name, 'name', LIMITS.name, problems, { required: true });
   checkText(definition.description, 'description', LIMITS.description, problems);
+  checkText(definition.author, 'author', LIMITS.author, problems);
+  checkText(definition.license, 'license', LIMITS.license, problems);
   checkWords(definition.words, problems);
   checkParts(definition.parts, problems);
 

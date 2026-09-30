@@ -255,7 +255,10 @@ function makeTestDb() {
         version INTEGER NOT NULL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        published_at DATETIME
+        published_at DATETIME,
+        origin TEXT,
+        source_hash TEXT,
+        deleted_at DATETIME
       )`);
 
       db.run(`CREATE TABLE sqlite_sequence (name TEXT, seq INTEGER)`, () => {

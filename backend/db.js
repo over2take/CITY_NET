@@ -501,7 +501,7 @@ db.serialize(() => {
   db.run(`ALTER TABLE initiative_scene ADD COLUMN sides TEXT NOT NULL DEFAULT '[]'`, () => {});
 
   // Game systems a GM built: a draft the builder edits and the published copy a game runs.
-  // See systemBuilder/store.js. Nothing in the running game reads it yet.
+  // See systemBuilder/store.js; published ones are loaded into the game by systemBuilder/runtime.js.
   db.run(`CREATE TABLE IF NOT EXISTS custom_systems (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -512,6 +512,15 @@ db.serialize(() => {
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     published_at DATETIME
   )`);
+  // Sharing systems as files (systemBuilder/citysys.js). `origin` is who the system is across
+  // servers, kept by every copy installed from its file; `source_hash` is what was installed,
+  // so an update can tell a copy edited since; `deleted_at` hides a deleted system while
+  // keeping it, so reinstalling its file brings it back with every character played in it.
+  db.run(`ALTER TABLE custom_systems ADD COLUMN origin TEXT`, () => {});
+  db.run(`ALTER TABLE custom_systems ADD COLUMN source_hash TEXT`, () => {});
+  db.run(`ALTER TABLE custom_systems ADD COLUMN deleted_at DATETIME`, () => {});
+  // A system made before files existed is its own origin.
+  db.run(`UPDATE custom_systems SET origin = id WHERE origin IS NULL`, () => {});
 
   // Migration: CP:R's name field was stored as 'handle'; it is now 'name'
   // (uniform across systems — the sheet is the source of truth for player
