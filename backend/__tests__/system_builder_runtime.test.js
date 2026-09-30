@@ -150,7 +150,7 @@ describe('a published system, in the running game', () => {
 
     await publish();
     expect(templates.isValidSystem(id)).toBe(true);
-    expect((await request(app).get('/api/sheets/system')).body.systems).toContainEqual({ id, name: 'Vault Knights', custom: true });
+    expect((await request(app).get('/api/sheets/system')).body.systems).toContainEqual({ id, name: 'Vault Knights', custom: true, version: 1 });
   });
 
   it('answers the same questions the built-in systems do', async () => {

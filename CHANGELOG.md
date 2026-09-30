@@ -23,6 +23,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   start after updating, every token's current values are saved for each system it could be
   shown in, so switching looks exactly as it does today for anyone with a character there.
 
+- **The game system picker is a searchable list.** The row of system buttons in the admin
+  panel's GAME tab is now one dropdown: the built-in systems first, then any the GM has made,
+  with a search box and arrow keys. Choosing a different system now asks first, since it
+  changes the game for everyone online.
+
 ### Security
 
 - **Players can no longer use the GM's tools.** A player's own login worked as a key to the GM's

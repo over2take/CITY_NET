@@ -546,6 +546,8 @@ CITY_NET/
 │   │   │   └── useAmbientHum.ts        # The ambient hum as one sound for the session: its first start eases in (slowly after the boot, quickly on a refresh); the volume slider and mute adjust it in place. Only a real 'playing' counts as started, so a start the browser holds back is asked again on the next key or press
 │   │   ├── components/
 │   │   │   ├── AdminPanel.tsx          # GM dashboard — CITY / EXPORT / GAME / PLAYERS tabs; CITY_GENERATOR delegates to cityGen/ and exposes LAYOUT, DRAG_RECT/DRAW_AREA bounds, OVERPASS_DENSITY, WATER, PARK_PONDS, an optional SEED and REGENERATE; CUSTOM type integrates into NEXT_STYLE cycle using cross-map custom_structure_library; data-driven HouseRulesPanel for CP:R, CWN, and SR6; SR6 Edge replenishment (reset all / give 1 to player)
+│   │   │   ├── SystemPicker.tsx        # GAME tab's system picker: a searchable dropdown, BUILT-IN then YOUR SYSTEMS, portalled into the theme, asking before it switches the game for everyone
+│   │   │   ├── systemPickerRules.ts    # The picker's rules on their own: grouping and order, search, arrow-key movement, what the button says
 │   │   │   ├── InventorySection.tsx    # The inventory table, on every system. Its own file because SheetRenderer is long enough, and generic: which rows carry an extra button, and what pressing it does, is supplied from outside - so a drug offers CONSUME and a skillplug offers LOAD without either knowing about the other
 │   │   │   ├── PharmaSection.tsx       # What is currently in the bloodstream, drawn in the sheet HEADER rather than a tab: a drug that wears off at the end of a scene and bills System Strain for it is not something to hide behind a tab somebody might not open. Draws nothing at all while a character is on nothing
 │   │   │   ├── XpWindow.tsx            # AWARD_EXPERIENCE — points each rather than a pot to divide, with LEVEL_UP and LEVEL_DOWN for correcting a level on purpose
@@ -608,6 +610,8 @@ CITY_NET/
 │   │   │   ├── UpdateModal.tsx          # Draggable update notification modal (shown on admin login when update available; Update Now / Remind Me Later / Skip Version; docker-aware)
 │   │   │   └── __tests__/              # Component unit tests (Vitest + Testing Library)
 │   │   │       ├── AdminPanel.test.tsx
+│   │   │       ├── SystemPicker.test.tsx            # The game-system dropdown: search, keys, the themed container, asking before a switch, nothing asked about the running system, and a refused switch said so
+│   │   │       ├── systemPickerRules.test.ts        # Built-ins in their fixed order then custom A to Z, empty groups left out, every-word search, wrapping arrow keys, the version tag
 │   │   │       ├── AttackAnimations.test.tsx
 │   │   │       ├── BankWindows.test.tsx
 │   │   │       ├── shopCart.test.ts                 # Cart lines and counts, totals both ways, sells grouped for the server, and the carry projection

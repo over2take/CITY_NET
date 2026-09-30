@@ -1457,3 +1457,22 @@ button:disabled, .utility-btn:disabled, .upload-btn:disabled {
 .crt-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
 .crt-scroll::-webkit-scrollbar-track { background: var(--black); }
 .crt-scroll::-webkit-scrollbar-thumb { background: var(--dark-green); border: 1px solid var(--green); }
+
+/* The game-system picker's list (components/SystemPicker.tsx). It scrolls itself inside a
+   portalled box, so it needs the themed scrollbar of its own - a nested scroller otherwise
+   draws the platform's wide default. */
+.system-picker-list {
+  max-height: 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dark-green) var(--black);
+  padding-bottom: 4px;
+}
+.system-picker-list::-webkit-scrollbar { width: 6px; }
+.system-picker-list::-webkit-scrollbar-track { background: var(--black); }
+.system-picker-list::-webkit-scrollbar-thumb {
+  background: var(--dark-green);
+  border: 1px solid var(--green);
+  border-radius: 3px;
+}

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BUILDING_TYPES, shopsAvailable, isShop, typeLabel } from '../data/buildingTypes';
 import { EmptyShopSteps } from './EmptyShopSteps';
+import { SystemPicker } from './SystemPicker';
+import type { PickerSystem } from './systemPickerRules';
 import { BuildingExtrasEditor, type BuildingExtrasHandle } from './BuildingExtrasEditor';
 import { OVERDRAFT_RULE, BUYBACK_SETTING, DEFAULT_BUYBACK_PCT } from '../data/shopRules';
 import { xpAvailable } from './XpWindow';
@@ -2287,7 +2289,7 @@ const SR6_HOUSE_RULES: HouseRuleDef[] = [
 function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: string; onOpenNpcLibrary?: () => void; activeUsers?: any[] }) {
   const [open, setOpen] = useState(false);
   const [system, setSystem] = useState<string>('generic');
-  const [systems, setSystems] = useState<{ id: string; name: string }[]>([]);
+  const [systems, setSystems] = useState<PickerSystem[]>([]);
   const [luckResetMsg, setLuckResetMsg] = useState<string | null>(null);
   const [edgeGrantTarget, setEdgeGrantTarget] = useState<string>('');
 
@@ -2300,12 +2302,15 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: str
 
   useEffect(() => { if (open) refresh(); }, [open]);
 
-  const selectSystem = (id: string) => {
-    fetch('/api/sheets/system', {
+  /** Switch the game. The picker has already asked; this says whether the server agreed. */
+  const selectSystem = async (id: string): Promise<boolean> => {
+    const r = await fetch('/api/sheets/system', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ system: id }),
-    }).then(r => { if (r.ok) setSystem(id); });
+    });
+    if (r.ok) setSystem(id);
+    return r.ok;
   };
 
   return (
@@ -2316,20 +2321,9 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: str
       {open && (
         <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <label style={{ fontSize: '0.7rem' }}>GAME SYSTEM</label>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {systems.map(s => (
-              <button
-                key={s.id}
-                className={`utility-btn ${system === s.id ? 'active' : ''}`}
-                style={{ padding: '4px 10px', fontSize: '0.65rem' }}
-                onClick={() => selectSystem(s.id)}
-              >
-                {s.name.toUpperCase()}
-              </button>
-            ))}
-          </div>
+          <SystemPicker systems={systems} current={system} onSwitch={selectSystem} />
           <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
-            Player sheets for the current system are kept and restored if you switch back.
+            Each system keeps its own characters, banks and token health; switching back restores them.
           </p>
           <HouseRulesPanel token={token} defs={[
             ...GLOBAL_HOUSE_RULES,

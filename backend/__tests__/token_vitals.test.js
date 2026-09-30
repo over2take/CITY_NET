@@ -231,8 +231,19 @@ describe('the real startup path', () => {
         // First open: a 1.14.4-era database is made, with a token carrying health.
         const first = require(${JSON.stringify(require_.resolve('../db.js'))});
         // Its own startup work first (the one-time moves run after the tables exist), so
-        // nothing of it is still running when this connection closes.
-        require(${JSON.stringify(require_.resolve('../tokens/vitals.js'))}).whenReady().then(() => {
+        // nothing of it is still running when this connection closes. That includes the admin
+        // seed: it waits on a bcrypt hash, and on a slow runner its INSERT landed after close()
+        // and killed the process with "Database is closed".
+        const adminSeeded = () => new Promise((resolve, reject) => {
+          const started = Date.now();
+          const poll = () => first.get('SELECT COUNT(*) AS n FROM admin', (err, row) => {
+            if (!err && row && row.n > 0) return resolve();
+            if (Date.now() - started > 30000) return reject(new Error('admin was never seeded'));
+            setTimeout(poll, 20);
+          });
+          poll();
+        });
+        require(${JSON.stringify(require_.resolve('../tokens/vitals.js'))}).whenReady().then(adminSeeded).then(() => {
         first.serialize(() => {
           first.run("DELETE FROM global_settings WHERE key = 'migration_token_vitals'");
           first.run("INSERT OR REPLACE INTO global_settings (key, value) VALUES ('game_system', '${CWN}')");

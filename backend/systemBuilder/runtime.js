@@ -53,35 +53,35 @@ const renderOf = (id, definition) => ({
   sheet: effectiveSheet(definition),
 });
 
-const put = (id, publishedText) => {
+const put = (id, publishedText, version) => {
   const definition = parse(publishedText);
   if (!definition) { loaded.delete(id); return; }
-  loaded.set(id, { name: definition.name, definition, meta: metaOf(definition), render: renderOf(id, definition) });
+  loaded.set(id, { name: definition.name, version: version || 0, definition, meta: metaOf(definition), render: renderOf(id, definition) });
 };
 
 /** Load every published system. cb(err, count). */
 const load = (db, cb = () => {}) => {
-  db.all('SELECT id, published FROM custom_systems WHERE published IS NOT NULL', [], (err, rows) => {
+  db.all('SELECT id, published, version FROM custom_systems WHERE published IS NOT NULL', [], (err, rows) => {
     if (err) { console.error('[systems] Could not load custom systems:', err.message); return cb(err); }
     loaded.clear();
-    for (const r of rows) put(r.id, r.published);
+    for (const r of rows) put(r.id, r.published, r.version);
     cb(null, loaded.size);
   });
 };
 
 /** Reload one system after it is published or deleted. cb(err). */
 const refresh = (db, id, cb = () => {}) => {
-  db.get('SELECT published FROM custom_systems WHERE id = ?', [id], (err, row) => {
+  db.get('SELECT published, version FROM custom_systems WHERE id = ?', [id], (err, row) => {
     if (err) return cb(err);
-    if (row && row.published) put(id, row.published); else loaded.delete(id);
+    if (row && row.published) put(id, row.published, row.version); else loaded.delete(id);
     cb(null);
   });
 };
 
 const meta = (id) => (loaded.has(id) ? loaded.get(id).meta : null);
 const render = (id) => (loaded.has(id) ? loaded.get(id).render : null);
-/** Every published system, for the picker. */
-const list = () => [...loaded.entries()].map(([id, s]) => ({ id, name: s.name, custom: true }))
+/** Every published system, for the picker, with the version that is running. */
+const list = () => [...loaded.entries()].map(([id, s]) => ({ id, name: s.name, custom: true, version: s.version }))
   .sort((a, b) => a.name.localeCompare(b.name));
 
 templates.setCustomMeta(meta);
