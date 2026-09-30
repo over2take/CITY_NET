@@ -4,7 +4,9 @@ const path = require('path');
 const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 const identity = require('../sheets/identity');
 const { mutateSheet, patchSheet } = require('../sheets/mutate');
-const { DEFAULT_SYSTEM } = require('../sheets/templates');
+const { DEFAULT_SYSTEM, applyDerived } = require('../sheets/templates');
+const customSystems = require('../systemBuilder/runtime');
+const { applyHealthAction } = require('../systemBuilder/health');
 const { BUILDING_TYPES, isValidType } = require('../buildingTypes');
 const { readPct } = require('../shops/buyback');
 const sheetSlots = require('../shops/sheetSlots');
@@ -715,8 +717,82 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             }
           );
         });
+      } else if (action === 'damage' || action === 'heal') {
+        // A custom system whose health is not one pool takes damage by its own model
+        // (systemBuilder/health.js). Everything else, the built-in systems included, goes
+        // through runHealth exactly as before.
+        db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
+          const system = !gErr && gRow ? gRow.value : null;
+          const health = system ? customSystems.health(system) : null;
+          if (!health || health.model === 'pool') return runHealth(action);
+          runModelHealth(system, health);
+        });
       } else {
         runHealth(action);
+      }
+
+      /**
+       * DAMAGE or HEAL under a custom health model. The detail lives on the sheet behind the
+       * token (a second track, marked boxes, harm notes), so the rule runs inside that sheet's
+       * write queue: it reads the sheet as it is at write time, and a player typing into it
+       * at that moment cannot lose their edit or have the damage worked out from stale marks.
+       */
+      function runModelHealth(system, health) {
+        const act = {
+          kind: action, amount,
+          track: req.body.track, type: req.body.type, level: req.body.level,
+          slot: req.body.slot, note: req.body.note, location: req.body.location,
+        };
+        const token = { current: row.hp_current, max: row.hp_max, temp: row.hp_temp };
+        const findSheet = (cb) => (row.shape === 'rhombus' && row.owner
+          ? db.get(`SELECT id, username, is_npc FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+            [row.owner, system], (e, s) => cb(e ? null : s || null))
+          : db.get(`SELECT cs.id, cs.username, cs.is_npc FROM npc_sheet_links l
+               JOIN character_sheets cs ON cs.id = l.sheet_id WHERE l.location_id = ? AND cs.system = ?`,
+            [id, system], (e, s) => cb(e ? null : s || null)));
+
+        const writeToken = (result) => {
+          const t = result.token;
+          const [sql, params] = row.shape === 'rhombus' && row.owner
+            ? ['UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = "rhombus" AND owner = ?', [t.current, t.max, t.temp, row.owner]]
+            : ['UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE id = ?', [t.current, t.max, t.temp, id]];
+          db.run(sql, params, (err2) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            // As runHealth: the map redraws, and a player's open sheet re-reads. An NPC's sheet
+            // window re-reads on the map update.
+            emitUpdate();
+            if (row.shape === 'rhombus' && row.owner) io.emit('sheetUpdated', { username: row.owner });
+            res.json({
+              id, hp_current: t.current, hp_max: t.max, hp_temp: t.temp, out: result.out,
+              ...(result.overflow ? { overflow: result.overflow } : {}),
+              ...(result.penalty !== undefined ? { penalty: result.penalty } : {}),
+            });
+          });
+        };
+
+        findSheet((sheet) => {
+          if (!sheet) {
+            const result = applyHealthAction(health, token, {}, act);
+            if (!result.ok) return res.status(400).json({ error: result.error });
+            if (Object.keys(result.sheetPatch).length) {
+              return res.status(409).json({ error: 'This token has no sheet to keep that on. Give it one first.' });
+            }
+            return writeToken(result);
+          }
+          let result = null;
+          mutateSheet(db, sheet.id, (data) => {
+            result = applyHealthAction(health, token, data, act);
+            if (!result.ok || !Object.keys(result.sheetPatch).length) return undefined;
+            const next = { ...data, ...result.sheetPatch };
+            applyDerived(system, next);
+            return next;
+          }, (err3) => {
+            if (err3) return res.status(500).json({ error: err3.message });
+            if (!result) return res.status(500).json({ error: 'Could not read the sheet' });
+            if (!result.ok) return res.status(400).json({ error: result.error });
+            writeToken(result);
+          });
+        });
       }
     });
   });
