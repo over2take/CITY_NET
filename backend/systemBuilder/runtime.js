@@ -123,7 +123,14 @@ const list = () => [...loaded.entries()].map(([id, s]) => ({ id, name: s.name, c
 
 const tiers = (id) => (loaded.has(id) ? loaded.get(id).tiers : null);
 
+/** A published system's health model (its core.health), or null: built-in systems have none here. */
+const health = (id) => {
+  const definition = loaded.has(id) ? loaded.get(id).definition : null;
+  const core = definition && definition.core && typeof definition.core === 'object' ? definition.core : null;
+  return core && core.health && typeof core.health === 'object' ? core.health : null;
+};
+
 templates.setCustomMeta(meta);
 npcTiers.setCustomTiers(tiers);
 
-module.exports = { load, refresh, meta, render, list, tiers, metaOf, renderOf };
+module.exports = { load, refresh, meta, render, list, tiers, health, metaOf, renderOf };
