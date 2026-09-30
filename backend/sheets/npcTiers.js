@@ -280,14 +280,26 @@ const TIERS = {
   },
 };
 
-const getTierOptions = (system) => TIERS[system]?.options ?? [];
+/**
+ * Published custom systems' tiers (systemBuilder/runtime.js), through a hook it sets, as
+ * templates.js does for sheet meta. Built-in systems are looked up first, so a custom
+ * system can never change what a built-in one generates. A custom tier may leave out HP
+ * or defense (null), which leaves the token's own value alone.
+ */
+let customTiers = () => null;
+const setCustomTiers = (fn) => { customTiers = typeof fn === 'function' ? fn : () => null; };
+
+const getTierOptions = (system) => TIERS[system]?.options ?? customTiers(system)?.options ?? [];
 
 // Returns { data, hp, dv } or null when the system has no tiers / unknown id.
 const buildTier = (system, tierId) => {
   const t = TIERS[system];
-  if (!t) return null;
+  if (!t) {
+    const custom = customTiers(system);
+    return custom ? custom.build(tierId) : null;
+  }
   const id = t.build[tierId] ? tierId : t.default;
   return t.build[id] ? { tierId: id, ...t.build[id]() } : null;
 };
 
-module.exports = { TIERS, getTierOptions, buildTier };
+module.exports = { TIERS, getTierOptions, buildTier, setCustomTiers };

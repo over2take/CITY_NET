@@ -6,7 +6,7 @@ import { shadowrun6e } from './templates/shadowrun_6e';
 import { isCustomSystem, customTemplate, loadCustomTemplate } from './customTemplates';
 
 export * from './types';
-export { isCustomSystem, loadCustomTemplate, CUSTOM_TEMPLATE_EVENT } from './customTemplates';
+export { isCustomSystem, loadCustomTemplate, npcTemplateOf, CUSTOM_TEMPLATE_EVENT } from './customTemplates';
 
 export const TEMPLATES: Record<string, SheetTemplate> = {
   generic,

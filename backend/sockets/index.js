@@ -1256,6 +1256,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!payload || typeof payload.fieldId !== 'string') return;
       getGameSystem((err, system) => {
         if (err) return;
+        // A value the system gives the GM to set (a custom system's XP, say): the owner
+        // sees it but cannot change it. The GM editing their own sheet still can.
+        if (!sheetTemplates.playerMayEdit(system, payload.fieldId) && !isAdminSocket(socket)) return;
         // Linked fields are owned by other systems (token HP, bank) - never
         // stored in sheet JSON. The AC links are the writable ones: a sheet edit
         // routes to the player's token, keeping the token the source of truth.
@@ -1364,8 +1367,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       getGameSystem((err, system) => {
         if (err) return;
         const linked = sheetTemplates.getLinkedFields(system);
+        // The GM's values are left out of a player's import or batch edit, as from a single
+        // edit: uploading a sheet does not set your own XP.
+        const gm = isAdminSocket(socket);
         const entries = Object.entries(payload.fields)
-          .filter(([k, v]) => !linked[k] && (typeof v === 'string' || typeof v === 'number'));
+          .filter(([k, v]) => !linked[k] && (gm || sheetTemplates.playerMayEdit(system, k))
+            && (typeof v === 'string' || typeof v === 'number'));
         if (entries.length === 0 && !cyber) return;
         // Through the queue: an import replaces the whole sheet, so a concurrent edit
         // does not merely lose a field, it disappears entirely. The occupancy carried
@@ -1795,9 +1802,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             });
           } else if (tier) {
             // Other systems (CWN): the tier's own defense values stand - no
-            // CP:R melee-DV formula, no take-10 house rule.
+            // CP:R melee-DV formula, no take-10 house rule. A custom system's tier may
+            // leave HP or defense out (null), which keeps the token's own.
             db.run(
-              `UPDATE locations SET hp_current = ?, hp_max = ?, melee_ac = ?, ranged_ac = ? WHERE id = ?`,
+              `UPDATE locations SET hp_current = COALESCE(?, hp_current), hp_max = COALESCE(?, hp_max),
+               melee_ac = COALESCE(?, melee_ac), ranged_ac = COALESCE(?, ranged_ac) WHERE id = ?`,
               [tier.hp, tier.hp, tier.dv.melee, tier.dv.ranged, location_id],
               () => { emitUpdate({ isRhombusOnly: true }); insertSheet(); }
             );

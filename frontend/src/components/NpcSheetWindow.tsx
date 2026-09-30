@@ -4,7 +4,7 @@ import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
 import { ImportSheetDialog } from './ImportSheetDialog';
-import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet } from '../sheets';
+import { getTemplate, getMaxPairs, hiddenTabsFor, npcTemplateOf, type CharacterSheet, type SheetTemplate } from '../sheets';
 import type { SheetFieldValue } from '../sheets/types';
 import { npcInitiativePortrait } from '../modules/initiative/npcPortrait';
 
@@ -36,6 +36,12 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
   const apiPath = playerUsername
     ? `/api/sheets/user/${encodeURIComponent(playerUsername)}`
     : `/api/sheets/npcs/${npcId}`;
+  // A player's sheet in their system's character layout; an NPC in the system's NPC layout,
+  // when it has one of its own (a custom system's stat block).
+  const layoutFor = useCallback((system: string): SheetTemplate => {
+    const template = getTemplate(system);
+    return playerUsername ? template : npcTemplateOf(template);
+  }, [playerUsername]);
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -115,7 +121,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
     let clampedCur: { fieldId: string; value: number } | null = null;
     setSheet(prev => {
       if (!prev) return prev;
-      const template = getTemplate(prev.system);
+      const template = layoutFor(prev.system);
       const pairs = getMaxPairs(template);
       const curField = pairs[fieldId]; // non-null when fieldId is a max field
       const data = { ...prev.data, [fieldId]: value };
@@ -137,7 +143,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
       if (clampedCur) fields[clampedCur.fieldId] = clampedCur.value;
       saveFields(fields);
     }, 400));
-  }, [saveFields]);
+  }, [saveFields, layoutFor]);
 
   const handlePortraitUpload = useCallback(async (file: File) => {
     const form = new FormData();
@@ -171,7 +177,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
     handleFieldChange('portrait_shadow_filter', shadowFilter ? 0 : 1);
   }, [handleFieldChange, shadowFilter]);
 
-  const template = sheet ? getTemplate(sheet.system) : null;
+  const template = sheet ? layoutFor(sheet.system) : null;
 
   return (
     <>
@@ -267,6 +273,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           data={sheet.data}
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
+          // GM-only in both modes: the GM sets the values a system keeps for the GM.
+          gm
           onPortraitUpload={handlePortraitUpload}
           portraitShadow={shadowFilter}
           onTogglePortraitShadow={handleTogglePortraitShadow}

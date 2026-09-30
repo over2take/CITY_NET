@@ -27,7 +27,14 @@ const text = (value, where, max, problems, { required = false } = {}) => {
   if (value.length > max) problems.push({ where, message: `Longer than ${max} characters` });
 };
 
-const FIELD_KEYS = new Set(['id', 'label', 'type', 'visibility', 'sensitivity', 'maxField', 'hint', 'placeholder', 'unit', 'options', 'source']);
+/**
+ * Who changes a field. 'player' (the default) is the character's owner, as on every built-in
+ * sheet; 'gm' is a value the owner sees but only the GM sets - XP, awarded items. A derived
+ * value is neither: it is worked out, so nobody edits it.
+ */
+const EDIT = ['player', 'gm'];
+
+const FIELD_KEYS = new Set(['id', 'label', 'type', 'visibility', 'sensitivity', 'maxField', 'hint', 'placeholder', 'unit', 'options', 'source', 'edit']);
 const SECTION_KEYS = new Set(['id', 'label', 'layout', 'tab', 'columns', 'fields']);
 const HEADER_KEYS = new Set(['nameField', 'subtitleFields', 'hpField', 'hpMaxField', 'chips']);
 
@@ -93,6 +100,8 @@ const checkSheet = (sheet, derivedIds, problems) => {
         text(field.unit, `${fw}, unit`, 20, problems);
         if (field.source !== undefined && !SOURCES.includes(field.source)) problems.push({ where: `${fw}, source`, message: `One of ${SOURCES.join(', ')}` });
         if (field.source !== undefined && derivedIds.has(field.id)) problems.push({ where: fw, message: 'Cannot be both a derived value and a linked one' });
+        if (field.edit !== undefined && !EDIT.includes(field.edit)) problems.push({ where: `${fw}, edit`, message: 'player or gm' });
+        if (field.edit !== undefined && derivedIds.has(field.id)) problems.push({ where: `${fw}, edit`, message: 'A derived value is worked out, so nobody edits it' });
         if (field.maxField !== undefined) maxRefs.push({ fw, ref: field.maxField });
         if (field.options !== undefined || field.type === 'select') {
           if (field.type !== 'select') problems.push({ where: `${fw}, options`, message: 'Only a select field has options' });
@@ -171,4 +180,4 @@ const effectiveSheet = (definition) => {
 const fieldsOf = (sheet) => (Array.isArray(sheet && sheet.sections) ? sheet.sections : [])
   .flatMap((s) => (s && Array.isArray(s.fields) ? s.fields : []));
 
-module.exports = { checkSheet, effectiveSheet, fieldsOf, LAYOUTS, TYPES, SOURCES, LIMITS };
+module.exports = { checkSheet, effectiveSheet, fieldsOf, LAYOUTS, TYPES, SOURCES, EDIT, LIMITS };

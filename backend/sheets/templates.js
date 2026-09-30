@@ -406,6 +406,13 @@ const acColumns = (linked, fields) => {
 
 const getLinkedFields = (system) => metaFor(system).linkedFields || {};
 
+/**
+ * May a character's owner change this field themselves? Everything, except what a custom
+ * system marks as the GM's to set (XP, awarded items). The built-in sheets mark nothing, so
+ * this is always true for them. The GM's own edits do not ask.
+ */
+const playerMayEdit = (system, fieldId) => !(metaFor(system).gmFields || []).includes(fieldId);
+
 // Returns a map of maxFieldId → currentFieldId for the system.
 const getMaxPairs = (system) => metaFor(system).maxPairs || {};
 
@@ -431,7 +438,7 @@ const applyDerived = (system, data, changedFieldId) => {
 };
 
 module.exports = {
-  TEMPLATES, DEFAULT_SYSTEM, isValidSystem, isBuiltIn, metaFor, setCustomMeta, filterPublicData, getLinkedFields, getMaxPairs,
+  TEMPLATES, DEFAULT_SYSTEM, isValidSystem, isBuiltIn, metaFor, setCustomMeta, filterPublicData, getLinkedFields, getMaxPairs, playerMayEdit,
   applyDerived, cwnEffectiveAc, cwnImplantAc, cwnMoveBonus, CWN_BASE_MOVE,
   TOKEN_SOURCES, rangedAcOf, acColumns,
 };

@@ -132,6 +132,7 @@ export default function SheetPage() {
               portraitUrl={sheet.portrait_url}
               onFieldChange={handleFieldChange}
               onFieldsChange={handleFieldsChange}
+              gm={!!adminToken}
               onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
               onRoll={actions.onRoll}
               onDeathSave={actions.onDeathSave}

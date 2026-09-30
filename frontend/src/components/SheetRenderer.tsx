@@ -104,7 +104,14 @@ interface SheetRendererProps {
   portraitShadow?: boolean;
   /** Called when the admin clicks the FX toggle button on the portrait. */
   onTogglePortraitShadow?: () => void;
+  /** The viewer is the GM, who may change the fields a system keeps for the GM
+   *  (SheetField.gmOnly). Everyone else sees those read-only. */
+  gm?: boolean;
 }
+
+/** Whether the viewer is the GM, for FieldInput's GM-only lock, without threading a prop
+ *  through every section layout. */
+const GmContext = React.createContext(false);
 
 const num = (v: unknown): number => {
   const n = Number(v);
@@ -200,13 +207,16 @@ function CustomTagEntry({ placeholder, label, onAdd }: {
   );
 }
 
-function FieldInput({ field, data, readOnly, onFieldChange, onFieldsChange, style, onOpenLink }: {
+function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFieldsChange, style, onOpenLink }: {
   field: SheetField; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onFieldsChange?: (fields: Record<string, string | number>) => void;
   style?: React.CSSProperties;
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
 }) {
+  // A value the system keeps for the GM (XP, awarded items) shows, but only the GM edits it.
+  const gm = React.useContext(GmContext);
+  const readOnly = sheetReadOnly || (!!field.gmOnly && !gm);
   const value = data[field.id] ?? '';
   if (field.source && field.sourceWritable && !readOnly) {
     // Writable linked field (token AC): edits go through the normal save
@@ -1789,7 +1799,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // What the character's chrome is doing to their numbers. Computed once for the whole
@@ -1923,6 +1933,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
     () => template.sections.flatMap(s => s.fields ?? []), [template]);
 
   return (
+    <GmContext.Provider value={gm}>
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <style>{`
         .sheet-input::-webkit-outer-spin-button, .sheet-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -2025,5 +2036,6 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         </div>
       )}
     </div>
+    </GmContext.Provider>
   );
 }

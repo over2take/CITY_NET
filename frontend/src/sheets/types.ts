@@ -116,6 +116,10 @@ export interface SheetField {
   /** Writable linked field: renders as a normal input; the server routes the
    *  write to the owning system (e.g. token_ac -> the token's AC). */
   sourceWritable?: boolean;
+  /** A value the owner sees but only the GM sets (a custom system's XP, say). Read-only on
+   *  the sheet unless the renderer is told the viewer is the GM; the server refuses the
+   *  owner's edit either way. The built-in sheets mark nothing with it. */
+  gmOnly?: true;
   /** For 'select' fields: the allowed choices. Supply one with an empty value to name
    *  the blank state; otherwise an em-dash placeholder is added for you. */
   options?: SheetOption[];
@@ -246,6 +250,9 @@ export interface SheetTemplate {
   /** NPC power tiers offered by GENERATE_SHEET (must mirror the server's
    *  npcTiers registry for this system). Absent = untiered generation. */
   npcTiers?: { id: string; label: string }[];
+  /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
+   *  (a custom system's stat block). Absent = NPCs use this template. */
+  npcLayout?: SheetTemplate;
   /** When false, the fumble-shield pip control is hidden even if the
    *  luck_negates_fumble house rule is on. Set false for systems whose
    *  critical-failure mechanic is not a nat-1 on a single die (e.g. SR6

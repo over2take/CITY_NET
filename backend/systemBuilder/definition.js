@@ -14,6 +14,7 @@
 //     parts:   { vehicles: { on: false }, ... },                               // Layer 2
 //     lookups: { ... }, derived: [ ... ],            // Layer 3, the Phase 1 engine's format
 //     sheet:   { tabs, header, sections },           // the character sheet (sheet.js)
+//     npc:     { sheet, tiers },                     // NPC layout and power tiers (npc.js)
 //   }
 //
 // Problems come in two weights. A **fatal** one means the document cannot be stored at all:
@@ -27,6 +28,7 @@
 
 const { compileSystem } = require('./derived');
 const { checkSheet } = require('./sheet');
+const { checkNpc } = require('./npc');
 
 const FORMAT = 1;
 
@@ -66,7 +68,7 @@ const PARTS = [
   'death', 'luck', 'xp', 'npc_tiers', 'sheet_import',
 ];
 
-const SECTIONS = new Set(['format', 'name', 'description', 'words', 'parts', 'lookups', 'derived', 'sheet']);
+const SECTIONS = new Set(['format', 'name', 'description', 'words', 'parts', 'lookups', 'derived', 'sheet', 'npc']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -153,6 +155,7 @@ const checkDefinition = (definition) => {
   const derivedIds = new Set(Array.isArray(definition.derived)
     ? definition.derived.filter((d) => d && typeof d.id === 'string').map((d) => d.id) : []);
   checkSheet(definition.sheet, derivedIds, problems);
+  checkNpc(definition, derivedIds, problems);
   return { problems };
 };
 
