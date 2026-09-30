@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { Location } from '../types';
+import { bandOf, BAND_COLOR, BAND_WORDS, RHYTHM, beatPoints, type HealthBand } from './healthBands';
 // Inline SVGs so we can tint them with CSS `color` (currentColor)
 export const PersonSVG = ({ color = 'currentColor', style }: { color?: string; style?: React.CSSProperties }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill={color} style={style}>
@@ -200,7 +201,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
-      <HeartMonitor color={hpColorFor(target.hp_current ?? 0, target.hp_max ?? 0)} flatline={(target.hp_current ?? 0) <= 0} />
+      <HeartMonitor band={bandOf(target.hp_current ?? 0, target.hp_max ?? 0)} />
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
           <div style={{ fontSize: '2rem', color: 'var(--green)', textShadow: 'var(--glow)', fontWeight: 'bold' }}>
@@ -273,38 +274,39 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
 
 // ─── Looking at someone else's health ───────────────────────────────────────
 
-export function HeartMonitor({ color, flatline }: { color: string; flatline: boolean }) {
+/**
+ * The heart monitor: how badly hurt, as a picture. Its color and its rhythm both come from
+ * the band (healthBands.ts), so the beat quickens and falters as the color turns. With reduced
+ * motion the trace holds still, keeping the shape of its rhythm.
+ */
+export function HeartMonitor({ band }: { band: HealthBand }) {
+  const color = BAND_COLOR[band];
   return (
-    <div style={{ width: '100%', height: '50px', overflow: 'hidden', background: 'var(--black)', borderRadius: '3px', border: '1px solid var(--dark-green)' }}>
+    <div role="img" aria-label={`Heart monitor: ${BAND_WORDS[band]}`} data-band={band}
+      style={{ width: '100%', height: '50px', overflow: 'hidden', background: 'var(--black)', borderRadius: '3px', border: '1px solid var(--dark-green)' }}>
       <style>{`
         @keyframes ekg-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
         .ekg-live { animation: ekg-scroll 2.4s linear infinite; width: 200%; display: block; }
         .ekg-dead { width: 100%; display: block; }
+        @media (prefers-reduced-motion: reduce) { .ekg-live { animation: none; } }
       `}</style>
-      {flatline ? (
+      {band === 'down' ? (
         <svg className="ekg-dead" height="50" viewBox="0 0 280 50"
           style={{ filter: `drop-shadow(0 0 2px ${color})` }}>
           <line x1="0" y1="25" x2="280" y2="25" stroke={color} strokeWidth="1.5" />
         </svg>
       ) : (
         <svg className="ekg-live" height="50" viewBox="0 0 560 50" preserveAspectRatio="none"
-          style={{ filter: `drop-shadow(0 0 3px ${color})` }}>
-          <polyline points="0,25 27,25 34,20 42,25 49,25 56,5 60,45 64,5 68,25 80,30 87,25 127,25 280,25"
+          style={{ animationDuration: `${RHYTHM[band].seconds}s`, filter: `drop-shadow(0 0 3px ${color})` }}>
+          <polyline points={beatPoints(0, RHYTHM[band].beats)}
             fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-          <polyline points="280,25 307,25 314,20 322,25 329,25 336,5 340,45 344,5 348,25 360,30 367,25 407,25 560,25"
+          <polyline points={beatPoints(280, RHYTHM[band].beats)}
             fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
         </svg>
       )}
     </div>
   );
 }
-
-/** The heart monitor's color: how badly hurt, without saying by how much. */
-export const hpColorFor = (hpCurrent: number, hpMax: number) => {
-  const pct = hpMax > 0 ? Math.max(0, Math.min(1, hpCurrent / hpMax)) : 0;
-  if (hpCurrent <= 0) return 'var(--danger)';
-  return pct > 0.5 ? 'var(--green)' : pct > 0.25 ? 'var(--warning)' : 'var(--danger)';
-};
 
 interface HealthReviewPanelProps {
   location: Location & { injuries?: string };
@@ -356,7 +358,6 @@ export function HealthReviewPanel({ location, socket, gameSystem, onRolled }: He
   const injuries = parseInjuries(location.injuries);
   const hpCurrent = location.hp_current ?? 0;
   const isDead = hpCurrent <= 0;
-  const hpColor = hpColorFor(hpCurrent, location.hp_max ?? 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left' }}>
@@ -365,7 +366,7 @@ export function HealthReviewPanel({ location, socket, gameSystem, onRolled }: He
       </div>
 
       {/* Heart monitor — flatlines at 0 HP */}
-      <HeartMonitor color={hpColor} flatline={isDead} />
+      <HeartMonitor band={bandOf(hpCurrent, location.hp_max ?? 0)} />
 
       {/* SR6 Stun track (Physical is the token HP above) */}
       {stun && (() => {
