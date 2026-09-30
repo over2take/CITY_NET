@@ -17,6 +17,8 @@ const awardXpModule = require('../sheets/awardXp');
 const tokenControl = require('./tokenControl');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
+const customSystems = require('../systemBuilder/runtime');
+const { healthView } = require('../systemBuilder/healthView');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
 const vehicleState = require('../sheets/vehicleState');
@@ -1740,6 +1742,41 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             });
           }
         );
+      });
+    });
+
+    // A token's health under a custom system's model, for its HEALTH folder (systemBuilder/
+    // healthView.js). The full view, numbers and notes, goes to whoever may change that
+    // token's health: the GM, a player granted editing, or the token's owner. Everyone else
+    // gets the description. Over the socket rather than a route because the socket is where a
+    // player's identity is known in every mode; a player in non-secure mode has no login to
+    // send with a request. Answers only the asker.
+    socket.on('requestHealthView', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !data || !Number.isInteger(Number(data.location_id))) return;
+      const locationId = Number(data.location_id);
+      getGameSystem((err, system) => {
+        if (err) return;
+        const health = customSystems.health(system);
+        const reply = (view) => socket.emit('healthView', { location_id: locationId, ...view });
+        if (!health) return reply({ model: null });
+        db.get(`SELECT id, shape, owner, hp_current, hp_max, hp_temp FROM locations WHERE id = ?`, [locationId], (e2, loc) => {
+          if (e2 || !loc || !RHOMBUS_SHAPES.includes(loc.shape)) return;
+          const playerToken = loc.shape === 'rhombus' && !!loc.owner;
+          const full = isAdminSocket(socket) || (playerToken && loc.owner === info.userName);
+          const send = (row) => {
+            let sheet = {};
+            try { sheet = row ? JSON.parse(row.data || '{}') : {}; } catch { sheet = {}; }
+            reply(healthView(health, { current: loc.hp_current, max: loc.hp_max, temp: loc.hp_temp }, sheet, { full }));
+          };
+          if (playerToken) {
+            db.get(`SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
+              [loc.owner, system], (e3, row) => send(e3 ? null : row));
+          } else {
+            db.get(`SELECT cs.data FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id
+                    WHERE l.location_id = ? AND cs.system = ?`, [loc.id, system], (e3, row) => send(e3 ? null : row));
+          }
+        });
       });
     });
 

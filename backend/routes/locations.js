@@ -717,14 +717,19 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             }
           );
         });
-      } else if (action === 'damage' || action === 'heal') {
+      } else if (action === 'damage' || action === 'heal' || (action === 'set_max' && req.body.track !== undefined)) {
         // A custom system whose health is not one pool takes damage by its own model
         // (systemBuilder/health.js). Everything else, the built-in systems included, goes
-        // through runHealth exactly as before.
+        // through runHealth exactly as before. So does every SET MAX but a second track's,
+        // whose maximum lives on the sheet.
         db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
           const system = !gErr && gRow ? gRow.value : null;
           const health = system ? customSystems.health(system) : null;
           if (!health || health.model === 'pool') return runHealth(action);
+          if (action === 'set_max') {
+            const second = health.model === 'tracks' && Array.isArray(health.tracks) ? health.tracks[1] : null;
+            if (!second || req.body.track !== second.id) return runHealth(action);
+          }
           runModelHealth(system, health);
         });
       } else {
@@ -766,6 +771,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
               id, hp_current: t.current, hp_max: t.max, hp_temp: t.temp, out: result.out,
               ...(result.overflow ? { overflow: result.overflow } : {}),
               ...(result.penalty !== undefined ? { penalty: result.penalty } : {}),
+              ...(result.turned ? { turned: result.turned } : {}),
+              ...(result.placed ? { placed: result.placed } : {}),
             });
           });
         };

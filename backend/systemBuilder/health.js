@@ -52,6 +52,13 @@ const tracks = (health, token, sheet, action) => {
   if (!first || !second) return fail('This system\'s tracks are not set up');
   const onSecond = action.track === second.id;
   if (action.track !== undefined && !onSecond && action.track !== first.id) return fail('Not one of this system\'s tracks');
+  if (action.kind === 'set_max') {
+    // The first track's maximum is the token's own, set as for any system.
+    if (!onSecond) return fail('The first track\'s maximum is set on the token');
+    const patch = { [`${second.id}_max`]: action.amount };
+    if (whole(sheet[second.id]) > action.amount) patch[second.id] = action.amount;
+    return done(token, patch);
+  }
   if (!onSecond) {
     return done(action.kind === 'damage' ? poolDamage(token, action.amount) : poolHeal(token, action.amount));
   }
@@ -78,6 +85,7 @@ const typed = (health, token, sheet, action) => {
   const total = () => marks.reduce((a, b) => a + b, 0);
   const heaviest = types.length - 1;
 
+  let turned = 0;
   if (action.kind === 'heal') {
     // A named type heals its own marks; otherwise the lightest heal first.
     let left = action.amount;
@@ -91,12 +99,14 @@ const typed = (health, token, sheet, action) => {
       if (lighter < 0) break; // every box already the heaviest: nothing left to take
       marks[lighter] -= 1;
       marks[lighter + 1] += 1;
+      turned += 1;
     }
   }
   // Marks cannot outnumber the boxes, even from a sheet edited by hand.
   const patch = Object.fromEntries(types.map((t, i) => [t.id, marks[i]]));
   const current = Math.max(0, boxes - total());
-  return { ok: true, token: { ...token, current }, sheetPatch: patch, out: marks[heaviest] >= boxes };
+  // How many boxes turned heavier, for the window to say so.
+  return { ok: true, token: { ...token, current }, sheetPatch: patch, out: marks[heaviest] >= boxes, ...(turned ? { turned } : {}) };
 };
 
 const harm = (health, token, sheet, action) => {
@@ -108,6 +118,7 @@ const harm = (health, token, sheet, action) => {
   const all = levels.flatMap(slots);
   const patch = {};
   let out = false;
+  let placed = null;
   if (action.kind === 'heal') {
     // A named slot, or the last one filled at the level.
     const own = slots(levels[index]);
@@ -117,16 +128,16 @@ const harm = (health, token, sheet, action) => {
   } else {
     const note = blank(action.note) ? 'Harm' : String(action.note).trim().slice(0, 60);
     // The first free slot at this level or, when it is full, the next level up.
-    let placed = false;
     for (let i = index; i < levels.length && !placed; i += 1) {
       const free = slots(levels[i]).find((id) => blank(sheet[id]));
-      if (free) { patch[free] = note; placed = true; }
+      if (free) { patch[free] = note; placed = levels[i].id; }
     }
     out = !placed;
   }
   const filled = all.filter((id) => !blank(id in patch ? patch[id] : sheet[id])).length;
   const current = out ? 0 : all.length - filled;
-  return { ok: true, token: { ...token, current, max: all.length }, sheetPatch: patch, out };
+  // Which level the harm landed on: the window says so when it moved up.
+  return { ok: true, token: { ...token, current, max: all.length }, sheetPatch: patch, out, ...(placed ? { placed } : {}) };
 };
 
 const wounds = (health, token, action) => {
@@ -156,13 +167,17 @@ const locations = (health, token, sheet, action) => {
  *   health  the system's core.health (checked on publish)
  *   token   { current, max, temp } from the token
  *   sheet   the data of the sheet behind the token ({} when there is none)
- *   action  { kind: 'damage' | 'heal', amount, track?, type?, level?, slot?, note?, location? }
+ *   action  { kind: 'damage' | 'heal' | 'set_max', amount, track?, type?, level?, slot?, note?, location? }
+ *           set_max is the second track's maximum (tracks only)
  *
- * Returns { ok: true, token, sheetPatch, out, overflow?, penalty? } or { ok: false, error }.
+ * Returns { ok: true, token, sheetPatch, out, overflow?, penalty?, turned?, placed? } or
+ * { ok: false, error }. turned: boxes that turned heavier; placed: the harm level written to.
  */
 const applyHealthAction = (health, token, sheet, action) => {
   if (!health || typeof health !== 'object') return fail('This system has no health model');
-  if (!action || !['damage', 'heal'].includes(action.kind)) return fail('Damage or heal');
+  if (!action || !['damage', 'heal', 'set_max'].includes(action.kind)) return fail('Damage or heal');
+  // A second track's maximum lives on the sheet; every other maximum is the token's own.
+  if (action.kind === 'set_max' && health.model !== 'tracks') return fail('This maximum is set on the token');
   const amount = whole(action.amount);
   // Harm is a note, not a number; every other model needs an amount.
   if (health.model !== 'harm' && amount <= 0) return fail('An amount above 0');
