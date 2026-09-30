@@ -44,6 +44,36 @@ module.exports = (db) => {
     });
   });
 
+  // ─── Sharing as files (systemBuilder/citysys.js) ────────────────────────────
+
+  // A published system as a .citysys file to download.
+  router.get('/:id/export', gm, (req, res) => {
+    store.exportSystem(db, req.params.id, (err, file) => {
+      if (err) return answer(res, err);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+      res.send(file.text);
+    });
+  });
+
+  // What installing a file would do, changing nothing. The file arrives as text so its size is
+  // checked before it is parsed.
+  router.post('/install/preview', gm, (req, res) => {
+    store.previewInstall(db, req.body && req.body.file, (err, preview) => answer(res, err, preview));
+  });
+
+  router.post('/install', gm, (req, res) => {
+    const { file, mode } = req.body || {};
+    store.installSystem(db, file, mode, (err, installed) => {
+      if (err) return res.status(err.status || 500).json({
+        error: err.status ? err.message : 'Could not reach the systems store',
+        ...(err.problems ? { problems: err.problems } : {}),
+        ...(err.installed ? { installed: err.installed } : {}),
+      });
+      runtime.refresh(db, installed.id, () => answer(res, null, installed));
+    });
+  });
+
   router.delete('/:id', gm, (req, res) => {
     store.deleteSystem(db, req.params.id, (err) => {
       if (err) return answer(res, err);

@@ -98,7 +98,7 @@ const put = (id, publishedText, version) => {
 
 /** Load every published system. cb(err, count). */
 const load = (db, cb = () => {}) => {
-  db.all('SELECT id, published, version FROM custom_systems WHERE published IS NOT NULL', [], (err, rows) => {
+  db.all('SELECT id, published, version FROM custom_systems WHERE published IS NOT NULL AND deleted_at IS NULL', [], (err, rows) => {
     if (err) { console.error('[systems] Could not load custom systems:', err.message); return cb(err); }
     loaded.clear();
     for (const r of rows) put(r.id, r.published, r.version);
@@ -108,7 +108,7 @@ const load = (db, cb = () => {}) => {
 
 /** Reload one system after it is published or deleted. cb(err). */
 const refresh = (db, id, cb = () => {}) => {
-  db.get('SELECT published, version FROM custom_systems WHERE id = ?', [id], (err, row) => {
+  db.get('SELECT published, version FROM custom_systems WHERE id = ? AND deleted_at IS NULL', [id], (err, row) => {
     if (err) return cb(err);
     if (row && row.published) put(id, row.published, row.version); else loaded.delete(id);
     cb(null);
