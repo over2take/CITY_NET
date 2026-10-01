@@ -137,7 +137,7 @@ export function TokenWindow({
         </>
       )}
       {open === 'quick' && quickActions}
-      {open === 'gm' && gmNotesToken && <GmNotes locationId={location?.id} token={gmNotesToken} />}
+      {open === 'gm' && gmNotesToken && <GmNotes locationId={location?.id} token={gmNotesToken} gm={word('gm', 'short', 'GM')} />}
     </TerminalWindow>
   );
 }
