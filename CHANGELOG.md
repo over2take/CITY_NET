@@ -52,6 +52,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Custom game systems can rename the app's words.** A system's own words for terms such as HP,
+  credits, level and GM now reach every window, ready for the windows to use them. Nothing on
+  screen changes yet, and the built-in systems keep their wording exactly.
+
+- **Custom game systems can be shared as files.** A published system exports as one readable
+  `.citysys` file, and installs on another server after a preview that changes nothing: as a new
+  system, an update, or a second copy beside it. It is never merged, and a file never carries
+  characters. Deleting a custom system now hides it instead, so reinstalling its file brings it
+  back with every character played in it.
+
+- **Custom game systems choose how health works.** Creating one asks how its core works: the
+  health model (one pool, two tracks, damage types, harm levels, a wound count, hit locations, or
+  none), how characters advance, its common dice and its unit of distance. Each health model
+  takes damage by its own rules and has its own HEALTH folder, and other players still see a
+  description, never a number. The built-in systems' health is unchanged.
+
+- **Custom game systems can keep fields for the GM, and give NPCs their own stat blocks.** A
+  player sees a GM-only field, such as XP or an awarded item, but cannot change it, including by
+  uploading a sheet. NPCs can have a shorter layout and power tiers for GENERATE_SHEET.
+
 - **A published custom game system can run the game.** It appears in the game system picker
   beside the built-in ones, players' sheets are drawn from its own layout by the same sheet
   window, and its derived values are worked out on every save. Players' browsers receive the
