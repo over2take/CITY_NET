@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { InitiativeCombatantRow } from './InitiativeCombatantRow';
 import type { InitiativeState, Side } from '../hooks/useInitiative';
 import { getInitiativeSystem } from '../systems';
+import { useWords } from '../../../sheets/words';
 
 interface Props {
   state: InitiativeState;
@@ -23,6 +24,10 @@ export function InitiativeSideView({
   const [dragOverSideId, setDragOverSideId] = useState<string | null>(null);
   const dragFrom = useRef<number | null>(null);
   const dragSideId = useRef<string | null>(null);
+  // A custom system's own words for initiative and the turn; today's text otherwise.
+  const word = useWords(state.system);
+  const INITIATIVE = word('initiative', 'singular', 'INITIATIVE').toUpperCase();
+  const INIT = word('initiative', 'short', 'INIT').toUpperCase();
 
   const sortedSides: Side[] = [...state.sides].sort((a, b) => {
     const diff = b.score - a.score;
@@ -60,7 +65,7 @@ export function InitiativeSideView({
     <div>
       {/* Counter */}
       <div style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', color: 'var(--green)', textShadow: 'var(--glow)', marginBottom: '8px' }}>
-        {`${sys.counterLabel} ${state.turnCounter}`}
+        {`${word('turn', 'singular', sys.counterLabel).toUpperCase()} ${state.turnCounter}`}
       </div>
 
       {/* Sides */}
@@ -101,7 +106,7 @@ export function InitiativeSideView({
                   {side.name}
                 </span>
                 <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>
-                  {side.score > 0 ? `INIT ${side.score}` : 'NOT ROLLED'}
+                  {side.score > 0 ? `${INIT} ${side.score}` : 'NOT ROLLED'}
                 </span>
               </div>
 
@@ -153,7 +158,7 @@ export function InitiativeSideView({
             style={{ width: '100%' }}
             onClick={() => onJoin(null, state.system)}
           >
-            JOIN INITIATIVE
+            JOIN {INITIATIVE}
           </button>
           <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', textAlign: 'center', marginTop: '4px' }}>
             ROLL DEX MOD + 1d8 — ADDED TO PLAYERS SIDE
@@ -177,7 +182,7 @@ export function InitiativeSideView({
             style={{ flex: 1, width: 'auto', background: 'transparent', color: '#ff4444', borderColor: '#ff4444' }}
             onClick={onEnd}
           >
-            END INIT
+            END {INIT}
           </button>
         </div>
       )}

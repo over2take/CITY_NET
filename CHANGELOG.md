@@ -52,6 +52,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system's words reach the initiative tracker and the dice log.** START, JOIN and END
+  INITIATIVE, the INIT score, the turn counter and the dice log's "rolled INITIATIVE" lines use the
+  words a custom system's GM chose for initiative and the turn. The built-in systems keep their
+  wording exactly, ROUND and PASS included. The first tracker's 1d20 roll window, which nothing
+  had opened since players began joining from the tracker itself in July, was removed.
+
 - **A custom system's words reach the shops and the bank button.** The shop's messages, receipt
   and refusals, the steps for stocking an empty shop, and the SHOP, VIEW_BANK and SHOP_CATALOGUES
   buttons use the words a custom system's GM chose for shops, money, the bank, the GM and

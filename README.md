@@ -462,6 +462,7 @@ CITY_NET/
 │       ├── system_builder_runtime.test.js # The sheet format's checks and starter sheet; a published system known to the game (never a draft), answering the same helpers as the built-ins without changing them, its render copy free of formulas, switched to from the picker, and a player's edit recomputing its derived values
 │       ├── system_builder_core.test.js # The setup answers: every health model's starter sheet (and that it passes the sheet checks), the unanswered starter unchanged to the byte, and every mistake reported with where it is
 │       ├── system_builder_health.test.js # Every health model's DAMAGE and HEAL rules; the HIT_POINTS route using them for players and linked NPCs, refusing what a model cannot do, keeping an edit made while damage lands, and leaving the built-in systems and a custom one-pool system on the route as before
+│       ├── system_builder_initiative_words.test.js # The dice log's initiative lines, written by the server: today's text under every built-in system and an unrenamed custom one, a custom system's own word (in capitals) where it renamed initiative
 │       ├── system_builder_health_view.test.js # Every model's full and described view; the socket sending the full one only to the GM, a granted editor or the owner (never through an NPC's owner field) and answering only the asker; a second track's SET MAX; the moved-up and turned-heavier details
 │       ├── system_builder_npc_privacy.test.js # GM-only fields refused to the owner by edit, batch and upload but not to the GM or a granted admin; the NPC layout and tier checks; tiers generating a sheet and setting (or keeping) the token's HP and defense; built-ins unchanged
 │       ├── system_builder_citysys.test.js # Export (published only, readable, never a character), reading a file as untrusted input, a preview that changes nothing, installing as new / update / keep both with their refusals, deleting as a hide, and a deleted system coming back under its old id with its characters
@@ -694,6 +695,7 @@ CITY_NET/
 │   │   │       │   ├── cwn.ts                  # 1d8+DEX mod roll; ROUND counter; PCs win ties; defaultMode: 'side'
 │   │   │       │   └── random.ts               # cryptoRng — uniform [0,1) from crypto.getRandomValues; shared by every system
 │   │   │       └── __tests__/
+│   │   │           ├── initiativeWords.test.tsx # The glossary in the tracker, side view and nav panel: today's text under every built-in system (ROUND, PASS, TURN kept) and an unrenamed custom one, a custom system's own words for initiative and the turn where it renamed them
 │   │   │           ├── systems.test.ts          # Registry lookup, generic/SR6/CP:R/CWN formulas, extra dice, breakdown format, diceResults shape
 │   │   │           ├── npcPortrait.test.ts      # A silhouetted NPC enters initiative with no portrait, since the tracker goes to every player
 │   │   │           ├── random.test.ts           # Browser cryptoRng range/uniqueness; every system exercised on its default rng

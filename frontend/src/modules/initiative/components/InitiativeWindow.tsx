@@ -4,6 +4,7 @@ import { InitiativeCombatantRow } from './InitiativeCombatantRow';
 import { InitiativeSideView } from './InitiativeSideView';
 import type { InitiativeState, ActiveCombat } from '../hooks/useInitiative';
 import { getInitiativeSystem } from '../systems';
+import { useWords } from '../../../sheets/words';
 
 interface Props {
   state: InitiativeState | null;
@@ -56,6 +57,12 @@ export function InitiativeWindow({
 
   const headerLabel = 'INITIATIVE.EXE';
   const systemDef = getInitiativeSystem(activeSystem);
+  // A custom system's own words for initiative and the turn; today's text otherwise, so the
+  // built-in systems keep their ROUND and PASS.
+  const word = useWords(activeSystem);
+  const INITIATIVE = word('initiative', 'singular', 'INITIATIVE').toUpperCase();
+  const INIT = word('initiative', 'short', 'INIT').toUpperCase();
+  const TURN = word('turn', 'singular', 'TURN').toUpperCase();
 
   const content = (
     <>
@@ -63,7 +70,7 @@ export function InitiativeWindow({
         <div style={{ fontSize: '0.65rem', color: 'var(--dark-green)', letterSpacing: '1px' }}>{sceneLabel}</div>
         {state && activeMode === 'individual' && (
           <div style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', color: 'var(--green)', textShadow: 'var(--glow)', marginTop: '2px' }}>
-            {`${systemDef.counterLabel} ${activeSystem === 'shadowrun_6e' ? state.passCounter : state.turnCounter}`}
+            {`${word('turn', 'singular', systemDef.counterLabel).toUpperCase()} ${activeSystem === 'shadowrun_6e' ? state.passCounter : state.turnCounter}`}
           </div>
         )}
       </div>
@@ -74,7 +81,7 @@ export function InitiativeWindow({
           {!showJoin ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <button className="upload-btn" style={{ width: '100%' }} onClick={() => onStart()}>
-                START INITIATIVE
+                START {INITIATIVE}
               </button>
               {activeCombats.length > 0 && (
                 <button
@@ -96,7 +103,7 @@ export function InitiativeWindow({
                   style={{ width: '100%', marginBottom: 4, textAlign: 'left' }}
                   onClick={() => { onStart(c.id); setShowJoin(false); }}
                 >
-                  COMBAT #{c.id} — TURN {c.turn_counter}
+                  COMBAT #{c.id} — {TURN} {c.turn_counter}
                   {c.scene_keys?.length ? ` [${c.scene_keys.length} SCENE${c.scene_keys.length > 1 ? 'S' : ''}]` : ''}
                 </button>
               ))}
@@ -110,7 +117,7 @@ export function InitiativeWindow({
 
       {!state && !isAdmin && (
         <div style={{ fontSize: '0.7rem', color: 'var(--dark-green)', padding: '8px 0' }}>
-          NO ACTIVE INITIATIVE IN THIS SCENE
+          NO ACTIVE {INITIATIVE} IN THIS SCENE
         </div>
       )}
 
@@ -193,7 +200,7 @@ export function InitiativeWindow({
                 style={{ flex: 1, width: 'auto', background: 'transparent', color: '#ff4444', borderColor: '#ff4444' }}
                 onClick={onEnd}
               >
-                END INIT
+                END {INIT}
               </button>
             </div>
           )}
@@ -229,7 +236,7 @@ export function InitiativeWindow({
                 style={{ width: '100%' }}
                 onClick={() => onJoin(null, activeSystem, extraDice ?? 0)}
               >
-                JOIN INITIATIVE
+                JOIN {INITIATIVE}
               </button>
               <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', textAlign: 'center', marginTop: '4px' }}>
                 {activeSystem === 'shadowrun_6e'

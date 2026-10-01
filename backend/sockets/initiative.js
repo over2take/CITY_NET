@@ -1,4 +1,8 @@
 const { cryptoRng } = require('../utils/random');
+const customSystems = require('../systemBuilder/runtime');
+
+/** A custom system's own word for initiative in the dice log; today's text for the rest. */
+const initiativeWord = (system) => customSystems.wordIn(system, 'initiative', 'singular', 'INITIATIVE').toUpperCase();
 
 // Initiative Tracker — socket event handlers
 // All events namespaced under initiative:* to avoid collisions.
@@ -228,7 +232,7 @@ function registerInitiativeHandlers(io, db) {
               (err) => {
                 if (err) return;
                 broadcastScene(io, db, sceneKey);
-                logRoll(io, db, combatant);
+                logRoll(io, db, combatant, system);
               }
             );
           } else {
@@ -254,7 +258,7 @@ function registerInitiativeHandlers(io, db) {
               (err) => {
                 if (err) return;
                 broadcastScene(io, db, sceneKey);
-                logRoll(io, db, combatant);
+                logRoll(io, db, combatant, system);
               }
             );
           }
@@ -268,7 +272,8 @@ function registerInitiativeHandlers(io, db) {
       if (!sceneKey || score === undefined) return;
 
       db.get(
-        `SELECT s.sides, s.combatants FROM initiative_scene s WHERE s.scene_key = ?`,
+        `SELECT s.sides, s.combatants, c.system FROM initiative_scene s
+         LEFT JOIN initiative_combat c ON c.id = s.combat_id WHERE s.scene_key = ?`,
         [sceneKey],
         (err, row) => {
           if (err || !row) return;
@@ -287,8 +292,8 @@ function registerInitiativeHandlers(io, db) {
               broadcastScene(io, db, sceneKey);
               // Log to dice tray
               const historyString = breakdown
-                ? `NPC SIDE INITIATIVE: ${breakdown}`
-                : `NPC SIDE rolled INITIATIVE [${score}]`;
+                ? `NPC SIDE ${initiativeWord(row.system)}: ${breakdown}`
+                : `NPC SIDE rolled ${initiativeWord(row.system)} [${score}]`;
               const results = diceResults || { 8: [score] };
               db.run(
                 `INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)`,
@@ -547,11 +552,11 @@ function registerInitiativeHandlers(io, db) {
 }
 
 // ── Shared helper: log a roll to dice tray ────────────────────────────────────
-function logRoll(io, db, combatant) {
+function logRoll(io, db, combatant, system) {
   const explodSuffix = combatant.exploded ? ' 💥EXPLOD' : '';
   const historyString = combatant.breakdown
-    ? `${combatant.name} INITIATIVE: ${combatant.breakdown}${explodSuffix}`
-    : `${combatant.name} rolled INITIATIVE [${combatant.score}]${explodSuffix}`;
+    ? `${combatant.name} ${initiativeWord(system)}: ${combatant.breakdown}${explodSuffix}`
+    : `${combatant.name} rolled ${initiativeWord(system)} [${combatant.score}]${explodSuffix}`;
   const results = combatant.diceResults || { 20: [combatant.score] };
   const resultsJson = JSON.stringify(results);
   db.run(
