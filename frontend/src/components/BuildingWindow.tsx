@@ -2,6 +2,7 @@ import { TerminalWindow, TERMINAL_PREVIEW, useFolder, type TerminalAction, type 
 import { BuildingPreview } from './BuildingPreview';
 import { buildingTypeById, typeLabel } from '../data/buildingTypes';
 import { GmNotes } from './GmNotes';
+import { useWords } from '../sheets/words';
 
 // A building's info window, drawn as a terminal: folders down the left, the open one's
 // text on the right, and the building itself in the corner.
@@ -41,10 +42,12 @@ interface Props {
 export function BuildingWindow({
   location, parts = [], title, gameSystem, pos, setPos, onClose, actions, isPrimaryAdmin, token,
 }: Props) {
+  // A custom system's own word for the GM; today's GM otherwise.
+  const gm = useWords(gameSystem)('gm', 'short', 'GM');
   const folders: TerminalFolder<BuildingTab>[] = [
     { id: 'info', label: 'INFO' },
     { id: 'residents', label: 'RESIDENTS' },
-    ...(isPrimaryAdmin ? [{ id: 'gm' as const, label: 'GM NOTES' }] : []),
+    ...(isPrimaryAdmin ? [{ id: 'gm' as const, label: `${gm.toUpperCase()} NOTES` }] : []),
   ];
   // Opening another building starts at its INFO, not wherever the last one was left.
   const [open, setOpen] = useFolder(folders, location?.id);
@@ -71,13 +74,13 @@ export function BuildingWindow({
             </>
           )}
           {open === 'residents' && 'KNOWN RESIDENTS'}
-          {open === 'gm' && 'GM ONLY · PLAYERS NEVER SEE THIS'}
+          {open === 'gm' && `${gm.toUpperCase()} ONLY · PLAYERS NEVER SEE THIS`}
         </>
       )}
     >
       {open === 'info' && (location?.description || 'NO_DATA')}
       {open === 'residents' && (location?.npcs || 'UNKNOWN')}
-      {open === 'gm' && <GmNotes locationId={location?.id} token={token} />}
+      {open === 'gm' && <GmNotes locationId={location?.id} token={token} gm={gm} />}
     </TerminalWindow>
   );
 }

@@ -52,6 +52,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system's words reach the building GM notes and the admin GAME tab.** The GM NOTES
+  folder, its header and editor, BANK SOUNDS and the INITIATIVE FOLLOWS BUILDING house rule use the
+  words a custom system's GM chose for the GM, the bank and initiative. The built-in systems keep
+  their wording exactly. The XP window, the vehicles window and the shop buy-back rate keep theirs
+  until custom systems can have those parts.
+
 - **A custom system's words reach the initiative tracker and the dice log.** START, JOIN and END
   INITIATIVE, the INIT score, the turn counter and the dice log's "rolled INITIATIVE" lines use the
   words a custom system's GM chose for initiative and the turn. The built-in systems keep their

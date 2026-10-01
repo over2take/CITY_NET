@@ -13,7 +13,12 @@ import React, { useEffect, useRef, useState } from 'react';
  * carried with the building - they never leave the server except through a request that
  * checks for the main admin.
  */
-export function GmNotes({ locationId, token }: { locationId: number | undefined; token: string }) {
+export function GmNotes({ locationId, token, gm }: {
+  locationId: number | undefined;
+  token: string;
+  /** What the running system calls the GM (today's GM unless a custom system renamed it), for the screen-reader label. */
+  gm: string;
+}) {
   const [notes, setNotes] = useState<string | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +69,7 @@ export function GmNotes({ locationId, token }: { locationId: number | undefined;
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%' }}>
         <textarea
-          aria-label="GM notes"
+          aria-label={`${gm} notes`}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           autoFocus

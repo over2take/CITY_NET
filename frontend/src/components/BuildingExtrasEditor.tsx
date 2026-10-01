@@ -1,4 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { useWords } from '../sheets/words';
 
 // The building photo and the GM's notes, in the admin edit view.
 //
@@ -33,6 +34,8 @@ interface Props {
   locationId: number | null;
   token: string;
   photoUrl?: string | null;
+  /** The running game system, for a custom system's own word for the GM. */
+  gameSystem?: string;
 }
 
 const label: React.CSSProperties = { display: 'block', marginBottom: 5 };
@@ -43,9 +46,10 @@ const hint: React.CSSProperties = { fontSize: '0.65rem', opacity: 0.8, marginTop
 const STALE = 'If the backend was just updated, restart it.';
 
 export const BuildingExtrasEditor = forwardRef<BuildingExtrasHandle, Props>(function BuildingExtrasEditor(
-  { locationId, token, photoUrl },
+  { locationId, token, photoUrl, gameSystem },
   ref,
 ) {
+  const gm = useWords(gameSystem)('gm', 'short', 'GM');
   /** A photo chosen but not yet uploaded, and the local preview of it. */
   const [pending, setPending] = useState<{ file: File; preview: string } | null>(null);
   /** The current photo marked for removal. */
@@ -115,21 +119,21 @@ export const BuildingExtrasEditor = forwardRef<BuildingExtrasHandle, Props>(func
             body: JSON.stringify({ notes }),
           });
           const body = await r.json().catch(() => ({}));
-          if (!r.ok) problems.push(body.error || 'The GM notes were not saved.');
-          else if (typeof body.notes !== 'string') problems.push(`The server did not take the GM notes. ${STALE}`);
+          if (!r.ok) problems.push(body.error || `The ${gm} notes were not saved.`);
+          else if (typeof body.notes !== 'string') problems.push(`The server did not take the ${gm} notes. ${STALE}`);
           else setSavedNotes(body.notes);
         } catch {
-          problems.push('The GM notes were not saved.');
+          problems.push(`The ${gm} notes were not saved.`);
         }
       }
       return problems;
     },
-  }), [locationId, token, pending, removing, notes, savedNotes]);
+  }), [locationId, token, pending, removing, notes, savedNotes, gm]);
 
   if (locationId == null) {
     return (
       <div style={{ marginTop: 10, fontSize: '0.7rem', opacity: 0.8 }}>
-        Save the building first to give it a photo or GM notes.
+        Save the building first to give it a photo or {gm} notes.
       </div>
     );
   }
@@ -185,7 +189,7 @@ export const BuildingExtrasEditor = forwardRef<BuildingExtrasHandle, Props>(func
       </div>
 
       <div>
-        <label style={label} htmlFor="gm-notes-box">GM NOTES</label>
+        <label style={label} htmlFor="gm-notes-box">{gm.toUpperCase()} NOTES</label>
         <textarea
           id="gm-notes-box"
           value={notes}

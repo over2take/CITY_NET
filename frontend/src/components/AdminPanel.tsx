@@ -44,7 +44,7 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 import { PNG_EXPORT_PRESETS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExportBounds';
 import { RECORD_DURATIONS, MAX_RECORD_SECONDS } from '../hooks/useMapExport';
 import { parseGrant, describeGrant } from '../utils/tokenControl';
-import { useWords, asLabel } from '../sheets/words';
+import { useWords, asLabel, type WordLookup } from '../sheets/words';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1989,7 +1989,7 @@ export function AdminPanel({
                 neither has anything to do with shops; main admin only, since a granted
                 editor sees this view too and the server refuses them both. */}
             {isAdmin && isPrimaryAdmin && !['enemy_rhombus', 'friendly_rhombus', 'rhombus', 'none'].includes(editData.shape) && (
-              <BuildingExtrasEditor ref={extrasRef} locationId={editId ?? null} token={token} photoUrl={editData.photo_url} />
+              <BuildingExtrasEditor ref={extrasRef} locationId={editId ?? null} token={token} photoUrl={editData.photo_url} gameSystem={gameSystem} />
             )}
 
             {editData.shape === 'friendly_rhombus' && (() => {
@@ -2216,11 +2216,12 @@ function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] 
   );
 }
 
-const GLOBAL_HOUSE_RULES: HouseRuleDef[] = [
+/** The house rules every system has. A function of the system's words: the first names initiative. */
+const globalHouseRules = (word: WordLookup): HouseRuleDef[] => [
   {
     settingKey: 'initiative_follows_building',
-    label: 'INITIATIVE FOLLOWS BUILDING (ALL FLOORS SHARE ONE TRACKER)',
-    title: 'When enabled, all floors of the same building share a single initiative tracker. Players moving between floors stay in the same combat order. Each building and the city map still have their own separate initiatives.',
+    label: `${word('initiative', 'singular', 'INITIATIVE').toUpperCase()} FOLLOWS BUILDING (ALL FLOORS SHARE ONE TRACKER)`,
+    title: `When enabled, all floors of the same building share a single ${word('initiative', 'singular', 'initiative')} tracker. Players moving between floors stay in the same combat order. Each building and the city map still have their own separate ${word('initiative', 'plural', 'initiatives')}.`,
   },
   {
     // Universal rather than per-system: every ruleset in the app has money, and whether
@@ -2297,6 +2298,8 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: str
   const [systems, setSystems] = useState<PickerSystem[]>([]);
   const [luckResetMsg, setLuckResetMsg] = useState<string | null>(null);
   const [edgeGrantTarget, setEdgeGrantTarget] = useState<string>('');
+  // The picked system's own words for the house rules every system shares.
+  const word = useWords(system);
 
   const refresh = () => {
     fetch('/api/sheets/system').then(r => r.json()).then(d => {
@@ -2331,7 +2334,7 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: str
             Each system keeps its own characters, banks and token health; switching back restores them.
           </p>
           <HouseRulesPanel token={token} defs={[
-            ...GLOBAL_HOUSE_RULES,
+            ...globalHouseRules(word),
             ...(system === 'cities_without_number' ? CWN_HOUSE_RULES : []),
             ...(system === 'cyberpunk_red' ? CPR_HOUSE_RULES : []),
             ...(system === 'shadowrun_6e' ? SR6_HOUSE_RULES : []),
@@ -2558,6 +2561,8 @@ function BankSoundsPanel({ token, globalSettings, fetchGlobalSettings }: { token
     cashregister: 1, debtpaid: 1, highroller: 1, firstpay: 1, overdraft: 1,
   });
   const [saving, setSaving] = useState(false);
+  // A custom system's own word for the bank; today's BANK otherwise.
+  const bank = useWords(globalSettings?.game_system)('bank', 'singular', 'BANK').toUpperCase();
 
   useEffect(() => {
     if (!globalSettings) return;
@@ -2590,7 +2595,7 @@ function BankSoundsPanel({ token, globalSettings, fetchGlobalSettings }: { token
         style={{ width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}
         onClick={() => setOpen(o => !o)}
       >
-        <span>BANK SOUNDS</span>
+        <span>{bank} SOUNDS</span>
         <span>{open ? '▲' : '▼'}</span>
       </button>
       {open && (
