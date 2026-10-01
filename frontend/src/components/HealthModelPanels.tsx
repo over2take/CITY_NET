@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Location } from '../types';
 import type { HealthView } from '../hooks/useHealthView';
 import { bandOf, harmBand, type HealthBand } from './healthBands';
+import { asLabel, todaysWords, type WordLookup } from '../sheets/words';
 
 // The HEALTH folder under a custom system's health model, as in the approved mockup
 // (docs/mockups/health-windows.html). HitPoints.tsx keeps everything around it - the heart
@@ -66,7 +67,11 @@ function SetRow({ name, value, onSet }: { name: string; value: number; onSet: (n
  * the buttons, and a line saying what happened. `gm` shows the maximum's SET row, as the
  * built-in panel shows MAX_HP only to the GM.
  */
-export function ModelHealthEditor({ view, target, send, gm }: { view: HealthView; target: Location; send: SendHealth; gm: boolean }) {
+export function ModelHealthEditor({ view, target, send, gm, words = todaysWords }: {
+  view: HealthView; target: Location; send: SendHealth; gm: boolean;
+  /** The running system's words (sheets/words.ts); today's text when not given. */
+  words?: WordLookup;
+}) {
   const [amount, setAmount] = useState(0);
   const [note, setNote] = useState('');
   const [picked, setPicked] = useState<string>(() => (view.model === 'tracks' ? view.tracks?.[0]?.id
@@ -210,7 +215,7 @@ export function ModelHealthEditor({ view, target, send, gm }: { view: HealthView
     const act = (kind: 'heal' | 'damage') => run(kind, { amount, ...(picked ? { location: picked } : {}), ...(note ? { note } : {}) }, () => { setNote(''); return ''; });
     return (
       <>
-        <div style={readout}>{cur} / {max}<div style={label}>HP</div></div>
+        <div style={readout}>{cur} / {max}<div style={label}>{words('hp', 'short', 'HP').toUpperCase()}</div></div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '4px' }}>
           {view.locations.map((l) => (
             <div key={l.id} style={{ border: `1px solid ${l.note ? 'var(--danger)' : 'var(--dark-green)'}`, color: l.note ? 'var(--danger)' : 'var(--green)', padding: '4px 6px', fontSize: '0.64rem', letterSpacing: '1px', minWidth: 0 }}>
@@ -230,7 +235,7 @@ export function ModelHealthEditor({ view, target, send, gm }: { view: HealthView
         {status}
         {amountInput}
         {buttons(() => act('heal'), () => act('damage'))}
-        {gm && <SetRow name="MAX_HP" value={max} onSet={(n) => run('set_max', { hp_max: n }, () => '')} />}
+        {gm && <SetRow name={`MAX_${asLabel(words('hp', 'plural', 'HP'))}`} value={max} onSet={(n) => run('set_max', { hp_max: n }, () => '')} />}
       </>
     );
   }

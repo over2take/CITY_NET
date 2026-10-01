@@ -13,7 +13,9 @@ import { makeTestDb, run } from './helpers/testDb.js';
 
 process.env.JWT_SECRET = 'test-secret';
 const require_ = createRequire(import.meta.url);
-const { resolveWords, TERMS, WORD_FORMS } = require_('../systemBuilder/definition');
+const { resolveWords, ownWords, TERMS, WORD_FORMS } = require_('../systemBuilder/definition');
+const { effectiveSheet } = require_('../systemBuilder/sheet');
+const { healthView } = require_('../systemBuilder/healthView');
 const runtime = require_('../systemBuilder/runtime');
 
 const GM = jwt.sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false }, 'test-secret');
@@ -38,8 +40,44 @@ describe('resolving a system\'s words', () => {
     expect(resolveWords({ name: 'Bare' })).toEqual(resolveWords({}));
   });
 
-  it('sends the browser the resolved words with a custom system\'s sheet', () => {
-    expect(runtime.renderOf('sys_0123456789abcdef', FANTASY).words).toEqual(resolveWords(FANTASY));
+  it('sends the browser only the terms a system renamed, every form filled from its own', () => {
+    expect(runtime.renderOf('sys_0123456789abcdef', FANTASY).words).toEqual({
+      hp: { singular: 'WOUND', plural: 'WOUNDS', short: 'WOUND' },
+      money: { singular: 'GOLD', plural: 'GOLD', short: 'GP' },
+      gm: { singular: 'WARDEN', plural: 'WARDEN', short: 'WARDEN' },
+    });
+    expect(runtime.renderOf('sys_0123456789abcdef', { name: 'Bare' }).words).toEqual({});
+  });
+});
+
+describe('a system\'s own words', () => {
+  it('ignore blank forms, a term with no usable form, and terms the app does not have', () => {
+    expect(ownWords({ words: {
+      hp: { singular: '  ', plural: 'WOUNDS' },
+      xp: { singular: '', short: ' ' },
+      mana: { singular: 'MANA' },
+      level: 'RANK',
+    } })).toEqual({ hp: { singular: 'WOUNDS', plural: 'WOUNDS', short: 'WOUNDS' } });
+    expect(ownWords({ words: 'none' })).toEqual({});
+    expect(ownWords(null)).toEqual({});
+  });
+
+  it('name the starter sheet\'s hit points, and nothing else changes', () => {
+    const pool = (definition) => effectiveSheet(definition).sections.find((s) => s.id === 'health').fields.map((f) => f.label);
+    expect(pool({ name: 'A' })).toEqual(['HP', 'HP MAX']);
+    expect(pool({ name: 'A', words: { gm: { singular: 'WARDEN' } } })).toEqual(['HP', 'HP MAX']);
+    expect(pool({ name: 'A', words: { hp: { singular: 'WOUND', plural: 'WOUNDS', short: 'WND' } } })).toEqual(['WND', 'WND MAX']);
+    expect(pool({ name: 'A', words: { hp: { short: 'WND' } }, core: { health: { model: 'locations', locations: [{ id: 'head', label: 'HEAD' }] } } }))
+      .toEqual(['WND', 'WND MAX']);
+    // A label the setup gave wins over the word.
+    expect(pool({ name: 'A', words: { hp: { short: 'WND' } }, core: { health: { model: 'pool', label: 'VIGOR' } } })).toEqual(['VIGOR', 'VIGOR MAX']);
+  });
+
+  it('name a one-pool system\'s HEALTH folder, unless the setup gave it a label', () => {
+    const token = { current: 5, max: 10 };
+    expect(healthView({ model: 'pool' }, token, {}).label).toBe('HP');
+    expect(healthView({ model: 'pool' }, token, {}, { hpWord: 'WND' }).label).toBe('WND');
+    expect(healthView({ model: 'pool', label: 'VIGOR' }, token, {}, { hpWord: 'WND' }).label).toBe('VIGOR');
   });
 });
 
@@ -67,8 +105,8 @@ describe('the server\'s own text', () => {
     await request(app).post(`/api/systems/${id}/publish`).set(gm);
     expect(runtime.wordIn(id, 'gm', 'singular', 'GM')).toBe('WARDEN');
     expect(runtime.wordIn(id, 'money', 'short', 'CR')).toBe('GP');
-    // A term it did not rename: the neutral default, not the built-in text of that place.
-    expect(runtime.wordIn(id, 'xp', 'short', 'EXP')).toBe('XP');
+    // A term it did not rename keeps the text that place shows today.
+    expect(runtime.wordIn(id, 'xp', 'short', 'EXP')).toBe('EXP');
     expect(runtime.wordIn(id, 'nonsense', 'singular', 'KEPT')).toBe('KEPT');
     await request(app).delete(`/api/systems/${id}`).set(gm);
     expect(runtime.wordIn(id, 'gm', 'singular', 'GM')).toBe('GM');

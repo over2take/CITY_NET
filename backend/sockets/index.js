@@ -1767,7 +1767,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           const send = (row) => {
             let sheet = {};
             try { sheet = row ? JSON.parse(row.data || '{}') : {}; } catch { sheet = {}; }
-            reply(healthView(health, { current: loc.hp_current, max: loc.hp_max, temp: loc.hp_temp }, sheet, { full }));
+            reply(healthView(health, { current: loc.hp_current, max: loc.hp_max, temp: loc.hp_temp }, sheet,
+              { full, hpWord: customSystems.wordIn(system, 'hp', 'short', 'HP') }));
           };
           if (playerToken) {
             db.get(`SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,

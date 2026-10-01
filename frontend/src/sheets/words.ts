@@ -10,13 +10,27 @@ import { CUSTOM_TEMPLATE_EVENT, customTemplate, isCustomSystem, loadCustomTempla
 //
 // Under a built-in system the answer is always that text, so CWN, Cyberpunk RED, Shadowrun and
 // Generic read exactly as they always have, whatever each place's wording is. Under a custom
-// system it is that system's word, or the neutral default where it set none; the server
-// resolves both (systemBuilder/definition.js resolveWords). Until the custom system's words
-// have loaded, the text shown today stands in. Window titles (BANK.EXE) are never asked.
+// system it is that system's word when it renamed the term, and that text otherwise: nothing
+// changes that the system did not choose to change (decided with the user, 2026-09-30). The
+// server sends only the renamed terms (systemBuilder/terms.js ownWords). Until the custom
+// system's words have loaded, the text shown today stands in. Window titles (BANK.EXE) are
+// never asked.
 
 export type Term = 'character' | 'hp' | 'money' | 'level' | 'xp' | 'class' | 'initiative'
   | 'round' | 'turn' | 'gm' | 'shop' | 'bank' | 'vehicle';
 export type WordForm = 'singular' | 'plural' | 'short';
+
+/** A lookup bound to the running system, as useWords returns. */
+export type WordLookup = (term: Term, form: WordForm, builtIn: string) => string;
+
+/** Today's text, unchanged: for components drawn without a running system to ask about. */
+export const todaysWords: WordLookup = (_term, _form, builtIn) => builtIn;
+
+/**
+ * A word in the app's terminal-label style: capitals, spaces to underscores. HIT POINTS becomes
+ * HIT_POINTS, COIN PURSE becomes COIN_PURSE (VIEW_COIN_PURSE).
+ */
+export const asLabel = (text: string): string => text.trim().toUpperCase().replace(/\s+/g, '_');
 
 /** What `system` calls `term` in `form`, or `builtIn` (the text this place shows today). */
 export const wordFor = (system: string | null | undefined, term: Term, form: WordForm, builtIn: string): string => {
@@ -38,5 +52,5 @@ export function useWords(system: string | null | undefined) {
     if (system) void loadCustomTemplate(system);
     return () => window.removeEventListener(CUSTOM_TEMPLATE_EVENT, onLoaded);
   }, [system]);
-  return (term: Term, form: WordForm, builtIn: string) => wordFor(system, term, form, builtIn);
+  return ((term, form, builtIn) => wordFor(system, term, form, builtIn)) as WordLookup;
 }

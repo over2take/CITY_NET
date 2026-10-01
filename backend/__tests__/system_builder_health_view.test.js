@@ -210,6 +210,15 @@ describe('in the running game', () => {
     expect(await viewFor(rook, npc.lastID)).toMatchObject({ full: false, second: { label: 'STUN', fill: 0.25, full: false } });
   });
 
+  it('names a one-pool system\'s health in its own word for hit points', async () => {
+    const definition = { format: 1, name: 'Hearth', words: { hp: { singular: 'WOUND', short: 'WND' } }, core: { health: { model: 'pool' } } };
+    const { id: system } = (await request(app).post('/api/systems').set('Authorization', `Bearer ${GM}`).send({ definition })).body;
+    await request(app).post(`/api/systems/${system}/publish`).set('Authorization', `Bearer ${GM}`);
+    await run(db, `UPDATE global_settings SET value = ? WHERE key = 'game_system'`, [system]);
+    const id = await playerToken('GHOST', system, {});
+    expect(await viewFor(await connectAs('GHOST'), id)).toMatchObject({ model: 'pool', label: 'WND' });
+  });
+
   it('says there is nothing to draw for a built-in system, and answers only the one who asked', async () => {
     const id = await playerToken('GHOST', 'cities_without_number', {});
     const asker = await connectAs('GHOST');
