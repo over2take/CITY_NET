@@ -639,6 +639,7 @@ CITY_NET/
 │   │   │       ├── DraggableWindow.test.tsx
 │   │   │       ├── BootScreen.test.tsx              # Types out by itself and finishes, skips on SKIP and nothing else, reports lines and clicks
 │   │   │       ├── HitPoints.test.tsx
+│   │   │       ├── wordsInBankAndShops.test.tsx     # The glossary in the SHOP and VIEW_BANK menu buttons and the empty-shop steps: today's text under every built-in system and an unrenamed custom one, a custom system's own words where it renamed them (the shop window's own are in ShopWindow.test.tsx)
 │   │   │       ├── wordsInWindows.test.tsx          # The glossary in the sidebar, sheet header, HEALTH folder and token window: exactly today's text under every built-in system and under a custom system that renamed nothing; a custom system's own words, in the label style, where it did
 │   │   │       ├── HealthModelPanels.test.tsx       # Each model's editor sending what the server expects and reporting it (spills, boxes turning heavier, harm moving up, out, refusals), the GM-only SET rows, other players seeing no numbers or notes, and the built-in systems' folder untouched and never asking
 │   │   │       ├── healthBands.test.tsx             # The bands' thresholds and colors, each rhythm's beats (the steady one unchanged, beats inside their stretch, weak ones drawn smaller), reduced motion, and the same band in the editing panel, the review panel and the stream
@@ -722,7 +723,7 @@ CITY_NET/
 │   │   │       └── useSocket.pendingRequests.test.ts     # Pending edit-request state; regression for stale requests on newly-promoted temp admins
 │   │   ├── data/
 │   │   │   ├── buildingTypes.ts # What a building is for and which catalogues it sells, mirrored from the server, plus which systems have shops (every one with a sheet, held equal to the server's gate by a test) and what each game calls a storefront - same ids everywhere, so a Ripperdoc becomes a Street Doc when the system changes rather than disappearing
-│   │   │   └── shopRules.ts     # The overdraft house rule, the buy-back rate and how it resolves, and the words for every refusal. Mirrored from backend/shops and compared against it value for value, since the window quoting one price and the server paying another is the failure worth fearing
+│   │   │   └── shopRules.ts     # The overdraft house rule, the buy-back rate and how it resolves, and the words for every refusal (refusalText, in a custom system's own words for shops, money and characters). Mirrored from backend/shops and compared against it value for value, since the window quoting one price and the server paying another is the failure worth fearing
 │   │   ├── sheets/
 │   │   │   ├── types.ts            # Sheet template type system (fields, sections, header, death saves, NPC tiers)
 │   │   │   ├── index.ts            # Template registry, getMaxPairs, GATED_TABS/hiddenTabsFor (house-rule-gated sheet tabs). getTemplate also answers for published custom systems

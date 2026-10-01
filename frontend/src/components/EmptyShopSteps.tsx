@@ -5,6 +5,7 @@ import {
 import { uploadedIn } from '../sheets/uploadedCatalogues';
 import { BOOK_SYSTEM } from '../sheets/ownedItems';
 import { columnsFor } from '../sheets/catalogueSchema';
+import { useWords, asLabel } from '../sheets/words';
 
 // What a GM is told when a shop has nothing to sell.
 //
@@ -41,6 +42,9 @@ interface Props {
 
 /** The steps, or nothing when this shop has something to sell. */
 export function EmptyShopSteps({ buildingType, system, onOpenCatalogues }: Props) {
+  // A custom system's own word for shops; today's text otherwise. Before the early return:
+  // it is a hook.
+  const word = useWords(system);
   const shelves = emptyShelves(buildingType, system);
   if (!shelves.length) return null;
 
@@ -71,11 +75,11 @@ export function EmptyShopSteps({ buildingType, system, onOpenCatalogues }: Props
         THIS {shop.toUpperCase()} HAS NOTHING TO SELL YET
       </div>
       <div style={{ color: 'var(--grid-section)', marginBottom: 6 }}>
-        Shops in this game sell only what you add. It sells {shelves.map((c) => catalogueLabel(c, system)).join(' and ')}.
+        {word('shop', 'plural', 'Shops')} in this game sell only what you add. It sells {shelves.map((c) => catalogueLabel(c, system)).join(' and ')}.
       </div>
       <ol style={{ margin: 0, paddingLeft: 18 }}>
         <li>
-          Open <strong>SHOP_CATALOGUES</strong>, in the admin panel&apos;s <strong>GAME</strong> tab.
+          Open <strong>{asLabel(word('shop', 'singular', 'SHOP'))}_CATALOGUES</strong>, in the admin panel&apos;s <strong>GAME</strong> tab.
           {onOpenCatalogues && (
             <>
               {' '}

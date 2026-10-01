@@ -14,7 +14,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
-import { render, screen, within, act } from '@testing-library/react';
+import { render, screen, within, act, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ShopWindow, CHECKOUT_TIMEOUT_MS } from '../ShopWindow';
 
@@ -42,6 +42,8 @@ import {
 import { CWN_WEAPON_ROWS } from '../../sheets/templates/cities_without_number';
 import { CWN_CYBERWARE } from '../../sheets/cwnCyberwarePresets';
 import { loadUploaded, clearUploaded } from '../../sheets/uploadedCatalogues';
+import { registerCustomTemplate, clearCustomTemplates } from '../../sheets/customTemplates';
+import { refusalText } from '../../data/shopRules';
 
 /**
  * A socket that answers the way the server does.
@@ -2045,5 +2047,150 @@ describe('an empty shop, opened by the GM', () => {
     render_(false);
     expect(screen.queryByRole('note', { name: 'How to stock this shop' })).toBeNull();
     expect(screen.getByText(/the GM adds stock in SHOP_CATALOGUES/)).toBeInTheDocument();
+  });
+});
+
+describe('a custom system\'s own words', () => {
+  /**
+   * The shop in a custom system that calls shops MERCHANTS, money GOLD, the GM the WARDEN
+   * and a character an OPERATIVE (3a4). Everything above is the built-in systems, whose
+   * wording these tests show unchanged.
+   */
+  const HEARTH = 'sys_cccccccccccccccc';
+  const all = (w: string, plural = w) => ({ singular: w, plural, short: w });
+  const ROPE = { id: 'rope', name: 'Rope', price: 100, fields: {} };
+
+  beforeEach(() => {
+    clearCustomTemplates();
+    clearUploaded();
+    registerCustomTemplate({
+      id: HEARTH, name: 'Hearth', parts: {}, derived: [], sheet: { sections: [] },
+      words: { shop: all('MERCHANT', 'MERCHANTS'), money: all('GOLD'), gm: all('WARDEN'), character: all('OPERATIVE') },
+    });
+    sheetState.sheet = { system: HEARTH, data: {} };
+  });
+  afterEach(() => { clearCustomTemplates(); clearUploaded(); });
+
+  it('says who stocks the shelves, and where', () => {
+    show('general_store', 'Vic', HEARTH);
+    expect(screen.getByText('Nothing on the shelves yet — the WARDEN adds stock in MERCHANT_CATALOGUES.')).toBeInTheDocument();
+  });
+
+  it('names the window by its own word', () => {
+    const { container } = show('general_store', 'Vic', HEARTH);
+    expect(container.querySelector('[aria-label="Vic MERCHANT"]')).not.toBeNull();
+  });
+
+  it('says what is missing to buy or sell with, in its own words', async () => {
+    sheetState.sheet = null;
+    loadUploaded({ gear: [ROPE] });
+    show('general_store', 'Vic', HEARTH);
+    expect(screen.getByText('NO OPERATIVE SHEET LOADED — NOTHING TO BUY ONTO')).toBeInTheDocument();
+    await openFolder('SELL');
+    expect(screen.getByText('NO OPERATIVE SHEET LOADED — NOTHING TO SELL.')).toBeInTheDocument();
+  });
+
+  it('says when it would buy nothing you have', async () => {
+    show('general_store', 'Vic', HEARTH);
+    await openFolder('SELL');
+    expect(screen.getByText('NOTHING HERE THIS MERCHANT WOULD BUY. A MERCHANT only takes the kinds of thing it sells.')).toBeInTheDocument();
+  });
+
+  it('says you are short of money before sending, or asks how to cover it', async () => {
+    bank.balance = 10;
+    loadUploaded({ gear: [ROPE] });
+    show('general_store', 'Vic', HEARTH);
+    await userEvent.click(screen.getByRole('button', { name: 'Add Rope to the cart' }));
+    await openFolder('CART');
+    await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
+    expect(screen.getByText(/^Not enough GOLD — the cart comes to/)).toBeInTheDocument();
+    expect(checkouts).toHaveLength(0);
+    cleanup();
+    // With the overdraft house rule on, the shop asks instead.
+    sheetState.overdraftAllowed = true;
+    show('general_store', 'Vic', HEARTH);
+    await userEvent.click(screen.getByRole('button', { name: 'Add Rope to the cart' }));
+    await openFolder('CART');
+    await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
+    expect(screen.getByRole('alertdialog', { name: 'Not enough GOLD' })).toBeInTheDocument();
+  });
+
+  it('words the server\'s refusals the same way', async () => {
+    loadUploaded({ gear: [ROPE] });
+    refuseWith = 'funds';
+    show('general_store', 'Vic', HEARTH);
+    await buyNow('Rope');
+    expect(screen.getByText('Not enough GOLD.')).toBeInTheDocument();
+  });
+
+  it('names the shop on a receipt when it has no name of its own', async () => {
+    loadUploaded({ gear: [ROPE] });
+    show('general_store', '', HEARTH);
+    await buyNow('Rope');
+    expect(screen.getByTestId('cart-receipt')).toHaveTextContent(/RECEIPT · MERCHANT/);
+  });
+
+  it('says what it pays when you sell, and what it cannot price', async () => {
+    loadUploaded({ gear: [ROPE] });
+    sheetState.sheet = { system: HEARTH, data: { inventory: JSON.stringify([{ name: 'Rope', qty: 1 }, { name: 'Mystery', qty: 1 }]) } };
+    const { container } = show('general_store', 'Vic', HEARTH);
+    await openFolder('SELL');
+    expect(screen.getByText(/^THIS MERCHANT PAYS 45% OF THE SHELF PRICE/)).toBeInTheDocument();
+    expect(container.querySelector('[title="Not on any shelf, so the MERCHANT cannot price it. Sells for nothing — settle up with your WARDEN."]')).not.toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Add Rope to the cart' }));
+    await openFolder('CART');
+    expect(screen.getByTestId('cart-total')).toHaveTextContent(/THE MERCHANT PAYS YOU/);
+  });
+
+  it('says when a building has no catalogue, and why you cannot buy without a sheet', () => {
+    show('bar', 'Vic', HEARTH);
+    expect(screen.getByText(/NO CATALOGUE FOR THIS MERCHANT YET\./)).toBeInTheDocument();
+    cleanup();
+    sheetState.sheet = null;
+    loadUploaded({ gear: [ROPE] });
+    show('general_store', 'Vic', HEARTH);
+    expect(screen.getByRole('button', { name: 'Add Rope to the cart' })).toHaveAttribute('title', 'No OPERATIVE sheet loaded');
+  });
+
+  it('says when the shop did not answer', async () => {
+    silentServer = true;
+    loadUploaded({ gear: [ROPE] });
+    show('general_store', 'Vic', HEARTH);
+    await userEvent.click(screen.getByRole('button', { name: 'Add Rope to the cart' }));
+    await openFolder('CART');
+    vi.useFakeTimers();
+    try {
+      act(() => { screen.getByRole('button', { name: 'CHECK OUT' }).click(); });
+      act(() => { vi.advanceTimersByTime(CHECKOUT_TIMEOUT_MS); });
+      expect(screen.getByText(/^The MERCHANT did not answer/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('the shop\'s refusals', () => {
+  it('read exactly as today with no system\'s words, and in a system\'s own words', () => {
+    const today = refusalText();
+    expect(today).toMatchObject({
+      no_shop: 'This building is not a shop any more.',
+      not_sold: 'This shop does not sell that.',
+      funds: 'Not enough credits.',
+      needs_choice: 'The shop did not ask how to cover this. Nothing was bought.',
+      no_sheet: 'No character sheet to sell from.',
+      qty: 'A quantity in the cart is more than the shop will sell at once. Nothing was charged.',
+    });
+    const words: Record<string, string> = { shop: 'merchant', money: 'gold', character: 'operative' };
+    const theirs = refusalText((term, _form, builtIn) => words[term] ?? builtIn);
+    expect(theirs).toMatchObject({
+      no_shop: 'This building is not a merchant any more.',
+      not_sold: 'This merchant does not sell that.',
+      funds: 'Not enough gold.',
+      needs_choice: 'The merchant did not ask how to cover this. Nothing was bought.',
+      no_sheet: 'No operative sheet to sell from.',
+      qty: 'A quantity in the cart is more than the merchant will sell at once. Nothing was charged.',
+    });
+    // Reasons with no term in them read the same everywhere.
+    for (const reason of ['price', 'no_account', 'write', 'empty', 'not_owned', 'no_system'] as const) expect(theirs[reason]).toBe(today[reason]);
   });
 });

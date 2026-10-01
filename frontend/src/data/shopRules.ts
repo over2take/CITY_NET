@@ -8,6 +8,8 @@
 // change already, so the shop knows before it sends whether a purchase will come up short
 // and can ask how to cover it, rather than sending, being refused, and asking afterwards.
 
+import { todaysWords, type WordLookup } from '../sheets/words';
+
 /**
  * The house rule that lets a player buy something they cannot afford.
  *
@@ -91,24 +93,30 @@ export type RefusalReason =
  * `needs_choice` is deliberately phrased as a fault on this side rather than theirs: the
  * window is supposed to ask before sending, so seeing it means the shop failed to.
  */
-export const REFUSAL_TEXT: Record<RefusalReason, string> = {
-  no_shop: 'This building is not a shop any more.',
-  not_sold: 'This shop does not sell that.',
-  price: 'That is not on the shelf.',
-  funds: 'Not enough credits.',
-  needs_choice: 'The shop did not ask how to cover this. Nothing was bought.',
-  no_account: 'Could not read your account.',
-  write: 'The payment did not go through. Nothing was bought.',
-  empty: 'Nothing on the sell list.',
-  /**
-   * The sale was checked against the sheet and came up short.
-   *
-   * Reachable without anybody cheating: a sheet edited in another window while the sell
-   * list sat here is enough. So it reads as something to look at again rather than as an
-   * accusation.
-   */
-  not_owned: 'You do not have all of that any more. Nothing was sold — check the list.',
-  no_sheet: 'No character sheet to sell from.',
-  no_system: 'Could not tell which game is running.',
-  qty: 'A quantity in the cart is more than the shop will sell at once. Nothing was charged.',
+export const refusalText = (word: WordLookup = todaysWords): Record<RefusalReason, string> => {
+  // A custom system's own words for shops, money and characters; today's text otherwise.
+  const shop = word('shop', 'singular', 'shop');
+  const credits = word('money', 'plural', 'credits');
+  const character = word('character', 'singular', 'character');
+  return {
+    no_shop: `This building is not a ${shop} any more.`,
+    not_sold: `This ${shop} does not sell that.`,
+    price: 'That is not on the shelf.',
+    funds: `Not enough ${credits}.`,
+    needs_choice: `The ${shop} did not ask how to cover this. Nothing was bought.`,
+    no_account: 'Could not read your account.',
+    write: 'The payment did not go through. Nothing was bought.',
+    empty: 'Nothing on the sell list.',
+    /**
+     * The sale was checked against the sheet and came up short.
+     *
+     * Reachable without anybody cheating: a sheet edited in another window while the sell
+     * list sat here is enough. So it reads as something to look at again rather than as an
+     * accusation.
+     */
+    not_owned: 'You do not have all of that any more. Nothing was sold — check the list.',
+    no_sheet: `No ${character} sheet to sell from.`,
+    no_system: 'Could not tell which game is running.',
+    qty: `A quantity in the cart is more than the ${shop} will sell at once. Nothing was charged.`,
+  };
 };

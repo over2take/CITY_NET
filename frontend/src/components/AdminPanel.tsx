@@ -44,6 +44,7 @@ import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 import { PNG_EXPORT_PRESETS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExportBounds';
 import { RECORD_DURATIONS, MAX_RECORD_SECONDS } from '../hooks/useMapExport';
 import { parseGrant, describeGrant } from '../utils/tokenControl';
+import { useWords, asLabel } from '../sheets/words';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -194,9 +195,13 @@ export function AdminPanel({
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
     onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
+    gameSystem,
     cityGenDrawMode, setCityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail,
     cityLayout, setCityLayout, citySeed, setCitySeed, lastCitySeed, setLastCitySeed, cityWater, setCityWater, cityParkPonds, setCityParkPonds, cityRoundabouts, setCityRoundabouts,
   }: any) {
+  // A custom system's own words for the GAME tab; today's text otherwise. Before the early
+  // return below: it is a hook.
+  const word = useWords(gameSystem);
   if (view === 'battle_map') {
     return (
       <BattleAdminPanel
@@ -1098,7 +1103,7 @@ export function AdminPanel({
                     onClick={() => setIsCatalogueOpen?.(true)}
                     className="utility-btn"
                     style={{ width: '100%', marginTop: '8px' }}
-                  >SHOP_CATALOGUES</button>
+                  >{asLabel(word('shop', 'singular', 'SHOP'))}_CATALOGUES</button>
                 </>
               )}
               <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
