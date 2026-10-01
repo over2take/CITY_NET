@@ -2513,6 +2513,7 @@ function App() {
                     : <div style={{ opacity: 0.7 }}>NO VITALS · NOT ON THE MAP</div>);
                 return (
                   <TokenWindow
+                    gameSystem={gameSystem}
                     location={selectedLocation}
                     title={`ID.EXE · ${tokenSheetLink?.sheet_name || selectedLocation.name || (selectedLocation.shape === 'enemy_rhombus' ? 'UNKNOWN_HOSTILE' : selectedLocation.shape === 'friendly_rhombus' ? 'UNKNOWN_FRIENDLY' : 'UNTAGGED')}`}
                     pos={infoPanelPos}

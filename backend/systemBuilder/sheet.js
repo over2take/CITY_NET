@@ -11,6 +11,7 @@
 // generic layout plus its derived values), so a published system can always be drawn.
 
 const { healthLayout } = require('./core');
+const { ownWords } = require('./terms');
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
@@ -156,7 +157,9 @@ const checkSheet = (sheet, derivedIds, problems) => {
 const effectiveSheet = (definition) => {
   if (definition && isPlainObject(definition.sheet)) return definition.sheet;
   const derived = Array.isArray(definition && definition.derived) ? definition.derived.filter((d) => d && typeof d.id === 'string') : [];
-  const health = healthLayout(definition && isPlainObject(definition.core) ? definition.core.health : undefined);
+  // A system that renamed hit points has its own word on its starter sheet's pool.
+  const hp = ownWords(definition).hp;
+  const health = healthLayout(definition && isPlainObject(definition.core) ? definition.core.health : undefined, hp ? hp.short : 'HP');
   const sections = [
     { id: 'identity', label: 'IDENTITY', layout: 'list', tab: 'STATS', fields: [
       { id: 'name', label: 'Name', type: 'text', visibility: 'public' },

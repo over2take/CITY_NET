@@ -13,6 +13,7 @@ import {
 } from '../sheets/cyberwareEffects';
 import React, { useState, useEffect, useMemo } from 'react';
 import type { SheetTemplate, SheetSection, SheetField, SheetData, SheetFieldValue } from '../sheets';
+import { wordFor, asLabel } from '../sheets/words';
 import { TvPortrait } from './TvPortrait';
 import { xpProgress, describeXp } from '../sheets/cwnAdvancement';
 import { carriedEnc, encState, describeEnc, encumberedMove } from '../sheets/cwnEncumbrance';
@@ -547,14 +548,17 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
           const cur = Math.max(0, Math.min(hp ?? 0, max));
           const ratio = max > 0 ? cur / max : 0;
           const hpColor = ratio > 0.5 ? 'var(--green)' : ratio > 0.25 ? 'var(--warning)' : 'var(--danger)';
+          // The system's own words for hit points, if it renamed them; today's text otherwise.
+          // The tooltip names the sidebar's button, so the two always read the same.
+          const hpButton = asLabel(wordFor(template.id, 'hp', 'plural', 'HIT POINTS'));
           return (
             <div
               role={onOpenLink ? 'button' : undefined}
-              title={onOpenLink ? 'Synced with your token — click to open HIT_POINTS' : 'Synced with your token'}
+              title={onOpenLink ? `Synced with your token — click to open ${hpButton}` : 'Synced with your token'}
               onClick={onOpenLink ? () => onOpenLink('token_hp') : undefined}
               style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', cursor: onOpenLink ? 'pointer' : 'default' }}
             >
-              <span style={{ ...barLabel }}>HP</span>
+              <span style={{ ...barLabel }}>{wordFor(template.id, 'hp', 'short', 'HP').toUpperCase()}</span>
               <div style={{ flex: 1, display: 'flex', gap: max > 40 ? '1px' : '2px', height: '12px', border: `1px solid ${hpColor}`, background: 'color-mix(in srgb, var(--black) 60%, transparent)', padding: '1px', transition: 'border-color 0.3s' }}>
                 {max > 0 ? Array.from({ length: max }, (_, i) => (
                   <div

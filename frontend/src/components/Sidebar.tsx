@@ -11,6 +11,7 @@ import { CurrencyIcon } from './BankWindows';
 import { THEMES } from '../theme/themes';
 import type { ThemeName } from '../theme/themes';
 import { getTemplate } from '../sheets';
+import { useWords, asLabel } from '../sheets/words';
 import { CWN_VEHICLE_ROWS, CWN_VEHICLE_WEAPON_ROWS } from '../sheets/templates/cities_without_number';
 import { hasVehicles } from '../sheets/vehicleSystems';
 import { startUpdate, waitForRestart, currentBootId } from '../utils/updateClient';
@@ -202,6 +203,7 @@ export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedL
   const [acMelee, setAcMelee] = useState('');
   const [acRanged, setAcRanged] = useState('');
   const tokenDefense = getTokenDefense(gameSystem);
+  const word = useWords(gameSystem);
 
   // Any rhombus the player owns on any map — used for AC/settings regardless of current view
   const anyUserRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
@@ -270,7 +272,7 @@ export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedL
     <div className="panel sidebar-panel">
       <style>{`@keyframes rainbowHue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }`}</style>
       <header style={{ marginBottom: '20px' }}>
-        <h3 style={{ margin: 0 }}>CHARACTER_CONTROLS</h3>
+        <h3 style={{ margin: 0 }}>{asLabel(word('character', 'singular', 'CHARACTER'))}_CONTROLS</h3>
       </header>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
 
@@ -1166,6 +1168,10 @@ interface SidebarProps {
 export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
   /** The rail label under the pointer, positioned from the button it belongs to. */
   const [railTip, setRailTip] = useState<{ label: string; x: number; y: number } | null>(null);
+  // A custom system's own words for the rail's labels; today's text otherwise.
+  const word = useWords(gameSystem);
+  const characterControls = `${asLabel(word('character', 'singular', 'CHARACTER'))}_CONTROLS`;
+  const hitPoints = asLabel(word('hp', 'plural', 'HIT POINTS'));
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -1248,12 +1254,12 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               <path d="M16.5 17h.01" />
             </svg>
           </button>
-          <button className={`rail-btn ${activeMenu === 'character_controls' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'character_controls' ? 'none' : 'character_controls')} aria-label="CHARACTER_CONTROLS" data-tip="CHARACTER_CONTROLS">
+          <button className={`rail-btn ${activeMenu === 'character_controls' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'character_controls' ? 'none' : 'character_controls')} aria-label={characterControls} data-tip={characterControls}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill={rhombusState?.color || 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
             </svg>
           </button>
-          <button className={`rail-btn ${isHitPointsOpen ? 'active' : ''}`} onClick={() => setIsHitPointsOpen(!isHitPointsOpen)} aria-label="HIT_POINTS" data-tip="HIT_POINTS">
+          <button className={`rail-btn ${isHitPointsOpen ? 'active' : ''}`} onClick={() => setIsHitPointsOpen(!isHitPointsOpen)} aria-label={hitPoints} data-tip={hitPoints}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>

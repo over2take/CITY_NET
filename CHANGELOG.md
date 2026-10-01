@@ -52,6 +52,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system's words show on the sheet, the token window and the HEALTH folder.** Where a
+  custom system renamed hit points, the character, the GM or initiative, those places use its word:
+  WOUNDS for HIT_POINTS, WARDEN NOTES for GM NOTES. A term it did not rename keeps today's text.
+  Nothing changes for the built-in systems, and no custom system can be made yet.
+
 - **Custom game systems can rename the app's words.** A system's own words for terms such as HP,
   credits, level and GM now reach every window, ready for the windows to use them. Nothing on
   screen changes yet, and the built-in systems keep their wording exactly.

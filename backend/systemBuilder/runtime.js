@@ -12,7 +12,7 @@
 const { compileSystem } = require('./derived');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf } = require('./npc');
-const { resolveWords } = require('./definition');
+const { ownWords } = require('./definition');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
 
@@ -76,8 +76,9 @@ const tiersFor = (definition, recompute) => {
 const renderOf = (id, definition) => ({
   id,
   name: definition.name,
-  // Every term in every form, resolved here, so the browser holds no table of defaults.
-  words: resolveWords(definition),
+  // The terms this system renamed, every form filled in. A term it left alone is absent, so
+  // each place keeps the text it shows today.
+  words: ownWords(definition),
   parts: definition.parts || {},
   derived: (Array.isArray(definition.derived) ? definition.derived : []).map((d) => d.id),
   sheet: effectiveSheet(definition),
@@ -127,8 +128,8 @@ const tiers = (id) => (loaded.has(id) ? loaded.get(id).tiers : null);
 
 /**
  * What the app calls `term` in `form` while `system` runs, for text the server writes (chat
- * lines, the dice log). A published custom system's word; otherwise `builtIn`, the text that
- * place has always shown, so a built-in system's wording never changes.
+ * lines, the dice log). A published custom system's own word, when it renamed the term;
+ * otherwise `builtIn`, the text that place has always shown.
  */
 const wordIn = (system, term, form, builtIn) => {
   const render = loaded.has(system) ? loaded.get(system).render : null;

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { TerminalWindow, TERMINAL_PREVIEW, useFolder, type TerminalAction, type TerminalFolder } from './TerminalWindow';
 import { TvPortrait } from './TvPortrait';
 import { GmNotes } from './GmNotes';
+import { useWords, todaysWords, type WordLookup } from '../sheets/words';
 
 // A token's info window - a player, an enemy or a friendly NPC - drawn as a terminal like
 // the building window: the portrait in the corner, folders down the left, the open folder
@@ -69,18 +70,22 @@ interface Props {
   folderRequest?: { folder: TokenFolder; seq: number } | null;
   /** Told which folder is open, so the sidebar can light HIT_POINTS while HEALTH shows. */
   onFolderChange?: (folder: TokenFolder) => void;
+  /** The running game system, for a custom system's own words (GM NOTES, INITIATIVE SCORE). */
+  gameSystem?: string;
 }
 
 export function TokenWindow({
   location, title, pos, setPos, onClose, titleControls, portrait, description, actions,
   operator, socket, health, gmHealth, quickActions, attackStatus, gmNotesToken, tierPicker,
-  folderRequest, onFolderChange,
+  folderRequest, onFolderChange, gameSystem,
 }: Props) {
+  const word = useWords(gameSystem);
+  const gm = word('gm', 'short', 'GM').toUpperCase();
   const folders: TerminalFolder<TokenFolder>[] = [
     { id: 'info', label: 'INFO' },
     { id: 'health', label: 'HEALTH' },
     ...(quickActions ? [{ id: 'quick' as const, label: 'QUICK ACTIONS' }] : []),
-    ...(gmNotesToken ? [{ id: 'gm' as const, label: 'GM NOTES' }] : []),
+    ...(gmNotesToken ? [{ id: 'gm' as const, label: `${gm} NOTES` }] : []),
   ];
   const [open, setOpen] = useFolder(folders, location?.id);
   // After useFolder's own reset, so a request that comes with a new token still wins.
@@ -109,7 +114,7 @@ export function TokenWindow({
           {open === 'info' && `${operator ? operator.toUpperCase() : kind} · DATA`}
           {open === 'health' && 'VITALS · LIVE'}
           {open === 'quick' && 'YOUR TOKEN · ROLLS GO TO THE DICE TRAY'}
-          {open === 'gm' && 'GM ONLY · PLAYERS NEVER SEE THIS'}
+          {open === 'gm' && `${gm} ONLY · PLAYERS NEVER SEE THIS`}
         </>
       )}
       footer={attackStatus ? (
@@ -128,7 +133,7 @@ export function TokenWindow({
       {open === 'health' && (
         <>
           {health}
-          {gmHealth && <GmHealth key={location?.id} {...gmHealth} />}
+          {gmHealth && <GmHealth key={location?.id} {...gmHealth} word={word} />}
         </>
       )}
       {open === 'quick' && quickActions}
@@ -246,7 +251,7 @@ const sectionHead: React.CSSProperties = { fontSize: 10, opacity: 0.8, letterSpa
 const divider: React.CSSProperties = { borderTop: '1px solid var(--dark-green)', marginTop: 12, paddingTop: 10 };
 
 /** The GM's part of HEALTH: defense to edit, and a sheetless NPC's initiative by hand. */
-function GmHealth({ defense, onSaveDefense, onAddToInit }: NonNullable<Props['gmHealth']>) {
+function GmHealth({ defense, onSaveDefense, onAddToInit, word = todaysWords }: NonNullable<Props['gmHealth']> & { word?: WordLookup }) {
   const [edit, setEdit] = useState<{ melee: string; ranged: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [score, setScore] = useState('');
@@ -302,10 +307,10 @@ function GmHealth({ defense, onSaveDefense, onAddToInit }: NonNullable<Props['gm
       </div>
       {onAddToInit && (
         <div style={divider}>
-          <div style={sectionHead}>INITIATIVE SCORE</div>
+          <div style={sectionHead}>{word('initiative', 'singular', 'INITIATIVE').toUpperCase()} SCORE</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
-              type="number" min="1" max="99" placeholder="SCORE" aria-label="Initiative score"
+              type="number" min="1" max="99" placeholder="SCORE" aria-label={`${word('initiative', 'singular', 'Initiative')} score`}
               value={score} onChange={(e) => setScore(e.target.value)} style={field}
             />
             <button
@@ -314,7 +319,7 @@ function GmHealth({ defense, onSaveDefense, onAddToInit }: NonNullable<Props['gm
               disabled={!validScore}
               onClick={() => { onAddToInit(Number(score)); setScore(''); }}
               style={small}
-            >ADD TO INIT</button>
+            >ADD TO {word('initiative', 'short', 'INIT').toUpperCase()}</button>
           </div>
         </div>
       )}

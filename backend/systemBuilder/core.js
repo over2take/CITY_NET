@@ -132,7 +132,7 @@ const checkHealth = (health, problems) => {
  * pair when the model has a pool on the token. A pool with no label is exactly the starter
  * sheet every system has had, so a system that answers nothing looks as it did.
  */
-const healthLayout = (health) => {
+const healthLayout = (health, hpWord = 'HP') => {
   const h = isPlainObject(health) ? health : { model: 'pool' };
   const grid = (fields) => ({ id: 'health', label: 'HEALTH', layout: 'grid', tab: 'STATS', columns: 2, fields });
   const pool = (id, name) => [
@@ -144,7 +144,7 @@ const healthLayout = (health) => {
   switch (h.model) {
     case 'tracks': {
       const [first, second] = list(h.tracks);
-      if (!first || !second) return healthLayout({ model: 'pool' });
+      if (!first || !second) return healthLayout({ model: 'pool' }, hpWord);
       // The first track is the token's; the second lives on the sheet.
       return {
         sections: [grid([
@@ -186,7 +186,7 @@ const healthLayout = (health) => {
     case 'locations':
       return {
         sections: [
-          grid(pool('hp', text(h.label, 'HP'))),
+          grid(pool('hp', text(h.label, hpWord))),
           { id: 'injuries', label: 'INJURIES', layout: 'list', tab: 'STATS',
             fields: list(h.locations).map((l) => ({ id: l.id, label: l.label, type: 'text' })) },
         ],
@@ -195,7 +195,7 @@ const healthLayout = (health) => {
     case 'none':
       return { sections: [], header: {} };
     default:
-      return { sections: [grid(pool('hp', text(h.label, 'HP')))], header: { hpField: 'hp', hpMaxField: 'hp_max' } };
+      return { sections: [grid(pool('hp', text(h.label, hpWord)))], header: { hpField: 'hp', hpMaxField: 'hp_max' } };
   }
 };
 

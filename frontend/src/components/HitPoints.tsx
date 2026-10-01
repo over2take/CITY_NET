@@ -3,6 +3,7 @@ import type { Location } from '../types';
 import { bandOf, BAND_COLOR, BAND_WORDS, RHYTHM, beatPoints, type HealthBand } from './healthBands';
 import { useHealthView } from '../hooks/useHealthView';
 import { isCustomSystem } from '../sheets';
+import { useWords, asLabel } from '../sheets/words';
 import { ModelHealthEditor, ModelHealthDescription, NoHealthNotice, monitorBandFor, type SendHealth } from './HealthModelPanels';
 // Inline SVGs so we can tint them with CSS `color` (currentColor)
 export const PersonSVG = ({ color = 'currentColor', style }: { color?: string; style?: React.CSSProperties }) => (
@@ -163,6 +164,9 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
   // A custom system's health model, as the server lets this viewer see it. Null for the
   // built-in systems, which keep the panel below exactly as it was.
   const view = useHealthView(socket, target?.id, isCustomSystem(gameSystem));
+  // A custom system's own word for hit points (TEMP_WOUNDS); today's text otherwise.
+  const word = useWords(gameSystem);
+  const hp = word('hp', 'plural', 'HP');
 
   useEffect(() => { setInjuries(parseInjuries(rawInjuries)); }, [target?.id, rawInjuries]);
 
@@ -228,10 +232,10 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
   );
   const tempRow = (
     <div>
-      <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TEMP_HP</label>
+      <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TEMP_{asLabel(hp)}</label>
       <div style={{ display: 'flex', gap: '10px' }}>
         <input
-          type="number" placeholder="0" max="100" aria-label="Temp HP"
+          type="number" placeholder="0" max="100" aria-label={`Temp ${hp}`}
           value={tempAmount || ''}
           onChange={e => { let val = parseInt(e.target.value) || 0; if (val > 100) val = 100; setTempAmount(val); }}
           style={{ flex: 1, minWidth: 0 }}
@@ -253,7 +257,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
           <InjuryToggle open={injuriesOpen} onClick={() => setInjuriesOpen((o) => !o)} size={18} />
         </div>
         {injuryMap}
-        <ModelHealthEditor key={`${target.id}:${view.model}`} view={view} target={target} send={sendHealth} gm={token !== ''} />
+        <ModelHealthEditor key={`${target.id}:${view.model}`} view={view} target={target} send={sendHealth} gm={token !== ''} words={word} />
         {(view.model === 'tracks' || view.model === 'locations') && (
           <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>{tempRow}</div>
         )}
@@ -308,9 +312,9 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
       <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {token !== '' && (
           <div>
-            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX_HP</label>
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX_{asLabel(hp)}</label>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <input type="number" placeholder="0" aria-label="Max HP" value={maxAmount || ''} onChange={e => setMaxAmount(parseInt(e.target.value) || 0)} style={{ flex: 1, minWidth: 0 }} />
+              <input type="number" placeholder="0" aria-label={`Max ${hp}`} value={maxAmount || ''} onChange={e => setMaxAmount(parseInt(e.target.value) || 0)} style={{ flex: 1, minWidth: 0 }} />
               <button className="upload-btn" style={{ width: 'auto', flexShrink: 0, margin: 0, padding: '0 15px' }} onClick={() => updateHealth('set_max', maxAmount)}>SET</button>
             </div>
           </div>

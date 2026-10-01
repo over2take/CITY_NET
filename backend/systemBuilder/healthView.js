@@ -35,11 +35,12 @@ const harmLevels = (health, sheet) => list(health.levels).map((l) => ({
  *   token   { current, max, temp }
  *   sheet   the data of the sheet behind the token ({} when there is none)
  *   full    true for the GM, a granted editor, or the token's owner
+ *   hpWord  the system's own word for hit points, for a pool with no label of its own
  *
  * Returns { model, full, ... } with the model's detail, or { model: null } when the system's
  * health is not a custom model (the built-in systems draw their own).
  */
-const healthView = (health, token, sheet, { full = false } = {}) => {
+const healthView = (health, token, sheet, { full = false, hpWord = 'HP' } = {}) => {
   if (!health || typeof health !== 'object' || typeof health.model !== 'string') return { model: null };
   const s = sheet && typeof sheet === 'object' ? sheet : {};
   const t = { current: num(token && token.current), max: num(token && token.max) };
@@ -47,7 +48,7 @@ const healthView = (health, token, sheet, { full = false } = {}) => {
 
   switch (health.model) {
     case 'pool':
-      return { ...base, label: health.label || 'HP' };
+      return { ...base, label: health.label || hpWord };
 
     case 'tracks': {
       const [first, second] = list(health.tracks);

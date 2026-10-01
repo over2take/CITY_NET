@@ -32,6 +32,7 @@ const { compileSystem } = require('./derived');
 const { checkSheet } = require('./sheet');
 const { checkNpc } = require('./npc');
 const { checkCore } = require('./core');
+const { TERMS, WORD_FORMS, wordFor, resolveWords, ownWords } = require('./terms');
 
 const FORMAT = 1;
 
@@ -46,27 +47,6 @@ const LIMITS = {
   /** One glossary word. */
   word: 40,
 };
-
-/**
- * The app's own words a system may rename (Layer 1). The key is the stable id the app looks
- * up; the default is what shows when a system says nothing.
- */
-const TERMS = {
-  character: { singular: 'CHARACTER', plural: 'CHARACTERS' },
-  hp: { singular: 'HP', plural: 'HP', short: 'HP' },
-  money: { singular: 'CREDIT', plural: 'CREDITS', short: 'CR' },
-  level: { singular: 'LEVEL', plural: 'LEVELS', short: 'LVL' },
-  xp: { singular: 'XP', plural: 'XP', short: 'XP' },
-  class: { singular: 'CLASS', plural: 'CLASSES' },
-  initiative: { singular: 'INITIATIVE', plural: 'INITIATIVE', short: 'INIT' },
-  round: { singular: 'ROUND', plural: 'ROUNDS' },
-  turn: { singular: 'TURN', plural: 'TURNS' },
-  gm: { singular: 'GM', plural: 'GMS', short: 'GM' },
-  shop: { singular: 'SHOP', plural: 'SHOPS' },
-  bank: { singular: 'BANK', plural: 'BANKS' },
-  vehicle: { singular: 'VEHICLE', plural: 'VEHICLES' },
-};
-const WORD_FORMS = ['singular', 'plural', 'short'];
 
 /** The parts of the app a system can turn off (Layer 2). All on unless a system says. */
 const PARTS = [
@@ -171,23 +151,6 @@ const checkDefinition = (definition) => {
 /** A new system's starting point: a name and nothing else. */
 const blankDefinition = (name) => ({ format: FORMAT, name: String(name || '').trim() });
 
-/** What the app calls `term` in this system: the system's word, or the app's own. */
-const wordFor = (definition, term, form = 'singular') => {
-  const own = definition && isPlainObject(definition.words) && isPlainObject(definition.words[term])
-    ? definition.words[term][form] : undefined;
-  if (typeof own === 'string' && own.trim()) return own;
-  const fallback = TERMS[term];
-  return fallback ? (fallback[form] || fallback.singular) : term;
-};
-
-/**
- * Every term the app can rename, in every form, as this system says it: its own word where it
- * set one, the neutral default otherwise. What the browser and the server's own text use.
- */
-const resolveWords = (definition) => Object.fromEntries(Object.keys(TERMS).map((term) => [
-  term, Object.fromEntries(WORD_FORMS.map((form) => [form, wordFor(definition, term, form)])),
-]));
-
 /** Is `part` on in this system? Everything is, unless the system turns it off. */
 const partOn = (definition, part) => {
   const setting = definition && isPlainObject(definition.parts) ? definition.parts[part] : undefined;
@@ -196,5 +159,5 @@ const partOn = (definition, part) => {
 
 module.exports = {
   FORMAT, LIMITS, TERMS, PARTS, WORD_FORMS,
-  parseDefinition, checkDefinition, blankDefinition, wordFor, resolveWords, partOn,
+  parseDefinition, checkDefinition, blankDefinition, wordFor, resolveWords, ownWords, partOn,
 };
