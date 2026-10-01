@@ -180,6 +180,14 @@ const wordFor = (definition, term, form = 'singular') => {
   return fallback ? (fallback[form] || fallback.singular) : term;
 };
 
+/**
+ * Every term the app can rename, in every form, as this system says it: its own word where it
+ * set one, the neutral default otherwise. What the browser and the server's own text use.
+ */
+const resolveWords = (definition) => Object.fromEntries(Object.keys(TERMS).map((term) => [
+  term, Object.fromEntries(WORD_FORMS.map((form) => [form, wordFor(definition, term, form)])),
+]));
+
 /** Is `part` on in this system? Everything is, unless the system turns it off. */
 const partOn = (definition, part) => {
   const setting = definition && isPlainObject(definition.parts) ? definition.parts[part] : undefined;
@@ -187,6 +195,6 @@ const partOn = (definition, part) => {
 };
 
 module.exports = {
-  FORMAT, LIMITS, TERMS, PARTS,
-  parseDefinition, checkDefinition, blankDefinition, wordFor, partOn,
+  FORMAT, LIMITS, TERMS, PARTS, WORD_FORMS,
+  parseDefinition, checkDefinition, blankDefinition, wordFor, resolveWords, partOn,
 };
