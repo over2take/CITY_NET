@@ -33,7 +33,8 @@ export interface CustomRenderSheet {
 export interface CustomRender {
   id: string;
   name: string;
-  words: Record<string, { singular?: string; plural?: string; short?: string }>;
+  /** Every term in every form, resolved by the server (the system's word or the neutral default). */
+  words: Record<string, { singular: string; plural: string; short: string }>;
   parts: Record<string, { on: boolean }>;
   derived: string[];
   sheet: CustomRenderSheet;
@@ -93,6 +94,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
   const npcSheet = render.npc?.sheet;
   return {
     ...layoutTemplate(render.id, render.name, render.sheet, derived),
+    ...(render.words ? { words: render.words } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived), ...tiers } } : {}),
   };

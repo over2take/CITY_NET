@@ -12,6 +12,7 @@
 const { compileSystem } = require('./derived');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf } = require('./npc');
+const { resolveWords } = require('./definition');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
 
@@ -75,7 +76,8 @@ const tiersFor = (definition, recompute) => {
 const renderOf = (id, definition) => ({
   id,
   name: definition.name,
-  words: definition.words || {},
+  // Every term in every form, resolved here, so the browser holds no table of defaults.
+  words: resolveWords(definition),
   parts: definition.parts || {},
   derived: (Array.isArray(definition.derived) ? definition.derived : []).map((d) => d.id),
   sheet: effectiveSheet(definition),
@@ -123,6 +125,17 @@ const list = () => [...loaded.entries()].map(([id, s]) => ({ id, name: s.name, c
 
 const tiers = (id) => (loaded.has(id) ? loaded.get(id).tiers : null);
 
+/**
+ * What the app calls `term` in `form` while `system` runs, for text the server writes (chat
+ * lines, the dice log). A published custom system's word; otherwise `builtIn`, the text that
+ * place has always shown, so a built-in system's wording never changes.
+ */
+const wordIn = (system, term, form, builtIn) => {
+  const render = loaded.has(system) ? loaded.get(system).render : null;
+  const word = render && render.words[term] ? render.words[term][form] : undefined;
+  return typeof word === 'string' && word ? word : builtIn;
+};
+
 /** A published system's health model (its core.health), or null: built-in systems have none here. */
 const health = (id) => {
   const definition = loaded.has(id) ? loaded.get(id).definition : null;
@@ -133,4 +146,4 @@ const health = (id) => {
 templates.setCustomMeta(meta);
 npcTiers.setCustomTiers(tiers);
 
-module.exports = { load, refresh, meta, render, list, tiers, health, metaOf, renderOf };
+module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, metaOf, renderOf };

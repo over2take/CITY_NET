@@ -250,6 +250,9 @@ export interface SheetTemplate {
   /** NPC power tiers offered by GENERATE_SHEET (must mirror the server's
    *  npcTiers registry for this system). Absent = untiered generation. */
   npcTiers?: { id: string; label: string }[];
+  /** A custom system's words for the app's terms, every form resolved by the server
+   *  (sheets/words.ts reads them). Absent on the built-in systems, whose wording is their own. */
+  words?: Record<string, { singular: string; plural: string; short: string }>;
   /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
    *  (a custom system's stat block). Absent = NPCs use this template. */
   npcLayout?: SheetTemplate;
