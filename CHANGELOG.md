@@ -52,6 +52,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system's words reach the shops and the bank button.** The shop's messages, receipt
+  and refusals, the steps for stocking an empty shop, and the SHOP, VIEW_BANK and SHOP_CATALOGUES
+  buttons use the words a custom system's GM chose for shops, money, the bank, the GM and
+  characters: a game that calls its shops MERCHANTS says "NOTHING HERE THIS MERCHANT WOULD BUY".
+  A term the system did not rename keeps today's text, and the built-in systems are unchanged.
+  Custom systems get shops of their own in a later piece.
+
 - **A custom system's words show on the sheet, the token window and the HEALTH folder.** When the
   GM who built a custom system gives hit points, the character, the GM or initiative a name of
   their own, those places use it: a game that calls hit points VIGOR shows VIGOR where HIT_POINTS

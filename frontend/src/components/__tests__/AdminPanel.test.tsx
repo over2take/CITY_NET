@@ -10,6 +10,7 @@ vi.mock('../../utils/locationHelpers', () => ({
 }));
 
 import { AdminPanel } from '../AdminPanel';
+import { registerCustomTemplate, clearCustomTemplates } from '../../sheets/customTemplates';
 
 const makeSocketRef = () => ({ current: { emit: vi.fn(), on: vi.fn(), off: vi.fn() } });
 
@@ -138,6 +139,30 @@ describe('AdminPanel list view', () => {
     render(<AdminPanel {...baseProps()} />);
     await userEvent.click(screen.getByText('GAME'));
     expect(screen.getByText('PAY_PLAYERS')).toBeInTheDocument();
+  });
+
+  it('names the catalogues button in a custom system\'s own word for shops, and as today otherwise', async () => {
+    const catalogues = async (gameSystem?: string) => {
+      // The shop settings show only where shops are on, which today means a built-in system;
+      // a custom system's shops arrive with its parts (3b3). Shown as a built-in game shows
+      // them, with the running system's words, this pins the button's name for then.
+      const { unmount } = render(<AdminPanel {...baseProps()} globalSettings={{ game_system: 'cyberpunk_red' }} gameSystem={gameSystem} />);
+      await userEvent.click(screen.getByText('GAME'));
+      // By text: a role lookup copies every button on this tab, and jsdom cannot parse one
+      // of their background styles.
+      const label = screen.getByText(/^[A-Z_]+_CATALOGUES$/).textContent;
+      unmount();
+      return label;
+    };
+    clearCustomTemplates();
+    registerCustomTemplate({ id: 'sys_aaaaaaaaaaaaaaaa', name: 'Hearth', parts: {}, derived: [], sheet: { sections: [] },
+      words: { shop: { singular: 'MERCHANT', plural: 'MERCHANTS', short: 'MERCHANT' } } });
+    registerCustomTemplate({ id: 'sys_bbbbbbbbbbbbbbbb', name: 'Plain', parts: {}, derived: [], sheet: { sections: [] }, words: {} });
+    for (const system of [undefined, 'cities_without_number', 'cyberpunk_red', 'shadowrun_6e', 'generic', 'sys_bbbbbbbbbbbbbbbb']) {
+      expect(await catalogues(system), String(system)).toBe('SHOP_CATALOGUES');
+    }
+    expect(await catalogues('sys_aaaaaaaaaaaaaaaa')).toBe('MERCHANT_CATALOGUES');
+    clearCustomTemplates();
   });
 
   it('calls setIsAdminPayOpen when PAY_PLAYERS is clicked', async () => {

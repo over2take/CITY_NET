@@ -4,7 +4,7 @@ import {
   buildingTypeById, shelvedCatalogues, catalogueById, typeLabel, catalogueLabel, type ShopStock,
 } from '../data/buildingTypes';
 import {
-  SETTLE_BALANCE, SETTLE_DEBT, REFUSAL_TEXT, buybackValue,
+  SETTLE_BALANCE, SETTLE_DEBT, refusalText, buybackValue,
   type Settle, type RefusalReason,
 } from '../data/shopRules';
 import { ownedItems, sellableAt, BOOK_SYSTEM } from '../sheets/ownedItems';
@@ -29,6 +29,7 @@ import {
 } from '../sheets/inventory';
 import { CWN_WEAPON_ROWS, CWN_VEHICLE_ROWS } from '../sheets/templates/cities_without_number';
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
+import { useWords, asLabel, todaysWords, type WordLookup } from '../sheets/words';
 import {
   addBuy, stepBuy, sellCounts, cartTotals, groupSells, slotsWanted, cartCarry,
   type CartBuy, type CartSell,
@@ -146,7 +147,7 @@ const stamp = (d: Date) => {
  * A checkout, set out like a receipt: the shop and the time, every line, the total, and
  * where the money went. Formal on purpose - it is the record of money changing hands.
  */
-function Receipt({ receipt: r, shop }: { receipt: CartReceipt; shop: string }) {
+function Receipt({ receipt: r, shop, word = todaysWords }: { receipt: CartReceipt; shop: string; word?: WordLookup }) {
   const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12 };
   const rule: React.CSSProperties = { borderTop: '1px dashed var(--dark-green)', margin: '6px 0' };
   const where = r.net > 0
@@ -155,7 +156,7 @@ function Receipt({ receipt: r, shop }: { receipt: CartReceipt; shop: string }) {
   return (
     <div data-testid="cart-receipt" style={{ ...mono(10), letterSpacing: 0, border: '1px solid var(--green)', padding: '8px 10px', marginBottom: 10, color: 'var(--green)' }}>
       <div style={{ ...row, fontWeight: 'bold' }}>
-        <span>RECEIPT · {(shop || 'SHOP').toUpperCase()}</span>
+        <span>RECEIPT · {(shop || word('shop', 'singular', 'SHOP')).toUpperCase()}</span>
         <span>{stamp(r.at)}</span>
       </div>
       <div style={rule} />
@@ -299,6 +300,14 @@ export function ShopWindow({
   const [pos, setPos] = useState({ x: 140, y: 90 });
   const [tab, setTab] = useState<Tab>('buy');
   const [filter, setFilter] = useState('');
+  // A custom system's own words for the shop, money, the GM and characters; today's text otherwise.
+  const word = useWords(system);
+  const gm = word('gm', 'short', 'GM');
+  const shopWord = word('shop', 'singular', 'shop');
+  const SHOP = word('shop', 'singular', 'SHOP').toUpperCase();
+  const moneyWord = word('money', 'plural', 'credits');
+  const CHARACTER = word('character', 'singular', 'CHARACTER').toUpperCase();
+  const characterWord = word('character', 'singular', 'character');
   /** Narrows the sell list, the way the buy side's filter narrows a shelf. */
   const [sellFilter, setSellFilter] = useState('');
 
@@ -548,7 +557,7 @@ export function ShopWindow({
     const balance = account?.balance ?? 0;
     if (net > balance && !settle) {
       if (!overdraftAllowed) {
-        setRefused(`Not enough credits — the cart comes to ${money(net)} and you have ${money(balance)}.`);
+        setRefused(`Not enough ${moneyWord} — the cart comes to ${money(net)} and you have ${money(balance)}.`);
         return;
       }
       // Asked rather than assumed. Debt and a negative balance are different problems.
@@ -568,7 +577,7 @@ export function ShopWindow({
     checkoutTimer.current = setTimeout(() => {
       checkoutTimer.current = null;
       setBusy(false);
-      setRefused('The shop did not answer. Check your balance before trying again — if the server was just updated, it needs restarting.');
+      setRefused(`The ${shopWord} did not answer. Check your balance before trying again — if the server was just updated, it needs restarting.`);
     }, CHECKOUT_TIMEOUT_MS);
     socket?.emit('checkoutShop', {
       locationId,
@@ -599,7 +608,7 @@ export function ShopWindow({
           setRepriced(Number(res.net) || 0);
           setRefused(`Prices changed while this sat in the cart — it now comes to ${money(Number(res.net) || 0)}. Check it, then CHECK OUT again.`);
         } else {
-          setRefused(REFUSAL_TEXT[res.reason as RefusalReason] ?? 'The checkout did not go through. Nothing was charged.');
+          setRefused(refusalText(word)[res.reason as RefusalReason] ?? 'The checkout did not go through. Nothing was charged.');
         }
         return;
       }
@@ -1377,7 +1386,7 @@ export function ShopWindow({
         <div role="alert" style={{ ...mono(10), color: 'var(--danger)', marginBottom: 6, letterSpacing: 0 }}>{refused}</div>
       )}
 
-      {receipt && <Receipt receipt={receipt} shop={name} />}
+      {receipt && <Receipt receipt={receipt} shop={name} word={word} />}
 
       {cartCount === 0 ? (
         !receipt && (
@@ -1463,7 +1472,7 @@ export function ShopWindow({
               <span style={{ fontWeight: 'bold' }}>{money(net)}</span>
             </div>
             <div style={{ color: net < 0 ? 'var(--cyan)' : 'var(--green)', textAlign: 'right' }}>
-              {net > 0 ? `YOU PAY ${money(net)}` : net < 0 ? `THE SHOP PAYS YOU ${money(-net)}` : 'IT COMES OUT EVEN'}
+              {net > 0 ? `YOU PAY ${money(net)}` : net < 0 ? `THE ${SHOP} PAYS YOU ${money(-net)}` : 'IT COMES OUT EVEN'}
               {account && ` · BALANCE AFTER ${money(account.balance - net)}`}
             </div>
             {repriced !== null && (
@@ -1474,7 +1483,7 @@ export function ShopWindow({
           {asking && (
             <div
               role="alertdialog"
-              aria-label="Not enough credits"
+              aria-label={`Not enough ${moneyWord}`}
               style={{ ...mono(10), letterSpacing: 0, marginTop: 8, padding: '6px 8px', border: '1px solid var(--warning)', color: 'var(--warning)' }}
             >
               <div style={{ marginBottom: 6 }}>
@@ -1528,7 +1537,7 @@ export function ShopWindow({
       }}
       panelMode="list"
       width={980}
-      label={`${name || 'Shop'} shop`}
+      label={`${name || word('shop', 'singular', 'Shop')} ${shopWord}`}
       header={(
         <span style={{ color: 'var(--cyan)' }}>
           {type ? typeLabel(type.id, system).toUpperCase() : 'UNKNOWN'} ·{' '}
@@ -1595,13 +1604,13 @@ export function ShopWindow({
               }}
             >
               {!sheet
-                ? 'NO CHARACTER SHEET LOADED — NOTHING TO BUY ONTO'
+                ? `NO ${CHARACTER} SHEET LOADED — NOTHING TO BUY ONTO`
                 : shelf?.notice ?? ''}
             </div>
 
             {!shelf ? (
               <div style={{ ...mono(10), color: 'var(--grid-section)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
-                NO CATALOGUE FOR THIS SHOP YET.
+                NO CATALOGUE FOR THIS {SHOP} YET.
                 {/* Named, so the answer to "why is this empty" is on the screen. */}
                 {type?.sells.length
                   ? ` The book has ${type.sells.map((s) => catalogueLabel(s, system)).join(' and ')} for this
@@ -1690,7 +1699,7 @@ export function ShopWindow({
                                   className="utility-btn"
                                   disabled={!sheet}
                                   aria-label={`Add ${label} to the cart`}
-                                  title={sheet ? shelf.notice : 'No character sheet loaded'}
+                                  title={sheet ? shelf.notice : `No ${characterWord} sheet loaded`}
                                   onClick={() => shelf.buy(row)}
                                   style={{ padding: '1px 6px', fontSize: 9 }}
                                 >+ CART{inCart ? ` ×${inCart}` : ''}</button>
@@ -1709,7 +1718,7 @@ export function ShopWindow({
                     {/* An empty shelf and a filter that matched nothing are different
                         answers, and only one of them is somebody else's job to fix. */}
                     {shelf.rows.length === 0
-                      ? 'Nothing on the shelves yet — the GM adds stock in SHOP_CATALOGUES.'
+                      ? `Nothing on the shelves yet — the ${gm} adds stock in ${asLabel(word('shop', 'singular', 'SHOP'))}_CATALOGUES.`
                       : 'NOTHING MATCHES THAT'}
                   </div>
                 )}
@@ -1726,7 +1735,7 @@ export function ShopWindow({
         ) : tab === 'sell' ? (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ ...mono(9), color: 'var(--grid-section)', marginBottom: 8, letterSpacing: 0 }}>
-              THIS SHOP PAYS {pct}% OF THE {book ? 'BOOK' : 'SHELF'} PRICE · + CART WHAT YOU WANT TO SELL, THEN CHECK OUT IN THE CART
+              THIS {SHOP} PAYS {pct}% OF THE {book ? 'BOOK' : 'SHELF'} PRICE · + CART WHAT YOU WANT TO SELL, THEN CHECK OUT IN THE CART
             </div>
 
             {refused && (
@@ -1738,8 +1747,8 @@ export function ShopWindow({
             {sellable.length === 0 ? (
               <div style={{ ...mono(11), color: 'var(--green)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
                 {!sheet
-                  ? 'NO CHARACTER SHEET LOADED — NOTHING TO SELL.'
-                  : 'NOTHING HERE THIS SHOP WOULD BUY. A shop only takes the kinds of thing it sells.'}
+                  ? `NO ${CHARACTER} SHEET LOADED — NOTHING TO SELL.`
+                  : `NOTHING HERE THIS ${SHOP} WOULD BUY. A ${shopWord} only takes the kinds of thing it sells.`}
               </div>
             ) : (
               <>
@@ -1788,7 +1797,7 @@ export function ShopWindow({
                               {l.unitPrice === null && (
                                 <span
                                   style={{ color: 'var(--grid-section)' }}
-                                  title="Not on any shelf, so the shop cannot price it. Sells for nothing — settle up with your GM."
+                                  title={`Not on any shelf, so the ${shopWord} cannot price it. Sells for nothing — settle up with your ${gm}.`}
                                 > ?</span>
                               )}
                             </td>

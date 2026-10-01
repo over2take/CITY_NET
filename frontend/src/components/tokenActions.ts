@@ -6,6 +6,8 @@
 // open a sheet, and a test holds each of them. Health moved from two buttons into a folder,
 // with the same split: the old UPDATE_HEALTH viewers change it, CHECK_HEALTH viewers watch it.
 
+import { asLabel, todaysWords, type WordLookup } from '../sheets/words';
+
 export type TokenActionKey =
   | 'attack' | 'melee' | 'ranged'
   | 'player-sheet' | 'npc-sheet' | 'generate-sheet' | 'edit'
@@ -113,6 +115,8 @@ export interface TokenActionContext {
   /** The tier GENERATE_SHEET asks for, already resolved; undefined where the system has none. */
   tier: string | undefined;
   isOwner: boolean;
+  /** The running system's words (sheets/words.ts), for VIEW_BANK; today's text when not given. */
+  words?: WordLookup;
   open: {
     ownSheet: () => void;
     playerSheet: (owner: string) => void;
@@ -177,8 +181,13 @@ export function buildTokenActions(viewer: TokenViewer, c: TokenActionContext): B
   };
 
   // Worded like the sidebar's own remove buttons: your token is yours to take off the map.
-  const label = (key: TokenActionKey) =>
-    key === 'purge' && viewer.isPlayerToken && viewer.isOwner ? 'REMOVE_MY_TOKEN' : LABEL[key];
+  // VIEW_BANK in a custom system's own word for the bank (VIEW_COIN_PURSE).
+  const word = c.words ?? todaysWords;
+  const label = (key: TokenActionKey) => {
+    if (key === 'purge' && viewer.isPlayerToken && viewer.isOwner) return 'REMOVE_MY_TOKEN';
+    if (key === 'bank') return `VIEW_${asLabel(word('bank', 'singular', 'BANK'))}`;
+    return LABEL[key];
+  };
   return tokenActionKeys(viewer).map((key) => ({ key, label: label(key), ...does[key] }));
 }
 

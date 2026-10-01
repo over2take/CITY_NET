@@ -4,6 +4,8 @@
 // and press every button - the same arrangement as tokenActions.ts. The conditions are the
 // old window's, carried over one for one.
 
+import { todaysWords, type WordLookup } from '../sheets/words';
+
 export type BuildingActionKey = 'shop' | 'battle' | 'ping' | 'broadcast' | 'enemy-vehicles' | 'request-edit';
 
 export interface BuildingViewer {
@@ -36,6 +38,8 @@ export interface BuildingActionContext {
   /** Someone already holds editing rights, so a request would only be refused. */
   someoneEditing: boolean;
   notify: (message: string) => void;
+  /** The running system's words (sheets/words.ts), for SHOP; today's text when not given. */
+  words?: WordLookup;
   open: {
     shop: (location: any) => void;
     battleMap: (locationId: number) => void;
@@ -74,5 +78,8 @@ export function buildBuildingActions(viewer: BuildingViewer, c: BuildingActionCo
       },
     },
   };
-  return buildingActionKeys(viewer).map((key) => ({ key, label: LABEL[key], ...does[key] }));
+  // A custom system's own word for its shops; every other label is the app's own.
+  const word = c.words ?? todaysWords;
+  const label = (key: BuildingActionKey) => (key === 'shop' ? word('shop', 'singular', 'SHOP').toUpperCase() : LABEL[key]);
+  return buildingActionKeys(viewer).map((key) => ({ key, label: label(key), ...does[key] }));
 }

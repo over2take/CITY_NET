@@ -19,6 +19,7 @@ import type {
 import rhombusIcon from './assets/rhombus.svg';
 import { useMapData } from './hooks/useMapData';
 import { useCustomTemplates } from './hooks/useCustomTemplates';
+import { wordFor } from './sheets/words';
 import { useSocket } from './hooks/useSocket';
 import { THEMES, ThemeContext } from './theme/themes';
 import type { ThemeName } from './theme/themes';
@@ -1861,6 +1862,7 @@ function App() {
             ))}
             {token && showAdminPanel && (
               <AdminPanel
+                gameSystem={gameSystem}
                 isAdmin={isAdmin}
                 setIsAdminPayOpen={setIsAdminPayOpen}
                 setIsAdminXpOpen={setIsAdminXpOpen}
@@ -2415,6 +2417,7 @@ function App() {
                   emit: (event, payload) => socketRef.current?.emit(event, payload),
                   someoneEditing: isSomeoneEditing,
                   notify: setNotification,
+                  words: (term, form, builtIn) => wordFor(gameSystem, term, form, builtIn),
                   open: {
                     shop: (loc) => setShopLocation(loc),
                     battleMap: (id) => enterBattleMap(id),
@@ -2473,6 +2476,7 @@ function App() {
                   sheetLink: linked && tokenSheetLink ? { sheet_id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label } : null,
                   tier: tiers && tiers.length > 0 ? (genTier || tiers[0].id) : undefined,
                   isOwner,
+                  words: (term, form, builtIn) => wordFor(gameSystem, term, form, builtIn),
                   open: {
                     ownSheet: () => setIsSheetOpen(true),
                     playerSheet: (owner) => setOpenPlayerSheetUser(owner),
