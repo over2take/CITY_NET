@@ -52,6 +52,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The app can ask which parts a custom system uses.** A custom system's choice to turn off the
+  bank, shops, vehicles, cyberware and its other parts now reaches the server and every window, ready
+  for the pieces that hide them. Nothing is hidden yet, and the built-in systems have every part on.
+
 - **A custom system's words reach the building GM notes and the admin GAME tab.** The GM NOTES
   folder, its header and editor, BANK SOUNDS and the INITIATIVE FOLLOWS BUILDING house rule use the
   words a custom system's GM chose for the GM, the bank and initiative. The built-in systems keep
