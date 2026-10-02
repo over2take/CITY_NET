@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BUILDING_TYPES, shopsAvailable, isShop, typeLabel } from '../data/buildingTypes';
+import { BUILDING_TYPES, shopsAvailable, isShopIn, typeLabel, typeOn } from '../data/buildingTypes';
 import { EmptyShopSteps } from './EmptyShopSteps';
 import { SystemPicker } from './SystemPicker';
 import type { PickerSystem } from './systemPickerRules';
@@ -1892,8 +1892,11 @@ export function AdminPanel({
                           style={{width: '100%'}}
                         >
                           <option value="">— NONE —</option>
-                          {BUILDING_TYPES.map((t) => (
-                            <option key={t.id} value={t.id}>{typeLabel(t.id, globalSettings['game_system'])}{t.shop ? ' (shop)' : ''}</option>
+                          {/* The types this game has, by its names. One it turned off stays
+                              listed only on a building that already has it, so the box can
+                              show it and saving keeps it (the server allows that one). */}
+                          {BUILDING_TYPES.filter((t) => typeOn(globalSettings['game_system'], t.id) || t.id === editData.building_type).map((t) => (
+                            <option key={t.id} value={t.id}>{typeLabel(t.id, globalSettings['game_system'])}{typeOn(globalSettings['game_system'], t.id) ? (t.shop ? ' (shop)' : '') : ' (not in this game)'}</option>
                           ))}
                         </select>
 
@@ -1906,7 +1909,7 @@ export function AdminPanel({
                           once a rate has been set, and why blank cannot mean zero. A shop
                           deliberately set to 0 buys nothing back.
                         */}
-                        {isShop(editData.building_type) && (
+                        {isShopIn(globalSettings['game_system'], editData.building_type) && (
                           <div style={{ marginTop: '8px' }}>
                             <label
                               htmlFor="loc-buyback"
@@ -1943,7 +1946,7 @@ export function AdminPanel({
                         {/* A shop with nothing to sell, and how to change that. Only ever
                             outside CWN, where shops carry what the GM uploads and nothing
                             else - and said here, where the shop is being set up. */}
-                        {isShop(editData.building_type) && (
+                        {isShopIn(globalSettings['game_system'], editData.building_type) && (
                           <EmptyShopSteps
                             buildingType={editData.building_type}
                             system={globalSettings['game_system']}

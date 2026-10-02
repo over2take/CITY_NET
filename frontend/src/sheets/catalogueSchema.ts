@@ -21,7 +21,7 @@
 import { getTemplate } from './index';
 import { customTemplate, isCustomSystem } from './customTemplates';
 import type { ShopStock } from '../data/buildingTypes';
-import { BUILDING_TYPES, CATALOGUES, typeLabel, catalogueLabel } from '../data/buildingTypes';
+import { BUILDING_TYPES, CATALOGUES, typeLabel, catalogueLabel, typeOn, catalogueOn } from '../data/buildingTypes';
 
 /** Columns every catalogue carries, whatever its shape. */
 const NAME = 'name';
@@ -175,7 +175,7 @@ export const columnsFor = (system: string, catalogue: ShopStock): CatalogueColum
 
 /** Which storefronts sell a given catalogue, by this game's names, for labelling a section. */
 export const shopsSelling = (catalogue: ShopStock, system: string): string[] =>
-  BUILDING_TYPES.filter((t) => t.shop && t.sells.includes(catalogue)).map((t) => typeLabel(t.id, system));
+  BUILDING_TYPES.filter((t) => t.shop && t.sells.includes(catalogue) && typeOn(system, t.id)).map((t) => typeLabel(t.id, system));
 
 /**
  * A few real rows per catalogue, so the example is something to edit rather than a blank
@@ -253,7 +253,8 @@ export const writeCatalogueFile = (
   catalogues?: ShopStock[],
   preamble: string[] = [],
 ): string => {
-  const wanted = catalogues ?? CATALOGUES.map((c) => c.id);
+  // Not the catalogues this game turned off: nothing would sell them.
+  const wanted = (catalogues ?? CATALOGUES.map((c) => c.id)).filter((c) => catalogueOn(system, c));
   const out: string[] = [
     '# CITY_NET storefront catalogue',
     `# system: ${system}`,

@@ -52,6 +52,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The windows use a custom system's building and catalogue names.** The building type picker,
+  the building window, the shop's shelves, the catalogue window and its file, and the shop setup steps
+  use the system's names and leave out what it turned off. A building whose type was turned off keeps
+  it, and saving the building no longer trips over it. CATALOGUES.EXE now calls the gear catalogue
+  "Gear" outside CWN, as the shop already did.
+
 - **A custom system can rename or turn off building types and shop catalogues.** A Ripperdoc can be
   a Temple and Cyberware can be Relics; a type or catalogue the system turns off sells nothing. The
   server follows this now, and the windows come next. Buildings keep their type, so turning one back

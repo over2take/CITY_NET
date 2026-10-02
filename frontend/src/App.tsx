@@ -39,7 +39,7 @@ import { TERMINAL_PREVIEW, type TerminalAction } from './components/TerminalWind
 import { BuildingPreview } from './components/BuildingPreview';
 import { ShopWindow } from './components/ShopWindow';
 import { CatalogueWindow } from './components/CatalogueWindow';
-import { isShop, shopsAvailable } from './data/buildingTypes';
+import { shopsAvailable, isShopIn } from './data/buildingTypes';
 import { HitPointsPanel, HealthReviewPanel } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
@@ -2225,7 +2225,7 @@ function App() {
             )}
 
             {/* ── Shop — a building that trades ─────────────────────────────────── */}
-            {shopLocation && shopsAvailable(gameSystem) && isShop(shopLocation.building_type) && (
+            {shopLocation && shopsAvailable(gameSystem) && isShopIn(gameSystem, shopLocation.building_type) && (
               <ShopWindow
                 name={shopLocation.name}
                 locationId={shopLocation.id}
@@ -2414,7 +2414,7 @@ function App() {
                  * them out and knows nothing about shops, battle maps or the stream camera.
                  */
                 const actions: BuildingAction[] = buildBuildingActions({
-                  shopHere: shopsAvailable(gameSystem) && isShop(selectedLocation.building_type),
+                  shopHere: shopsAvailable(gameSystem) && isShopIn(gameSystem, selectedLocation.building_type),
                   hasBattleMaps: currentLocBattleMaps.length > 0,
                   isAdmin,
                   systemHasVehicles: hasVehicles(gameSystem),

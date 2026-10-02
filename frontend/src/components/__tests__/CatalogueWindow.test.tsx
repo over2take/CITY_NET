@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CatalogueWindow } from '../CatalogueWindow';
+import { registerCustomTemplate, clearCustomTemplates } from '../../sheets/customTemplates';
 
 /** A socket that records what was sent and lets a test answer as the server would. */
 let listeners: Record<string, Function[]> = {};
@@ -215,6 +216,24 @@ describe('saving only what was previewed', () => {
     expect(sent).toContainEqual({ event: 'saveCatalogue', data: { text: ZIP } });
     reply('catalogueSaved', { ok: true, saved: [{ catalogue: 'weapons', count: 1 }] });
     expect(screen.getByText(/Saved: Weapons ×1\. The shops have it now\./)).toBeInTheDocument();
+  });
+
+  it('names the catalogues as a custom system does (3b3b2)', async () => {
+    const HEARTH = 'sys_aaaaaaaaaaaaaaaa';
+    registerCustomTemplate({ id: HEARTH, name: 'Hearth', parts: {}, derived: [], sheet: { sections: [] }, words: {},
+      buildings: { catalogues: { weapons: { name: 'Arms' } } } });
+    try {
+      show(HEARTH);
+      type(ZIP);
+      await userEvent.click(button('PREVIEW'));
+      reply('cataloguePreview', cleanPreview);
+      expect(screen.getByText(/ARMS ×1/)).toBeInTheDocument();
+      await userEvent.click(button('SAVE'));
+      reply('catalogueSaved', { ok: true, saved: [{ catalogue: 'weapons', count: 1 }] });
+      expect(screen.getByText(/Saved: Arms ×1\./)).toBeInTheDocument();
+    } finally {
+      clearCustomTemplates();
+    }
   });
 
   it('says so when the save fails, and that nothing changed', async () => {

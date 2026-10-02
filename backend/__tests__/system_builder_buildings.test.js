@@ -140,7 +140,13 @@ describe('the building-type routes', () => {
     expect(await typeOf(fresh)).toBeNull();
     expect((await give(fresh, 'ripperdoc')).status).toBe(200);
     const old = await stall('gun_shop');
-    expect(await typeOf(old)).toBe('gun_shop');
+    // Saving the building again sends the type it already has, and its rate rides along.
+    const again = await request(app()).patch(`/api/locations/${old}/building-type`)
+      .set('Authorization', `Bearer ${ADMIN}`).send({ building_type: 'gun_shop', buyback_pct: 30 });
+    expect(again.status).toBe(200);
+    expect(await get(db, 'SELECT building_type, buyback_pct FROM locations WHERE id = ?', [old])).toEqual({ building_type: 'gun_shop', buyback_pct: 30 });
+    // But another building cannot be moved onto it.
+    expect((await give(fresh, 'gun_shop')).status).toBe(409);
     // Clearing it is still allowed.
     expect((await give(old, '')).status).toBe(200);
     expect(await typeOf(old)).toBeNull();

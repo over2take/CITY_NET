@@ -31,12 +31,20 @@ export interface CustomRenderSheet {
   sections: { id: string; label: string; layout: SectionLayout; tab?: string; columns?: number; fields: CustomRenderField[] }[];
 }
 
+/** A system's own names for the app's building types and catalogues, and which it turned off. */
+export interface CustomBuildings {
+  types?: Record<string, { name?: string; on?: boolean }>;
+  catalogues?: Record<string, { name?: string; on?: boolean }>;
+}
+
 export interface CustomRender {
   id: string;
   name: string;
   /** Every term in every form, resolved by the server (the system's word or the neutral default). */
   words: Record<string, { singular: string; plural: string; short: string }>;
   parts: Record<string, { on: boolean }>;
+  /** The building types and shop catalogues it renamed or turned off (backend systemBuilder/buildings.js). */
+  buildings?: CustomBuildings;
   derived: string[];
   sheet: CustomRenderSheet;
   /** NPCs' own layout (null: they use the character sheet) and GENERATE_SHEET's tiers. */
@@ -97,6 +105,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...layoutTemplate(render.id, render.name, render.sheet, derived),
     ...(render.words ? { words: render.words } : {}),
     ...(render.parts ? { parts: render.parts } : {}),
+    ...(render.buildings ? { buildings: render.buildings } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived), ...tiers } } : {}),
   };

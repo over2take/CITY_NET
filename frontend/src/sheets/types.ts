@@ -256,6 +256,9 @@ export interface SheetTemplate {
   /** The parts of the app a custom system set on or off (sheets/parts.ts reads them); a part
    *  not listed is on. Absent on the built-in systems. */
   parts?: Record<string, { on: boolean }>;
+  /** The building types and shop catalogues a custom system renamed or turned off
+   *  (data/buildingTypes.ts reads them). Absent on the built-in systems. */
+  buildings?: { types?: Record<string, { name?: string; on?: boolean }>; catalogues?: Record<string, { name?: string; on?: boolean }> };
   /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
    *  (a custom system's stat block). Absent = NPCs use this template. */
   npcLayout?: SheetTemplate;

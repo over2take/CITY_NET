@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  shelvedCatalogues, typeLabel, catalogueLabel, type ShopStock,
+  shelvedIn, typeLabel, catalogueLabel, type ShopStock,
 } from '../data/buildingTypes';
 import { uploadedIn } from '../sheets/uploadedCatalogues';
 import { BOOK_SYSTEM } from '../sheets/ownedItems';
@@ -24,7 +24,7 @@ import { useWords, asLabel } from '../sheets/words';
 export const emptyShelves = (
   buildingType: string | null | undefined, system: string,
 ): ShopStock[] => {
-  const shelves = shelvedCatalogues(buildingType);
+  const shelves = shelvedIn(buildingType, system);
   if (!shelves.length || system === BOOK_SYSTEM) return [];
   return shelves.every((c) => uploadedIn(c).length === 0) ? shelves : [];
 };

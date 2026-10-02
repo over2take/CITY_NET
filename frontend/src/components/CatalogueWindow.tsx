@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { exampleFor, currentFor, type StoredEntry } from '../sheets/catalogueSchema';
-import { CATALOGUES, type ShopStock } from '../data/buildingTypes';
+import { catalogueLabel, type ShopStock } from '../data/buildingTypes';
 
 // Where a GM adds to what the shops sell.
 //
@@ -40,7 +40,6 @@ const mono = (size: number): React.CSSProperties => ({
   fontFamily: 'monospace', fontSize: size, letterSpacing: 0,
 });
 
-const labelOf = (id: string) => CATALOGUES.find((c) => c.id === id)?.label ?? id;
 
 /** Hand the browser a text file to save. */
 const download = (filename: string, text: string) => {
@@ -80,7 +79,7 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
         setMessage({ tone: 'bad', text: res.reason === 'empty' ? 'Nothing in that could be saved.' : 'The save did not go through. Nothing was changed.' });
         return;
       }
-      const parts = (res.saved ?? []).map((s) => `${labelOf(s.catalogue)} ×${s.count}`);
+      const parts = (res.saved ?? []).map((s) => `${catalogueLabel(s.catalogue as ShopStock, system)} ×${s.count}`);
       setMessage({ tone: 'ok', text: `Saved: ${parts.join(', ')}. The shops have it now.` });
       setPreview(null);
       setPreviewedText(null);
@@ -269,7 +268,7 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
 
             {preview.summary.map((s) => (
               <div key={s.catalogue}>
-                {labelOf(s.catalogue).toUpperCase()} ×{s.count}
+                {catalogueLabel(s.catalogue as ShopStock, system).toUpperCase()} ×{s.count}
                 {/* Overriding a book price is allowed - a GM house-ruling it means it -
                     but it should be a thing they chose, not a thing that happened. */}
                 {s.overrides.length > 0 && (
