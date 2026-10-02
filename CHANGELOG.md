@@ -52,6 +52,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A shop cart can be worked out in several currencies.** Each item is priced in its catalogue's
+  currency, each currency is settled on its own account, and a shortfall is covered only as that
+  currency allows. Nothing uses it yet; the built-in checkout is unchanged.
+
 - **The bank works in a custom system's currencies.** Withdrawing, borrowing, paying debt, PAY_PLAYERS
   and the GM's bank edit act on the currency asked for, or the main one, and keep to its debt and
   negative switches; a refusal is told to the player. Balance updates list every currency. The bank

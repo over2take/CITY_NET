@@ -10,7 +10,7 @@
 // it. The sale half is shops/sell.js's planSale, unchanged, so selling through the cart is
 // held to exactly what selling was held to.
 
-const { planPurchase, SETTLE_BALANCE } = require('./purchase');
+const { planPurchase, SETTLE_BALANCE, SETTLE_DEBT } = require('./purchase');
 
 /** More of one line than anybody buys at a counter; a typo, or a crafted message. */
 const MAX_QTY = 99;
@@ -82,4 +82,84 @@ const planCheckout = ({
   };
 };
 
-module.exports = { planCheckout, MAX_QTY };
+/**
+ * Plan a checkout in a custom system's currencies (3c2a4a).
+ *
+ * Each catalogue is priced in its own currency (buildings.js catalogueCurrency, decided with
+ * the user 2026-10-02), so a cart can hold Gold for the market's goods and Favor for the guild
+ * hall's. Every currency the cart touches is worked out, and settled on its own account, as
+ * planCheckout settles the one: either every currency goes through or none does.
+ *
+ * A shortfall is covered only as that currency allows (the user, 2026-10-02): with debt on, by
+ * borrowing the rest ('debt'); with negative on, by going below zero ('balance'); with neither,
+ * it is refused. Where it may be covered and the cart did not say how, the answer is
+ * 'needs_choice' with the ways that currency allows, so the window can ask.
+ *
+ * Amounts are whole numbers of each currency's smallest unit (currencies.js); a buy-back that
+ * comes to a fraction pays the whole units below it.
+ *
+ * `currencyOf(catalogue)` is the catalogue's currency (currencies.js shape). `accounts`,
+ * `settle` and `expectedNet` are keyed by currency id. Returns
+ * `{ ok: true, lines, currencies: { [id]: { buyTotal, payout, net, balance, debt, settled } } }`
+ * or `{ ok: false, reason, currency?, ... }`.
+ */
+const planCheckoutInCurrencies = ({
+  buys, priceOf, shelved, sale, currencyOf, accounts, settle, expectedNet,
+}) => {
+  const lines = [];
+  const byId = new Map();
+  const note = (currency) => {
+    if (!byId.has(currency.id)) byId.set(currency.id, { currency, buyTotal: 0, payout: 0 });
+    return byId.get(currency.id);
+  };
+  for (const b of Array.isArray(buys) ? buys : []) {
+    const catalogue = String((b && b.catalogue) || '');
+    const itemId = String((b && b.itemId) || '');
+    const qty = Number(b && b.qty);
+    if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY) return { ok: false, reason: 'qty', catalogue, itemId };
+    if (!shelved.includes(catalogue)) return { ok: false, reason: 'not_sold', catalogue, itemId };
+    const price = priceOf(catalogue, itemId);
+    if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return { ok: false, reason: 'price', catalogue, itemId };
+    const currency = currencyOf(catalogue);
+    if (!currency) return { ok: false, reason: 'price', catalogue, itemId };
+    lines.push({ catalogue, itemId, qty, price, currency: currency.id });
+    note(currency).buyTotal += price * qty;
+  }
+  for (const s of sale && Array.isArray(sale.sold) ? sale.sold : []) {
+    const currency = currencyOf(s.catalogue);
+    if (!currency) return { ok: false, reason: 'not_sold', catalogue: s.catalogue };
+    note(currency).payout += (Number(s.each) || 0) * (Number(s.qty) || 0);
+  }
+  if (!byId.size) return { ok: false, reason: 'empty' };
+
+  const out = {};
+  for (const [id, t] of byId) {
+    const buyTotal = Math.round(t.buyTotal);
+    const payout = Math.floor(t.payout);
+    const net = buyTotal - payout;
+    const totals = { buyTotal, payout, net };
+    const shown = expectedNet && Object.prototype.hasOwnProperty.call(expectedNet, id) ? expectedNet[id] : undefined;
+    if (shown !== undefined && shown !== null && Math.round(Number(shown)) !== net) {
+      return { ok: false, reason: 'total_changed', currency: id, ...totals };
+    }
+    const account = (accounts && accounts[id]) || {};
+    const have = Number(account.balance) || 0;
+    const owed = Number(account.debt) || 0;
+    if (net <= have) {
+      // Paying what is held, or the shop paying the player: debt is left alone, as in
+      // planCheckout (paying it off is the bank's own button).
+      out[id] = { ...totals, balance: have - net, debt: owed, settled: SETTLE_BALANCE };
+      continue;
+    }
+    const ways = [t.currency.negative && SETTLE_BALANCE, t.currency.debt && SETTLE_DEBT].filter(Boolean);
+    if (!ways.length) return { ok: false, reason: 'funds', currency: id, ...totals };
+    const how = settle && settle[id];
+    if (!ways.includes(how)) return { ok: false, reason: 'needs_choice', currency: id, options: ways, ...totals };
+    const plan = planPurchase({ balance: have, debt: owed, price: net, overdraftAllowed: true, settle: how });
+    if (!plan.ok) return { ...plan, currency: id, ...totals };
+    out[id] = { ...totals, balance: plan.balance, debt: plan.debt, settled: plan.settled };
+  }
+  return { ok: true, lines, currencies: out };
+};
+
+module.exports = { planCheckout, planCheckoutInCurrencies, MAX_QTY };
