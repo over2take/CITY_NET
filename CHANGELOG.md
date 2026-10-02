@@ -52,6 +52,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The bank's rules, per currency.** One place now says what a withdrawal, borrowing, paying debt and
+  the GM's own edit may do in a currency: a custom currency borrows only with debt on and goes below
+  zero only with negative on. Nothing uses it yet. The built-in systems keep today's bank exactly.
+
 - **The bank can hold a custom system's further currencies.** A new table starts empty and keeps each
   extra currency's balance and debt. A system's first currency is the account every player already
   has, so no money moves. Nothing uses it yet. The built-in systems keep their single account.
