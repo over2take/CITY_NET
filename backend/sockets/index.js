@@ -2010,6 +2010,59 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         socket.emit('shopCheckout', { ok: false, reason, ...(extra || {}) });
       const sells = Array.isArray(data.sells) ? data.sells : [];
 
+      /**
+       * The checkout in a custom system's currencies (3c2a4c, shops/checkout.js
+       * planCheckoutInCurrencies): every catalogue priced in its own currency, every currency
+       * the cart touches settled on its own account, a shortfall covered only as that currency
+       * allows. `settle` and `expectedNet` come keyed by currency. As above, the sheet loses
+       * what was sold before any account changes.
+       */
+      const checkoutInCurrencies = ({ system, catalogues, sale, sheetRow }) => {
+        bankCurrencies.all(db, username, system, (aErr, held) => {
+          if (aErr) return refuse('no_account');
+          const keyed = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : undefined);
+          const plan = shopCheckout.planCheckoutInCurrencies({
+            buys: data.buys,
+            priceOf: shopPrices.priceOf,
+            shelved: catalogues,
+            sale,
+            currencyOf: (catalogue) => customSystems.catalogueCurrencyIn(system, catalogue),
+            accounts: Object.fromEntries(held.map((a) => [a.id, a])),
+            settle: keyed(data.settle) || {},
+            expectedNet: keyed(data.expectedNet),
+          });
+          if (!plan.ok) {
+            const { ok, ...why } = plan;
+            return refuse(plan.reason, why);
+          }
+          const pay = () => {
+            const moves = Object.entries(plan.currencies);
+            let left = moves.length;
+            let failed = false;
+            moves.forEach(([id, c]) => bankCurrencies.put(db, username, system, id, c.balance, c.debt, (wErr) => {
+              if (failed) return;
+              if (wErr) { failed = true; return refuse('write'); }
+              left -= 1;
+              if (left) return;
+              sendBankUpdate(username);
+              if (sale) io.emit('sheetUpdated', { username, system });
+              socket.emit('shopCheckout', {
+                ok: true,
+                buys: plan.lines,
+                currencies: plan.currencies,
+                sold: sale ? sale.sold : [],
+                fromBody: sale ? sale.fromBody : 0,
+              });
+            }));
+          };
+          if (!sale) return pay();
+          patchSheet(db, sheetRow.id, sale.patch, (pErr) => {
+            if (pErr) return refuse('write');
+            pay();
+          });
+        });
+      };
+
       getShopSystem((sysErr, system) => {
         if (sysErr) return refuse('no_system');
         // Nothing to pay with or be paid in while the running system has the bank off.
@@ -2055,6 +2108,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         locationPct: loc.buyback_pct, globalPct, system,
                       });
                       if (!sale.ok) return refuse(sale.reason, { itemId: sale.itemId });
+                    }
+
+                    // A custom system with currencies of its own prices each catalogue in its
+                    // currency and settles each on its own account (3c2a4c).
+                    if (customSystems.currenciesIn(system).length) {
+                      return checkoutInCurrencies({ system, catalogues, sale, sheetRow });
                     }
 
                     bank.get(db, username, system,
