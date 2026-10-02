@@ -14,7 +14,9 @@ vi.mock('@react-three/drei', () => ({
   Html: ({ children }: any) => <div data-testid="html-label">{children}</div>,
 }));
 
-vi.mock('../HealthBar', () => ({
+// Rhombuses.tsx imports src/HealthBar.tsx, which from here is ../../HealthBar. ('../HealthBar'
+// named a file that does not exist, so this stand-in was never used; fixed in 3b7.)
+vi.mock('../../HealthBar', () => ({
   HealthBar: () => <div data-testid="health-bar" />,
 }));
 
@@ -134,6 +136,37 @@ describe('PlayerRhombus', () => {
     const socket = makeSocket();
     const { getByTestId } = render(<PlayerRhombus location={makeLoc({ name: 'PLAYER_NODE' })} onClick={vi.fn()} isSelected={true} setTargetObject={vi.fn()} token="" userName="GHOST" refreshLocations={vi.fn()} setIsDragging={vi.fn()} socket={socket} activeUsers={activeUsers} roads={[]} isBattleMap={false} battleMapPos={null} measureMode={false} />);
     expect(getByTestId('html-label').textContent).toBe('PLAYER_NODE');
+  });
+});
+
+// ─── Health bars ──────────────────────────────────────────────────────────────
+
+describe('health bars', () => {
+  const bars = (el: React.ReactElement) => {
+    const { queryAllByTestId, unmount } = render(el);
+    const n = queryAllByTestId('health-bar').length;
+    unmount();
+    return n;
+  };
+  const common = () => ({ onClick: vi.fn(), isSelected: false, setTargetObject: vi.fn(), refreshLocations: vi.fn(),
+    setIsDragging: vi.fn(), socket: makeSocket(), roads: [], isBattleMap: false, measureMode: false });
+
+  it('show the GM one on an enemy token and on a friendly token', () => {
+    expect(bars(<EnemyRhombus location={makeLoc({ shape: 'enemy_rhombus' })} token="admintoken" {...common()} />)).toBe(1);
+    expect(bars(<FriendlyRhombus location={makeLoc({ shape: 'friendly_rhombus' })} token="admintoken" userName="gm" {...common()} />)).toBe(1);
+  });
+
+  it('show a player none on an enemy token or a friendly one', () => {
+    expect(bars(<EnemyRhombus location={makeLoc({ shape: 'enemy_rhombus' })} token="" {...common()} />)).toBe(0);
+    expect(bars(<FriendlyRhombus location={makeLoc({ shape: 'friendly_rhombus' })} token="" userName="GHOST" {...common()} />)).toBe(0);
+  });
+
+  it('show on a player token while its owner is online, and not once they leave', () => {
+    const player = (activeUsers: { userName: string }[]) => (
+      <PlayerRhombus location={makeLoc()} token="" userName="GHOST" activeUsers={activeUsers} battleMapPos={null} {...common()} />
+    );
+    expect(bars(player([{ userName: 'GHOST' }]))).toBe(1);
+    expect(bars(player([{ userName: 'ROOK' }]))).toBe(0);
   });
 });
 
