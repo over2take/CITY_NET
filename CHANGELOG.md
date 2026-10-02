@@ -52,6 +52,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The bank works in a custom system's currencies.** Withdrawing, borrowing, paying debt, PAY_PLAYERS
+  and the GM's bank edit act on the currency asked for, or the main one, and keep to its debt and
+  negative switches; a refusal is told to the player. Balance updates list every currency. The bank
+  windows follow later. The built-in systems keep today's bank exactly.
+
 - **Each shop catalogue can be priced in its own currency.** A custom system names a catalogue's
   currency beside its name, so a guild hall can sell for Favor while the market sells for Gold; a
   catalogue that names none uses the main currency. Nothing uses it yet.
