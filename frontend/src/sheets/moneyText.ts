@@ -28,6 +28,17 @@ export const amountProblem = (currency: Currency, parsed: ParsedAmount, { positi
   }
 };
 
+/**
+ * An amount to show as the way to write this currency, under an empty box: "2 gp 5 sp" with
+ * coins, "$4.34" or "4,34 €" with decimals, "¥4" or "4 Favor" without.
+ */
+export const amountExample = (currency: Currency): string => {
+  const coins = currency.denominations;
+  if (coins.length > 1) return formatAmount(currency, 2 * coins[0].value + 5 * coins[1].value);
+  if (coins.length === 1) return formatAmount(currency, 15 * coins[0].value);
+  return formatAmount(currency, Math.round(4.34 * 10 ** currency.decimals));
+};
+
 /** What the bank did, as the server names it (bankRefused: backend/bank/moneyRules.js). */
 export type BankAction = 'withdraw' | 'borrow' | 'pay' | 'set';
 export type BankReason = 'amount' | 'funds' | 'no_debt' | 'no_negative' | 'nothing';

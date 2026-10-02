@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { useParts } from '../sheets/parts';
+import { currenciesFor, formatAmount, parseAmount, type BankCurrencyAccount, type Currency } from '../sheets/currencies';
+import { amountExample, amountProblem, bankRefusal, celebrationsFor, type BankAction } from '../sheets/moneyText';
 import creditsPngIcon from '../assets/Credits.png';
 
 export type BankSoundKey = 'cashregister' | 'debtpaid' | 'highroller' | 'firstpay' | 'overdraft';
@@ -316,8 +318,6 @@ const OVERDRAFT_CSS = `
 }
 `;
 
-const HIGH_ROLLER_THRESHOLD = 10000;
-
 const HIGH_ROLLER_CSS = `
 @keyframes credit-rain {
   0%   { transform: translateY(-10px) rotate(0deg); opacity: 1; }
@@ -354,7 +354,8 @@ interface BankWindowProps {
   pos: { x: number; y: number };
   setPos: (pos: { x: number; y: number }) => void;
   onClose: () => void;
-  bankData: { balance: number; debt: number };
+  /** The main currency's balance and debt; `currencies` lists every currency's under a custom system with its own (3c2b3). */
+  bankData: { balance: number; debt: number; currencies?: BankCurrencyAccount[] };
   socket: any;
   userName: string;
   isBankOpen: boolean;
@@ -367,7 +368,19 @@ interface BankWindowProps {
   currencyIcon?: string;
 }
 
-const CONFETTI_COLORS = ['#ff0066', '#00ff66', 'var(--warning)', '#00ccff', '#ff6600', '#cc00ff', '#ffffff'];
+/**
+ * A player's account in one of a custom system's currencies, from the last bank update. The main
+ * currency's is the balance and debt every update carries, so it is known even before an update
+ * lists the others; a currency not listed yet holds nothing.
+ */
+const accountIn = (bankData: BankWindowProps['bankData'], currencies: Currency[], c: Currency) =>
+  bankData.currencies?.find((a) => a.id === c.id)
+  ?? (c.id === currencies[0]?.id ? { id: c.id, balance: bankData.balance, debt: bankData.debt } : { id: c.id, balance: 0, debt: 0 });
+
+/** An amount that wraps between coins, never between a number and its coin or symbol. */
+const unbroken = (text: string) => text.replace(/(\d) (\S)/g, '$1\u00a0$2');
+
+const CONFETTI_COLORS =['#ff0066', '#00ff66', 'var(--warning)', '#00ccff', '#ff6600', '#cc00ff', '#ffffff'];
 
 const CELEBRATION_CSS = `
 @keyframes confetti-fall {
@@ -400,6 +413,35 @@ const CELEBRATION_CSS = `
 
 export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOpen, system, firstPayDone, highRollerDone, audioEnabled, soundVolumes, currencyIcon }: BankWindowProps) {
   const bankOn = useParts(system)('bank');
+  /**
+   * A custom system's own currencies (3c2b3, mockup approved 2026-10-02): every account listed,
+   * the boxes below for the one picked. None for a built-in system, which keeps today's window.
+   */
+  const currencies = currenciesFor(system);
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const picked: Currency | null = currencies.find((c) => c.id === pickedId) ?? currencies[0] ?? null;
+  /** Why the bank last did nothing, as the server said (bankRefused), until the next try. */
+  const [refused, setRefused] = useState<string | null>(null);
+  const bankDataRef = useRef(bankData);
+  bankDataRef.current = bankData;
+  useEffect(() => {
+    if (!socket || !currencies.length) return;
+    const onRefused = (data: { action: BankAction; reason: string; currency: string | null }) => {
+      const list = currenciesFor(system);
+      const c = list.find((x) => x.id === data?.currency);
+      if (c) setRefused(bankRefusal(c, data.action, data.reason, accountIn(bankDataRef.current, list, c)));
+    };
+    socket.on('bankRefused', onRefused);
+    return () => socket.off('bankRefused', onRefused);
+  }, [socket, system, currencies.length]);
+  /**
+   * The celebrations: every built-in system as today; a custom system's only if its GM turned them
+   * on, whale status only at its own threshold (decided with the user, 2026-10-02). Read from a ref
+   * in the effects below, which run on the main balance alone.
+   */
+  const party = celebrationsFor(system);
+  const partyRef = useRef(party);
+  partyRef.current = party;
   const vol = (key: string) => (soundVolumes?.[key] ?? 1);
   const audioEnabledRef = useRef(audioEnabled);
   useEffect(() => { audioEnabledRef.current = audioEnabled; }, [audioEnabled]);
@@ -447,7 +489,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
   // Debt paid off
   useEffect(() => {
     if (!bankInitializedRef.current) return;
-    if (prevDebtRef.current > 0 && bankData.debt === 0) {
+    if (prevDebtRef.current > 0 && bankData.debt === 0 && partyRef.current.on) {
       if (audioEnabledRef.current && !startupGraceRef.current) playProudFanfare(vol('debtpaid'));
       if (!isBankOpenRef.current) { prevDebtRef.current = bankData.debt; return; }
       setShowCelebration(true);
@@ -476,7 +518,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
       if (canPlaySound) playCashRegister(vol('cashregister'));
 
       // First Paycheck: balance was ≤ 0, now positive
-      if (prev <= 0 && curr > 0 && !hasFirstPayFiredRef.current) {
+      if (prev <= 0 && curr > 0 && !hasFirstPayFiredRef.current && partyRef.current.on) {
         hasFirstPayFiredRef.current = true; socket.emit("markFirstPayDone", { username: userName });
         if (canPlaySound) playCalibration(vol('firstpay'));
         if (bankIsOpen) {
@@ -487,7 +529,8 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
       }
 
       // High Roller: balance crosses threshold for first time this session
-      if (curr >= HIGH_ROLLER_THRESHOLD && !hasHighRollerFiredRef.current) {
+      const whale = partyRef.current.whale;
+      if (whale !== null && curr >= whale && !hasHighRollerFiredRef.current) {
         hasHighRollerFiredRef.current = true;
         socket.emit('markHighRollerDone', { username: userName });
         if (canPlaySound) playHighRollerSound(vol('highroller'));
@@ -500,7 +543,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
     }
 
     // Overdraft: balance just went negative
-    if (prev >= 0 && curr < 0) {
+    if (prev >= 0 && curr < 0 && partyRef.current.on) {
       if (canPlaySound) playWompWomp(vol('overdraft'));
       if (bankIsOpen) {
         setShowOverdraft(true);
@@ -514,7 +557,23 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
 
   if (!isBankOpen || !bankOn) return null;
 
+  // In a custom currency the box reads money as written ("2 gp 5 sp", "$4.34"), says how it read
+  // it, and sends whole smallest units for the picked currency; CONFIRM waits for an amount.
+  const promptRead = picked ? parseAmount(picked, promptAmount) : null;
+  const promptProblem = picked && promptRead ? amountProblem(picked, promptRead, { positive: true }) : null;
+  const promptReady = !promptRead || (promptRead.ok && promptRead.amount > 0);
+
+  const open = (prompt: 'withdraw' | 'borrow' | 'pay') => { setRefused(null); setActivePrompt(prompt); };
+
   const handleAction = () => {
+    if (picked && promptRead) {
+      if (!promptRead.ok || promptRead.amount <= 0) return;
+      const event = { withdraw: 'withdrawFunds', borrow: 'borrowFunds', pay: 'payDebt' }[activePrompt!];
+      socket.emit(event, { username: userName, amount: promptRead.amount, currency: picked.id });
+      setActivePrompt(null);
+      setPromptAmount('');
+      return;
+    }
     const amount = parseFloat(promptAmount);
     if (isNaN(amount) || amount <= 0) {
       setActivePrompt(null);
@@ -534,45 +593,104 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
     setPromptAmount('');
   };
 
-  const roundedBalance = Math.round(bankData.balance * 100) / 100;
-  const roundedDebt = Math.round(bankData.debt * 100) / 100;
+  // The picked currency's account in a custom system's money; the one balance otherwise.
+  const shown = picked ? accountIn(bankData, currencies, picked) : bankData;
+  const roundedBalance = Math.round(shown.balance * 100) / 100;
+  const roundedDebt = Math.round(shown.debt * 100) / 100;
   const balanceColor = roundedBalance > 0 ? '#00ff66' : roundedBalance < 0 ? '#ff0044' : '#fff';
   const debtColor = roundedDebt > 0 ? '#ff0044' : '#fff';
+  const pickedName = picked ? picked.name.toUpperCase() : '';
+  /** A figure in a box: the currency's own writing, or today's icon and two decimals. */
+  const figure = (value: number, color: string) => (picked
+    ? <span style={{ fontSize: '20px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{unbroken(formatAmount(picked, value))}</span>
+    : <><CurrencyIcon icon={currencyIcon} size={18} color={color} />{formatBankValue(value)}</>);
+  // A currency that can't be owed has no DEBT box, unless something is owed in it all the same.
+  const showDebt = !picked || picked.debt || shown.debt > 0;
 
   return (
     <DraggableWindow title="BANK.EXE" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '420px' }} contentStyle={{ overflow: 'hidden', maxHeight: 'none', minHeight: '220px' }}>
+      {picked && currencies.length > 1 && (
+        <div role="group" aria-label="Accounts" style={{ margin: '10px 10px 0', border: '1px solid var(--dark-green)', display: 'flex', flexDirection: 'column' }}>
+          {currencies.map((c, i) => {
+            const a = accountIn(bankData, currencies, c);
+            const on = c.id === picked.id;
+            return (
+              <button key={c.id} type="button" aria-pressed={on} data-testid={`bank-account-${c.id}`}
+                onClick={() => { setPickedId(c.id); setRefused(null); }}
+                style={{
+                  display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '2px 10px', width: '100%', padding: '5px 8px',
+                  background: on ? 'color-mix(in srgb, var(--green) 14%, transparent)' : 'transparent',
+                  boxShadow: on ? 'inset 3px 0 0 var(--green)' : 'none',
+                  border: 0, borderBottom: i < currencies.length - 1 ? '1px solid var(--dark-green)' : 0,
+                  color: 'var(--green)', fontFamily: 'inherit', fontSize: '12px', fontWeight: on ? 'bold' : 'normal', textAlign: 'left', cursor: 'pointer',
+                }}>
+                <span>{c.name.toUpperCase()}{i === 0 && <span style={{ fontSize: '9px', opacity: 0.6, marginLeft: '6px', fontWeight: 'normal' }}>MAIN</span>}</span>
+                <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: a.balance < 0 ? 'var(--danger)' : undefined }}>{unbroken(formatAmount(c, a.balance))}</span>
+                {a.debt > 0 && <span style={{ gridColumn: 2, textAlign: 'right', color: 'var(--danger)', fontSize: '10px', fontWeight: 'normal' }}>OWES {unbroken(formatAmount(c, a.debt))}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '20px', padding: '10px' }}>
-        <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>BALANCE</div>
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: balanceColor, marginBottom: '15px' }}>
-            <CurrencyIcon icon={currencyIcon} size={18} color={balanceColor} />
-            {formatBankValue(bankData.balance)}
+        <div style={{ flex: 1, minWidth: 0, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>{picked ? `BALANCE · ${pickedName}` : 'BALANCE'}</div>
+          <div data-testid="bank-balance" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: balanceColor, marginBottom: '15px' }}>
+            {figure(shown.balance, balanceColor)}
           </div>
-          <button className="panel-btn" style={{ width: '100%' }} onClick={() => setActivePrompt('withdraw')}>WITHDRAW</button>
+          <button className="panel-btn" style={{ width: '100%' }} onClick={() => open('withdraw')}>WITHDRAW</button>
         </div>
 
-        <div style={{ flex: 1, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>DEBT</div>
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: debtColor, marginBottom: '15px' }}>
-            <CurrencyIcon icon={currencyIcon} size={18} color={debtColor} />
-            {formatBankValue(bankData.debt)}
+        {showDebt && (
+          <div style={{ flex: 1, minWidth: 0, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
+            <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>{picked ? `DEBT · ${pickedName}` : 'DEBT'}</div>
+            <div data-testid="bank-debt" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: debtColor, marginBottom: '15px' }}>
+              {figure(shown.debt, debtColor)}
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button className="panel-btn" style={{ flex: 1 }} onClick={() => open('borrow')} disabled={!!picked && !picked.debt}>BORROW</button>
+              <button className="panel-btn" style={{ flex: 1 }} onClick={() => open('pay')}>PAY</button>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt('borrow')}>BORROW</button>
-            <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt('pay')}>PAY</button>
-          </div>
-        </div>
+        )}
       </div>
 
-      <CandleChart balance={bankData.balance} />
+      {picked && !picked.debt && (
+        <div style={{ textAlign: 'center', fontSize: '10px', letterSpacing: '1px', opacity: 0.6, color: 'var(--green)', padding: '0 10px 6px' }}>
+          {pickedName} CAN&apos;T BE BORROWED IN THIS GAME{picked.negative ? '' : ' · NEVER BELOW ZERO'}
+        </div>
+      )}
+      {refused && (
+        <div role="status" style={{ color: 'var(--danger)', fontSize: '11px', textAlign: 'center', padding: '0 10px 6px' }}>{refused}</div>
+      )}
+
+      {/* Keyed by currency, so picking another starts its own chart rather than reading the switch as a crash. */}
+      <CandleChart key={picked ? picked.id : 'money'} balance={shown.balance} />
 
       {activePrompt && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10 }}>
           <div style={{ background: '#111', border: '1px solid #444', padding: '20px', width: '200px' }}>
-            <div style={{ color: '#00ff66', marginBottom: '10px', textTransform: 'uppercase', textAlign: 'center' }}>AMOUNT TO {activePrompt === 'pay' ? 'PAY OFF' : activePrompt.toUpperCase()}?</div>
-            <input type="number" step="1" min="1" value={promptAmount} onChange={(e) => setPromptAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '10px', background: '#000', color: '#fff', border: '1px solid #333', outline: 'none', textAlign: 'center' }} autoFocus />
+            <div style={{ color: '#00ff66', marginBottom: '10px', textTransform: 'uppercase', textAlign: 'center' }}>
+              AMOUNT TO {activePrompt === 'pay' ? 'PAY OFF' : activePrompt.toUpperCase()}?
+              {picked && <div style={{ fontSize: '10px', opacity: 0.7 }}>IN {pickedName}</div>}
+            </div>
+            {picked ? (
+              <>
+                <input type="text" aria-label="Amount" autoComplete="off" value={promptAmount}
+                  onChange={(e) => setPromptAmount(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAction(); }}
+                  style={{ width: '100%', padding: '5px', marginBottom: '6px', background: '#000', color: '#fff', border: '1px solid #333', outline: 'none', textAlign: 'center' }} autoFocus />
+                <div data-testid="bank-amount-read" style={{ minHeight: '2.4em', fontSize: '10px', textAlign: 'center', marginBottom: '6px', lineHeight: 1.4,
+                  color: promptProblem ? 'var(--danger)' : promptAmount.trim() ? 'var(--cyan)' : 'var(--text)', opacity: promptAmount.trim() ? 1 : 0.6 }}>
+                  {promptProblem ?? (promptAmount.trim() && promptRead?.ok ? `READS AS ${formatAmount(picked, promptRead.amount)}` : `Write it like ${amountExample(picked)}`)}
+                </div>
+              </>
+            ) : (
+              <input type="number" step="1" min="1" value={promptAmount} onChange={(e) => setPromptAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '10px', background: '#000', color: '#fff', border: '1px solid #333', outline: 'none', textAlign: 'center' }} autoFocus />
+            )}
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="panel-btn" style={{ flex: 1 }} onClick={handleAction}>CONFIRM</button>
+              <button className="panel-btn" style={{ flex: 1 }} onClick={handleAction} disabled={!promptReady}>CONFIRM</button>
               <button className="panel-btn" style={{ flex: 1 }} onClick={() => setActivePrompt(null)}>CANCEL</button>
             </div>
           </div>
@@ -672,7 +790,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
             </div>
 
             <div style={{ fontSize: '13px', color: 'var(--warning)', fontFamily: 'monospace', textAlign: 'center', opacity: 0.8, animation: 'whale-pop 0.5s 0.3s both' }}>
-              BALANCE EXCEEDED ₡{HIGH_ROLLER_THRESHOLD.toLocaleString()}
+              BALANCE EXCEEDED {currencies.length ? formatAmount(currencies[0], party.whale ?? 0) : `₡${(party.whale ?? 0).toLocaleString()}`}
             </div>
             <div style={{ fontSize: '12px', color: '#888', fontFamily: 'monospace', textAlign: 'center', animation: 'whale-pop 0.5s 0.45s both' }}>
               The city knows your name now.
