@@ -1966,8 +1966,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           'SELECT building_type, buyback_pct FROM locations WHERE id = ?',
           [data.locationId],
           (err, loc) => {
-            if (err || !loc) return refuse('no_shop');
-            const catalogues = buildingTypes.shelvedCatalogues(loc.building_type);
+            // A building whose type this game turned off is not a shop here (it keeps the type,
+            // for when the type comes back), and a catalogue it turned off is on no shelf.
+            if (err || !loc || !customSystems.buildingIn(system, 'types', loc.building_type)) return refuse('no_shop');
+            const catalogues = buildingTypes.shelvedCatalogues(loc.building_type)
+              .filter((c) => customSystems.buildingIn(system, 'catalogues', c));
             if (!catalogues.length) return refuse('not_sold');
 
             db.all(

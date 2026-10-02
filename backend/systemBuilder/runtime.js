@@ -14,6 +14,7 @@ const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf } = require('./npc');
 const { ownWords } = require('./definition');
 const { partOn, PARTS } = require('./parts');
+const { buildingOn, buildingName, ownBuildings } = require('./buildings');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
 
@@ -81,6 +82,8 @@ const renderOf = (id, definition) => ({
   // each place keeps the text it shows today.
   words: ownWords(definition),
   parts: definition.parts || {},
+  // The building types and catalogues it renamed or turned off (buildings.js).
+  buildings: ownBuildings(definition),
   derived: (Array.isArray(definition.derived) ? definition.derived : []).map((d) => d.id),
   sheet: effectiveSheet(definition),
   npc: {
@@ -150,6 +153,15 @@ const partIn = (system, part) => {
   return loaded.has(system) ? partOn(loaded.get(system).definition, part) : true;
 };
 
+/**
+ * Whether `system` has a building type (`kind` 'types') or shop catalogue ('catalogues'). Only a
+ * published custom system can turn one off; every built-in system has all of them.
+ */
+const buildingIn = (system, kind, id) => (loaded.has(system) ? buildingOn(loaded.get(system).definition, kind, id) : true);
+
+/** A published custom system's own name for a building type or catalogue, or null: the app's name stands. */
+const buildingNameIn = (system, kind, id) => (loaded.has(system) ? buildingName(loaded.get(system).definition, kind, id) : null);
+
 /** A published system's health model (its core.health), or null: built-in systems have none here. */
 const health = (id) => {
   const definition = loaded.has(id) ? loaded.get(id).definition : null;
@@ -160,4 +172,4 @@ const health = (id) => {
 templates.setCustomMeta(meta);
 npcTiers.setCustomTiers(tiers);
 
-module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, metaOf, renderOf };
+module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, metaOf, renderOf };

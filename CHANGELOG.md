@@ -52,6 +52,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system can rename or turn off building types and shop catalogues.** A Ripperdoc can be
+  a Temple and Cyberware can be Relics; a type or catalogue the system turns off sells nothing. The
+  server follows this now, and the windows come next. Buildings keep their type, so turning one back
+  on brings its shop back. The built-in systems are unchanged.
+
 - **Custom systems have shops.** A custom game gets building types and shops, selling what its GM
   uploads, with every purchase landing in the inventory as on the generic sheet. A custom system can
   turn its shops off, and one with the bank off has no shops either. The buy-back setting uses the

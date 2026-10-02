@@ -34,6 +34,7 @@ const { checkNpc } = require('./npc');
 const { checkCore } = require('./core');
 const { TERMS, WORD_FORMS, wordFor, resolveWords, ownWords } = require('./terms');
 const { PARTS, partOn } = require('./parts');
+const { checkBuildings } = require('./buildings');
 
 const FORMAT = 1;
 
@@ -49,7 +50,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'lookups', 'derived', 'sheet', 'npc', 'core']);
+const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'lookups', 'derived', 'sheet', 'npc', 'core']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -130,6 +131,7 @@ const checkDefinition = (definition) => {
   checkText(definition.license, 'license', LIMITS.license, problems);
   checkWords(definition.words, problems);
   checkParts(definition.parts, problems);
+  checkBuildings(definition.buildings, problems);
 
   if (definition.lookups !== undefined || definition.derived !== undefined) {
     const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [] });
