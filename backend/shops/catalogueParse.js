@@ -25,6 +25,7 @@
 // and believed.
 
 /** A byte-order mark at the front of a file Excel saved. Invisible, and breaks the first header. */
+const { parseAmount, formatAmount } = require('../systemBuilder/currencies');
 const stripBom = (text) => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
 
 /**
@@ -117,8 +118,25 @@ const readPrice = (raw) => {
 const slug = (name) => String(name || '').trim().toLowerCase()
   .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
-/** Turn one row of values into a catalogue entry, or say what is wrong with it. */
-const readRow = (catalogue, columns, cells, line, problems) => {
+/** Why a price written in a currency could not be read, for the GM (currencies.js parseAmount). */
+const priceProblem = (reason, raw, currency) => {
+  const coins = Array.isArray(currency.denominations) ? currency.denominations : [];
+  if (reason === 'which_coin') return `price "${raw}" needs a coin, like ${raw} ${coins[0].short || coins[0].name}`;
+  if (reason === 'unknown_coin') return `price "${raw}" names a coin ${currency.name} does not have`;
+  if (reason === 'too_precise') return `price "${raw}" has more decimals than ${currency.name} has (${currency.decimals || 0})`;
+  if (reason === 'negative') return `price "${raw}" is below zero`;
+  return `price "${raw || ''}" is not a number`;
+};
+
+/**
+ * Turn one row of values into a catalogue entry, or say what is wrong with it.
+ *
+ * In a custom system with currencies, `options.currencyOf(catalogue)` is the catalogue's
+ * currency, and the price is read as people write it in that currency ("2gp 5sp", "$4.34",
+ * "1.234,56") into whole smallest units, with `read` saying how it was read for the preview
+ * (decided with the user, 2026-10-02). Otherwise prices are read as they always have been.
+ */
+const readRow = (catalogue, columns, cells, line, problems, options = {}) => {
   const values = {};
   columns.forEach((col, i) => { values[col] = (cells[i] ?? '').trim(); });
 
@@ -128,13 +146,27 @@ const readRow = (catalogue, columns, cells, line, problems) => {
     return null;
   }
 
-  const price = readPrice(values.price);
-  if (price === null) {
-    problems.push({
-      line, catalogue, name,
-      message: `price "${values.price || ''}" is not a number`,
-    });
-    return null;
+  const currency = options.currencyOf ? options.currencyOf(catalogue) : null;
+  let price;
+  let read;
+  if (currency) {
+    const got = parseAmount(currency, values.price);
+    const reason = !got.ok ? got.reason : got.amount < 0 ? 'negative' : null;
+    if (reason) {
+      problems.push({ line, catalogue, name, message: priceProblem(reason, values.price, currency) });
+      return null;
+    }
+    price = got.amount;
+    read = formatAmount(currency, got.amount);
+  } else {
+    price = readPrice(values.price);
+    if (price === null) {
+      problems.push({
+        line, catalogue, name,
+        message: `price "${values.price || ''}" is not a number`,
+      });
+      return null;
+    }
   }
 
   // Everything that is not name or price fills the sheet when the item is bought. Blank
@@ -145,11 +177,11 @@ const readRow = (catalogue, columns, cells, line, problems) => {
     if (values[col]) fields[col] = values[col];
   }
 
-  return { id: slug(name), name, price, fields, line };
+  return { id: slug(name), name, price, fields, line, ...(read ? { read } : {}) };
 };
 
 /** JSON in, in either of the two shapes somebody would reasonably write. */
-const parseJson = (text, problems) => {
+const parseJson = (text, problems, options) => {
   let data;
   try {
     data = JSON.parse(text);
@@ -172,7 +204,7 @@ const parseJson = (text, problems) => {
       }
       const columns = Object.keys(row);
       const cells = columns.map((c) => (row[c] == null ? '' : String(row[c])));
-      const entry = readRow(catalogue, columns, cells, i + 1, problems);
+      const entry = readRow(catalogue, columns, cells, i + 1, problems, options);
       if (entry) out.push(entry);
     });
     sections[catalogue] = out;
@@ -199,7 +231,7 @@ const parseJson = (text, problems) => {
 };
 
 /** The sectioned delimited format the example is written in. */
-const parseDelimited = (text, problems) => {
+const parseDelimited = (text, problems, options) => {
   const delimiter = delimiterOf(text);
   const lines = text.split(/\r\n|\r|\n/);
   const sections = {};
@@ -243,7 +275,7 @@ const parseDelimited = (text, problems) => {
       return;
     }
 
-    const entry = readRow(catalogue, columns, cells, line, problems);
+    const entry = readRow(catalogue, columns, cells, line, problems, options);
     if (entry) sections[catalogue].push(entry);
   });
 
@@ -257,13 +289,13 @@ const parseDelimited = (text, problems) => {
  * whatever could be read - a file with problems still yields the rows that were fine, so a
  * preview can show both at once.
  */
-const parseCatalogue = (input) => {
+const parseCatalogue = (input, options = {}) => {
   const problems = [];
   const text = stripBom(String(input == null ? '' : input)).trim();
   if (!text) return { sections: {}, problems: [{ line: 0, message: 'nothing to read' }], format: null };
 
   const json = looksLikeJson(text);
-  const sections = json ? parseJson(text, problems) : parseDelimited(text, problems);
+  const sections = json ? parseJson(text, problems, options) : parseDelimited(text, problems, options);
 
   // Two rows of one thing is a GM editing in a hurry, not a catalogue with two prices for
   // a pistol. Later wins, and they are told.

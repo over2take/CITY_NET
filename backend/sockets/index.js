@@ -2179,10 +2179,21 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
      * shown in the preview is literally what they would get - a preview built from a
      * second, gentler implementation would be a preview that can lie.
      */
+    /**
+     * How a catalogue's prices are read under `system`: in each catalogue's currency for a
+     * custom system with currencies of its own (3c2a4d), as they always were otherwise.
+     */
+    const catalogueOptions = (system) => (customSystems.currenciesIn(system).length
+      ? { currencyOf: (catalogue) => customSystems.catalogueCurrencyIn(system, catalogue) } : {});
+
     socket.on('previewCatalogue', (data) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.isAdmin) return;
-      const parsed = catalogueParse.parseCatalogue(data && data.text);
+      getGameSystem((sysErr, system) => previewCatalogue(data, sysErr ? {} : catalogueOptions(system)));
+    });
+
+    const previewCatalogue = (data, options) => {
+      const parsed = catalogueParse.parseCatalogue(data && data.text, options);
 
       // An id that already exists in the book is an override rather than an addition, and
       // the GM should be told before they save rather than after.
@@ -2198,7 +2209,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         problems: parsed.problems,
         summary,
       });
-    });
+    };
 
     /**
      * Store a catalogue.
@@ -2214,7 +2225,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
       getGameSystem((sysErr, system) => {
         if (sysErr) return refuse('no_system');
-        const parsed = catalogueParse.parseCatalogue(data && data.text);
+        const parsed = catalogueParse.parseCatalogue(data && data.text, catalogueOptions(system));
         const wanted = Object.keys(parsed.sections);
         if (!wanted.length) return refuse('empty');
 
