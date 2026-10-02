@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { parseAmount, type Currency } from '../currencies';
-import { amountExample, amountProblem, bankRefusal, shortQuestion, cartRefusal, celebrationsFor, BUILT_IN_WHALE } from '../moneyText';
+import {
+  amountExample, amountProblem, bankRefusal, shortQuestion, cartRefusal, celebrationsFor, BUILT_IN_WHALE,
+  readAccountEdit, payShare, shortfallRule,
+} from '../moneyText';
 import { registerCustomTemplate, clearCustomTemplates, customTemplate, type CustomRender } from '../customTemplates';
 
 /**
@@ -92,6 +95,38 @@ describe('the cart, short in a currency', () => {
     expect(cartRefusal('total_changed', { currency: DOLLARS, net: 45000, balance: 0, short: 0 }))
       .toBe('Prices changed while this sat in the cart: the Dollars total is now $450.00. Check it, then CHECK OUT again.');
     for (const reason of ['qty', 'price', 'needs_choice', 'no_shops']) expect(cartRefusal(reason, short), reason).toBeNull();
+  });
+});
+
+describe('a GM\'s edit to an account', () => {
+  it('is read the currency\'s way and held to its switches, as the server holds it', () => {
+    expect(readAccountEdit(GOLD, '20 gp 4 sp', null)).toEqual({ ok: true, balance: 2040, debt: 0 });
+    expect(readAccountEdit(DOLLARS, '-$5.00', '$1.50')).toEqual({ ok: true, balance: -500, debt: 150 });
+    expect(readAccountEdit(GOLD, '0 gp', '0 gp')).toEqual({ ok: true, balance: 0, debt: 0 });
+    expect(readAccountEdit(GOLD, '', null)).toEqual({ ok: false, problem: 'Write an amount of Gold.' });
+    expect(readAccountEdit(GOLD, '20 gp', '  ')).toEqual({ ok: false, problem: 'Write an amount of Gold.' });
+    expect(readAccountEdit(GOLD, '15', null)).toEqual({ ok: false, problem: 'Which coin? Write it like "15 gp" (gp, sp, cp).' });
+    expect(readAccountEdit(DOLLARS, '$1', 'lots')).toEqual({ ok: false, problem: 'That isn\'t an amount of Dollars.' });
+    expect(readAccountEdit(GOLD, '-1 cp', null)).toEqual({ ok: false, problem: 'Gold can\'t go below zero in this game.' });
+    expect(readAccountEdit(DOLLARS, '$1', '-$1')).toEqual({ ok: false, problem: 'Debt is never below zero.' });
+    expect(readAccountEdit(GOLD, '1 gp', '1 cp')).toEqual({ ok: false, problem: 'Nobody can owe Gold in this game.' });
+  });
+});
+
+describe('a share of PAYROLL', () => {
+  it('is the total split, rounded up so nobody is short', () => {
+    expect(payShare(GOLD, 2000, 2)).toBe('2 players: 10 gp each.');
+    expect(payShare(GOLD, 2000, 3)).toBe('3 players: 6 gp 6 sp 7 cp each, rounded up so nobody is short.');
+    expect(payShare(DOLLARS, 100, 1)).toBe('1 player: $1.00 each.');
+  });
+});
+
+describe('what a currency does when a player is short', () => {
+  it('is what its switches allow', () => {
+    expect(shortfallRule(GOLD)).toBe('refused');
+    expect(shortfallRule({ ...GOLD, debt: true })).toBe('can be owed');
+    expect(shortfallRule({ ...GOLD, negative: true })).toBe('can go below zero');
+    expect(shortfallRule(DOLLARS)).toBe('can be owed or go below zero');
   });
 });
 

@@ -1,4 +1,4 @@
-import { formatAmount, type Currency, type ParsedAmount } from './currencies';
+import { formatAmount, parseAmount, type Currency, type ParsedAmount } from './currencies';
 import { customTemplate, isCustomSystem } from './customTemplates';
 
 // What the money windows say in a custom system's own currencies (3c2b2), and whether the bank
@@ -93,6 +93,52 @@ export const cartRefusal = (reason: string, total: CartCurrencyTotal): string | 
     return `Prices changed while this sat in the cart: the ${name} total is now ${formatAmount(currency, net)}. Check it, then CHECK OUT again.`;
   }
   return null;
+};
+
+/**
+ * A GM's edit to one account in BANK_ADMIN.EXE (3c2b5), read as the server will hold it
+ * (backend/bank/moneyRules.js setAccount): a balance below zero only where the currency allows it,
+ * debt never below zero and only where it can be owed. `debtText` is null where the window shows no
+ * debt box, which is none owed.
+ */
+export const readAccountEdit = (
+  currency: Currency, balanceText: string, debtText: string | null,
+): { ok: true; balance: number; debt: number } | { ok: false; problem: string } => {
+  /** An amount, or what is wrong with the text. */
+  const read = (text: string): number | string => {
+    if (!text.trim()) return `Write an amount of ${currency.name}.`;
+    const parsed = parseAmount(currency, text);
+    return parsed.ok ? parsed.amount : amountProblem(currency, parsed) ?? `That isn't an amount of ${currency.name}.`;
+  };
+  const balance = read(balanceText);
+  if (typeof balance === 'string') return { ok: false, problem: balance };
+  const debt = debtText === null ? 0 : read(debtText);
+  if (typeof debt === 'string') return { ok: false, problem: debt };
+  if (balance < 0 && !currency.negative) return { ok: false, problem: `${currency.name} can't go below zero in this game.` };
+  if (debt < 0) return { ok: false, problem: 'Debt is never below zero.' };
+  if (debt > 0 && !currency.debt) return { ok: false, problem: `Nobody can owe ${currency.name} in this game.` };
+  return { ok: true, balance, debt };
+};
+
+/**
+ * What each player gets from PAYROLL.EXE in a custom currency (3c2b5): the total split, rounded up
+ * to a whole smallest unit so nobody is short, as the server pays it (adminPayPlayers).
+ */
+export const payShare = (currency: Currency, total: number, count: number): string => {
+  const each = Math.ceil(total / count);
+  return `${count} ${count === 1 ? 'player' : 'players'}: ${formatAmount(currency, each)} each`
+    + `${each * count !== total ? ', rounded up so nobody is short' : ''}.`;
+};
+
+/**
+ * What a currency allows when a player is short of it, for the house rules' note where the
+ * overdraft rule is hidden (3c2b5): each currency decides for itself, set in the system.
+ */
+export const shortfallRule = (currency: Currency): string => {
+  if (currency.debt && currency.negative) return 'can be owed or go below zero';
+  if (currency.debt) return 'can be owed';
+  if (currency.negative) return 'can go below zero';
+  return 'refused';
 };
 
 /** Whale status's threshold in every built-in system, as it has always been. */
