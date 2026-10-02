@@ -41,6 +41,18 @@ export const currenciesFor = (system: string | null | undefined): Currency[] =>
   (isCustomSystem(system) ? customTemplate(system)?.currencies ?? [] : []);
 
 /**
+ * The currency a shop catalogue is priced in: the one the system named for it, its main currency
+ * otherwise, or null where the system has the app's single money (decided with the user,
+ * 2026-10-02). Mirrors backend/systemBuilder/buildings.js catalogueCurrency.
+ */
+export const catalogueCurrencyFor = (system: string | null | undefined, catalogue: string): Currency | null => {
+  const list = currenciesFor(system);
+  if (!list.length) return null;
+  const own = isCustomSystem(system) ? customTemplate(system)?.buildings?.catalogues?.[catalogue]?.currency : undefined;
+  return list.find((c) => c.id === own) ?? list[0];
+};
+
+/**
  * An amount in coins, largest first, leaving out the coins it has none of. Zero is one line of
  * the smallest coin; a currency without coins is one line of the amount, its decimals applied
  * (434 cents is 4.34). The sign is apart.

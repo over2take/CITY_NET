@@ -8,8 +8,12 @@
 //
 //   buildings: {
 //     types:      { ripperdoc: { name: 'Temple' }, corp: { on: false } },
-//     catalogues: { cyberware: { name: 'Relics' }, vehicles: { on: false } },
+//     catalogues: { cyberware: { name: 'Relics', currency: 'favor' }, vehicles: { on: false } },
 //   }
+//
+// A catalogue may also name the currency its shelves are priced in, one of the system's own
+// (currencies.js), so a guild hall can sell for Favor while the market sells for Gold (decided
+// with the user, 2026-10-02). Unset, it is priced in the system's main currency.
 //
 // Its own module, needing only the vocabulary, so the definition checks and the running game
 // can both use it without a circle.
@@ -27,8 +31,11 @@ const KINDS = {
   catalogues: new Set(CATALOGUES.map((c) => c.id)),
 };
 
-/** Problems with a definition's `buildings` section, pushed onto `problems`. */
-const checkBuildings = (buildings, problems) => {
+/**
+ * Problems with a definition's `buildings` section, pushed onto `problems`. `currencyIds` are the
+ * system's own currencies, which a catalogue's currency must be one of.
+ */
+const checkBuildings = (buildings, problems, currencyIds = []) => {
   if (buildings === undefined) return;
   if (!isPlainObject(buildings)) { problems.push({ where: 'buildings', message: 'Must be a set of types and catalogues' }); return; }
   for (const [kind, entries] of Object.entries(buildings)) {
@@ -39,8 +46,13 @@ const checkBuildings = (buildings, problems) => {
       const where = `buildings ${kind} ${id}`;
       if (!ids.has(id)) { problems.push({ where, message: kind === 'types' ? 'Not a building type of the app' : 'Not a shop catalogue of the app' }); continue; }
       if (!isPlainObject(setting)) { problems.push({ where, message: 'Must say a name, on, or both' }); continue; }
+      const keys = kind === 'catalogues' ? ['name', 'on', 'currency'] : ['name', 'on'];
       for (const key of Object.keys(setting)) {
-        if (key !== 'name' && key !== 'on') problems.push({ where: `${where}, ${key}`, message: 'Only "name" and "on" are set here' });
+        if (!keys.includes(key)) problems.push({ where: `${where}, ${key}`, message: kind === 'catalogues' ? 'Only "name", "on" and "currency" are set here' : 'Only "name" and "on" are set here' });
+      }
+      if (kind === 'catalogues' && setting.currency !== undefined) {
+        if (!currencyIds.length) problems.push({ where: `${where}, currency`, message: 'This system has no currencies of its own' });
+        else if (!currencyIds.includes(setting.currency)) problems.push({ where: `${where}, currency`, message: "Not one of this system's currencies" });
       }
       if (setting.on !== undefined && typeof setting.on !== 'boolean') problems.push({ where: `${where}, on`, message: 'Must be true or false' });
       if (setting.name !== undefined) {
@@ -81,6 +93,18 @@ const buildingOn = (definition, kind, id) => {
   return !shelves.length || shelves.some((c) => catalogueOn(definition, c));
 };
 
+/**
+ * The currency a catalogue is priced in: its own where it names one, the system's main (first)
+ * currency otherwise, or null for a system with no currencies, which has the app's single money.
+ */
+const catalogueCurrency = (definition, id) => {
+  const ids = definition && Array.isArray(definition.currencies)
+    ? definition.currencies.filter(isPlainObject).map((c) => c.id) : [];
+  if (!ids.length) return null;
+  const own = (settingOf(definition, 'catalogues', id) || {}).currency;
+  return ids.includes(own) ? own : ids[0];
+};
+
 /** The system's own name for a type or catalogue, or null where it kept the app's. */
 const buildingName = (definition, kind, id) => {
   const name = (settingOf(definition, kind, id) || {}).name;
@@ -88,8 +112,9 @@ const buildingName = (definition, kind, id) => {
 };
 
 /**
- * What the browser needs: only the types and catalogues the system renamed or turned off,
- * each with just what it set. A published definition has been checked, so this only tidies.
+ * What the browser needs: only the types and catalogues the system renamed or turned off, or
+ * whose currency it named, each with just what it set. A published definition has been checked,
+ * so this only tidies.
  */
 const ownBuildings = (definition) => {
   const out = { types: {}, catalogues: {} };
@@ -97,10 +122,12 @@ const ownBuildings = (definition) => {
     for (const id of KINDS[kind]) {
       const name = buildingName(definition, kind, id);
       const on = buildingOn(definition, kind, id);
-      if (name || !on) out[kind][id] = { ...(name ? { name } : {}), ...(on ? {} : { on: false }) };
+      const own = kind === 'catalogues' ? (settingOf(definition, kind, id) || {}).currency : undefined;
+      const currency = own !== undefined && catalogueCurrency(definition, id) === own ? own : undefined;
+      if (name || !on || currency) out[kind][id] = { ...(name ? { name } : {}), ...(on ? {} : { on: false }), ...(currency ? { currency } : {}) };
     }
   }
   return out;
 };
 
-module.exports = { checkBuildings, buildingOn, buildingName, ownBuildings, NAME_LIMIT };
+module.exports = { checkBuildings, buildingOn, buildingName, catalogueCurrency, ownBuildings, NAME_LIMIT };
