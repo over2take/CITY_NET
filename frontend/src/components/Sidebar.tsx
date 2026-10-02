@@ -12,6 +12,7 @@ import { THEMES } from '../theme/themes';
 import type { ThemeName } from '../theme/themes';
 import { getTemplate } from '../sheets';
 import { useWords, asLabel } from '../sheets/words';
+import { useParts } from '../sheets/parts';
 import { CWN_VEHICLE_ROWS, CWN_VEHICLE_WEAPON_ROWS } from '../sheets/templates/cities_without_number';
 import { hasVehicles } from '../sheets/vehicleSystems';
 import { startUpdate, waitForRestart, currentBootId } from '../utils/updateClient';
@@ -1170,6 +1171,8 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
   const [railTip, setRailTip] = useState<{ label: string; x: number; y: number } | null>(null);
   // A custom system's own words for the rail's labels; today's text otherwise.
   const word = useWords(gameSystem);
+  // A custom system with the bank off has no BANK button (3b2b).
+  const bankOn = useParts(gameSystem)('bank');
   const characterControls = `${asLabel(word('character', 'singular', 'CHARACTER'))}_CONTROLS`;
   const hitPoints = asLabel(word('hp', 'plural', 'HIT POINTS'));
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
@@ -1304,9 +1307,11 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               <line x1="12" y1="15" x2="16" y2="15" />
             </svg>
           </button>
-          <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} aria-label="CITY_NET // BANK" data-tip="CITY_NET // BANK">
-            <CurrencyIcon icon={currencyIcon} size={24} />
-          </button>
+          {bankOn && (
+            <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} aria-label="CITY_NET // BANK" data-tip="CITY_NET // BANK">
+              <CurrencyIcon icon={currencyIcon} size={24} />
+            </button>
+          )}
           <button
             className={`rail-btn ${isRadioOpen ? 'active' : ''}`}
             onClick={onToggleRadio}

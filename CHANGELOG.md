@@ -52,6 +52,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system with the bank turned off no longer offers it.** The BANK button, VIEW_BANK,
+  the bank windows, PAY_PLAYERS, CURRENCY_ICON, BANK SOUNDS and the overdraft house rule are hidden.
+  The built-in systems, and a custom system that keeps its bank, show them as before.
+
 - **A custom system with the bank turned off has no money.** The server moves no money, tells no
   balance and refuses a shop checkout, and the sheet drops its cash field. Every account is kept as it
   was, so turning the bank back on brings the money back. The bank buttons themselves go in the next

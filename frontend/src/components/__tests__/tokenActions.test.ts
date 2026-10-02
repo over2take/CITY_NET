@@ -13,7 +13,7 @@ import { hitPointsTarget, tokenActionKeys, tokenView, type TokenViewer } from '.
 const base: TokenViewer = {
   isAdmin: false, isPrimaryAdmin: false, isOwner: false, isLoggedIn: true, isPlayerToken: true, hasOwner: true,
   sheetHere: false, linked: false, attackPending: false, sheetCombat: false, canManage: false,
-  hasRoster: false, systemHasVehicles: false, hasBattleMaps: false,
+  hasRoster: false, systemHasVehicles: false, systemHasBank: true, hasBattleMaps: false,
 };
 const keys = (over: Partial<TokenViewer>) => tokenActionKeys({ ...base, ...over });
 

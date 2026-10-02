@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DraggableWindow } from './DraggableWindow';
+import { useParts } from '../sheets/parts';
 import creditsPngIcon from '../assets/Credits.png';
 
 export type BankSoundKey = 'cashregister' | 'debtpaid' | 'highroller' | 'firstpay' | 'overdraft';
@@ -26,9 +27,16 @@ interface AdminBankWindowProps {
   targetUser: string;
   socket: any;
   token: string;
+  /** The running system: a custom one with the bank off shows no bank at all (3b2b). */
+  system?: string;
 }
 
-export function AdminBankWindow({ pos, setPos, onClose, targetUser, socket, token }: AdminBankWindowProps) {
+/** The GM's view of one player's account; nothing while the running system has the bank off. */
+export function AdminBankWindow(props: AdminBankWindowProps) {
+  return useParts(props.system)('bank') ? <AdminBankAccount {...props} /> : null;
+}
+
+function AdminBankAccount({ pos, setPos, onClose, targetUser, socket, token }: AdminBankWindowProps) {
   const [bankData, setBankData] = useState({ balance: 0, debt: 0 });
   const [balInput, setBalInput] = useState('');
   const [debtInput, setDebtInput] = useState('');
@@ -79,9 +87,16 @@ interface AdminPayWindowProps {
   socket: any;
   token: string;
   activeUsers: any[];
+  /** The running system: a custom one with the bank off shows no bank at all (3b2b). */
+  system?: string;
 }
 
-export function AdminPayWindow({ pos, setPos, onClose, socket, token, activeUsers }: AdminPayWindowProps) {
+/** PAY_PLAYERS; nothing while the running system has the bank off. */
+export function AdminPayWindow(props: AdminPayWindowProps) {
+  return useParts(props.system)('bank') ? <AdminPay {...props} /> : null;
+}
+
+function AdminPay({ pos, setPos, onClose, socket, token, activeUsers }: AdminPayWindowProps) {
   const [amount, setAmount] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
 
@@ -343,6 +358,8 @@ interface BankWindowProps {
   socket: any;
   userName: string;
   isBankOpen: boolean;
+  /** The running system: a custom one with the bank off shows no bank at all (3b2b). */
+  system?: string;
   firstPayDone?: boolean;
   highRollerDone?: boolean;
   audioEnabled?: boolean;
@@ -381,7 +398,8 @@ const CELEBRATION_CSS = `
 }
 `;
 
-export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOpen, firstPayDone, highRollerDone, audioEnabled, soundVolumes, currencyIcon }: BankWindowProps) {
+export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, isBankOpen, system, firstPayDone, highRollerDone, audioEnabled, soundVolumes, currencyIcon }: BankWindowProps) {
+  const bankOn = useParts(system)('bank');
   const vol = (key: string) => (soundVolumes?.[key] ?? 1);
   const audioEnabledRef = useRef(audioEnabled);
   useEffect(() => { audioEnabledRef.current = audioEnabled; }, [audioEnabled]);
@@ -494,7 +512,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
     prevBalanceRef.current = curr;
   }, [bankData.balance]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!isBankOpen) return null;
+  if (!isBankOpen || !bankOn) return null;
 
   const handleAction = () => {
     const amount = parseFloat(promptAmount);
