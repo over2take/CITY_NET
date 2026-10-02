@@ -80,6 +80,69 @@ export const toBaseAmount = (currency: Currency, counts: Record<string, number>)
     return sum + (Number.isFinite(count) ? Math.round(count) : 0) * coin.value;
   }, 0);
 
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export type ParsedAmount = { ok: true; amount: number } | { ok: false; reason: 'empty' | 'not_a_number' | 'which_coin' | 'unknown_coin' | 'too_precise' };
+
+/**
+ * Read an amount as people write it into whole smallest units: "$4.34" is 434, "1.234,56 €" is
+ * 123456, "2gp 5sp" is 250, "120 Honor" is 120, a leading "-" negative. A bare number in a
+ * currency of several coins, misgrouped thousands ("4,34" is not $434) and more decimals than
+ * the currency has are refused. Mirrors backend/systemBuilder/currencies.js parseAmount.
+ */
+export const parseAmount = (currency: Currency, input: string | number | null | undefined): ParsedAmount => {
+  let text = String(input ?? '').trim();
+  if (!text) return { ok: false, reason: 'empty' };
+  let sign = 1;
+  if (text.startsWith('-')) { sign = -1; text = text.slice(1).trim(); }
+  const coins = currency.denominations ?? [];
+
+  if (coins.length) {
+    if (/^\d+$/.test(text)) {
+      if (coins.length > 1) return { ok: false, reason: 'which_coin' };
+      return { ok: true, amount: sign * Number(text) * coins[0].value };
+    }
+    const named = new Map<string, number>();
+    for (const coin of coins) {
+      named.set(coin.name.trim().toLowerCase(), coin.value);
+      if (coin.short) named.set(coin.short.trim().toLowerCase(), coin.value);
+    }
+    let amount = 0;
+    const lower = text.toLowerCase();
+    let rest = lower;
+    for (const match of lower.matchAll(/(\d+)\s*([^\d\s,]+(?:\s+[^\d\s,]+)*)/g)) {
+      const value = named.get(match[2].trim());
+      if (value === undefined) return { ok: false, reason: 'unknown_coin' };
+      amount += Number(match[1]) * value;
+      rest = rest.replace(match[0], '');
+    }
+    if (rest.replace(/[\s,]/g, '')) return { ok: false, reason: 'not_a_number' };
+    return { ok: true, amount: sign * amount };
+  }
+
+  // Without coins: drop the symbol, and the name or short name written after the number.
+  if (currency.symbol) text = text.split(currency.symbol).join(' ').trim();
+  for (const word of [currency.name, currency.short]) {
+    if (word) text = text.replace(new RegExp(`\\s*${escapeRegExp(word)}$`, 'i'), '').trim();
+  }
+  if (text.startsWith('-')) { sign = -sign; text = text.slice(1).trim(); }
+  const mark = currency.decimalMark === ',' ? ',' : '.';
+  const group = mark === ',' ? '.' : ',';
+  const places = currency.decimals ?? 0;
+  const [whole, fraction, extra] = text.split(mark);
+  if (extra !== undefined || whole === undefined) return { ok: false, reason: 'not_a_number' };
+  const grouped = whole.replace(/\s/g, group);
+  const groupRe = new RegExp(`^\\d{1,3}(${escapeRegExp(group)}\\d{3})*$`);
+  if (!/^\d+$/.test(grouped) && !groupRe.test(grouped)) return { ok: false, reason: 'not_a_number' };
+  const digits = grouped.split(group).join('');
+  if (fraction !== undefined) {
+    if (!/^\d+$/.test(fraction)) return { ok: false, reason: 'not_a_number' };
+    if (fraction.length > places) return { ok: false, reason: 'too_precise' };
+  }
+  const frac = (fraction ?? '').padEnd(places, '0');
+  return { ok: true, amount: sign * (Number(digits) * 10 ** places + (places ? Number(frac) : 0)) };
+};
+
 /** A number with this currency's decimal mark: "1,234.56", or "1.234,56" with a comma. */
 const numberIn = (currency: Currency, value: number): string => {
   const places = currency.decimals ?? 0;
