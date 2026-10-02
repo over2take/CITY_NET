@@ -591,7 +591,20 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     });
   });
 
-  router.put('/:id/health', optionalAuthenticate, (req, res) => {
+  /**
+   * A game with token health turned off (a custom system's choice, 3b6d) has no HP on its
+   * tokens to change: every health action is refused, whatever the model would have done.
+   */
+  const requireTokenHealth = (req, res, next) => {
+    db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
+      if (!gErr && gRow && !customSystems.partIn(gRow.value, 'token_health')) {
+        return res.status(409).json({ error: 'This game has no token health' });
+      }
+      next();
+    });
+  };
+
+  router.put('/:id/health', optionalAuthenticate, requireTokenHealth, (req, res) => {
     const { id } = req.params;
     const { hp_current, hp_max, hp_temp, action, amount } = req.body;
 

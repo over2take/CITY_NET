@@ -95,7 +95,7 @@ const renderOf = (id, definition) => ({
   sheet: effectiveSheet(definition),
   npc: {
     // Null when NPCs use the character sheet.
-    sheet: definition.npc && definition.npc.sheet ? definition.npc.sheet : null,
+    sheet: definition.npc && definition.npc.sheet ? npcSheetOf(definition) : null,
     tiers: tiersWhenOn(definition).map((t) => ({ id: t.id, label: t.label })),
   },
 });
@@ -172,6 +172,9 @@ const buildingNameIn = (system, kind, id) => (loaded.has(system) ? buildingName(
 /** A published system's health model (its core.health), or null: built-in systems have none here. */
 const health = (id) => {
   const definition = loaded.has(id) ? loaded.get(id).definition : null;
+  // With token health off a system has no health at all: the 'none' model, which takes no
+  // damage and shows nothing (3b6d). Its own model stays in the definition for when it returns.
+  if (definition && !partOn(definition, 'token_health')) return { model: 'none' };
   const core = definition && definition.core && typeof definition.core === 'object' ? definition.core : null;
   return core && core.health && typeof core.health === 'object' ? core.health : null;
 };

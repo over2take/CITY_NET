@@ -52,6 +52,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system can turn token health off, on the server.** Its tokens take no health actions, it
+  has no health model, and its character and NPC sheets lose the HP fields and the HP bar. A sheet's
+  token AC field now leaves with combat the same way. The health windows follow in the next piece.
+  The built-in systems are unchanged.
+
 - **A custom system can turn NPC tiers off, and no longer offers IMPORT.** With tiers off,
   GENERATE_SHEET makes an untiered sheet and the tier picker goes. The IMPORT button is hidden on a
   custom system's sheets, since there is no importer for one. The built-in systems are unchanged.

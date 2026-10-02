@@ -153,25 +153,39 @@ const checkSheet = (sheet, derivedIds, problems) => {
  * The sheet a system is drawn with: its own, or a starter one. The starter is the generic
  * layout (name, concept, description, health, cash, notes) with the system's derived values in
  * a section of their own, so a system that has not designed its sheet yet still has one. Its
- * health is shaped by the system's health model (core.js); with none, it is one HP pool. With the
- * bank off, no money on it either way (withoutBank).
+ * health is shaped by the system's health model (core.js); with none, it is one HP pool. Fields
+ * linked to a part the system turned off are not on it either way (withoutOffParts).
  */
-const effectiveSheet = (definition) => withoutBank(designedOrStarter(definition), definition);
+const effectiveSheet = (definition) => withoutOffParts(designedOrStarter(definition), definition);
+
+/** The part each linked field belongs to: cash to the bank, HP to token health, AC to combat. */
+const SOURCE_PART = { bank_balance: 'bank', token_hp: 'token_health', token_hp_max: 'token_health', token_ac: 'combat' };
 
 /**
- * A system with the bank off has no money on its sheets: a field linked to the bank leaves, and
- * so does a section that held nothing else (the starter's MONEY). The value lives in the bank
- * account, never in the sheet, so nothing is lost; turning the bank back on brings it back.
+ * A system that turned a part off has none of it on its sheets: a field linked to that part
+ * leaves (cash with the bank, 3b2a; HP with token health and AC with combat, 3b6d), so does a
+ * section that held nothing else (the starter's MONEY), and so does a header bar showing a field
+ * that left. A linked value lives on the token or in the bank, never in the sheet, so nothing
+ * is lost; turning the part back on brings it back.
  */
-const withoutBank = (sheet, definition) => {
-  if (partOn(definition, 'bank') || !Array.isArray(sheet && sheet.sections)) return sheet;
+const withoutOffParts = (sheet, definition) => {
+  const off = new Set(Object.keys(SOURCE_PART).filter((source) => !partOn(definition, SOURCE_PART[source])));
+  if (!off.size || !Array.isArray(sheet && sheet.sections)) return sheet;
+  const gone = new Set();
   const sections = sheet.sections.map((s) => {
     if (!isPlainObject(s) || !Array.isArray(s.fields)) return s;
-    const kept = s.fields.filter((f) => !(isPlainObject(f) && f.source === 'bank_balance'));
+    const kept = s.fields.filter((f) => {
+      const leaves = isPlainObject(f) && off.has(f.source);
+      if (leaves) gone.add(f.id);
+      return !leaves;
+    });
     if (kept.length === s.fields.length) return s;
     return kept.length ? { ...s, fields: kept } : null;
   }).filter(Boolean);
-  return { ...sheet, sections };
+  const header = isPlainObject(sheet.header) && gone.has(sheet.header.hpField)
+    ? Object.fromEntries(Object.entries(sheet.header).filter(([k]) => k !== 'hpField' && k !== 'hpMaxField'))
+    : sheet.header;
+  return { ...sheet, sections, ...(header !== undefined ? { header } : {}) };
 };
 
 /** The system's own sheet, or the starter one. */
@@ -180,7 +194,10 @@ const designedOrStarter = (definition) => {
   const derived = Array.isArray(definition && definition.derived) ? definition.derived.filter((d) => d && typeof d.id === 'string') : [];
   // A system that renamed hit points has its own word on its starter sheet's pool.
   const hp = ownWords(definition).hp;
-  const health = healthLayout(definition && isPlainObject(definition.core) ? definition.core.health : undefined, hp ? hp.short : 'HP');
+  // With token health off there is no health model at all, so no health section (3b6d).
+  const model = !partOn(definition, 'token_health') ? { model: 'none' }
+    : definition && isPlainObject(definition.core) ? definition.core.health : undefined;
+  const health = healthLayout(model, hp ? hp.short : 'HP');
   const sections = [
     { id: 'identity', label: 'IDENTITY', layout: 'list', tab: 'STATS', fields: [
       { id: 'name', label: 'Name', type: 'text', visibility: 'public' },
@@ -205,4 +222,4 @@ const designedOrStarter = (definition) => {
 const fieldsOf = (sheet) => (Array.isArray(sheet && sheet.sections) ? sheet.sections : [])
   .flatMap((s) => (s && Array.isArray(s.fields) ? s.fields : []));
 
-module.exports = { checkSheet, effectiveSheet, fieldsOf, LAYOUTS, TYPES, SOURCES, EDIT, LIMITS };
+module.exports = { checkSheet, effectiveSheet, withoutOffParts, fieldsOf, LAYOUTS, TYPES, SOURCES, EDIT, LIMITS };
