@@ -6,6 +6,7 @@ import { ImportSheetDialog } from './ImportSheetDialog';
 import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { VehicleBadgeButton } from './VehicleBadgeButton';
 import type { SheetLinkSource } from '../sheets';
+import { isCustomSystem } from '../sheets/customTemplates';
 
 // The player's own character sheet (in-game floating window). Identity is
 // the socket's registered user - the server only ever returns / edits the
@@ -60,14 +61,16 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
             onDisembark={(occupant) => socket?.emit('seatOut', { occupant })}
             compact
           />
-          <button
+          {/* Not for a custom system: there is no importer for one, so the server refuses every
+              import (3b6c). Once custom systems can import, this is the sheet_import part. */}
+          {!isCustomSystem(sheet?.system) && <button
             title="Import from PDF / JSON / text"
             className="win95-close-btn"
             style={{ fontSize: '9px', width: 'auto', padding: '0 5px' }}
             onClick={() => setIsImportOpen(true)}
           >
             IMPORT
-          </button>
+          </button>}
           {template && (
             <span style={{ border: '1px solid currentColor', padding: '0 6px', fontSize: '0.6rem', letterSpacing: '1px' }}>
               {template.name.toUpperCase()}
