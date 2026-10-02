@@ -35,7 +35,8 @@ export interface CustomRenderSheet {
 /** A system's own names for the app's building types and catalogues, and which it turned off. */
 export interface CustomBuildings {
   types?: Record<string, { name?: string; on?: boolean }>;
-  catalogues?: Record<string, { name?: string; on?: boolean }>;
+  /** A catalogue may name the currency it is priced in (sheets/currencies.ts catalogueCurrencyFor). */
+  catalogues?: Record<string, { name?: string; on?: boolean; currency?: string }>;
 }
 
 export interface CustomRender {

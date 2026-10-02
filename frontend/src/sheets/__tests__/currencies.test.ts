@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { currenciesFor, splitAmount, toBaseAmount, formatAmount, type Currency } from '../currencies';
+import { currenciesFor, catalogueCurrencyFor, splitAmount, toBaseAmount, formatAmount, type Currency } from '../currencies';
 import { registerCustomTemplate, clearCustomTemplates } from '../customTemplates';
 
 /**
@@ -36,6 +36,15 @@ describe('the running system\'s currencies', () => {
   it('are a custom system\'s own, the first the main one', () => {
     expect(currenciesFor(HEARTH)).toEqual(CASES.normalized);
     expect(currenciesFor(HEARTH)[0].id).toBe('gold');
+  });
+
+  it('price each catalogue in the currency the system named for it, and the main one otherwise (3c2a2)', () => {
+    registerCustomTemplate({ id: HEARTH, name: 'Hearth', parts: {}, derived: [], sheet: { sections: [] }, words: {},
+      currencies: CASES.normalized, buildings: { catalogues: { cyberware: { currency: 'honor' }, gear: { name: 'Supplies' } } } });
+    expect(catalogueCurrencyFor(HEARTH, 'cyberware')?.id).toBe('honor');
+    expect(catalogueCurrencyFor(HEARTH, 'gear')?.id).toBe('gold');
+    expect(catalogueCurrencyFor(HEARTH, 'weapons')?.id).toBe('gold');
+    for (const system of ['cities_without_number', 'generic', 'sys_bbbbbbbbbbbbbbbb']) expect(catalogueCurrencyFor(system, 'gear'), system).toBeNull();
   });
 
   it('are none for a built-in system, or a custom one not loaded, which keep the app\'s money', () => {

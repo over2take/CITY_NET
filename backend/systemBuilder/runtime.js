@@ -14,7 +14,7 @@ const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf } = require('./npc');
 const { ownWords } = require('./definition');
 const { partOn, PARTS } = require('./parts');
-const { buildingOn, buildingName, ownBuildings } = require('./buildings');
+const { buildingOn, buildingName, catalogueCurrency, ownBuildings } = require('./buildings');
 const { currenciesOf } = require('./currencies');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
@@ -178,6 +178,16 @@ const buildingNameIn = (system, kind, id) => (loaded.has(system) ? buildingName(
  */
 const currenciesIn = (system) => (loaded.has(system) ? currenciesOf(loaded.get(system).definition) : []);
 
+/**
+ * The currency a shop catalogue is priced in under `system` (buildings.js catalogueCurrency), as
+ * currencies.js shapes it; null for a built-in system or one with no currencies of its own.
+ */
+const catalogueCurrencyIn = (system, catalogue) => {
+  if (!loaded.has(system)) return null;
+  const id = catalogueCurrency(loaded.get(system).definition, catalogue);
+  return id ? currenciesIn(system).find((c) => c.id === id) || null : null;
+};
+
 /** A published system's health model (its core.health), or null: built-in systems have none here. */
 const health = (id) => {
   const definition = loaded.has(id) ? loaded.get(id).definition : null;
@@ -191,4 +201,4 @@ const health = (id) => {
 templates.setCustomMeta(meta);
 npcTiers.setCustomTiers(tiers);
 
-module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, metaOf, renderOf };
+module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, metaOf, renderOf };

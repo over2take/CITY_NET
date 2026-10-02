@@ -52,6 +52,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Each shop catalogue can be priced in its own currency.** A custom system names a catalogue's
+  currency beside its name, so a guild hall can sell for Favor while the market sells for Gold; a
+  catalogue that names none uses the main currency. Nothing uses it yet.
+
 - **The bank's rules, per currency.** One place now says what a withdrawal, borrowing, paying debt and
   the GM's own edit may do in a currency: a custom currency borrows only with debt on and goes below
   zero only with negative on. Nothing uses it yet. The built-in systems keep today's bank exactly.

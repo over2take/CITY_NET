@@ -132,7 +132,8 @@ const checkDefinition = (definition) => {
   checkText(definition.license, 'license', LIMITS.license, problems);
   checkWords(definition.words, problems);
   checkParts(definition.parts, problems);
-  checkBuildings(definition.buildings, problems);
+  checkBuildings(definition.buildings, problems, Array.isArray(definition.currencies)
+    ? definition.currencies.filter((c) => c && typeof c.id === 'string').map((c) => c.id) : []);
   checkCurrencies(definition.currencies, problems);
 
   if (definition.lookups !== undefined || definition.derived !== undefined) {
