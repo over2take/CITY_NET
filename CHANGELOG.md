@@ -52,6 +52,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Shops check out in a custom system's currencies.** A cart is paid from each currency's own
+  account, all at once or not at all, and a shortfall is covered only as that currency allows. The
+  shop window follows later. The built-in checkout is unchanged.
+
 - **Amounts can be read as people write them.** "$4.34", "1.234,56 €", "2gp 5sp" and "120 Honor" read
   as exact amounts, and what could be misread is refused: a bare "15" in a currency of several coins,
   "4,34" where the point is the decimal mark, or more decimals than the currency has. Nothing uses it
