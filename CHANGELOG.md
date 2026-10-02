@@ -34,6 +34,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   flatline. It still shows no numbers, in the HEALTH folder and on the stream overlay alike. With
   reduced motion turned on in the system settings, the trace holds still but keeps its shape.
 
+### Fixed
+
+- **A catalogue file with more than one section saves.** Saving a file with, say, both a
+  `[weapons]` and a `[gear]` section reported a failure after saving only the first section.
+  Every section is now saved together, and if one can't be saved, none are and the earlier
+  catalogues stay as they were.
+
 ### Security
 
 - **Players can no longer use the GM's tools.** A player's own login worked as a key to the GM's

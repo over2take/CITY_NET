@@ -219,6 +219,44 @@ describe('saving a catalogue', () => {
     handlers['saveCatalogue']({ text: 'nonsense with no sections' });
     expect((await waitFor(emitted, 'catalogueSaved')).data).toMatchObject({ ok: false });
   });
+
+  it('stores every catalogue in a file of several', async () => {
+    // Each once began its own transaction at the same moment, and every one after the first
+    // was refused: the file was reported failed with only its first catalogue saved.
+    const { emitted } = await save([ZIP_GUN, '[gear]', 'name, price', 'Lockpick, 20', '[cyberware]', 'name, price', 'Eye Lamp, 300'].join('\n'));
+    expect(last(emitted, 'catalogueSaved').data).toMatchObject({
+      ok: true,
+      saved: [{ catalogue: 'weapons', count: 1 }, { catalogue: 'gear', count: 1 }, { catalogue: 'cyberware', count: 1 }],
+    });
+    const rows = await new Promise((res, rej) => db.all(
+      'SELECT catalogue, id FROM shop_catalogues ORDER BY catalogue', (e, r) => (e ? rej(e) : res(r)),
+    ));
+    expect(rows).toEqual([
+      { catalogue: 'cyberware', id: 'eye_lamp' }, { catalogue: 'gear', id: 'lockpick' }, { catalogue: 'weapons', id: 'zip_gun' },
+    ]);
+    expect(store.priceOf('gear', 'lockpick')).toBe(20);
+  });
+});
+
+describe('a file that cannot be written whole', () => {
+  it('writes none of it, and keeps what was there', async () => {
+    // The parser never hands over two rows with one id, so the store is called directly
+    // with a file whose last catalogue the table refuses.
+    const catalogueDb = require_('../shops/catalogueDb');
+    const replace = (sections) => new Promise((resolve) => catalogueDb.replaceCatalogues(db, 'cities_without_number', sections, resolve));
+    expect(await replace({ weapons: [{ id: 'zip_gun', name: 'Zip Gun', price: 15 }] })).toBeNull();
+
+    const err = await replace({
+      weapons: [{ id: 'slug_thrower', name: 'Slug Thrower', price: 80 }],
+      gear: [{ id: 'rope', name: 'Rope', price: 5 }, { id: 'rope', name: 'Rope Again', price: 6 }],
+    });
+    expect(err).toBeTruthy();
+    const rows = await new Promise((res, rej) => db.all('SELECT id FROM shop_catalogues', (e, r) => (e ? rej(e) : res(r))));
+    expect(rows.map((r) => r.id)).toEqual(['zip_gun']);
+
+    // And the connection is left free for the next save.
+    expect(await replace({ gear: [{ id: 'rope', name: 'Rope', price: 5 }] })).toBeNull();
+  });
 });
 
 describe('buying and selling something a GM added', () => {
