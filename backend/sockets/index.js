@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { isMainAdmin } = require('../middleware/auth');
 const bank = require('../bank/accounts');
+const bankCurrencies = require('../bank/currencies');
+const moneyRules = require('../bank/moneyRules');
 const { cryptoRng } = require('../utils/random');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
@@ -165,6 +167,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   /**
    * Tell everyone a player's balance, from their account in the running system (bank/accounts.js:
    * one per player per system). An account that does not exist yet is opened at zero, as before.
+   * A custom system with currencies of its own also tells every currency's balance and debt, the
+   * main one first (bank/currencies.js); the fields before it are the main currency's, as always.
    */
   const sendBankUpdate = (username) => {
     bank.activeSystem(db, (sErr, system) => {
@@ -172,7 +176,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (sErr || !customSystems.partIn(system, 'bank')) return;
       bank.ensure(db, username, system, (err, row) => {
         if (err || !row) return;
-        io.emit('bankUpdate', { username, balance: row.balance, debt: row.debt, firstPayDone: !!row.first_pay_done, highRollerDone: !!row.high_roller_done });
+        const update = { username, balance: row.balance, debt: row.debt, firstPayDone: !!row.first_pay_done, highRollerDone: !!row.high_roller_done };
+        if (!customSystems.currenciesIn(system).length) return io.emit('bankUpdate', update);
+        bankCurrencies.all(db, username, system, (cErr, list) => io.emit('bankUpdate', cErr ? update : { ...update, currencies: list }));
       });
     });
   };
@@ -184,6 +190,37 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
    */
   const withBankSystem = (fn) => bank.activeSystem(db, (err, system) => {
     if (!err && customSystems.partIn(system, 'bank')) fn(system);
+  });
+
+  /**
+   * Run `fn(money)` with the account a money handler acts on (3c2a3), and its rules
+   * (bank/moneyRules.js). Under a built-in system, or a custom one with no currencies of its own,
+   * it is the running system's single account on today's rules. Under a custom system with
+   * currencies it is the one the message names (`currency`), or the main one, on that currency's
+   * debt and negative switches; a currency the system lacks moves nothing. `money` reads (get)
+   * and moves (adjust, put, add) that account.
+   */
+  const withMoney = (data, fn) => withBankSystem((system) => {
+    const list = customSystems.currenciesIn(system);
+    if (!list.length) {
+      return fn({
+        system, currency: null, rules: moneyRules.BUILT_IN,
+        get: (user, cb) => bank.get(db, user, system, cb),
+        adjust: (user, moved, cb) => bank.adjust(db, user, system, moved, cb),
+        put: (user, balance, debt, cb) => bank.put(db, user, system, balance, debt, cb),
+        add: (user, amount, cb) => bank.addToBalance(db, user, system, amount, cb),
+      });
+    }
+    const id = data && typeof data.currency === 'string' ? data.currency : list[0].id;
+    const currency = list.find((c) => c.id === id);
+    if (!currency) return;
+    fn({
+      system, currency, rules: moneyRules.rulesFor(currency),
+      get: (user, cb) => bankCurrencies.get(db, user, system, id, cb),
+      adjust: (user, moved, cb) => bankCurrencies.adjust(db, user, system, id, moved, cb),
+      put: (user, balance, debt, cb) => bankCurrencies.put(db, user, system, id, balance, debt, cb),
+      add: (user, amount, cb) => bankCurrencies.addToBalance(db, user, system, id, amount, cb),
+    });
   });
 
   // Load NPCs from DB on startup
@@ -1897,13 +1934,25 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       return info && info.userName ? info.userName : null;
     };
 
+    /**
+     * Tell the player why the bank did nothing: not enough to withdraw, or debt or a balance
+     * below zero where the currency allows neither (bank/moneyRules.js reasons).
+     */
+    const refuseMoney = (action, reason, money) =>
+      socket.emit('bankRefused', { action, reason, currency: money.currency ? money.currency.id : null });
+
     socket.on('withdrawFunds', (data) => {
       const username = ownAccount();
       if (!username || !data || !data.amount) return;
       const amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      withBankSystem((system) => bank.adjust(db, username, system, { balance: -amount }, (err) => {
-        if (!err) sendBankUpdate(username);
+      withMoney(data, (money) => money.get(username, (err, account) => {
+        if (err) return;
+        const plan = moneyRules.withdraw(account || { balance: 0, debt: 0 }, amount, money.rules);
+        if (!plan.ok) return refuseMoney('withdraw', plan.reason, money);
+        money.adjust(username, plan.moved, (err2) => {
+          if (!err2) sendBankUpdate(username);
+        });
       }));
     });
 
@@ -1912,22 +1961,25 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!username || !data || !data.amount) return;
       const amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      withBankSystem((system) => bank.adjust(db, username, system, { debt: amount }, (err) => {
-        if (!err) sendBankUpdate(username);
-      }));
+      withMoney(data, (money) => {
+        const plan = moneyRules.borrow(null, amount, money.rules);
+        if (!plan.ok) return refuseMoney('borrow', plan.reason, money);
+        money.adjust(username, plan.moved, (err) => {
+          if (!err) sendBankUpdate(username);
+        });
+      });
     });
 
     socket.on('payDebt', (data) => {
       const username = ownAccount();
       if (!username || !data || !data.amount) return;
-      let amount = parseFloat(data.amount);
+      const amount = parseFloat(data.amount);
       if (isNaN(amount) || amount <= 0) return;
-      withBankSystem((system) => bank.get(db, username, system, (err, row) => {
-        if (err || !row) return;
-        if (amount > row.balance) amount = row.balance;
-        if (amount > row.debt) amount = row.debt;
-        if (amount <= 0) return;
-        bank.adjust(db, username, system, { balance: -amount, debt: -amount }, (err2) => {
+      withMoney(data, (money) => money.get(username, (err, account) => {
+        if (err || !account) return;
+        const plan = moneyRules.payDebt(account, amount);
+        if (!plan.ok) return;
+        money.adjust(username, plan.moved, (err2) => {
           if (!err2) sendBankUpdate(username);
         });
       }));
@@ -2158,11 +2210,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (!isMainAdmin(decoded)) return;
         const count = data.usernames.length;
         if (count === 0) return;
-        const amountPerPlayer = Math.ceil((parseFloat(data.totalAmount) / count) * 100) / 100;
-        if (isNaN(amountPerPlayer) || amountPerPlayer <= 0) return;
-        withBankSystem((system) => data.usernames.forEach((uname) => {
-          bank.addToBalance(db, uname, system, amountPerPlayer, () => sendBankUpdate(uname));
-        }));
+        withMoney(data, (money) => {
+          // Split, rounded up so nobody is short: to the cent in the app's money, and to a whole
+          // smallest unit in a custom currency, whose amounts are whole (434 for $4.34).
+          const share = parseFloat(data.totalAmount) / count;
+          const amountPerPlayer = money.currency ? Math.ceil(share) : Math.ceil(share * 100) / 100;
+          if (isNaN(amountPerPlayer) || amountPerPlayer <= 0) return;
+          data.usernames.forEach((uname) => money.add(uname, amountPerPlayer, () => sendBankUpdate(uname)));
+        });
       });
     });
 
@@ -2231,7 +2286,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         const balance = parseFloat(data.balance);
         const debt = parseFloat(data.debt);
         if (isNaN(balance) || isNaN(debt)) return;
-        withBankSystem((system) => bank.put(db, data.username, system, balance, debt, () => sendBankUpdate(data.username)));
+        withMoney(data, (money) => {
+          // Any numbers under a built-in system, as always; a custom currency's switches otherwise.
+          const plan = moneyRules.setAccount(balance, debt, money.rules);
+          if (!plan.ok) return refuseMoney('set', plan.reason, money);
+          money.put(data.username, plan.balance, plan.debt, () => sendBankUpdate(data.username));
+        });
       });
     });
 
