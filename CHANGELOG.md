@@ -52,6 +52,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system can turn initiative off.** The tracker, its sidebar button and panel, ROLL INIT on
+  NPC sheets, ADD TO INIT on tokens and the INITIATIVE FOLLOWS BUILDING house rule are hidden, and the
+  server starts no tracker and takes no rolls for it. A combat left from before is kept and comes back
+  with initiative. The built-in systems are unchanged.
+
 - **A custom system with cyberware turned off has no ripperdoc.** Its cyberware catalogues leave the
   shops, and the ripperdoc with them. Custom sheets have no cyberware table, so nothing else changes.
   The built-in systems are unchanged.

@@ -3,6 +3,8 @@ const customSystems = require('../systemBuilder/runtime');
 
 /** A custom system's own word for initiative in the dice log; today's text for the rest. */
 const initiativeWord = (system) => customSystems.wordIn(system, 'initiative', 'singular', 'INITIATIVE').toUpperCase();
+/** Whether a system has initiative at all: a custom system can turn it off (systemBuilder/parts.js). */
+const initiativeOn = (system) => customSystems.partIn(system || 'generic', 'initiative');
 
 // Initiative Tracker — socket event handlers
 // All events namespaced under initiative:* to avoid collisions.
@@ -143,6 +145,15 @@ function registerInitiativeHandlers(io, db) {
     // system: ttrpg system key; mode: 'individual' | 'side'
     socket.on('initiative:start', ({ sceneKey, combatId, system, mode }) => {
       if (!sceneKey) return;
+      // Asked of the game the server is running, not the system the message names: a game with
+      // initiative turned off starts no tracker. One already running can still be ended.
+      db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
+        if (gErr || !initiativeOn(gRow && gRow.value)) return;
+        start({ sceneKey, combatId, system, mode });
+      });
+    });
+
+    const start = ({ sceneKey, combatId, system, mode }) => {
       const safeSystem = system || 'generic';
       const safeMode = mode || 'individual';
 
@@ -176,7 +187,7 @@ function registerInitiativeHandlers(io, db) {
           }
         );
       }
-    });
+    };
 
     // ── Submit roll ───────────────────────────────────────────────────────────
     // { sceneKey, combatant: { id, name, portraitUrl, score, isNpc }, appendToEnd? }
@@ -192,6 +203,8 @@ function registerInitiativeHandlers(io, db) {
         [sceneKey],
         (err, row) => {
           if (err || !row) return;
+          // No rolls into a combat whose system has initiative turned off.
+          if (!initiativeOn(row.system)) return;
 
           const system = row.system || 'generic';
           const mode = row.mode || 'individual';
@@ -277,6 +290,7 @@ function registerInitiativeHandlers(io, db) {
         [sceneKey],
         (err, row) => {
           if (err || !row) return;
+          if (!initiativeOn(row.system)) return;
 
           const sides = JSON.parse(row.sides || '[]');
           const npcExists = sides.some((s) => s.id === 'npc');

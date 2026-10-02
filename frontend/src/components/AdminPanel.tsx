@@ -2191,7 +2191,7 @@ function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] 
 
 /**
  * The house rules every system has. A function of the system's words (the first names initiative)
- * and its parts: buying with money you do not have means nothing with the bank off (3b2b).
+ * and its parts: each leaves with the part it is about, initiative (3b6a) or the bank (3b2b).
  */
 const globalHouseRules = (word: WordLookup, on: PartLookup): HouseRuleDef[] => [
   {
@@ -2206,7 +2206,8 @@ const globalHouseRules = (word: WordLookup, on: PartLookup): HouseRuleDef[] => [
     label: 'BUY WITH MONEY YOU DO NOT HAVE',
     title: "House rule: a player who cannot afford something in a shop is asked how to cover it - take the shortfall as debt, or let the balance go negative - instead of being refused. Off by default, which refuses the purchase. What happens to someone carrying a negative balance is yours to decide; the app records the hole, it does not collect on it.",
   },
-].filter((rule) => rule.settingKey !== OVERDRAFT_RULE || on('bank'));
+].filter((rule) => (rule.settingKey !== OVERDRAFT_RULE || on('bank'))
+  && (rule.settingKey !== 'initiative_follows_building' || on('initiative')));
 
 const CPR_HOUSE_RULES: HouseRuleDef[] = [
   {
