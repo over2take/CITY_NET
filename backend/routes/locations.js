@@ -141,13 +141,18 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       if (!shopsOpen(system)) {
         return res.status(409).json({ error: `Building types are not available under ${system}` });
       }
-      next();
+      next(system);
     });
   };
 
-  /** The list the admin picker is built from, so the vocabulary has one owner. */
+  /**
+   * The list the admin picker is built from, so the vocabulary has one owner: the types this
+   * game has, by its own names (a custom system can rename and turn off types, buildings.js).
+   */
   router.get('/building-types', (req, res) =>
-    withShopSystem(res, () => res.json(BUILDING_TYPES)));
+    withShopSystem(res, (system) => res.json(BUILDING_TYPES
+      .filter((t) => customSystems.buildingIn(system, 'types', t.id))
+      .map((t) => ({ ...t, label: customSystems.buildingNameIn(system, 'types', t.id) || t.label })))));
 
   /**
    * What a building is for.
@@ -156,13 +161,18 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
    * and rewrites the whole row, which is a lot of blast radius for setting one label. It
    * also leaves building_type alone, so the two do not fight.
    */
-  router.patch('/:id/building-type', authenticate, (req, res) => withShopSystem(res, () => {
+  router.patch('/:id/building-type', authenticate, (req, res) => withShopSystem(res, (system) => {
     const { building_type, buyback_pct } = req.body;
     // A value nobody recognises would put a SHOP button on a building that cannot sell
     // anything, so it is refused rather than stored and puzzled over later.
     if (!isValidType(building_type)) return res.status(400).json({ error: 'Unknown building type' });
 
     const next = building_type === '' || building_type === undefined ? null : building_type;
+    // A type this game turned off is not one a building can be given here. One already given
+    // keeps it, unused, for when the type is turned back on.
+    if (next !== null && !customSystems.buildingIn(system, 'types', next)) {
+      return res.status(409).json({ error: 'Not a building type in this game' });
+    }
 
     /**
      * What this shop pays for second-hand goods, or nothing to say.
