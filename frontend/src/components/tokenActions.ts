@@ -43,6 +43,8 @@ export interface TokenViewer {
   systemHasVehicles: boolean;
   /** The running system has a bank (a custom system can turn it off). */
   systemHasBank: boolean;
+  /** The running system has combat (a custom system can turn it off): no attack buttons without. */
+  systemHasCombat: boolean;
   /** This location has battle maps. */
   hasBattleMaps: boolean;
 }
@@ -52,7 +54,7 @@ export function tokenActionKeys(v: TokenViewer): TokenActionKey[] {
   const keys: TokenActionKey[] = [];
 
   // Attacking: anyone signed in, at anything but their own token, when not already mid-attack.
-  if (v.isLoggedIn && !v.isOwner && !v.attackPending) {
+  if (v.isLoggedIn && !v.isOwner && !v.attackPending && v.systemHasCombat) {
     keys.push(...(v.sheetCombat ? ['attack' as const] : ['melee' as const, 'ranged' as const]));
   }
   // A player's sheet: its owner, or the GM.
