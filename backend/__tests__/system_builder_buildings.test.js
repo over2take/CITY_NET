@@ -182,8 +182,11 @@ describe('the checkout', () => {
   it('sells nothing from a catalogue the game turned off', async () => {
     // The armorer sells armor and armor mods; Hearth turned armor off, so the mods remain.
     expect(await checkout(HEARTH, 'armorer')).not.toBe('not_sold');
+    // With both off the armorer has no shelf left, and a shop with nothing to sell is no shop
+    // (3b4): the type goes with its last catalogue.
     await republish({ ...hearth(), buildings: { ...hearth().buildings, catalogues: { armor: { on: false }, armor_mods: { on: false } } } });
-    expect(await checkout(HEARTH, 'armorer')).toBe('not_sold');
+    expect(await checkout(HEARTH, 'armorer')).toBe('no_shop');
+    expect(runtime.buildingIn(HEARTH, 'types', 'armorer')).toBe(false);
   });
 
   it('is as before under the built-in systems', async () => {
