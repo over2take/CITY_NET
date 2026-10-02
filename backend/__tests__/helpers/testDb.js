@@ -233,6 +233,15 @@ function makeTestDb() {
         high_roller_done INTEGER DEFAULT 0,
         PRIMARY KEY (username, system)
       )`);
+      // A custom system's further currencies (bank/currencies.js).
+      db.run(`CREATE TABLE bank_balances (
+        username TEXT NOT NULL,
+        system TEXT NOT NULL,
+        currency TEXT NOT NULL,
+        balance REAL DEFAULT 0,
+        debt REAL DEFAULT 0,
+        PRIMARY KEY (username, system, currency)
+      )`);
 
       // A token's health in the systems that are not running (tokens/vitals.js).
       db.run(`CREATE TABLE token_vitals (

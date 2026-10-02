@@ -52,6 +52,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The bank can hold a custom system's further currencies.** A new table starts empty and keeps each
+  extra currency's balance and debt. A system's first currency is the account every player already
+  has, so no money moves. Nothing uses it yet. The built-in systems keep their single account.
+
 - **A custom system can describe its own money.** Any number of currencies, each with coins (gold,
   silver, copper, shown as 12 gp 3 sp 4 cp) or a symbol and decimals ($4.34, £1,234.56, 1.234,56 €,
   ¥1,234), and whether a player may owe or go below zero in it, both off unless the GM turns them on.
