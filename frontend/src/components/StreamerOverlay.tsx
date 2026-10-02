@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { DirectorState, Location } from '../types';
 import { HeartMonitor, PersonSVG, INJURY_ZONES } from './HitPoints';
 import { bandOf } from './healthBands';
+import { useParts } from '../sheets/parts';
 
 interface DiceEvent {
   id: string;
@@ -14,7 +15,9 @@ interface DiceEvent {
 
 // Broadcast HUD for the spectator window: scene title chyron, dice lower-third,
 // optional cinematic letterbox. Pure DOM — sits on top of the Canvas.
-export function StreamerOverlay({ socket, directorState, selectedLocation, battleMapLabel }: { socket: any; directorState: DirectorState; selectedLocation: Location | null; battleMapLabel?: string | null }) {
+export function StreamerOverlay({ socket, directorState, selectedLocation, battleMapLabel, gameSystem }: { socket: any; directorState: DirectorState; selectedLocation: Location | null; battleMapLabel?: string | null; gameSystem?: string }) {
+  // No heart monitor or injury map where the game has token health off (3b6d).
+  const healthOn = useParts(gameSystem)('token_health');
   const [diceEvents, setDiceEvents] = useState<DiceEvent[]>([]);
 
   useEffect(() => {
@@ -115,7 +118,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                   <span style={{ color: 'var(--green)' }}>{selectedLocation.district_name}</span>
                 </div>
               )}
-              {isRhombus && (() => {
+              {isRhombus && healthOn && (() => {
                 const hpCurrent = selectedLocation.hp_current ?? 0;
                 const hpMax = selectedLocation.hp_max ?? 0;
                 const injuries: Record<string, boolean> = (() => {

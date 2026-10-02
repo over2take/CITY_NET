@@ -7,6 +7,7 @@ import { useStreamerVisibility } from '../context/StreamerVisibilityContext';
 import { IS_SPECTATOR } from '../streamerMode';
 import { parseVehicleState } from '../types';
 import { canMoveToken } from '../utils/tokenControl';
+import { useParts } from '../sheets/parts';
 
 /**
  * Marks a token as being inside a vehicle.
@@ -65,7 +66,9 @@ const useStreamerHover = (socket: any, locationId: number, isAdmin: boolean, isH
   return streamerHovered;
 };
 
-export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap, measureMode }: any) => {
+export const EnemyRhombus = React.memo(({ gameSystem, location, onClick, isSelected, setTargetObject, token, refreshLocations, setIsDragging, socket, roads, isBattleMap, measureMode }: any) => {
+  // No health bar where the game has token health off (3b6d).
+  const healthOn = useParts(gameSystem)('token_health');
   const meshRef = useRef<THREE.Mesh>(null);
   const coreRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.PointLight>(null);
@@ -325,7 +328,7 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
         <meshBasicMaterial color="#220000" />
       </mesh>
       
-      {isAdmin && (
+      {isAdmin && healthOn && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
 
@@ -345,7 +348,9 @@ export const EnemyRhombus = React.memo(({ location, onClick, isSelected, setTarg
   );
 });
 
-export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, roads, isBattleMap, measureMode }: any) => {
+export const FriendlyRhombus = React.memo(({ gameSystem, location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, roads, isBattleMap, measureMode }: any) => {
+  // No health bar where the game has token health off (3b6d).
+  const healthOn = useParts(gameSystem)('token_health');
   const groupRef = useRef<THREE.Group>(null);
   const meshGroupRef = useRef<THREE.Group>(null);
   const lightRef = useRef<THREE.PointLight>(null);
@@ -591,7 +596,7 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
         </mesh>
       </group>
       
-      {isAdmin && (
+      {isAdmin && healthOn && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
 
@@ -610,7 +615,9 @@ export const FriendlyRhombus = React.memo(({ location, onClick, isSelected, setT
   );
 });
 
-export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, activeUsers, roads, isBattleMap, battleMapPos, measureMode }: any) => {
+export const PlayerRhombus = React.memo(({ gameSystem, location, onClick, isSelected, setTargetObject, token, userName, refreshLocations, setIsDragging, socket, activeUsers, roads, isBattleMap, battleMapPos, measureMode }: any) => {
+  // No health bar where the game has token health off (3b6d).
+  const healthOn = useParts(gameSystem)('token_health');
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const haloRef = useRef<THREE.Mesh>(null);
@@ -903,7 +910,7 @@ export const PlayerRhombus = React.memo(({ location, onClick, isSelected, setTar
         </mesh>
       </mesh>
 
-      {isOnline && streamerVis.showHealthBars && (
+      {isOnline && streamerVis.showHealthBars && healthOn && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
 

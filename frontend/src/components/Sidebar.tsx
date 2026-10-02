@@ -205,6 +205,10 @@ export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedL
   const [acRanged, setAcRanged] = useState('');
   const tokenDefense = getTokenDefense(gameSystem);
   const word = useWords(gameSystem);
+  // A custom system with token health or combat off has no MAX HEALTH or defense to set (3b6d).
+  const controlParts = useParts(gameSystem);
+  const healthOn = controlParts('token_health');
+  const combatOn = controlParts('combat');
 
   // Any rhombus the player owns on any map — used for AC/settings regardless of current view
   const anyUserRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
@@ -230,7 +234,7 @@ export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedL
     const target = anyUserRhombus;
     if (target) {
       // HP max
-      if (rhombusState.hp_max > 0) {
+      if (healthOn && rhombusState.hp_max > 0) {
         await fetch(`/api/locations/${target.id}/health`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -238,7 +242,7 @@ export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedL
         });
       }
       // AC - only when the active system edits defense on the token
-      if (tokenDefense.editOnToken) {
+      if (combatOn && tokenDefense.editOnToken) {
         const meleeVal = acMelee === '' ? null : parseInt(acMelee, 10);
         const rangedVal = acRanged === '' ? null : parseInt(acRanged, 10);
         await fetch(`/api/locations/${target.id}`, {
@@ -354,7 +358,7 @@ export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedL
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
           {/* 5 — Max health */}
-          <div>
+          {healthOn && <div>
             <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX HEALTH</label>
             <input
               type="number"
@@ -363,12 +367,12 @@ export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedL
               onChange={(e) => setRhombusState({ ...rhombusState, hp_max: parseInt(e.target.value) || 0 })}
               style={{ width: '100%', boxSizing: 'border-box', marginBottom: 0 }}
             />
-          </div>
+          </div>}
 
           {/* 6 — Defense fields. What shows depends on the active game
               system's tokenDefense: D&D-likes edit AC here; systems whose
               armor lives on the sheet (CP:R SP) get a pointer instead. */}
-          {tokenDefense.editOnToken ? (
+          {!combatOn ? null : tokenDefense.editOnToken ? (
             <div>
               <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>ARMOR_CLASS</label>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -408,9 +412,9 @@ export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedL
 
           {/* 7 — SET button (health/armor only — color autosaves, identity
               comes from the character sheet) */}
-          <button className="upload-btn" style={{ width: '100%', marginTop: '4px' }} onClick={handleSet}>
+          {(healthOn || combatOn) && <button className="upload-btn" style={{ width: '100%', marginTop: '4px' }} onClick={handleSet}>
             SAVE_STATS
-          </button>
+          </button>}
 
         </div>
 
@@ -1176,6 +1180,8 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
   const bankOn = parts('bank');
   // A custom system with initiative off has no tracker button or panel (3b6a).
   const initiativeOn = parts('initiative');
+  // And with token health off, no HIT_POINTS button (3b6d).
+  const healthOn = parts('token_health');
   const characterControls = `${asLabel(word('character', 'singular', 'CHARACTER'))}_CONTROLS`;
   const hitPoints = asLabel(word('hp', 'plural', 'HIT POINTS'));
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
@@ -1265,11 +1271,11 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
             </svg>
           </button>
-          <button className={`rail-btn ${isHitPointsOpen ? 'active' : ''}`} onClick={() => setIsHitPointsOpen(!isHitPointsOpen)} aria-label={hitPoints} data-tip={hitPoints}>
+          {healthOn && <button className={`rail-btn ${isHitPointsOpen ? 'active' : ''}`} onClick={() => setIsHitPointsOpen(!isHitPointsOpen)} aria-label={hitPoints} data-tip={hitPoints}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
-          </button>
+          </button>}
           <button className={`rail-btn ${activeMenu === 'dice_menu' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'dice_menu' ? 'none' : 'dice_menu')} aria-label="DICE_ROLLER" data-tip="DICE_ROLLER">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="12 2 20.5 7 20.5 17 12 22 3.5 17 3.5 7" />

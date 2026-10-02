@@ -52,6 +52,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The windows follow a custom system with token health turned off.** No health bars on the map or
+  the stream, no HIT_POINTS button, no MAX HEALTH to set, and no health panel in the token window.
+  The HEALTH folder stays only for what the GM still keeps there. The built-in systems are unchanged.
+
 - **A custom system can turn token health off, on the server.** Its tokens take no health actions, it
   has no health model, and its character and NPC sheets lose the HP fields and the HP bar. A sheet's
   token AC field now leaves with combat the same way. The health windows follow in the next piece.
