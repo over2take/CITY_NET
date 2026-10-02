@@ -234,6 +234,13 @@ export interface TokenDefense {
   note?: string;
 }
 
+/** A custom system's bank settings (backend/systemBuilder/bank.js bankOf): whether the bank window
+ *  celebrates, and its own whale threshold in the main currency's smallest unit, or null. */
+export interface CustomBank {
+  celebrations: boolean;
+  whale: number | null;
+}
+
 export interface SheetTemplate {
   id: string;
   name: string;
@@ -262,6 +269,9 @@ export interface SheetTemplate {
   /** A custom system's currencies, the first the main one (sheets/currencies.ts reads them).
    *  Absent on the built-in systems, which keep the app's single money. */
   currencies?: import('./currencies').Currency[];
+  /** A custom system's bank settings (sheets/moneyText.ts celebrationsFor reads them). Absent on
+   *  the built-in systems, which celebrate as they always have. */
+  bank?: CustomBank;
   /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
    *  (a custom system's stat block). Absent = NPCs use this template. */
   npcLayout?: SheetTemplate;

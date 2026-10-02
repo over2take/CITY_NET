@@ -8,7 +8,7 @@
 
 import { useEffect, useReducer } from 'react';
 import type { Currency } from './currencies';
-import type { SheetTemplate, SheetSection, SheetField, SheetFieldType, SheetLinkSource, SectionLayout } from './types';
+import type { SheetTemplate, SheetSection, SheetField, SheetFieldType, SheetLinkSource, SectionLayout, CustomBank } from './types';
 
 export interface CustomRenderField {
   id: string;
@@ -49,6 +49,8 @@ export interface CustomRender {
   buildings?: CustomBuildings;
   /** Its own money, the first the main one (sheets/currencies.ts); empty when it has the app's. */
   currencies?: Currency[];
+  /** Whether its bank window celebrates (backend systemBuilder/bank.js); off unless turned on. */
+  bank?: CustomBank;
   derived: string[];
   sheet: CustomRenderSheet;
   /** NPCs' own layout (null: they use the character sheet) and GENERATE_SHEET's tiers. */
@@ -111,6 +113,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.parts ? { parts: render.parts } : {}),
     ...(render.buildings ? { buildings: render.buildings } : {}),
     ...(render.currencies ? { currencies: render.currencies } : {}),
+    ...(render.bank ? { bank: render.bank } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived), ...tiers } } : {}),
   };
