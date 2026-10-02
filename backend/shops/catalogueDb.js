@@ -58,49 +58,45 @@ const refresh = (db, system, cb = () => {}) => {
   });
 };
 
+const q = (db, sql, params = []) => new Promise((resolve, reject) => {
+  db.run(sql, params, (err) => (err ? reject(err) : resolve()));
+});
+
 /**
- * Replace one catalogue's uploaded items.
+ * Replace the uploaded items of every catalogue in one file: { catalogue: entries }.
  *
- * Wholesale for that catalogue, because "here is my weapon list" is how a GM thinks about
- * it and re-uploading is how a line gets removed. Other catalogues, other systems and
- * every built-in table are untouched.
+ * Wholesale for each catalogue named, because "here is my weapon list" is how a GM thinks
+ * about it and re-uploading is how a line gets removed. Catalogues the file does not name,
+ * other systems and every built-in table are untouched.
  *
- * Done in a transaction: a half-written catalogue would be worse than a failed upload,
- * since the GM would have no way of telling which half took.
+ * One transaction for the whole file, its statements one after another. A half-written file
+ * would be worse than a failed upload, since the GM would have no way of telling which half
+ * took. It was once a transaction per catalogue, all begun at once on the one connection:
+ * every catalogue after the first was refused, and the file was reported as failed after the
+ * first had been saved (found 2026-10-02).
  */
-const replaceCatalogue = (db, system, catalogue, entries, cb) => {
-  db.serialize(() => {
-    db.run('BEGIN IMMEDIATE', (beginErr) => {
-      if (beginErr) return cb(beginErr);
-
-      db.run(
-        'DELETE FROM shop_catalogues WHERE system = ? AND catalogue = ?',
-        [system, catalogue],
-        (delErr) => {
-          if (delErr) return db.run('ROLLBACK', () => cb(delErr));
-
-          const stmt = db.prepare(
+const replaceCatalogues = (db, system, sections, cb) => {
+  const write = async () => {
+    await q(db, 'BEGIN IMMEDIATE');
+    try {
+      for (const [catalogue, entries] of Object.entries(sections || {})) {
+        await q(db, 'DELETE FROM shop_catalogues WHERE system = ? AND catalogue = ?', [system, catalogue]);
+        for (const entry of entries || []) {
+          if (!entry || !entry.id) continue;
+          await q(db,
             `INSERT INTO shop_catalogues (system, catalogue, id, name, price, fields)
              VALUES (?, ?, ?, ?, ?, ?)`,
-          );
-          let failed = null;
-          for (const entry of entries || []) {
-            if (!entry || !entry.id) continue;
-            stmt.run(
-              system, catalogue, entry.id, String(entry.name || ''),
-              Number(entry.price) || 0, JSON.stringify(entry.fields || {}),
-              (runErr) => { if (runErr && !failed) failed = runErr; },
-            );
-          }
-          stmt.finalize((finErr) => {
-            const problem = failed || finErr;
-            if (problem) return db.run('ROLLBACK', () => cb(problem));
-            db.run('COMMIT', (commitErr) => cb(commitErr || null));
-          });
-        },
-      );
-    });
-  });
+            [system, catalogue, entry.id, String(entry.name || ''),
+              Number(entry.price) || 0, JSON.stringify(entry.fields || {})]);
+        }
+      }
+      await q(db, 'COMMIT');
+    } catch (err) {
+      await q(db, 'ROLLBACK').catch(() => {});
+      throw err;
+    }
+  };
+  write().then(() => cb(null), cb);
 };
 
 /** Forget one catalogue entirely, returning it to whatever the app ships with. */
@@ -111,4 +107,4 @@ const clearCatalogue = (db, system, catalogue, cb) =>
     (err) => cb(err || null),
   );
 
-module.exports = { read, refresh, replaceCatalogue, clearCatalogue, shape };
+module.exports = { read, refresh, replaceCatalogues, clearCatalogue, shape };

@@ -117,13 +117,9 @@ describe('the catalogue window\'s preview and save', () => {
   });
 
   it('stores whole smallest units', async () => {
-    // One catalogue per save: a file of several fails to save today, whatever the system
-    // (found 2026-10-02, its own fix).
-    for (const text of [['[weapons]', 'name; price', 'Sword; 15gp'], ['[gear]', 'name; price', 'Rope; $4.34']]) {
-      const { handlers, sent } = await gm(HEARTH);
-      handlers.saveCatalogue({ text: text.join('\n') });
-      expect((await untilValue(() => sent.find((e) => e.event === 'catalogueSaved'), Boolean, { label: 'the save' })).data.ok).toBe(true);
-    }
+    const { handlers, sent } = await gm(HEARTH);
+    handlers.saveCatalogue({ text: TEXT });
+    expect((await untilValue(() => sent.find((e) => e.event === 'catalogueSaved'), Boolean, { label: 'the save' })).data.ok).toBe(true);
     expect(await get(db, "SELECT price FROM shop_catalogues WHERE system = ? AND id = 'sword'", [HEARTH])).toEqual({ price: 1500 });
     expect(await get(db, "SELECT price FROM shop_catalogues WHERE system = ? AND id = 'rope'", [HEARTH])).toEqual({ price: 434 });
   });

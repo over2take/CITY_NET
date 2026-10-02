@@ -2229,26 +2229,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         const wanted = Object.keys(parsed.sections);
         if (!wanted.length) return refuse('empty');
 
-        let left = wanted.length;
-        let failed = null;
-        for (const catalogue of wanted) {
-          catalogueDb.replaceCatalogue(db, system, catalogue, parsed.sections[catalogue], (err) => {
-            if (err && !failed) failed = err;
-            left -= 1;
-            if (left > 0) return;
-            if (failed) return refuse('write');
-            // Back into memory, then out to everybody - the shop windows draw their
-            // shelves from this and would otherwise show yesterday's catalogue.
-            catalogueDb.refresh(db, system, () => {
-              io.emit('cataloguesChanged', { system });
-              socket.emit('catalogueSaved', {
-                ok: true,
-                saved: wanted.map((c) => ({ catalogue: c, count: parsed.sections[c].length })),
-                problems: parsed.problems,
-              });
+        catalogueDb.replaceCatalogues(db, system, parsed.sections, (err) => {
+          if (err) return refuse('write');
+          // Back into memory, then out to everybody - the shop windows draw their
+          // shelves from this and would otherwise show yesterday's catalogue.
+          catalogueDb.refresh(db, system, () => {
+            io.emit('cataloguesChanged', { system });
+            socket.emit('catalogueSaved', {
+              ok: true,
+              saved: wanted.map((c) => ({ catalogue: c, count: parsed.sections[c].length })),
+              problems: parsed.problems,
             });
           });
-        }
+        });
       });
     });
 
