@@ -33,6 +33,7 @@ const { checkSheet } = require('./sheet');
 const { checkNpc } = require('./npc');
 const { checkCore } = require('./core');
 const { TERMS, WORD_FORMS, wordFor, resolveWords, ownWords } = require('./terms');
+const { PARTS, partOn } = require('./parts');
 
 const FORMAT = 1;
 
@@ -47,12 +48,6 @@ const LIMITS = {
   /** One glossary word. */
   word: 40,
 };
-
-/** The parts of the app a system can turn off (Layer 2). All on unless a system says. */
-const PARTS = [
-  'bank', 'shops', 'vehicles', 'cyberware', 'initiative', 'combat', 'token_health',
-  'death', 'luck', 'xp', 'npc_tiers', 'sheet_import',
-];
 
 const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'lookups', 'derived', 'sheet', 'npc', 'core']);
 
@@ -150,12 +145,6 @@ const checkDefinition = (definition) => {
 
 /** A new system's starting point: a name and nothing else. */
 const blankDefinition = (name) => ({ format: FORMAT, name: String(name || '').trim() });
-
-/** Is `part` on in this system? Everything is, unless the system turns it off. */
-const partOn = (definition, part) => {
-  const setting = definition && isPlainObject(definition.parts) ? definition.parts[part] : undefined;
-  return !(isPlainObject(setting) && setting.on === false);
-};
 
 module.exports = {
   FORMAT, LIMITS, TERMS, PARTS, WORD_FORMS,

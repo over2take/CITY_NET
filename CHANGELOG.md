@@ -52,6 +52,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system with the bank turned off has no money.** The server moves no money, tells no
+  balance and refuses a shop checkout, and the sheet drops its cash field. Every account is kept as it
+  was, so turning the bank back on brings the money back. The bank buttons themselves go in the next
+  piece. The built-in systems are unchanged.
+
 - **The app can ask which parts a custom system uses.** A custom system's choice to turn off the
   bank, shops, vehicles, cyberware and its other parts now reaches the server and every window, ready
   for the pieces that hide them. Nothing is hidden yet, and the built-in systems have every part on.
