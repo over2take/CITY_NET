@@ -12,7 +12,7 @@ import { buildTokenActions, createPlayerTokenRow, type TokenActionContext, type 
 const everyone: TokenViewer = {
   isAdmin: true, isPrimaryAdmin: true, isOwner: false, isLoggedIn: true, isPlayerToken: true, hasOwner: true,
   sheetHere: false, linked: false, attackPending: false, sheetCombat: false, canManage: true,
-  hasRoster: true, systemHasVehicles: true, hasBattleMaps: true,
+  hasRoster: true, systemHasVehicles: true, systemHasBank: true, hasBattleMaps: true,
 };
 
 const context = (over: Partial<TokenActionContext> = {}): TokenActionContext => ({

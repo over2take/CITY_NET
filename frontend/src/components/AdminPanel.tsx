@@ -45,6 +45,7 @@ import { PNG_EXPORT_PRESETS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExport
 import { RECORD_DURATIONS, MAX_RECORD_SECONDS } from '../hooks/useMapExport';
 import { parseGrant, describeGrant } from '../utils/tokenControl';
 import { useWords, asLabel, type WordLookup } from '../sheets/words';
+import { useParts, type PartLookup } from '../sheets/parts';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,6 +57,8 @@ function BattleAdminPanel({
   globalSettings, fetchGlobalSettings, onOpenNpcLibrary, activeUsers,
 }: any) {
   const [tab, setTab] = useState<'battle_map' | 'game'>('battle_map');
+  // A custom system with the bank off has no pay or currency (3b2b).
+  const bankOn = useParts(globalSettings?.game_system)('bank');
 
   const resolvedBattleMapScale = (() => {
     if (tempBattleMapScale !== null) return tempBattleMapScale;
@@ -130,34 +133,17 @@ function BattleAdminPanel({
           <button className="map-save-btn" onClick={handleSaveDefault}>SAVE_DEFAULT</button>
           <button className="map-load-btn" onClick={handleLoadDefault}>LOAD_DEFAULT</button>
         </div>
-        <button className="utility-btn" onClick={() => setIsAdminPayOpen(true)} style={{ width: '100%', marginBottom: '10px' }}>PAY_PLAYERS</button>
+        {bankOn && <button className="utility-btn" onClick={() => setIsAdminPayOpen(true)} style={{ width: '100%', marginBottom: '10px' }}>PAY_PLAYERS</button>}
         {!secureModeEnabled && <button className="utility-btn danger-btn" onClick={() => { onLogout(); }} style={{ width: '100%' }}>EXIT_ADMIN_MODE</button>}
       </>}
 
       {tab === 'game' && <>
         <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
-        <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
-          <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
-              <button
-                key={opt}
-                className={`utility-btn ${(globalSettings?.currency_icon || 'credits') === opt ? 'active' : ''}`}
-                style={{ padding: '4px 10px', fontSize: opt === 'credits' ? '0.6rem' : '1rem' }}
-                onClick={() => {
-                  fetch('/api/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ key: 'currency_icon', value: opt }),
-                  }).then(() => fetchGlobalSettings());
-                }}
-              >
-                {opt === 'credits' ? 'DEFAULT' : opt}
-              </button>
-            ))}
-          </div>
-        </div>
-        <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
+        {/* Money, which a custom system with the bank off does not have (3b2b). */}
+        {bankOn && <>
+          <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
+          <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
+        </>}
         <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
       </>}
     </div>
@@ -202,6 +188,7 @@ export function AdminPanel({
   // A custom system's own words for the GAME tab; today's text otherwise. Before the early
   // return below: it is a hook.
   const word = useWords(gameSystem);
+  const bankOn = useParts(gameSystem)('bank');
   if (view === 'battle_map') {
     return (
       <BattleAdminPanel
@@ -1056,28 +1043,11 @@ export function AdminPanel({
           {adminTab === 'game' && (
             <>
               <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
-              <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
-                <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
-                    <button
-                      key={opt}
-                      className={`utility-btn ${(globalSettings?.currency_icon || 'credits') === opt ? 'active' : ''}`}
-                      style={{ padding: '4px 10px', fontSize: opt === 'credits' ? '0.6rem' : '1rem' }}
-                      onClick={() => {
-                        fetch('/api/settings', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                          body: JSON.stringify({ key: 'currency_icon', value: opt }),
-                        }).then(() => fetchGlobalSettings());
-                      }}
-                    >
-                      {opt === 'credits' ? 'DEFAULT' : opt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
+              {/* Money, which a custom system with the bank off does not have (3b2b). */}
+              {bankOn && <>
+                <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
+                <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
+              </>}
               {/* Beside PAY_PLAYERS because it is the same gesture at the end of a
                   session, and deliberately named for what it does: that one splits a pot,
                   this one gives each character the same number.
@@ -2216,21 +2186,24 @@ function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] 
   );
 }
 
-/** The house rules every system has. A function of the system's words: the first names initiative. */
-const globalHouseRules = (word: WordLookup): HouseRuleDef[] => [
+/**
+ * The house rules every system has. A function of the system's words (the first names initiative)
+ * and its parts: buying with money you do not have means nothing with the bank off (3b2b).
+ */
+const globalHouseRules = (word: WordLookup, on: PartLookup): HouseRuleDef[] => [
   {
     settingKey: 'initiative_follows_building',
     label: `${word('initiative', 'singular', 'INITIATIVE').toUpperCase()} FOLLOWS BUILDING (ALL FLOORS SHARE ONE TRACKER)`,
     title: `When enabled, all floors of the same building share a single ${word('initiative', 'singular', 'initiative')} tracker. Players moving between floors stay in the same combat order. Each building and the city map still have their own separate ${word('initiative', 'plural', 'initiatives')}.`,
   },
   {
-    // Universal rather than per-system: every ruleset in the app has money, and whether
+    // Universal rather than per-system: every built-in ruleset has money, and whether
     // you can spend what you have not got is a table decision, not a ruleset one.
     settingKey: OVERDRAFT_RULE,
     label: 'BUY WITH MONEY YOU DO NOT HAVE',
     title: "House rule: a player who cannot afford something in a shop is asked how to cover it - take the shortfall as debt, or let the balance go negative - instead of being refused. Off by default, which refuses the purchase. What happens to someone carrying a negative balance is yours to decide; the app records the hole, it does not collect on it.",
   },
-];
+].filter((rule) => rule.settingKey !== OVERDRAFT_RULE || on('bank'));
 
 const CPR_HOUSE_RULES: HouseRuleDef[] = [
   {
@@ -2300,6 +2273,7 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: str
   const [edgeGrantTarget, setEdgeGrantTarget] = useState<string>('');
   // The picked system's own words for the house rules every system shares.
   const word = useWords(system);
+  const on = useParts(system);
 
   const refresh = () => {
     fetch('/api/sheets/system').then(r => r.json()).then(d => {
@@ -2334,7 +2308,7 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: str
             Each system keeps its own characters, banks and token health; switching back restores them.
           </p>
           <HouseRulesPanel token={token} defs={[
-            ...globalHouseRules(word),
+            ...globalHouseRules(word, on),
             ...(system === 'cities_without_number' ? CWN_HOUSE_RULES : []),
             ...(system === 'cyberpunk_red' ? CPR_HOUSE_RULES : []),
             ...(system === 'shadowrun_6e' ? SR6_HOUSE_RULES : []),
@@ -2555,6 +2529,33 @@ function BuybackPanel({ token, globalSettings, fetchGlobalSettings }: { token: s
   );
 }
 
+/** Which symbol money is shown with: one of the GM's choices, saved for the whole table. */
+function CurrencyIconPanel({ token, globalSettings, fetchGlobalSettings }: { token: string; globalSettings: any; fetchGlobalSettings: () => void }) {
+  return (
+    <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
+      <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
+          <button
+            key={opt}
+            className={`utility-btn ${(globalSettings?.currency_icon || 'credits') === opt ? 'active' : ''}`}
+            style={{ padding: '4px 10px', fontSize: opt === 'credits' ? '0.6rem' : '1rem' }}
+            onClick={() => {
+              fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ key: 'currency_icon', value: opt }),
+              }).then(() => fetchGlobalSettings());
+            }}
+          >
+            {opt === 'credits' ? 'DEFAULT' : opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BankSoundsPanel({ token, globalSettings, fetchGlobalSettings }: { token: string; globalSettings: any; fetchGlobalSettings: () => void }) {
   const [open, setOpen] = useState(false);
   const [volumes, setVolumes] = useState<Record<BankSoundKey, number>>({
@@ -2563,6 +2564,8 @@ function BankSoundsPanel({ token, globalSettings, fetchGlobalSettings }: { token
   const [saving, setSaving] = useState(false);
   // A custom system's own word for the bank; today's BANK otherwise.
   const bank = useWords(globalSettings?.game_system)('bank', 'singular', 'BANK').toUpperCase();
+  // A custom system with the bank off makes no bank sounds (3b2b).
+  const bankOn = useParts(globalSettings?.game_system)('bank');
 
   useEffect(() => {
     if (!globalSettings) return;
@@ -2588,6 +2591,7 @@ function BankSoundsPanel({ token, globalSettings, fetchGlobalSettings }: { token
     fetchGlobalSettings();
   };
 
+  if (!bankOn) return null;
   return (
     <div style={{ marginTop: '10px' }}>
       <button

@@ -20,6 +20,7 @@ import rhombusIcon from './assets/rhombus.svg';
 import { useMapData } from './hooks/useMapData';
 import { useCustomTemplates } from './hooks/useCustomTemplates';
 import { wordFor } from './sheets/words';
+import { useParts } from './sheets/parts';
 import { useSocket } from './hooks/useSocket';
 import { THEMES, ThemeContext } from './theme/themes';
 import type { ThemeName } from './theme/themes';
@@ -246,6 +247,9 @@ function App() {
   // A published custom system's sheet template, ready before a sheet opens, and a redraw when
   // one arrives (sheets/customTemplates.ts).
   useCustomTemplates(gameSystem);
+  // A custom system with the bank off: no VIEW_BANK on tokens (3b2b; the bank windows check for
+  // themselves). The server refuses money there anyway (3b2a); this stops offering it.
+  const bankOn = useParts(gameSystem)('bank');
 
   // Custom dice: GM-authored (DB) plus any built-ins the active system ships.
   const { customDice, applyDice, addDie, updateDie, deleteDie, error: customDiceError, setError: setCustomDiceError } = useCustomDice(token, gameSystem);
@@ -2037,6 +2041,7 @@ function App() {
                   targetUser={adminBankPlayer}
                   socket={socketRef.current}
                   token={token}
+                  system={gameSystem}
               />
             )}
             {isCatalogueOpen && isAdmin && (
@@ -2066,6 +2071,7 @@ function App() {
                   onClose={() => setIsAdminPayOpen(false)}
                   socket={socketRef.current}
                   token={token}
+                  system={gameSystem}
                   activeUsers={activeUsers}
               />
             )}
@@ -2077,6 +2083,7 @@ function App() {
                 socket={socketRef.current}
                 userName={userName}
                 isBankOpen={isBankOpen}
+                system={gameSystem}
                 firstPayDone={bankData.firstPayDone}
                 highRollerDone={bankData.highRollerDone}
                 audioEnabled={audioEnabled}
@@ -2463,7 +2470,7 @@ function App() {
                   isAdmin, isPrimaryAdmin: isAdmin && isPrimaryAdmin, isOwner, isLoggedIn,
                   isPlayerToken: isPlayerRhombus, hasOwner: !!selectedLocation.owner,
                   sheetHere, linked, attackPending: !!attackPending, sheetCombat: hasSheetCombat(gameSystem),
-                  canManage, hasRoster: vehicleRoster.hasVehicles, systemHasVehicles: hasVehicles(gameSystem),
+                  canManage, hasRoster: vehicleRoster.hasVehicles, systemHasVehicles: hasVehicles(gameSystem), systemHasBank: bankOn,
                   hasBattleMaps: currentLocBattleMaps.length > 0,
                 };
                 const tokenFolders = tokenView(viewer);

@@ -41,6 +41,8 @@ export interface TokenViewer {
   hasRoster: boolean;
   /** The running system has vehicles at all. */
   systemHasVehicles: boolean;
+  /** The running system has a bank (a custom system can turn it off). */
+  systemHasBank: boolean;
   /** This location has battle maps. */
   hasBattleMaps: boolean;
 }
@@ -60,7 +62,7 @@ export function tokenActionKeys(v: TokenViewer): TokenActionKey[] {
   if (v.isAdmin && isNpc && !v.sheetHere) keys.push('generate-sheet');
   if (v.isAdmin && isNpc && !v.linked) keys.push('edit');
   if (v.hasRoster) keys.push('vehicles');
-  if (v.isAdmin && v.isPlayerToken) keys.push('bank');
+  if (v.isAdmin && v.isPlayerToken && v.systemHasBank) keys.push('bank');
   // The enemy roster never reaches a player's client at all.
   if (v.isAdmin && v.systemHasVehicles) keys.push('enemy-vehicles');
   if (v.hasBattleMaps) keys.push('battle');
