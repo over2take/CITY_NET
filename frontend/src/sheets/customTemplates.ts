@@ -7,6 +7,7 @@
 // until it arrives the generic one stands in, and a window event tells the app to redraw.
 
 import { useEffect, useReducer } from 'react';
+import type { Currency } from './currencies';
 import type { SheetTemplate, SheetSection, SheetField, SheetFieldType, SheetLinkSource, SectionLayout } from './types';
 
 export interface CustomRenderField {
@@ -45,6 +46,8 @@ export interface CustomRender {
   parts: Record<string, { on: boolean }>;
   /** The building types and shop catalogues it renamed or turned off (backend systemBuilder/buildings.js). */
   buildings?: CustomBuildings;
+  /** Its own money, the first the main one (sheets/currencies.ts); empty when it has the app's. */
+  currencies?: Currency[];
   derived: string[];
   sheet: CustomRenderSheet;
   /** NPCs' own layout (null: they use the character sheet) and GENERATE_SHEET's tiers. */
@@ -106,6 +109,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.words ? { words: render.words } : {}),
     ...(render.parts ? { parts: render.parts } : {}),
     ...(render.buildings ? { buildings: render.buildings } : {}),
+    ...(render.currencies ? { currencies: render.currencies } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived), ...tiers } } : {}),
   };

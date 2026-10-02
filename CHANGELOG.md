@@ -52,6 +52,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system can describe its own money.** Any number of currencies, each with coins (gold,
+  silver, copper, shown as 12 gp 3 sp 4 cp) or a symbol and decimals ($4.34, £1,234.56, 1.234,56 €,
+  ¥1,234), and whether a player may owe or go below zero in it, both off unless the GM turns them on.
+  Nothing uses it yet; the built-in systems keep their single money.
+
 - **The map-token tests check health bars.** Their stand-in for the health bar named a file that does
   not exist, so it was never used, and no test checked that a bar is drawn. It now replaces the real
   one, and the tests check that the GM sees bars on enemy and friendly tokens, players do not, and a

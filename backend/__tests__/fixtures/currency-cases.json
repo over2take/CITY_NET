@@ -1,0 +1,62 @@
+{
+  "about": "Shared by backend/__tests__/system_builder_currencies.test.js and frontend/src/sheets/__tests__/currencies.test.ts, so the server's and the browser's currency rules (systemBuilder/currencies.js, sheets/currencies.ts) are held to the same answers.",
+  "definition": [
+    { "id": "gold", "name": "Gold", "short": "gp", "debt": true,
+      "denominations": [
+        { "id": "cp", "name": "Copper", "short": "cp", "value": 1 },
+        { "id": "gp", "name": "Gold", "short": "gp", "value": 100 },
+        { "id": "sp", "name": "Silver", "short": "sp", "value": 10 }
+      ] },
+    { "id": "dollars", "name": "Dollars", "symbol": "$", "decimals": 2, "negative": true },
+    { "id": "euro", "name": "Euro", "symbol": "€", "symbolAfter": true, "decimals": 2, "decimalMark": "," },
+    { "id": "pounds", "name": "Pounds", "symbol": "£", "decimals": 2 },
+    { "id": "yen", "name": "Yen", "symbol": "¥" },
+    { "id": "honor", "name": "Honor" },
+    { "id": "rep", "name": "Reputation", "short": "rep" }
+  ],
+  "normalized": [
+    { "id": "gold", "name": "Gold", "short": "gp", "decimals": 0, "decimalMark": ".", "debt": true, "negative": false,
+      "denominations": [
+        { "id": "gp", "name": "Gold", "short": "gp", "value": 100 },
+        { "id": "sp", "name": "Silver", "short": "sp", "value": 10 },
+        { "id": "cp", "name": "Copper", "short": "cp", "value": 1 }
+      ] },
+    { "id": "dollars", "name": "Dollars", "symbol": "$", "symbolAfter": false, "decimals": 2, "decimalMark": ".", "debt": false, "negative": true, "denominations": [] },
+    { "id": "euro", "name": "Euro", "symbol": "€", "symbolAfter": true, "decimals": 2, "decimalMark": ",", "debt": false, "negative": false, "denominations": [] },
+    { "id": "pounds", "name": "Pounds", "symbol": "£", "symbolAfter": false, "decimals": 2, "decimalMark": ".", "debt": false, "negative": false, "denominations": [] },
+    { "id": "yen", "name": "Yen", "symbol": "¥", "symbolAfter": false, "decimals": 0, "decimalMark": ".", "debt": false, "negative": false, "denominations": [] },
+    { "id": "honor", "name": "Honor", "decimals": 0, "decimalMark": ".", "debt": false, "negative": false, "denominations": [] },
+    { "id": "rep", "name": "Reputation", "short": "rep", "decimals": 0, "decimalMark": ".", "debt": false, "negative": false, "denominations": [] }
+  ],
+  "format": [
+    { "currency": "gold", "amount": 1234, "text": "12 gp 3 sp 4 cp" },
+    { "currency": "gold", "amount": 1200, "text": "12 gp" },
+    { "currency": "gold", "amount": 5, "text": "5 cp" },
+    { "currency": "gold", "amount": 0, "text": "0 cp" },
+    { "currency": "gold", "amount": -500, "text": "-5 gp" },
+    { "currency": "gold", "amount": 1234.6, "text": "12 gp 3 sp 5 cp" },
+    { "currency": "dollars", "amount": 434, "text": "$4.34" },
+    { "currency": "dollars", "amount": 0, "text": "$0.00" },
+    { "currency": "dollars", "amount": 7, "text": "$0.07" },
+    { "currency": "dollars", "amount": -123456, "text": "-$1,234.56" },
+    { "currency": "euro", "amount": 434, "text": "4,34 €" },
+    { "currency": "euro", "amount": 123456, "text": "1.234,56 €" },
+    { "currency": "euro", "amount": -99, "text": "-0,99 €" },
+    { "currency": "pounds", "amount": 123456, "text": "£1,234.56" },
+    { "currency": "yen", "amount": 1234, "text": "¥1,234" },
+    { "currency": "yen", "amount": 1234567, "text": "¥1,234,567" },
+    { "currency": "honor", "amount": 1200, "text": "1,200 Honor" },
+    { "currency": "rep", "amount": -3, "text": "-3 rep" }
+  ],
+  "split": [
+    { "currency": "gold", "amount": 1234, "negative": false, "parts": [{ "id": "gp", "count": 12 }, { "id": "sp", "count": 3 }, { "id": "cp", "count": 4 }] },
+    { "currency": "gold", "amount": -1010, "negative": true, "parts": [{ "id": "gp", "count": 10 }, { "id": "sp", "count": 1 }] },
+    { "currency": "dollars", "amount": 434, "negative": false, "parts": [{ "id": "dollars", "count": 4.34 }] }
+  ],
+  "toBase": [
+    { "currency": "gold", "counts": { "gp": 12, "sp": 3, "cp": 4 }, "amount": 1234 },
+    { "currency": "gold", "counts": { "sp": 25 }, "amount": 250 },
+    { "currency": "gold", "counts": { "gp": 1, "pp": 9 }, "amount": 100 },
+    { "currency": "gold", "counts": { "gp": "2", "sp": "x" }, "amount": 200 }
+  ]
+}

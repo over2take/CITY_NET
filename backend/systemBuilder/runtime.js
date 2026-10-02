@@ -15,6 +15,7 @@ const { npcSheetOf, tiersOf } = require('./npc');
 const { ownWords } = require('./definition');
 const { partOn, PARTS } = require('./parts');
 const { buildingOn, buildingName, ownBuildings } = require('./buildings');
+const { currenciesOf } = require('./currencies');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
 
@@ -91,6 +92,8 @@ const renderOf = (id, definition) => ({
   parts: definition.parts || {},
   // The building types and catalogues it renamed or turned off (buildings.js).
   buildings: ownBuildings(definition),
+  // Its own money (currencies.js): empty for a system with the app's single money.
+  currencies: currenciesOf(definition),
   derived: (Array.isArray(definition.derived) ? definition.derived : []).map((d) => d.id),
   sheet: effectiveSheet(definition),
   npc: {
@@ -169,6 +172,12 @@ const buildingIn = (system, kind, id) => (loaded.has(system) ? buildingOn(loaded
 /** A published custom system's own name for a building type or catalogue, or null: the app's name stands. */
 const buildingNameIn = (system, kind, id) => (loaded.has(system) ? buildingName(loaded.get(system).definition, kind, id) : null);
 
+/**
+ * A published custom system's currencies (currencies.js), the first the main one; empty for a
+ * built-in system or one that defines none, which keep the app's single money.
+ */
+const currenciesIn = (system) => (loaded.has(system) ? currenciesOf(loaded.get(system).definition) : []);
+
 /** A published system's health model (its core.health), or null: built-in systems have none here. */
 const health = (id) => {
   const definition = loaded.has(id) ? loaded.get(id).definition : null;
@@ -182,4 +191,4 @@ const health = (id) => {
 templates.setCustomMeta(meta);
 npcTiers.setCustomTiers(tiers);
 
-module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, metaOf, renderOf };
+module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, metaOf, renderOf };
