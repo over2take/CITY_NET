@@ -52,6 +52,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Catalogue prices are read in each catalogue's currency.** In a custom system with currencies, a
+  GM writes "15gp", "$4.34" or "1.234,56 €"; the preview shows how each price was read, and anything
+  that could be misread is refused with the reason. The built-in systems read prices as before.
+
 - **Shops check out in a custom system's currencies.** A cart is paid from each currency's own
   account, all at once or not at all, and a shortfall is covered only as that currency allows. The
   shop window follows later. The built-in checkout is unchanged.
