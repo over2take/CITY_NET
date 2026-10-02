@@ -33,7 +33,17 @@ const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
 const ID = /^[a-z][a-z0-9_]{0,31}$/;
 const LIMITS = { currencies: 8, denominations: 8, name: 40, short: 8, symbol: 4, decimals: 4 };
-const CURRENCY_KEYS = new Set(['id', 'name', 'short', 'symbol', 'symbolAfter', 'decimals', 'decimalMark', 'debt', 'negative', 'denominations']);
+const CURRENCY_KEYS = new Set(['id', 'name', 'short', 'symbol', 'symbolAfter', 'decimals', 'decimalMark', 'debt', 'negative', 'denominations', 'icon']);
+
+/**
+ * A currency's icon (3c2c, decided with the user 2026-10-01 and 2026-10-02): one of the five the
+ * app's CURRENCY_ICON has always offered, or a small image the GM uploaded, named by its content
+ * (routes/systems.js stores it). An uploaded one is only ever an address under /uploads, served with
+ * the sandbox headers (middleware/uploadHeaders.js) and drawn through <img>, never inlined.
+ */
+const BUILT_IN_ICONS = ['credits', '$', '£', '€', '🪙'];
+const UPLOADED_ICON = /^\/uploads\/currency_icons\/[0-9a-f]{64}\.(png|webp|svg)$/;
+const isIcon = (icon) => typeof icon === 'string' && (BUILT_IN_ICONS.includes(icon) || UPLOADED_ICON.test(icon));
 const DECIMAL_MARKS = ['.', ','];
 const DENOMINATION_KEYS = new Set(['id', 'name', 'short', 'value']);
 
@@ -91,6 +101,9 @@ const checkCurrencies = (currencies, problems) => {
       if (c[flag] !== undefined && typeof c[flag] !== 'boolean') problems.push({ where: `${where}, ${flag}`, message: 'Must be true or false' });
     }
     checkDenominations(c.denominations, `${where}, denominations`, problems);
+    if (c.icon !== undefined && !isIcon(c.icon)) {
+      problems.push({ where: `${where}, icon`, message: `Must be one of ${BUILT_IN_ICONS.join(' ')} or an uploaded icon` });
+    }
   });
 };
 
@@ -110,6 +123,8 @@ const currenciesOf = (definition) => {
     decimalMark: c.decimalMark === ',' ? ',' : '.',
     debt: c.debt === true,
     negative: c.negative === true,
+    // Only a usable icon is sent; a currency without one shows its symbol or coins, as before.
+    ...(isIcon(c.icon) ? { icon: c.icon } : {}),
     denominations: (Array.isArray(c.denominations) ? c.denominations : [])
       .filter(isPlainObject)
       .map((d) => ({ id: d.id, name: d.name, ...(typeof d.short === 'string' && d.short.trim() ? { short: d.short } : {}), value: d.value }))
@@ -238,4 +253,4 @@ const parseAmount = (currency, input) => {
   return { ok: true, amount: sign * (Number(digits) * 10 ** places + (places ? Number(frac) : 0)) };
 };
 
-module.exports = { checkCurrencies, currenciesOf, splitAmount, toBaseAmount, formatAmount, parseAmount, LIMITS };
+module.exports = { checkCurrencies, currenciesOf, splitAmount, toBaseAmount, formatAmount, parseAmount, LIMITS, BUILT_IN_ICONS, isIcon };

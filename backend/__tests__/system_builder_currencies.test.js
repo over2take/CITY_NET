@@ -76,6 +76,35 @@ describe('the currencies section', () => {
   });
 });
 
+describe('a currency\'s icon (3c2c1)', () => {
+  const HASH = 'a'.repeat(64);
+  const icon = (value) => [{ id: 'gold', name: 'Gold', icon: value }];
+
+  it('is one of the five the app has always offered, or an icon the GM uploaded', () => {
+    for (const ok of ['credits', '$', '£', '€', '🪙', `/uploads/currency_icons/${HASH}.png`, `/uploads/currency_icons/${HASH}.webp`, `/uploads/currency_icons/${HASH}.svg`]) {
+      expect(where(icon(ok)), ok).toEqual([]);
+      expect(currenciesOf({ currencies: icon(ok) })[0].icon, ok).toBe(ok);
+    }
+  });
+
+  it('is refused as anything else: another folder, another type, a name, or not text', () => {
+    const refused = [
+      'gold.png', '¥', `/uploads/currency_icons/${'a'.repeat(63)}.png`, `/uploads/currency_icons/${'A'.repeat(64)}.png`,
+      `/uploads/battle_maps/${HASH}.png`, `/uploads/currency_icons/${HASH}.gif`, `/uploads/currency_icons/${HASH}.svg?x=1`,
+      `https://example.com/uploads/currency_icons/${HASH}.png`, `/uploads/currency_icons/../${HASH}.png`, '', 42, null, { upload: HASH },
+    ];
+    for (const bad of refused) {
+      expect(messages(icon(bad)), String(bad)).toEqual(['currencies gold, icon: Must be one of credits $ £ € 🪙 or an uploaded icon']);
+      // Never sent to a browser, even from a draft holding it.
+      expect(currenciesOf({ currencies: icon(bad) })[0], String(bad)).not.toHaveProperty('icon');
+    }
+  });
+
+  it('is absent where a currency has none, which shows its symbol or coins as before', () => {
+    expect(currenciesOf({ currencies: [{ id: 'gold', name: 'Gold' }] })[0]).not.toHaveProperty('icon');
+  });
+});
+
 describe('the rules, shared with the browser', () => {
   it('fill in the switches (off unless on) and sort the coins, largest first', () => {
     expect(currenciesOf({ currencies: CASES.definition })).toEqual(CASES.normalized);
@@ -121,6 +150,16 @@ describe('the running game', () => {
     expect(runtime.currenciesIn(ID)).toEqual(CASES.normalized);
     expect(runtime.currenciesIn(ID)[0].id).toBe('gold');
     expect(runtime.render(ID).currencies).toEqual(CASES.normalized);
+  });
+
+  it('sends each currency\'s icon with it', async () => {
+    const db = new sqlite3.Database(':memory:');
+    await run(db, 'CREATE TABLE custom_systems (id TEXT PRIMARY KEY, name TEXT, draft TEXT, published TEXT, version INTEGER, deleted_at DATETIME)');
+    const upload = `/uploads/currency_icons/${'b'.repeat(64)}.svg`;
+    const text = JSON.stringify({ format: 1, name: 'Hearth', currencies: [{ id: 'gold', name: 'Gold', icon: upload }, { id: 'favor', name: 'Favor', icon: '🪙' }] });
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [ID, 'Hearth', text, text]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    expect(runtime.render(ID).currencies.map((c) => c.icon)).toEqual([upload, '🪙']);
   });
 
   it('gives every built-in system none, so each keeps the app\'s single money', () => {
