@@ -82,11 +82,16 @@ export function TokenWindow({
 }: Props) {
   const word = useWords(gameSystem);
   // A custom system with combat off has no defense to show or edit (3b6b).
-  const combatOn = useParts(gameSystem)('combat');
+  const parts = useParts(gameSystem);
+  const combatOn = parts('combat');
+  // With token health off there is no health to show; the folder stays only for what the GM
+  // still keeps in it, the defense (with combat) or a manual initiative score (3b6d).
+  const healthOn = parts('token_health');
+  const healthFolder = healthOn || (!!gmHealth && (combatOn || !!gmHealth.onAddToInit));
   const gm = word('gm', 'short', 'GM').toUpperCase();
   const folders: TerminalFolder<TokenFolder>[] = [
     { id: 'info', label: 'INFO' },
-    { id: 'health', label: 'HEALTH' },
+    ...(healthFolder ? [{ id: 'health' as const, label: 'HEALTH' }] : []),
     ...(quickActions ? [{ id: 'quick' as const, label: 'QUICK ACTIONS' }] : []),
     ...(gmNotesToken ? [{ id: 'gm' as const, label: `${gm} NOTES` }] : []),
   ];
@@ -115,7 +120,7 @@ export function TokenWindow({
       header={(
         <>
           {open === 'info' && `${operator ? operator.toUpperCase() : kind} · DATA`}
-          {open === 'health' && 'VITALS · LIVE'}
+          {open === 'health' && (healthOn ? 'VITALS · LIVE' : `${gm} ONLY`)}
           {open === 'quick' && 'YOUR TOKEN · ROLLS GO TO THE DICE TRAY'}
           {open === 'gm' && `${gm} ONLY · PLAYERS NEVER SEE THIS`}
         </>
@@ -135,7 +140,7 @@ export function TokenWindow({
       )}
       {open === 'health' && (
         <>
-          {health}
+          {healthOn && health}
           {gmHealth && <GmHealth key={location?.id} {...gmHealth} word={word} showDefense={combatOn} />}
         </>
       )}

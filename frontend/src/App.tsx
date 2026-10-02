@@ -2852,21 +2852,21 @@ function App() {
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
                 (view !== 'battle_map' && l.battle_map_id == null)
             )).map(loc => (
-              <PlayerRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} activeUsers={activeUsers} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
+              <PlayerRhombus key={loc.id} gameSystem={gameSystem} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} activeUsers={activeUsers} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
             ))}
             {/* Dedicated Enemy Rhombus Rendering */}
             {locations.filter(l => l.shape === 'enemy_rhombus' && (
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
                 (view !== 'battle_map' && l.battle_map_id == null)
             )).map(loc => (
-              <EnemyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
+              <EnemyRhombus key={loc.id} gameSystem={gameSystem} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
             ))}
             {/* Dedicated Friendly NPC Rendering */}
             {locations.filter(l => l.shape === 'friendly_rhombus' && (
                 (view === 'battle_map' && activeBattleMapData && Number(l.battle_map_id) === Number(activeBattleMapData.locationId) && Number(l.floor_index) === Number(activeBattleMapData.currentFloorIndex)) ||
                 (view !== 'battle_map' && l.battle_map_id == null)
             )).map(loc => (
-              <FriendlyRhombus key={loc.id} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
+              <FriendlyRhombus key={loc.id} gameSystem={gameSystem} location={loc} onClick={() => handleBuildingClick(loc)} isSelected={selectedLocation?.id === loc.id} setTargetObject={setTargetObject} token={token} userName={userName} refreshLocations={fetchLocations} setIsDragging={setIsDragging} socket={socketRef.current} roads={roads} isBattleMap={view === 'battle_map'} measureMode={measureMode} />
             ))}
             </group>
             {token && view === 'editor' && !editId && (
@@ -2933,7 +2933,7 @@ function App() {
               </StreamerVisibilityContext.Provider>
             </Canvas>
           </ThemeContext.Provider>
-        {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} selectedLocation={selectedLocation} battleMapLabel={view === 'battle_map' && activeBattleMapData ? activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation : null} />}
+        {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} selectedLocation={selectedLocation} gameSystem={gameSystem} battleMapLabel={view === 'battle_map' && activeBattleMapData ? activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation : null} />}
         </>
       )}
     </div>
