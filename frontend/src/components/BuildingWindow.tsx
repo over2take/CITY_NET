@@ -1,6 +1,6 @@
 import { TerminalWindow, TERMINAL_PREVIEW, useFolder, type TerminalAction, type TerminalFolder } from './TerminalWindow';
 import { BuildingPreview } from './BuildingPreview';
-import { buildingTypeById, typeLabel } from '../data/buildingTypes';
+import { buildingTypeById, typeLabel, typeOn } from '../data/buildingTypes';
 import { GmNotes } from './GmNotes';
 import { useWords } from '../sheets/words';
 
@@ -69,7 +69,8 @@ export function BuildingWindow({
         <>
           {open === 'info' && (
             <>
-              {type ? typeLabel(type.id, gameSystem).toUpperCase() : 'BUILDING'}
+              {/* A type this game turned off reads as a plain building, as if it had none. */}
+              {type && typeOn(gameSystem, type.id) ? typeLabel(type.id, gameSystem).toUpperCase() : 'BUILDING'}
               {location?.district_name ? ` · ${String(location.district_name).toUpperCase()}` : ''}
             </>
           )}

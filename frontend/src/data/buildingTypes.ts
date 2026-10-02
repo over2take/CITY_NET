@@ -9,7 +9,7 @@
 // inside.
 
 import { TEMPLATES } from '../sheets';
-import { isCustomSystem } from '../sheets/customTemplates';
+import { customTemplate, isCustomSystem } from '../sheets/customTemplates';
 import { partOn } from '../sheets/parts';
 
 /**
@@ -160,12 +160,38 @@ const PLAIN_CATALOGUE_NAMES: Partial<Record<ShopStock, string>> = {
 
 const BOOK_SYSTEM = 'cities_without_number';
 
+/**
+ * What a custom system set for a building type or catalogue: its own name, or off. Custom
+ * systems rename and turn off the app's types and catalogues, never add new ones, and the ids
+ * stay (backend/systemBuilder/buildings.js). Nothing for a built-in system.
+ */
+const customSetting = (system: string | null | undefined, kind: 'types' | 'catalogues', id: string | null | undefined) =>
+  (isCustomSystem(system) ? customTemplate(system)?.buildings?.[kind]?.[String(id ?? '')] : undefined);
+
+/** Whether this game has a building type: every one, unless a custom system turned it off. */
+export const typeOn = (system: string | null | undefined, id: string | null | undefined): boolean =>
+  customSetting(system, 'types', id)?.on !== false;
+
+/** Whether this game has a shop catalogue: every one, unless a custom system turned it off. */
+export const catalogueOn = (system: string | null | undefined, id: ShopStock): boolean =>
+  customSetting(system, 'catalogues', id)?.on !== false;
+
+/** Whether a building of this type is a shop in this game. */
+export const isShopIn = (system: string | null | undefined, id: string | null | undefined): boolean =>
+  isShop(id) && typeOn(system, id);
+
+/** The catalogues a shop of this type puts on its shelves in this game. */
+export const shelvedIn = (id: string | null | undefined, system: string | null | undefined): ShopStock[] =>
+  shelvedCatalogues(id).filter((c) => catalogueOn(system, c));
+
 /** A building type's name in this game. Blank for an id that is not on the list. */
 export const typeLabel = (id: string | null | undefined, system: string | null | undefined): string =>
-  TYPE_NAMES[String(system ?? '')]?.[String(id ?? '')] ?? buildingTypeById(id)?.label ?? '';
+  customSetting(system, 'types', id)?.name ?? TYPE_NAMES[String(system ?? '')]?.[String(id ?? '')] ?? buildingTypeById(id)?.label ?? '';
 
 /** A catalogue's name in this game, for a shelf tab or a section of the catalogue file. */
 export const catalogueLabel = (id: ShopStock, system: string | null | undefined): string => {
+  const own = customSetting(system, 'catalogues', id)?.name;
+  if (own) return own;
   const label = catalogueById(id)?.label ?? id;
   return system === BOOK_SYSTEM ? label : PLAIN_CATALOGUE_NAMES[id] ?? label;
 };

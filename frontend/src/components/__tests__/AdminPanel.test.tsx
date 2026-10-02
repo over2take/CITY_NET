@@ -1208,6 +1208,39 @@ describe('the building type control', () => {
     expect(screen.queryByRole('option', { name: 'Bar (shop)' })).not.toBeInTheDocument();
   });
 
+  describe('under a custom system that renamed or turned off types (3b3b2)', () => {
+    const HEARTH = 'sys_aaaaaaaaaaaaaaaa';
+    beforeEach(() => {
+      clearCustomTemplates();
+      registerCustomTemplate({ id: HEARTH, name: 'Hearth', parts: {}, derived: [], sheet: { sections: [] }, words: {},
+        buildings: { types: { ripperdoc: { name: 'Temple' }, gun_shop: { on: false } } } });
+    });
+    afterEach(() => clearCustomTemplates());
+    const options = () => [...screen.getByLabelText('Building type').querySelectorAll('option')]
+      .map((o) => o.textContent).filter((o) => o !== '— NONE —');
+
+    it('offers the types it kept, by its names', () => {
+      editView({ globalSettings: { game_system: HEARTH } });
+      expect(options()).toContain('Temple (shop)');
+      expect(options().some((o) => o?.startsWith('Gun Shop'))).toBe(false);
+      expect(options()).toHaveLength(10 - 1);
+    });
+
+    it('still shows a building\'s own type the game turned off, so saving keeps it', () => {
+      editView({ globalSettings: { game_system: HEARTH }, editData: { building_type: 'gun_shop' } });
+      expect(options()).toContain('Gun Shop (not in this game)');
+      // Not a shop here, so no rate and no stocking steps.
+      expect(screen.queryByLabelText(/buy-back/i)).toBeNull();
+      expect(screen.queryByRole('note', { name: 'How to stock this shop' })).toBeNull();
+    });
+
+    it('offers every type, as before, under a built-in system', () => {
+      editView({ globalSettings: { game_system: 'cyberpunk_red' } });
+      expect(options()).toHaveLength(10);
+      expect(options()).not.toContain('Gun Shop (not in this game)');
+    });
+  });
+
   it('is there under every system, named the way that game names them', () => {
     editView({ globalSettings: { game_system: 'shadowrun_6e' } });
     expect(screen.getByLabelText('Building type')).toBeInTheDocument();

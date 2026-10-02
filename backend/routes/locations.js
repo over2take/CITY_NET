@@ -168,11 +168,6 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     if (!isValidType(building_type)) return res.status(400).json({ error: 'Unknown building type' });
 
     const next = building_type === '' || building_type === undefined ? null : building_type;
-    // A type this game turned off is not one a building can be given here. One already given
-    // keeps it, unused, for when the type is turned back on.
-    if (next !== null && !customSystems.buildingIn(system, 'types', next)) {
-      return res.status(409).json({ error: 'Not a building type in this game' });
-    }
 
     /**
      * What this shop pays for second-hand goods, or nothing to say.
@@ -185,9 +180,15 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
      */
     const pct = buyback_pct === undefined ? undefined : readPct(buyback_pct);
 
-    db.get('SELECT id FROM locations WHERE id = ?', [req.params.id], (err, row) => {
+    db.get('SELECT id, building_type FROM locations WHERE id = ?', [req.params.id], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'Not found' });
+      // A type this game turned off is not one a building can be given here. One already given
+      // keeps it, unused, for when the type is turned back on - and saving the building again
+      // (the editor sends its type on every save) is not giving it anything new.
+      if (next !== null && next !== row.building_type && !customSystems.buildingIn(system, 'types', next)) {
+        return res.status(409).json({ error: 'Not a building type in this game' });
+      }
 
       const sql = pct === undefined
         ? 'UPDATE locations SET building_type = ? WHERE id = ?'

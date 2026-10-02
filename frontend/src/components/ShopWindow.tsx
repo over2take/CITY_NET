@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { TerminalWindow } from './TerminalWindow';
 import {
-  buildingTypeById, shelvedCatalogues, catalogueById, typeLabel, catalogueLabel, type ShopStock,
+  buildingTypeById, shelvedIn, catalogueById, typeLabel, catalogueLabel, type ShopStock,
 } from '../data/buildingTypes';
 import {
   SETTLE_BALANCE, SETTLE_DEBT, refusalText, buybackValue,
@@ -359,7 +359,8 @@ export function ShopWindow({
   const [kinds, setKinds] = useState({ ranged: false, melee: false });
 
   const type = buildingTypeById(buildingType);
-  const catalogues = shelvedCatalogues(buildingType);
+  // Without the catalogues this game turned off.
+  const catalogues = shelvedIn(buildingType, system);
   /** The tab somebody pressed, if they have pressed one. Not necessarily the open shelf. */
   const [picked, setPicked] = useState<ShopStock | null>(null);
 
