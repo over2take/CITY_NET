@@ -31,9 +31,11 @@ import { CWN_WEAPON_ROWS, CWN_VEHICLE_ROWS } from '../sheets/templates/cities_wi
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
 import { useWords, asLabel, todaysWords, type WordLookup } from '../sheets/words';
 import {
-  addBuy, stepBuy, sellCounts, cartTotals, groupSells, slotsWanted, cartCarry,
-  type CartBuy, type CartSell,
+  addBuy, stepBuy, sellCounts, cartTotals, cartTotalsIn, groupSells, slotsWanted, cartCarry,
+  type CartBuy, type CartSell, type CurrencyTotal,
 } from './shopCart';
+import { currenciesFor, catalogueCurrencyFor, formatAmount, type BankCurrencyAccount, type Currency } from '../sheets/currencies';
+import { cartRefusal, shortQuestion } from '../sheets/moneyText';
 
 // A shop: what the building carries, and a way to take a piece away with you.
 //
@@ -124,11 +126,29 @@ export const CHECKOUT_TIMEOUT_MS = 15_000;
 /** Credits with a sign, for the cart: a total can be nothing, or the shop paying you. */
 const money = (n: number): string => `${n < 0 ? '-' : ''}${Math.abs(n).toLocaleString()}cr`;
 
+/**
+ * Money in a custom system's own currency (3c2b4), written its way ("15 gp", "-$4.34"); today's
+ * credits where there is none. `moneyIn` is signed, for the cart; `priceIn` is a shelf price, which
+ * like credits() reads N/A rather than free for nothing.
+ */
+const moneyIn = (c: Currency | null, n: number): string => (c ? formatAmount(c, n) : money(n));
+const priceIn = (c: Currency | null, n: number): string => (c ? (n === 0 ? 'N/A' : formatAmount(c, n)) : credits(n));
+
+/** One currency's part of a checkout in a custom system's currencies, for the receipt. */
+interface ReceiptCurrency {
+  currency: Currency;
+  net: number;
+  balance: number;
+  debt: number;
+  settled?: Settle;
+}
+
 /** What a checkout came to, kept to show as a receipt. */
 interface CartReceipt {
   at: Date;
-  buys: { label: string; qty: number; price: number }[];
-  sells: { label: string; each: number; installed: boolean }[];
+  /** `currency`: the line's, in a custom system's currencies; absent with today's single money. */
+  buys: { label: string; qty: number; price: number; currency?: Currency | null }[];
+  sells: { label: string; each: number; installed: boolean; currency?: Currency | null }[];
   buyTotal: number;
   payout: number;
   net: number;
@@ -136,6 +156,8 @@ interface CartReceipt {
   debt: number;
   settled?: Settle;
   fromBody: number;
+  /** Each currency the checkout touched, the main one first; in place of the totals above. */
+  currencies?: ReceiptCurrency[];
 }
 
 const stamp = (d: Date) => {
@@ -150,9 +172,12 @@ const stamp = (d: Date) => {
 function Receipt({ receipt: r, shop, word = todaysWords }: { receipt: CartReceipt; shop: string; word?: WordLookup }) {
   const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12 };
   const rule: React.CSSProperties = { borderTop: '1px dashed var(--dark-green)', margin: '6px 0' };
-  const where = r.net > 0
-    ? r.settled === 'debt' ? 'PAID FROM YOUR ACCOUNT, THE REST TAKEN AS DEBT' : 'PAID FROM YOUR ACCOUNT'
-    : r.net < 0 ? 'PAID INTO YOUR ACCOUNT' : 'NOTHING CHANGED HANDS';
+  const whereOf = (net: number, settled?: Settle) => (net > 0
+    ? settled === 'debt' ? 'PAID FROM YOUR ACCOUNT, THE REST TAKEN AS DEBT' : 'PAID FROM YOUR ACCOUNT'
+    : net < 0 ? 'PAID INTO YOUR ACCOUNT' : 'NOTHING CHANGED HANDS');
+  const where = whereOf(r.net, r.settled);
+  /** Several currencies each get a total; one keeps today's TOTAL line. */
+  const several = (r.currencies?.length ?? 0) > 1;
   return (
     <div data-testid="cart-receipt" style={{ ...mono(10), letterSpacing: 0, border: '1px solid var(--green)', padding: '8px 10px', marginBottom: 10, color: 'var(--green)' }}>
       <div style={{ ...row, fontWeight: 'bold' }}>
@@ -164,22 +189,36 @@ function Receipt({ receipt: r, shop, word = todaysWords }: { receipt: CartReceip
       {r.buys.map((b) => (
         <div key={`b-${b.label}`} style={row}>
           <span>&nbsp;&nbsp;{b.label}{b.qty > 1 ? ` ×${b.qty}` : ''}</span>
-          <span>{money(b.price * b.qty)}</span>
+          <span>{moneyIn(b.currency ?? null, b.price * b.qty)}</span>
         </div>
       ))}
       {r.sells.length > 0 && <div style={{ opacity: 0.8 }}>SOLD</div>}
       {r.sells.map((x, i) => (
         <div key={`s-${i}`} style={row}>
           <span>&nbsp;&nbsp;{x.label}{x.installed ? ' ⚕' : ''}</span>
-          <span>{money(-x.each)}</span>
+          <span>{moneyIn(x.currency ?? null, -x.each)}</span>
         </div>
       ))}
       <div style={rule} />
-      <div style={{ ...row, fontWeight: 'bold' }}><span>TOTAL</span><span>{money(r.net)}</span></div>
-      <div style={{ opacity: 0.8 }}>{where}</div>
-      <div style={{ opacity: 0.8 }}>
-        BALANCE {money(r.balance)}{r.debt > 0 ? ` · DEBT ${money(r.debt)}` : ''}
-      </div>
+      {r.currencies ? r.currencies.map((c) => (
+        <div key={c.currency.id} data-testid={`receipt-total-${c.currency.id}`}>
+          <div style={{ ...row, fontWeight: 'bold' }}>
+            <span>{several ? `TOTAL · ${c.currency.name.toUpperCase()}` : 'TOTAL'}</span><span>{moneyIn(c.currency, c.net)}</span>
+          </div>
+          <div style={{ opacity: 0.8 }}>{whereOf(c.net, c.settled)}</div>
+          <div style={{ opacity: 0.8 }}>
+            BALANCE {moneyIn(c.currency, c.balance)}{c.debt > 0 ? ` · DEBT ${moneyIn(c.currency, c.debt)}` : ''}
+          </div>
+        </div>
+      )) : (
+        <>
+          <div style={{ ...row, fontWeight: 'bold' }}><span>TOTAL</span><span>{money(r.net)}</span></div>
+          <div style={{ opacity: 0.8 }}>{where}</div>
+          <div style={{ opacity: 0.8 }}>
+            BALANCE {money(r.balance)}{r.debt > 0 ? ` · DEBT ${money(r.debt)}` : ''}
+          </div>
+        </>
+      )}
       {r.fromBody > 0 && (
         <div style={{ color: 'var(--warning)', marginTop: 4 }}>
           ⚕ {r.fromBody === 1 ? 'A piece' : `${r.fromBody} pieces`} of installed cyberware came out.
@@ -330,18 +369,34 @@ export function ShopWindow({
    * account rather than at a copy of it.
    */
   const [account, setAccount] = useState<{ balance: number; debt: number } | null>(null);
+  /** Every currency's account under a custom system with its own, by id (3c2b4). */
+  const [accountsById, setAccountsById] = useState<Record<string, { balance: number; debt: number }>>({});
 
   useEffect(() => {
     if (!socket || !userName) return;
-    const onBank = (info: { username: string; balance: number; debt: number }) => {
+    const onBank = (info: { username: string; balance: number; debt: number; currencies?: BankCurrencyAccount[] }) => {
       if (info && info.username === userName) {
         setAccount({ balance: Number(info.balance) || 0, debt: Number(info.debt) || 0 });
+        setAccountsById(Object.fromEntries((info.currencies ?? []).map((a) => [a.id, { balance: Number(a.balance) || 0, debt: Number(a.debt) || 0 }])));
       }
     };
     socket.on('bankUpdate', onBank);
     socket.emit('requestBankBalance', { username: userName });
     return () => { socket.off?.('bankUpdate', onBank); };
   }, [socket, userName]);
+
+  /**
+   * A custom system's own currencies, the first the main one; none in a built-in system, whose
+   * shop keeps today's credits. Each catalogue is priced in its own (decided with the user,
+   * 2026-10-02), and each account is the one the bank last told; the main one's is the balance
+   * every update carries, before an update lists the rest.
+   */
+  const currencies = currenciesFor(system);
+  const inCurrencies = currencies.length > 0;
+  const currencyOf = (catalogue: string | null): Currency | null => (inCurrencies ? catalogueCurrencyFor(system, catalogue ?? '') : null);
+  const accountsIn: Record<string, { balance: number; debt: number }> = Object.fromEntries(currencies.map((c, i) => [
+    c.id, accountsById[c.id] ?? (i === 0 && account ? account : { balance: 0, debt: 0 }),
+  ]));
 
   /** Why the last thing tried did not happen, cleared as soon as anything else does. */
   const [refused, setRefused] = useState<string | null>(null);
@@ -521,6 +576,20 @@ export function ShopWindow({
    * changed while the cart sat here. Shown to the player; checking out again agrees to it.
    */
   const [repriced, setRepriced] = useState<number | null>(null);
+  /** The same in a custom system's currencies: the server's total for each currency it repriced. */
+  const [repricedIn, setRepricedIn] = useState<Record<string, number>>({});
+  /** How each currency the cart is short in is to be covered, as the player picked it. */
+  const [settleIn, setSettleIn] = useState<Record<string, Settle>>({});
+  /**
+   * The cart's totals in a custom system's currencies (3c2b4): one per currency it touches, the
+   * main one first, each with its shortfall and the ways that currency allows covering it. Worked
+   * out as the server will (shopCart.ts cartTotalsIn); none with today's single money.
+   */
+  const perCurrency: CurrencyTotal[] = inCurrencies
+    ? cartTotalsIn(cartBuys, cartSells, currencies, currencyOf, accountsIn, repricedIn) : [];
+  /** What the checkout's answer is read against, as it is now rather than when it was sent. */
+  const moneyNow = React.useRef({ perCurrency, currencies, currencyOf });
+  moneyNow.current = { perCurrency, currencies, currencyOf };
   /** What the last checkout came to, itemised, until something else happens. */
   const [receipt, setReceipt] = useState<CartReceipt | null>(null);
   /**
@@ -546,12 +615,25 @@ export function ShopWindow({
   cartNow.current = { buys: cartBuys, sells: cartSells };
 
   // Changing the cart makes an agreed new total meaningless: it is worked out afresh.
-  useEffect(() => { setRepriced(null); setAsking(false); }, [cartBuys, cartSells]);
+  useEffect(() => { setRepriced(null); setRepricedIn({}); setSettleIn({}); setAsking(false); }, [cartBuys, cartSells]);
 
   const checkout = (settle?: Settle) => {
     if (!cartCount || busy) return;
     if (carryBlocks) {
       setRefused('Too much to carry — take something out of the cart, or sell something with it.');
+      return;
+    }
+    if (inCurrencies) {
+      // A currency short with no way to cover it refuses the whole cart, named; one that can be
+      // covered is asked about, all of them at once, before anything is sent.
+      const hopeless = perCurrency.find((t) => t.short && !t.options.length);
+      if (hopeless) { setRefused(cartRefusal('funds', hopeless)); return; }
+      const shorts = perCurrency.filter((t) => t.short);
+      if (!shorts.every((t) => settleIn[t.currency.id])) { setAsking(true); return; }
+      send(
+        Object.fromEntries(shorts.map((t) => [t.currency.id, settleIn[t.currency.id]])),
+        Object.fromEntries(perCurrency.map((t) => [t.currency.id, t.net])),
+      );
       return;
     }
     const net = repriced ?? totals.net;
@@ -565,6 +647,11 @@ export function ShopWindow({
       setAsking(true);
       return;
     }
+    send(settle, net);
+  };
+
+  /** Send the cart, with how any shortfall is covered and the total the player was shown. */
+  const send = (settle: Settle | Record<string, Settle> | undefined, expectedNet: number | Record<string, number>) => {
     setAsking(false);
     setRefused(null);
     setReceipt(null);
@@ -585,7 +672,7 @@ export function ShopWindow({
       buys: cartBuys.map(({ catalogue, itemId, qty }) => ({ catalogue, itemId, qty })),
       sells: groupSells(cartSells),
       settle,
-      expectedNet: net,
+      expectedNet,
     });
   };
 
@@ -601,10 +688,22 @@ export function ShopWindow({
       ok: boolean; reason?: RefusalReason | 'total_changed'; net?: number; buyTotal?: number;
       payout?: number; balance?: number; debt?: number; settled?: Settle; fromBody?: number;
       buys?: { catalogue: string; itemId: string; qty: number; price: number }[];
+      /** In a custom system's currencies: the one a refusal is about, and each one's outcome. */
+      currency?: string;
+      currencies?: Record<string, { net: number; balance: number; debt: number; settled?: Settle }>;
     }) => {
       if (checkoutTimer.current) { clearTimeout(checkoutTimer.current); checkoutTimer.current = null; }
       setBusy(false);
+      const now = moneyNow.current;
       if (!res.ok) {
+        // A refusal about one currency says so in it, with the server's own total for it.
+        const about = res.currency ? now.perCurrency.find((t) => t.currency.id === res.currency) : undefined;
+        if (about) {
+          const net = res.net === undefined ? about.net : Number(res.net) || 0;
+          if (res.reason === 'total_changed') setRepricedIn((r) => ({ ...r, [about.currency.id]: net }));
+          const said = cartRefusal(String(res.reason), { ...about, net });
+          if (said) { setRefused(said); return; }
+        }
         if (res.reason === 'total_changed') {
           setRepriced(Number(res.net) || 0);
           setRefused(`Prices changed while this sat in the cart — it now comes to ${money(Number(res.net) || 0)}. Check it, then CHECK OUT again.`);
@@ -616,13 +715,27 @@ export function ShopWindow({
       const { buys, sells } = cartNow.current;
       // Only now does any of it exist. Paid for, then owned.
       setPlacing(buys.flatMap((l) => Array.from({ length: l.qty }, () => l.place)));
+      // In a custom system's currencies, every line in its catalogue's and a total for each
+      // currency the checkout touched, the main one first.
+      const outcome = res.currencies;
+      const lineCurrency = (catalogue: string | null) => (outcome ? now.currencyOf(catalogue) : undefined);
       setReceipt({
         at: new Date(),
         buys: buys.map((l) => ({
           label: l.label, qty: l.qty,
           price: res.buys?.find((b) => b.catalogue === l.catalogue && b.itemId === l.itemId)?.price ?? l.price,
+          ...(outcome ? { currency: lineCurrency(l.catalogue) } : {}),
         })),
-        sells: sells.map((s) => ({ label: s.line.label, each: s.each, installed: s.installed })),
+        sells: sells.map((s) => ({
+          label: s.line.label, each: s.each, installed: s.installed,
+          ...(outcome ? { currency: lineCurrency(s.line.catalogue) } : {}),
+        })),
+        ...(outcome ? {
+          currencies: now.currencies.filter((c) => outcome[c.id]).map((c) => ({
+            currency: c, net: Number(outcome[c.id].net) || 0, balance: Number(outcome[c.id].balance) || 0,
+            debt: Number(outcome[c.id].debt) || 0, settled: outcome[c.id].settled,
+          })),
+        } : {}),
         buyTotal: Number(res.buyTotal) || 0,
         payout: Number(res.payout) || 0,
         net: Number(res.net) || 0,
@@ -1223,7 +1336,8 @@ export function ShopWindow({
     const ownedOf = (e: UploadedEntry) => owned.find((l) => l.key === `${id}/${e.id}`)?.qty ?? 0;
     const columns: Record<string, ShelfColumn<UploadedEntry>> = {
       name: { label: 'NAME', value: (e) => e.name, first: 'asc' },
-      price: { label: 'PRICE', value: (e) => e.price, numeric: true, first: 'desc', align: 'right', render: (e) => credits(e.price) },
+      // In the catalogue's own currency where the system has currencies (3c2b4).
+      price: { label: 'PRICE', value: (e) => e.price, numeric: true, first: 'desc', align: 'right', render: (e) => priceIn(currencyOf(id), e.price) },
     };
     for (const col of extra) {
       const cells = rows.map((e) => String(e.fields[col] ?? '')).filter(Boolean);
@@ -1381,6 +1495,62 @@ export function ShopWindow({
   };
   const lineBtn: React.CSSProperties = { padding: '1px 6px', fontSize: 9, marginLeft: 4 };
   const net = repriced ?? totals.net;
+  /** Which currency a cart line is in, where a system has several of its own. */
+  const currencyTag = (catalogue: string | null) => {
+    if (currencies.length < 2) return null;
+    const c = currencyOf(catalogue);
+    return c ? (
+      <span data-testid="cart-currency" style={{ fontSize: 8, letterSpacing: 1, border: '1px solid var(--dark-green)', padding: '0 4px', marginLeft: 6 }}>
+        {c.name.toUpperCase()}
+      </span>
+    ) : null;
+  };
+  /** The cart's total in each currency it touches, as today's one total reads (3c2b4). */
+  const currencyTotals = perCurrency.map((t) => (
+    <div key={t.currency.id} data-testid={`cart-total-${t.currency.id}`} style={{ marginBottom: 4 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span>{currencies.length > 1 ? `TOTAL · ${t.currency.name.toUpperCase()}` : 'TOTAL'}</span>
+        <span style={{ fontWeight: 'bold' }}>{moneyIn(t.currency, t.net)}</span>
+      </div>
+      <div style={{ color: t.short ? 'var(--warning)' : t.net < 0 ? 'var(--cyan)' : 'var(--green)', textAlign: 'right' }}>
+        {t.net > 0 ? `YOU PAY ${moneyIn(t.currency, t.net)}` : t.net < 0 ? `THE ${SHOP} PAYS YOU ${moneyIn(t.currency, -t.net)}` : 'IT COMES OUT EVEN'}
+        {` · BALANCE AFTER ${moneyIn(t.currency, t.after)}`}
+        {t.short > 0 && ` · ${moneyIn(t.currency, t.short)} SHORT`}
+      </div>
+      {repricedIn[t.currency.id] !== undefined && (
+        <div style={{ color: 'var(--warning)', textAlign: 'right' }}>PRICES CHANGED — THIS IS THE NEW TOTAL</div>
+      )}
+    </div>
+  ));
+  /** Every currency the cart is short in, asked about at once, offering only what each allows. */
+  const shortIn = perCurrency.filter((t) => t.short > 0);
+  const askInCurrencies = (
+    <div role="alertdialog" aria-label="Not enough to cover the cart"
+      style={{ ...mono(10), letterSpacing: 0, marginTop: 8, padding: '6px 8px', border: '1px solid var(--warning)', color: 'var(--warning)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {shortIn.map((t) => (
+        <div key={t.currency.id} data-testid={`cart-short-${t.currency.id}`}>
+          <div style={{ marginBottom: 4 }}>{shortQuestion(t)}</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {t.options.map((o) => (
+              <button key={o} type="button" className={`utility-btn${settleIn[t.currency.id] === o ? ' active' : ''}`}
+                aria-pressed={settleIn[t.currency.id] === o}
+                onClick={() => setSettleIn((s) => ({ ...s, [t.currency.id]: o }))}
+                title={o === SETTLE_DEBT ? 'Spend what you have and borrow the rest' : 'Let the balance go below zero'}
+                style={{ ...mono(10), padding: '2px 10px' }}>
+                {o === SETTLE_DEBT ? 'TAKE DEBT' : 'GO NEGATIVE'}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button type="button" className="utility-btn" onClick={() => checkout()}
+          disabled={!shortIn.every((t) => settleIn[t.currency.id])} style={{ ...mono(10), padding: '2px 10px' }}>CHECK OUT</button>
+        <button type="button" className="utility-btn" onClick={() => { setAsking(false); setSettleIn({}); }}
+          style={{ ...mono(10), padding: '2px 10px' }}>CANCEL</button>
+      </div>
+    </div>
+  );
   const cartPanel = (
     <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
       {refused && (
@@ -1410,7 +1580,7 @@ export function ShopWindow({
             <tbody>
               {cartBuys.map((l) => (
                 <tr key={l.key} data-testid="cart-buy">
-                  <td style={{ ...cell, whiteSpace: 'nowrap' }}>BUY · {l.label}</td>
+                  <td style={{ ...cell, whiteSpace: 'nowrap' }}>BUY · {l.label}{currencyTag(l.catalogue)}</td>
                   <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button type="button" className="utility-btn" aria-label={`One fewer ${l.label}`}
                       onClick={() => setCartBuys((c) => stepBuy(c, l.key, -1))} style={lineBtn}>−</button>
@@ -1419,8 +1589,8 @@ export function ShopWindow({
                       onClick={() => moreOf(l)}
                       style={lineBtn}>+</button>
                   </td>
-                  <td style={{ ...cell, textAlign: 'right' }}>{money(l.price)}</td>
-                  <td style={{ ...cell, textAlign: 'right' }}>{money(l.price * l.qty)}</td>
+                  <td style={{ ...cell, textAlign: 'right' }}>{moneyIn(currencyOf(l.catalogue), l.price)}</td>
+                  <td style={{ ...cell, textAlign: 'right' }}>{moneyIn(currencyOf(l.catalogue), l.price * l.qty)}</td>
                   <td style={{ ...cell, textAlign: 'right' }}>
                     <button type="button" className="utility-btn" aria-label={`Remove ${l.label} from the cart`}
                       onClick={() => setCartBuys((c) => stepBuy(c, l.key, -l.qty))} style={lineBtn}>✕</button>
@@ -1430,7 +1600,7 @@ export function ShopWindow({
               {cartSells.map((s) => (
                 <tr key={s.uid} data-testid="cart-sell">
                   <td style={{ ...cell }}>
-                    SELL · {s.line.label}
+                    SELL · {s.line.label}{currencyTag(s.line.catalogue)}
                     {s.installed && (
                       <div style={{ color: 'var(--warning)', fontSize: 9, whiteSpace: 'normal' }}>
                         ⚕ Installed — it comes out with no surgery roll. Square that with your GM.
@@ -1438,8 +1608,8 @@ export function ShopWindow({
                     )}
                   </td>
                   <td style={{ ...cell, textAlign: 'right' }}>×1</td>
-                  <td style={{ ...cell, textAlign: 'right' }}>{money(-s.each)}</td>
-                  <td style={{ ...cell, textAlign: 'right' }}>{money(-s.each)}</td>
+                  <td style={{ ...cell, textAlign: 'right' }}>{moneyIn(currencyOf(s.line.catalogue), -s.each)}</td>
+                  <td style={{ ...cell, textAlign: 'right' }}>{moneyIn(currencyOf(s.line.catalogue), -s.each)}</td>
                   <td style={{ ...cell, textAlign: 'right' }}>
                     <button type="button" className="utility-btn" aria-label={`Remove ${s.line.label} from the cart`}
                       onClick={() => setCartSells((c) => c.filter((x) => x.uid !== s.uid))} style={lineBtn}>✕</button>
@@ -1468,20 +1638,25 @@ export function ShopWindow({
           )}
 
           <div data-testid="cart-total" style={{ ...mono(11), letterSpacing: 0, marginTop: 10, borderTop: '1px solid var(--dark-green)', paddingTop: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>TOTAL</span>
-              <span style={{ fontWeight: 'bold' }}>{money(net)}</span>
-            </div>
-            <div style={{ color: net < 0 ? 'var(--cyan)' : 'var(--green)', textAlign: 'right' }}>
-              {net > 0 ? `YOU PAY ${money(net)}` : net < 0 ? `THE ${SHOP} PAYS YOU ${money(-net)}` : 'IT COMES OUT EVEN'}
-              {account && ` · BALANCE AFTER ${money(account.balance - net)}`}
-            </div>
-            {repriced !== null && (
-              <div style={{ color: 'var(--warning)', textAlign: 'right' }}>PRICES CHANGED — THIS IS THE NEW TOTAL</div>
+            {inCurrencies ? currencyTotals : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>TOTAL</span>
+                  <span style={{ fontWeight: 'bold' }}>{money(net)}</span>
+                </div>
+                <div style={{ color: net < 0 ? 'var(--cyan)' : 'var(--green)', textAlign: 'right' }}>
+                  {net > 0 ? `YOU PAY ${money(net)}` : net < 0 ? `THE ${SHOP} PAYS YOU ${money(-net)}` : 'IT COMES OUT EVEN'}
+                  {account && ` · BALANCE AFTER ${money(account.balance - net)}`}
+                </div>
+                {repriced !== null && (
+                  <div style={{ color: 'var(--warning)', textAlign: 'right' }}>PRICES CHANGED — THIS IS THE NEW TOTAL</div>
+                )}
+              </>
             )}
           </div>
 
-          {asking && (
+          {asking && inCurrencies && askInCurrencies}
+          {asking && !inCurrencies && (
             <div
               role="alertdialog"
               aria-label={`Not enough ${moneyWord}`}
@@ -1547,7 +1722,19 @@ export function ShopWindow({
           {book && shelf && catalogueById(shelf.id) && ` · CWN P${catalogueById(shelf.id)!.page}`}
           {/* What you can spend, where you are about to spend it. A shop that charges an
               account without showing it is asking people to shop blind. */}
-          {account && (
+          {/* In a custom system's currencies, every account, each written its own way. */}
+          {account && inCurrencies && currencies.map((c) => (
+            <React.Fragment key={c.id}>
+              {' · '}
+              <span data-testid={`shop-account-${c.id}`} style={{ color: accountsIn[c.id].balance < 0 ? 'var(--danger)' : undefined }}>
+                {formatAmount(c, accountsIn[c.id].balance)}
+              </span>
+              {accountsIn[c.id].debt > 0 && (
+                <span style={{ color: 'var(--warning)' }}> ({formatAmount(c, accountsIn[c.id].debt)} OWED)</span>
+              )}
+            </React.Fragment>
+          ))}
+          {account && !inCurrencies && (
             <>
               {' · '}
               <span style={{ color: account.balance < 0 ? 'var(--danger)' : undefined }}>
@@ -1804,7 +1991,7 @@ export function ShopWindow({
                             </td>
                             <td style={{ ...cell, textAlign: 'right' }}>×{left}</td>
                             <td style={{ ...cell, textAlign: 'right' }}>
-                              {l.unitPrice === null ? '—' : credits(each)}
+                              {l.unitPrice === null ? '—' : priceIn(currencyOf(l.catalogue), each)}
                             </td>
                             <td style={{ ...cell, textAlign: 'right', color: 'var(--cyan)' }}>
                               {staged > 0 ? `×${staged}` : ''}

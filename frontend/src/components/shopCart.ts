@@ -89,12 +89,14 @@ export interface CurrencyTotal extends CartCurrencyTotal {
  * (`currencyOf`, sheets/currencies.ts catalogueCurrencyFor). Worked out as the server will
  * (backend/shops/checkout.js planCheckoutInCurrencies): buy-backs paid in whole units, a shortfall
  * covered only as that currency allows. `accounts` is each currency's balance and debt, by id, as
- * the bank last told the window.
+ * the bank last told the window. `repriced` is a total the server worked out differently for a
+ * currency (a price changed while the cart sat there), which stands in for the cart's own.
  */
 export const cartTotalsIn = (
   buys: CartBuy[], sells: CartSell[], currencies: Currency[],
   currencyOf: (catalogue: string) => Currency | null,
   accounts: Record<string, { balance: number; debt: number } | undefined>,
+  repriced: Record<string, number> = {},
 ): CurrencyTotal[] => {
   const sums = new Map<string, { buyTotal: number; payout: number }>();
   const add = (currency: Currency | null) => {
@@ -108,7 +110,7 @@ export const cartTotalsIn = (
     const t = sums.get(currency.id)!;
     const buyTotal = Math.round(t.buyTotal);
     const payout = Math.floor(t.payout);
-    const net = buyTotal - payout;
+    const net = repriced[currency.id] ?? buyTotal - payout;
     const balance = Number(accounts[currency.id]?.balance) || 0;
     const debt = Number(accounts[currency.id]?.debt) || 0;
     // Only a payment can be short: a sale brings even a balance below zero up.
