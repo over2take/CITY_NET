@@ -59,6 +59,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **BANK.EXE in a custom system's own currencies.** A list at the top shows every account, the
+  main one first, with what is owed beside it; picking one shows its balance and debt in the boxes
+  below. Amounts are written the system's way ("20 gp 4 sp 7 cp", "$4.34") and typed the same way.
+  The amount box says how it read what you typed, or why it can't, before CONFIRM. A currency that
+  can't be owed has no DEBT box. When the bank refuses, the window says why in that currency. The
+  celebrations run only if the system turned them on. Built-in systems keep today's window.
+
 - **The money windows' words and sums for a custom system's currencies.** What the bank, the shop
   cart and the GM's money windows will say in a system's own currencies: an amount that can't be
   read, why the bank refused, and how to cover a shortfall. Also the cart's total for each

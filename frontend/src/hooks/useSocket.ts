@@ -4,6 +4,7 @@ import type {
   ActiveUser, ChatMessage, BattleMapSessionData, BattleMapPosition,
   Location, PendingRequest, DirectorState,
 } from '../types';
+import type { BankCurrencyAccount } from '../sheets/currencies';
 
 interface UseSocketOptions {
   userName: string;
@@ -23,8 +24,9 @@ interface UseSocketOptions {
   onFetchSigns?: () => void;
   onFetchBattleMaps?: () => void;
   onViewSettingsUpdate?: (settings: { renderSignage: boolean; signageDensity: number; renderSidewalks: boolean }) => void;
-  onBankUpdate: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean) => void;
-  onBalancePaid?: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean) => void;
+  /** `currencies`: every currency's balance and debt, the main one first, under a custom system with currencies of its own (3c2b3). */
+  onBankUpdate: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean, currencies?: BankCurrencyAccount[]) => void;
+  onBalancePaid?: (balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean, currencies?: BankCurrencyAccount[]) => void;
   onNotification: (msg: string | null) => void;
   onHasUnreadChat: (val: boolean) => void;
   onTokenUpdate: (token: string) => void;
@@ -149,11 +151,11 @@ export function useSocket({
     });
 
     let lastKnownBalance: number | null = null;
-    newSocket.on('bankUpdate', (data: { username: string; balance: number; debt: number; firstPayDone?: boolean; highRollerDone?: boolean }) => {
+    newSocket.on('bankUpdate', (data: { username: string; balance: number; debt: number; firstPayDone?: boolean; highRollerDone?: boolean; currencies?: BankCurrencyAccount[] }) => {
       if (data.username !== userNameRef.current) return;
-      onBankUpdate(data.balance, data.debt, data.firstPayDone, data.highRollerDone);
+      onBankUpdate(data.balance, data.debt, data.firstPayDone, data.highRollerDone, data.currencies);
       if (lastKnownBalance !== null && data.balance > lastKnownBalance) {
-        onBalancePaid?.(data.balance, data.debt, data.firstPayDone, data.highRollerDone);
+        onBalancePaid?.(data.balance, data.debt, data.firstPayDone, data.highRollerDone, data.currencies);
       }
       lastKnownBalance = data.balance;
     });

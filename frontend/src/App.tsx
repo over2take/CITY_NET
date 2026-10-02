@@ -45,6 +45,7 @@ import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
 import { CityDataBaseMenu } from './components/CityDatabase';
 import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './components/BankWindows';
+import type { BankCurrencyAccount } from './sheets/currencies';
 import { AdminXpWindow } from './components/XpWindow';
 import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, CharacterControlsMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
@@ -366,7 +367,7 @@ function App() {
   const [sheetPos, setSheetPos] = useState(() => ({ x: window.innerWidth / 2 - 220, y: 60 }));
   const [vehiclesPos, setVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 90 }));
   const [enemyVehiclesPos, setEnemyVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 160, y: 130 }));
-  const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean }>({ balance: 0, debt: 0 });
+  const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean, currencies?: BankCurrencyAccount[] }>({ balance: 0, debt: 0 });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   // Load notification preference from the user's rhombus data
@@ -865,8 +866,8 @@ function App() {
       setSignageDensity(sd);
       setRenderSidewalks(rw);
     },
-    onBankUpdate: (balance, debt, firstPayDone, highRollerDone) => setBankData({ balance, debt, firstPayDone, highRollerDone }),
-    onBalancePaid: (balance, debt, firstPayDone, highRollerDone) => { setBankData({ balance, debt, firstPayDone, highRollerDone }); setIsBankOpen(true); },
+    onBankUpdate: (balance, debt, firstPayDone, highRollerDone, currencies) => setBankData({ balance, debt, firstPayDone, highRollerDone, currencies }),
+    onBalancePaid: (balance, debt, firstPayDone, highRollerDone, currencies) => { setBankData({ balance, debt, firstPayDone, highRollerDone, currencies }); setIsBankOpen(true); },
     onNotification: setNotification,
     onHasUnreadChat: setHasUnreadChat,
     onTokenUpdate: setToken,

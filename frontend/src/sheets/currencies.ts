@@ -36,6 +36,13 @@ export interface Currency {
   denominations: Denomination[];
 }
 
+/** A player's account in one currency, as a bank update lists them (backend bank/currencies.js all). */
+export interface BankCurrencyAccount {
+  id: string;
+  balance: number;
+  debt: number;
+}
+
 /** The running system's currencies, the first the main one; empty where it has the app's money. */
 export const currenciesFor = (system: string | null | undefined): Currency[] =>
   (isCustomSystem(system) ? customTemplate(system)?.currencies ?? [] : []);

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { parseAmount, type Currency } from '../currencies';
-import { amountProblem, bankRefusal, shortQuestion, cartRefusal, celebrationsFor, BUILT_IN_WHALE } from '../moneyText';
+import { amountExample, amountProblem, bankRefusal, shortQuestion, cartRefusal, celebrationsFor, BUILT_IN_WHALE } from '../moneyText';
 import { registerCustomTemplate, clearCustomTemplates, customTemplate, type CustomRender } from '../customTemplates';
 
 /**
@@ -42,6 +42,18 @@ describe('an amount typed into a box', () => {
     expect(say(EURO, '4,34')).toBe('Euro has only 1 decimal place.');
     expect(say(YEN, '¥4.5')).toBe('Yen has no decimal places.');
     expect(say(DOLLARS, 'lots')).toBe('That isn\'t an amount of Dollars.');
+  });
+});
+
+describe('the way to write an amount, under an empty box', () => {
+  it('is an example in the currency\'s own writing, which the box reads back', () => {
+    const FAVOR: Currency = { id: 'favor', name: 'Favor', decimals: 0, decimalMark: '.', debt: true, negative: false, denominations: [] };
+    const CROWNS: Currency = { ...FAVOR, id: 'crowns', name: 'Crowns', denominations: [{ id: 'cr', name: 'Crown', short: 'cr', value: 1 }] };
+    const cases: [Currency, string][] = [[GOLD, '2 gp 5 sp'], [CROWNS, '15 cr'], [DOLLARS, '$4.34'], [EURO, '4,3 €'], [YEN, '¥4'], [FAVOR, '4 Favor']];
+    for (const [c, text] of cases) {
+      expect(amountExample(c), c.id).toBe(text);
+      expect(parseAmount(c, amountExample(c)).ok, c.id).toBe(true);
+    }
   });
 });
 
