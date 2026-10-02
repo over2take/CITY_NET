@@ -59,6 +59,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system's currencies can each have an icon.** Either one of the five CURRENCY_ICON
+  has always offered, or a small image the GM uploads, held only as the address of a stored file
+  and never as the image itself. Anything else is refused. Nothing sets or shows one yet.
+
 - **The GM's money windows in a custom system's own currencies.** PAY_PLAYERS picks the currency
   to pay in, reads the amount as written, and says what each player will get. BANK_ADMIN edits
   every account a player has, each its own way, and refuses what a currency doesn't allow before
