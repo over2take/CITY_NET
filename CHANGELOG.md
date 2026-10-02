@@ -59,6 +59,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The bank's celebrations are a custom system's choice.** First payday, overdraft, debt cleared
+  and whale status run in a custom system only if its GM turns them on, and whale status also
+  needs a threshold the GM sets in the system's main currency. The built-in systems keep them as
+  they are. Nothing on screen uses this yet.
+
 - **Catalogue prices are read in each catalogue's currency.** In a custom system with currencies, a
   GM writes "15gp", "$4.34" or "1.234,56 €"; the preview shows how each price was read, and anything
   that could be misread is refused with the reason. The built-in systems read prices as before.

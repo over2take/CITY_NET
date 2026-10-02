@@ -16,6 +16,7 @@ const { ownWords } = require('./definition');
 const { partOn, PARTS } = require('./parts');
 const { buildingOn, buildingName, catalogueCurrency, ownBuildings } = require('./buildings');
 const { currenciesOf } = require('./currencies');
+const { bankOf } = require('./bank');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
 
@@ -94,6 +95,8 @@ const renderOf = (id, definition) => ({
   buildings: ownBuildings(definition),
   // Its own money (currencies.js): empty for a system with the app's single money.
   currencies: currenciesOf(definition),
+  // Whether the bank window's celebrations run (bank.js): off unless the system turns them on.
+  bank: bankOf(definition),
   derived: (Array.isArray(definition.derived) ? definition.derived : []).map((d) => d.id),
   sheet: effectiveSheet(definition),
   npc: {

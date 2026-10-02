@@ -13,6 +13,8 @@
 //     author: '...', license: '...',                 // optional, free text; a shared file's cover
 //     words:   { hp: { singular: 'WOUND', plural: 'WOUNDS', short: 'W' }, ... },  // Layer 1
 //     parts:   { vehicles: { on: false }, ... },                               // Layer 2
+//     buildings: { ... }, currencies: [ ... ],       // building names, money (buildings.js, currencies.js)
+//     bank:    { celebrations, whale },              // the bank window's easter eggs (bank.js)
 //     lookups: { ... }, derived: [ ... ],            // Layer 3, the Phase 1 engine's format
 //     sheet:   { tabs, header, sections },           // the character sheet (sheet.js)
 //     npc:     { sheet, tiers },                     // NPC layout and power tiers (npc.js)
@@ -36,6 +38,7 @@ const { TERMS, WORD_FORMS, wordFor, resolveWords, ownWords } = require('./terms'
 const { PARTS, partOn } = require('./parts');
 const { checkBuildings } = require('./buildings');
 const { checkCurrencies } = require('./currencies');
+const { checkBank } = require('./bank');
 
 const FORMAT = 1;
 
@@ -51,7 +54,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'lookups', 'derived', 'sheet', 'npc', 'core']);
+const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'lookups', 'derived', 'sheet', 'npc', 'core']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -135,6 +138,7 @@ const checkDefinition = (definition) => {
   checkBuildings(definition.buildings, problems, Array.isArray(definition.currencies)
     ? definition.currencies.filter((c) => c && typeof c.id === 'string').map((c) => c.id) : []);
   checkCurrencies(definition.currencies, problems);
+  checkBank(definition.bank, problems);
 
   if (definition.lookups !== undefined || definition.derived !== undefined) {
     const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [] });
