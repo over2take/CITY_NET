@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { useParts } from '../sheets/parts';
 import { currenciesFor, formatAmount, parseAmount, type BankCurrencyAccount, type Currency } from '../sheets/currencies';
-import { amountExample, amountProblem, bankRefusal, celebrationsFor, type BankAction } from '../sheets/moneyText';
+import {
+  amountExample, amountProblem, bankRefusal, celebrationsFor, payShare, readAccountEdit, type BankAction,
+} from '../sheets/moneyText';
 import creditsPngIcon from '../assets/Credits.png';
 
 export type BankSoundKey = 'cashregister' | 'debtpaid' | 'highroller' | 'firstpay' | 'overdraft';
@@ -38,7 +40,12 @@ export function AdminBankWindow(props: AdminBankWindowProps) {
   return useParts(props.system)('bank') ? <AdminBankAccount {...props} /> : null;
 }
 
-function AdminBankAccount({ pos, setPos, onClose, targetUser, socket, token }: AdminBankWindowProps) {
+function AdminBankAccount(props: AdminBankWindowProps) {
+  // A custom system with currencies of its own has an account in each (3c2b5).
+  return currenciesFor(props.system).length ? <AdminBankCurrencies {...props} /> : <AdminBankMoney {...props} />;
+}
+
+function AdminBankMoney({ pos, setPos, onClose, targetUser, socket, token }: AdminBankWindowProps) {
   const [bankData, setBankData] = useState({ balance: 0, debt: 0 });
   const [balInput, setBalInput] = useState('');
   const [debtInput, setDebtInput] = useState('');
@@ -82,6 +89,85 @@ function AdminBankAccount({ pos, setPos, onClose, targetUser, socket, token }: A
   );
 }
 
+/**
+ * One player's accounts in a custom system's own currencies (3c2b5, mockup approved 2026-10-02):
+ * a row for each, the main one first, the balance and (where it can be owed, or is) the debt
+ * written the currency's way. Each row says how it read what was typed, or what the currency
+ * won't allow, and SAVE CHANGES sends only the accounts that changed, once every row is good.
+ */
+function AdminBankCurrencies({ pos, setPos, onClose, targetUser, socket, token, system }: AdminBankWindowProps) {
+  const currencies = currenciesFor(system);
+  const [held, setHeld] = useState<Record<string, { balance: number; debt: number }>>({});
+  const [edits, setEdits] = useState<Record<string, { balance: string; debt: string }>>({});
+  const [problem, setProblem] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleUpdate = (data: { username: string; balance: number; debt: number; currencies?: BankCurrencyAccount[] }) => {
+      if (data.username !== targetUser) return;
+      const list = currenciesFor(system);
+      const accounts = Object.fromEntries(list.map((c, i) => {
+        const a = data.currencies?.find((x) => x.id === c.id) ?? (i === 0 ? data : { balance: 0, debt: 0 });
+        return [c.id, { balance: Number(a.balance) || 0, debt: Number(a.debt) || 0 }];
+      }));
+      setHeld(accounts);
+      setEdits(Object.fromEntries(list.map((c) => [c.id, { balance: formatAmount(c, accounts[c.id].balance), debt: formatAmount(c, accounts[c.id].debt) }])));
+    };
+    socket.on('bankUpdate', handleUpdate);
+    socket.emit('requestBankBalance', { username: targetUser });
+    return () => socket.off('bankUpdate', handleUpdate);
+  }, [targetUser, socket, system]);
+
+  /** A debt box where the currency can be owed, or something is owed in it all the same. */
+  const hasDebt = (c: Currency) => c.debt || (held[c.id]?.debt ?? 0) > 0;
+  const readRow = (c: Currency) => readAccountEdit(c, edits[c.id]?.balance ?? '', hasDebt(c) ? edits[c.id]?.debt ?? '' : null);
+
+  const handleSave = () => {
+    const rows = currencies.map((c) => ({ c, read: readRow(c) }));
+    const bad = rows.find((r) => !r.read.ok);
+    if (bad && !bad.read.ok) { setProblem(`${bad.c.name}: ${bad.read.problem}`); return; }
+    for (const { c, read } of rows) {
+      if (!read.ok) continue;
+      if (held[c.id] && read.balance === held[c.id].balance && read.debt === held[c.id].debt) continue;
+      socket.emit('adminUpdateBank', { token, username: targetUser, balance: read.balance, debt: read.debt, currency: c.id });
+    }
+    onClose();
+  };
+
+  const input: React.CSSProperties = { width: '100%', padding: '5px', background: 'var(--black)', color: 'var(--text)', border: '1px solid var(--dark-green)', boxSizing: 'border-box' };
+  return (
+    <DraggableWindow title={`BANK_ADMIN.EXE · ${targetUser}`} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '360px' }}>
+      <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '64px minmax(0, 1fr) minmax(0, 1fr)', gap: '4px 8px', fontSize: '10px', letterSpacing: '1px', opacity: 0.7 }}>
+          <span /><span>BALANCE</span><span>DEBT</span>
+        </div>
+        {currencies.map((c) => {
+          const read = readRow(c);
+          const set = (field: 'balance' | 'debt', value: string) => {
+            setProblem(null);
+            setEdits((e) => ({ ...e, [c.id]: { ...(e[c.id] ?? { balance: '', debt: '' }), [field]: value } }));
+          };
+          return (
+            <div key={c.id} data-testid={`admin-account-${c.id}`}>
+              <div style={{ display: 'grid', gridTemplateColumns: '64px minmax(0, 1fr) minmax(0, 1fr)', gap: '4px 8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>{c.name.toUpperCase()}</span>
+                <input type="text" aria-label={`${c.name} balance`} value={edits[c.id]?.balance ?? ''} onChange={(e) => set('balance', e.target.value)} style={input} />
+                {hasDebt(c)
+                  ? <input type="text" aria-label={`${c.name} debt`} value={edits[c.id]?.debt ?? ''} onChange={(e) => set('debt', e.target.value)} style={input} />
+                  : <span style={{ fontSize: '10px', letterSpacing: '1px', opacity: 0.5 }}>NO DEBT</span>}
+              </div>
+              <div data-testid={`admin-read-${c.id}`} style={{ fontSize: '10px', minHeight: '1.2em', marginLeft: '72px', color: read.ok ? 'var(--cyan)' : 'var(--danger)' }}>
+                {read.ok ? `= ${formatAmount(c, read.balance)}${read.debt ? ` · OWES ${formatAmount(c, read.debt)}` : ''}` : read.problem}
+              </div>
+            </div>
+          );
+        })}
+        <button className="panel-btn" style={{ width: '100%' }} onClick={handleSave}>SAVE CHANGES</button>
+        {problem && <div role="status" style={{ color: 'var(--danger)', fontSize: '11px' }}>{problem}</div>}
+      </div>
+    </DraggableWindow>
+  );
+}
+
 interface AdminPayWindowProps {
   pos: { x: number; y: number };
   setPos: (pos: { x: number; y: number }) => void;
@@ -98,9 +184,19 @@ export function AdminPayWindow(props: AdminPayWindowProps) {
   return useParts(props.system)('bank') ? <AdminPay {...props} /> : null;
 }
 
-function AdminPay({ pos, setPos, onClose, socket, token, activeUsers }: AdminPayWindowProps) {
+function AdminPay({ pos, setPos, onClose, socket, token, activeUsers, system }: AdminPayWindowProps) {
   const [amount, setAmount] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  /**
+   * A custom system with currencies of its own pays in the one picked, the main one unless another
+   * is (3c2b5): the amount read as written, sent in whole units with the currency. None in a
+   * built-in system, which pays today's money.
+   */
+  const currencies = currenciesFor(system);
+  const [currencyId, setCurrencyId] = useState<string | null>(null);
+  const currency: Currency | null = currencies.find((c) => c.id === currencyId) ?? currencies[0] ?? null;
+  const read = currency ? parseAmount(currency, amount) : null;
+  const problem = currency && read ? amountProblem(currency, read, { positive: true }) : null;
 
   const allUsers = (activeUsers || [])
     .filter((u: any) => !u.isNPC && !(u.isAdmin && !u.isTemporaryAdmin))
@@ -111,27 +207,46 @@ function AdminPay({ pos, setPos, onClose, socket, token, activeUsers }: AdminPay
     setSelectedUsers(prev => prev.includes(u) ? prev.filter(x => x !== u) : [...prev, u]);
   };
 
-  const handlePay = () => {
-    const total = parseFloat(amount);
-    if (!isNaN(total) && total > 0 && selectedUsers.length > 0) {
-      socket.emit('adminPayPlayers', { token, usernames: selectedUsers, totalAmount: total });
+  /** The total to pay, or NaN when there is none to pay. */
+  const total = currency ? (read?.ok && read.amount > 0 ? read.amount : NaN) : parseFloat(amount);
+  const pay = (usernames: string[]) => {
+    if (!isNaN(total) && total > 0 && usernames.length > 0) {
+      socket.emit('adminPayPlayers', { token, usernames, totalAmount: total, ...(currency ? { currency: currency.id } : {}) });
       onClose();
     }
   };
-
-  const handleDivideAll = () => {
-    const total = parseFloat(amount);
-    if (!isNaN(total) && total > 0 && allUsers.length > 0) {
-      socket.emit('adminPayPlayers', { token, usernames: allUsers, totalAmount: total });
-      onClose();
-    }
-  };
+  const handlePay = () => pay(selectedUsers);
+  const handleDivideAll = () => pay(allUsers);
+  /** Who a press would pay: those ticked, or everybody for SPLIT_AMONG_ALL. */
+  const payees = selectedUsers.length || allUsers.length;
 
   return (
     <DraggableWindow title="PAYROLL.EXE" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
       <div style={{ padding: '10px' }}>
+        {currencies.length > 1 && (
+          <>
+            <label htmlFor="payroll-currency" style={{ display: 'block', marginBottom: '5px', color: '#00ff66' }}>CURRENCY</label>
+            <select id="payroll-currency" value={currency?.id} onChange={(e) => { setCurrencyId(e.target.value); setAmount(''); }}
+              style={{ width: '100%', padding: '5px', marginBottom: '10px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)' }}>
+              {currencies.map((c) => <option key={c.id} value={c.id}>{c.name.toUpperCase()}</option>)}
+            </select>
+          </>
+        )}
         <label style={{ display: 'block', marginBottom: '5px', color: '#00ff66' }}>TOTAL_AMOUNT</label>
-        <input type="number" step="1" min="1" value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '15px', background: '#000', color: '#fff', border: '1px solid #333' }} />
+        {currency ? (
+          <>
+            <input type="text" aria-label="Total amount" autoComplete="off" value={amount} onChange={e => setAmount(e.target.value)}
+              style={{ width: '100%', padding: '5px', marginBottom: '4px', background: '#000', color: '#fff', border: '1px solid #333', boxSizing: 'border-box' }} />
+            <div data-testid="payroll-share" style={{ fontSize: '10px', minHeight: '2.4em', marginBottom: '8px', lineHeight: 1.4,
+              color: problem ? 'var(--danger)' : 'var(--cyan)', opacity: amount.trim() ? 1 : 0.6 }}>
+              {problem ?? (!isNaN(total) && payees
+                ? `${formatAmount(currency, total)} for ${payShare(currency, total, payees)}`
+                : `Write it like ${amountExample(currency)}`)}
+            </div>
+          </>
+        ) : (
+          <input type="number" step="1" min="1" value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '15px', background: '#000', color: '#fff', border: '1px solid #333' }} />
+        )}
 
         <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #333', padding: '5px', marginBottom: '10px', background: 'rgba(0,0,0,0.5)' }}>
           {allUsers.length === 0 ? (

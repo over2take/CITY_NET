@@ -45,7 +45,9 @@ import { PNG_EXPORT_PRESETS, DEFAULT_PNG_EXPORT_WIDTH } from '../utils/mapExport
 import { RECORD_DURATIONS, MAX_RECORD_SECONDS } from '../hooks/useMapExport';
 import { parseGrant, describeGrant } from '../utils/tokenControl';
 import { useWords, asLabel, type WordLookup } from '../sheets/words';
-import { useParts, type PartLookup } from '../sheets/parts';
+import { useParts, partOn, type PartLookup } from '../sheets/parts';
+import { currenciesFor } from '../sheets/currencies';
+import { shortfallRule } from '../sheets/moneyText';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2097,7 +2099,29 @@ interface HouseRuleDef {
   defaultOn?: boolean;
 }
 
-function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] }) {
+/**
+ * Where BUY WITH MONEY YOU DO NOT HAVE is hidden because the system has currencies of its own
+ * (3c2b5, mockup approved 2026-10-02): what each currency does when a player is short of it, read
+ * only, so a GM can see why a cart was refused. Set in the system, not here. Nothing otherwise.
+ */
+function ShortfallNote({ system }: { system: string }) {
+  const currencies = currenciesFor(system);
+  const word = useWords(system);
+  if (!currencies.length || !partOn(system, 'bank')) return null;
+  return (
+    <div data-testid="shortfall-note" style={{ border: '1px dashed var(--dark-green)', padding: '5px 6px', fontSize: '0.6rem', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      <span style={{ letterSpacing: '1px' }}>SHORT AT THE {word('shop', 'singular', 'SHOP').toUpperCase()}</span>
+      <span style={{ opacity: 0.7 }}>Each currency decides, set in the system:</span>
+      {currencies.map((c) => (
+        <span key={c.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+          <span>{c.name.toUpperCase()}</span><span style={{ opacity: 0.8 }}>{shortfallRule(c)}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function HouseRulesPanel({ token, defs, note }: { token: string; defs: HouseRuleDef[]; note?: React.ReactNode }) {
   const [rules, setRules] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [msg, setMsg] = useState<string | null>(null);
@@ -2159,6 +2183,7 @@ function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] 
             <span style={{ textAlign: 'left' }}>{d.label}</span>
           </label>
         ))}
+        {note}
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <button
             className="utility-btn"
@@ -2193,7 +2218,7 @@ function HouseRulesPanel({ token, defs }: { token: string; defs: HouseRuleDef[] 
  * The house rules every system has. A function of the system's words (the first names initiative)
  * and its parts: each leaves with the part it is about, initiative (3b6a) or the bank (3b2b).
  */
-const globalHouseRules = (word: WordLookup, on: PartLookup): HouseRuleDef[] => [
+const globalHouseRules = (word: WordLookup, on: PartLookup, ownCurrencies = false): HouseRuleDef[] => [
   {
     settingKey: 'initiative_follows_building',
     label: `${word('initiative', 'singular', 'INITIATIVE').toUpperCase()} FOLLOWS BUILDING (ALL FLOORS SHARE ONE TRACKER)`,
@@ -2206,7 +2231,9 @@ const globalHouseRules = (word: WordLookup, on: PartLookup): HouseRuleDef[] => [
     label: 'BUY WITH MONEY YOU DO NOT HAVE',
     title: "House rule: a player who cannot afford something in a shop is asked how to cover it - take the shortfall as debt, or let the balance go negative - instead of being refused. Off by default, which refuses the purchase. What happens to someone carrying a negative balance is yours to decide; the app records the hole, it does not collect on it.",
   },
-].filter((rule) => (rule.settingKey !== OVERDRAFT_RULE || on('bank'))
+  // A system with currencies of its own decides a shortfall per currency, by each one's own
+  // switches (decided with the user, 2026-10-02): the table-wide rule would only contradict them.
+].filter((rule) => (rule.settingKey !== OVERDRAFT_RULE || (on('bank') && !ownCurrencies))
   && (rule.settingKey !== 'initiative_follows_building' || on('initiative')));
 
 const CPR_HOUSE_RULES: HouseRuleDef[] = [
@@ -2311,8 +2338,8 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: str
           <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
             Each system keeps its own characters, banks and token health; switching back restores them.
           </p>
-          <HouseRulesPanel token={token} defs={[
-            ...globalHouseRules(word, on),
+          <HouseRulesPanel token={token} note={<ShortfallNote system={system} />} defs={[
+            ...globalHouseRules(word, on, currenciesFor(system).length > 0),
             ...(system === 'cities_without_number' ? CWN_HOUSE_RULES : []),
             ...(system === 'cyberpunk_red' ? CPR_HOUSE_RULES : []),
             ...(system === 'shadowrun_6e' ? SR6_HOUSE_RULES : []),

@@ -59,6 +59,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The GM's money windows in a custom system's own currencies.** PAY_PLAYERS picks the currency
+  to pay in, reads the amount as written, and says what each player will get. BANK_ADMIN edits
+  every account a player has, each its own way, and refuses what a currency doesn't allow before
+  saving. In the house rules, BUY WITH MONEY YOU DO NOT HAVE gives way to a note of what each
+  currency allows when a player is short. Built-in systems keep today's windows and rule.
+
 - **The shop in a custom system's own currencies.** Every shelf, the sell list and the cart price
   things in the currency of the catalogue they come from. The cart totals each currency on its
   own, says when one is short, and asks once how to cover every short currency, offering only
