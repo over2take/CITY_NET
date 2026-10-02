@@ -17,6 +17,7 @@
 const crypto = require('crypto');
 const { checkDefinition, blankDefinition } = require('./definition');
 const citysys = require('./citysys');
+const { isIcon, BUILT_IN_ICONS } = require('./currencies');
 
 const PREFIX = 'sys_';
 
@@ -142,6 +143,41 @@ const deleteSystem = (db, id, cb) => {
   });
 };
 
+/**
+ * Set one currency's icon, or clear it with null (3c2c2): one of CURRENCY_ICON's five, or an
+ * uploaded icon's address (currencies.js isIcon). Chosen in the admin panel rather than the
+ * builder (decided with the user, 2026-10-02), so it changes the draft and the published copy
+ * alike and nothing else in either: a draft's unpublished work stays unpublished, and the running
+ * game shows the new icon without a republish. Refused for a currency neither copy has.
+ */
+const setCurrencyIcon = (db, id, currencyId, icon, cb) => {
+  if (!isCustomId(id)) return cb(fail(404, 'No such system'));
+  if (icon !== null && !isIcon(icon)) return cb(fail(400, `An icon is one of ${BUILT_IN_ICONS.join(' ')} or an uploaded icon`));
+  db.get('SELECT draft, published FROM custom_systems WHERE id = ? AND deleted_at IS NULL', [id], (err, row) => {
+    if (err) return cb(err);
+    if (!row) return cb(fail(404, 'No such system'));
+    let found = false;
+    /** One copy with the icon changed, or as it was when that copy has no such currency. */
+    const withIcon = (text) => {
+      const definition = parse(text);
+      const currency = definition && Array.isArray(definition.currencies)
+        ? definition.currencies.find((c) => c && typeof c === 'object' && c.id === currencyId) : null;
+      if (!currency) return text;
+      found = true;
+      if (icon === null) delete currency.icon; else currency.icon = icon;
+      return JSON.stringify(definition);
+    };
+    const draft = withIcon(row.draft);
+    const published = withIcon(row.published);
+    if (!found) return cb(fail(404, 'No such currency'));
+    db.run(
+      'UPDATE custom_systems SET draft = ?, published = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [draft, published, id],
+      (err2) => (err2 ? cb(err2) : cb(null, { icon })),
+    );
+  });
+};
+
 // ─── Sharing as files ───────────────────────────────────────────────────────
 
 /** A published system as a file: { fileName, text }. A draft is not shared. */
@@ -263,5 +299,5 @@ const installSystem = (db, text, mode, cb) => {
 
 module.exports = {
   PREFIX, isCustomId, listSystems, getSystem, createSystem, saveDraft, publishSystem, deleteSystem,
-  exportSystem, previewInstall, installSystem,
+  setCurrencyIcon, exportSystem, previewInstall, installSystem,
 };

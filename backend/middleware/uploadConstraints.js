@@ -38,6 +38,9 @@ const LIMITS = {
   // phone picture; anything larger is a scan nobody needs at that size.
   building_photo: 10 * MB,
   font: 5 * MB,
+  // A currency's icon, drawn at the size of a letter beside an amount (3c2c2). A quarter of a
+  // megabyte is generous for that; more is a photo, not an icon.
+  currency_icon: MB / 4,
 };
 
 const asMb = (bytes) => `${(bytes / MB).toFixed(bytes < MB ? 2 : 1)}MB`;

@@ -64,7 +64,7 @@ app.use('/api/player', require('./routes/player')(db, io));
 app.use('/api', require('./routes/admin')(db, io, helpers));
 app.use('/api/music', require('./routes/music')(db, io));
 app.use('/api/sheets', require('./routes/sheets')(db, io));
-app.use('/api/systems', require('./routes/systems')(db));
+app.use('/api/systems', require('./routes/systems')(db, io));
 
 // Frontend static serving
 const frontendDist = path.join(__dirname, '../frontend/dist');
