@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { currenciesFor, catalogueCurrencyFor, splitAmount, toBaseAmount, formatAmount, type Currency } from '../currencies';
+import { currenciesFor, catalogueCurrencyFor, splitAmount, toBaseAmount, formatAmount, parseAmount, type Currency } from '../currencies';
 import { registerCustomTemplate, clearCustomTemplates } from '../customTemplates';
 
 /**
@@ -15,6 +15,18 @@ const byId = (id: string): Currency => CASES.normalized.find((c: Currency) => c.
 describe('the rules, shared with the server', () => {
   it('write each amount as the system would', () => {
     for (const c of CASES.format) expect(formatAmount(byId(c.currency), c.amount), `${c.currency} ${c.amount}`).toBe(c.text);
+  });
+
+  it('read an amount as people write it, and refuse what could be misread', () => {
+    for (const c of CASES.parse) expect(parseAmount(byId(c.currency), c.text), `${c.currency} ${c.text}`).toEqual({ ok: true, amount: c.amount });
+    for (const c of CASES.parseRefused) expect(parseAmount(byId(c.currency), c.text), `${c.currency} ${c.text}`).toEqual({ ok: false, reason: c.reason });
+  });
+
+  it('read back what they write', () => {
+    for (const c of CASES.format) {
+      if (c.amount !== Math.round(c.amount)) continue;
+      expect(parseAmount(byId(c.currency), c.text), c.text).toEqual({ ok: true, amount: c.amount });
+    }
   });
 
   it('split amounts into coins and back', () => {

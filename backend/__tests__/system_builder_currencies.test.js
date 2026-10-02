@@ -15,7 +15,7 @@ import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
 const { checkDefinition } = require_('../systemBuilder/definition');
-const { currenciesOf, splitAmount, toBaseAmount, formatAmount } = require_('../systemBuilder/currencies');
+const { currenciesOf, splitAmount, toBaseAmount, formatAmount, parseAmount } = require_('../systemBuilder/currencies');
 const runtime = require_('../systemBuilder/runtime');
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -84,6 +84,18 @@ describe('the rules, shared with the browser', () => {
 
   it('write each amount as the system would', () => {
     for (const c of CASES.format) expect(formatAmount(byId(c.currency), c.amount), `${c.currency} ${c.amount}`).toBe(c.text);
+  });
+
+  it('read an amount as people write it, and refuse what could be misread (3c2a4b)', () => {
+    for (const c of CASES.parse) expect(parseAmount(byId(c.currency), c.text), `${c.currency} ${c.text}`).toEqual({ ok: true, amount: c.amount });
+    for (const c of CASES.parseRefused) expect(parseAmount(byId(c.currency), c.text), `${c.currency} ${c.text}`).toEqual({ ok: false, reason: c.reason });
+  });
+
+  it('read back what they write', () => {
+    for (const c of CASES.format) {
+      if (c.amount !== Math.round(c.amount)) continue;
+      expect(parseAmount(byId(c.currency), c.text), c.text).toEqual({ ok: true, amount: c.amount });
+    }
   });
 
   it('split amounts into coins and back', () => {

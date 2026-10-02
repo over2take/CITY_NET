@@ -169,4 +169,73 @@ const formatAmount = (currency, amount) => {
   return `${sign}${parts.map((p) => `${p.count} ${label(p.id)}`).join(' ')}`;
 };
 
-module.exports = { checkCurrencies, currenciesOf, splitAmount, toBaseAmount, formatAmount, LIMITS };
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Read an amount as a GM or player writes it (3c2a4b) into whole smallest units: "$4.34" and
+ * "4.34" are 434, "1.234,56 €" is 123456 with a comma for the decimal mark, "2gp 5sp" or
+ * "2 Gold, 5 Silver" is 250, "120 Honor" is 120. A leading "-" makes it negative.
+ *
+ * Written as people read amounts, not in the smallest unit (decided with the user,
+ * 2026-10-02). So a bare number in a currency of several coins is refused ("15" could be
+ * copper or gold), thousands separators must group by three ("4,34" is not $434), and more
+ * decimals than the currency has are refused rather than rounded.
+ *
+ * Returns { ok: true, amount } or { ok: false, reason }: 'empty', 'not_a_number',
+ * 'which_coin', 'unknown_coin', 'too_precise'.
+ */
+const parseAmount = (currency, input) => {
+  let text = String(input === undefined || input === null ? '' : input).trim();
+  if (!text) return { ok: false, reason: 'empty' };
+  let sign = 1;
+  if (text.startsWith('-')) { sign = -1; text = text.slice(1).trim(); }
+  const coins = coinsOf(currency);
+
+  if (coins.length) {
+    if (/^\d+$/.test(text)) {
+      if (coins.length > 1) return { ok: false, reason: 'which_coin' };
+      return { ok: true, amount: sign * Number(text) * coins[0].value };
+    }
+    const named = new Map();
+    for (const coin of coins) {
+      named.set(coin.name.trim().toLowerCase(), coin.value);
+      if (coin.short) named.set(coin.short.trim().toLowerCase(), coin.value);
+    }
+    let amount = 0;
+    let rest = text.toLowerCase();
+    const part = /(\d+)\s*([^\d\s,]+(?:\s+[^\d\s,]+)*)/g;
+    let match;
+    while ((match = part.exec(text.toLowerCase())) !== null) {
+      const value = named.get(match[2].trim());
+      if (value === undefined) return { ok: false, reason: 'unknown_coin' };
+      amount += Number(match[1]) * value;
+      rest = rest.replace(match[0], '');
+    }
+    if (rest.replace(/[\s,]/g, '')) return { ok: false, reason: 'not_a_number' };
+    return { ok: true, amount: sign * amount };
+  }
+
+  // Without coins: drop the symbol, and the name or short name written after the number.
+  if (currency && currency.symbol) text = text.split(currency.symbol).join(' ').trim();
+  for (const word of [currency && currency.name, currency && currency.short]) {
+    if (word) text = text.replace(new RegExp(`\\s*${escapeRegExp(word)}$`, 'i'), '').trim();
+  }
+  if (text.startsWith('-')) { sign = -sign; text = text.slice(1).trim(); }
+  const mark = currency && currency.decimalMark === ',' ? ',' : '.';
+  const group = mark === ',' ? '.' : ',';
+  const places = placesOf(currency);
+  const [whole, fraction, extra] = text.split(mark);
+  if (extra !== undefined || whole === undefined) return { ok: false, reason: 'not_a_number' };
+  const grouped = whole.replace(/\s/g, group);
+  const groupRe = new RegExp(`^\\d{1,3}(${escapeRegExp(group)}\\d{3})*$`);
+  if (!/^\d+$/.test(grouped) && !groupRe.test(grouped)) return { ok: false, reason: 'not_a_number' };
+  const digits = grouped.split(group).join('');
+  if (fraction !== undefined) {
+    if (!/^\d+$/.test(fraction)) return { ok: false, reason: 'not_a_number' };
+    if (fraction.length > places) return { ok: false, reason: 'too_precise' };
+  }
+  const frac = (fraction || '').padEnd(places, '0');
+  return { ok: true, amount: sign * (Number(digits) * 10 ** places + (places ? Number(frac) : 0)) };
+};
+
+module.exports = { checkCurrencies, currenciesOf, splitAmount, toBaseAmount, formatAmount, parseAmount, LIMITS };

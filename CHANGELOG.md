@@ -52,6 +52,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Amounts can be read as people write them.** "$4.34", "1.234,56 €", "2gp 5sp" and "120 Honor" read
+  as exact amounts, and what could be misread is refused: a bare "15" in a currency of several coins,
+  "4,34" where the point is the decimal mark, or more decimals than the currency has. Nothing uses it
+  yet; catalogue prices and the bank's boxes will.
+
 - **A shop cart can be worked out in several currencies.** Each item is priced in its catalogue's
   currency, each currency is settled on its own account, and a shortfall is covered only as that
   currency allows. Nothing uses it yet; the built-in checkout is unchanged.
