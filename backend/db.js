@@ -347,6 +347,16 @@ db.serialize(() => {
     high_roller_done INTEGER DEFAULT 0,
     PRIMARY KEY (username, system)
   )`);
+  // A custom system's further currencies (bank/currencies.js). Its first, main one is the
+  // balance above, so nothing already held moves; this starts empty and only ever gains rows.
+  db.run(`CREATE TABLE IF NOT EXISTS bank_balances (
+    username TEXT NOT NULL,
+    system TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    balance REAL DEFAULT 0,
+    debt REAL DEFAULT 0,
+    PRIMARY KEY (username, system, currency)
+  )`);
 
   // A token's health, defense and injuries in the systems that are NOT running. The running
   // system's live on the token itself; switching swaps them (tokens/vitals.js).
