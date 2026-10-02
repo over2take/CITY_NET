@@ -66,6 +66,13 @@ describe('the totals per currency', () => {
     expect(totals.map((t) => [t.currency.id, t.net])).toEqual([['gold', -7], ['dollars', -125]]);
   });
 
+  it('take the server\'s total for a currency it repriced, and work the rest out from it', () => {
+    const buys = [buy('weapon_mods', 'rune', 3, 1), buy('weapons', 'sword', 1500, 1)];
+    const [gold, favor] = cartTotalsIn(buys, [], CURRENCIES, currencyOf, accounts, { favor: 9 });
+    expect(gold).toMatchObject({ net: 1500, short: 0 });
+    expect(favor).toMatchObject({ buyTotal: 3, net: 9, after: -4, short: 4, options: ['debt'] });
+  });
+
   it('are none for an empty cart, and leave out a catalogue with no currency', () => {
     expect(cartTotalsIn([], [], CURRENCIES, currencyOf, {})).toEqual([]);
     expect(cartTotalsIn([buy('weapons', 'sword', 1500, 1)], [], CURRENCIES, () => null, {})).toEqual([]);

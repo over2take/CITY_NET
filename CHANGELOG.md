@@ -59,6 +59,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The shop in a custom system's own currencies.** Every shelf, the sell list and the cart price
+  things in the currency of the catalogue they come from. The cart totals each currency on its
+  own, says when one is short, and asks once how to cover every short currency, offering only
+  what each allows. A currency that allows no way to cover it refuses the cart and says which. The
+  receipt has a total for each currency, and the header lists every account. Built-in systems
+  keep today's shop.
+
 - **BANK.EXE in a custom system's own currencies.** A list at the top shows every account, the
   main one first, with what is owed beside it; picking one shows its balance and debt in the boxes
   below. Amounts are written the system's way ("20 gp 4 sp 7 cp", "$4.34") and typed the same way.
