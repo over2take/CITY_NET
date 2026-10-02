@@ -2474,6 +2474,9 @@ function Hint({ text }: { text: string }) {
  */
 function BuybackPanel({ token, globalSettings, fetchGlobalSettings }: { token: string; globalSettings: any; fetchGlobalSettings: () => void }) {
   const [value, setValue] = useState('');
+  // A custom system's own word for shops (now that custom systems have them, 3b3).
+  const word = useWords(globalSettings?.game_system);
+  const shop = word('shop', 'singular', 'shop');
 
   useEffect(() => {
     if (!globalSettings) return;
@@ -2504,8 +2507,8 @@ function BuybackPanel({ token, globalSettings, fetchGlobalSettings }: { token: s
           gap: '5px', marginBottom: '5px',
         }}
       >
-        SHOP_BUY_BACK
-        <Hint text={`What every shop pays for something sold back to it, unless that storefront has been given its own rate. Default ${DEFAULT_BUYBACK_PCT}%.`} />
+        {asLabel(word('shop', 'singular', 'SHOP'))}_BUY_BACK
+        <Hint text={`What every ${shop} pays for something sold back to it, unless that storefront has been given its own rate. Default ${DEFAULT_BUYBACK_PCT}%.`} />
       </label>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
         <input
@@ -2516,7 +2519,7 @@ function BuybackPanel({ token, globalSettings, fetchGlobalSettings }: { token: s
           value={value}
           onChange={e => setValue(e.target.value)}
           onBlur={save}
-          aria-label="Shop buy-back percentage"
+          aria-label={`${word('shop', 'singular', 'Shop')} buy-back percentage`}
           style={{ width: '80px', padding: '4px 6px', textAlign: 'center' }}
         />
         {/* The book only exists on CWN. Everywhere else the price is whatever the GM

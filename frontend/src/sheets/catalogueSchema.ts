@@ -19,6 +19,7 @@
 // and the example says so rather than leaving somebody to discover it.
 
 import { getTemplate } from './index';
+import { customTemplate, isCustomSystem } from './customTemplates';
 import type { ShopStock } from '../data/buildingTypes';
 import { BUILDING_TYPES, CATALOGUES, typeLabel, catalogueLabel } from '../data/buildingTypes';
 
@@ -99,6 +100,8 @@ const NOT_CATALOGUE = new Set([
  * row 1, which is the definition every other row copies.
  */
 export const rowGroupsOf = (system: string): Record<string, string[]> => {
+  // None for a custom system, whose purchases are all inventory lines (sheetSlots.ts).
+  if (isCustomSystem(system)) return {};
   const template = getTemplate(system) as unknown;
   const ids: string[] = [];
   const walk = (node: unknown): void => {
@@ -165,7 +168,7 @@ export const columnsFor = (system: string, catalogue: ShopStock): CatalogueColum
     shape: 'inventory',
     columns: [NAME, PRICE, ...INVENTORY_COLUMNS],
     ...(missing
-      ? { unavailable: `${system} has no ${missing}, so these land in the inventory` }
+      ? { unavailable: `${customTemplate(system)?.name ?? system} has no ${missing}, so these land in the inventory` }
       : {}),
   };
 };

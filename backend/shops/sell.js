@@ -15,6 +15,7 @@ const prices = require('./catalogueStore');
 const buyback = require('./buyback');
 
 const sheetSlots = require('./sheetSlots');
+const { knowsSheet } = require('./availability');
 
 /**
  * Every field one weapon or vehicle row owns, for the system this sheet belongs to.
@@ -102,7 +103,7 @@ const planSale = ({ data, items, catalogues, locationPct, globalPct, system }) =
    * Cyberpunk RED sheet would clear CWN's ten weapon fields and leave `rof` behind, which is
    * exactly the half-deleted row this module exists to prevent. Better to refuse.
    */
-  if (!sheetSlots.SLOTS[String(system || '')]) return { ok: false, reason: 'no_system' };
+  if (!knowsSheet(system)) return { ok: false, reason: 'no_system' };
   if (!Array.isArray(items) || items.length === 0) return { ok: false, reason: 'empty' };
 
   const pct = buyback.buybackPct(locationPct, globalPct);
