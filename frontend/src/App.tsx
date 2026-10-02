@@ -254,6 +254,8 @@ function App() {
   // A custom system with initiative off: no ROLL INIT on NPC sheets, no ADD TO INIT on tokens
   // (3b6a; the tracker window checks for itself).
   const initiativeOn = parts('initiative');
+  // And with combat off, no attack buttons on tokens (3b6b).
+  const combatOn = parts('combat');
 
   // Custom dice: GM-authored (DB) plus any built-ins the active system ships.
   const { customDice, applyDice, addDie, updateDie, deleteDie, error: customDiceError, setError: setCustomDiceError } = useCustomDice(token, gameSystem);
@@ -2474,7 +2476,7 @@ function App() {
                   isAdmin, isPrimaryAdmin: isAdmin && isPrimaryAdmin, isOwner, isLoggedIn,
                   isPlayerToken: isPlayerRhombus, hasOwner: !!selectedLocation.owner,
                   sheetHere, linked, attackPending: !!attackPending, sheetCombat: hasSheetCombat(gameSystem),
-                  canManage, hasRoster: vehicleRoster.hasVehicles, systemHasVehicles: hasVehicles(gameSystem), systemHasBank: bankOn,
+                  canManage, hasRoster: vehicleRoster.hasVehicles, systemHasVehicles: hasVehicles(gameSystem), systemHasBank: bankOn, systemHasCombat: combatOn,
                   hasBattleMaps: currentLocBattleMaps.length > 0,
                 };
                 const tokenFolders = tokenView(viewer);
@@ -2595,7 +2597,7 @@ function App() {
                       }
                       : undefined}
                     quickActions={tokenFolders.quickActions
-                      ? <QuickActions socket={socketRef.current} userName={userName} defense={defense} onRolled={() => setIsDiceTrayOpen(true)} />
+                      ? <QuickActions socket={socketRef.current} userName={userName} defense={defense} onRolled={() => setIsDiceTrayOpen(true)} system={gameSystem} />
                       : undefined}
                     attackStatus={!canAttack ? null
                       : attackingThis

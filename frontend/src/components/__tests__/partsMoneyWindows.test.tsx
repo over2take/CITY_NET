@@ -47,7 +47,7 @@ describe('the token\'s VIEW_BANK', () => {
   const gm: TokenViewer = {
     isAdmin: true, isPrimaryAdmin: true, isOwner: false, isLoggedIn: true, isPlayerToken: true, hasOwner: true,
     sheetHere: false, linked: false, attackPending: false, sheetCombat: false, canManage: true,
-    hasRoster: false, systemHasVehicles: false, systemHasBank: true, hasBattleMaps: false,
+    hasRoster: false, systemHasVehicles: false, systemHasBank: true, systemHasCombat: true, hasBattleMaps: false,
   };
 
   it('is offered to the GM on a player\'s token only while the system has a bank', () => {

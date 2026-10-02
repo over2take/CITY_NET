@@ -2236,6 +2236,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('initiateAttack', (data) => {
       const info = userSockets.get(socket.id);
       if (!info || !data || !data.targetId || !data.attackType) return;
+      // A game with combat turned off has no attacks (3b6b): none starts, so no roll resolves one.
+      getGameSystem((sysErr, system) => {
+        if (sysErr || !customSystems.partIn(system, 'combat')) return;
+        startAttack(data);
+      });
+    });
+
+    const startAttack = (data) => {
       db.get('SELECT id, name, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index, vehicle_state FROM locations WHERE id = ?', [data.targetId], (err, target) => {
         if (err || !target) return;
         const isRhombus = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'].includes(target.shape);
@@ -2250,7 +2258,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         pendingAttacks.set(socket.id, { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, targetX: target.x, targetZ: target.z, targetBattleMapId: target.battle_map_id, targetFloorIndex: target.floor_index });
         socket.emit('attackPending', { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, vehicle });
       });
-    });
+    };
 
     socket.on('cancelAttack', () => {
       pendingAttacks.delete(socket.id);

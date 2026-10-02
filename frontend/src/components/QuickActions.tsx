@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
 import { quickRolls } from '../sheets/quickRolls';
 import { DefenseReadout, type TokenDefense } from './TokenWindow';
+import { useParts } from '../sheets/parts';
 
 // Your own token's QUICK ACTIONS: your defense as it stands, and the rolls you would otherwise
 // open the sheet for - saves, stats, a skill check. Each goes through the sheet's own roll
@@ -14,13 +15,16 @@ interface Props {
   defense: TokenDefense | null;
   /** A roll went out: the app pops the dice tray. */
   onRolled?: () => void;
+  /** The running game: one with combat turned off shows no defense (3b6b). */
+  system?: string;
 }
 
 const sectionHead: React.CSSProperties = { fontSize: 10, opacity: 0.8, letterSpacing: 1, marginBottom: 6 };
 const divider: React.CSSProperties = { borderTop: '1px solid var(--dark-green)', marginTop: 12, paddingTop: 10 };
 const btn: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, padding: '4px 10px' };
 
-export function QuickActions({ socket, userName, defense, onRolled }: Props) {
+export function QuickActions({ socket, userName, defense: given, onRolled, system }: Props) {
+  const defense = useParts(system)('combat') ? given : null;
   const { sheet, template, hiddenTabs, actions } = usePlayerSheet(socket, userName, { onRolled });
   const { checks, skills } = quickRolls(template, hiddenTabs);
   const [skill, setSkill] = useState('');

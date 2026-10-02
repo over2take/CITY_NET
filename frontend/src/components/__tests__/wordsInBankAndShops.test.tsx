@@ -51,7 +51,7 @@ describe('the token menu', () => {
   const viewer: TokenViewer = {
     isAdmin: true, isPrimaryAdmin: true, isOwner: false, isLoggedIn: true, isPlayerToken: true, hasOwner: true,
     sheetHere: false, linked: false, attackPending: false, sheetCombat: false, canManage: true,
-    hasRoster: false, systemHasVehicles: false, systemHasBank: true, hasBattleMaps: false,
+    hasRoster: false, systemHasVehicles: false, systemHasBank: true, systemHasCombat: true, hasBattleMaps: false,
   };
   const bankLabel = (words?: ReturnType<typeof lookup>) => buildTokenActions(viewer, {
     location: { id: 42, name: 'GHOST', shape: 'rhombus', owner: 'ghost' }, authToken: 'tok', emit: vi.fn(),

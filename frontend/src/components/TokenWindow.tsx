@@ -3,6 +3,7 @@ import { TerminalWindow, TERMINAL_PREVIEW, useFolder, type TerminalAction, type 
 import { TvPortrait } from './TvPortrait';
 import { GmNotes } from './GmNotes';
 import { useWords, todaysWords, type WordLookup } from '../sheets/words';
+import { useParts } from '../sheets/parts';
 
 // A token's info window - a player, an enemy or a friendly NPC - drawn as a terminal like
 // the building window: the portrait in the corner, folders down the left, the open folder
@@ -80,6 +81,8 @@ export function TokenWindow({
   folderRequest, onFolderChange, gameSystem,
 }: Props) {
   const word = useWords(gameSystem);
+  // A custom system with combat off has no defense to show or edit (3b6b).
+  const combatOn = useParts(gameSystem)('combat');
   const gm = word('gm', 'short', 'GM').toUpperCase();
   const folders: TerminalFolder<TokenFolder>[] = [
     { id: 'info', label: 'INFO' },
@@ -133,7 +136,7 @@ export function TokenWindow({
       {open === 'health' && (
         <>
           {health}
-          {gmHealth && <GmHealth key={location?.id} {...gmHealth} word={word} />}
+          {gmHealth && <GmHealth key={location?.id} {...gmHealth} word={word} showDefense={combatOn} />}
         </>
       )}
       {open === 'quick' && quickActions}
@@ -250,8 +253,11 @@ export function DefenseReadout({ defense }: { defense: TokenDefense }) {
 const sectionHead: React.CSSProperties = { fontSize: 10, opacity: 0.8, letterSpacing: 1, marginBottom: 6 };
 const divider: React.CSSProperties = { borderTop: '1px solid var(--dark-green)', marginTop: 12, paddingTop: 10 };
 
-/** The GM's part of HEALTH: defense to edit, and a sheetless NPC's initiative by hand. */
-function GmHealth({ defense, onSaveDefense, onAddToInit, word = todaysWords }: NonNullable<Props['gmHealth']> & { word?: WordLookup }) {
+/**
+ * The GM's part of HEALTH: defense to edit, and a sheetless NPC's initiative by hand. Defense
+ * belongs to combat, so it is not shown where the game has combat turned off.
+ */
+function GmHealth({ defense, onSaveDefense, onAddToInit, word = todaysWords, showDefense = true }: NonNullable<Props['gmHealth']> & { word?: WordLookup; showDefense?: boolean }) {
   const [edit, setEdit] = useState<{ melee: string; ranged: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [score, setScore] = useState('');
@@ -271,7 +277,7 @@ function GmHealth({ defense, onSaveDefense, onAddToInit, word = todaysWords }: N
 
   return (
     <>
-      <div style={divider}>
+      {showDefense && <div style={divider}>
         <div style={sectionHead}>{L} · GM</div>
         {edit ? (
           <>
@@ -304,7 +310,7 @@ function GmHealth({ defense, onSaveDefense, onAddToInit, word = todaysWords }: N
             >EDIT_{L}</button>
           </>
         )}
-      </div>
+      </div>}
       {onAddToInit && (
         <div style={divider}>
           <div style={sectionHead}>{word('initiative', 'singular', 'INITIATIVE').toUpperCase()} SCORE</div>
