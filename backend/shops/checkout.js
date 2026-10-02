@@ -145,9 +145,11 @@ const planCheckoutInCurrencies = ({
     const account = (accounts && accounts[id]) || {};
     const have = Number(account.balance) || 0;
     const owed = Number(account.debt) || 0;
-    if (net <= have) {
+    if (net <= 0 || net <= have) {
       // Paying what is held, or the shop paying the player: debt is left alone, as in
-      // planCheckout (paying it off is the bank's own button).
+      // planCheckout (paying it off is the bank's own button). A sale is never short, even to
+      // a balance already below zero: it only brings it up (found by the browser's own totals
+      // being held to these, 3c2b2).
       out[id] = { ...totals, balance: have - net, debt: owed, settled: SETTLE_BALANCE };
       continue;
     }

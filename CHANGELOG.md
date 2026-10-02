@@ -59,6 +59,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The money windows' words and sums for a custom system's currencies.** What the bank, the shop
+  cart and the GM's money windows will say in a system's own currencies: an amount that can't be
+  read, why the bank refused, and how to cover a shortfall. Also the cart's total for each
+  currency, checked against the server's own checkout on 2,000 generated carts. Whether the bank
+  celebrates follows each custom system's choice. Nothing on screen uses this yet.
+
+- **A sale in a custom currency is never short.** Selling more than you buy, with a balance
+  already below zero in a currency that allows it, was treated as a shortfall: the player was
+  asked how to cover it, then refused. The shop now just pays them, as the built-in checkout always
+  has.
+
 - **The bank's celebrations are a custom system's choice.** First payday, overdraft, debt cleared
   and whale status run in a custom system only if its GM turns them on, and whale status also
   needs a threshold the GM sets in the system's main currency. The built-in systems keep them as

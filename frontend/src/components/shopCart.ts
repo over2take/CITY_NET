@@ -9,6 +9,9 @@ import type { ShopStock } from '../data/buildingTypes';
 import type { OwnedLine } from '../sheets/ownedItems';
 import { readInventory } from '../sheets/inventory';
 import { carriedEnc, encLimits } from '../sheets/cwnEncumbrance';
+import type { Currency } from '../sheets/currencies';
+import type { CartCurrencyTotal } from '../sheets/moneyText';
+import { SETTLE_BALANCE, SETTLE_DEBT, type Settle } from '../data/shopRules';
 
 /** One thing being bought, as many times as it is wanted. */
 export interface CartBuy {
@@ -67,6 +70,54 @@ export const cartTotals = (buys: CartBuy[], sells: CartSell[]) => {
   const buyTotal = buys.reduce((sum, l) => sum + l.price * l.qty, 0);
   const payout = sells.reduce((sum, s) => sum + s.each, 0);
   return { buyTotal, payout, net: buyTotal - payout };
+};
+
+/** One currency's part of a cart in a custom system's currencies (cartTotalsIn). */
+export interface CurrencyTotal extends CartCurrencyTotal {
+  buyTotal: number;
+  payout: number;
+  debt: number;
+  /** The balance once checked out, before any shortfall is covered. */
+  after: number;
+  /** How a shortfall may be covered in this currency, in the server's order: none, then refused. */
+  options: Settle[];
+}
+
+/**
+ * A cart's totals in a custom system's currencies (3c2b2): one entry per currency the cart touches,
+ * in the system's own order, the main one first. Each catalogue is priced in its own currency
+ * (`currencyOf`, sheets/currencies.ts catalogueCurrencyFor). Worked out as the server will
+ * (backend/shops/checkout.js planCheckoutInCurrencies): buy-backs paid in whole units, a shortfall
+ * covered only as that currency allows. `accounts` is each currency's balance and debt, by id, as
+ * the bank last told the window.
+ */
+export const cartTotalsIn = (
+  buys: CartBuy[], sells: CartSell[], currencies: Currency[],
+  currencyOf: (catalogue: string) => Currency | null,
+  accounts: Record<string, { balance: number; debt: number } | undefined>,
+): CurrencyTotal[] => {
+  const sums = new Map<string, { buyTotal: number; payout: number }>();
+  const add = (currency: Currency | null) => {
+    if (!currency) return null;
+    if (!sums.has(currency.id)) sums.set(currency.id, { buyTotal: 0, payout: 0 });
+    return sums.get(currency.id)!;
+  };
+  for (const l of buys) { const s = add(currencyOf(l.catalogue)); if (s) s.buyTotal += l.price * l.qty; }
+  for (const x of sells) { const s = add(currencyOf(x.line.catalogue ?? '')); if (s) s.payout += x.each; }
+  return currencies.filter((c) => sums.has(c.id)).map((currency) => {
+    const t = sums.get(currency.id)!;
+    const buyTotal = Math.round(t.buyTotal);
+    const payout = Math.floor(t.payout);
+    const net = buyTotal - payout;
+    const balance = Number(accounts[currency.id]?.balance) || 0;
+    const debt = Number(accounts[currency.id]?.debt) || 0;
+    // Only a payment can be short: a sale brings even a balance below zero up.
+    const short = net > 0 && net > balance ? net - balance : 0;
+    const options: Settle[] = short
+      ? [...(currency.negative ? [SETTLE_BALANCE] : []), ...(currency.debt ? [SETTLE_DEBT] : [])]
+      : [];
+    return { currency, buyTotal, payout, net, balance, debt, after: balance - net, short, options };
+  });
 };
 
 /** The sell half as the server takes it: one entry per thing, with a count. */

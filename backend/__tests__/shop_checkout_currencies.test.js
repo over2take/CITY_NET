@@ -100,6 +100,23 @@ describe('selling back', () => {
     const out = plan({ sale, accounts: { gold: { balance: 0, debt: 50 }, favor: { balance: 0, debt: 0 } } });
     expect(out.currencies.gold).toMatchObject({ balance: 675, debt: 50 });
   });
+
+  it('is never short, even to a balance already below zero', () => {
+    // Found by the browser's totals being held to these (3c2b2): selling more than is bought,
+    // with Scrip at -500, was asked how to cover a shortfall, then refused once it was answered.
+    const armorSale = { ok: true, payout: 0, sold: [{ catalogue: 'armor', id: 'mail', label: 'Mail', qty: 1, each: 180 }] };
+    const accounts = { scrip: { balance: -500, debt: 0 } };
+    for (const settle of [{}, { scrip: 'balance' }]) {
+      expect(plan({ sale: armorSale, accounts, settle }).currencies, JSON.stringify(settle))
+        .toEqual({ scrip: { buyTotal: 0, payout: 180, net: -180, balance: -320, debt: 0, settled: 'balance' } });
+    }
+    // Coming out even is the same.
+    const even = plan({ sale: armorSale, accounts, buys: [{ catalogue: 'armor', itemId: 'mail', qty: 1 }] });
+    expect(even).toMatchObject({ ok: false, reason: 'needs_choice', currency: 'scrip' });
+    const evenSale = { ok: true, payout: 0, sold: [{ catalogue: 'armor', id: 'mail', label: 'Mail', qty: 1, each: 400 }] };
+    expect(plan({ sale: evenSale, accounts, buys: [{ catalogue: 'armor', itemId: 'mail', qty: 1 }] }).currencies.scrip)
+      .toEqual({ buyTotal: 400, payout: 400, net: 0, balance: -500, debt: 0, settled: 'balance' });
+  });
 });
 
 describe('what is refused before any money moves', () => {
