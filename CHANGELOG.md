@@ -52,6 +52,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The map-token tests check health bars.** Their stand-in for the health bar named a file that does
+  not exist, so it was never used, and no test checked that a bar is drawn. It now replaces the real
+  one, and the tests check that the GM sees bars on enemy and friendly tokens, players do not, and a
+  player token shows one while its owner is online.
+
 - **The windows follow a custom system with token health turned off.** No health bars on the map or
   the stream, no HIT_POINTS button, no MAX HEALTH to set, and no health panel in the token window.
   The HEALTH folder stays only for what the GM still keeps there. The built-in systems are unchanged.
