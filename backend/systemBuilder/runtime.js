@@ -12,7 +12,8 @@
 const { compileSystem } = require('./derived');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf } = require('./npc');
-const { ownWords, partOn, PARTS } = require('./definition');
+const { ownWords } = require('./definition');
+const { partOn, PARTS } = require('./parts');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
 
@@ -138,7 +139,7 @@ const wordIn = (system, term, form, builtIn) => {
 };
 
 /**
- * Whether `part` of the app (definition.js PARTS: the bank, shops, vehicles...) is on while
+ * Whether `part` of the app (parts.js PARTS: the bank, shops, vehicles...) is on while
  * `system` runs. Only a published custom system can turn one off; a built-in system, a draft and
  * an unknown id always answer on, so every place keeps today's own rule for whether it shows (CWN
  * alone has cyberware, and so on). Off only ever hides: nothing a part holds is deleted, so

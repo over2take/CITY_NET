@@ -85,7 +85,9 @@ export type RefusalReason =
   // Selling adds its own: nothing staged, nothing owned, or no sheet to sell from.
   | 'empty' | 'not_owned' | 'no_sheet' | 'no_system'
   // The cart adds a count the server will not take.
-  | 'qty';
+  | 'qty'
+  // A custom system with the bank turned off has no money to trade in (3b2).
+  | 'no_bank';
 
 /**
  * What to tell the player when the server says no.
@@ -118,5 +120,6 @@ export const refusalText = (word: WordLookup = todaysWords): Record<RefusalReaso
     no_sheet: `No ${character} sheet to sell from.`,
     no_system: 'Could not tell which game is running.',
     qty: `A quantity in the cart is more than the ${shop} will sell at once. Nothing was charged.`,
+    no_bank: `This game has no ${credits} to trade in. Nothing was bought or sold.`,
   };
 };

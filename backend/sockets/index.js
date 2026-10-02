@@ -167,7 +167,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
    */
   const sendBankUpdate = (username) => {
     bank.activeSystem(db, (sErr, system) => {
-      if (sErr) return;
+      // A system with the bank off has no balances to tell (its accounts are kept, untouched).
+      if (sErr || !customSystems.partIn(system, 'bank')) return;
       bank.ensure(db, username, system, (err, row) => {
         if (err || !row) return;
         io.emit('bankUpdate', { username, balance: row.balance, debt: row.debt, firstPayDone: !!row.first_pay_done, highRollerDone: !!row.high_roller_done });
@@ -175,8 +176,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     });
   };
 
-  /** Run `fn(system)` with the running system, the one whose accounts money moves in. */
-  const withBankSystem = (fn) => bank.activeSystem(db, (err, system) => { if (!err) fn(system); });
+  /**
+   * Run `fn(system)` with the running system, the one whose accounts money moves in. Never while
+   * that system has the bank off (a custom system's choice, systemBuilder/parts.js): no money
+   * moves, and every account stays as it was for when the bank is turned back on.
+   */
+  const withBankSystem = (fn) => bank.activeSystem(db, (err, system) => {
+    if (!err && customSystems.partIn(system, 'bank')) fn(system);
+  });
 
   // Load NPCs from DB on startup
   db.all('SELECT username, isActive FROM fake_users', (err, rows) => {
@@ -1949,6 +1956,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
       getShopSystem((sysErr, system) => {
         if (sysErr) return refuse('no_system');
+        // Nothing to pay with or be paid in while the running system has the bank off.
+        if (!customSystems.partIn(system, 'bank')) return refuse('no_bank');
 
         db.get(
           'SELECT building_type, buyback_pct FROM locations WHERE id = ?',

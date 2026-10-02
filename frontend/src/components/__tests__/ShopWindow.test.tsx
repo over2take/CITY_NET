@@ -2179,6 +2179,7 @@ describe('the shop\'s refusals', () => {
       needs_choice: 'The shop did not ask how to cover this. Nothing was bought.',
       no_sheet: 'No character sheet to sell from.',
       qty: 'A quantity in the cart is more than the shop will sell at once. Nothing was charged.',
+      no_bank: 'This game has no credits to trade in. Nothing was bought or sold.',
     });
     const words: Record<string, string> = { shop: 'merchant', money: 'gold', character: 'operative' };
     const theirs = refusalText((term, _form, builtIn) => words[term] ?? builtIn);
@@ -2189,6 +2190,7 @@ describe('the shop\'s refusals', () => {
       needs_choice: 'The merchant did not ask how to cover this. Nothing was bought.',
       no_sheet: 'No operative sheet to sell from.',
       qty: 'A quantity in the cart is more than the merchant will sell at once. Nothing was charged.',
+      no_bank: 'This game has no gold to trade in. Nothing was bought or sold.',
     });
     // Reasons with no term in them read the same everywhere.
     for (const reason of ['price', 'no_account', 'write', 'empty', 'not_owned', 'no_system'] as const) expect(theirs[reason]).toBe(today[reason]);

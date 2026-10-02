@@ -12,6 +12,7 @@
 
 const { healthLayout } = require('./core');
 const { ownWords } = require('./terms');
+const { partOn } = require('./parts');
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
@@ -152,9 +153,29 @@ const checkSheet = (sheet, derivedIds, problems) => {
  * The sheet a system is drawn with: its own, or a starter one. The starter is the generic
  * layout (name, concept, description, health, cash, notes) with the system's derived values in
  * a section of their own, so a system that has not designed its sheet yet still has one. Its
- * health is shaped by the system's health model (core.js); with none, it is one HP pool.
+ * health is shaped by the system's health model (core.js); with none, it is one HP pool. With the
+ * bank off, no money on it either way (withoutBank).
  */
-const effectiveSheet = (definition) => {
+const effectiveSheet = (definition) => withoutBank(designedOrStarter(definition), definition);
+
+/**
+ * A system with the bank off has no money on its sheets: a field linked to the bank leaves, and
+ * so does a section that held nothing else (the starter's MONEY). The value lives in the bank
+ * account, never in the sheet, so nothing is lost; turning the bank back on brings it back.
+ */
+const withoutBank = (sheet, definition) => {
+  if (partOn(definition, 'bank') || !Array.isArray(sheet && sheet.sections)) return sheet;
+  const sections = sheet.sections.map((s) => {
+    if (!isPlainObject(s) || !Array.isArray(s.fields)) return s;
+    const kept = s.fields.filter((f) => !(isPlainObject(f) && f.source === 'bank_balance'));
+    if (kept.length === s.fields.length) return s;
+    return kept.length ? { ...s, fields: kept } : null;
+  }).filter(Boolean);
+  return { ...sheet, sections };
+};
+
+/** The system's own sheet, or the starter one. */
+const designedOrStarter = (definition) => {
   if (definition && isPlainObject(definition.sheet)) return definition.sheet;
   const derived = Array.isArray(definition && definition.derived) ? definition.derived.filter((d) => d && typeof d.id === 'string') : [];
   // A system that renamed hit points has its own word on its starter sheet's pool.
