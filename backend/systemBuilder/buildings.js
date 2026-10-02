@@ -14,7 +14,8 @@
 // Its own module, needing only the vocabulary, so the definition checks and the running game
 // can both use it without a circle.
 
-const { BUILDING_TYPES, CATALOGUES } = require('../buildingTypes');
+const { BUILDING_TYPES, CATALOGUES, shelvedCatalogues, isShop } = require('../buildingTypes');
+const { partOn } = require('./parts');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
@@ -56,8 +57,26 @@ const settingOf = (definition, kind, id) => {
   return isPlainObject(setting) ? setting : null;
 };
 
-/** Whether this system has a building type (`kind` 'types') or catalogue ('catalogues'). On unless it says off. */
-const buildingOn = (definition, kind, id) => (settingOf(definition, kind, id) || {}).on !== false;
+/**
+ * The catalogues that belong to a part of the app (parts.js): a system without vehicles sells
+ * none of the garage's stock (3b4).
+ */
+const CATALOGUE_PART = { vehicles: 'vehicles', vehicle_fittings: 'vehicles', vehicle_weapons: 'vehicles' };
+
+const catalogueOn = (definition, id) => (settingOf(definition, 'catalogues', id) || {}).on !== false
+  && (!CATALOGUE_PART[id] || partOn(definition, CATALOGUE_PART[id]));
+
+/**
+ * Whether this system has a building type (`kind` 'types') or catalogue ('catalogues'). On unless
+ * it says off. A catalogue is off with its part (the garage's with vehicles), and a shop type is
+ * off when every shelf it has is: a garage with nothing to sell is no garage.
+ */
+const buildingOn = (definition, kind, id) => {
+  if (kind === 'catalogues') return catalogueOn(definition, id);
+  if ((settingOf(definition, 'types', id) || {}).on === false) return false;
+  const shelves = isShop(id) ? shelvedCatalogues(id) : [];
+  return !shelves.length || shelves.some((c) => catalogueOn(definition, c));
+};
 
 /** The system's own name for a type or catalogue, or null where it kept the app's. */
 const buildingName = (definition, kind, id) => {
