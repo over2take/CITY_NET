@@ -249,7 +249,11 @@ function App() {
   useCustomTemplates(gameSystem);
   // A custom system with the bank off: no VIEW_BANK on tokens (3b2b; the bank windows check for
   // themselves). The server refuses money there anyway (3b2a); this stops offering it.
-  const bankOn = useParts(gameSystem)('bank');
+  const parts = useParts(gameSystem);
+  const bankOn = parts('bank');
+  // A custom system with initiative off: no ROLL INIT on NPC sheets, no ADD TO INIT on tokens
+  // (3b6a; the tracker window checks for itself).
+  const initiativeOn = parts('initiative');
 
   // Custom dice: GM-authored (DB) plus any built-ins the active system ships.
   const { customDice, applyDice, addDie, updateDie, deleteDie, error: customDiceError, setError: setCustomDiceError } = useCustomDice(token, gameSystem);
@@ -2335,7 +2339,7 @@ function App() {
                 setPos={setNpcSheetPos}
                 onClose={() => setOpenNpcSheet(null)}
                 onRollInitiative={(() => {
-                  if (!initiative.state) return undefined;
+                  if (!initiative.state || !initiativeOn) return undefined;
                   const id = openNpcSheet.locationId ? `npc:${openNpcSheet.locationId}` : `npc:sheet:${openNpcSheet.id}`;
                   if (initiative.state.combatants.some(c => c.id === id)) return undefined;
                   return (portraitUrl: string | undefined) => {
@@ -2462,7 +2466,7 @@ function App() {
                 const tiers = template.npcTiers;
                 const canAttack = isLoggedIn && !isOwner;
                 const attackingThis = attackPending?.targetId === selectedLocation.id;
-                const canAddToInit = isAdmin && isNpc && !!initiative.state
+                const canAddToInit = isAdmin && isNpc && initiativeOn && !!initiative.state
                   && !initiative.state.combatants.some((c: any) => c.id === `npc:${selectedLocation.id}`);
                 // Who gets which button and folder, and what each button does, is in
                 // tokenActions.ts, where all of it is tested; this hands over what they reach for.

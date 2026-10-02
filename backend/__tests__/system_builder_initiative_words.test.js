@@ -36,6 +36,8 @@ const makeDb = async () => {
     sides TEXT NOT NULL DEFAULT '[]', turn_index INTEGER DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
   await run(db, `CREATE TABLE dice_rolls (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, total INTEGER, results TEXT,
     color TEXT, historyString TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  // Starting a tracker asks the running game whether it has initiative (3b6a).
+  await run(db, `CREATE TABLE global_settings (key TEXT PRIMARY KEY, value TEXT)`);
   // Two published custom systems, loaded the way the server loads them on start.
   await run(db, `CREATE TABLE custom_systems (id TEXT PRIMARY KEY, name TEXT, draft TEXT, published TEXT, version INTEGER, deleted_at DATETIME)`);
   const renamed = JSON.stringify({ format: 1, name: 'Hearth', words: { initiative: { singular: 'order', short: 'ORD' } } });

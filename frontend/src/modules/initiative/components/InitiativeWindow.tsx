@@ -5,6 +5,7 @@ import { InitiativeSideView } from './InitiativeSideView';
 import type { InitiativeState, ActiveCombat } from '../hooks/useInitiative';
 import { getInitiativeSystem } from '../systems';
 import { useWords } from '../../../sheets/words';
+import { useParts } from '../../../sheets/parts';
 
 interface Props {
   state: InitiativeState | null;
@@ -29,7 +30,15 @@ interface Props {
   system?: string;
 }
 
-export function InitiativeWindow({
+/**
+ * The tracker; nothing while the running game has initiative turned off (3b6a). A combat left
+ * from before stays stored, and shows again when initiative is turned back on.
+ */
+export function InitiativeWindow(props: Props) {
+  return useParts(props.system)('initiative') ? <InitiativeTracker {...props} /> : null;
+}
+
+function InitiativeTracker({
   state, activeCombats, sceneKey, sceneLabel, isAdmin,
   onClose, onStart, onListCombats, onNext, onEnd, onRemove, onReorder,
   playerCombatantId, onJoin,

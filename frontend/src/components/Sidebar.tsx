@@ -1172,7 +1172,10 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
   // A custom system's own words for the rail's labels; today's text otherwise.
   const word = useWords(gameSystem);
   // A custom system with the bank off has no BANK button (3b2b).
-  const bankOn = useParts(gameSystem)('bank');
+  const parts = useParts(gameSystem);
+  const bankOn = parts('bank');
+  // A custom system with initiative off has no tracker button or panel (3b6a).
+  const initiativeOn = parts('initiative');
   const characterControls = `${asLabel(word('character', 'singular', 'CHARACTER'))}_CONTROLS`;
   const hitPoints = asLabel(word('hp', 'plural', 'HIT POINTS'));
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
@@ -1331,7 +1334,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               }} />
             )}
           </button>
-          {(token || initiativeActive) && (
+          {initiativeOn && (token || initiativeActive) && (
             <button
               className={`rail-btn ${activeMenu === 'initiative_tracker' || isInitiativeOpen ? 'active' : ''} ${initiativeNeedsRoll && !isInitiativeOpen && activeMenu !== 'initiative_tracker' ? 'initiative-needs-roll' : ''}`}
               onClick={token
@@ -1409,7 +1412,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'character_controls' && <CharacterControlsMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
           {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} />}
-          {activeMenu === 'initiative_tracker' && (
+          {activeMenu === 'initiative_tracker' && initiativeOn && (
             <InitiativeNavPanel
               system={gameSystem}
               initiativeActive={!!initiativeActive}
