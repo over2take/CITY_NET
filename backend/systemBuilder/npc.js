@@ -16,16 +16,19 @@
 // A tier is a package, as the built-in ones are: a label, the token's HP and defense, and
 // the sheet values a generated NPC starts with. The first tier is the default.
 
-const { checkSheet, fieldsOf, effectiveSheet } = require('./sheet');
+const { checkSheet, fieldsOf, effectiveSheet, withoutOffParts } = require('./sheet');
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const LIMITS = { tiers: 20, label: 30, values: 200, text: 300, hp: 9999, defense: 99 };
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
-/** The layout NPCs are drawn with: their own, or the character sheet. */
+/**
+ * The layout NPCs are drawn with: their own, or the character sheet. Either way without the
+ * fields of a part the system turned off (sheet.js withoutOffParts), as the character sheet is.
+ */
 const npcSheetOf = (definition) => (definition && isPlainObject(definition.npc) && isPlainObject(definition.npc.sheet)
-  ? definition.npc.sheet : effectiveSheet(definition));
+  ? withoutOffParts(definition.npc.sheet, definition) : effectiveSheet(definition));
 
 /** The tiers as defined, or none. Only called on a checked definition. */
 const tiersOf = (definition) => (definition && isPlainObject(definition.npc) && Array.isArray(definition.npc.tiers)

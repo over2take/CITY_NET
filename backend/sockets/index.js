@@ -1849,11 +1849,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           } else if (tier) {
             // Other systems (CWN): the tier's own defense values stand - no
             // CP:R melee-DV formula, no take-10 house rule. A custom system's tier may
-            // leave HP or defense out (null), which keeps the token's own.
+            // leave HP or defense out (null), which keeps the token's own; so does a custom
+            // system with token health or combat turned off (3b6d).
+            const hp = customSystems.partIn(system, 'token_health') ? tier.hp : null;
+            const dv = customSystems.partIn(system, 'combat') ? tier.dv : { melee: null, ranged: null };
             db.run(
               `UPDATE locations SET hp_current = COALESCE(?, hp_current), hp_max = COALESCE(?, hp_max),
                melee_ac = COALESCE(?, melee_ac), ranged_ac = COALESCE(?, ranged_ac) WHERE id = ?`,
-              [tier.hp, tier.hp, tier.dv.melee, tier.dv.ranged, location_id],
+              [hp, hp, dv.melee, dv.ranged, location_id],
               () => { emitUpdate({ isRhombusOnly: true }); insertSheet(); }
             );
           } else {
