@@ -12,7 +12,7 @@
 const { compileSystem } = require('./derived');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf } = require('./npc');
-const { ownWords } = require('./definition');
+const { ownWords, partOn, PARTS } = require('./definition');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
 
@@ -137,6 +137,18 @@ const wordIn = (system, term, form, builtIn) => {
   return typeof word === 'string' && word ? word : builtIn;
 };
 
+/**
+ * Whether `part` of the app (definition.js PARTS: the bank, shops, vehicles...) is on while
+ * `system` runs. Only a published custom system can turn one off; a built-in system, a draft and
+ * an unknown id always answer on, so every place keeps today's own rule for whether it shows (CWN
+ * alone has cyberware, and so on). Off only ever hides: nothing a part holds is deleted, so
+ * turning it back on brings all of it back.
+ */
+const partIn = (system, part) => {
+  if (!PARTS.includes(part)) throw new Error(`Not a part of the app: ${part}`);
+  return loaded.has(system) ? partOn(loaded.get(system).definition, part) : true;
+};
+
 /** A published system's health model (its core.health), or null: built-in systems have none here. */
 const health = (id) => {
   const definition = loaded.has(id) ? loaded.get(id).definition : null;
@@ -147,4 +159,4 @@ const health = (id) => {
 templates.setCustomMeta(meta);
 npcTiers.setCustomTiers(tiers);
 
-module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, metaOf, renderOf };
+module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, metaOf, renderOf };

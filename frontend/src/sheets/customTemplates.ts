@@ -6,6 +6,7 @@
 // it does for a built-in one. A template not loaded yet is fetched the first time it is asked for;
 // until it arrives the generic one stands in, and a window event tells the app to redraw.
 
+import { useEffect, useReducer } from 'react';
 import type { SheetTemplate, SheetSection, SheetField, SheetFieldType, SheetLinkSource, SectionLayout } from './types';
 
 export interface CustomRenderField {
@@ -95,6 +96,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
   return {
     ...layoutTemplate(render.id, render.name, render.sheet, derived),
     ...(render.words ? { words: render.words } : {}),
+    ...(render.parts ? { parts: render.parts } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived), ...tiers } } : {}),
   };
@@ -132,3 +134,17 @@ export const loadCustomTemplate = (id: string, fetcher: typeof fetch = fetch): P
 
 /** For tests: forget every loaded template. */
 export const clearCustomTemplates = () => { cache.clear(); pending.clear(); };
+
+/**
+ * Redraw when `system`'s template arrives, fetching it if nobody has yet. For the lookups that
+ * read a custom system's render copy (useWords, useParts); a built-in id is never fetched.
+ */
+export function useCustomTemplate(system: string | null | undefined) {
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    const onLoaded = (e: Event) => { if ((e as CustomEvent).detail?.id === system) redraw(); };
+    window.addEventListener(CUSTOM_TEMPLATE_EVENT, onLoaded);
+    if (system) void loadCustomTemplate(system);
+    return () => window.removeEventListener(CUSTOM_TEMPLATE_EVENT, onLoaded);
+  }, [system]);
+}

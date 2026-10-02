@@ -1,5 +1,4 @@
-import { useEffect, useReducer } from 'react';
-import { CUSTOM_TEMPLATE_EVENT, customTemplate, isCustomSystem, loadCustomTemplate } from './customTemplates';
+import { customTemplate, isCustomSystem, useCustomTemplate } from './customTemplates';
 
 // What the app calls its own terms while a game runs: the glossary (Layer 1 of the system
 // builder). A custom system can call HP "WOUNDS", credits "GOLD", the GM "WARDEN".
@@ -44,13 +43,6 @@ export const wordFor = (system: string | null | undefined, term: Term, form: Wor
  * arrive. Fetches them if nobody has yet.
  */
 export function useWords(system: string | null | undefined) {
-  const [, redraw] = useReducer((n: number) => n + 1, 0);
-  useEffect(() => {
-    const onLoaded = (e: Event) => { if ((e as CustomEvent).detail?.id === system) redraw(); };
-    window.addEventListener(CUSTOM_TEMPLATE_EVENT, onLoaded);
-    // Asks the server only about a custom system (loadCustomTemplate refuses a built-in id).
-    if (system) void loadCustomTemplate(system);
-    return () => window.removeEventListener(CUSTOM_TEMPLATE_EVENT, onLoaded);
-  }, [system]);
+  useCustomTemplate(system);
   return ((term, form, builtIn) => wordFor(system, term, form, builtIn)) as WordLookup;
 }
