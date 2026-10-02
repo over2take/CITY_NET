@@ -59,9 +59,12 @@ const settingOf = (definition, kind, id) => {
 
 /**
  * The catalogues that belong to a part of the app (parts.js): a system without vehicles sells
- * none of the garage's stock (3b4).
+ * none of the garage's stock (3b4), and one without cyberware none of the ripperdoc's (3b5).
  */
-const CATALOGUE_PART = { vehicles: 'vehicles', vehicle_fittings: 'vehicles', vehicle_weapons: 'vehicles' };
+const CATALOGUE_PART = {
+  vehicles: 'vehicles', vehicle_fittings: 'vehicles', vehicle_weapons: 'vehicles',
+  cyberware: 'cyberware', cyber_mods: 'cyberware', skillplugs: 'cyberware',
+};
 
 const catalogueOn = (definition, id) => (settingOf(definition, 'catalogues', id) || {}).on !== false
   && (!CATALOGUE_PART[id] || partOn(definition, CATALOGUE_PART[id]));
