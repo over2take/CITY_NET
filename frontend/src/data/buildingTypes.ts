@@ -9,6 +9,8 @@
 // inside.
 
 import { TEMPLATES } from '../sheets';
+import { isCustomSystem } from '../sheets/customTemplates';
+import { partOn } from '../sheets/parts';
 
 /**
  * A catalogue a shop can deal in - one per priced table in the book.
@@ -169,7 +171,7 @@ export const catalogueLabel = (id: ShopStock, system: string | null | undefined)
 };
 
 /**
- * The systems shops exist under: every system the app has a sheet for.
+ * The built-in systems shops exist under: every one the app has a sheet for.
  *
  * CWN was the only one for a while, on purpose - buying and selling were CWN-shaped, and a
  * Cyberpunk RED gun would have been written with CWN's fields and lost its `rof`. Both now
@@ -181,5 +183,12 @@ export const catalogueLabel = (id: ShopStock, system: string | null | undefined)
  */
 export const SHOP_SYSTEMS = new Set(Object.keys(TEMPLATES));
 
+/**
+ * Whether this system has shops (and so building types): a built-in one, or a custom one, whose
+ * purchases are inventory lines as on the generic sheet. A custom system can turn its shops off,
+ * and one with the bank off has none either, having nothing to trade in. Mirrors
+ * backend/shops/availability.js.
+ */
 export const shopsAvailable = (gameSystem: string | null | undefined): boolean =>
-  SHOP_SYSTEMS.has(String(gameSystem ?? ''));
+  (SHOP_SYSTEMS.has(String(gameSystem ?? '')) || isCustomSystem(gameSystem))
+  && partOn(gameSystem, 'shops') && partOn(gameSystem, 'bank');

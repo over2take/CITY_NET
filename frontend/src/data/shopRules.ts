@@ -87,7 +87,9 @@ export type RefusalReason =
   // The cart adds a count the server will not take.
   | 'qty'
   // A custom system with the bank turned off has no money to trade in (3b2).
-  | 'no_bank';
+  | 'no_bank'
+  // A custom system that turned its shops off (3b3).
+  | 'no_shops';
 
 /**
  * What to tell the player when the server says no.
@@ -98,6 +100,7 @@ export type RefusalReason =
 export const refusalText = (word: WordLookup = todaysWords): Record<RefusalReason, string> => {
   // A custom system's own words for shops, money and characters; today's text otherwise.
   const shop = word('shop', 'singular', 'shop');
+  const shops = word('shop', 'plural', 'shops');
   const credits = word('money', 'plural', 'credits');
   const character = word('character', 'singular', 'character');
   return {
@@ -121,5 +124,6 @@ export const refusalText = (word: WordLookup = todaysWords): Record<RefusalReaso
     no_system: 'Could not tell which game is running.',
     qty: `A quantity in the cart is more than the ${shop} will sell at once. Nothing was charged.`,
     no_bank: `This game has no ${credits} to trade in. Nothing was bought or sold.`,
+    no_shops: `This game has no ${shops}. Nothing was bought or sold.`,
   };
 };

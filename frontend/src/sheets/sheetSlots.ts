@@ -17,6 +17,7 @@
 // compared entry for entry by a test.
 
 import { getTemplate } from './index';
+import { isCustomSystem } from './customTemplates';
 
 /** The row groups a shop can put things into. Spells are rows too, but nothing sells one. */
 export const SLOT_GROUPS = ['weapon', 'vehicle'] as const;
@@ -57,6 +58,9 @@ export const templateFieldIds = (system: string): string[] => {
  * `'vehicle' in slotsOf(system)` rather than a separate list somebody has to keep in step.
  */
 export const slotsOf = (system: string): Partial<Record<SlotGroup, Slots>> => {
+  // A custom system's sheet has no weapon or vehicle rows the shops fill: everything it buys
+  // is an inventory line, and the server (backend/shops/sheetSlots.js) knows no rows for it.
+  if (isCustomSystem(system)) return {};
   const ids = templateFieldIds(system);
   const out: Partial<Record<SlotGroup, Slots>> = {};
 

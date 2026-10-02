@@ -34,6 +34,7 @@ const shopPurchase = require('../shops/purchase');
 const shopCheckout = require('../shops/checkout');
 const shopSell = require('../shops/sell');
 const shopBuyback = require('../shops/buyback');
+const { shopsOpen } = require('../shops/availability');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -1958,6 +1959,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (sysErr) return refuse('no_system');
         // Nothing to pay with or be paid in while the running system has the bank off.
         if (!customSystems.partIn(system, 'bank')) return refuse('no_bank');
+        // A custom system that turned its shops off has none to buy from.
+        if (!shopsOpen(system)) return refuse('no_shops');
 
         db.get(
           'SELECT building_type, buyback_pct FROM locations WHERE id = ?',

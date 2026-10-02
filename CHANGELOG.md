@@ -52,6 +52,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Custom systems have shops.** A custom game gets building types and shops, selling what its GM
+  uploads, with every purchase landing in the inventory as on the generic sheet. A custom system can
+  turn its shops off, and one with the bank off has no shops either. The buy-back setting uses the
+  system's own word for shops. The built-in systems are unchanged.
+
 - **A custom system with the bank turned off no longer offers it.** The BANK button, VIEW_BANK,
   the bank windows, PAY_PLAYERS, CURRENCY_ICON, BANK SOUNDS and the overdraft house rule are hidden.
   The built-in systems, and a custom system that keeps its bank, show them as before.

@@ -9,7 +9,7 @@ const customSystems = require('../systemBuilder/runtime');
 const { applyHealthAction } = require('../systemBuilder/health');
 const { BUILDING_TYPES, isValidType } = require('../buildingTypes');
 const { readPct } = require('../shops/buyback');
-const sheetSlots = require('../shops/sheetSlots');
+const { shopsOpen } = require('../shops/availability');
 const { selectByIds, deleteByIds } = require('../bulk');
 const { canReadNpcSheets, redactLocation } = require('../sheets/npcPrivacy');
 
@@ -127,27 +127,18 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   });
 
   /**
-   * The systems shops exist under: every one whose sheet shape the shops know.
-   *
-   * Read from sheetSlots rather than listed, because that table is what a sale empties -
-   * a system missing from it is one where selling a gun would not know which fields to
-   * clear, and a shop there would be worse than none.
-   *
-   * CWN was the only entry for a while, on purpose: buying and selling were CWN-shaped, and
-   * a Cyberpunk RED gun would have been written with CWN's fields and lost its `rof`. Both
-   * now read each system's own rows, and outside CWN a shop sells only what that GM
-   * uploaded.
+   * Building types exist where shops do (shops/availability.js): a system whose sheet shape the
+   * shops know, with shops and the bank on.
    *
    * Still gated on the server rather than only hidden in the client: a button nobody can see
    * is not a rule, and an unrecognised system is still refused.
    */
-  const SHOP_SYSTEMS = new Set(Object.keys(sheetSlots.SLOTS));
 
   const withShopSystem = (res, next) => {
     db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       const system = (row && row.value) || DEFAULT_SYSTEM;
-      if (!SHOP_SYSTEMS.has(system)) {
+      if (!shopsOpen(system)) {
         return res.status(409).json({ error: `Building types are not available under ${system}` });
       }
       next();
