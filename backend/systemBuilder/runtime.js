@@ -60,7 +60,7 @@ const metaOf = (definition) => {
  * consistent before anybody edits it. Null when the system defines no tiers.
  */
 const tiersFor = (definition, recompute) => {
-  const tiers = tiersOf(definition);
+  const tiers = tiersWhenOn(definition);
   if (!tiers.length) return null;
   return {
     options: tiers.map((t) => ({ id: t.id, label: t.label })),
@@ -73,6 +73,13 @@ const tiersFor = (definition, recompute) => {
     },
   };
 };
+
+/**
+ * A system's NPC tiers, or none while it has NPC tiers turned off (3b6c): GENERATE_SHEET then
+ * makes an untiered sheet, and the browser, sent no tiers, offers no picker. The tiers stay in
+ * the definition for when the part is turned back on.
+ */
+const tiersWhenOn = (definition) => (partOn(definition, 'npc_tiers') ? tiersOf(definition) : []);
 
 /** What the browser draws a sheet from: no formulas, lookups or rule names. */
 const renderOf = (id, definition) => ({
@@ -89,7 +96,7 @@ const renderOf = (id, definition) => ({
   npc: {
     // Null when NPCs use the character sheet.
     sheet: definition.npc && definition.npc.sheet ? definition.npc.sheet : null,
-    tiers: tiersOf(definition).map((t) => ({ id: t.id, label: t.label })),
+    tiers: tiersWhenOn(definition).map((t) => ({ id: t.id, label: t.label })),
   },
 });
 

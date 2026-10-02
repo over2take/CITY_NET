@@ -52,6 +52,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system can turn NPC tiers off, and no longer offers IMPORT.** With tiers off,
+  GENERATE_SHEET makes an untiered sheet and the tier picker goes. The IMPORT button is hidden on a
+  custom system's sheets, since there is no importer for one. The built-in systems are unchanged.
+
 - **A custom system can turn combat off.** Tokens lose their attack buttons and their defense (AC or
   DV) in the token window, and the server starts no attack. The built-in systems are unchanged.
 
