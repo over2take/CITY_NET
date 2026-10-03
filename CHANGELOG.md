@@ -59,6 +59,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system tells the browser its distance unit.** The server now sends the unit a system
+  chose in its setup answers (meters, feet, yards, squares, hexes or zones). It sends feet, which
+  the ruler has always used, where the system gave none. Nothing reads it yet.
+
 - **Each currency's icon, chosen in the admin panel.** In a custom system with currencies of its
   own, CURRENCY_ICON lists every currency with NONE, the five built-in icons and UPLOAD, for a small
   PNG, WebP or SVG. BANK.EXE shows a currency's icon beside its amount. The sidebar's BANK button

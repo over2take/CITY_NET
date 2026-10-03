@@ -43,6 +43,16 @@ const ADVANCEMENT = [
 
 const DISTANCE = ['meters', 'feet', 'yards', 'squares', 'hexes', 'zones'];
 
+/**
+ * The unit a system's distances are read in (3d1): its own answer, or feet, which every built-in
+ * system and the map's ruler have always used, where it gave none (decided with the user,
+ * 2026-10-02). The ruler converts from there (frontend 3d2).
+ */
+const distanceOf = (definition) => {
+  const core = definition && definition.core;
+  return core && DISTANCE.includes(core.distance) ? core.distance : 'feet';
+};
+
 /** d2 to d100 (odd sizes too) or Fate dice, with an optional count: d20, 2d6, 4dF, d7. */
 const DIE = /^([1-9][0-9]?)?d([2-9]|[1-9][0-9]|100|F)$/;
 
@@ -249,4 +259,4 @@ const checkCore = (core, derivedIds, problems) => {
   }
 };
 
-module.exports = { checkCore, healthLayout, HEALTH_MODELS, ADVANCEMENT, DISTANCE, LIMITS };
+module.exports = { checkCore, healthLayout, distanceOf, HEALTH_MODELS, ADVANCEMENT, DISTANCE, LIMITS };

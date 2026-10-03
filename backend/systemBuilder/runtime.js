@@ -17,6 +17,7 @@ const { partOn, PARTS } = require('./parts');
 const { buildingOn, buildingName, catalogueCurrency, ownBuildings } = require('./buildings');
 const { currenciesOf } = require('./currencies');
 const { bankOf } = require('./bank');
+const { distanceOf } = require('./core');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
 
@@ -97,6 +98,8 @@ const renderOf = (id, definition) => ({
   currencies: currenciesOf(definition),
   // Whether the bank window's celebrations run (bank.js): off unless the system turns them on.
   bank: bankOf(definition),
+  // The unit its ruler reads distances in (core.js distanceOf): feet unless it chose another.
+  distance: distanceOf(definition),
   derived: (Array.isArray(definition.derived) ? definition.derived : []).map((d) => d.id),
   sheet: effectiveSheet(definition),
   npc: {
