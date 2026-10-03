@@ -1,7 +1,13 @@
 **/node_modules
 **/.git
 frontend/dist
-backend/city.db
+# The database and every copy beside it: backups (city.db.bak, city.db.before-<migration>-<time>.bak)
+# and SQLite's journal files. The backend image copies backend/ whole, so without this a copy of a
+# table's characters, banks and passwords' hashes would ship inside the image.
+backend/city.db*
+# Tests and their config are not part of the running server.
+backend/__tests__/
+backend/vitest.config.js
 backend/data/
 backend/uploads/
 backend/.env

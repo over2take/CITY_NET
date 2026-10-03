@@ -12,6 +12,8 @@ build/
 # SQLite databases
 backend/*.db
 backend/*.db.bak
+# Backups made before a migration (city.db.before-<migration>-<time>.bak).
+backend/*.db.before-*.bak
 backend/*.sqlite
 backend/data/
 
