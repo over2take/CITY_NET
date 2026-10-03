@@ -35,7 +35,7 @@ const WATER_OPTIONS: { value: WaterType; label: string }[] = [
   { value: 'LAKE', label: 'LAKE — AN OBSTACLE INSIDE IT' },
 ];
 import type { BankSoundKey } from './BankWindows';
-import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound } from './BankWindows';
+import { playCashRegister, playWompWomp, playCalibration, playProudFanfare, playHighRollerSound, CurrencyIcon } from './BankWindows';
 import { SignEditor, type SignData } from '../modules/signs';
 import { BUILTIN_FONTS, type RemoteFont } from '../utils/fontLoader';
 
@@ -46,7 +46,8 @@ import { RECORD_DURATIONS, MAX_RECORD_SECONDS } from '../hooks/useMapExport';
 import { parseGrant, describeGrant } from '../utils/tokenControl';
 import { useWords, asLabel, type WordLookup } from '../sheets/words';
 import { useParts, partOn, type PartLookup } from '../sheets/parts';
-import { currenciesFor } from '../sheets/currencies';
+import { currenciesFor, isUploadedIcon, BUILT_IN_ICONS, type Currency } from '../sheets/currencies';
+import { useCustomTemplate, refreshCustomTemplate } from '../sheets/customTemplates';
 import { shortfallRule } from '../sheets/moneyText';
 
 
@@ -143,7 +144,7 @@ function BattleAdminPanel({
         <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
         {/* Money, which a custom system with the bank off does not have (3b2b). */}
         {bankOn && <>
-          <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
+          <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={globalSettings?.game_system} />
           <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
         </>}
         <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
@@ -1047,7 +1048,7 @@ export function AdminPanel({
               <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
               {/* Money, which a custom system with the bank off does not have (3b2b). */}
               {bankOn && <>
-                <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
+                <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={gameSystem} />
                 <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
               </>}
               {/* Beside PAY_PLAYERS because it is the same gesture at the end of a
@@ -2563,13 +2564,19 @@ function BuybackPanel({ token, globalSettings, fetchGlobalSettings }: { token: s
   );
 }
 
-/** Which symbol money is shown with: one of the GM's choices, saved for the whole table. */
-function CurrencyIconPanel({ token, globalSettings, fetchGlobalSettings }: { token: string; globalSettings: any; fetchGlobalSettings: () => void }) {
+/**
+ * Which symbol money is shown with: one of the GM's choices, saved for the whole table. In a custom
+ * system with currencies of its own, each currency's instead (CurrencyIconRows).
+ */
+function CurrencyIconPanel({ token, globalSettings, fetchGlobalSettings, system }: { token: string; globalSettings: any; fetchGlobalSettings: () => void; system?: string }) {
+  useCustomTemplate(system);
+  const currencies = currenciesFor(system);
+  if (system && currencies.length) return <CurrencyIconRows token={token} system={system} currencies={currencies} />;
   return (
     <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
       <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-        {(['credits', '$', '£', '€', '🪙'] as const).map(opt => (
+        {BUILT_IN_ICONS.map(opt => (
           <button
             key={opt}
             className={`utility-btn ${(globalSettings?.currency_icon || 'credits') === opt ? 'active' : ''}`}
@@ -2584,6 +2591,94 @@ function CurrencyIconPanel({ token, globalSettings, fetchGlobalSettings }: { tok
           >
             {opt === 'credits' ? 'DEFAULT' : opt}
           </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * CURRENCY_ICON in a custom system with currencies of its own (3c2c3, decided with the user
+ * 2026-10-02): a row per currency, the main one first, each with NONE (its symbol or coins alone),
+ * the five icons the app has always offered, and UPLOAD for a small PNG, WebP or SVG of the GM's
+ * own. Saved into the running system (routes/systems.js), which tells every browser to fetch it
+ * again; this one fetches it at once rather than wait for that.
+ */
+function CurrencyIconRows({ token, system, currencies }: { token: string; system: string; currencies: Currency[] }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [problems, setProblems] = useState<Record<string, string>>({});
+  const say = (id: string, problem: string) => setProblems((p) => ({ ...p, [id]: problem }));
+
+  /** Set one currency's icon, or clear it with null; true when the server took it. */
+  const setIcon = async (c: Currency, icon: string | null) => {
+    const r = await fetch(`/api/systems/${system}/currencies/${c.id}/icon`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ icon }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      say(c.id, body.error || 'The icon could not be set.');
+      return false;
+    }
+    await refreshCustomTemplate(system);
+    return true;
+  };
+  const choose = async (c: Currency, icon: string | null) => {
+    setBusy(c.id);
+    say(c.id, '');
+    try { await setIcon(c, icon); } catch { say(c.id, 'Could not reach the server.'); }
+    setBusy(null);
+  };
+  /** Upload a file, then make it the currency's icon. The server names what was wrong with it. */
+  const upload = async (c: Currency, file: File) => {
+    setBusy(c.id);
+    say(c.id, '');
+    try {
+      const form = new FormData();
+      form.append('icon', file);
+      const r = await fetch('/api/systems/currency-icons', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok || typeof body.icon !== 'string') say(c.id, body.error || 'The icon could not be uploaded.');
+      else await setIcon(c, body.icon);
+    } catch {
+      say(c.id, 'Could not reach the server.');
+    }
+    setBusy(null);
+  };
+
+  return (
+    <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
+      <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>CURRENCY_ICON</label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {currencies.map((c) => (
+          <div key={c.id} data-testid={`currency-icon-${c.id}`} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '0.65rem', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {c.name.toUpperCase()}
+              {isUploadedIcon(c.icon) && <CurrencyIcon icon={c.icon} size={16} />}
+            </span>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <button className={`utility-btn ${!c.icon ? 'active' : ''}`} disabled={busy === c.id}
+                title="Its symbol or coins alone" style={{ padding: '4px 10px', fontSize: '0.6rem' }}
+                onClick={() => choose(c, null)}>NONE</button>
+              {BUILT_IN_ICONS.map((opt) => (
+                <button key={opt} className={`utility-btn ${c.icon === opt ? 'active' : ''}`} disabled={busy === c.id}
+                  aria-label={`${opt === 'credits' ? 'DEFAULT' : opt} for ${c.name}`}
+                  style={{ padding: '4px 10px', fontSize: opt === 'credits' ? '0.6rem' : '1rem' }}
+                  onClick={() => choose(c, opt)}>
+                  {opt === 'credits' ? 'DEFAULT' : opt}
+                </button>
+              ))}
+              <label className={`utility-btn ${isUploadedIcon(c.icon) ? 'active' : ''}`} title="A small PNG, WebP or SVG"
+                style={{ padding: '4px 10px', fontSize: '0.6rem', cursor: busy === c.id ? 'default' : 'pointer' }}>
+                UPLOAD
+                <input type="file" aria-label={`Upload an icon for ${c.name}`} accept=".png,.webp,.svg,image/png,image/webp,image/svg+xml"
+                  disabled={busy === c.id} style={{ display: 'none' }}
+                  onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void upload(c, file); }} />
+              </label>
+            </div>
+            {problems[c.id] && <span role="alert" style={{ fontSize: '0.6rem', color: 'var(--danger)' }}>{problems[c.id]}</span>}
+          </div>
         ))}
       </div>
     </div>

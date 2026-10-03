@@ -149,6 +149,20 @@ export const loadCustomTemplate = (id: string, fetcher: typeof fetch = fetch): P
   return request;
 };
 
+/**
+ * Fetch a custom system's template again after it changed on the server (a currency's icon set in
+ * the admin panel, 3c2c3: `customSystemChanged`). The old one stays in place until the new one
+ * arrives, so nothing flickers back to the app's defaults meanwhile; a system never loaded here is
+ * left for whoever first asks for it.
+ */
+export const refreshCustomTemplate = (id: string, fetcher: typeof fetch = fetch): Promise<SheetTemplate | null> => {
+  if (!isCustomSystem(id) || !cache.has(id)) return Promise.resolve(null);
+  return fetcher(`/api/systems/render/${id}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((render: CustomRender | null) => (render ? registerCustomTemplate(render) : null))
+    .catch(() => null);
+};
+
 /** For tests: forget every loaded template. */
 export const clearCustomTemplates = () => { cache.clear(); pending.clear(); };
 

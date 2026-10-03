@@ -34,7 +34,20 @@ export interface Currency {
   negative: boolean;
   /** Largest first; empty for a currency without coins. */
   denominations: Denomination[];
+  /** Its icon (3c2c): one of CURRENCY_ICON's five, or an uploaded image's /uploads address. None
+   *  shows the symbol or coins alone. */
+  icon?: string;
 }
+
+/**
+ * The five icons CURRENCY_ICON has always offered, and an uploaded icon's address (3c2c). Mirrors
+ * backend/systemBuilder/currencies.js BUILT_IN_ICONS and its upload pattern; a test holds the two
+ * to each other.
+ */
+export const BUILT_IN_ICONS = ['credits', '$', '£', '€', '🪙'] as const;
+const UPLOADED_ICON = /^\/uploads\/currency_icons\/[0-9a-f]{64}\.(png|webp|svg)$/;
+/** An icon the GM uploaded, which is only ever drawn through <img>. */
+export const isUploadedIcon = (icon: unknown): icon is string => typeof icon === 'string' && UPLOADED_ICON.test(icon);
 
 /** A player's account in one currency, as a bank update lists them (backend bank/currencies.js all). */
 export interface BankCurrencyAccount {

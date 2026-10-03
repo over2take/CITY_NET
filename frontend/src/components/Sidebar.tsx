@@ -13,6 +13,7 @@ import type { ThemeName } from '../theme/themes';
 import { getTemplate } from '../sheets';
 import { useWords, asLabel } from '../sheets/words';
 import { useParts } from '../sheets/parts';
+import { currenciesFor } from '../sheets/currencies';
 import { CWN_VEHICLE_ROWS, CWN_VEHICLE_WEAPON_ROWS } from '../sheets/templates/cities_without_number';
 import { hasVehicles } from '../sheets/vehicleSystems';
 import { startUpdate, waitForRestart, currentBootId } from '../utils/updateClient';
@@ -1178,6 +1179,13 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
   // A custom system with the bank off has no BANK button (3b2b).
   const parts = useParts(gameSystem);
   const bankOn = parts('bank');
+  /**
+   * The BANK button's icon: today's table-wide choice, or, in a custom system with currencies of
+   * its own, its main currency's icon, else its symbol, else the app's own (3c2c3). The table-wide
+   * choice is not used there: it belongs to the built-in systems' single money.
+   */
+  const mainCurrency = currenciesFor(gameSystem)[0];
+  const bankIcon = mainCurrency ? mainCurrency.icon ?? mainCurrency.symbol ?? 'credits' : currencyIcon;
   // A custom system with initiative off has no tracker button or panel (3b6a).
   const initiativeOn = parts('initiative');
   // And with token health off, no HIT_POINTS button (3b6d).
@@ -1318,7 +1326,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           </button>
           {bankOn && (
             <button className={`rail-btn ${isBankOpen ? 'active' : ''}`} onClick={() => setIsBankOpen(!isBankOpen)} aria-label="CITY_NET // BANK" data-tip="CITY_NET // BANK">
-              <CurrencyIcon icon={currencyIcon} size={24} />
+              <CurrencyIcon icon={bankIcon} size={24} />
             </button>
           )}
           <button

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { useParts } from '../sheets/parts';
-import { currenciesFor, formatAmount, parseAmount, type BankCurrencyAccount, type Currency } from '../sheets/currencies';
+import { currenciesFor, formatAmount, isUploadedIcon, parseAmount, type BankCurrencyAccount, type Currency } from '../sheets/currencies';
 import {
   amountExample, amountProblem, bankRefusal, celebrationsFor, payShare, readAccountEdit, type BankAction,
 } from '../sheets/moneyText';
@@ -11,6 +11,11 @@ export type BankSoundKey = 'cashregister' | 'debtpaid' | 'highroller' | 'firstpa
 export type BankSoundVolumes = Record<BankSoundKey, number>;
 
 export function CurrencyIcon({ icon, size = 18, color = 'currentColor' }: { icon?: string; size?: number; color?: string }) {
+  // An uploaded icon (3c2c3) is drawn as it was made, through <img> only: never inlined, so an SVG
+  // cannot run anything, and /uploads serves it sandboxed besides.
+  if (isUploadedIcon(icon)) {
+    return <img src={icon} alt="" width={size} height={size} style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }} />;
+  }
   if (!icon || icon === 'credits') {
     return <div style={{ width: size, height: size, backgroundColor: color, WebkitMaskImage: `url(${creditsPngIcon})`, WebkitMaskSize: 'contain', WebkitMaskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskImage: `url(${creditsPngIcon})`, maskSize: 'contain', maskRepeat: 'no-repeat', maskPosition: 'center', flexShrink: 0 }} />;
   }
@@ -716,8 +721,12 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
   const debtColor = roundedDebt > 0 ? '#ff0044' : '#fff';
   const pickedName = picked ? picked.name.toUpperCase() : '';
   /** A figure in a box: the currency's own writing, or today's icon and two decimals. */
+  // A currency's own icon, where it has one, goes before its amount as today's does (3c2c3).
   const figure = (value: number, color: string) => (picked
-    ? <span style={{ fontSize: '20px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{unbroken(formatAmount(picked, value))}</span>
+    ? <>
+      {picked.icon && <CurrencyIcon icon={picked.icon} size={18} color={color} />}
+      <span style={{ fontSize: '20px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{unbroken(formatAmount(picked, value))}</span>
+    </>
     : <><CurrencyIcon icon={currencyIcon} size={18} color={color} />{formatBankValue(value)}</>);
   // A currency that can't be owed has no DEBT box, unless something is owed in it all the same.
   const showDebt = !picked || picked.debt || shown.debt > 0;

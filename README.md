@@ -657,6 +657,7 @@ CITY_NET/
 │   │   │       ├── AttackAnimations.test.tsx
 │   │   │       ├── BankWindows.test.tsx
 │   │   │       ├── AdminCurrencyWindows.test.tsx    # The GM's money windows in a custom system's currencies: BANK_ADMIN edits every account (debt box only where owed or owable, refusals before saving, only changed accounts sent), PAYROLL pays in the picked currency with each player's share, and the house rules' shortfall note in place of the overdraft rule
+│   │   │       ├── CurrencyIconWindows.test.tsx     # Currency icons in the windows: an uploaded icon drawn through <img> only, a currency's icon in BANK.EXE and on the sidebar's BANK button (built-ins keep the table-wide one), and CURRENCY_ICON's row per currency (NONE, the five, UPLOAD then set, refusals shown)
 │   │   │       ├── BankWindowCurrencies.test.tsx    # BANK.EXE in a custom system's currencies: the account list, boxes for the picked one (no DEBT box where it can't be owed), amounts read and sent in whole units, refusals said in that currency, celebrations on or off by the system and today's under built-ins
 │   │   │       ├── shopCart.test.ts                 # Cart lines and counts, totals both ways, sells grouped for the server, and the carry projection
 │   │   │       ├── shopCartCurrencies.test.ts       # The cart's totals per currency (main first, shortfalls and the ways each currency allows covering them), held to the server's own checkout on 2,000 seeded carts

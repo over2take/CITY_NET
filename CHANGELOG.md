@@ -59,6 +59,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Each currency's icon, chosen in the admin panel.** In a custom system with currencies of its
+  own, CURRENCY_ICON lists every currency with NONE, the five built-in icons and UPLOAD, for a small
+  PNG, WebP or SVG. BANK.EXE shows a currency's icon beside its amount. The sidebar's BANK button
+  shows the main currency's icon, else its symbol. A change reaches every open game without a
+  reload. Built-in systems keep today's single table-wide icon.
+
 - **Currency icons can be uploaded and set.** The main admin can upload a small PNG, WebP or SVG
   (up to 0.25MB). It's served sandboxed, like battle maps, so an SVG can't run anything. The
   admin can then set it, or one of the five built-in icons, as a currency's icon in the running

@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { currenciesFor, catalogueCurrencyFor, splitAmount, toBaseAmount, formatAmount, parseAmount, type Currency } from '../currencies';
+import { createRequire } from 'module';
+import {
+  currenciesFor, catalogueCurrencyFor, splitAmount, toBaseAmount, formatAmount, parseAmount, BUILT_IN_ICONS, isUploadedIcon, type Currency,
+} from '../currencies';
 import { registerCustomTemplate, clearCustomTemplates } from '../customTemplates';
 
 /**
@@ -34,6 +37,28 @@ describe('the rules, shared with the server', () => {
       expect(splitAmount(byId(c.currency), c.amount), `${c.currency} ${c.amount}`).toEqual({ negative: c.negative, parts: c.parts });
     }
     for (const c of CASES.toBase) expect(toBaseAmount(byId(c.currency), c.counts), JSON.stringify(c.counts)).toBe(c.amount);
+  });
+});
+
+describe('a currency\'s icon, as the server allows it (3c2c3)', () => {
+  const server = createRequire(import.meta.url)('../../../../backend/systemBuilder/currencies.js');
+
+  it('is one of the same five icons', () => {
+    expect([...BUILT_IN_ICONS]).toEqual(server.BUILT_IN_ICONS);
+  });
+
+  it('is an uploaded icon exactly where the server says so', () => {
+    const hash = 'a'.repeat(64);
+    const cases = [
+      `/uploads/currency_icons/${hash}.png`, `/uploads/currency_icons/${hash}.webp`, `/uploads/currency_icons/${hash}.svg`,
+      `/uploads/currency_icons/${hash}.gif`, `/uploads/currency_icons/${'A'.repeat(64)}.png`, `/uploads/battle_maps/${hash}.png`,
+      `https://example.com/uploads/currency_icons/${hash}.png`, `/uploads/currency_icons/${hash}.svg?x`, '$', 'credits', '', 42, null,
+    ];
+    for (const icon of cases) {
+      const uploaded = typeof icon === 'string' && !server.BUILT_IN_ICONS.includes(icon) && server.isIcon(icon);
+      expect(isUploadedIcon(icon), String(icon)).toBe(uploaded);
+    }
+    expect(isUploadedIcon(`/uploads/currency_icons/${hash}.svg`)).toBe(true);
   });
 });
 
