@@ -18,6 +18,15 @@ const items = (result) => JSON.parse(result.mapped.inventory);
 
 const SYSTEMS = Object.keys(IMPORTERS);
 
+describe('the systems that can import', () => {
+  it('are exactly these three, which the sheet windows offer IMPORT for', () => {
+    // Pinned here and in frontend/src/components/__tests__/importButton.test.tsx, which holds
+    // sheets/importable.ts to the same list: the frontend suite may not load this file (it needs
+    // pdf-lib), so each end pins the shape instead (frontend crossBoundaryImports.test.ts).
+    expect(SYSTEMS.sort()).toEqual(['cities_without_number', 'cyberpunk_red', 'shadowrun_6e']);
+  });
+});
+
 describe('a written-out inventory', () => {
   it('splits a line into rows', () => {
     const out = map('cities_without_number', { Inventory: 'Rope, Medkit; Rations' });

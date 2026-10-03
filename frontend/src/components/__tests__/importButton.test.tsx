@@ -5,7 +5,6 @@ import { CharacterSheetWindow } from '../CharacterSheetWindow';
 import { NpcSheetWindow } from '../NpcSheetWindow';
 import { registerCustomTemplate, clearCustomTemplates } from '../../sheets/customTemplates';
 import { canImport, IMPORTABLE_SYSTEMS } from '../../sheets/importable';
-import { createRequire } from 'module';
 
 vi.mock('../DraggableWindow', () => ({
   DraggableWindow: ({ children, title, titleControls }: any) => (
@@ -29,9 +28,11 @@ const NONE = ['generic', 'sys_aaaaaaaaaaaaaaaa'];
 const HEARTH = 'sys_aaaaaaaaaaaaaaaa';
 
 describe('which systems can import', () => {
-  it('are exactly the ones the server has an importer for', () => {
-    const server = createRequire(import.meta.url)('../../../../backend/sheets/importers.js');
-    expect([...IMPORTABLE_SYSTEMS].sort()).toEqual(Object.keys(server.IMPORTERS).sort());
+  it('are exactly the three the server has an importer for', () => {
+    // Pinned here and in backend/__tests__/sheet_import_inventory.test.js, which holds the
+    // server's IMPORTERS to the same list. This suite may not load that file: it needs pdf-lib,
+    // which only the backend has (crossBoundaryImports.test.ts).
+    expect([...IMPORTABLE_SYSTEMS].sort()).toEqual(['cities_without_number', 'cyberpunk_red', 'shadowrun_6e']);
     for (const system of [...NONE, null, undefined, '']) expect(canImport(system), String(system)).toBe(false);
   });
 });

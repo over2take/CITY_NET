@@ -1,5 +1,5 @@
 // Which systems can fill a sheet from a PDF: the ones the server has an importer for
-// (backend/sheets/importers.js IMPORTERS; a test holds the two lists together). The sheet windows
+// (backend/sheets/importers.js IMPORTERS; a test at each end pins the same list). The sheet windows
 // offer IMPORT only there. Generic has no importer, and neither does a custom system, so the
 // server refused every import from either and the button only ever failed (hidden for Generic
 // at the user's choice, 2026-10-02; for custom systems since 3b6c).
