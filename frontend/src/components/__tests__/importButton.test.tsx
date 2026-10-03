@@ -4,6 +4,7 @@ import { render, screen, act, cleanup, waitFor } from '@testing-library/react';
 import { CharacterSheetWindow } from '../CharacterSheetWindow';
 import { NpcSheetWindow } from '../NpcSheetWindow';
 import { registerCustomTemplate, clearCustomTemplates } from '../../sheets/customTemplates';
+import { canImport, IMPORTABLE_SYSTEMS } from '../../sheets/importable';
 
 vi.mock('../DraggableWindow', () => ({
   DraggableWindow: ({ children, title, titleControls }: any) => (
@@ -16,13 +17,25 @@ vi.mock('../DraggableWindow', () => ({
 }));
 
 /**
- * The sheet windows' IMPORT button (3b6c). There is no importer for a custom system, so the
- * server refuses every import there, and the button is not offered. Every built-in system
- * shows it as before; Generic included, whose import the server also refuses (left as it was).
+ * The sheet windows' IMPORT button. It is offered only where the server has an importer
+ * (backend/sheets/importers.js): CWN, Cyberpunk RED and Shadowrun. Generic and every custom
+ * system have none, so the server refused every import there and the button only ever failed:
+ * hidden for custom systems since 3b6c, and for Generic at the user's choice (2026-10-02).
  */
 
-const BUILT_INS = ['cities_without_number', 'cyberpunk_red', 'shadowrun_6e', 'generic'];
+const BUILT_INS = ['cities_without_number', 'cyberpunk_red', 'shadowrun_6e'];
+const NONE = ['generic', 'sys_aaaaaaaaaaaaaaaa'];
 const HEARTH = 'sys_aaaaaaaaaaaaaaaa';
+
+describe('which systems can import', () => {
+  it('are exactly the three the server has an importer for', () => {
+    // Pinned here and in backend/__tests__/sheet_import_inventory.test.js, which holds the
+    // server's IMPORTERS to the same list. This suite may not load that file: it needs pdf-lib,
+    // which only the backend has (crossBoundaryImports.test.ts).
+    expect([...IMPORTABLE_SYSTEMS].sort()).toEqual(['cities_without_number', 'cyberpunk_red', 'shadowrun_6e']);
+    for (const system of [...NONE, null, undefined, '']) expect(canImport(system), String(system)).toBe(false);
+  });
+});
 
 beforeEach(() => {
   clearCustomTemplates();
@@ -43,9 +56,9 @@ describe('the player\'s sheet window', () => {
     return there;
   };
 
-  it('offers IMPORT under every built-in system and not under a custom one', () => {
+  it('offers IMPORT where there is an importer, and not under Generic or a custom system', () => {
     for (const system of BUILT_INS) expect(offered(system), system).toBe(true);
-    expect(offered(HEARTH)).toBe(false);
+    for (const system of NONE) expect(offered(system), system).toBe(false);
   });
 });
 
@@ -65,8 +78,8 @@ describe('the NPC sheet window', () => {
     return there;
   };
 
-  it('offers IMPORT under every built-in system and not under a custom one', async () => {
+  it('offers IMPORT where there is an importer, and not under Generic or a custom system', async () => {
     for (const system of BUILT_INS) expect(await offered(system), system).toBe(true);
-    expect(await offered(HEARTH)).toBe(false);
+    for (const system of NONE) expect(await offered(system), system).toBe(false);
   });
 });

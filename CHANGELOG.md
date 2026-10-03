@@ -36,6 +36,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **No IMPORT button in a Generic game.** Generic has no PDF importer, so the character and NPC
+  sheets' IMPORT button always failed there. It's now offered only in Cities Without Number,
+  Cyberpunk RED and Shadowrun, the systems that can import.
+
 - **A catalogue file with more than one section saves.** Saving a file with, say, both a
   `[weapons]` and a `[gear]` section reported a failure after saving only the first section.
   Every section is now saved together, and if one can't be saved, none are and the earlier
