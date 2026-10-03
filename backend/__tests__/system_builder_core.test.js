@@ -12,7 +12,7 @@ import { createRequire } from 'module';
 const require_ = createRequire(import.meta.url);
 const { checkDefinition } = require_('../systemBuilder/definition');
 const { effectiveSheet } = require_('../systemBuilder/sheet');
-const { healthLayout, HEALTH_MODELS, ADVANCEMENT } = require_('../systemBuilder/core');
+const { healthLayout, distanceOf, HEALTH_MODELS, ADVANCEMENT, DISTANCE } = require_('../systemBuilder/core');
 const { metaOf, renderOf } = require_('../systemBuilder/runtime');
 
 const problems = (definition) => checkDefinition(definition).problems.map((p) => `${p.where}: ${p.message}`);
@@ -82,6 +82,23 @@ describe('the setup answers', () => {
     expect(HEALTH_MODELS.map((m) => m.id)).toEqual(['pool', 'tracks', 'typed', 'harm', 'wounds', 'locations', 'none']);
     expect(ADVANCEMENT.map((a) => a.id)).toEqual(['levels', 'milestone', 'spend', 'use']);
     for (const m of HEALTH_MODELS) expect(m.label && m.worksLike && m.examples, m.id).toBeTruthy();
+  });
+});
+
+describe('the distance answer (3d1)', () => {
+  it('is the unit the browser\'s ruler reads in, one of the six', () => {
+    expect(DISTANCE).toEqual(['meters', 'feet', 'yards', 'squares', 'hexes', 'zones']);
+    for (const distance of DISTANCE) {
+      expect(distanceOf(withCore({ distance })), distance).toBe(distance);
+      expect(renderOf('sys_aaaaaaaaaaaaaaaa', withCore({ distance })).distance, distance).toBe(distance);
+    }
+  });
+
+  it('is feet, as every built-in system and the ruler have always used, where a system gave none', () => {
+    for (const definition of [{ format: 1, name: 'Bare' }, withCore({}), withCore({ distance: 'leagues' }), withCore({ distance: 7 }), { format: 1, name: 'Odd', core: 'yes' }, null]) {
+      expect(distanceOf(definition), JSON.stringify(definition)).toBe('feet');
+    }
+    expect(renderOf('sys_aaaaaaaaaaaaaaaa', { format: 1, name: 'Bare' }).distance).toBe('feet');
   });
 });
 
