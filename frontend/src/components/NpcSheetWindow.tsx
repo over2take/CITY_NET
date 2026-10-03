@@ -7,7 +7,7 @@ import { ImportSheetDialog } from './ImportSheetDialog';
 import { getTemplate, getMaxPairs, hiddenTabsFor, npcTemplateOf, type CharacterSheet, type SheetTemplate } from '../sheets';
 import type { SheetFieldValue } from '../sheets/types';
 import { npcInitiativePortrait } from '../modules/initiative/npcPortrait';
-import { isCustomSystem } from '../sheets/customTemplates';
+import { canImport } from '../sheets/importable';
 
 // Admin view/edit of an NPC or player sheet. Unlike the player window
 // (socket-based, self-only), this goes through the admin REST routes:
@@ -191,7 +191,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           {/* Not for a custom system: there is no importer for one, so the server refuses every
               import (3b6c). Once custom systems can import, this is the sheet_import part. */}
-          {!isCustomSystem(sheet?.system) && <button
+          {canImport(sheet?.system) && <button
             title="Import from PDF / JSON / text"
             className="win95-close-btn"
             style={{ fontSize: '9px', width: 'auto', padding: '0 5px' }}
