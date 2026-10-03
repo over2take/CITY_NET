@@ -5,6 +5,7 @@ import type {
   Location, PendingRequest, DirectorState,
 } from '../types';
 import type { BankCurrencyAccount } from '../sheets/currencies';
+import { refreshCustomTemplate } from '../sheets/customTemplates';
 
 interface UseSocketOptions {
   userName: string;
@@ -114,6 +115,12 @@ export function useSocket({
 
     newSocket.on('settingsUpdated', () => {
       onFetchGlobalSettings?.();
+    });
+
+    // A custom system changed on the server without a republish (a currency's icon, 3c2c3): its
+    // template is fetched again, and every window drawn from it redraws once it arrives.
+    newSocket.on('customSystemChanged', (data: { id?: string }) => {
+      if (data && typeof data.id === 'string') void refreshCustomTemplate(data.id);
     });
 
     newSocket.on('dataUpdated', (payload: { isRhombusOnly?: boolean }) => {

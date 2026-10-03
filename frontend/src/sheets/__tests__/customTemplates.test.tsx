@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SheetRenderer } from '../../components/SheetRenderer';
 import {
-  templateFromRender, loadCustomTemplate, registerCustomTemplate, clearCustomTemplates,
+  templateFromRender, loadCustomTemplate, refreshCustomTemplate, registerCustomTemplate, clearCustomTemplates,
   isCustomSystem, CUSTOM_TEMPLATE_EVENT, type CustomRender,
 } from '../customTemplates';
 import { getTemplate } from '../index';
@@ -105,6 +105,41 @@ describe('loading', () => {
     expect(await loadCustomTemplate('cities_without_number', fetchMock as never)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(getTemplate('cities_without_number').id).toBe('cities_without_number');
+  });
+});
+
+describe('fetching again after a change on the server (3c2c3)', () => {
+  const renamed = { ...VAULT, name: 'Vault Knights II' };
+
+  it('replaces the one held with the server\'s new copy, says so, and keeps the old one meanwhile', async () => {
+    registerCustomTemplate(VAULT);
+    let answer!: (r: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => { answer = resolve; }));
+    const loaded = vi.fn();
+    window.addEventListener(CUSTOM_TEMPLATE_EVENT, loaded);
+    const pending = refreshCustomTemplate(ID, fetchMock as never);
+    expect(fetchMock).toHaveBeenCalledWith(`/api/systems/render/${ID}`);
+    expect(getTemplate(ID).name).toBe('Vault Knights');
+    answer({ ok: true, json: () => Promise.resolve(renamed) } as Response);
+    expect((await pending)!.name).toBe('Vault Knights II');
+    expect(getTemplate(ID).name).toBe('Vault Knights II');
+    expect(loaded).toHaveBeenCalledTimes(1);
+    window.removeEventListener(CUSTOM_TEMPLATE_EVENT, loaded);
+  });
+
+  it('keeps the old one when the server can\'t be reached or says no', async () => {
+    registerCustomTemplate(VAULT);
+    // A refusal with a body is still a refusal, whatever the body says.
+    expect(await refreshCustomTemplate(ID, vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve(renamed) } as Response)) as never)).toBeNull();
+    expect(await refreshCustomTemplate(ID, vi.fn(() => Promise.reject(new Error('offline'))) as never)).toBeNull();
+    expect(getTemplate(ID).name).toBe('Vault Knights');
+  });
+
+  it('leaves a system this browser never loaded for whoever first asks, and never asks about a built-in', async () => {
+    const fetchMock = vi.fn();
+    expect(await refreshCustomTemplate(ID, fetchMock as never)).toBeNull();
+    expect(await refreshCustomTemplate('cities_without_number', fetchMock as never)).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
