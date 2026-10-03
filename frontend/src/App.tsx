@@ -2639,8 +2639,8 @@ function App() {
                     finalScale = parseFloat(scaleData) || 5;
                 }
                 return finalScale;
-            })() : (globalSettings?.map_scale_multiplier || 5)} color={rhombusState.color || '#00ff00'} userName={userName} />
-            <MeasurementVisualizer socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} userName={userName} />
+            })() : (globalSettings?.map_scale_multiplier || 5)} color={rhombusState.color || '#00ff00'} userName={userName} system={gameSystem} />
+            <MeasurementVisualizer socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} userName={userName} system={gameSystem} />
             {view === 'battle_map' && IS_SPECTATOR && (
               <SpectatorBattleMapRig socket={socketRef.current} cameraMode={directorState.cameraMode} />
             )}

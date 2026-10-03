@@ -3,6 +3,8 @@ import { useThree } from '@react-three/fiber';
 import { Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import type { BattleMapSessionData, MeasurementData } from '../types';
+import { useCustomTemplate } from '../sheets/customTemplates';
+import { distanceUnitFor, rulerReading } from '../sheets/distance';
 
 interface MeasurementToolProps {
   measureMode: boolean;
@@ -12,6 +14,31 @@ interface MeasurementToolProps {
   mapScaleMultiplier: string | number;
   color: string;
   userName: string;
+  /** The running system, whose distance unit the ruler reads in (3d3); feet when absent. */
+  system?: string | null;
+}
+
+/**
+ * A line's reading at its middle, in the running system's unit (sheets/distance.ts, 3d3): feet as
+ * always in every built-in system, the system's own unit in a custom one, and no number at all in
+ * zones, where the line alone points at things. `squares` is the line's length in the map's own
+ * squares, `feetPerSquare` the map's scale.
+ */
+function Reading({ start, end, feetPerSquare, color, system }: {
+  start: { x: number; z: number }; end: { x: number; z: number }; feetPerSquare: number; color: string; system?: string | null;
+}) {
+  useCustomTemplate(system);
+  const squares = Math.sqrt((end.x - start.x) ** 2 + (end.z - start.z) ** 2);
+  const text = rulerReading(distanceUnitFor(system), squares, feetPerSquare);
+  if (text === null) return null;
+  const midPoint = new THREE.Vector3((start.x + end.x) / 2, 0.2, (start.z + end.z) / 2);
+  return (
+    <Html position={midPoint} center style={{ pointerEvents: 'none', userSelect: 'none' }}>
+      <div style={{ background: 'rgba(0,0,0,0.8)', color, padding: '2px 6px', borderRadius: '4px', border: `1px solid ${color}`, fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', textShadow: '1px 1px 0 #000' }}>
+        {text}
+      </div>
+    </Html>
+  );
 }
 
 function resolveScale(mapScaleMultiplier: string | number, floorIndex: number): number {
@@ -24,7 +51,7 @@ function resolveScale(mapScaleMultiplier: string | number, floorIndex: number): 
   return parseFloat(String(mapScaleMultiplier)) || 5;
 }
 
-export function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapScaleMultiplier, color, userName }: MeasurementToolProps) {
+export function MeasurementTool({ measureMode, socket, view, activeBattleMapData, mapScaleMultiplier, color, userName, system }: MeasurementToolProps) {
   const { raycaster, camera, scene, pointer, gl } = useThree();
   const [startPoint, setStartPoint] = useState<THREE.Vector3 | null>(null);
   const [currentPoint, setCurrentPoint] = useState<THREE.Vector3 | null>(null);
@@ -94,17 +121,11 @@ export function MeasurementTool({ measureMode, socket, view, activeBattleMapData
 
   const floorIndex = activeBattleMapData?.currentFloorIndex ?? 0;
   const scaleNum = resolveScale(mapScaleMultiplier, floorIndex);
-  const distance = Math.sqrt((currentPoint.x - startPoint.x) ** 2 + (currentPoint.z - startPoint.z) ** 2) * scaleNum;
-  const midPoint = new THREE.Vector3((startPoint.x + currentPoint.x) / 2, 0.2, (startPoint.z + currentPoint.z) / 2);
 
   return (
     <group>
       <Line points={[new THREE.Vector3(startPoint.x, 0.2, startPoint.z), new THREE.Vector3(currentPoint.x, 0.2, currentPoint.z)]} color={color} lineWidth={3} />
-      <Html position={midPoint} center style={{ pointerEvents: 'none', userSelect: 'none' }}>
-        <div style={{ background: 'rgba(0,0,0,0.8)', color, padding: '2px 6px', borderRadius: '4px', border: `1px solid ${color}`, fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', textShadow: '1px 1px 0 #000' }}>
-          {distance.toFixed(1)} ft
-        </div>
-      </Html>
+      <Reading start={startPoint} end={currentPoint} feetPerSquare={scaleNum} color={color} system={system} />
     </group>
   );
 }
@@ -114,9 +135,11 @@ interface MeasurementVisualizerProps {
   view: string;
   activeBattleMapData: BattleMapSessionData | null;
   userName: string;
+  /** The running system, whose distance unit every line reads in (3d3); feet when absent. */
+  system?: string | null;
 }
 
-export function MeasurementVisualizer({ socket, view, activeBattleMapData, userName }: MeasurementVisualizerProps) {
+export function MeasurementVisualizer({ socket, view, activeBattleMapData, userName, system }: MeasurementVisualizerProps) {
   const [measurements, setMeasurements] = useState<MeasurementData[]>([]);
 
   useEffect(() => {
@@ -144,16 +167,10 @@ export function MeasurementVisualizer({ socket, view, activeBattleMapData, userN
       {measurements.map(m => {
         const floorIndex = activeBattleMapData?.currentFloorIndex ?? 0;
         const scaleNum = resolveScale(m.map_scale_multiplier, floorIndex);
-        const distance = Math.sqrt((m.end.x - m.start.x) ** 2 + (m.end.z - m.start.z) ** 2) * scaleNum;
-        const midPoint = new THREE.Vector3((m.start.x + m.end.x) / 2, 0.2, (m.start.z + m.end.z) / 2);
         return (
           <group key={m.owner}>
             <Line points={[new THREE.Vector3(m.start.x, 0.2, m.start.z), new THREE.Vector3(m.end.x, 0.2, m.end.z)]} color={m.color} lineWidth={3} />
-            <Html position={midPoint} center style={{ pointerEvents: 'none', userSelect: 'none' }}>
-              <div style={{ background: 'rgba(0,0,0,0.8)', color: m.color, padding: '2px 6px', borderRadius: '4px', border: `1px solid ${m.color}`, fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', textShadow: '1px 1px 0 #000' }}>
-                {distance.toFixed(1)} ft
-              </div>
-            </Html>
+            <Reading start={m.start} end={m.end} feetPerSquare={scaleNum} color={m.color} system={system} />
           </group>
         );
       })}
