@@ -294,6 +294,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.14.5] - 2026-10-02
+
+Database backups stay out of the server image.
+
+### Security
+
+- **Database backups no longer go into a Docker image built from your own copy.** The server
+  image left out the database itself, but not the copies beside it: `city.db.bak` and the
+  backups made before a migration were built into an image made on your machine, and with them
+  every account, sheet and bank. Those, and the backend's test files, are now left out. The
+  images published to Docker Hub are built from the repository, which never held them, so they
+  were never affected. Git now also ignores the before-migration backups.
+
+---
+
 ## [1.14.4] - 2026-09-29
 
 NPC sheets and hidden faces stay with the GM.
