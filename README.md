@@ -617,7 +617,7 @@ CITY_NET/
 │   │   │   ├── RadioPlayer.tsx         # Playback window (scrubber, transport, per-client volume)
 │   │   │   ├── Camera.tsx              # CameraController and cursor-pivot helpers
 │   │   │   ├── HealthBar.tsx           # 3D health bar rendered above tokens
-│   │   │   ├── MeasurementTool.tsx     # Ruler overlay for distance measurement
+│   │   │   ├── MeasurementTool.tsx     # Ruler overlay for distance measurement, read in the running system's unit (sheets/distance.ts) from each map's own scale; no number in zones
 │   │   │   ├── StatusDisplay.tsx       # Status log and status bar text
 │   │   │   ├── Streamer.tsx            # Camera broadcaster/rig pairs for streamer mode
 │   │   │   ├── StreamerOverlay.tsx     # HUD overlay rendered on the spectator window

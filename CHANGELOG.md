@@ -59,6 +59,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The map's ruler reads in a custom system's own unit.** Meters, yards, squares or hexes, for your
+  own line and everyone else's. Every map and floor keeps its own scale, untouched. In zones, the
+  ruler draws its line with no number. Built-in systems read feet exactly as before.
+
 - **What the ruler will read in a custom system's unit.** Feet as always for every built-in
   system. Meters and yards are converted from the map's feet, so no map needs its scale redone.
   Squares and hexes count the map's own squares, and zones show no number. Nothing on screen uses

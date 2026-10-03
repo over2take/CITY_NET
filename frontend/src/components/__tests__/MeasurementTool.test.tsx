@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
 import * as THREE from 'three';
 
@@ -28,6 +28,7 @@ vi.mock('@react-three/drei', () => ({
 }));
 
 import { MeasurementTool, MeasurementVisualizer } from '../MeasurementTool';
+import { registerCustomTemplate, clearCustomTemplates } from '../../sheets/customTemplates';
 
 const makeSocket = () => ({ emit: vi.fn(), on: vi.fn(), off: vi.fn() });
 
@@ -182,5 +183,90 @@ describe('MeasurementVisualizer', () => {
       handler({ owner: 'OTHER', view: 'battle_map', start: { x: 0, z: 0 }, end: { x: 4, z: 0 }, color: '#0f0', map_scale_multiplier: '5' });
     });
     expect(document.body.textContent).not.toContain('ft');
+  });
+});
+
+// ─── The running system's unit (3d3) ─────────────────────────────────────────
+
+describe('the ruler in the running system\'s unit', () => {
+  const HEARTH = 'sys_aaaaaaaaaaaaaaaa';
+  const use = (distance: string) => registerCustomTemplate({
+    id: HEARTH, name: 'Hearth', words: {}, parts: {}, derived: [], sheet: { sections: [] }, distance,
+  });
+  beforeEach(() => clearCustomTemplates());
+  afterEach(() => clearCustomTemplates());
+
+  /** Your own ruler, 6 squares long on a map at 5 ft a square: its label, or null for none. */
+  const measure = (system?: string) => {
+    mockRaycaster.intersectObjects
+      .mockReturnValueOnce([{ point: new THREE.Vector3(0, 0, 0), object: { visible: true } }])
+      .mockReturnValueOnce([{ point: new THREE.Vector3(6, 0, 0), object: { visible: true } }]);
+    const { queryByTestId, unmount } = render(
+      <MeasurementTool measureMode={true} socket={makeSocket()} view="list" activeBattleMapData={null} mapScaleMultiplier={5} color="#0f0" userName="GHOST" system={system} />,
+    );
+    fireEvent.pointerDown(mockDomElement, { button: 0 });
+    fireEvent.pointerMove(mockDomElement);
+    const label = queryByTestId('html-label')?.textContent ?? null;
+    unmount();
+    return label;
+  };
+
+  /** Somebody else's line, 6 squares long on a map at `scale` ft a square, as this browser shows it. */
+  const theirs = (system?: string, scale = '5') => {
+    const socket = makeSocket();
+    const { container, unmount } = render(<MeasurementVisualizer socket={socket} view="list" activeBattleMapData={null} userName="GHOST" system={system} />);
+    const handler = (socket.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'measurementUpdated')[1];
+    act(() => handler({ owner: 'OTHER', view: 'list', start: { x: 0, z: 0 }, end: { x: 6, z: 0 }, color: '#0f0', map_scale_multiplier: scale, isFinal: true }));
+    const label = container.querySelector('[data-testid="html-label"]')?.textContent ?? null;
+    unmount();
+    return label;
+  };
+
+  it('reads feet, as always, in every built-in system', () => {
+    for (const system of [undefined, 'cities_without_number', 'generic']) {
+      expect(measure(system), String(system)).toBe('30.0 ft');
+      expect(theirs(system), String(system)).toBe('30.0 ft');
+    }
+  });
+
+  it('reads a custom system\'s own unit, the same for your line and everyone else\'s', () => {
+    for (const [unit, reads] of [['meters', '9.1 m'], ['yards', '10.0 yd'], ['squares', '6.0 sq'], ['hexes', '6.0 hex'], ['feet', '30.0 ft']]) {
+      use(unit);
+      expect(measure(HEARTH), unit).toBe(reads);
+      expect(theirs(HEARTH), unit).toBe(reads);
+    }
+  });
+
+  it('still follows each map\'s own scale, floor by floor, converting feet but counting squares', () => {
+    const onFloor = (system: string, distance: string) => {
+      use(distance);
+      mockRaycaster.intersectObjects
+        .mockReturnValueOnce([{ point: new THREE.Vector3(0, 0, 0), object: { visible: true } }])
+        .mockReturnValueOnce([{ point: new THREE.Vector3(6, 0, 0), object: { visible: true } }]);
+      const { getByTestId, unmount } = render(
+        <MeasurementTool measureMode={true} socket={makeSocket()} view="battle_map"
+          activeBattleMapData={{ locationId: 1, maps: [], currentFloorIndex: 1 }}
+          mapScaleMultiplier="[2,10]" color="#0f0" userName="GHOST" system={system} />,
+      );
+      fireEvent.pointerDown(mockDomElement, { button: 0 });
+      fireEvent.pointerMove(mockDomElement);
+      const label = getByTestId('html-label').textContent;
+      unmount();
+      return label;
+    };
+    // Floor 1 of this map is 10 ft a square: 6 squares is 60 ft.
+    expect(onFloor(HEARTH, 'feet')).toBe('60.0 ft');
+    expect(onFloor(HEARTH, 'meters')).toBe('18.3 m');
+    expect(onFloor(HEARTH, 'squares')).toBe('6.0 sq');
+    // And somebody else's line on that map, at the scale it was drawn with.
+    use('meters');
+    expect(theirs(HEARTH, '10')).toBe('18.3 m');
+    expect(theirs('cities_without_number', '10')).toBe('60.0 ft');
+  });
+
+  it('draws the line with no number in zones', () => {
+    use('zones');
+    expect(measure(HEARTH)).toBeNull();
+    expect(theirs(HEARTH)).toBeNull();
   });
 });
