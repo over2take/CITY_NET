@@ -59,6 +59,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What the ruler will read in a custom system's unit.** Feet as always for every built-in
+  system. Meters and yards are converted from the map's feet, so no map needs its scale redone.
+  Squares and hexes count the map's own squares, and zones show no number. Nothing on screen uses
+  this yet.
+
 - **A custom system tells the browser its distance unit.** The server now sends the unit a system
   chose in its setup answers (meters, feet, yards, squares, hexes or zones). It sends feet, which
   the ruler has always used, where the system gave none. Nothing reads it yet.

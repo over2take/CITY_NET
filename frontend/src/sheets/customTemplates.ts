@@ -51,6 +51,8 @@ export interface CustomRender {
   currencies?: Currency[];
   /** Whether its bank window celebrates (backend systemBuilder/bank.js); off unless turned on. */
   bank?: CustomBank;
+  /** The unit its ruler reads distances in (backend systemBuilder/core.js distanceOf). */
+  distance?: string;
   derived: string[];
   sheet: CustomRenderSheet;
   /** NPCs' own layout (null: they use the character sheet) and GENERATE_SHEET's tiers. */
@@ -114,6 +116,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.buildings ? { buildings: render.buildings } : {}),
     ...(render.currencies ? { currencies: render.currencies } : {}),
     ...(render.bank ? { bank: render.bank } : {}),
+    ...(render.distance ? { distance: render.distance } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived), ...tiers } } : {}),
   };
