@@ -59,6 +59,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Currency icons can be uploaded and set.** The main admin can upload a small PNG, WebP or SVG
+  (up to 0.25MB). It's served sandboxed, like battle maps, so an SVG can't run anything. The
+  admin can then set it, or one of the five built-in icons, as a currency's icon in the running
+  system, without republishing it or touching unpublished work in its draft. Everyone's game is
+  told the system changed. There's no button for it yet.
+
 - **A custom system's currencies can each have an icon.** Either one of the five CURRENCY_ICON
   has always offered, or a small image the GM uploads, held only as the address of a stored file
   and never as the image itself. Anything else is refused. Nothing sets or shows one yet.
