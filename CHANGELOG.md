@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Under the hood (tidying)
+
+- **The backend and frontend no longer list the whole project as a package they need.** Each had
+  a `mapsystem` dependency pointing back at the project itself, which nothing used. Installing it
+  linked the project into its own `node_modules` in a loop, so file searches crawled, and the
+  server image linked to the container's root folder. Both are gone; nothing the game does
+  changes.
+
 ### Changed
 
 - **Each game system has its own bank.** A character's money now belongs to the game it was
