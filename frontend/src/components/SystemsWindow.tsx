@@ -184,7 +184,7 @@ function InstallPanel({ api, onInstalled }: { api: Api; onInstalled: (id: string
         onDragLeave={() => setDragging(false)}
         onDrop={(e) => { e.preventDefault(); setDragging(false); read(e.dataTransfer.files[0]); }}
         style={{
-          border: `1px dashed var(--green)`, padding: 12, textAlign: 'center', fontSize: 11, letterSpacing: 1, cursor: 'pointer',
+          border: `1px dashed var(--green)`, padding: '24px 12px', textAlign: 'center', fontSize: 11, letterSpacing: 1, cursor: 'pointer',
           background: dragging ? 'color-mix(in srgb, var(--green) 12%, transparent)' : 'none',
         }}
       >
@@ -521,7 +521,9 @@ export function SystemsWindow({ token, running, pos, setPos, onClose, fetcher }:
         </>}
         {folder === 'new' && <NewPanel api={api} onMade={made} />}
         {folder === 'install' && <InstallPanel api={api} onInstalled={installed} />}
-        <div role="status" style={{ minHeight: '1.2em', fontSize: 11, color: status?.bad ? 'var(--danger)' : 'var(--cyan)' }}>
+        {/* Always there, so a screen reader hears each new line; with nothing to say it takes
+            no room, gap included, so what is above it sits centered in the panel. */}
+        <div role="status" style={{ fontSize: 11, color: status?.bad ? 'var(--danger)' : 'var(--cyan)', ...(status ? {} : { marginTop: -10 }) }}>
           {status?.text ?? ''}
         </div>
       </div>

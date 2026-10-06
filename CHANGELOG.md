@@ -90,7 +90,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   cover, what it holds and any problems before anything changes, then offers what fits: INSTALL,
   BRING IT BACK for one deleted here, UPDATE for one already here, or REPLACE, which asks first
   when the copy here was changed, always beside KEEP BOTH. A name already taken is shown as the
-  copy name it will get.
+  copy name it will get. The place to choose or drop a file is roomier and sits centered in its
+  folder.
 
 - **What the SYSTEMS.EXE window will say.** The badges on each system (RUNNING, PUBLISHED v3,
   UNPUBLISHED CHANGES, a problem count, INSTALLED), the facts beside the one picked, and, for a file
