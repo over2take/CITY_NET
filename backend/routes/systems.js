@@ -78,10 +78,14 @@ module.exports = (db, io = null) => {
   });
 
   // Publishing and deleting change what the game can run, so the running copy is reloaded.
+  // Every browser drawing it fetches the new version (customSystemChanged).
   router.post('/:id/publish', gm, (req, res) => {
     store.publishSystem(db, req.params.id, (err, done) => {
       if (err) return answer(res, err);
-      runtime.refresh(db, req.params.id, () => answer(res, null, done));
+      runtime.refresh(db, req.params.id, () => {
+        if (io) io.emit('customSystemChanged', { id: req.params.id });
+        answer(res, null, done);
+      });
     });
   });
 
