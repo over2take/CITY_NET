@@ -212,8 +212,77 @@ describe('installing', () => {
     expect((await preview(fileOf(VAULT))).body.installed.map((s) => s.id)).toEqual([first]);
   });
 
+  it('is listed as installed, whichever way it came in', async () => {
+    const made = await create({ ...VAULT, name: 'Homebrew' });
+    const first = (await install(fileOf(VAULT), 'new')).body.id;
+    const copy = (await install(fileOf(VAULT), 'keep_both')).body.id;
+    const listed = (await request(app).get('/api/systems').set(gm)).body;
+    expect(Object.fromEntries(listed.map((s) => [s.id, s.installed]))).toEqual({ [made]: false, [first]: true, [copy]: true });
+  });
+
   it('refuses a mode it does not know', async () => {
     expect((await install(fileOf(VAULT), 'merge')).status).toBe(400);
+  });
+});
+
+describe('installing under a name already here', () => {
+  const nameOf = async (id) => {
+    const row = await get(db, 'SELECT name, draft, published, source_hash FROM custom_systems WHERE id = ?', [id]);
+    return { name: row.name, draft: JSON.parse(row.draft).name, published: row.published && JSON.parse(row.published).name, edited: citysys.hashOf(row.draft) !== row.source_hash };
+  };
+
+  it('installs a different system with the same name as a copy, never refusing it', async () => {
+    const mine = await create();
+    const res = await install(fileOf(VAULT, 'org_other'), 'new');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ name: 'Vault Knights copy', published: true });
+    // The row, both copies and the running game agree, and it does not count as changed here.
+    expect(await nameOf(res.body.id)).toEqual({ name: 'Vault Knights copy', draft: 'Vault Knights copy', published: 'Vault Knights copy', edited: false });
+    expect(runtime.render(res.body.id).name).toBe('Vault Knights copy');
+    expect((await nameOf(mine)).name).toBe('Vault Knights');
+  });
+
+  it('keeps its own name when nothing else has it', async () => {
+    const res = await install(fileOf(VAULT), 'new');
+    expect(res.body.name).toBe('Vault Knights');
+    expect((await get(db, 'SELECT draft FROM custom_systems WHERE id = ?', [res.body.id])).draft).toBe(JSON.stringify(VAULT));
+  });
+
+  it('counts on for each further copy, matching names whatever their capitals', async () => {
+    await create({ ...VAULT, name: 'VAULT KNIGHTS' });
+    expect((await install(fileOf(VAULT), 'new')).body.name).toBe('Vault Knights copy');
+    expect((await install(fileOf(VAULT), 'keep_both')).body.name).toBe('Vault Knights copy 02');
+    expect((await install(fileOf(VAULT), 'keep_both')).body.name).toBe('Vault Knights copy 03');
+  });
+
+  it('names a copy kept beside its original as a copy', async () => {
+    await install(fileOf(VAULT), 'new');
+    const res = await install(fileOf(VAULT), 'keep_both');
+    expect(await nameOf(res.body.id)).toMatchObject({ name: 'Vault Knights copy', draft: 'Vault Knights copy' });
+  });
+
+  it('keeps an updated system\'s own name, and its copy name while the other is still here', async () => {
+    const id = (await install(fileOf(VAULT), 'new')).body.id;
+    expect((await install(fileOf({ ...VAULT, description: 'v2' }, 'org_vault', 4), 'update')).body).toMatchObject({ id, name: 'Vault Knights' });
+    const other = await create();
+    await request(app).delete(`/api/systems/${id}`).set(gm);
+    const back = await install(fileOf(VAULT), 'new');
+    expect(back.body).toMatchObject({ id, restored: true, name: 'Vault Knights copy' });
+    expect((await install(fileOf({ ...VAULT, description: 'v3' }, 'org_vault', 5), 'update')).body).toMatchObject({ id, name: 'Vault Knights copy' });
+    expect((await nameOf(other)).name).toBe('Vault Knights');
+  });
+
+  it('installs a copy with problems as a copy too, kept as a draft', async () => {
+    await create();
+    const res = await install(fileOf({ ...VAULT, derived: [{ id: 'a', formula: '@a' }] }), 'new');
+    expect(res.body).toMatchObject({ name: 'Vault Knights copy', published: false });
+    expect(await nameOf(res.body.id)).toMatchObject({ name: 'Vault Knights copy', draft: 'Vault Knights copy', published: null });
+  });
+
+  it('ignores a deleted system\'s name', async () => {
+    const mine = await create();
+    await request(app).delete(`/api/systems/${mine}`).set(gm);
+    expect((await install(fileOf(VAULT, 'org_other'), 'new')).body.name).toBe('Vault Knights');
   });
 });
 

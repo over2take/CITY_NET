@@ -138,7 +138,7 @@ describe('the systems routes', () => {
     expect(res.body.id).toMatch(/^sys_[0-9a-f]{16}$/);
     expect(res.body.problems).toEqual([]);
     const [only] = await list();
-    expect(only).toMatchObject({ id: res.body.id, name: 'Vault Knights', version: 0, published: false, unpublishedChanges: true });
+    expect(only).toMatchObject({ id: res.body.id, name: 'Vault Knights', version: 0, published: false, unpublishedChanges: true, installed: false });
   });
 
   it('never collides with a built-in system id', () => {
