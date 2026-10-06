@@ -71,6 +71,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What the SYSTEMS.EXE window will say.** The badges on each system (RUNNING, PUBLISHED v3,
+  UNPUBLISHED CHANGES, a problem count, INSTALLED), the facts beside the one picked, and, for a file
+  about to be installed, what it holds and which buttons it offers: INSTALL, BRING IT BACK, UPDATE,
+  or REPLACE with a warning when the system was changed here, always beside KEEP BOTH. Also the
+  requests the window sends. Nothing on screen uses it yet: the window comes next.
+
 - **A new system can't take a name already in use, and an installed system can always be
   updated.** Creating a system with the name of another is refused, as renaming is. Installing a
   newer file of a system already here now always offers to update it. If it was changed here
