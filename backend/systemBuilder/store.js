@@ -39,30 +39,42 @@ const problemsOf = (draft) => {
   return checked.fatal ? [{ where: 'definition', message: checked.fatal }] : checked.problems;
 };
 
+/** A definition's text field, or '' when it has none. */
+const textOf = (definition, key) => (definition && typeof definition[key] === 'string' ? definition[key].trim() : '');
+
 /**
  * Every system, newest change first, without their definitions. Each says how many problems its
- * draft has, so SYSTEMS.EXE can badge them without fetching every system.
+ * draft has, so the builder's MY SYSTEMS can badge them without fetching every system, and what
+ * its line shows (approved mockup builder-my-systems, 2026-10-06): the draft's description and
+ * author, and how many players' characters are played in it (NPC sheets are not counted).
  */
 const listSystems = (db, cb) => {
   db.all(
-    `SELECT id, name, version, draft, published, source_hash, updated_at, published_at
-     FROM custom_systems WHERE deleted_at IS NULL ORDER BY updated_at DESC, name`,
+    `SELECT s.id, s.name, s.version, s.draft, s.published, s.source_hash, s.updated_at, s.published_at,
+       (SELECT COUNT(*) FROM character_sheets c WHERE c.system = s.id AND COALESCE(c.is_npc, 0) = 0) AS character_count
+     FROM custom_systems s WHERE s.deleted_at IS NULL ORDER BY s.updated_at DESC, s.name`,
     [],
     (err, rows) => {
       if (err) return cb(err);
-      cb(null, rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        version: r.version,
-        updatedAt: r.updated_at,
-        publishedAt: r.published_at,
-        published: r.published != null,
-        // Compared as stored text: the draft is written exactly as publishing copies it.
-        unpublishedChanges: r.published == null || r.draft !== r.published,
-        // Installed from a file, rather than made here: only an install records the file's hash.
-        installed: r.source_hash != null,
-        problemCount: problemsOf(parse(r.draft)).length,
-      })));
+      cb(null, rows.map((r) => {
+        const draft = parse(r.draft);
+        return {
+          id: r.id,
+          name: r.name,
+          version: r.version,
+          updatedAt: r.updated_at,
+          publishedAt: r.published_at,
+          published: r.published != null,
+          // Compared as stored text: the draft is written exactly as publishing copies it.
+          unpublishedChanges: r.published == null || r.draft !== r.published,
+          // Installed from a file, rather than made here: only an install records the file's hash.
+          installed: r.source_hash != null,
+          problemCount: problemsOf(draft).length,
+          description: textOf(draft, 'description'),
+          author: textOf(draft, 'author'),
+          characterCount: r.character_count,
+        };
+      }));
     },
   );
 };
