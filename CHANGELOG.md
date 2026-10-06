@@ -75,6 +75,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What the builder's WORDS and FEATURES pages will change.** A system's own words for the app's
+  terms; which parts of the app it uses; its names for building types and shop catalogues, and
+  the currency each catalogue sells in; its currencies, counted in whole numbers, decimals or
+  coins; and the bank's celebrations. Anything left blank stays the app's own and isn't stored.
+  Removing a currency puts its catalogues back on the main one, and making another currency the
+  main one keeps every catalogue's prices where they were. All of it is checked against the
+  server's own rules. The pages themselves come next.
+
 - **The builder's SETUP page.** The page a new system opens on asks five things, each saved as
   you answer: what the system is (its name, refused if another system has it, plus description,
   author and license); how characters get hurt, with each health model's own settings and a live
