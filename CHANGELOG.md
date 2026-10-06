@@ -71,6 +71,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A new system can't take a name already in use, and an installed system can always be
+  updated.** Creating a system with the name of another is refused, as renaming is. Installing a
+  newer file of a system already here now always offers to update it. If it was changed here
+  since it was installed, updating asks first, since those changes are replaced, rather than
+  being refused outright. An updated system keeps the name it has here, so one the GM renamed
+  stays renamed, and browsers fetch the update straight away.
+
 - **The system list counts each system's problems, and an install says its name first.** The list
   of a GM's systems now says how many problems each draft has, so SYSTEMS.EXE can mark them without
   opening each one. Looking at a file before installing it now says the name it will go in under

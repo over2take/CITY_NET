@@ -45,7 +45,7 @@ const create = async (definition = VAULT) => (await request(app).post('/api/syst
 const publish = (id) => request(app).post(`/api/systems/${id}/publish`).set(gm);
 const exported = async (id) => (await request(app).get(`/api/systems/${id}/export`).set(gm)).text;
 const preview = (file) => request(app).post('/api/systems/install/preview').set(gm).send({ file });
-const install = (file, mode) => request(app).post('/api/systems/install').set(gm).send({ file, mode });
+const install = (file, mode, extra = {}) => request(app).post('/api/systems/install').set(gm).send({ file, mode, ...extra });
 const rows = () => new Promise((resolve) => db.all('SELECT id, name, version, origin, deleted_at FROM custom_systems ORDER BY created_at, id', (e, r) => resolve(r)));
 const fileOf = (definition, origin = 'org_vault', version = 3) => JSON.stringify(citysys.buildFile({ definition, version, origin }));
 
@@ -182,25 +182,54 @@ describe('installing', () => {
     expect(runtime.render(id).name).toBe('Vault Knights');
   });
 
-  it('as an update: refused over changes made here, over problems, and when not installed', async () => {
+  it('as an update: refused over problems, and when not installed', async () => {
     expect((await install(fileOf(VAULT), 'update')).status).toBe(404);
     const id = (await install(fileOf(VAULT), 'new')).body.id;
     const broken = { ...VAULT, derived: [{ id: 'a', formula: '@a' }] };
-    expect((await install(fileOf(broken), 'update')).status).toBe(409);
-    await request(app).put(`/api/systems/${id}/draft`).set(gm).send({ definition: { ...VAULT, description: 'Mine now' } });
-    expect((await preview(fileOf(VAULT))).body.installed[0].edited).toBe(true);
-    const res = await install(fileOf({ ...VAULT, description: 'Theirs' }), 'update');
+    const res = await install(fileOf(broken), 'update', { replaceChanges: true });
     expect(res.status).toBe(409);
-    expect(res.body.error).toBe('This system has been changed here since it was installed. Keep both instead.');
-    expect(JSON.parse((await get(db, 'SELECT draft FROM custom_systems WHERE id = ?', [id])).draft).description).toBe('Mine now');
+    expect(res.body.error).toBe('The file has problems; install it as a second copy to fix them');
+    expect(JSON.parse((await get(db, 'SELECT published FROM custom_systems WHERE id = ?', [id])).published)).toEqual(VAULT);
   });
 
-  it('never overwrites a system made here, even from its own file', async () => {
+  it('as an update over changes made here: only once the GM has been warned, and then it replaces them', async () => {
+    const id = (await install(fileOf(VAULT), 'new')).body.id;
+    await request(app).put(`/api/systems/${id}/draft`).set(gm).send({ definition: { ...VAULT, description: 'Mine now' } });
+    expect((await preview(fileOf(VAULT))).body.installed[0].edited).toBe(true);
+    const theirs = fileOf({ ...VAULT, description: 'Theirs' }, 'org_vault', 4);
+    for (const extra of [{}, { replaceChanges: 'yes' }]) {
+      const res = await install(theirs, 'update', extra);
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual({ error: 'This system has been changed here since it was installed. Replacing it loses those changes.', changed: true });
+    }
+    expect(JSON.parse((await get(db, 'SELECT draft FROM custom_systems WHERE id = ?', [id])).draft).description).toBe('Mine now');
+    const res = await install(theirs, 'update', { replaceChanges: true });
+    expect(res.body).toMatchObject({ id, name: 'Vault Knights', published: true });
+    const row = await get(db, 'SELECT draft, published, version FROM custom_systems WHERE id = ?', [id]);
+    expect(JSON.parse(row.draft).description).toBe('Theirs');
+    expect(row.version).toBe(2);
+    // Unchanged since this install, so the next update needs no warning.
+    expect((await preview(theirs)).body.installed[0].edited).toBe(false);
+  });
+
+  it('treats a system made here as changed, even from its own file', async () => {
     const id = await create();
     await publish(id);
     const file = await exported(id);
     expect((await preview(file)).body.installed).toEqual([{ id, name: 'Vault Knights', version: 1, edited: true }]);
-    expect((await install(file, 'update')).status).toBe(409);
+    expect((await install(file, 'update')).body.changed).toBe(true);
+  });
+
+  it('keeps the name the GM chose through an update', async () => {
+    const id = (await install(fileOf(VAULT), 'new')).body.id;
+    await request(app).put(`/api/systems/${id}/name`).set(gm).send({ name: 'Vault Knights (our table)' });
+    expect((await preview(fileOf(VAULT))).body).toMatchObject({ installed: [{ edited: true }], installsAs: { update: 'Vault Knights (our table)' } });
+    const res = await install(fileOf({ ...VAULT, description: 'v2' }, 'org_vault', 4), 'update', { replaceChanges: true });
+    expect(res.body).toMatchObject({ id, name: 'Vault Knights (our table)' });
+    const row = await get(db, 'SELECT name, draft, published FROM custom_systems WHERE id = ?', [id]);
+    expect([row.name, JSON.parse(row.draft).name, JSON.parse(row.published).name]).toEqual(Array(3).fill('Vault Knights (our table)'));
+    expect(JSON.parse(row.published).description).toBe('v2');
+    expect(runtime.render(id).name).toBe('Vault Knights (our table)');
   });
 
   it('keeping both: a second copy with its own id and origin, so the two never collide', async () => {
@@ -266,8 +295,8 @@ describe('installing under a name already here', () => {
   it('keeps an updated system\'s own name, and its copy name while the other is still here', async () => {
     const id = (await install(fileOf(VAULT), 'new')).body.id;
     expect((await install(fileOf({ ...VAULT, description: 'v2' }, 'org_vault', 4), 'update')).body).toMatchObject({ id, name: 'Vault Knights' });
-    const other = await create();
     await request(app).delete(`/api/systems/${id}`).set(gm);
+    const other = await create();
     const back = await install(fileOf(VAULT), 'new');
     expect(back.body).toMatchObject({ id, restored: true, name: 'Vault Knights copy' });
     expect((await install(fileOf({ ...VAULT, description: 'v3' }, 'org_vault', 5), 'update')).body).toMatchObject({ id, name: 'Vault Knights copy' });
@@ -286,13 +315,13 @@ describe('installing under a name already here', () => {
     const asNew = (await preview(fileOf(VAULT))).body.installsAs;
     expect(asNew).toEqual({ new: 'Vault Knights copy', update: null, keep_both: 'Vault Knights copy' });
     const id = (await install(fileOf(VAULT), 'new')).body.id;
-    // Installed: an update keeps its name while the other is here; keeping both counts on.
+    // Installed: an update keeps the name it has here; keeping both counts on.
     expect((await preview(fileOf(VAULT))).body.installsAs).toEqual({ new: null, update: 'Vault Knights copy', keep_both: 'Vault Knights copy 02' });
     expect((await install(fileOf(VAULT), 'keep_both')).body.name).toBe('Vault Knights copy 02');
-    // With the other gone, an update takes the file's own name back.
+    // Even with the other gone: its name is the one it has here, not the file's.
     await request(app).delete(`/api/systems/${mine}`).set(gm);
-    expect((await preview(fileOf(VAULT))).body.installsAs.update).toBe('Vault Knights');
-    expect((await install(fileOf({ ...VAULT, description: 'v2' }, 'org_vault', 4), 'update')).body).toMatchObject({ id, name: 'Vault Knights' });
+    expect((await preview(fileOf(VAULT))).body.installsAs.update).toBe('Vault Knights copy');
+    expect((await install(fileOf({ ...VAULT, description: 'v2' }, 'org_vault', 4), 'update')).body).toMatchObject({ id, name: 'Vault Knights copy' });
   });
 
   it('names one brought back from deletion as it will be', async () => {

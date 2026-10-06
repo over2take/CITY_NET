@@ -118,6 +118,18 @@ describe('renaming a system', () => {
     expect(emitted).toEqual([]);
   });
 
+  it('keeps through an update from the system\'s file, and every browser fetches the update', async () => {
+    const citysys = require_('../systemBuilder/citysys');
+    const file = (description) => JSON.stringify(citysys.buildFile({ definition: { ...PUBLISHED, description }, version: 4, origin: 'org_hearth' }));
+    const { id } = (await request(app).post('/api/systems/install').set(bearer(GM)).send({ file: file('v1'), mode: 'keep_both' })).body;
+    await run(db, 'UPDATE custom_systems SET origin = ? WHERE id = ?', ['org_hearth', id]);
+    expect((await rename('Hearth, ours', id)).status).toBe(200);
+    emitted = [];
+    const res = await request(app).post('/api/systems/install').set(bearer(GM)).send({ file: file('v2'), mode: 'update', replaceChanges: true });
+    expect(res.body).toMatchObject({ id, name: 'Hearth, ours' });
+    expect(emitted).toEqual([{ event: 'customSystemChanged', data: { id } }]);
+  });
+
   it('is the main admin\'s alone', async () => {
     expect((await rename('Hearthfire', HEARTH, EDITOR)).status).toBe(403);
     expect((await rename('Hearthfire', HEARTH, PLAYER)).status).toBe(403);
