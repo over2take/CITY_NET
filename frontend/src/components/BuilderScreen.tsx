@@ -4,7 +4,8 @@ import {
   createAutosave, saveStatus, exitWarning, leaveNeedsAsking, publishBlocked, publishedMessage,
   BUILDER_PAGES, type Autosave, type BuilderPage,
 } from '../sheets/builderSession';
-import { SYSTEMS_CHANGED_EVENT, badgesFor, versionLabel, type Badge, type LibrarySystem } from '../sheets/systemsLibrary';
+import { SYSTEMS_CHANGED_EVENT } from '../sheets/systemsLibrary';
+import { MySystemsPage } from './MySystemsPage';
 
 // The system builder (4a2b): it takes over the whole window, with no map. A sidebar down the left
 // holds the system's name, its pages, SAVE and PUBLISH, and EXIT TO MAP; the open page fills the
@@ -18,23 +19,23 @@ import { SYSTEMS_CHANGED_EVENT, badgesFor, versionLabel, type Badge, type Librar
 
 interface Props {
   token: string;
-  systemId: string;
-  /** The page it opens on: SETUP for a system just made. */
-  startPage?: BuilderPage;
+  /** The system open in it; none when the GM has yet to pick one, and MY SYSTEMS is all there is. */
+  systemId: string | null;
+  /** The page it opens on: SETUP for a system just made, MY SYSTEMS from the GAME tab. */
+  startPage?: BuilderPage | 'systems';
   /** The system the game runs, so PUBLISH can say whether the game now runs the new version. */
   running: string | null;
   /** Back to the map. */
   onExit: () => void;
-  /** Another system, opened here in its place (MY SYSTEMS). */
-  onOpenSystem: (id: string) => void;
-  /** Back to SYSTEMS.EXE on the map, to rename, copy, share or install. */
-  onManageSystems: () => void;
+  /** Another system, opened here in its place at a page (MY SYSTEMS), once the open one is saved. */
+  onOpenSystem: (id: string, page: BuilderPage) => void;
   fetcher?: typeof fetch;
 }
 
 /**
- * MY SYSTEMS is the builder's own list of systems, not a way out of it: picking one opens it here
- * (the user asked, 2026-10-06, after it first went back to SYSTEMS.EXE on the map).
+ * MY SYSTEMS is the builder's own page for every system: picking, making, copying, sharing and
+ * installing them without leaving (MySystemsPage; approved mockup builder-my-systems, 2026-10-06,
+ * which retired the SYSTEMS.EXE window).
  */
 const MY_SYSTEMS = { id: 'systems' as const, label: 'MY SYSTEMS', what: 'Every system you have made or installed. Pick one to work on it.' };
 type Page = BuilderPage | 'systems';
@@ -61,10 +62,6 @@ const ExitIcon = () => (
 
 /** How wide the rail grows to show the names. */
 const RAIL_OPEN = 220;
-
-const BADGE_BORDER: Record<Badge['tone'], string> = {
-  run: 'var(--cyan)', plain: 'var(--dark-green)', warn: 'var(--warning)', bad: 'var(--danger)',
-};
 
 const badge = (border: string, color?: string): React.CSSProperties => ({
   fontSize: 10, letterSpacing: 1, padding: '1px 5px', border: `1px solid ${border}`, ...(color ? { color } : {}),
@@ -128,12 +125,12 @@ function RailButton({ icon: glyph, label, onClick, title, active, disabled, coun
   );
 }
 
-export function BuilderScreen({ token, systemId, startPage = 'setup', running, onExit, onOpenSystem, onManageSystems, fetcher }: Props) {
+export function BuilderScreen({ token, systemId, startPage = 'setup', running, onExit, onOpenSystem, fetcher }: Props) {
   const api = useMemo(() => systemsApi(token, fetcher), [token, fetcher]);
   const [system, setSystem] = useState<SystemCopies | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [page, setPage] = useState<Page>(startPage);
-  const [library, setLibrary] = useState<{ systems: LibrarySystem[] | null; error: string | null }>({ systems: null, error: null });
+  // With no system open, MY SYSTEMS is the only page there is.
+  const [page, setPage] = useState<Page>(systemId ? startPage : 'systems');
   const [status, setStatus] = useState<{ text: string; bad?: boolean } | null>(null);
   const [exitError, setExitError] = useState<{ error: string; then: () => void } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -142,6 +139,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   const autosave = useRef<Autosave<Definition> | null>(null);
 
   const load = useCallback(async () => {
+    if (!systemId) return null;
     const r = await api.get(systemId);
     if (!r.ok) { setLoadError(r.error); return null; }
     setSystem(r.value);
@@ -151,7 +149,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   useEffect(() => {
     let live = true;
     load().then((sys) => {
-      if (!live || !sys) return;
+      if (!live || !sys || !systemId) return;
       autosave.current = createAutosave<Definition>({
         save: async (definition) => {
           const r = await api.saveDraft(systemId, definition);
@@ -200,7 +198,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     if (!saved) { setBusy(false); return; }
     const blocked = publishBlocked(autosave.current.problems);
     if (blocked) { setBusy(false); setPage('problems'); setStatus({ text: blocked, bad: true }); return; }
-    const r = await api.publish(systemId);
+    const r = await api.publish(systemId!);
     setBusy(false);
     if (!r.ok) {
       if (r.problems) setPage('problems');
@@ -211,14 +209,6 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     await load();
     window.dispatchEvent(new Event(SYSTEMS_CHANGED_EVENT));
   };
-
-  // MY SYSTEMS reads the list each time it opens, so it shows what was published or renamed since.
-  useEffect(() => {
-    if (page !== 'systems') return;
-    let live = true;
-    api.list().then((r) => { if (live) setLibrary(r.ok ? { systems: r.value, error: null } : { systems: null, error: r.error }); });
-    return () => { live = false; };
-  }, [api, page]);
 
   const current = page === 'systems' ? MY_SYSTEMS : BUILDER_PAGES.find((p) => p.id === page)!;
   const saveLine = state ? saveStatus(state) : null;
@@ -246,7 +236,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
         }}
       >
         <div className="rail-top" style={{ alignItems: 'stretch' }}>
-          <RailButton icon={Icons.builder} label="SYSTEM_BUILDER" big onClick={() => setPage('setup')} />
+          <RailButton icon={Icons.builder} label="SYSTEM_BUILDER" big onClick={() => setPage(systemId ? 'setup' : 'systems')} />
         </div>
         <div style={{ padding: '10px 0' }}>
           <RailButton icon={<ExitIcon />} label="EXIT TO MAP" aria="Exit the builder and go back to the map" onClick={() => leave(onExit)} />
@@ -259,7 +249,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
               key={p.id}
               icon={Icons[p.id]}
               label={p.label}
-              title={p.what}
+              title={systemId ? p.what : 'Open a system first, in MY SYSTEMS.'}
+              disabled={!systemId}
               active={p.id === page}
               count={p.id === 'problems' && problems.length > 0 ? problems.length : undefined}
               onClick={() => { setPage(p.id); setStatus(null); }}
@@ -281,7 +272,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
           minWidth: 0,
         }}>
           <span data-testid="builder-system" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <b style={{ color: 'var(--green)', letterSpacing: 1 }}>{name.toUpperCase() || '…'}</b>
+            <b style={{ color: 'var(--green)', letterSpacing: 1 }}>{systemId ? (name.toUpperCase() || '…') : 'NO SYSTEM OPEN'}</b>
             {system && (system.published
               ? <span style={badge('color-mix(in srgb, var(--green) 50%, transparent)')}>PUBLISHED v{system.version}</span>
               : <span style={badge('var(--warning)', 'var(--warning)')}>NEVER PUBLISHED</span>)}
@@ -296,7 +287,16 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
 
         <section aria-label={current.label} className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 24, fontSize: 13, lineHeight: 1.5 }}>
           {loadError && <p role="alert" style={{ color: 'var(--danger)' }}>{loadError}</p>}
-          {!system && !loadError && <p style={{ opacity: 0.7 }}>LOADING…</p>}
+          {systemId && !system && !loadError && <p style={{ opacity: 0.7 }}>LOADING…</p>}
+          {page === 'systems' && (systemId === null || system) && (
+            <MySystemsPage
+              api={api}
+              openId={systemId}
+              running={running}
+              onOpen={(id, at) => leave(() => onOpenSystem(id, at))}
+              say={(text, bad) => setStatus({ text, bad })}
+            />
+          )}
           {system && page === 'problems' && (problems.length === 0
             ? <p style={{ color: 'var(--green)' }}>No problems. It can be published.</p>
             : (
@@ -304,51 +304,6 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
                 {problems.map((p, i) => <li key={i}><b>{p.where}</b>: {p.message}</li>)}
               </ul>
             ))}
-          {system && page === 'systems' && (
-            <div style={{ maxWidth: '70ch', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {library.error && <p role="alert" style={{ margin: 0, color: 'var(--danger)' }}>{library.error}</p>}
-              {!library.systems && !library.error && <p style={{ margin: 0, opacity: 0.7 }}>LOADING…</p>}
-              {library.systems && (
-                <div role="group" aria-label="Your systems" style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--dark-green)' }}>
-                  {library.systems.map((s) => {
-                    const here = s.id === systemId;
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        aria-current={here ? 'true' : undefined}
-                        disabled={here || busy}
-                        title={here ? 'Open now' : `Save this one and open ${s.name}`}
-                        onClick={() => leave(() => onOpenSystem(s.id))}
-                        style={{
-                          ...mono, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '4px 12px', padding: '9px 12px',
-                          border: 0, borderBottom: '1px solid var(--dark-green)', textAlign: 'left', fontSize: 12, color: 'var(--green)',
-                          cursor: here ? 'default' : 'pointer',
-                          background: here ? 'color-mix(in srgb, var(--green) 14%, transparent)' : 'none',
-                          boxShadow: here ? 'inset 3px 0 0 var(--green)' : 'none',
-                        }}
-                      >
-                        <span style={{ fontWeight: 700, letterSpacing: 1, overflowWrap: 'anywhere' }}>{s.name.toUpperCase()}</span>
-                        <span style={{ opacity: 0.7 }}>{here ? 'OPEN NOW' : versionLabel(s)}</span>
-                        <span style={{ gridColumn: '1 / -1', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                          {badgesFor(s, running).map((b) => (
-                            <span key={b.text} style={badge(BADGE_BORDER[b.tone], b.tone === 'plain' ? undefined : BADGE_BORDER[b.tone])}>{b.text}</span>
-                          ))}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              <p style={{ margin: 0, opacity: 0.75, fontSize: 12 }}>
-                To rename, copy, share or install a system, use SYSTEMS.EXE on the map.
-              </p>
-              <div>
-                <button type="button" className="utility-btn" style={{ ...mono, fontSize: 11, letterSpacing: 1, padding: '5px 10px' }}
-                  onClick={() => leave(onManageSystems)}>OPEN SYSTEMS.EXE</button>
-              </div>
-            </div>
-          )}
           {system && page !== 'problems' && page !== 'systems' && (
             <div style={{ maxWidth: '60ch', border: '1px dashed color-mix(in srgb, var(--green) 45%, transparent)', padding: '16px 18px' }}>
               <p style={{ margin: '0 0 6px', color: 'var(--green)', letterSpacing: 1 }}>{current.label}</p>

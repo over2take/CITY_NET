@@ -2300,7 +2300,7 @@ const SR6_HOUSE_RULES: HouseRuleDef[] = [
 
 function TTRPGSystemPanel({ token, onOpenNpcLibrary, onOpenSystems, activeUsers }: {
   token: string; onOpenNpcLibrary?: () => void; activeUsers?: any[];
-  /** Opens SYSTEMS.EXE; the main admin's alone, so absent for a granted editor. */
+  /** Opens the system builder on MY SYSTEMS; the main admin's alone, so absent for a granted editor. */
   onOpenSystems?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -2320,7 +2320,7 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, onOpenSystems, activeUsers 
   };
 
   useEffect(() => { if (open) refresh(); }, [open]);
-  // SYSTEMS.EXE renamed, copied or deleted one: the picker shows it at once.
+  // The builder renamed, copied, installed or deleted one: the picker shows it at once.
   useEffect(() => {
     const again = () => refresh();
     window.addEventListener(SYSTEMS_CHANGED_EVENT, again);
@@ -2351,9 +2351,9 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, onOpenSystems, activeUsers 
             Each system keeps its own characters, banks and token health; switching back restores them.
           </p>
           {onOpenSystems && <>
-            <button className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={onOpenSystems}>SYSTEMS.EXE</button>
+            <button className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={onOpenSystems}>SYSTEM BUILDER</button>
             <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
-              Switching the game stays here, in the picker. SYSTEMS.EXE is for making and managing systems.
+              Switching the game stays here, in the picker. The builder is for making and managing systems.
             </p>
           </>}
           <HouseRulesPanel token={token} note={<ShortfallNote system={system} />} defs={[

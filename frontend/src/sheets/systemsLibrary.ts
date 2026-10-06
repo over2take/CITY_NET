@@ -1,4 +1,5 @@
-// What SYSTEMS.EXE says about a GM's own game systems (4a1b2): the badges in its list, the facts
+// What the builder's MY SYSTEMS says about a GM's own game systems (4a1b2, first for the SYSTEMS.EXE
+// window, retired in 4a2c2b): the badges in its list, the facts
 // beside the one picked, what an install preview offers, and the line after each action. Pure, so
 // the window only draws it. The server's answers are shaped by backend/systemBuilder/store.js
 // (listSystems, previewInstall, installSystem); its requests are in systemsApi.ts.
@@ -80,7 +81,7 @@ export const changedFact = (updatedAt: string): string => {
 };
 
 /**
- * Sent on the window after SYSTEMS.EXE changes a system, so the game-system picker beside it
+ * Sent on the window after the builder changes a system, so the game-system picker
  * fetches the list again: a renamed, copied or deleted system shows there at once.
  */
 export const SYSTEMS_CHANGED_EVENT = 'citynet:systems-changed';

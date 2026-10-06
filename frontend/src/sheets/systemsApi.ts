@@ -1,4 +1,4 @@
-// SYSTEMS.EXE's requests to the server (4a1b2): backend/routes/systems.js, main admin only. Each
+// The system builder's requests to the server (4a1b2): backend/routes/systems.js, main admin only. Each
 // answers { ok: true, value } or { ok: false, error }, the error being the server's own words
 // ("Another system is already called Ember.") so the window can show them where they apply.
 // What the answers mean is systemsLibrary.ts.
