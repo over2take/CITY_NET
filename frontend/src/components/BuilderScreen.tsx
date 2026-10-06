@@ -6,6 +6,7 @@ import {
 } from '../sheets/builderSession';
 import { SYSTEMS_CHANGED_EVENT } from '../sheets/systemsLibrary';
 import { MySystemsPage } from './MySystemsPage';
+import { SetupPage } from './SetupPage';
 
 // The system builder (4a2b): it takes over the whole window, with no map. A sidebar down the left
 // holds the system's name, its pages, SAVE and PUBLISH, and EXIT TO MAP; the open page fills the
@@ -137,6 +138,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   const [railOpen, setRailOpen] = useState(false);
   const [, redraw] = useReducer((n: number) => n + 1, 0);
   const autosave = useRef<Autosave<Definition> | null>(null);
+  /** The draft as the pages edit it; the server's copy catches up as autosave saves it. */
+  const [definition, setDefinition] = useState<Definition | null>(null);
 
   const load = useCallback(async () => {
     if (!systemId) return null;
@@ -158,10 +161,16 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
         onChange: redraw,
         initialProblems: sys.problems,
       });
-      redraw();
+      setDefinition(sys.draft);
     });
     return () => { live = false; autosave.current?.dispose(); };
   }, [api, load, systemId]);
+
+  /** A page changed the system: shown at once, saved once editing pauses (builderSession). */
+  const edit = (next: Definition) => {
+    setDefinition(next);
+    autosave.current?.edit(next);
+  };
 
   // Closing or reloading the tab asks first while anything is unsaved.
   useEffect(() => {
@@ -174,7 +183,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
 
   const state = autosave.current?.state ?? null;
   const problems = autosave.current?.problems ?? system?.problems ?? [];
-  const name = system?.draft?.name || system?.name || '';
+  const name = definition?.name || system?.name || '';
 
   /** Save, then leave; if saving fails, say so and let the GM choose. */
   const leave = async (then: () => void) => {
@@ -304,7 +313,10 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
                 {problems.map((p, i) => <li key={i}><b>{p.where}</b>: {p.message}</li>)}
               </ul>
             ))}
-          {system && page !== 'problems' && page !== 'systems' && (
+          {systemId && system && definition && page === 'setup' && (
+            <SetupPage api={api} systemId={systemId} definition={definition} edit={edit} say={(text, bad) => setStatus({ text, bad })} />
+          )}
+          {system && !['problems', 'systems', 'setup'].includes(page) && (
             <div style={{ maxWidth: '60ch', border: '1px dashed color-mix(in srgb, var(--green) 45%, transparent)', padding: '16px 18px' }}>
               <p style={{ margin: '0 0 6px', color: 'var(--green)', letterSpacing: 1 }}>{current.label}</p>
               <p style={{ margin: 0, opacity: 0.8 }}>{current.what} This page arrives in a coming update.</p>
