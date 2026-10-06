@@ -8,11 +8,17 @@
 // Copying a copy counts on rather than stacking: "Hearth copy" taken gives "Hearth copy 02",
 // never "Hearth copy copy". A long name is shortened to keep the result within the name limit.
 //
+// RENAME is different: a name another system already has is refused, not changed, so the GM
+// picks another (decided with the user, 2026-10-06). It matches names with `sameName`.
+//
 // Pure: the store passes the names of the systems not deleted.
 
 const { LIMITS } = require('./definition');
 
 const keyOf = (name) => String(name).trim().toLowerCase();
+
+/** Whether two names are the same name: "hearth " and "Hearth" are. */
+const sameName = (a, b) => keyOf(a) === keyOf(b);
 
 /** " copy" for the first copy, then " copy 02", " copy 03"... */
 const copySuffix = (n) => (n === 1 ? ' copy' : ` copy ${String(n).padStart(2, '0')}`);
@@ -42,4 +48,4 @@ const uniqueName = (wanted, taken, max = LIMITS.name) => {
   }
 };
 
-module.exports = { uniqueName };
+module.exports = { uniqueName, sameName };

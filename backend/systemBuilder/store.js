@@ -15,9 +15,10 @@
 // played in it was never removed by a delete anyway.
 
 const crypto = require('crypto');
-const { checkDefinition, blankDefinition } = require('./definition');
+const { checkDefinition, blankDefinition, LIMITS } = require('./definition');
 const citysys = require('./citysys');
 const { isIcon, BUILT_IN_ICONS } = require('./currencies');
+const { sameName } = require('./names');
 
 const PREFIX = 'sys_';
 
@@ -178,6 +179,39 @@ const setCurrencyIcon = (db, id, currencyId, icon, cb) => {
   });
 };
 
+/**
+ * Rename a system (4a1a), in the draft and the published copy alike, at once: the picker and the
+ * running game show the new name without a republish, and a draft's unpublished work stays
+ * unpublished. No new version, as with setCurrencyIcon. Refused when blank, too long, or another
+ * system not deleted already has the name (sameName), so the GM can pick another; its own name
+ * with different capitals is fine.
+ */
+const renameSystem = (db, id, wanted, cb) => {
+  if (!isCustomId(id)) return cb(fail(404, 'No such system'));
+  const name = typeof wanted === 'string' ? wanted.trim() : '';
+  if (!name) return cb(fail(400, 'A system needs a name'));
+  if (name.length > LIMITS.name) return cb(fail(400, `A name is at most ${LIMITS.name} characters`));
+  db.all('SELECT id, name, draft, published FROM custom_systems WHERE deleted_at IS NULL', [], (err, rows) => {
+    if (err) return cb(err);
+    const row = rows.find((r) => r.id === id);
+    if (!row) return cb(fail(404, 'No such system'));
+    const other = rows.find((r) => r.id !== id && sameName(r.name, name));
+    if (other) return cb(fail(409, `Another system is already called ${other.name}.`));
+    /** One copy with the new name; a copy that isn't there stays absent. */
+    const withName = (text) => {
+      const definition = parse(text);
+      if (!definition) return text;
+      definition.name = name;
+      return JSON.stringify(definition);
+    };
+    db.run(
+      'UPDATE custom_systems SET name = ?, draft = ?, published = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [name, withName(row.draft), withName(row.published), id],
+      (err2) => (err2 ? cb(err2) : cb(null, { name })),
+    );
+  });
+};
+
 // ─── Sharing as files ───────────────────────────────────────────────────────
 
 /** A published system as a file: { fileName, text }. A draft is not shared. */
@@ -299,5 +333,5 @@ const installSystem = (db, text, mode, cb) => {
 
 module.exports = {
   PREFIX, isCustomId, listSystems, getSystem, createSystem, saveDraft, publishSystem, deleteSystem,
-  setCurrencyIcon, exportSystem, previewInstall, installSystem,
+  setCurrencyIcon, renameSystem, exportSystem, previewInstall, installSystem,
 };

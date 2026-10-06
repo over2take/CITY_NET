@@ -7,8 +7,17 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
-const { uniqueName } = require_('../systemBuilder/names');
+const { uniqueName, sameName } = require_('../systemBuilder/names');
 const { LIMITS } = require_('../systemBuilder/definition');
+
+describe('sameName', () => {
+  it('matches names trimmed and ignoring case, and nothing else', () => {
+    expect(sameName('Hearth', ' hearth ')).toBe(true);
+    expect(sameName('HEARTH', 'Hearth')).toBe(true);
+    expect(sameName('Hearth', 'Hearthfire')).toBe(false);
+    expect(sameName('Hearth copy', 'Hearth')).toBe(false);
+  });
+});
 
 describe('uniqueName', () => {
   it('keeps a name no system has, trimmed', () => {
