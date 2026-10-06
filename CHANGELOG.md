@@ -71,6 +71,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's new MY SYSTEMS page, ready to be put in.** Every system as one line: its name and
+  version, its description, who made it, when it changed, where it came from and how many
+  characters are played in it, then its badges. Clicking a line opens it out with OPEN, RENAME,
+  DUPLICATE, EXPORT and DELETE. + NEW makes a system and opens it on SETUP; INSTALL A FILE offers
+  OPEN IT once it's in. DELETE is off for the system open in the builder as well as the one the
+  game runs. The builder starts using it in the next update.
+
 - **The system list says more about each system.** Each one now comes with its description, its
   author and how many players' characters are played in it (NPCs aren't counted), for the
   builder's MY SYSTEMS page to show under each name.

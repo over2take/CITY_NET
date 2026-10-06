@@ -19,7 +19,26 @@ export interface LibrarySystem {
   unpublishedChanges: boolean;
   installed: boolean;
   problemCount: number;
+  /** The draft's description and author, '' when it has none. */
+  description: string;
+  author: string;
+  /** Players' characters saved under it; NPCs aren't counted. */
+  characterCount: number;
 }
+
+/**
+ * The facts on a system's line in MY SYSTEMS, in order (approved mockup builder-my-systems,
+ * 2026-10-06): who made it, when it changed, where it came from, how many characters play it.
+ */
+export const lineFacts = (s: LibrarySystem): string[] => [
+  ...(s.author ? [`BY ${s.author.toUpperCase()}`] : []),
+  `CHANGED ${changedFact(s.updatedAt)}`,
+  s.installed ? 'INSTALLED FROM A FILE' : 'MADE HERE',
+  plural(s.characterCount, 'CHARACTER'),
+];
+
+/** What a line says when the system has no description yet. */
+export const NO_DESCRIPTION = 'No description yet. SETUP asks for one.';
 
 export type BadgeTone = 'run' | 'plain' | 'warn' | 'bad';
 export interface Badge { text: string; tone: BadgeTone }
@@ -67,8 +86,11 @@ export const changedFact = (updatedAt: string): string => {
 export const SYSTEMS_CHANGED_EVENT = 'citynet:systems-changed';
 
 /** Why a button can't be used now, or null when it can. */
-export const deleteBlocked = (s: LibrarySystem, running: string | null): string | null =>
-  (s.id === running ? 'This is the system the game is running. Switch to another first.' : null);
+export const deleteBlocked = (s: LibrarySystem, running: string | null, openInBuilder: string | null = null): string | null => {
+  if (s.id === running) return 'This is the system the game is running. Switch to another first.';
+  if (s.id === openInBuilder) return 'It\'s open in the builder. Open another first.';
+  return null;
+};
 export const exportBlocked = (s: LibrarySystem): string | null =>
   (s.published ? null : 'Publish it before sharing it. Only a published system is shared.');
 

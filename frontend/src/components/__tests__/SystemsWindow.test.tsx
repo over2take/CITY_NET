@@ -29,7 +29,8 @@ const COPY = 'sys_dddddddddddddddd';
 
 const row = (over: Partial<LibrarySystem>): LibrarySystem => ({
   id: HEARTH, name: 'Hearth', version: 3, updatedAt: '2026-10-06 14:10:00', publishedAt: '2026-10-06 14:10:00',
-  published: true, unpublishedChanges: false, installed: false, problemCount: 0, ...over,
+  published: true, unpublishedChanges: false, installed: false, problemCount: 0,
+  description: '', author: '', characterCount: 0, ...over,
 });
 
 let systems: LibrarySystem[];
