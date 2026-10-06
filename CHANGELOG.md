@@ -71,6 +71,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A system can be renamed.** The new name reaches the system picker and the running game at
+  once, with no republish, and a draft's unpublished changes stay unpublished. A name another
+  system already has is refused ("Another system is already called Ember."), whatever its capitals,
+  so the GM can pick another. The SYSTEMS.EXE window that offers it comes later.
+
 - **How a copied system is named.** When a second system would share a name with one already
   here, it becomes "Hearth copy", then "Hearth copy 02", "Hearth copy 03" and so on. Names match
   regardless of capitals or spaces at either end, a copy of a copy counts on instead of becoming

@@ -101,6 +101,20 @@ module.exports = (db, io = null) => {
     });
   });
 
+  /**
+   * Rename a system (store.renameSystem): at once, in the draft and the running copy alike, and
+   * every browser fetches it again. A name another system has is refused with 409.
+   */
+  router.put('/:id/name', gm, (req, res) => {
+    store.renameSystem(db, req.params.id, req.body && req.body.name, (err, done) => {
+      if (err) return answer(res, err);
+      runtime.refresh(db, req.params.id, () => {
+        if (io) io.emit('customSystemChanged', { id: req.params.id });
+        answer(res, null, done);
+      });
+    });
+  });
+
   // ─── Sharing as files (systemBuilder/citysys.js) ────────────────────────────
 
   // A published system as a .citysys file to download.
