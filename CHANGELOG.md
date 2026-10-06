@@ -76,8 +76,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   has made or installed, with badges for the one running, its version, unpublished changes,
   problems and whether it was installed from a file. Beside the one picked are its facts and
   RENAME, DUPLICATE, EXPORT .CITYSYS and DELETE. A name already in use is refused right in the
-  rename box, which stays open to try another. The picker shows each change at once. Making a
-  new system and installing a file come next.
+  rename box, which stays open to try another. The picker shows each change at once.
+
+- **SYSTEMS.EXE makes and installs systems.** NEW makes a draft from a name, refusing one already
+  in use right where it was typed. INSTALL takes a .citysys file, chosen or dropped, and shows its
+  cover, what it holds and any problems before anything changes, then offers what fits: INSTALL,
+  BRING IT BACK for one deleted here, UPDATE for one already here, or REPLACE, which asks first
+  when the copy here was changed, always beside KEEP BOTH. A name already taken is shown as the
+  copy name it will get.
 
 - **What the SYSTEMS.EXE window will say.** The badges on each system (RUNNING, PUBLISHED v3,
   UNPUBLISHED CHANGES, a problem count, INSTALLED), the facts beside the one picked, and, for a file

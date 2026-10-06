@@ -14,7 +14,7 @@ vi.mock('../DraggableWindow', () => ({
 
 import { SystemsWindow } from '../SystemsWindow';
 import { AdminPanel } from '../AdminPanel';
-import { SYSTEMS_CHANGED_EVENT, type LibrarySystem } from '../../sheets/systemsLibrary';
+import { SYSTEMS_CHANGED_EVENT, type LibrarySystem, type InstallPreview } from '../../sheets/systemsLibrary';
 
 /**
  * SYSTEMS.EXE (4a1c1): the main admin's systems, opened from the GAME tab. Decided with the user:
@@ -34,8 +34,17 @@ const row = (over: Partial<LibrarySystem>): LibrarySystem => ({
 
 let systems: LibrarySystem[];
 let calls: { url: string; method: string; body: unknown }[];
-/** How the server answers a rename; a test changes it. */
+/** How the server answers a rename, a preview and an install; a test changes them. */
 let renameAnswer: { status: number; body: unknown } | null;
+let previewAnswer: { status: number; body: unknown };
+let installAnswer: { status: number; body: unknown };
+
+const INSIDE = { words: 12, partsOff: 0, currencies: 2, derived: 0, lookups: 0, sheetFields: 41, npcTiers: 0, healthModel: null };
+const PREVIEW: InstallPreview = {
+  manifest: { name: 'Iron Sea', author: 'M. Okafor', license: 'CC BY 4.0', builder: '1.15.0', version: 4, origin: 'org_iron' },
+  name: 'Iron Sea', inside: INSIDE, problems: [], installed: [], restores: null,
+  installsAs: { new: 'Iron Sea', update: null, keep_both: 'Iron Sea' },
+};
 
 const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
@@ -46,6 +55,17 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     ok: status < 300, status, json: async () => b, text: async () => String(b), headers: { get: (k: string) => headers[k] ?? null },
   }) as unknown as Response;
   if (url === '/api/systems' && method === 'GET') return json(200, systems);
+  if (url === '/api/systems' && method === 'POST') {
+    const taken = systems.find((s) => s.name.toLowerCase() === body.name.trim().toLowerCase());
+    if (taken) return json(409, { error: `Another system is already called ${taken.name}.` });
+    systems = [row({ id: COPY, name: body.name, published: false, version: 0, unpublishedChanges: true }), ...systems];
+    return json(200, { id: COPY, problems: [] });
+  }
+  if (url === '/api/systems/install/preview') return json(previewAnswer.status, previewAnswer.body);
+  if (url === '/api/systems/install') {
+    if (installAnswer.status === 200) systems = [row({ id: COPY, name: (installAnswer.body as { name: string }).name, installed: true }), ...systems];
+    return json(installAnswer.status, installAnswer.body);
+  }
   const m = /^\/api\/systems\/(sys_[0-9a-f]+)(\/[a-z]+)?$/.exec(url);
   if (m) {
     const [, id, rest] = m;
@@ -69,6 +89,8 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
 beforeEach(() => {
   calls = [];
   renameAnswer = null;
+  previewAnswer = { status: 200, body: PREVIEW };
+  installAnswer = { status: 200, body: { id: COPY, name: 'Iron Sea', published: true, problems: [] } };
   systems = [
     row({}),
     row({ id: NEON, name: 'Neon Exchange', version: 1, unpublishedChanges: true }),
@@ -114,7 +136,7 @@ describe('the list', () => {
   it('says when there are none, and when the server can\'t be reached', async () => {
     systems = [];
     open();
-    expect(await screen.findByText('No systems of your own yet.')).toBeTruthy();
+    expect(await screen.findByText('No systems of your own yet. Make one in NEW, or install a file in INSTALL.')).toBeTruthy();
     expect(screen.getByTestId('window-title').textContent).toBe('SYSTEMS.EXE · LIBRARY');
     cleanup();
     render(<SystemsWindow token="gm" running={null} pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()}
@@ -231,6 +253,135 @@ describe('DELETE', () => {
     await waitFor(() => expect(listed()).toHaveLength(2));
     expect(calls.find((c) => c.method === 'DELETE')!.url).toBe(`/api/systems/${NEON}`);
     expect(entry('Hearth').getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+const folder = async (name: 'SYSTEMS' | 'NEW' | 'INSTALL') => {
+  await waitFor(() => expect(listed().length).toBeGreaterThan(0));
+  await userEvent.click(screen.getByRole('tab', { name }));
+};
+
+describe('NEW', () => {
+  it('makes a draft from a name, then shows it picked in SYSTEMS', async () => {
+    const told = vi.fn();
+    window.addEventListener(SYSTEMS_CHANGED_EVENT, told);
+    open();
+    await folder('NEW');
+    expect((screen.getByText('CREATE') as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.type(screen.getByLabelText('NAME'), '  Tidewater {Enter}');
+    expect(calls.find((c) => c.method === 'POST')).toEqual({ url: '/api/systems', method: 'POST', body: { name: 'Tidewater' } });
+    expect(await screen.findByText('Made Tidewater as a draft.')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'SYSTEMS' }).getAttribute('aria-selected')).toBe('true');
+    await waitFor(() => expect(entry('Tidewater').getAttribute('aria-pressed')).toBe('true'));
+    expect(told).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SYSTEMS_CHANGED_EVENT, told);
+  });
+
+  it('refuses a name in use where it was typed, keeping it to change', async () => {
+    open();
+    await folder('NEW');
+    await userEvent.type(screen.getByLabelText('NAME'), 'hearth');
+    await userEvent.click(screen.getByText('CREATE'));
+    expect((await screen.findByRole('alert')).textContent).toBe('Another system is already called Hearth.');
+    expect((screen.getByLabelText('NAME') as HTMLInputElement).value).toBe('hearth');
+    expect(document.activeElement).toBe(screen.getByLabelText('NAME'));
+    await userEvent.type(screen.getByLabelText('NAME'), 'fire');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('starts blank only, for now', async () => {
+    open();
+    await folder('NEW');
+    const starts = within(screen.getByRole('radiogroup', { name: 'Start from' })).getAllByRole('radio') as HTMLButtonElement[];
+    expect(starts.map((b) => [b.textContent!.split('A name')[0].split('Cities')[0].split('Fantasy')[0], b.disabled, b.getAttribute('aria-checked')])).toEqual([
+      ['BLANK', false, 'true'], ['A BUILT-IN EXAMPLE', true, 'false'], ['A GENRE STARTER', true, 'false'],
+    ]);
+  });
+});
+
+describe('INSTALL', () => {
+  /** The INSTALL button, not the INSTALL folder. */
+  const installButton = () => screen.getAllByRole('button', { name: 'INSTALL' }).find((b) => b.getAttribute('role') !== 'tab')!;
+  const choose = async (text = '{"citysys":1}', name = 'iron-sea.citysys') => {
+    await userEvent.upload(screen.getByLabelText('System file'), new File([text], name, { type: 'application/json' }));
+  };
+
+  it('previews a file, then installs it, saying so', async () => {
+    open();
+    await folder('INSTALL');
+    await choose();
+    const cover = await screen.findByTestId('install-cover');
+    expect(calls.find((c) => c.url === '/api/systems/install/preview')!.body).toEqual({ file: '{"citysys":1}' });
+    expect(within(cover).getByText('IRON SEA')).toBeTruthy();
+    expect(within(cover).getByText('M. Okafor')).toBeTruthy();
+    expect(within(cover).getByText('CITY_NET 1.15.0')).toBeTruthy();
+    expect(within(cover).getByText('12 WORDS RENAMED')).toBeTruthy();
+    expect(screen.getByText('iron-sea.citysys · CHOOSE ANOTHER FILE')).toBeTruthy();
+    expect(screen.getByText('Not installed here. It installs as a new system, published and ready to run.')).toBeTruthy();
+    await userEvent.click(installButton());
+    expect(calls.find((c) => c.url === '/api/systems/install')!.body).toEqual({ file: '{"citysys":1}', mode: 'new' });
+    expect(await screen.findByText('Installed Iron Sea v4. It\'s in the list and the game-system picker.')).toBeTruthy();
+    expect(screen.queryByTestId('install-cover')).toBeNull();
+    await userEvent.click(screen.getByRole('tab', { name: 'SYSTEMS' }));
+    expect(entry('Iron Sea').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('asks before REPLACING changes made here, and sends the say-so only then', async () => {
+    previewAnswer = { status: 200, body: {
+      ...PREVIEW, installed: [{ id: HEARTH, name: 'Iron Sea (ours)', version: 3, edited: true }],
+      installsAs: { new: null, update: 'Iron Sea (ours)', keep_both: 'Iron Sea copy' },
+    } };
+    open();
+    await folder('INSTALL');
+    await choose();
+    await userEvent.click(await screen.findByText('REPLACE WITH v4'));
+    const ask = screen.getByRole('alertdialog', { name: 'REPLACE WITH v4' });
+    expect(within(ask).getByText('Your changes to Iron Sea (ours) since you installed it will be lost. Characters, banks and tokens are kept.')).toBeTruthy();
+    await userEvent.click(within(ask).getByText('CANCEL'));
+    expect(calls.some((c) => c.url === '/api/systems/install')).toBe(false);
+    await userEvent.click(screen.getByText('REPLACE WITH v4'));
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByText('REPLACE WITH v4'));
+    expect(calls.find((c) => c.url === '/api/systems/install')!.body).toEqual({ file: '{"citysys":1}', mode: 'update', replaceChanges: true });
+  });
+
+  it('keeps both without asking, and won\'t update with a file that has problems', async () => {
+    previewAnswer = { status: 200, body: {
+      ...PREVIEW, problems: [{ where: 'derived armor', message: 'Depends on itself' }],
+      installed: [{ id: HEARTH, name: 'Iron Sea', version: 3, edited: false }],
+      installsAs: { new: null, update: 'Iron Sea', keep_both: 'Iron Sea copy' },
+    } };
+    open();
+    await folder('INSTALL');
+    await choose();
+    expect(await screen.findByText('derived armor: Depends on itself')).toBeTruthy();
+    expect((screen.getByText('UPDATE TO v4') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('UPDATE TO v4: The file has problems.')).toBeTruthy();
+    await userEvent.click(screen.getByText('KEEP BOTH, AS A DRAFT'));
+    expect(calls.find((c) => c.url === '/api/systems/install')!.body).toEqual({ file: '{"citysys":1}', mode: 'keep_both' });
+  });
+
+  it('says why a file can\'t be read, and refuses one far too large without sending it', async () => {
+    previewAnswer = { status: 400, body: { error: 'Not a CITY_NET system file' } };
+    open();
+    await folder('INSTALL');
+    await choose('hello', 'notes.txt');
+    expect((await screen.findByRole('alert')).textContent).toBe('Not a CITY_NET system file');
+    expect(screen.queryByTestId('install-cover')).toBeNull();
+    const before = calls.length;
+    await choose('x'.repeat(1024 * 1024 + 1), 'huge.citysys');
+    expect((await screen.findByRole('alert')).textContent).toBe('huge.citysys is over 1 MB, too large to be a system file.');
+    expect(calls.length).toBe(before);
+  });
+
+  it('shows a refused install where it happened', async () => {
+    installAnswer = { status: 409, body: { error: 'Already installed. Update it or keep both.' } };
+    open();
+    await folder('INSTALL');
+    await choose();
+    await screen.findByTestId('install-cover');
+    await userEvent.click(installButton());
+    expect((await screen.findByRole('alert')).textContent).toBe('Already installed. Update it or keep both.');
+    expect(screen.getByTestId('install-cover')).toBeTruthy();
   });
 });
 
