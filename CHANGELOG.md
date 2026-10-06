@@ -75,6 +75,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's SETUP page.** The page a new system opens on asks five things, each saved as
+  you answer: what the system is (its name, refused if another system has it, plus description,
+  author and license); how characters get hurt, with each health model's own settings and a live
+  preview of the HEALTH section every character sheet will start with; how characters grow; the
+  dice it rolls most; and how distance is measured. When characters already play the system, it
+  says that changing their health changes their sheets once you publish, keeping their numbers.
+  Leaving the builder now warns you only if your latest changes couldn't be saved.
+
 - **What the builder's SETUP page will ask and show.** The core questions read from a system and
   written back: its description, author and license; how characters get hurt, with each health
   model's usual starting shape; how they grow; the dice it rolls most (up to eight); and how

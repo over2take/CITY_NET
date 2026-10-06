@@ -36,6 +36,8 @@ const LIBRARY = [row(HEARTH, 'Hearth', { version: 3 }), row(EMBER, 'Ember', { in
 let served: SystemCopies;
 let calls: { url: string; method: string }[];
 let publishAnswer: { status: number; body: unknown };
+let draftAnswer: { status: number; body: unknown };
+let drafts: unknown[];
 
 const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
@@ -43,6 +45,11 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
   calls.push({ url, method });
   const json = (status: number, body: unknown) => ({ ok: status < 300, status, json: async () => body }) as unknown as Response;
   if (url === `/api/systems/${HEARTH}` && method === 'GET') return json(200, served);
+  if (url === `/api/systems/${HEARTH}/name` && method === 'PUT') return json(200, { name: JSON.parse(String(init!.body)).name });
+  if (url === `/api/systems/${HEARTH}/draft` && method === 'PUT') {
+    drafts.push(JSON.parse(String(init!.body)).definition);
+    return json(draftAnswer.status, draftAnswer.body);
+  }
   if (url === '/api/systems' && method === 'GET') return json(200, LIBRARY);
   if (url === `/api/systems/${HEARTH}/publish`) {
     if (publishAnswer.status === 200) served = { ...served, version: served.version + 1 };
@@ -58,6 +65,8 @@ beforeEach(() => {
     draft: { format: 1, name: 'Hearth' }, published: { format: 1, name: 'Hearth' }, problems: [],
   };
   publishAnswer = { status: 200, body: { version: 4 } };
+  draftAnswer = { status: 200, body: { problems: [] } };
+  drafts = [];
 });
 afterEach(() => cleanup());
 
@@ -80,12 +89,18 @@ describe('the builder', () => {
     expect(within(screen.getByTestId('builder-system')).getByText('PUBLISHED v3')).toBeTruthy();
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('SETUP');
     expect(within(sidebar()).getByText('SETUP').closest('button')!.getAttribute('aria-current')).toBe('page');
-    expect(screen.getByText(/This page arrives in a coming update\./)).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'WHAT IS IT?' })).toBeTruthy();
     expect(screen.getByTestId('save-status').textContent).toMatch(/^DRAFT · SAVED \d\d:\d\d$/);
   });
 
+  it('shows what a page not built yet will hold', async () => {
+    open({ startPage: 'words' });
+    await ready();
+    expect(screen.getByText(/This page arrives in a coming update\./)).toBeTruthy();
+  });
+
   it('lists every page, each saying what it is for, and opens the one picked', async () => {
-    open();
+    open({ startPage: 'problems' });
     await ready();
     const pages = within(sidebar()).getAllByRole('button').filter((b) => b.title && !['PUBLISH', 'MY SYSTEMS'].includes(b.textContent!));
     expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'TRY IT', 'PROBLEMS']);
@@ -93,7 +108,7 @@ describe('the builder', () => {
     await userEvent.click(pages[1]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('WORDS');
     expect(pages[1].getAttribute('aria-current')).toBe('page');
-    // The list of systems is fetched for MY SYSTEMS alone.
+    // The list of systems is read only by the pages that use it (MY SYSTEMS; SETUP's character count).
     expect(calls.some((c) => c.url === '/api/systems')).toBe(false);
   });
 
@@ -272,6 +287,98 @@ describe('with no system open', () => {
     const { onExit } = open({ systemId: null });
     await userEvent.click(screen.getByLabelText('Exit the builder and go back to the map'));
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('saving what a page changes', () => {
+  const describeIt = async (text: string) => {
+    await waitFor(() => expect(screen.getByLabelText('DESCRIPTION')).toBeTruthy());
+    await userEvent.type(screen.getByLabelText('DESCRIPTION'), text);
+  };
+
+  it('shows the change as unsaved, and SAVE stores it with its problems', async () => {
+    draftAnswer = { status: 200, body: { problems: [PROBLEM] } };
+    open({ startPage: 'setup' });
+    await ready();
+    await describeIt('By one fire.');
+    expect(screen.getByTestId('save-status').textContent).toBe('DRAFT · UNSAVED CHANGES');
+    await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
+    await waitFor(() => expect(screen.getByTestId('save-status').textContent).toMatch(/^DRAFT · SAVED \d\d:\d\d$/));
+    expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', description: 'By one fire.' });
+    expect(screen.getByText('PROBLEMS: 1')).toBeTruthy();
+  });
+
+  it('a rename in SETUP shows in the top bar at once, and the next save keeps it', async () => {
+    open({ startPage: 'setup' });
+    await ready();
+    await waitFor(() => expect(screen.getByLabelText('NAME')).toBeTruthy());
+    await userEvent.clear(screen.getByLabelText('NAME'));
+    await userEvent.type(screen.getByLabelText('NAME'), 'Emberhold{Enter}');
+    await waitFor(() => expect(within(screen.getByTestId('builder-system')).getByText('EMBERHOLD')).toBeTruthy());
+    await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
+    await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Emberhold' }));
+  });
+
+  it('asks before the browser tab closes while a change is unsaved', async () => {
+    open({ startPage: 'setup' });
+    await ready();
+    await describeIt('x');
+    const e = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('EXIT TO MAP saves first, then leaves', async () => {
+    const { onExit } = open({ startPage: 'setup' });
+    await ready();
+    await describeIt('By one fire.');
+    await userEvent.click(screen.getByLabelText('Exit the builder and go back to the map'));
+    await waitFor(() => expect(onExit).toHaveBeenCalledTimes(1));
+    expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', description: 'By one fire.' });
+  });
+
+  it('when that save fails, asks: STAY, TRY AGAIN or EXIT WITHOUT SAVING', async () => {
+    draftAnswer = { status: 500, body: { error: 'Could not reach the systems store' } };
+    const { onExit } = open({ startPage: 'setup' });
+    await ready();
+    await describeIt('By one fire.');
+    await userEvent.click(screen.getByLabelText('Exit the builder and go back to the map'));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toContain('EXIT.EXE · UNSAVED WORK');
+    expect(dialog.textContent).toContain('Your latest changes to Hearth couldn\'t be saved: Could not reach the systems store');
+    expect(screen.getByTestId('save-status').textContent).toBe('NOT SAVED: Could not reach the systems store');
+    await userEvent.click(within(dialog).getByText('STAY'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onExit).not.toHaveBeenCalled();
+    // Still failing: asked again. Then the server answers, and it leaves.
+    await userEvent.click(screen.getByLabelText('Exit the builder and go back to the map'));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByText('TRY AGAIN'));
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(onExit).not.toHaveBeenCalled();
+    draftAnswer = { status: 200, body: { problems: [] } };
+    await userEvent.click(within(screen.getByRole('dialog')).getByText('TRY AGAIN'));
+    await waitFor(() => expect(onExit).toHaveBeenCalledTimes(1));
+  });
+
+  it('EXIT WITHOUT SAVING leaves at once', async () => {
+    draftAnswer = { status: 500, body: { error: 'Could not reach the systems store' } };
+    const { onExit, onOpenSystem } = open({ startPage: 'setup' });
+    await ready();
+    await describeIt('x');
+    await userEvent.click(screen.getByLabelText('Exit the builder and go back to the map'));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByText('EXIT WITHOUT SAVING'));
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(onOpenSystem).not.toHaveBeenCalled();
+  });
+
+  it('PUBLISH saves first, and stops when that fails', async () => {
+    draftAnswer = { status: 500, body: { error: 'Could not reach the systems store' } };
+    open({ startPage: 'setup' });
+    await ready();
+    await describeIt('x');
+    await userEvent.click(within(sidebar()).getByLabelText('PUBLISH'));
+    await waitFor(() => expect(screen.getByTestId('save-status').textContent).toBe('NOT SAVED: Could not reach the systems store'));
+    expect(calls.some((c) => c.url.endsWith('/publish'))).toBe(false);
   });
 });
 
