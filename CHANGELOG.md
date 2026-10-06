@@ -71,6 +71,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **How a copied system is named.** When a second system would share a name with one already
+  here, it becomes "Hearth copy", then "Hearth copy 02", "Hearth copy 03" and so on. Names match
+  regardless of capitals or spaces at either end, a copy of a copy counts on instead of becoming
+  "Hearth copy copy", and a long name is shortened to fit. Nothing uses it yet: duplicating a
+  system and installing a second copy of one come next.
+
 - **The map's ruler reads in a custom system's own unit.** Meters, yards, squares or hexes, for your
   own line and everyone else's. Every map and floor keeps its own scale, untouched. In zones, the
   ruler draws its line with no number. Built-in systems read feet exactly as before.
