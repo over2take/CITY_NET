@@ -7,6 +7,7 @@ import {
 import { SYSTEMS_CHANGED_EVENT } from '../sheets/systemsLibrary';
 import { MySystemsPage } from './MySystemsPage';
 import { SetupPage } from './SetupPage';
+import { WordsPage } from './WordsPage';
 
 // The system builder (4a2b): it takes over the whole window, with no map. A sidebar down the left
 // holds the system's name, its pages, SAVE and PUBLISH, and EXIT TO MAP; the open page fills the
@@ -316,7 +317,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
           {systemId && system && definition && page === 'setup' && (
             <SetupPage api={api} systemId={systemId} definition={definition} edit={edit} say={(text, bad) => setStatus({ text, bad })} />
           )}
-          {system && !['problems', 'systems', 'setup'].includes(page) && (
+          {system && definition && page === 'words' && <WordsPage definition={definition} edit={edit} />}
+          {system && !['problems', 'systems', 'setup', 'words'].includes(page) && (
             <div style={{ maxWidth: '60ch', border: '1px dashed color-mix(in srgb, var(--green) 45%, transparent)', padding: '16px 18px' }}>
               <p style={{ margin: '0 0 6px', color: 'var(--green)', letterSpacing: 1 }}>{current.label}</p>
               <p style={{ margin: 0, opacity: 0.8 }}>{current.what} This page arrives in a coming update.</p>

@@ -94,9 +94,18 @@ describe('the builder', () => {
   });
 
   it('shows what a page not built yet will hold', async () => {
-    open({ startPage: 'words' });
+    open({ startPage: 'rules' });
     await ready();
     expect(screen.getByText(/This page arrives in a coming update\./)).toBeTruthy();
+  });
+
+  it('WORDS edits the system\'s terms, saved like any other change', async () => {
+    open({ startPage: 'words' });
+    await ready();
+    await userEvent.type(await screen.findByLabelText('HP one'), 'wound');
+    expect(screen.getByTestId('save-status').textContent).toBe('DRAFT · UNSAVED CHANGES');
+    await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
+    await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', words: { hp: { singular: 'WOUND' } } }));
   });
 
   it('lists every page, each saying what it is for, and opens the one picked', async () => {

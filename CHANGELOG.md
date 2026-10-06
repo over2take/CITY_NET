@@ -75,6 +75,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's WORDS page.** One table of the app's terms, grouped (characters, money, play,
+  vehicles), with a box for each one's singular, plural and short form. The app's own word shows
+  faintly in every empty box and is what a blank box means. The last column reads each term as
+  players will see it, and RESET puts a term back. A term whose part is off in FEATURES is greyed.
+  Every change autosaves like the rest of the builder.
+
 - **What the builder's WORDS and FEATURES pages will change.** A system's own words for the app's
   terms; which parts of the app it uses; its names for building types and shop catalogues, and
   the currency each catalogue sells in; its currencies, counted in whole numbers, decimals or
