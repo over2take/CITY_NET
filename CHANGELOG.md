@@ -71,6 +71,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The system list says more about each system.** Each one now comes with its description, its
+  author and how many players' characters are played in it (NPCs aren't counted), for the
+  builder's MY SYSTEMS page to show under each name.
+
 - **The system builder opens.** OPEN IN BUILDER in SYSTEMS.EXE, or CREATE for a new system, opens
   the builder over the whole window. Its sidebar is an icon rail like the map's, which widens to
   show the names when you point at it: EXIT TO MAP where the power button sits, MY SYSTEMS, the

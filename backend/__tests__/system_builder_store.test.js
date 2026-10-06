@@ -139,6 +139,26 @@ describe('the systems routes', () => {
     expect(res.body.problems).toEqual([]);
     const [only] = await list();
     expect(only).toMatchObject({ id: res.body.id, name: 'Vault Knights', version: 0, published: false, unpublishedChanges: true, installed: false, problemCount: 0 });
+    // Nothing yet to describe it, credit or play in it.
+    expect(only).toMatchObject({ description: '', author: '', characterCount: 0 });
+  });
+
+  it('says what each system\'s line shows: its draft\'s description and author, and its players\' characters', async () => {
+    const { id } = (await create({ definition: { format: 1, name: 'Hearth', description: '  Low fantasy by one fire. ', author: 'Cody' } })).body;
+    const other = (await create({ name: 'Ember' })).body.id;
+    const sheet = (username, system, isNpc) => run(db, 'INSERT INTO character_sheets (username, system, data, is_npc) VALUES (?, ?, ?, ?)', [username, system, '{}', isNpc]);
+    await sheet('vex', id, 0);
+    await sheet('rook', id, 0);
+    await sheet('gm', id, 1);
+    await sheet('vex', other, 0);
+    await sheet('vex', 'cities_without_number', 0);
+    await run(db, 'INSERT INTO character_sheets (username, system, data, is_npc) VALUES (?, ?, ?, NULL)', ['ghost', id, '{}']);
+    const byId = Object.fromEntries((await list()).map((s) => [s.id, s]));
+    expect(byId[id]).toMatchObject({ description: 'Low fantasy by one fire.', author: 'Cody', characterCount: 3 });
+    expect(byId[other]).toMatchObject({ description: '', author: '', characterCount: 1 });
+    // The draft's, not the published copy's: what the GM is working on.
+    await request(app).put(`/api/systems/${id}/draft`).set(bearer(GM)).send({ definition: { format: 1, name: 'Hearth', description: 'Rewritten.', author: 42 } });
+    expect((await list()).find((s) => s.id === id)).toMatchObject({ description: 'Rewritten.', author: '' });
   });
 
   it('refuses a name another system has, whatever its capitals, so the GM can pick another', async () => {
