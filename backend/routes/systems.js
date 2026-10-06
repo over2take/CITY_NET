@@ -115,6 +115,12 @@ module.exports = (db, io = null) => {
     });
   });
 
+  // A new, unpublished system from this one's draft (store.duplicateSystem). Nothing running
+  // changes, so nothing is reloaded.
+  router.post('/:id/duplicate', gm, (req, res) => {
+    store.duplicateSystem(db, req.params.id, (err, made) => answer(res, err, made));
+  });
+
   // ─── Sharing as files (systemBuilder/citysys.js) ────────────────────────────
 
   // A published system as a .citysys file to download.

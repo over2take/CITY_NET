@@ -18,7 +18,7 @@ const crypto = require('crypto');
 const { checkDefinition, blankDefinition, LIMITS } = require('./definition');
 const citysys = require('./citysys');
 const { isIcon, BUILT_IN_ICONS } = require('./currencies');
-const { sameName } = require('./names');
+const { sameName, uniqueName } = require('./names');
 
 const PREFIX = 'sys_';
 
@@ -36,7 +36,7 @@ const fail = (status, message, extra) => Object.assign(new Error(message), { sta
 /** Every system, newest change first, without their definitions. */
 const listSystems = (db, cb) => {
   db.all(
-    `SELECT id, name, version, draft, published, updated_at, published_at
+    `SELECT id, name, version, draft, published, source_hash, updated_at, published_at
      FROM custom_systems WHERE deleted_at IS NULL ORDER BY updated_at DESC, name`,
     [],
     (err, rows) => {
@@ -50,6 +50,8 @@ const listSystems = (db, cb) => {
         published: r.published != null,
         // Compared as stored text: the draft is written exactly as publishing copies it.
         unpublishedChanges: r.published == null || r.draft !== r.published,
+        // Installed from a file, rather than made here: only an install records the file's hash.
+        installed: r.source_hash != null,
       })));
     },
   );
@@ -212,6 +214,31 @@ const renameSystem = (db, id, wanted, cb) => {
   });
 };
 
+/**
+ * Duplicate a system (4a1a): a new system from its **draft**, unpublished changes included
+ * (decided with the user, 2026-10-02), named "<name> copy", "copy 02"... (names.js). It is made
+ * here, so it is its own origin, records no file it came from, and starts unpublished.
+ */
+const duplicateSystem = (db, id, cb) => {
+  if (!isCustomId(id)) return cb(fail(404, 'No such system'));
+  db.all('SELECT id, name, draft FROM custom_systems WHERE deleted_at IS NULL', [], (err, rows) => {
+    if (err) return cb(err);
+    const row = rows.find((r) => r.id === id);
+    if (!row) return cb(fail(404, 'No such system'));
+    const definition = parse(row.draft) || {};
+    // The column, not the draft's own: a draft saved with its name blank keeps its last name there.
+    const name = uniqueName(row.name, rows.map((r) => r.name));
+    definition.name = name;
+    const copy = newId();
+    db.run(
+      `INSERT INTO custom_systems (id, name, draft, version, origin, created_at, updated_at)
+       VALUES (?, ?, ?, 0, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [copy, name, JSON.stringify(definition), copy],
+      (err2) => (err2 ? cb(err2) : cb(null, { id: copy, name })),
+    );
+  });
+};
+
 // ─── Sharing as files ───────────────────────────────────────────────────────
 
 /** A published system as a file: { fileName, text }. A draft is not shared. */
@@ -284,54 +311,64 @@ const previewInstall = (db, text, cb) => {
  *   update     replace the copy already here, when it has not been changed since installing
  *   keep_both  a second copy beside it, with a new id and a new origin of its own
  * Published straight away when the file has no problems; otherwise kept as a draft to fix.
- * Never a merge. Resolves { id, published, restored?, problems }.
+ * Never a merge, and never refused over a name: one another system already has becomes
+ * "<name> copy", "copy 02"... (names.js; decided with the user, 2026-10-06), in the row and the
+ * definition alike. Resolves { id, name, published, restored?, problems }.
  */
 const installSystem = (db, text, mode, cb) => {
   if (!['new', 'update', 'keep_both'].includes(mode)) return cb(fail(400, 'Install as new, update or keep both'));
   const read = citysys.readFile(text);
   if (read.fatal) return cb(fail(400, read.fatal));
   const { manifest, definition } = read.file;
-  const stored = JSON.stringify(definition);
-  const hash = citysys.hashOf(stored);
-  const name = definition.name.trim();
   const publishable = read.problems.length === 0;
-  const done = (id, extra) => (err) => (err ? cb(err) : cb(null, { id, published: publishable, problems: read.problems, ...extra }));
 
-  const insert = (id, origin, extra) => db.run(
+  /** The file's definition as stored, under a name none of `others` has. */
+  const named = (others) => {
+    const name = uniqueName(definition.name, others.map((r) => r.name));
+    const stored = JSON.stringify({ ...definition, name });
+    return { name, stored, hash: citysys.hashOf(stored) };
+  };
+  const done = (id, name, extra) => (err) => (err ? cb(err) : cb(null, { id, name, published: publishable, problems: read.problems, ...extra }));
+
+  const insert = (id, origin, { name, stored, hash }) => db.run(
     `INSERT INTO custom_systems (id, name, draft, published, version, origin, source_hash, created_at, updated_at, published_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${publishable ? 'CURRENT_TIMESTAMP' : 'NULL'})`,
     [id, name, stored, publishable ? stored : null, publishable ? 1 : 0, origin, hash],
-    done(id, extra),
+    done(id, name),
   );
   // The row keeps its id, so everything played in it is still its own.
-  const replace = (row, extra) => db.run(
+  const replace = (row, { name, stored, hash }, extra) => db.run(
     `UPDATE custom_systems SET name = ?, draft = ?, source_hash = ?, deleted_at = NULL, updated_at = CURRENT_TIMESTAMP
      ${publishable ? ', published = ?, version = version + 1, published_at = CURRENT_TIMESTAMP' : ''}
      WHERE id = ?`,
     publishable ? [name, stored, hash, stored, row.id] : [name, stored, hash, row.id],
-    done(row.id, extra),
+    done(row.id, name, extra),
   );
 
   matchesFor(db, manifest.origin, (err, found) => {
     if (err) return cb(err);
-    const here = found.installed[0];
-    if (mode === 'keep_both') {
-      const id = newId();
-      return insert(id, id);
-    }
-    if (mode === 'update') {
-      if (!here) return cb(fail(404, 'This system is not installed here; install it as new'));
-      if (editedSinceInstall(here)) return cb(fail(409, 'This system has been changed here since it was installed. Keep both instead.'));
-      if (!publishable) return cb(fail(409, 'The file has problems; install it as a second copy to fix them', { problems: read.problems }));
-      return replace(here);
-    }
-    if (here) return cb(fail(409, 'Already installed. Update it or keep both.', { installed: found.installed.map((r) => ({ id: r.id, name: r.name })) }));
-    if (found.deleted) return replace(found.deleted, { restored: true });
-    return insert(newId(), manifest.origin);
+    db.all('SELECT id, name FROM custom_systems WHERE deleted_at IS NULL', [], (err2, systems) => {
+      if (err2) return cb(err2);
+      const here = found.installed[0];
+      if (mode === 'keep_both') {
+        const id = newId();
+        return insert(id, id, named(systems));
+      }
+      if (mode === 'update') {
+        if (!here) return cb(fail(404, 'This system is not installed here; install it as new'));
+        if (editedSinceInstall(here)) return cb(fail(409, 'This system has been changed here since it was installed. Keep both instead.'));
+        if (!publishable) return cb(fail(409, 'The file has problems; install it as a second copy to fix them', { problems: read.problems }));
+        // Its own name is not in the way of itself.
+        return replace(here, named(systems.filter((s) => s.id !== here.id)));
+      }
+      if (here) return cb(fail(409, 'Already installed. Update it or keep both.', { installed: found.installed.map((r) => ({ id: r.id, name: r.name })) }));
+      if (found.deleted) return replace(found.deleted, named(systems), { restored: true });
+      return insert(newId(), manifest.origin, named(systems));
+    });
   });
 };
 
 module.exports = {
   PREFIX, isCustomId, listSystems, getSystem, createSystem, saveDraft, publishSystem, deleteSystem,
-  setCurrencyIcon, renameSystem, exportSystem, previewInstall, installSystem,
+  setCurrencyIcon, renameSystem, duplicateSystem, exportSystem, previewInstall, installSystem,
 };

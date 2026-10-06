@@ -71,6 +71,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A system can be duplicated, and an install is never stopped by a name.** A duplicate is a new,
+  unpublished system made from the original's draft, unpublished changes included, and named
+  "Hearth copy", "Hearth copy 02" and so on. Installing a file whose system has a name already
+  here now installs it as a copy the same way, rather than putting two systems of one name side by
+  side. The system list also says which systems were installed from a file and which were made
+  here; a duplicate counts as made here. The SYSTEMS.EXE window that shows all this comes later.
+
 - **A system can be renamed.** The new name reaches the system picker and the running game at
   once, with no republish, and a draft's unpublished changes stay unpublished. A name another
   system already has is refused ("Another system is already called Ember."), whatever its capitals,
