@@ -6,14 +6,15 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  badgesFor, versionLabel, versionFact, originFact, changedFact, deleteBlocked, exportBlocked, insideBadges, installPlan,
+  badgesFor, versionLabel, versionFact, originFact, changedFact, lineFacts, NO_DESCRIPTION, deleteBlocked, exportBlocked, insideBadges, installPlan,
   installedMessage, renamedMessage, duplicatedMessage, deletedMessage, createdMessage,
   type LibrarySystem, type InstallPreview,
 } from '../systemsLibrary';
 
 const sys = (over: Partial<LibrarySystem> = {}): LibrarySystem => ({
   id: 'sys_aaaaaaaaaaaaaaaa', name: 'Hearth', version: 3, updatedAt: '2026-10-06 08:00:00', publishedAt: '2026-10-05 20:00:00',
-  published: true, unpublishedChanges: false, installed: false, problemCount: 0, ...over,
+  published: true, unpublishedChanges: false, installed: false, problemCount: 0,
+  description: '', author: '', characterCount: 0, ...over,
 });
 const text = (s: LibrarySystem, running: string | null = null) => badgesFor(s, running).map((b) => `${b.text}/${b.tone}`);
 
@@ -61,9 +62,20 @@ describe('facts', () => {
     expect(originFact(sys())).toBe('Made here');
   });
 
+  it('the facts on its line in MY SYSTEMS', () => {
+    const at = changedFact('2026-10-06 08:00:00');
+    expect(lineFacts(sys({ author: 'Cody', characterCount: 5 }))).toEqual(['BY CODY', `CHANGED ${at}`, 'MADE HERE', '5 CHARACTERS']);
+    expect(lineFacts(sys({ installed: true, characterCount: 1 }))).toEqual([`CHANGED ${at}`, 'INSTALLED FROM A FILE', '1 CHARACTER']);
+    expect(lineFacts(sys())).toEqual([`CHANGED ${at}`, 'MADE HERE', '0 CHARACTERS']);
+    expect(NO_DESCRIPTION).toBe('No description yet. SETUP asks for one.');
+  });
+
   it('why DELETE and EXPORT are off', () => {
     expect(deleteBlocked(sys(), 'sys_aaaaaaaaaaaaaaaa')).toBe('This is the system the game is running. Switch to another first.');
     expect(deleteBlocked(sys(), 'cities_without_number')).toBeNull();
+    expect(deleteBlocked(sys(), null, 'sys_aaaaaaaaaaaaaaaa')).toBe('It\'s open in the builder. Open another first.');
+    expect(deleteBlocked(sys(), 'sys_aaaaaaaaaaaaaaaa', 'sys_aaaaaaaaaaaaaaaa')).toBe('This is the system the game is running. Switch to another first.');
+    expect(deleteBlocked(sys(), null, 'sys_bbbbbbbbbbbbbbbb')).toBeNull();
     expect(exportBlocked(sys({ published: false }))).toBe('Publish it before sharing it. Only a published system is shared.');
     expect(exportBlocked(sys())).toBeNull();
   });

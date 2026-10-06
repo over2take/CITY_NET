@@ -15,6 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   server image linked to the container's root folder. Both are gone; nothing the game does
   changes.
 
+- **A bank test no longer fails on a slow machine.** It waited a fixed number of steps for a
+  payment before the GM's own edit of the same account; on a slow test machine the payment landed
+  later and overwrote the edit. It now waits for each to land. Nothing in the game changes.
+
 ### Changed
 
 - **Each game system has its own bank.** A character's money now belongs to the game it was
@@ -70,6 +74,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   now work only for the GM and granted editors, as they appear in the admin panel.
 
 ### Under the hood
+
+- **The builder's new MY SYSTEMS page, ready to be put in.** Every system as one line: its name and
+  version, its description, who made it, when it changed, where it came from and how many
+  characters are played in it, then its badges. Clicking a line opens it out with OPEN, RENAME,
+  DUPLICATE, EXPORT and DELETE. + NEW makes a system and opens it on SETUP; INSTALL A FILE offers
+  OPEN IT once it's in. DELETE is off for the system open in the builder as well as the one the
+  game runs. The builder starts using it in the next update.
 
 - **The system list says more about each system.** Each one now comes with its description, its
   author and how many players' characters are played in it (NPCs aren't counted), for the

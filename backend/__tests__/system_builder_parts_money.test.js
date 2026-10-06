@@ -16,7 +16,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
 import { createRequire } from 'module';
 import { makeTestDb, get, run } from './helpers/testDb.js';
-import { drain } from './helpers/until.js';
+import { drain, untilValue } from './helpers/until.js';
 
 process.env.JWT_SECRET = 'test-secret';
 const GM = jwt.sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false }, 'test-secret');
@@ -73,8 +73,14 @@ beforeEach(async () => {
   await new Promise((resolve) => runtime.load(db, resolve));
 });
 
-/** Every way money moves or is told, run once. */
-const everything = async ({ handlers }) => {
+/**
+ * Every way money moves or is told, run once. Where the bank is on (`system` given), it waits for
+ * the pay to reach ROOK (50 + 200) before the GM's own edit, and for the edit to land, rather than
+ * a fixed number of rounds: on a slow CI machine the pay once landed after them, its write
+ * overtaking the edit (2026-10-06).
+ */
+const everything = async ({ handlers }, system = null) => {
+  const rook = () => account('ROOK', system);
   handlers.withdrawFunds({ amount: 100 });
   handlers.borrowFunds({ amount: 100 });
   handlers.payDebt({ amount: 100 });
@@ -83,10 +89,12 @@ const everything = async ({ handlers }) => {
   handlers.adminPayPlayers({ token: GM, usernames: ['GHOST', 'ROOK'], totalAmount: 400 });
   // The pay lands before the GM's own edit of ROOK, so the edit is the last word.
   await drain(db);
+  if (system) await untilValue(rook, (a) => a && a.balance === 250, { label: 'the pay reaching ROOK' });
   handlers.adminUpdateBank({ token: GM, username: 'ROOK', balance: 9999, debt: 0 });
   handlers.requestBankBalance({ username: 'GHOST' });
   handlers.checkoutShop({ locationId: 1, buys: [] });
   await drain(db);
+  if (system) await untilValue(rook, (a) => a && a.balance === 9999, { label: 'the GM\'s edit of ROOK' });
 };
 
 describe('a custom system with the bank off', () => {
@@ -116,7 +124,7 @@ describe('the bank, where it is on', () => {
   for (const system of [BANKED, 'cities_without_number', 'generic']) {
     it(`moves money and tells balances as before (${system})`, async () => {
       const booted = await running(system);
-      await everything(booted);
+      await everything(booted, system);
       // 1000 - 100 withdrawn, + 100 borrowed onto the debt, 100 of it paid back, + 200 of the pay.
       expect(await account('GHOST', system)).toEqual({ balance: 1000, debt: 500, first_pay_done: 1, high_roller_done: 1 });
       expect(await account('ROOK', system)).toMatchObject({ balance: 9999 });
