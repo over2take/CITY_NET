@@ -75,6 +75,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What the builder's SETUP page will ask and show.** The core questions read from a system and
+  written back: its description, author and license; how characters get hurt, with each health
+  model's usual starting shape; how they grow; the dice it rolls most (up to eight); and how
+  distance is measured. Also the preview of the HEALTH section a character sheet starts with,
+  checked against the server so it never shows something the game wouldn't build. The page itself
+  comes next.
+
 - **One place for your systems: the builder.** The GAME tab's SYSTEMS.EXE button is now SYSTEM
   BUILDER, and opens the builder on MY SYSTEMS, with the system the game runs already open when
   it's one of yours. Everything SYSTEMS.EXE did happens there, so the SYSTEMS.EXE window is gone.
