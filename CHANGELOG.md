@@ -75,6 +75,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **One place for your systems: the builder.** The GAME tab's SYSTEMS.EXE button is now SYSTEM
+  BUILDER, and opens the builder on MY SYSTEMS, with the system the game runs already open when
+  it's one of yours. Everything SYSTEMS.EXE did happens there, so the SYSTEMS.EXE window is gone.
+  With no system open yet, MY SYSTEMS is the only page, and SAVE and PUBLISH wait until you open
+  or make one.
+
 - **The builder's new MY SYSTEMS page, ready to be put in.** Every system as one line: its name and
   version, its description, who made it, when it changed, where it came from and how many
   characters are played in it, then its badges. Clicking a line opens it out with OPEN, RENAME,

@@ -4,8 +4,8 @@ import {
   insideBadges, installPlan, installedMessage, type Badge, type InstallPreview, type InstallAction,
 } from '../sheets/systemsLibrary';
 
-// The parts of managing a GM's systems that SYSTEMS.EXE and the builder's MY SYSTEMS page share
-// (4a2c2a): NEW, INSTALL, the badges, and their look. What they say is sheets/systemsLibrary.ts.
+// The builder MY SYSTEMS page's parts (4a2c2a; first built for the SYSTEMS.EXE window, retired in
+// 4a2c2b): NEW, INSTALL, the badges, and their look. What they say is sheets/systemsLibrary.ts.
 
 /** Larger than any system file can be (the server's limit is about half a megabyte). */
 export const MAX_FILE_BYTES = 1024 * 1024;
