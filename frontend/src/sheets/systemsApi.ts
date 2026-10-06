@@ -5,9 +5,26 @@
 
 import type { InstallMode, InstallPreview, InstallResult, LibrarySystem } from './systemsLibrary';
 
+type Problem = { where: string; message: string };
+
+/** A system's definition as stored: the builder edits it whole (backend/systemBuilder/definition.js). */
+export type Definition = { format: number; name: string; author?: string; [section: string]: unknown };
+
+/** One system as GET /api/systems/:id answers (store.getSystem). */
+export interface SystemCopies {
+  id: string;
+  name: string;
+  version: number;
+  updatedAt: string;
+  publishedAt: string | null;
+  draft: Definition | null;
+  published: Definition | null;
+  problems: Problem[];
+}
+
 export type Answer<T> =
   | { ok: true; value: T }
-  | { ok: false; error: string; status: number; changed?: boolean; problems?: { where: string; message: string }[] };
+  | { ok: false; error: string; status: number; changed?: boolean; problems?: Problem[] };
 
 const UNREACHABLE = 'Could not reach the server.';
 
@@ -39,8 +56,13 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
   const id = (systemId: string) => `/api/systems/${encodeURIComponent(systemId)}`;
   return {
     list: () => call<LibrarySystem[]>(fetcher, token, '/api/systems'),
-    /** One system with both copies: the facts panel reads the draft's author. */
-    get: (systemId: string) => call<{ draft: { author?: string } | null }>(fetcher, token, id(systemId)),
+    /** One system with both copies and the draft's problems: the facts panel and the builder. */
+    get: (systemId: string) => call<SystemCopies>(fetcher, token, id(systemId)),
+    /** Store the builder's draft; its problems come back, stored either way. */
+    saveDraft: (systemId: string, definition: Definition) =>
+      call<{ problems: Problem[] }>(fetcher, token, `${id(systemId)}/draft`, 'PUT', { definition }),
+    /** Make the stored draft what the game runs; refused, with `problems`, while it has any. */
+    publish: (systemId: string) => call<{ version: number }>(fetcher, token, `${id(systemId)}/publish`, 'POST', {}),
     create: (name: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name }),
     rename: (systemId: string, name: string) => call<{ name: string }>(fetcher, token, `${id(systemId)}/name`, 'PUT', { name }),
     duplicate: (systemId: string) => call<{ id: string; name: string }>(fetcher, token, `${id(systemId)}/duplicate`, 'POST', {}),

@@ -71,6 +71,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **How the builder will save.** Changes are saved by themselves about five seconds after you
+  stop editing, and always when you leave; SAVE saves at once and PUBLISH makes the system what
+  the game runs. Leaving the builder only warns you when a save failed. An edit made while a save
+  is under way is never lost, and two saves never run at once. Publishing a system now tells every
+  open browser, so sheets drawn from the old version update straight away. The builder screen
+  itself comes next.
+
 - **SYSTEMS.EXE, the GM's own game systems in one window.** A SYSTEMS.EXE button under the game
   system picker, in the GAME tab, opens it, for the main admin only. It lists every system the GM
   has made or installed, with badges for the one running, its version, unpublished changes,

@@ -26,6 +26,8 @@ describe('the requests', () => {
     const cases: [(api: ReturnType<typeof systemsApi>) => Promise<unknown>, string, string, unknown][] = [
       [(a) => a.list(), '/api/systems', 'GET', undefined],
       [(a) => a.get(ID), `/api/systems/${ID}`, 'GET', undefined],
+      [(a) => a.saveDraft(ID, { format: 1, name: 'Hearth' }), `/api/systems/${ID}/draft`, 'PUT', { definition: { format: 1, name: 'Hearth' } }],
+      [(a) => a.publish(ID), `/api/systems/${ID}/publish`, 'POST', {}],
       [(a) => a.create('Hearth'), '/api/systems', 'POST', { name: 'Hearth' }],
       [(a) => a.rename(ID, 'Emberhold'), `/api/systems/${ID}/name`, 'PUT', { name: 'Emberhold' }],
       [(a) => a.duplicate(ID), `/api/systems/${ID}/duplicate`, 'POST', {}],

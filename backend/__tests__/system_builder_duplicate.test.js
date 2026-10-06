@@ -50,6 +50,21 @@ afterEach(() => elevatedUsers.delete('ghost'));
 const duplicate = (id = HEARTH, token = GM) => request(app).post(`/api/systems/${id}/duplicate`).set(bearer(token));
 const count = async () => (await get(db, 'SELECT COUNT(*) AS n FROM custom_systems')).n;
 
+describe('publishing a system', () => {
+  it('tells every browser, so a sheet drawn from the old version is fetched again', async () => {
+    const res = await request(app).post(`/api/systems/${HEARTH}/publish`).set(bearer(GM));
+    expect(res.body).toEqual({ version: 4 });
+    expect(JSON.parse((await get(db, 'SELECT published FROM custom_systems WHERE id = ?', [HEARTH])).published)).toEqual(DRAFT);
+    expect(emitted).toEqual([{ event: 'customSystemChanged', data: { id: HEARTH } }]);
+  });
+
+  it('tells nobody when it is refused', async () => {
+    await run(db, 'UPDATE custom_systems SET draft = ? WHERE id = ?', [JSON.stringify({ ...DRAFT, derived: [{ id: 'a', formula: '@a' }] }), HEARTH]);
+    expect((await request(app).post(`/api/systems/${HEARTH}/publish`).set(bearer(GM))).status).toBe(409);
+    expect(emitted).toEqual([]);
+  });
+});
+
 describe('duplicating a system', () => {
   it('makes a new, unpublished system from the draft, named as a copy, made here', async () => {
     const res = await duplicate();
