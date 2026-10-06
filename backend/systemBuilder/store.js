@@ -33,7 +33,16 @@ const parse = (text) => {
 /** A stored error: `status` is what a route answers with. */
 const fail = (status, message, extra) => Object.assign(new Error(message), { status, ...(extra || {}) });
 
-/** Every system, newest change first, without their definitions. */
+/** A draft's problems, as publishing would list them. */
+const problemsOf = (draft) => {
+  const checked = checkDefinition(draft);
+  return checked.fatal ? [{ where: 'definition', message: checked.fatal }] : checked.problems;
+};
+
+/**
+ * Every system, newest change first, without their definitions. Each says how many problems its
+ * draft has, so SYSTEMS.EXE can badge them without fetching every system.
+ */
 const listSystems = (db, cb) => {
   db.all(
     `SELECT id, name, version, draft, published, source_hash, updated_at, published_at
@@ -52,6 +61,7 @@ const listSystems = (db, cb) => {
         unpublishedChanges: r.published == null || r.draft !== r.published,
         // Installed from a file, rather than made here: only an install records the file's hash.
         installed: r.source_hash != null,
+        problemCount: problemsOf(parse(r.draft)).length,
       })));
     },
   );
@@ -64,7 +74,6 @@ const getSystem = (db, id, cb) => {
     if (err) return cb(err);
     if (!row) return cb(fail(404, 'No such system'));
     const draft = parse(row.draft);
-    const checked = checkDefinition(draft);
     cb(null, {
       id: row.id,
       name: row.name,
@@ -73,7 +82,7 @@ const getSystem = (db, id, cb) => {
       publishedAt: row.published_at,
       draft,
       published: parse(row.published),
-      problems: checked.fatal ? [{ where: 'definition', message: checked.fatal }] : checked.problems,
+      problems: problemsOf(draft),
     });
   });
 };
@@ -262,7 +271,10 @@ const exportSystem = (db, id, cb) => {
 const editedSinceInstall = (row) => citysys.hashOf(row.draft) !== row.source_hash
   || (row.published != null && citysys.hashOf(row.published) !== row.source_hash);
 
-/** The systems here with a file's origin: the ones in use, and the most recently deleted. */
+/**
+ * The systems here with a file's origin: the ones in use, and the most recently deleted; and
+ * every system in use, whose names a new one must not take.
+ */
 const matchesFor = (db, origin, cb) => {
   db.all(
     `SELECT id, name, version, draft, published, source_hash, deleted_at FROM custom_systems
@@ -270,17 +282,38 @@ const matchesFor = (db, origin, cb) => {
     [origin],
     (err, rows) => {
       if (err) return cb(err);
-      cb(null, {
-        installed: rows.filter((r) => r.deleted_at == null),
-        deleted: rows.find((r) => r.deleted_at != null) || null,
+      db.all('SELECT id, name FROM custom_systems WHERE deleted_at IS NULL', [], (err2, inUse) => {
+        if (err2) return cb(err2);
+        cb(null, {
+          installed: rows.filter((r) => r.deleted_at == null),
+          deleted: rows.find((r) => r.deleted_at != null) || null,
+          inUse,
+        });
       });
     },
   );
 };
 
 /**
+ * The name a file's system goes in under, for each way of installing it: its own, or
+ * "<name> copy"... when another system has it (decided with the user, 2026-10-06). An update
+ * replaces the copy here, so that copy's name is not in its way. Null where the way does not
+ * apply: `new` once it is installed, `update` until it is.
+ */
+const installNames = (name, found) => {
+  const here = found.installed[0];
+  const taken = (rows) => rows.map((r) => r.name);
+  return {
+    new: here ? null : uniqueName(name, taken(found.inUse)),
+    update: here ? uniqueName(name, taken(found.inUse.filter((r) => r.id !== here.id))) : null,
+    keep_both: uniqueName(name, taken(found.inUse)),
+  };
+};
+
+/**
  * What installing a file would do, changing nothing: its cover, what is inside, its problems,
- * the copies already here, and whether it would bring a deleted system back.
+ * the copies already here, whether it would bring a deleted system back, and the name it would
+ * go in under for each way of installing it (installNames).
  */
 const previewInstall = (db, text, cb) => {
   const read = citysys.readFile(text);
@@ -301,6 +334,7 @@ const previewInstall = (db, text, cb) => {
         name: found.deleted.name,
         replacesChanges: found.deleted.draft !== JSON.stringify(definition) && editedSinceInstall(found.deleted),
       } : null,
+      installsAs: installNames(definition.name, found),
     });
   });
 };
@@ -322,9 +356,8 @@ const installSystem = (db, text, mode, cb) => {
   const { manifest, definition } = read.file;
   const publishable = read.problems.length === 0;
 
-  /** The file's definition as stored, under a name none of `others` has. */
-  const named = (others) => {
-    const name = uniqueName(definition.name, others.map((r) => r.name));
+  /** The file's definition as stored, under the name this way of installing gives it. */
+  const named = (name) => {
     const stored = JSON.stringify({ ...definition, name });
     return { name, stored, hash: citysys.hashOf(stored) };
   };
@@ -347,24 +380,21 @@ const installSystem = (db, text, mode, cb) => {
 
   matchesFor(db, manifest.origin, (err, found) => {
     if (err) return cb(err);
-    db.all('SELECT id, name FROM custom_systems WHERE deleted_at IS NULL', [], (err2, systems) => {
-      if (err2) return cb(err2);
-      const here = found.installed[0];
-      if (mode === 'keep_both') {
-        const id = newId();
-        return insert(id, id, named(systems));
-      }
-      if (mode === 'update') {
-        if (!here) return cb(fail(404, 'This system is not installed here; install it as new'));
-        if (editedSinceInstall(here)) return cb(fail(409, 'This system has been changed here since it was installed. Keep both instead.'));
-        if (!publishable) return cb(fail(409, 'The file has problems; install it as a second copy to fix them', { problems: read.problems }));
-        // Its own name is not in the way of itself.
-        return replace(here, named(systems.filter((s) => s.id !== here.id)));
-      }
-      if (here) return cb(fail(409, 'Already installed. Update it or keep both.', { installed: found.installed.map((r) => ({ id: r.id, name: r.name })) }));
-      if (found.deleted) return replace(found.deleted, named(systems), { restored: true });
-      return insert(newId(), manifest.origin, named(systems));
-    });
+    const here = found.installed[0];
+    const names = installNames(definition.name, found);
+    if (mode === 'keep_both') {
+      const id = newId();
+      return insert(id, id, named(names.keep_both));
+    }
+    if (mode === 'update') {
+      if (!here) return cb(fail(404, 'This system is not installed here; install it as new'));
+      if (editedSinceInstall(here)) return cb(fail(409, 'This system has been changed here since it was installed. Keep both instead.'));
+      if (!publishable) return cb(fail(409, 'The file has problems; install it as a second copy to fix them', { problems: read.problems }));
+      return replace(here, named(names.update));
+    }
+    if (here) return cb(fail(409, 'Already installed. Update it or keep both.', { installed: found.installed.map((r) => ({ id: r.id, name: r.name })) }));
+    if (found.deleted) return replace(found.deleted, named(names.new), { restored: true });
+    return insert(newId(), manifest.origin, named(names.new));
   });
 };
 

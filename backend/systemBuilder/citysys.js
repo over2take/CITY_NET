@@ -100,6 +100,7 @@ const summarize = (definition) => {
   return {
     words: isPlainObject(definition.words) ? Object.keys(definition.words).length : 0,
     partsOff: isPlainObject(definition.parts) ? Object.values(definition.parts).filter((p) => isPlainObject(p) && p.on === false).length : 0,
+    currencies: count(definition.currencies),
     derived: count(definition.derived),
     lookups: isPlainObject(definition.lookups) ? Object.keys(definition.lookups).length : 0,
     sheetFields: fields,

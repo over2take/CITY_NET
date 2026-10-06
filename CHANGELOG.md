@@ -71,6 +71,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The system list counts each system's problems, and an install says its name first.** The list
+  of a GM's systems now says how many problems each draft has, so SYSTEMS.EXE can mark them without
+  opening each one. Looking at a file before installing it now says the name it will go in under
+  ("Vault Knights copy" when that name is taken), for each way of installing it, and how many
+  currencies it has.
+
 - **A system can be duplicated, and an install is never stopped by a name.** A duplicate is a new,
   unpublished system made from the original's draft, unpublished changes included, and named
   "Hearth copy", "Hearth copy 02" and so on. Installing a file whose system has a name already

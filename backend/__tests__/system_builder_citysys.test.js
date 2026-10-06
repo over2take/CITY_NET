@@ -130,9 +130,11 @@ describe('previewing an install', () => {
     expect(res.body).toMatchObject({
       name: 'Vault Knights',
       manifest: { author: 'Cody', version: 3, origin: 'org_vault' },
-      inside: { words: 1, derived: 1, healthModel: 'wounds' },
+      inside: { words: 1, derived: 1, currencies: 0, healthModel: 'wounds' },
       problems: [], installed: [], restores: null,
+      installsAs: { new: 'Vault Knights', update: null, keep_both: 'Vault Knights' },
     });
+    expect((await preview(fileOf({ ...VAULT, currencies: [{ id: 'gold', name: 'Gold' }, { id: 'favor', name: 'Favor' }] }))).body.inside.currencies).toBe(2);
     expect(await rows()).toEqual(before);
   });
 
@@ -277,6 +279,28 @@ describe('installing under a name already here', () => {
     const res = await install(fileOf({ ...VAULT, derived: [{ id: 'a', formula: '@a' }] }), 'new');
     expect(res.body).toMatchObject({ name: 'Vault Knights copy', published: false });
     expect(await nameOf(res.body.id)).toMatchObject({ name: 'Vault Knights copy', draft: 'Vault Knights copy', published: null });
+  });
+
+  it('says beforehand the name each way of installing would give, and installing keeps to it', async () => {
+    const mine = await create();
+    const asNew = (await preview(fileOf(VAULT))).body.installsAs;
+    expect(asNew).toEqual({ new: 'Vault Knights copy', update: null, keep_both: 'Vault Knights copy' });
+    const id = (await install(fileOf(VAULT), 'new')).body.id;
+    // Installed: an update keeps its name while the other is here; keeping both counts on.
+    expect((await preview(fileOf(VAULT))).body.installsAs).toEqual({ new: null, update: 'Vault Knights copy', keep_both: 'Vault Knights copy 02' });
+    expect((await install(fileOf(VAULT), 'keep_both')).body.name).toBe('Vault Knights copy 02');
+    // With the other gone, an update takes the file's own name back.
+    await request(app).delete(`/api/systems/${mine}`).set(gm);
+    expect((await preview(fileOf(VAULT))).body.installsAs.update).toBe('Vault Knights');
+    expect((await install(fileOf({ ...VAULT, description: 'v2' }, 'org_vault', 4), 'update')).body).toMatchObject({ id, name: 'Vault Knights' });
+  });
+
+  it('names one brought back from deletion as it will be', async () => {
+    const id = (await install(fileOf(VAULT), 'new')).body.id;
+    await request(app).delete(`/api/systems/${id}`).set(gm);
+    await create();
+    expect((await preview(fileOf(VAULT))).body).toMatchObject({ restores: { id }, installsAs: { new: 'Vault Knights copy' } });
+    expect((await install(fileOf(VAULT), 'new')).body).toMatchObject({ id, restored: true, name: 'Vault Knights copy' });
   });
 
   it('ignores a deleted system\'s name', async () => {

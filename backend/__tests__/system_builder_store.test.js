@@ -138,7 +138,14 @@ describe('the systems routes', () => {
     expect(res.body.id).toMatch(/^sys_[0-9a-f]{16}$/);
     expect(res.body.problems).toEqual([]);
     const [only] = await list();
-    expect(only).toMatchObject({ id: res.body.id, name: 'Vault Knights', version: 0, published: false, unpublishedChanges: true, installed: false });
+    expect(only).toMatchObject({ id: res.body.id, name: 'Vault Knights', version: 0, published: false, unpublishedChanges: true, installed: false, problemCount: 0 });
+  });
+
+  it('counts a draft that cannot be read at all as one problem, as publishing would', async () => {
+    const { id } = (await create({ name: 'Broken' })).body;
+    await run(db, 'UPDATE custom_systems SET draft = ? WHERE id = ?', ['not json', id]);
+    expect((await list())[0].problemCount).toBe(1);
+    expect((await request(app).get(`/api/systems/${id}`).set(bearer(GM))).body.problems).toEqual([{ where: 'definition', message: expect.any(String) }]);
   });
 
   it('never collides with a built-in system id', () => {
@@ -166,6 +173,8 @@ describe('the systems routes', () => {
     const saved = await request(app).put(`/api/systems/${id}/draft`).set(bearer(GM)).send({ definition: broken });
     expect(saved.status).toBe(200);
     expect(saved.body.problems).toEqual([{ where: 'derived hp', message: 'Depends on itself: hp → hp' }]);
+    // The list counts them, so SYSTEMS.EXE can badge it without fetching the system.
+    expect((await list())[0].problemCount).toBe(1);
 
     const refused = await request(app).post(`/api/systems/${id}/publish`).set(bearer(GM));
     expect(refused.status).toBe(409);
@@ -174,6 +183,7 @@ describe('the systems routes', () => {
 
     const fixed = { format: 1, name: 'Draft', derived: [{ id: 'hp', formula: '@con + 10' }] };
     await request(app).put(`/api/systems/${id}/draft`).set(bearer(GM)).send({ definition: fixed });
+    expect((await list())[0].problemCount).toBe(0);
     const published = await request(app).post(`/api/systems/${id}/publish`).set(bearer(GM));
     expect(published.status).toBe(200);
     expect(published.body).toEqual({ version: 1 });
