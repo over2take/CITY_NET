@@ -61,6 +61,7 @@ import { useVehicleRoster } from './hooks/useVehicleRoster';
 import { useEnemyVehicles } from './hooks/useEnemyVehicles';
 import { hasVehicles } from './sheets/vehicleSystems';
 import { NpcLibrary } from './components/NpcLibrary';
+import { SystemsWindow } from './components/SystemsWindow';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
 import { TvPortrait } from './components/TvPortrait';
 import { headshotsForShape } from './headshots';
@@ -298,6 +299,8 @@ function App() {
 
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
+  const [isSystemsOpen, setIsSystemsOpen] = useState(false);
+  const [systemsPos, setSystemsPos] = useState(() => ({ x: window.innerWidth / 2 - 310, y: window.innerHeight / 2 - 260 }));
   const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string; locationId?: number } | null>(null);
   // NPC sheet linked to the currently selected token (admin) - drives
   // GENERATE_SHEET vs OPEN_SHEET on the token menu
@@ -2038,6 +2041,7 @@ function App() {
                 onGrantAccess={handleGrantAccess}
                 onRevokeAccess={handleRevokeAccess}
                 onOpenNpcLibrary={() => setIsNpcLibraryOpen(true)}
+                onOpenSystems={isPrimaryAdmin ? () => setIsSystemsOpen(true) : undefined}
                 />
             )}
             {adminBankPlayer && (
@@ -2317,6 +2321,15 @@ function App() {
                 onClose={() => setIsNpcLibraryOpen(false)}
                 onOpenNpc={(npc) => setOpenNpcSheet(npc)}
                 attachLocationId={selectedLocation && ['enemy_rhombus', 'friendly_rhombus'].includes(selectedLocation.shape) ? selectedLocation.id : null}
+              />
+            )}
+            {isSystemsOpen && token && isPrimaryAdmin && (
+              <SystemsWindow
+                token={token}
+                running={gameSystem}
+                pos={systemsPos}
+                setPos={setSystemsPos}
+                onClose={() => setIsSystemsOpen(false)}
               />
             )}
             {openPlayerSheetUser && token && (

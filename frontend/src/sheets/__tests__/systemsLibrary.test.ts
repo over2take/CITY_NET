@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  badgesFor, versionLabel, versionFact, originFact, deleteBlocked, exportBlocked, insideBadges, installPlan,
+  badgesFor, versionLabel, versionFact, originFact, changedFact, deleteBlocked, exportBlocked, insideBadges, installPlan,
   installedMessage, renamedMessage, duplicatedMessage, deletedMessage, createdMessage,
   type LibrarySystem, type InstallPreview,
 } from '../systemsLibrary';
@@ -43,6 +43,17 @@ describe('facts', () => {
     expect(versionFact(sys())).toBe('v3 published');
     expect(versionFact(sys({ unpublishedChanges: true }))).toBe('v3 published, with changes not yet published');
     expect(versionFact(sys({ published: false }))).toBe('Never published');
+  });
+
+  it('when it changed, in the GM\'s own time; text it can\'t read as it came', () => {
+    const at = new Date(Date.UTC(2026, 9, 6, 14, 10));
+    const two = (n: number) => String(n).padStart(2, '0');
+    expect(changedFact('2026-10-06 14:10:00'))
+      .toBe(`${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())} ${two(at.getHours())}:${two(at.getMinutes())}`);
+    expect(changedFact('yesterday')).toBe('yesterday');
+    expect(changedFact('2026-13-45 99:99:00')).toBe('2026-13-45 99:99:00');
+    expect(changedFact('')).toBe('');
+    expect(changedFact('2026-10-06')).toBe('2026-10-06');
   });
 
   it('where it came from', () => {
