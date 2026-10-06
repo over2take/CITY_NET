@@ -49,6 +49,7 @@ import { useParts, partOn, type PartLookup } from '../sheets/parts';
 import { currenciesFor, isUploadedIcon, BUILT_IN_ICONS, type Currency } from '../sheets/currencies';
 import { useCustomTemplate, refreshCustomTemplate } from '../sheets/customTemplates';
 import { shortfallRule } from '../sheets/moneyText';
+import { SYSTEMS_CHANGED_EVENT } from '../sheets/systemsLibrary';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -57,7 +58,7 @@ function BattleAdminPanel({
   token, isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly,
   tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, locations, refreshLocations,
   handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen, secureModeEnabled, onLogout,
-  globalSettings, fetchGlobalSettings, onOpenNpcLibrary, activeUsers,
+  globalSettings, fetchGlobalSettings, onOpenNpcLibrary, onOpenSystems, activeUsers,
 }: any) {
   const [tab, setTab] = useState<'battle_map' | 'game'>('battle_map');
   // A custom system with the bank off has no pay or currency (3b2b).
@@ -141,7 +142,7 @@ function BattleAdminPanel({
       </>}
 
       {tab === 'game' && <>
-        <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
+        <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} />
         {/* Money, which a custom system with the bank off does not have (3b2b). */}
         {bankOn && <>
           <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={globalSettings?.game_system} />
@@ -182,7 +183,7 @@ export function AdminPanel({
     tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
-    activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onToggleHidden,
+    activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onOpenSystems, onToggleHidden,
     onExportPng, onStartRecording, onStopRecording, isRecording, isExporting, recordSecondsLeft,
     gameSystem,
     cityGenDrawMode, setCityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail,
@@ -203,7 +204,7 @@ export function AdminPanel({
         handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
         setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} setIsCatalogueOpen={setIsCatalogueOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
         globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings}
-        onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers}
+        onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers}
       />
     );
   }
@@ -1045,7 +1046,7 @@ export function AdminPanel({
 
           {adminTab === 'game' && (
             <>
-              <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} activeUsers={activeUsers} />
+              <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} />
               {/* Money, which a custom system with the bank off does not have (3b2b). */}
               {bankOn && <>
                 <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={gameSystem} />
@@ -2297,7 +2298,11 @@ const SR6_HOUSE_RULES: HouseRuleDef[] = [
   },
 ];
 
-function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: string; onOpenNpcLibrary?: () => void; activeUsers?: any[] }) {
+function TTRPGSystemPanel({ token, onOpenNpcLibrary, onOpenSystems, activeUsers }: {
+  token: string; onOpenNpcLibrary?: () => void; activeUsers?: any[];
+  /** Opens SYSTEMS.EXE; the main admin's alone, so absent for a granted editor. */
+  onOpenSystems?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [system, setSystem] = useState<string>('generic');
   const [systems, setSystems] = useState<PickerSystem[]>([]);
@@ -2315,6 +2320,12 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: str
   };
 
   useEffect(() => { if (open) refresh(); }, [open]);
+  // SYSTEMS.EXE renamed, copied or deleted one: the picker shows it at once.
+  useEffect(() => {
+    const again = () => refresh();
+    window.addEventListener(SYSTEMS_CHANGED_EVENT, again);
+    return () => window.removeEventListener(SYSTEMS_CHANGED_EVENT, again);
+  }, []);
 
   /** Switch the game. The picker has already asked; this says whether the server agreed. */
   const selectSystem = async (id: string): Promise<boolean> => {
@@ -2339,6 +2350,12 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, activeUsers }: { token: str
           <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
             Each system keeps its own characters, banks and token health; switching back restores them.
           </p>
+          {onOpenSystems && <>
+            <button className="utility-btn" style={{ fontSize: '0.65rem' }} onClick={onOpenSystems}>SYSTEMS.EXE</button>
+            <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: 0 }}>
+              Switching the game stays here, in the picker. SYSTEMS.EXE is for making and managing systems.
+            </p>
+          </>}
           <HouseRulesPanel token={token} note={<ShortfallNote system={system} />} defs={[
             ...globalHouseRules(word, on, currenciesFor(system).length > 0),
             ...(system === 'cities_without_number' ? CWN_HOUSE_RULES : []),

@@ -71,6 +71,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **SYSTEMS.EXE, the GM's own game systems in one window.** A SYSTEMS.EXE button under the game
+  system picker, in the GAME tab, opens it, for the main admin only. It lists every system the GM
+  has made or installed, with badges for the one running, its version, unpublished changes,
+  problems and whether it was installed from a file. Beside the one picked are its facts and
+  RENAME, DUPLICATE, EXPORT .CITYSYS and DELETE. A name already in use is refused right in the
+  rename box, which stays open to try another. The picker shows each change at once. Making a
+  new system and installing a file come next.
+
 - **What the SYSTEMS.EXE window will say.** The badges on each system (RUNNING, PUBLISHED v3,
   UNPUBLISHED CHANGES, a problem count, INSTALLED), the facts beside the one picked, and, for a file
   about to be installed, what it holds and which buttons it offers: INSTALL, BRING IT BACK, UPDATE,

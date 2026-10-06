@@ -49,6 +49,23 @@ export const versionFact = (s: LibrarySystem): string => {
 /** The FROM fact. */
 export const originFact = (s: LibrarySystem): string => (s.installed ? 'Installed from a file' : 'Made here');
 
+/**
+ * The CHANGED fact, in the GM's own time: the server stores UTC as "2026-10-06 14:10:00". Text
+ * it can't read is shown as it came.
+ */
+export const changedFact = (updatedAt: string): string => {
+  const at = new Date(`${updatedAt.replace(' ', 'T')}Z`);
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(updatedAt) || Number.isNaN(at.getTime())) return updatedAt;
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())} ${two(at.getHours())}:${two(at.getMinutes())}`;
+};
+
+/**
+ * Sent on the window after SYSTEMS.EXE changes a system, so the game-system picker beside it
+ * fetches the list again: a renamed, copied or deleted system shows there at once.
+ */
+export const SYSTEMS_CHANGED_EVENT = 'citynet:systems-changed';
+
 /** Why a button can't be used now, or null when it can. */
 export const deleteBlocked = (s: LibrarySystem, running: string | null): string | null =>
   (s.id === running ? 'This is the system the game is running. Switch to another first.' : null);
