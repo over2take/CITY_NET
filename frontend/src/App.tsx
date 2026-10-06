@@ -2345,7 +2345,8 @@ function App() {
                 startPage={builder.page}
                 running={gameSystem}
                 onExit={() => setBuilder(null)}
-                onMySystems={() => { setBuilder(null); setIsSystemsOpen(true); }}
+                onOpenSystem={(id) => setBuilder({ id, page: 'setup' })}
+                onManageSystems={() => { setBuilder(null); setIsSystemsOpen(true); }}
               />
             )}
             {openPlayerSheetUser && token && (
