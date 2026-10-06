@@ -141,6 +141,19 @@ describe('the systems routes', () => {
     expect(only).toMatchObject({ id: res.body.id, name: 'Vault Knights', version: 0, published: false, unpublishedChanges: true, installed: false, problemCount: 0 });
   });
 
+  it('refuses a name another system has, whatever its capitals, so the GM can pick another', async () => {
+    const { id } = (await create({ name: 'Hearth' })).body;
+    for (const body of [{ name: 'hearth' }, { name: ' HEARTH ' }, { definition: { format: 1, name: 'Hearth' } }]) {
+      const res = await create(body);
+      expect(res.status, JSON.stringify(body)).toBe(409);
+      expect(res.body, JSON.stringify(body)).toEqual({ error: 'Another system is already called Hearth.' });
+    }
+    expect((await list()).map((s) => s.id)).toEqual([id]);
+    // A deleted system's name is free again.
+    await request(app).delete(`/api/systems/${id}`).set(bearer(GM));
+    expect((await create({ name: 'Hearth' })).status).toBe(200);
+  });
+
   it('counts a draft that cannot be read at all as one problem, as publishing would', async () => {
     const { id } = (await create({ name: 'Broken' })).body;
     await run(db, 'UPDATE custom_systems SET draft = ? WHERE id = ?', ['not json', id]);

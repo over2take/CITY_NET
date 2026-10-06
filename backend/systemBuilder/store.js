@@ -88,22 +88,38 @@ const getSystem = (db, id, cb) => {
 };
 
 /**
- * Create a system from a name, or from a whole definition (an import, a copy). Refused only
- * when the definition cannot be stored at all; its ordinary problems come back with it.
+ * The refusal when another of `rows` (the systems not deleted) already has `name`, else null.
+ * CREATE and RENAME refuse it so the GM can pick another (decided with the user, 2026-10-06);
+ * a system's own name, `self`, is not in its way.
+ */
+const nameTaken = (rows, name, self = null) => {
+  const other = rows.find((r) => r.id !== self && sameName(r.name, name));
+  return other ? fail(409, `Another system is already called ${other.name}.`) : null;
+};
+
+/**
+ * Create a system from a name, or from a whole definition (an import, a copy). Refused when the
+ * definition cannot be stored at all, or another system has its name; its ordinary problems
+ * come back with it.
  */
 const createSystem = (db, { name, definition } = {}, cb) => {
   const def = definition === undefined ? blankDefinition(name) : definition;
   const checked = checkDefinition(def);
   if (checked.fatal) return cb(fail(400, checked.fatal));
   if (typeof def.name !== 'string' || !def.name.trim()) return cb(fail(400, 'A system needs a name'));
-  const id = newId();
-  // A system made here is its own origin: shared as a file, every copy keeps it.
-  db.run(
-    `INSERT INTO custom_systems (id, name, draft, version, origin, created_at, updated_at)
-     VALUES (?, ?, ?, 0, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-    [id, def.name.trim(), JSON.stringify(def), id],
-    (err) => (err ? cb(err) : cb(null, { id, problems: checked.problems })),
-  );
+  db.all('SELECT id, name FROM custom_systems WHERE deleted_at IS NULL', [], (err, rows) => {
+    if (err) return cb(err);
+    const taken = nameTaken(rows, def.name);
+    if (taken) return cb(taken);
+    const id = newId();
+    // A system made here is its own origin: shared as a file, every copy keeps it.
+    db.run(
+      `INSERT INTO custom_systems (id, name, draft, version, origin, created_at, updated_at)
+       VALUES (?, ?, ?, 0, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [id, def.name.trim(), JSON.stringify(def), id],
+      (err2) => (err2 ? cb(err2) : cb(null, { id, problems: checked.problems })),
+    );
+  });
 };
 
 /** Replace a system's draft. Stored even with problems, which come back to show. */
@@ -206,8 +222,8 @@ const renameSystem = (db, id, wanted, cb) => {
     if (err) return cb(err);
     const row = rows.find((r) => r.id === id);
     if (!row) return cb(fail(404, 'No such system'));
-    const other = rows.find((r) => r.id !== id && sameName(r.name, name));
-    if (other) return cb(fail(409, `Another system is already called ${other.name}.`));
+    const taken = nameTaken(rows, name, id);
+    if (taken) return cb(taken);
     /** One copy with the new name; a copy that isn't there stays absent. */
     const withName = (text) => {
       const definition = parse(text);
@@ -297,16 +313,17 @@ const matchesFor = (db, origin, cb) => {
 /**
  * The name a file's system goes in under, for each way of installing it: its own, or
  * "<name> copy"... when another system has it (decided with the user, 2026-10-06). An update
- * replaces the copy here, so that copy's name is not in its way. Null where the way does not
- * apply: `new` once it is installed, `update` until it is.
+ * keeps the name the system has here, whether the GM chose it or it came in as a copy: a name
+ * isn't a rule (same day). Null where the way does not apply: `new` once it is installed,
+ * `update` until it is.
  */
 const installNames = (name, found) => {
   const here = found.installed[0];
-  const taken = (rows) => rows.map((r) => r.name);
+  const taken = found.inUse.map((r) => r.name);
   return {
-    new: here ? null : uniqueName(name, taken(found.inUse)),
-    update: here ? uniqueName(name, taken(found.inUse.filter((r) => r.id !== here.id))) : null,
-    keep_both: uniqueName(name, taken(found.inUse)),
+    new: here ? null : uniqueName(name, taken),
+    update: here ? here.name : null,
+    keep_both: uniqueName(name, taken),
   };
 };
 
@@ -342,14 +359,16 @@ const previewInstall = (db, text, cb) => {
 /**
  * Install a file.
  *   new        a system not here yet; one deleted here comes back under its old id
- *   update     replace the copy already here, when it has not been changed since installing
+ *   update     replace the copy already here, keeping its name. One changed here since it was
+ *              installed is replaced only with `replaceChanges`, the GM having been warned that
+ *              those changes go (decided with the user, 2026-10-06; until then it was refused)
  *   keep_both  a second copy beside it, with a new id and a new origin of its own
  * Published straight away when the file has no problems; otherwise kept as a draft to fix.
  * Never a merge, and never refused over a name: one another system already has becomes
  * "<name> copy", "copy 02"... (names.js; decided with the user, 2026-10-06), in the row and the
  * definition alike. Resolves { id, name, published, restored?, problems }.
  */
-const installSystem = (db, text, mode, cb) => {
+const installSystem = (db, { text, mode, replaceChanges = false } = {}, cb) => {
   if (!['new', 'update', 'keep_both'].includes(mode)) return cb(fail(400, 'Install as new, update or keep both'));
   const read = citysys.readFile(text);
   if (read.fatal) return cb(fail(400, read.fatal));
@@ -388,8 +407,10 @@ const installSystem = (db, text, mode, cb) => {
     }
     if (mode === 'update') {
       if (!here) return cb(fail(404, 'This system is not installed here; install it as new'));
-      if (editedSinceInstall(here)) return cb(fail(409, 'This system has been changed here since it was installed. Keep both instead.'));
       if (!publishable) return cb(fail(409, 'The file has problems; install it as a second copy to fix them', { problems: read.problems }));
+      if (editedSinceInstall(here) && replaceChanges !== true) {
+        return cb(fail(409, 'This system has been changed here since it was installed. Replacing it loses those changes.', { changed: true }));
+      }
       return replace(here, named(names.update));
     }
     if (here) return cb(fail(409, 'Already installed. Update it or keep both.', { installed: found.installed.map((r) => ({ id: r.id, name: r.name })) }));

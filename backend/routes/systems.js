@@ -139,15 +139,21 @@ module.exports = (db, io = null) => {
     store.previewInstall(db, req.body && req.body.file, (err, preview) => answer(res, err, preview));
   });
 
+  // `replaceChanges: true` only after the GM was warned that changes made here would go.
   router.post('/install', gm, (req, res) => {
-    const { file, mode } = req.body || {};
-    store.installSystem(db, file, mode, (err, installed) => {
+    const { file, mode, replaceChanges } = req.body || {};
+    store.installSystem(db, { text: file, mode, replaceChanges }, (err, installed) => {
       if (err) return res.status(err.status || 500).json({
         error: err.status ? err.message : 'Could not reach the systems store',
         ...(err.problems ? { problems: err.problems } : {}),
         ...(err.installed ? { installed: err.installed } : {}),
+        ...(err.changed ? { changed: true } : {}),
       });
-      runtime.refresh(db, installed.id, () => answer(res, null, installed));
+      // An update or a system brought back may be one a browser already has: it fetches it again.
+      runtime.refresh(db, installed.id, () => {
+        if (io) io.emit('customSystemChanged', { id: installed.id });
+        answer(res, null, installed);
+      });
     });
   });
 
