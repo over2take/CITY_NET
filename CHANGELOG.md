@@ -15,6 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   server image linked to the container's root folder. Both are gone; nothing the game does
   changes.
 
+- **A bank test no longer fails on a slow machine.** It waited a fixed number of steps for a
+  payment before the GM's own edit of the same account; on a slow test machine the payment landed
+  later and overwrote the edit. It now waits for each to land. Nothing in the game changes.
+
 ### Changed
 
 - **Each game system has its own bank.** A character's money now belongs to the game it was
