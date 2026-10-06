@@ -62,6 +62,8 @@ import { useEnemyVehicles } from './hooks/useEnemyVehicles';
 import { hasVehicles } from './sheets/vehicleSystems';
 import { NpcLibrary } from './components/NpcLibrary';
 import { SystemsWindow } from './components/SystemsWindow';
+import { BuilderScreen } from './components/BuilderScreen';
+import type { BuilderPage } from './sheets/builderSession';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
 import { TvPortrait } from './components/TvPortrait';
 import { headshotsForShape } from './headshots';
@@ -300,6 +302,8 @@ function App() {
   const [isNpcLibraryOpen, setIsNpcLibraryOpen] = useState(false);
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
   const [isSystemsOpen, setIsSystemsOpen] = useState(false);
+  /** The system the builder is open on, taking over the window (4a2b), and the page it opened at. */
+  const [builder, setBuilder] = useState<{ id: string; page: BuilderPage } | null>(null);
   const [systemsPos, setSystemsPos] = useState(() => ({ x: window.innerWidth / 2 - 310, y: window.innerHeight / 2 - 260 }));
   const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string; locationId?: number } | null>(null);
   // NPC sheet linked to the currently selected token (admin) - drives
@@ -2330,6 +2334,18 @@ function App() {
                 pos={systemsPos}
                 setPos={setSystemsPos}
                 onClose={() => setIsSystemsOpen(false)}
+                onOpenBuilder={(id, page) => { setIsSystemsOpen(false); setBuilder({ id, page }); }}
+              />
+            )}
+            {builder && token && isPrimaryAdmin && (
+              <BuilderScreen
+                key={builder.id}
+                token={token}
+                systemId={builder.id}
+                startPage={builder.page}
+                running={gameSystem}
+                onExit={() => setBuilder(null)}
+                onMySystems={() => { setBuilder(null); setIsSystemsOpen(true); }}
               />
             )}
             {openPlayerSheetUser && token && (

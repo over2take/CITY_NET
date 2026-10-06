@@ -261,6 +261,31 @@ const folder = async (name: 'SYSTEMS' | 'NEW' | 'INSTALL') => {
   await userEvent.click(screen.getByRole('tab', { name }));
 };
 
+describe('the builder', () => {
+  it('OPEN IN BUILDER opens the picked system there', async () => {
+    const onOpenBuilder = vi.fn();
+    render(<SystemsWindow token="gm" running={null} pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()} onOpenBuilder={onOpenBuilder} fetcher={fakeServer as typeof fetch} />);
+    await waitFor(() => expect(listed()).toHaveLength(3));
+    await userEvent.click(entry('Neon Exchange'));
+    await userEvent.click(screen.getByText('OPEN IN BUILDER'));
+    expect(onOpenBuilder).toHaveBeenCalledWith(NEON, 'setup');
+  });
+
+  it('CREATE opens the new system there, on SETUP', async () => {
+    const onOpenBuilder = vi.fn();
+    render(<SystemsWindow token="gm" running={null} pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()} onOpenBuilder={onOpenBuilder} fetcher={fakeServer as typeof fetch} />);
+    await folder('NEW');
+    await userEvent.type(screen.getByLabelText('NAME'), 'Tidewater{Enter}');
+    await waitFor(() => expect(onOpenBuilder).toHaveBeenCalledWith(COPY, 'setup'));
+  });
+
+  it('has no OPEN IN BUILDER without a builder to open', async () => {
+    open();
+    await waitFor(() => expect(listed()).toHaveLength(3));
+    expect(screen.queryByText('OPEN IN BUILDER')).toBeNull();
+  });
+});
+
 describe('NEW', () => {
   it('makes a draft from a name, then shows it picked in SYSTEMS', async () => {
     const told = vi.fn();

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TerminalWindow, useFolder, type TerminalFolder } from './TerminalWindow';
+import type { BuilderPage } from '../sheets/builderSession';
 import { systemsApi } from '../sheets/systemsApi';
 import {
   badgesFor, versionLabel, versionFact, originFact, changedFact, deleteBlocked, exportBlocked,
@@ -37,6 +38,8 @@ interface Props {
   pos: { x: number; y: number };
   setPos: (p: { x: number; y: number }) => void;
   onClose: () => void;
+  /** Opens the builder on a system, at a page: OPEN IN BUILDER, and CREATE (on SETUP). */
+  onOpenBuilder?: (id: string, page: BuilderPage) => void;
   fetcher?: typeof fetch;
 }
 
@@ -262,7 +265,7 @@ function InstallPanel({ api, onInstalled }: { api: Api; onInstalled: (id: string
   );
 }
 
-export function SystemsWindow({ token, running, pos, setPos, onClose, fetcher }: Props) {
+export function SystemsWindow({ token, running, pos, setPos, onClose, onOpenBuilder, fetcher }: Props) {
   const api = useMemo(() => systemsApi(token, fetcher), [token, fetcher]);
   const [folder, setFolder] = useFolder(FOLDERS, null);
   const [systems, setSystems] = useState<LibrarySystem[] | null>(null);
@@ -374,9 +377,10 @@ export function SystemsWindow({ token, running, pos, setPos, onClose, fetcher }:
     setConfirmDelete(false);
   };
 
-  /** Made in NEW: shown picked in SYSTEMS. The builder opens it from here once it exists (4a2). */
+  /** Made in NEW: the builder opens it on SETUP (decided 2026-10-03); without one, it is shown picked. */
   const made = async (id: string, name: string) => {
     await changed(id);
+    if (onOpenBuilder) { onOpenBuilder(id, 'setup'); return; }
     setFolder('systems');
     setStatus({ text: createdMessage(name) });
   };
@@ -456,6 +460,11 @@ export function SystemsWindow({ token, running, pos, setPos, onClose, fetcher }:
       )}
 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {onOpenBuilder && (
+          <button type="button" className="utility-btn active" style={btn} disabled={busy} onClick={() => onOpenBuilder(system.id, 'setup')}>
+            OPEN IN BUILDER
+          </button>
+        )}
         <button
           type="button" className="utility-btn" style={btn} disabled={!!renaming || busy}
           onClick={() => { setRenaming({ text: system.name, error: null }); setConfirmDelete(false); setStatus(null); }}

@@ -71,6 +71,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The system builder opens.** OPEN IN BUILDER in SYSTEMS.EXE, or CREATE for a new system, opens
+  the builder over the whole window. Its sidebar names the system and its version, lists its pages
+  (SETUP, WORDS, FEATURES, STATS & RULES, CHARACTER SHEET, NPCS, TRY IT, PROBLEMS), each saying
+  what it is for, and holds SAVE, PUBLISH, MY SYSTEMS and EXIT TO MAP. PROBLEMS lists what stops
+  a system from being published, and PUBLISH opens it instead of publishing while there are any.
+  A status line along the bottom says when the draft was last saved. The other pages say what they
+  will hold; they come in the next updates.
+
 - **How the builder will save.** Changes are saved by themselves about five seconds after you
   stop editing, and always when you leave; SAVE saves at once and PUBLISH makes the system what
   the game runs. Leaving the builder only warns you when a save failed. An edit made while a save
