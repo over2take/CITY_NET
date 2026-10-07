@@ -57,7 +57,7 @@ describe('the parts', () => {
 
   it('opens SHOPS\' settings only while shops are on', async () => {
     open();
-    expect(within(part('bank')).queryByText(/SETTINGS/)).toBeNull();
+    expect(within(part('vehicles')).queryByText(/SETTINGS/)).toBeNull();
     await openShops();
     expect(screen.getByRole('region', { name: 'Shop buildings' })).toBeTruthy();
     await userEvent.click(within(part('shops')).getByText(/SETTINGS/));
@@ -66,6 +66,15 @@ describe('the parts', () => {
     await userEvent.click(sw('SHOPS'));
     expect(within(part('shops')).queryByText(/SETTINGS/)).toBeNull();
     expect(screen.queryByRole('region', { name: 'Shop buildings' })).toBeNull();
+  });
+});
+
+describe('BANK', () => {
+  it('opens out to the currencies and celebrations', async () => {
+    open();
+    await userEvent.click(within(part('bank')).getByText(/SETTINGS/));
+    expect(screen.getByRole('region', { name: 'Currencies' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Celebrations' })).toBeTruthy();
   });
 });
 

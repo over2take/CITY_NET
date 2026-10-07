@@ -70,6 +70,23 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
     preview: (file: string) => call<InstallPreview>(fetcher, token, '/api/systems/install/preview', 'POST', { file }),
     install: (file: string, mode: InstallMode, replaceChanges = false) =>
       call<InstallResult>(fetcher, token, '/api/systems/install', 'POST', { file, mode, ...(replaceChanges ? { replaceChanges: true } : {}) }),
+    /**
+     * A currency icon image (PNG, WebP or SVG, a quarter of a megabyte at most), stored by the
+     * server under its content hash: the address a currency's `icon` then names.
+     */
+    uploadIcon: async (file: File): Promise<Answer<{ icon: string }>> => {
+      const form = new FormData();
+      form.append('icon', file);
+      let res: Response;
+      try {
+        res = await fetcher('/api/systems/currency-icons', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+      } catch {
+        return { ok: false, error: UNREACHABLE, status: 0 };
+      }
+      const json = await res.json().catch(() => null);
+      if (res.ok && json && typeof json.icon === 'string') return { ok: true, value: { icon: json.icon } };
+      return { ok: false, status: res.status, error: json && typeof json.error === 'string' ? json.error : 'The icon could not be uploaded.' };
+    },
     /** A published system as its .citysys file: its name and text, for the window to save. */
     exportFile: async (systemId: string): Promise<Answer<{ fileName: string; text: string }>> => {
       let res: Response;

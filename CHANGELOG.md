@@ -75,6 +75,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's FEATURES page: the bank.** BANK opens out to the system's currencies and its
+  celebrations. Each currency is counted in whole numbers, decimals (with its symbol before or
+  after, and a point or a comma) or coins (each with its worth), and shows how an amount will read.
+  Each has its own debt and below-zero switches, and an icon: one of the five, or one you upload.
+  The first currency is the main one, the balance every bank account already holds. Another can be
+  made main, and an extra one is removed only after asking. Whale status is written the way people
+  write money ("500 gp") and read back in the main currency.
+
 - **The builder's FEATURES page: parts and shops.** Every part of the app as a switch with a line
   saying what it does, all on unless turned off. XP awards, death saves, luck and PDF import show
   as off and greyed, since a custom system can't use them yet. SHOPS opens out to the app's shop

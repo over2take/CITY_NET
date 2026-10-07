@@ -77,6 +77,27 @@ describe('the requests', () => {
   });
 });
 
+describe('uploading a currency icon', () => {
+  it('sends the file as a form with the token, and answers with its address', async () => {
+    const f = server(200, { icon: '/uploads/currency_icons/abc.png' });
+    const file = new File(['x'], 'coin.png', { type: 'image/png' });
+    expect(await systemsApi('tok', f).uploadIcon(file)).toEqual({ ok: true, value: { icon: '/uploads/currency_icons/abc.png' } });
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/systems/currency-icons');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({ Authorization: 'Bearer tok' });
+    expect((init.body as FormData).get('icon')).toBe(file);
+  });
+
+  it('passes on a refusal, a garbled answer, and an unreachable server', async () => {
+    const file = new File(['x'], 'coin.gif');
+    expect(await systemsApi('tok', server(400, { error: 'Only .png, .webp, .svg' })).uploadIcon(file)).toEqual({ ok: false, status: 400, error: 'Only .png, .webp, .svg' });
+    expect(await systemsApi('tok', server(200, { nope: 1 })).uploadIcon(file)).toEqual({ ok: false, status: 200, error: 'The icon could not be uploaded.' });
+    const down = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    expect(await systemsApi('tok', down as never).uploadIcon(file)).toEqual({ ok: false, status: 0, error: 'Could not reach the server.' });
+  });
+});
+
 describe('exporting', () => {
   it('fetches the file with the token and names it as the server does', async () => {
     const f = server(200, '{"citysys":1}', { 'Content-Disposition': 'attachment; filename="vault-knights.citysys"' });

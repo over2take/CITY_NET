@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import type { Definition } from '../sheets/systemsApi';
+import type { Definition, systemsApi } from '../sheets/systemsApi';
+import { BankSettings } from './BankSettings';
 import {
   PART_ROWS, partIsOn, withPart, SHOP_TYPES, OTHER_TYPES, CATALOGUE_ROWS, BUILDING_NAME_LIMIT, buildingSetting, withBuilding,
   cataloguePartOff, currencyList, type BuildingKind,
@@ -16,6 +17,8 @@ import {
 interface Props {
   definition: Definition;
   edit: (next: Definition) => void;
+  /** For uploading a currency's icon (BankSettings). */
+  api?: ReturnType<typeof systemsApi>;
 }
 
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
@@ -106,10 +109,10 @@ function ShopsSettings({ definition, edit }: Props) {
   </>;
 }
 
-export function FeaturesPage({ definition, edit }: Props) {
+export function FeaturesPage({ definition, edit, api }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  // A part's settings, where it has any. The bank's come with 4b1c2.
-  const settings: Partial<Record<string, (p: Props) => React.ReactElement>> = { shops: ShopsSettings };
+  // A part's settings, where it has any.
+  const settings: Partial<Record<string, (p: Props) => React.ReactElement>> = { bank: BankSettings, shops: ShopsSettings };
 
   return (
     <div style={{ maxWidth: 920, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -136,7 +139,7 @@ export function FeaturesPage({ definition, edit }: Props) {
                   {p.unused ? `${p.what} Not used by custom systems yet.` : p.what}
                 </span>
               </div>
-              {isOpen && <div style={{ padding: '0 14px 14px 72px', display: 'flex', flexDirection: 'column', gap: 10 }}><Settings definition={definition} edit={edit} /></div>}
+              {isOpen && <div style={{ padding: '0 14px 14px 72px', display: 'flex', flexDirection: 'column', gap: 10 }}><Settings definition={definition} edit={edit} api={api} /></div>}
             </div>
           );
         })}
