@@ -291,12 +291,13 @@ const setCustomTiers = (fn) => { customTiers = typeof fn === 'function' ? fn : (
 
 const getTierOptions = (system) => TIERS[system]?.options ?? customTiers(system)?.options ?? [];
 
-// Returns { data, hp, dv } or null when the system has no tiers / unknown id.
-const buildTier = (system, tierId) => {
+// Returns { data, hp, dv } or null when the system has no tiers / unknown id. A custom system's
+// tier is worked out for `level` (systemBuilder/tierRolls.js); the built-in ones have no level.
+const buildTier = (system, tierId, level) => {
   const t = TIERS[system];
   if (!t) {
     const custom = customTiers(system);
-    return custom ? custom.build(tierId) : null;
+    return custom ? custom.build(tierId, level) : null;
   }
   const id = t.build[tierId] ? tierId : t.default;
   return t.build[id] ? { tierId: id, ...t.build[id]() } : null;
