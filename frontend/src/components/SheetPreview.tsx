@@ -3,7 +3,7 @@ import { SheetRenderer } from './SheetRenderer';
 import { templateFromRender, type CustomRender, type CustomRenderSheet } from '../sheets/customTemplates';
 import type { Definition } from '../sheets/systemsApi';
 import { formulaList, sampleOf, allStats } from '../sheets/statsRules';
-import { fieldsOn } from '../sheets/sheetDesigner';
+import { othersSee } from '../sheets/publicLines';
 
 // The CHARACTER SHEET page's preview (4b3d2): the sheet as the game draws it, by the game's own
 // SheetRenderer, seen as its owner or as the GM, and what everyone else gets: the lines of the
@@ -21,19 +21,6 @@ const segBtn = (on: boolean): React.CSSProperties => ({
 
 /** The name a made-up character gets. */
 export const SAMPLE_NAME = 'Sample character';
-
-/** What everyone else sees: the name, then each EVERYONE field that isn't an attack number, with its value. */
-export const othersSee = (sheet: CustomRenderSheet, data: Record<string, unknown>): { label: string; value: string }[] => {
-  const nameField = sheet.header?.nameField ?? 'name';
-  const text = (v: unknown) => (v === undefined || v === null || v === '' ? '—' : String(v));
-  const fields = fieldsOn(sheet);
-  const name = fields.find((f) => f.id === nameField);
-  return [
-    ...(name ? [{ label: name.label, value: text(data[name.id]) }] : []),
-    ...fields.filter((f) => f.id !== nameField && f.visibility === 'public' && f.sensitivity !== 'combat')
-      .map((f) => ({ label: f.label, value: text(data[f.id]) })),
-  ];
-};
 
 interface Props {
   definition: Definition;

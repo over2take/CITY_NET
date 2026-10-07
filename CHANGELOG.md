@@ -75,6 +75,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system's characters show their public details in ID.EXE.** INFO on a player's token
+  now lists the character's name and every field the system's sheet shows to EVERYONE, by the
+  sheet's own labels, as the built-in systems show handle, name and role. A value that decides
+  whether attacks hit never shows. The built-in systems' INFO is unchanged.
+
 - **The builder's CHARACTER SHEET page: a live preview.** Beside the layout, the sheet is drawn by
   the game's own sheet renderer for a made-up character (the SAMPLE values from STATS & RULES, with
   formulas worked out from them), a moment after each change. It can be seen as its owner (GM-only
