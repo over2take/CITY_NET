@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import type { CustomRenderSheet } from '../sheets/customTemplates';
+import { SheetPreview } from './SheetPreview';
 import {
   sheetOf, fieldKind, pagesOf, sectionsOn, LAYOUTS, TYPES,
   withCustomized, withAutomatic, tabNameProblem, withNewTab, withTabName, withTabMoved, withoutTab,
@@ -14,7 +15,8 @@ import {
 // that in to arrange by hand: tabs, then their sections, then fields, each picked on the left and
 // set in the middle. Stats, formulas and starter fields not on the sheet wait in NOT ON THE SHEET
 // YET until placed. What it reads and writes is sheets/sheetDesigner.ts; every change goes through
-// the builder's `edit`, which autosaves it. The preview comes in 4b3d2.
+// the builder's `edit`, which autosaves it. On the right, the sheet as players get it (SheetPreview,
+// 4b3d2), a moment behind the last change, as the server draws it.
 
 type Field = CustomRenderSheet['sections'][number]['fields'][number];
 
@@ -96,6 +98,7 @@ const blankProblem = (what: string) => (text: string) => (text.trim() ? null : `
 
 export function SheetPage({ definition, edit, api }: Props) {
   const [preview, setPreview] = useState<{ sheet: CustomRenderSheet; starter: CustomRenderSheet } | null>(null);
+  const [values, setValues] = useState<Record<string, number>>({});
   const [asked, setAsked] = useState(false);
   const [pick, setPick] = useState<Pick>({ kind: 'none' });
   const [confirmReset, setConfirmReset] = useState(false);
@@ -111,6 +114,9 @@ export function SheetPage({ definition, edit, api }: Props) {
     const timer = setTimeout(() => {
       api.previewSheet(definition).then((r) => {
         if (live && r.ok) setPreview(r.value);
+      });
+      api.previewValues(definition).then((r) => {
+        if (live && r.ok) setValues(r.value.values);
       });
       setAsked(true);
     }, asked ? SHEET_PREVIEW_DELAY_MS : 0);
@@ -467,7 +473,7 @@ export function SheetPage({ definition, edit, api }: Props) {
         )}
       </div>
 
-      <div style={{ flex: 1, minHeight: 360, display: 'grid', gridTemplateColumns: '280px minmax(0, 320px)', border: '1px solid var(--dark-green)' }}>
+      <div style={{ flex: 1, minHeight: 360, display: 'grid', gridTemplateColumns: '280px minmax(0, 320px) minmax(0, 1fr)', border: '1px solid var(--dark-green)' }}>
         <div style={col} className="cyber-scroll">
           {tree ?? <p style={why}>LOADING…</p>}
         </div>
@@ -486,6 +492,10 @@ export function SheetPage({ definition, edit, api }: Props) {
           ) : tabSettings || sectionSettings || fieldSettings || (
             <p style={{ ...why, margin: 0 }}>Pick a tab, section or field on the left, or add one.</p>
           )}
+        </div>
+        <div style={{ ...col, borderRight: 0 }} className="cyber-scroll">
+          {preview ? <SheetPreview definition={definition} sheet={preview.sheet} values={values} />
+            : <p style={why}>{api ? 'LOADING…' : 'No preview without the server.'}</p>}
         </div>
       </div>
     </div>

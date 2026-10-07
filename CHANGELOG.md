@@ -75,6 +75,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's CHARACTER SHEET page: a live preview.** Beside the layout, the sheet is drawn by
+  the game's own sheet renderer for a made-up character (the SAMPLE values from STATS & RULES, with
+  formulas worked out from them), a moment after each change. It can be seen as its owner (GM-only
+  fields locked), as the GM, or as everyone else, who get the name and each EVERYONE field, never
+  a value that decides whether attacks hit. Typing in it tries the sheet out and saves nothing.
+  CHARACTER SHEET is now complete.
+
 - **The builder's CHARACTER SHEET page: fields.** A field can be named, made a number, text, long
   text or pick-one (its choices typed a line at a time), shown to the owner and GM or to everyone,
   marked as deciding whether attacks hit (never shown to anyone else), left to the player or to
