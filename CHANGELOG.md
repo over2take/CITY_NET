@@ -75,6 +75,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's CHARACTER SHEET page: fields.** A field can be named, made a number, text, long
+  text or pick-one (its choices typed a line at a time), shown to the owner and GM or to everyone,
+  marked as deciding whether attacks hit (never shown to anyone else), left to the player or to
+  the GM alone, given a hint, moved to another section, and taken off. Formulas, stats and linked
+  values (HP, armor, the bank) say what they are and keep their kind. Stats, formulas and starter
+  fields taken off, or added after customizing, wait in NOT ON THE SHEET YET until placed. A live
+  preview comes next.
+
 - **The builder's CHARACTER SHEET page: tabs and sections.** A system's sheet shows as the game
   would draw it, AUTOMATIC from its stats, formulas and health model, until CUSTOMIZE copies it to
   arrange by hand (BACK TO AUTOMATIC asks first). Tabs, their sections and their fields are listed

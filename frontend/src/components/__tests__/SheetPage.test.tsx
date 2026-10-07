@@ -344,6 +344,198 @@ describe('fields', () => {
   });
 });
 
+const fieldOf = (def: Definition, id: string) => (def.sheet as CustomRenderSheet).sections.flatMap((s) => s.fields).find((f) => f.id === id);
+const pressed = (group: string) => within(screen.getByRole('group', { name: group })).getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
+
+describe('field settings', () => {
+  it('adds a field to a section, picked to name it', async () => {
+    const { last } = await customized();
+    await userEvent.click(node('IDENTITY section'));
+    await userEvent.click(screen.getByRole('button', { name: '+ FIELD' }));
+    expect(fieldOf(last(), 'new_field')).toEqual({ id: 'new_field', label: 'New field', type: 'text' });
+    expect(node('New field field').getAttribute('aria-current')).toBe('true');
+    const label = screen.getByLabelText('Field label') as HTMLInputElement;
+    await userEvent.clear(label);
+    expect(screen.getByRole('alert').textContent).toBe('A field needs a name.');
+    expect(fieldOf(last(), 'new_field')!.label).toBe('New field');
+    await userEvent.type(label, 'Reputation');
+    expect(fieldOf(last(), 'new_field')!.label).toBe('Reputation');
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('makes a field a pick-one, typing its choices a line at a time', async () => {
+    const { last } = await customized();
+    await userEvent.click(node('Concept field'));
+    expect(pressed('Kind')).toEqual(['TEXT']);
+    await userEvent.click(within(screen.getByRole('group', { name: 'Kind' })).getByRole('button', { name: 'PICK ONE' }));
+    const choices = screen.getByLabelText('Choices') as HTMLTextAreaElement;
+    expect(choices.value).toBe('Option 1\nOption 2');
+    await userEvent.clear(choices);
+    expect(screen.getByRole('alert').textContent).toBe('A pick-one field needs at least one choice.');
+    await userEvent.type(choices, 'Courier{Enter}');
+    expect(choices.value).toBe('Courier\n');
+    await userEvent.type(choices, 'Fixer');
+    expect(fieldOf(last(), 'concept')!.options).toEqual([{ value: 'Courier', label: 'Courier' }, { value: 'Fixer', label: 'Fixer' }]);
+    expect(problems(last())).toEqual([]);
+    await userEvent.click(within(screen.getByRole('group', { name: 'Kind' })).getByRole('button', { name: 'LONG TEXT' }));
+    expect(fieldOf(last(), 'concept')).toEqual({ id: 'concept', label: 'Concept', type: 'textarea' });
+    expect(screen.queryByLabelText('Choices')).toBeNull();
+  });
+
+  it('shows the choices of the field picked, not the last one\'s', async () => {
+    const sheet = { ...STARTER, sections: STARTER.sections.map((s) => (s.id === 'identity' ? { ...s, fields: [...s.fields,
+      { id: 'origin', label: 'Origin', type: 'select' as const, options: [{ value: 'Street', label: 'Street' }] },
+      { id: 'faction', label: 'Faction', type: 'select' as const, options: [{ value: 'Corp', label: 'Corp' }] }] } : s)) };
+    open({ ...HEARTH, sheet });
+    await userEvent.click(await screen.findByRole('button', { name: 'Origin field' }));
+    expect((screen.getByLabelText('Choices') as HTMLTextAreaElement).value).toBe('Street');
+    await userEvent.click(node('Faction field'));
+    expect((screen.getByLabelText('Choices') as HTMLTextAreaElement).value).toBe('Corp');
+  });
+
+  it('says what a formula, linked field and stat are, without a kind to change', async () => {
+    await customized();
+    await userEvent.click(node('Save field'));
+    expect(screen.getByText('A formula from STATS & RULES: worked out, so nobody edits it.')).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Kind' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Who changes it' })).toBeNull();
+    await userEvent.click(node('Cash field'));
+    expect(screen.getByText('Linked to the bank balance: the same number everywhere.')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Who changes it' })).toBeTruthy();
+    await userEvent.click(node('HP field'));
+    expect(screen.getByText("Linked to the token's HP: the same number everywhere.")).toBeTruthy();
+    await userEvent.click(node('Strength field'));
+    expect(screen.getByText('A stat from STATS & RULES: a number players fill in.')).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Kind' })).toBeNull();
+  });
+
+  it('shows a field to everyone or the owner and GM, never an attack number', async () => {
+    const { last } = await customized();
+    await userEvent.click(node('Strength field'));
+    expect(pressed('Who sees it')).toEqual(['OWNER AND GM']);
+    const everyone = within(screen.getByRole('group', { name: 'Who sees it' })).getByRole('button', { name: 'EVERYONE' }) as HTMLButtonElement;
+    await userEvent.click(everyone);
+    expect(fieldOf(last(), 'str')!.visibility).toBe('public');
+    expect(pressed('Who sees it')).toEqual(['EVERYONE']);
+    await userEvent.click(screen.getByRole('checkbox', { name: /Decides whether attacks hit/ }));
+    expect(fieldOf(last(), 'str')).toEqual({ id: 'str', label: 'Strength', type: 'number', sensitivity: 'combat' });
+    expect(pressed('Who sees it')).toEqual(['OWNER AND GM']);
+    expect(everyone.disabled).toBe(true);
+    expect(everyone.title).toBe('A number that decides whether attacks hit is never shown to anyone else.');
+    await userEvent.click(screen.getByRole('checkbox', { name: /Decides whether attacks hit/ }));
+    expect(everyone.disabled).toBe(false);
+    expect(fieldOf(last(), 'str')).toEqual({ id: 'str', label: 'Strength', type: 'number' });
+    await userEvent.click(everyone);
+    await userEvent.click(within(screen.getByRole('group', { name: 'Who sees it' })).getByRole('button', { name: 'OWNER AND GM' }));
+    expect(fieldOf(last(), 'str')!.visibility).toBeUndefined();
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('lets only the GM change a field, and sets a hint', async () => {
+    const { last } = await customized();
+    await userEvent.click(node('Strength field'));
+    expect(pressed('Who changes it')).toEqual(['THE PLAYER']);
+    await userEvent.click(within(screen.getByRole('group', { name: 'Who changes it' })).getByRole('button', { name: 'ONLY THE GM' }));
+    expect(fieldOf(last(), 'str')!.edit).toBe('gm');
+    expect(pressed('Who changes it')).toEqual(['ONLY THE GM']);
+    await userEvent.click(within(screen.getByRole('group', { name: 'Who changes it' })).getByRole('button', { name: 'THE PLAYER' }));
+    expect('edit' in fieldOf(last(), 'str')!).toBe(false);
+    await userEvent.type(screen.getByLabelText('Hint'), 'Rolled at creation');
+    expect(fieldOf(last(), 'str')!.hint).toBe('Rolled at creation');
+    await userEvent.clear(screen.getByLabelText('Hint'));
+    expect('hint' in fieldOf(last(), 'str')!).toBe(false);
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('moves a field to another section, on another tab', async () => {
+    const { last } = await customized();
+    await userEvent.click(node('Concept field'));
+    const to = screen.getByLabelText('Move to') as HTMLSelectElement;
+    expect(to.value).toBe('identity');
+    expect([...to.options].map((o) => o.textContent)).toContain('NOTES · NOTES');
+    await userEvent.selectOptions(to, 'notes');
+    expect((last().sheet as CustomRenderSheet).sections.find((s) => s.id === 'notes')!.fields.map((f) => f.id)).toEqual(['notes', 'concept']);
+    expect(within(screen.getByRole('group', { name: 'NOTES tab' })).getByRole('button', { name: 'Concept field' })).toBeTruthy();
+    expect((screen.getByLabelText('Move to') as HTMLSelectElement).value).toBe('notes');
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('keeps the name on the sheet, saying why', async () => {
+    const { edits } = await customized();
+    await userEvent.click(node('Name field'));
+    expect((screen.getByRole('button', { name: 'TAKE OFF THE SHEET' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Every sheet keeps the character\'s name.')).toBeTruthy();
+    expect(edits).toEqual([]);
+  });
+
+  it('says what happens to a field taken off: back to the tray, or gone', async () => {
+    const own = { ...STARTER, sections: STARTER.sections.map((s) => (s.id === 'identity'
+      ? { ...s, fields: [...s.fields, { id: 'grit', label: 'Grit', type: 'number' as const }] } : s)) };
+    const { last } = open({ ...HEARTH, sheet: own });
+    await userEvent.click(await screen.findByRole('button', { name: 'Grit field' }));
+    expect(screen.getByText('Taken off, it is gone.')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'TAKE OFF THE SHEET' }));
+    expect(fieldOf(last(), 'grit')).toBeUndefined();
+    expect(node('IDENTITY section').getAttribute('aria-current')).toBe('true');
+    expect(screen.queryByRole('region', { name: 'Not on the sheet yet' })).toBeNull();
+    for (const name of ['Concept field', 'Save field', 'Strength field', 'Cash field']) {
+      await userEvent.click(node(name));
+      expect(screen.getByText('Taken off, it waits in NOT ON THE SHEET YET.')).toBeTruthy();
+    }
+  });
+});
+
+describe('not on the sheet yet', () => {
+  const tray = () => screen.getByRole('region', { name: 'Not on the sheet yet' });
+
+  it('holds what was taken off, in the starter\'s order, until placed', async () => {
+    const { last } = await customized();
+    for (const name of ['Save field', 'Concept field']) {
+      await userEvent.click(node(name));
+      await userEvent.click(screen.getByRole('button', { name: 'TAKE OFF THE SHEET' }));
+    }
+    expect(within(tray()).getByText('Concept')).toBeTruthy();
+    expect(within(tray()).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Place Concept', 'Place Save']);
+    expect(within(tray()).getByText('WORKED OUT')).toBeTruthy();
+    // DERIVED was picked when Save came off; Concept's section (IDENTITY) is picked now.
+    await userEvent.click(within(tray()).getByRole('button', { name: 'Place Save' }));
+    expect((last().sheet as CustomRenderSheet).sections.find((s) => s.id === 'identity')!.fields.map((f) => f.id)).toEqual(['name', 'description', 'save']);
+    expect(node('Save field').getAttribute('aria-current')).toBe('true');
+    await userEvent.click(within(tray()).getByRole('button', { name: 'Place Concept' }));
+    expect((last().sheet as CustomRenderSheet).sections.find((s) => s.id === 'identity')!.fields.at(-1)!.id).toBe('concept');
+    expect(screen.queryByRole('region', { name: 'Not on the sheet yet' })).toBeNull();
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('places into the picked tab\'s first section, or a new section when it has none', async () => {
+    const { last } = await customized();
+    await userEvent.click(node('Save field'));
+    await userEvent.click(screen.getByRole('button', { name: 'TAKE OFF THE SHEET' }));
+    await userEvent.click(node('GEAR tab'));
+    await userEvent.click(within(tray()).getByRole('button', { name: 'Place Save' }));
+    expect((last().sheet as CustomRenderSheet).sections.find((s) => s.id === 'inventory')!.fields.map((f) => f.id)).toEqual(['save']);
+    await userEvent.click(screen.getByRole('button', { name: 'TAKE OFF THE SHEET' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ TAB' }));
+    await userEvent.click(within(tray()).getByRole('button', { name: 'Place Save' }));
+    expect(placement(last()).at(-1)).toBe('TAB 4/new_section');
+    expect(fieldOf(last(), 'save')).toBeTruthy();
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('lists a stat added in STATS & RULES after customizing', async () => {
+    const withGrit: Definition = { ...HEARTH, stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'str', label: 'Strength' }, { id: 'dex', label: 'Dexterity' }, { id: 'grit', label: 'Grit' }] }] };
+    open({ ...withGrit, sheet: STARTER });
+    expect(await screen.findByRole('button', { name: 'Place Grit' })).toBeTruthy();
+    expect(within(tray()).getByText('NUMBER')).toBeTruthy();
+  });
+
+  it('isn\'t shown while the sheet is automatic', async () => {
+    open();
+    await screen.findByTestId('sheet-tree');
+    expect(screen.queryByRole('region', { name: 'Not on the sheet yet' })).toBeNull();
+  });
+});
+
 describe('asking the server', () => {
   it('asks at once, then only a moment after the last change', async () => {
     vi.useFakeTimers();
