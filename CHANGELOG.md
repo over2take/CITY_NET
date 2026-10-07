@@ -75,6 +75,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's STATS & RULES page: stats and tables.** STATS lists the numbers players fill in,
+  in groups you name, each with its lowest and highest value, the stat it's tied to (a skill to its
+  ability) and a SAMPLE value for a made-up character. Each group becomes a section of the starter
+  sheet. TABLES holds lookups such as an ability score's modifier, as "up to / gives" rows, with a
+  TRY IT box. Formulas, with their live values, come next.
+
 - **What the builder's STATS & RULES page will change.** Adding, renaming and removing stat groups
   and stats (with their lowest, highest and ties), the sample character, formulas with their names,
   and lookup tables with their rows. A new entry's id comes from its first name and never changes,
