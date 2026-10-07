@@ -4,6 +4,7 @@
 // What the answers mean is systemsLibrary.ts.
 
 import type { InstallMode, InstallPreview, InstallResult, LibrarySystem } from './systemsLibrary';
+import type { CustomRenderSheet } from './customTemplates';
 
 type Problem = { where: string; message: string };
 
@@ -67,6 +68,12 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     previewValues: (definition: Definition) =>
       call<{ values: Record<string, number>; problems: Problem[] }>(fetcher, token, '/api/systems/preview-values', 'POST', { definition }),
+    /**
+     * A draft's sheet as it would be drawn (its own or the starter, without the parts it turned
+     * off), and the starter sheet CUSTOMIZE copies, without saving (CHARACTER SHEET).
+     */
+    previewSheet: (definition: Definition) =>
+      call<{ sheet: CustomRenderSheet; starter: CustomRenderSheet }>(fetcher, token, '/api/systems/preview-sheet', 'POST', { definition }),
     /** Make the stored draft what the game runs; refused, with `problems`, while it has any. */
     publish: (systemId: string) => call<{ version: number }>(fetcher, token, `${id(systemId)}/publish`, 'POST', {}),
     create: (name: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name }),

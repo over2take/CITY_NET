@@ -9,6 +9,7 @@ const store = require('../systemBuilder/store');
 const runtime = require('../systemBuilder/runtime');
 const { checkDefinition } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
+const { effectiveSheet, starterSheet } = require('../systemBuilder/sheet');
 
 /** What a currency's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
@@ -149,6 +150,18 @@ module.exports = (db, io = null) => {
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     const samples = definition.samples && typeof definition.samples === 'object' && !Array.isArray(definition.samples) ? definition.samples : {};
     res.json(previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples));
+  });
+
+  /**
+   * The builder's CHARACTER SHEET page (4b3): the sheet a draft is drawn with as it stands (its own
+   * or the starter, without the parts it turned off) and the starter sheet CUSTOMIZE copies.
+   * Changes nothing.
+   */
+  router.post('/preview-sheet', gm, (req, res) => {
+    const definition = req.body && req.body.definition;
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    res.json({ sheet: effectiveSheet(definition), starter: starterSheet(definition) });
   });
 
   // What installing a file would do, changing nothing. The file arrives as text so its size is

@@ -221,8 +221,15 @@ const designedOrStarter = (definition) => {
   return { tabs: ['STATS', 'GEAR', 'NOTES'], header: { nameField: 'name', subtitleFields: ['concept'], ...health.header }, sections };
 };
 
+/**
+ * The starter sheet a definition would get with no sheet of its own: what the builder's CUSTOMIZE
+ * copies (4b3). Every linked field is on it, even one whose part is off, so turning that part back
+ * on later brings it back on a customized sheet as on an automatic one.
+ */
+const starterSheet = (definition) => designedOrStarter({ ...definition, sheet: undefined });
+
 /** Every field on a sheet, in order. */
 const fieldsOf = (sheet) => (Array.isArray(sheet && sheet.sections) ? sheet.sections : [])
   .flatMap((s) => (s && Array.isArray(s.fields) ? s.fields : []));
 
-module.exports = { checkSheet, effectiveSheet, withoutOffParts, fieldsOf, LAYOUTS, TYPES, SOURCES, EDIT, LIMITS };
+module.exports = { checkSheet, effectiveSheet, starterSheet, withoutOffParts, fieldsOf, LAYOUTS, TYPES, SOURCES, EDIT, LIMITS };
