@@ -93,8 +93,16 @@ describe('the builder', () => {
     expect(screen.getByTestId('save-status').textContent).toMatch(/^DRAFT · SAVED \d\d:\d\d$/);
   });
 
-  it('shows what a page not built yet will hold', async () => {
+  it('STATS & RULES adds stats, saved like any other change', async () => {
     open({ startPage: 'rules' });
+    await ready();
+    await userEvent.click(await screen.findByText('+ GROUP'));
+    await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
+    await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', stats: [{ id: 'new_group', label: 'NEW GROUP', stats: [] }] }));
+  });
+
+  it('shows what a page not built yet will hold', async () => {
+    open({ startPage: 'sheet' });
     await ready();
     expect(screen.getByText(/This page arrives in a coming update\./)).toBeTruthy();
   });

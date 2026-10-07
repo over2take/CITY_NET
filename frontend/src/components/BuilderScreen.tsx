@@ -9,6 +9,7 @@ import { MySystemsPage } from './MySystemsPage';
 import { SetupPage } from './SetupPage';
 import { WordsPage } from './WordsPage';
 import { FeaturesPage } from './FeaturesPage';
+import { StatsRulesPage } from './StatsRulesPage';
 
 // The system builder (4a2b): it takes over the whole window, with no map. A sidebar down the left
 // holds the system's name, its pages, SAVE and PUBLISH, and EXIT TO MAP; the open page fills the
@@ -320,7 +321,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
           )}
           {system && definition && page === 'words' && <WordsPage definition={definition} edit={edit} />}
           {system && definition && page === 'features' && <FeaturesPage definition={definition} edit={edit} api={api} />}
-          {system && !['problems', 'systems', 'setup', 'words', 'features'].includes(page) && (
+          {system && definition && page === 'rules' && <StatsRulesPage definition={definition} edit={edit} />}
+          {system && !['problems', 'systems', 'setup', 'words', 'features', 'rules'].includes(page) && (
             <div style={{ maxWidth: '60ch', border: '1px dashed color-mix(in srgb, var(--green) 45%, transparent)', padding: '16px 18px' }}>
               <p style={{ margin: '0 0 6px', color: 'var(--green)', letterSpacing: 1 }}>{current.label}</p>
               <p style={{ margin: 0, opacity: 0.8 }}>{current.what} This page arrives in a coming update.</p>
