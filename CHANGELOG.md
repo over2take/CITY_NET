@@ -75,6 +75,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's FEATURES page: parts and shops.** Every part of the app as a switch with a line
+  saying what it does, all on unless turned off. XP awards, death saves, luck and PDF import show
+  as off and greyed, since a custom system can't use them yet. SHOPS opens out to the app's shop
+  buildings, its catalogues and its other buildings, each renamed (blank keeps the app's name) or
+  turned off, and each catalogue priced in any of the system's currencies. A catalogue whose part
+  is off is greyed. The bank's settings come next.
+
 - **The builder's WORDS page.** One table of the app's terms, grouped (characters, money, play,
   vehicles), with a box for each one's singular, plural and short form. The app's own word shows
   faintly in every empty box and is what a blank box means. The last column reads each term as
