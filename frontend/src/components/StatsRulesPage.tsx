@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import type { Definition } from '../sheets/systemsApi';
+import React, { useEffect, useRef, useState } from 'react';
+import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  statGroups, withNewGroup, withGroupLabel, withoutGroup, withNewStat, withStat, withoutStat, sampleOf, withSample,
+  statGroups, allStats, withNewGroup, withGroupLabel, withoutGroup, withNewStat, withStat, withoutStat, sampleOf, withSample,
   tableList, withNewTable, withTableLabel, withoutTable, withBands, lookupIn,
+  formulaList, withNewFormula, withFormula, withoutFormula, usedBy, problemsByFormula, insertToken, FUNCTIONS,
 } from '../sheets/statsRules';
 
 // The builder's STATS & RULES page (4b2d): the numbers players fill in (STATS) and the lookup
@@ -15,9 +16,14 @@ import {
 interface Props {
   definition: Definition;
   edit: (next: Definition) => void;
+  /** For the live values (FORMULAS); without it the tab shows no values. */
+  api?: ReturnType<typeof systemsApi>;
 }
 
-type Tab = 'stats' | 'tables';
+type Tab = 'stats' | 'formulas' | 'tables';
+
+/** How long after the last keystroke the live values are asked for. */
+export const PREVIEW_DELAY_MS = 400;
 
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
 const why: React.CSSProperties = { fontSize: 12, lineHeight: 1.45, opacity: 0.85 };
@@ -161,9 +167,115 @@ function TablesTab({ definition, edit }: Props) {
   );
 }
 
-export function StatsRulesPage({ definition, edit }: Props) {
+/**
+ * FORMULAS: each formula's name and text, its value for the sample character a moment after
+ * typing stops (worked out by the server, POST /api/systems/preview-values, so it is the game's own
+ * engine), its mistake under it, and which formulas read it; INSERT puts a name at the cursor.
+ */
+function FormulasTab({ definition, edit, api }: Props) {
+  const formulas = formulaList(definition);
+  const [preview, setPreview] = useState<{ values: Record<string, number>; problems: Record<string, string> } | null>(null);
+  const [cursor, setCursor] = useState<{ id: string; at: number } | null>(null);
+  const inputs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+    if (!api) return undefined;
+    let live = true;
+    const timer = setTimeout(() => {
+      api.previewValues(definition).then((r) => {
+        if (live && r.ok) setPreview({ values: r.value.values, problems: problemsByFormula(r.value.problems) });
+      });
+    }, PREVIEW_DELAY_MS);
+    return () => { live = false; clearTimeout(timer); };
+  }, [api, definition]);
+
+  const insert = (token: string) => {
+    if (!cursor) return;
+    const f = formulas.find((x) => x.id === cursor.id);
+    if (!f) return;
+    const next = insertToken(f.formula ?? '', cursor.at, token);
+    edit(withFormula(definition, f.id, { formula: next.text }));
+    setCursor({ id: f.id, at: next.cursor });
+    requestAnimationFrame(() => { const el = inputs.current[f.id]; if (el) { el.focus(); el.setSelectionRange(next.cursor, next.cursor); } });
+  };
+  const chips = (title: string, tokens: string[]) => tokens.length > 0 && (
+    <>
+      <span style={{ ...small, opacity: 0.55 }}>{title}</span>
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+        {tokens.map((t) => (
+          <button key={t} type="button" disabled={!cursor} onMouseDown={(e) => e.preventDefault()} onClick={() => insert(t)}
+            style={{ border: '1px solid var(--dark-green)', background: 'none', color: 'var(--green)', fontFamily: 'monospace', fontSize: 11, padding: '1px 6px', cursor: cursor ? 'pointer' : 'default' }}>{t}</button>
+        ))}
+      </div>
+    </>
+  );
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 230px', gap: 16, alignItems: 'start' }}>
+      <div>
+        <p style={{ ...why, margin: '0 0 10px', maxWidth: '68ch' }}>
+          Values worked out from stats, tables and each other, written the way a rulebook says them. The value on the right is the sample character's.
+        </p>
+        {formulas.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead><tr>
+              <th scope="col" style={{ ...th, width: 190 }}>NAME</th><th scope="col" style={th}>FORMULA</th>
+              <th scope="col" style={{ ...th, width: 60, textAlign: 'right' }}>VALUE</th><th scope="col" style={th} />
+            </tr></thead>
+            <tbody>
+              {formulas.map((f) => {
+                const problem = preview?.problems[f.id];
+                const value = preview?.values[f.id];
+                const users = usedBy(definition, f.id);
+                const condition = (f as { kind?: string }).kind === 'condition';
+                return (
+                  <tr key={f.id} data-testid={`formula-${f.id}`}>
+                    <td style={td}>
+                      <input type="text" aria-label={`${f.label || f.id} name`} maxLength={40} value={f.label ?? ''} placeholder={f.id} style={{ ...field, width: '100%' }}
+                        onChange={(e) => edit(withFormula(definition, f.id, { label: e.target.value }))} />
+                      <div style={{ fontSize: 11, opacity: 0.6 }}>@{f.id}{users.length > 0 && ` · used by ${users.join(', ')}`}</div>
+                    </td>
+                    <td style={td}>
+                      {condition
+                        ? <span style={{ ...why, fontSize: 11 }}>A condition: if {(f as { when?: string }).when} then {(f as { then?: string }).then} else {(f as { else?: string }).else}. Edited in the node graph later.</span>
+                        : <input ref={(el) => { inputs.current[f.id] = el; }} type="text" aria-label={`${f.label || f.id} formula`} maxLength={1000} value={f.formula ?? ''}
+                            aria-invalid={problem ? true : undefined}
+                            style={{ ...field, width: '100%', borderColor: problem ? 'var(--danger)' : 'var(--green)' }}
+                            onChange={(e) => { edit(withFormula(definition, f.id, { formula: e.target.value })); setCursor({ id: f.id, at: e.target.selectionStart ?? e.target.value.length }); }}
+                            onSelect={(e) => setCursor({ id: f.id, at: (e.target as HTMLInputElement).selectionStart ?? 0 })}
+                            onFocus={(e) => setCursor({ id: f.id, at: e.target.selectionStart ?? e.target.value.length })} />}
+                      {problem && <div role="alert" style={{ ...why, color: 'var(--danger)', opacity: 1, fontSize: 11 }}>{problem}</div>}
+                    </td>
+                    <td data-testid={`value-${f.id}`} style={{ ...td, textAlign: 'right', color: 'var(--cyan)', fontSize: 13 }}>
+                      {value !== undefined ? value : '·'}
+                    </td>
+                    <td style={td}><button type="button" className="utility-btn" style={btn} aria-label={`Remove ${f.label || f.id}`}
+                      onClick={() => edit(withoutFormula(definition, f.id))}>×</button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        <div style={{ padding: '8px 0' }}>
+          <button type="button" className="utility-btn" style={btn} onClick={() => edit(withNewFormula(definition))}>+ FORMULA</button>
+        </div>
+      </div>
+      <aside aria-label="Insert" style={{ border: '1px solid var(--dark-green)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span style={small}>INSERT</span>
+        {chips('STATS', allStats(definition).map((s) => `@${s.id}`))}
+        {chips('FORMULAS', formulas.map((f) => `@${f.id}`))}
+        {chips('TABLES', tableList(definition).map((t) => `${t.id}()`))}
+        {chips('FUNCTIONS', FUNCTIONS.map((fn) => `${fn}()`))}
+        <span style={{ ...why, fontSize: 11 }}>{cursor ? 'Click one to put it at the cursor.' : 'Click in a formula first, then a name to put it there.'}</span>
+      </aside>
+    </div>
+  );
+}
+
+export function StatsRulesPage({ definition, edit, api }: Props) {
   const [tab, setTab] = useState<Tab>('stats');
-  const tabs: [Tab, string][] = [['stats', 'STATS'], ['tables', 'TABLES']];
+  const tabs: [Tab, string][] = [['stats', 'STATS'], ['formulas', 'FORMULAS'], ['tables', 'TABLES']];
   return (
     <div style={{ maxWidth: 1000 }}>
       <div role="tablist" aria-label="Stats and rules" style={{ display: 'flex', borderBottom: '1px solid var(--dark-green)', marginBottom: 14 }}>
@@ -172,6 +284,7 @@ export function StatsRulesPage({ definition, edit }: Props) {
         ))}
       </div>
       {tab === 'stats' && <StatsTab definition={definition} edit={edit} />}
+      {tab === 'formulas' && <FormulasTab definition={definition} edit={edit} api={api} />}
       {tab === 'tables' && <TablesTab definition={definition} edit={edit} />}
     </div>
   );
