@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, screen, cleanup, within, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createRequire } from 'module';
 
 import { StatsRulesPage } from '../StatsRulesPage';
-import type { Definition } from '../../sheets/systemsApi';
+import { systemsApi, type Definition } from '../../sheets/systemsApi';
 
 /**
  * The builder's STATS & RULES page, STATS and TABLES (4b2d1). Approved mockup builder-stats-rules
@@ -79,6 +80,114 @@ describe('STATS', () => {
     expect('samples' in last()).toBe(false);
     await userEvent.click(screen.getByLabelText('Remove the SKILLS group'));
     expect(last().stats).toEqual([{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'dex', label: 'Dexterity' }] }]);
+  });
+});
+
+describe('FORMULAS', () => {
+  const req = createRequire(import.meta.url);
+  const { previewDerived } = req('../../../../backend/systemBuilder/derived.js');
+  /** The route's own work, done here with the server's engine. */
+  const server = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+    const { definition } = JSON.parse(String(init!.body));
+    const body = previewDerived({ lookups: definition.lookups, derived: definition.derived }, definition.samples || {});
+    return { ok: true, status: 200, json: async () => body } as unknown as Response;
+  });
+  const SYSTEM: Definition = { ...HEARTH, samples: { str: 16, dex: 14 },
+    lookups: { mod: { bands: [{ upTo: 7, value: -1 }, { upTo: 13, value: 0 }, { value: 1 }] } },
+    derived: [{ id: 'str_mod', label: 'Strength mod', formula: 'mod(@str)' }, { id: 'save', label: 'Save', formula: '16 - @str_mod' }] };
+  const openFormulas = async (start: Definition = SYSTEM) => {
+    const edits: Definition[] = [];
+    const Harness = () => {
+      const [def, setDef] = useState(start);
+      return <StatsRulesPage definition={def} api={systemsApi('gm', server as typeof fetch)} edit={(next) => { edits.push(next); setDef(next); }} />;
+    };
+    render(<Harness />);
+    await userEvent.click(screen.getByRole('tab', { name: 'FORMULAS' }));
+    return { last: () => edits[edits.length - 1] };
+  };
+  const value = (id: string) => screen.getByTestId(`value-${id}`).textContent;
+
+  it('shows each formula with its name, id, users, and its value for the sample', async () => {
+    await openFormulas();
+    expect(screen.getByTestId('formula-str_mod').textContent).toContain('@str_mod · used by Save');
+    await waitFor(() => expect(value('save')).toBe('15'));
+    expect(value('str_mod')).toBe('1');
+  });
+
+  it('works the values out again a moment after typing stops', async () => {
+    await openFormulas();
+    await waitFor(() => expect(value('save')).toBe('15'));
+    const calls = server.mock.calls.length;
+    const formula = screen.getByLabelText('Save formula');
+    await userEvent.clear(formula);
+    await userEvent.type(formula, '20 - @str_mod');
+    await waitFor(() => expect(value('save')).toBe('19'));
+    // Asked once for the whole burst of typing, not once a key.
+    expect(server.mock.calls.length - calls).toBeLessThanOrEqual(2);
+  });
+
+  it('never lets a late answer for an older formula overwrite a newer one', async () => {
+    const answers: ((body: object) => void)[] = [];
+    const slow = vi.fn(() => new Promise<Response>((resolve) => {
+      answers.push((body) => resolve({ ok: true, status: 200, json: async () => body } as unknown as Response));
+    }));
+    const Harness = () => {
+      const [def, setDef] = useState<Definition>(SYSTEM);
+      return <StatsRulesPage definition={def} api={systemsApi('gm', slow as unknown as typeof fetch)} edit={setDef} />;
+    };
+    render(<Harness />);
+    await userEvent.click(screen.getByRole('tab', { name: 'FORMULAS' }));
+    await waitFor(() => expect(answers).toHaveLength(1));
+    const formula = screen.getByLabelText('Save formula');
+    await userEvent.clear(formula);
+    await userEvent.type(formula, '20');
+    await waitFor(() => expect(answers).toHaveLength(2));
+    answers[1]({ values: { save: 20 }, problems: [] });
+    await waitFor(() => expect(value('save')).toBe('20'));
+    answers[0]({ values: { save: 15 }, problems: [] });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(value('save')).toBe('20');
+  });
+
+  it('shows a mistake under its formula, keeping the others\' values', async () => {
+    await openFormulas({ ...SYSTEM, derived: [...(SYSTEM.derived as object[]), { id: 'broken', formula: 'mod(' }] });
+    expect((await screen.findByRole('alert')).textContent).toMatch(/.+/);
+    expect(screen.getByLabelText('broken formula').getAttribute('aria-invalid')).toBe('true');
+    expect(value('broken')).toBe('·');
+    expect(value('save')).toBe('15');
+  });
+
+  it('names, adds and removes formulas', async () => {
+    const { last } = await openFormulas({ format: 1, name: 'Hearth' });
+    await userEvent.click(screen.getByText('+ FORMULA'));
+    expect(last().derived).toEqual([{ id: 'new_formula', label: 'New formula', formula: '0' }]);
+    const name = screen.getByLabelText('New formula name');
+    await userEvent.clear(name);
+    expect(last().derived).toEqual([{ id: 'new_formula', formula: '0' }]);
+    await userEvent.click(screen.getByLabelText('Remove new_formula'));
+    expect('derived' in last()).toBe(false);
+  });
+
+  it('puts a name from INSERT at the cursor, once a formula is clicked', async () => {
+    const { last } = await openFormulas();
+    const chip = screen.getByRole('button', { name: '@dex' });
+    expect((chip as HTMLButtonElement).disabled).toBe(true);
+    const formula = screen.getByLabelText('Save formula') as HTMLInputElement;
+    await userEvent.click(formula);
+    formula.setSelectionRange(2, 2);
+    fireEvent.select(formula);
+    await userEvent.click(screen.getByRole('button', { name: '@dex' }));
+    expect((last().derived as { id: string; formula: string }[]).find((f) => f.id === 'save')!.formula).toBe('16@dex - @str_mod');
+    await userEvent.click(screen.getByRole('button', { name: 'max()' }));
+    expect((last().derived as { id: string; formula: string }[]).find((f) => f.id === 'save')!.formula).toBe('16@dexmax() - @str_mod');
+    expect(screen.getByRole('button', { name: 'mod()' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '@str_mod' })).toBeTruthy();
+  });
+
+  it('shows a condition without editing it', async () => {
+    await openFormulas({ ...SYSTEM, derived: [{ id: 'hurt', kind: 'condition', when: '@str < 5', then: '1', else: '0' }] });
+    expect(screen.getByTestId('formula-hurt').textContent).toContain('A condition: if @str < 5 then 1 else 0.');
+    expect(screen.queryByLabelText('hurt formula')).toBeNull();
   });
 });
 

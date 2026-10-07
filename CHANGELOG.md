@@ -75,6 +75,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's STATS & RULES page: formulas.** FORMULAS lists each formula with the name
+  players see, its formula written the rulebook way, and its value for the sample character,
+  worked out by the game's own engine a moment after you stop typing. A mistake shows in red under
+  its formula while the others keep their values, and each formula says which others read it. An
+  INSERT panel puts a stat, formula, table or function at the cursor. STATS & RULES is now
+  complete.
+
 - **The builder's STATS & RULES page: stats and tables.** STATS lists the numbers players fill in,
   in groups you name, each with its lowest and highest value, the stat it's tied to (a skill to its
   ability) and a SAMPLE value for a made-up character. Each group becomes a section of the starter
