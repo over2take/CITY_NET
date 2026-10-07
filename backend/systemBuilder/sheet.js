@@ -13,6 +13,7 @@
 const { healthLayout } = require('./core');
 const { ownWords } = require('./terms');
 const { partOn } = require('./parts');
+const { statSections, derivedLabel } = require('./stats');
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
@@ -205,10 +206,12 @@ const designedOrStarter = (definition) => {
       { id: 'description', label: 'Description', type: 'textarea', visibility: 'public' },
     ] },
     ...health.sections,
+    // What players fill in, a section per group (stats.js, 4b2a).
+    ...statSections(definition),
   ];
   if (derived.length) {
     sections.push({ id: 'derived', label: 'DERIVED', layout: 'grid', tab: 'STATS', columns: 4,
-      fields: derived.map((d) => ({ id: d.id, label: d.id.replace(/_/g, ' ').toUpperCase(), type: 'number' })) });
+      fields: derived.map((d) => ({ id: d.id, label: derivedLabel(d), type: 'number' })) });
   }
   sections.push(
     { id: 'inventory', label: 'INVENTORY', layout: 'inventory', tab: 'GEAR', fields: [] },

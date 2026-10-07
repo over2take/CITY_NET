@@ -15,6 +15,8 @@
 //     parts:   { vehicles: { on: false }, ... },                               // Layer 2
 //     buildings: { ... }, currencies: [ ... ],       // building names, money (buildings.js, currencies.js)
 //     bank:    { celebrations, whale },              // the bank window's easter eggs (bank.js)
+//     stats:   [ { id, label, stats: [...] } ],      // what players fill in, in groups (stats.js)
+//     samples: { str: 16, ... },                     // the builder's sample character (stats.js)
 //     lookups: { ... }, derived: [ ... ],            // Layer 3, the Phase 1 engine's format
 //     sheet:   { tabs, header, sections },           // the character sheet (sheet.js)
 //     npc:     { sheet, tiers },                     // NPC layout and power tiers (npc.js)
@@ -33,7 +35,11 @@
 const { compileSystem } = require('./derived');
 const { checkSheet } = require('./sheet');
 const { checkNpc } = require('./npc');
-const { checkCore } = require('./core');
+const { checkCore, healthLayout } = require('./core');
+const { checkStats, checkDerivedLabels, checkSamples, statIdsOf } = require('./stats');
+
+/** Fields the starter sheet always has (sheet.js designedOrStarter), which a stat must not name. */
+const STARTER_IDS = ['name', 'concept', 'description', 'cash', 'notes'];
 const { TERMS, WORD_FORMS, wordFor, resolveWords, ownWords } = require('./terms');
 const { PARTS, partOn } = require('./parts');
 const { checkBuildings } = require('./buildings');
@@ -54,7 +60,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'lookups', 'derived', 'sheet', 'npc', 'core']);
+const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -146,6 +152,16 @@ const checkDefinition = (definition) => {
   }
   const derivedIds = new Set(Array.isArray(definition.derived)
     ? definition.derived.filter((d) => d && typeof d.id === 'string').map((d) => d.id) : []);
+  checkDerivedLabels(definition.derived, problems);
+  // A stat may not share an id with a formula or a field the starter sheet already has.
+  const taken = new Map([
+    ...STARTER_IDS.map((id) => [id, 'The starter sheet already has a field with this id']),
+    ...healthLayout(isPlainObject(definition.core) ? definition.core.health : undefined).sections
+      .flatMap((s) => s.fields.map((f) => [f.id, 'The health section already has a field with this id'])),
+    ...[...derivedIds].map((id) => [id, 'A formula has this id']),
+  ]);
+  checkStats(definition.stats, taken, problems);
+  checkSamples(definition.samples, statIdsOf(definition), problems);
   checkSheet(definition.sheet, derivedIds, problems);
   checkCore(definition.core, derivedIds, problems);
   checkNpc(definition, derivedIds, problems);

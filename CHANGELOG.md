@@ -75,6 +75,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A custom system's stats.** A system can now list the numbers players fill in, in groups
+  (abilities, skills, anything), each with a name, an optional lowest and highest value, and a
+  skill optionally tied to an ability. Until a system designs its own sheet, the starter sheet
+  shows each group as a section, so formulas like "16 − (level + best of STR, CON)" finally have
+  boxes to read. Formulas can carry a name players see on the sheet ("Physical save"). The builder
+  can save a made-up sample character with the draft, for checking formulas. The STATS & RULES
+  page that edits all this comes next.
+
 - **The builder's FEATURES page: the bank.** BANK opens out to the system's currencies and its
   celebrations. Each currency is counted in whole numbers, decimals (with its symbol before or
   after, and a point or a comma) or coins (each with its worth), and shows how an amount will read.
