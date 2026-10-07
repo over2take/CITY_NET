@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { createRequire } from 'module';
 
 import { SheetPage, SHEET_PREVIEW_DELAY_MS } from '../SheetPage';
+import { othersSee, SAMPLE_NAME } from '../SheetPreview';
 import type { Definition, systemsApi } from '../../sheets/systemsApi';
 import type { CustomRenderSheet } from '../../sheets/customTemplates';
 
@@ -18,6 +19,7 @@ import type { CustomRenderSheet } from '../../sheets/customTemplates';
 const req = createRequire(import.meta.url);
 const { starterSheet, effectiveSheet } = req('../../../../backend/systemBuilder/sheet.js');
 const { checkDefinition } = req('../../../../backend/systemBuilder/definition.js');
+const { previewDerived } = req('../../../../backend/systemBuilder/derived.js');
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -33,6 +35,7 @@ type Api = ReturnType<typeof systemsApi>;
 /** The server's preview, answered by its own code. */
 const serverApi = () => ({
   previewSheet: vi.fn(async (def: Definition) => ({ ok: true as const, value: { sheet: effectiveSheet(def), starter: starterSheet(def) } })),
+  previewValues: vi.fn(async (def: Definition) => ({ ok: true as const, value: previewDerived({ lookups: def.lookups, derived: def.derived }, (def.samples ?? {}) as object) })),
 });
 
 const open = (start: Definition = HEARTH, api: { previewSheet: unknown } | null = serverApi()) => {
@@ -81,11 +84,11 @@ describe('automatic', () => {
 
   it('can\'t be customized before the starter has arrived, nor without the server', async () => {
     let answer!: (v: unknown) => void;
-    const api = { previewSheet: vi.fn(() => new Promise((r) => { answer = r; })) };
+    const api = { previewSheet: vi.fn(() => new Promise((r) => { answer = r; })), previewValues: vi.fn(async () => ({ ok: false })) };
     open(HEARTH, api);
     const customize = screen.getByRole('button', { name: 'CUSTOMIZE THIS SHEET' }) as HTMLButtonElement;
     expect(customize.disabled).toBe(true);
-    expect(screen.getByText('LOADING…')).toBeTruthy();
+    expect(screen.getAllByText('LOADING…')).toHaveLength(2);
     await waitFor(() => expect(api.previewSheet).toHaveBeenCalled());
     await act(async () => { answer({ ok: true, value: { sheet: effectiveSheet(HEARTH), starter: STARTER } }); });
     expect(customize.disabled).toBe(false);
@@ -536,6 +539,100 @@ describe('not on the sheet yet', () => {
   });
 });
 
+describe('the preview', () => {
+  const SAMPLED: Definition = { ...HEARTH, samples: { str: 10 } };
+  const preview = () => within(screen.getByTestId('sheet-preview'));
+  const seenBy = (who: string) => userEvent.click(within(screen.getByRole('group', { name: 'Seen by' })).getByRole('button', { name: who }));
+
+  it('draws the sheet with the game\'s own renderer, filled with the sample character', async () => {
+    open(SAMPLED);
+    await screen.findByTestId('sheet-preview');
+    expect(preview().getByDisplayValue(SAMPLE_NAME)).toBeTruthy();
+    expect(preview().getByDisplayValue('10')).toBeTruthy();
+    // Save is 16 - @str, worked out by the server from the sample.
+    await waitFor(() => expect((preview().getByLabelText('Save') as HTMLInputElement).value).toBe('6'));
+    expect(preview().getByText(/─── ABILITIES ───/)).toBeTruthy();
+    expect(pressed('Seen by')).toEqual(['ITS OWNER']);
+  });
+
+  it('follows the layout a moment after a change', async () => {
+    await customized(SAMPLED);
+    await screen.findByTestId('sheet-preview');
+    await userEvent.click(node('ABILITIES section'));
+    const name = screen.getByLabelText('Section name');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'ATTRIBUTES');
+    await waitFor(() => expect(preview().getByText(/─── ATTRIBUTES ───/)).toBeTruthy());
+    expect(preview().queryByText(/ABILITIES/)).toBeNull();
+  });
+
+  it('locks a GM-only field for the owner, not for the GM', async () => {
+    await customized(SAMPLED);
+    await userEvent.click(node('Strength field'));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Who changes it' })).getByRole('button', { name: 'ONLY THE GM' }));
+    await waitFor(() => expect((preview().getByDisplayValue('10') as HTMLInputElement).readOnly).toBe(true));
+    expect((preview().getByDisplayValue(SAMPLE_NAME) as HTMLInputElement).readOnly).toBe(false);
+    await seenBy('THE GM');
+    expect((preview().getByDisplayValue('10') as HTMLInputElement).readOnly).toBe(false);
+  });
+
+  it('can be typed in to try it, saving nothing', async () => {
+    const { edits } = open(SAMPLED);
+    await screen.findByTestId('sheet-preview');
+    const nameBox = preview().getByDisplayValue(SAMPLE_NAME);
+    fireEvent.change(nameBox, { target: { value: 'Vex' } });
+    expect(preview().getByDisplayValue('Vex')).toBeTruthy();
+    expect(edits).toEqual([]);
+  });
+
+  it('shows everyone else the name and the EVERYONE fields, never an attack number', async () => {
+    await customized(SAMPLED);
+    await screen.findByTestId('sheet-preview');
+    await seenBy('EVERYONE ELSE');
+    const lines = () => screen.getByTestId('others-see').textContent;
+    // The starter shows the name and description to everyone.
+    expect(lines()).toBe(`NAME${SAMPLE_NAME}DESCRIPTION—`);
+    expect(screen.queryByText(/Only the name\./)).toBeNull();
+    for (const field of ['Strength field', 'Concept field']) {
+      await userEvent.click(node(field));
+      await userEvent.click(within(screen.getByRole('group', { name: 'Who sees it' })).getByRole('button', { name: 'EVERYONE' }));
+    }
+    await waitFor(() => expect(lines()).toBe(`NAME${SAMPLE_NAME}CONCEPT—DESCRIPTION—STRENGTH10`));
+    await userEvent.click(node('Strength field'));
+    await userEvent.click(screen.getByRole('checkbox', { name: /Decides whether attacks hit/ }));
+    await waitFor(() => expect(lines()).toBe(`NAME${SAMPLE_NAME}CONCEPT—DESCRIPTION—`));
+    for (const field of ['Concept field', 'Description field']) {
+      await userEvent.click(node(field));
+      await userEvent.click(within(screen.getByRole('group', { name: 'Who sees it' })).getByRole('button', { name: 'OWNER AND GM' }));
+    }
+    await waitFor(() => expect(lines()).toBe(`NAME${SAMPLE_NAME}`));
+    expect(screen.getByText(/Only the name\./)).toBeTruthy();
+  });
+
+  it('shows the automatic sheet too, and says when there is no server to draw it', async () => {
+    open(SAMPLED);
+    expect(await screen.findByTestId('sheet-preview')).toBeTruthy();
+    cleanup();
+    open(SAMPLED, null);
+    expect(screen.getByText('No preview without the server.')).toBeTruthy();
+  });
+});
+
+describe('what everyone else sees', () => {
+  it('reads the name from the header\'s name field, then EVERYONE fields in order', () => {
+    const sheet: CustomRenderSheet = { header: { nameField: 'handle' }, sections: [{ id: 'a', label: 'A', layout: 'list', fields: [
+      { id: 'rank', label: 'Rank', type: 'text', visibility: 'public' },
+      { id: 'handle', label: 'Handle', type: 'text', visibility: 'public' },
+      { id: 'secret', label: 'Secret', type: 'text' },
+      { id: 'ward', label: 'Ward', type: 'number', visibility: 'public', sensitivity: 'combat' },
+    ] }] };
+    expect(othersSee(sheet, { handle: 'Vex', rank: 0, secret: 'x', ward: 3 })).toEqual([{ label: 'Handle', value: 'Vex' }, { label: 'Rank', value: '0' }]);
+    expect(othersSee({ sections: [] }, {})).toEqual([]);
+    expect(othersSee({ sections: [{ id: 'a', label: 'A', layout: 'list', fields: [{ id: 'name', label: 'Name', type: 'text' }] }] }, { name: '' }))
+      .toEqual([{ label: 'Name', value: '—' }]);
+  });
+});
+
 describe('asking the server', () => {
   it('asks at once, then only a moment after the last change', async () => {
     vi.useFakeTimers();
@@ -554,7 +651,7 @@ describe('asking the server', () => {
 
   it('never lets a late answer replace a newer one', async () => {
     const answers: ((v: unknown) => void)[] = [];
-    const api = { previewSheet: vi.fn(() => new Promise((r) => { answers.push(r); })) };
+    const api = { previewSheet: vi.fn(() => new Promise((r) => { answers.push(r); })), previewValues: vi.fn(async () => ({ ok: false })) };
     const Harness = () => {
       const [def, setDef] = useState<Definition>(HEARTH);
       return (
