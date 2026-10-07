@@ -75,6 +75,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What the builder's STATS & RULES page will change.** Adding, renaming and removing stat groups
+  and stats (with their lowest, highest and ties), the sample character, formulas with their names,
+  and lookup tables with their rows. A new entry's id comes from its first name and never changes,
+  and is never one something else already has. Removing a stat takes its sample and any skill's tie
+  to it. Each formula knows which others read it, and the server's problems are matched to the
+  formula they belong to. The page itself comes next.
+
 - **Formulas worked out while you write them.** The server can now work out a draft's formulas
   from its sample character without saving anything, for the STATS & RULES page to show each
   formula's value as you type. A formula with a mistake, and any formula that reads it, is left
