@@ -45,6 +45,11 @@ export const takenIds = (def: Definition): string[] => [
   ...formulaList(def).map((f) => f.id),
   ...tableList(def).map((t) => t.id),
   ...FUNCTIONS,
+  // A customized sheet's own fields (4b3): a new stat or formula taking one's id would land in it.
+  ...(isObject(def.sheet) && Array.isArray((def.sheet as Obj).sections)
+    ? ((def.sheet as Obj).sections as unknown[]).flatMap((s) => (isObject(s) && Array.isArray(s.fields) ? s.fields : []))
+      .filter((f): f is Obj => isObject(f) && typeof f.id === 'string').map((f) => f.id as string)
+    : []),
 ];
 
 const withList = (def: Definition, key: 'stats' | 'derived', list: unknown[]): Definition => {

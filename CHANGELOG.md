@@ -75,6 +75,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What the builder's CHARACTER SHEET page will change.** Customizing copies the starter sheet in
+  and going back to automatic drops it. Tabs can be added, renamed (never blank or repeated), moved
+  and removed, their sections moving to another tab, and removing the last makes the sheet one
+  page. Sections and fields can be added, renamed, restyled, moved and removed. Stats, formulas and
+  starter fields taken off wait in a tray to be placed again, and the header forgets fields that
+  left. Every sheet keeps its Name field. A formula's kind never changes and nobody edits it, and a
+  value that decides whether attacks hit is never shown to everyone. The page itself comes next.
+
 - **A draft's character sheet, shown without saving.** The server can now answer, for a draft
   still being edited, the sheet it would be drawn with and the starter sheet it would get without
   one of its own, for the builder's CHARACTER SHEET page to preview and to copy when you customize.
