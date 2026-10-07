@@ -224,4 +224,42 @@ const compileSystem = (definition) => {
   };
 };
 
-module.exports = { compileSystem, LIMITS };
+/** The id a problem is about, when it is one derived value's: "derived save, formula" → "save". */
+const problemId = (p) => {
+  const m = /^derived ([a-z][a-z0-9_]*)(,|$)/.exec(p.where || '');
+  return m ? m[1] : null;
+};
+
+/**
+ * Every derived value the builder can show while a GM is still writing them (4b2b): worked out from
+ * `data` (the sample character), leaving out each value with a problem and every value that reads
+ * one, so one unfinished formula doesn't blank the rest. Returns { values, problems }, the problems
+ * all of compileSystem's. The running game never uses this: it runs only a published, whole system.
+ */
+const previewDerived = ({ lookups, derived }, data) => {
+  const all = Array.isArray(derived) ? derived : [];
+  const first = compileSystem({ lookups, derived: all });
+  if (first.ok) return { values: first.system.evaluate(data), problems: [] };
+  let kept = all;
+  let compiled = first;
+  // Each round drops what failed and what reads it; bounded, since each drops at least one.
+  for (let round = 0; round <= all.length && !compiled.ok; round += 1) {
+    const out = new Set(compiled.problems.map(problemId).filter(Boolean));
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const d of kept) {
+        if (!d || out.has(d.id)) continue;
+        const text = [d.formula, d.when, d.then, d.else].filter((s) => typeof s === 'string').join(' ');
+        if ([...out].some((id) => new RegExp(`@${id}(?![a-z0-9_])`).test(text))) { out.add(d.id); grew = true; }
+      }
+    }
+    const next = kept.filter((d) => d && typeof d.id === 'string' && !out.has(d.id));
+    if (next.length === kept.length) break;
+    kept = next;
+    compiled = compileSystem({ lookups, derived: kept });
+  }
+  return { values: compiled.ok ? compiled.system.evaluate(data) : {}, problems: first.problems };
+};
+
+module.exports = { compileSystem, previewDerived, LIMITS };

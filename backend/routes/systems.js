@@ -7,6 +7,8 @@ const { authenticate, requireMainAdmin } = require('../middleware/auth');
 const { LIMITS, rejectFormat, uploadErrors } = require('../middleware/uploadConstraints');
 const store = require('../systemBuilder/store');
 const runtime = require('../systemBuilder/runtime');
+const { checkDefinition } = require('../systemBuilder/definition');
+const { previewDerived } = require('../systemBuilder/derived');
 
 /** What a currency's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
@@ -135,6 +137,18 @@ module.exports = (db, io = null) => {
       res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
       res.send(file.text);
     });
+  });
+
+  /**
+   * The builder's live values (4b2b): a draft's derived values worked out from its sample character,
+   * leaving out what can't be worked out yet, with the formulas' problems. Changes nothing.
+   */
+  router.post('/preview-values', gm, (req, res) => {
+    const definition = req.body && req.body.definition;
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    const samples = definition.samples && typeof definition.samples === 'object' && !Array.isArray(definition.samples) ? definition.samples : {};
+    res.json(previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples));
   });
 
   // What installing a file would do, changing nothing. The file arrives as text so its size is
