@@ -16,6 +16,9 @@ import { BuilderScreen } from '../BuilderScreen';
 import { AdminPanel } from '../AdminPanel';
 import { SYSTEMS_CHANGED_EVENT } from '../../sheets/systemsLibrary';
 import type { SystemCopies } from '../../sheets/systemsApi';
+import { createRequire } from 'module';
+
+const { starterSheet, effectiveSheet } = createRequire(import.meta.url)('../../../../backend/systemBuilder/sheet.js');
 
 /**
  * The builder screen (4a2b): it takes over the window, with its own sidebar of pages, SAVE,
@@ -51,6 +54,10 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     return json(draftAnswer.status, draftAnswer.body);
   }
   if (url === '/api/systems' && method === 'GET') return json(200, LIBRARY);
+  if (url === '/api/systems/preview-sheet') {
+    const { definition } = JSON.parse(String(init!.body));
+    return json(200, { sheet: effectiveSheet(definition), starter: starterSheet(definition) });
+  }
   if (url === `/api/systems/${HEARTH}/publish`) {
     if (publishAnswer.status === 200) served = { ...served, version: served.version + 1 };
     return json(publishAnswer.status, publishAnswer.body);
@@ -102,9 +109,17 @@ describe('the builder', () => {
   });
 
   it('shows what a page not built yet will hold', async () => {
-    open({ startPage: 'sheet' });
+    open({ startPage: 'npcs' });
     await ready();
     expect(screen.getByText(/This page arrives in a coming update\./)).toBeTruthy();
+  });
+
+  it('CHARACTER SHEET customizes the sheet, saved like any other change', async () => {
+    open({ startPage: 'sheet' });
+    await ready();
+    await userEvent.click(await screen.findByRole('button', { name: 'CUSTOMIZE THIS SHEET' }));
+    await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
+    await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', sheet: starterSheet({ format: 1, name: 'Hearth' }) }));
   });
 
   it('FEATURES turns parts on and off, saved like any other change', async () => {

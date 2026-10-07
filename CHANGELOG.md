@@ -75,6 +75,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's CHARACTER SHEET page: tabs and sections.** A system's sheet shows as the game
+  would draw it, AUTOMATIC from its stats, formulas and health model, until CUSTOMIZE copies it to
+  arrange by hand (BACK TO AUTOMATIC asks first). Tabs, their sections and their fields are listed
+  with arrows to reorder them. A tab can be renamed, with a refused name explained right there, and
+  removing one asks which tab its sections move to; removing the last makes the sheet one page,
+  and + TAB splits it again. A section can be renamed, moved to another tab, shown as a list, grid
+  (with columns), notes or items, and removed, which asks first when it holds fields. Field
+  settings, the tray and a live preview come next.
+
 - **What the builder's CHARACTER SHEET page will change.** Customizing copies the starter sheet in
   and going back to automatic drops it. Tabs can be added, renamed (never blank or repeated), moved
   and removed, their sections moving to another tab, and removing the last makes the sheet one
