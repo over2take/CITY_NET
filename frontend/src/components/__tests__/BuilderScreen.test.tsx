@@ -99,6 +99,14 @@ describe('the builder', () => {
     expect(screen.getByText(/This page arrives in a coming update\./)).toBeTruthy();
   });
 
+  it('FEATURES turns parts on and off, saved like any other change', async () => {
+    open({ startPage: 'features' });
+    await ready();
+    await userEvent.click(await screen.findByRole('switch', { name: 'VEHICLES' }));
+    await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
+    await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', parts: { vehicles: { on: false } } }));
+  });
+
   it('WORDS edits the system\'s terms, saved like any other change', async () => {
     open({ startPage: 'words' });
     await ready();
