@@ -74,6 +74,7 @@ const VAULT = {
       { id: 'squire', label: 'SQUIRE', hp: 6, defense: 11, values: { might: 9, threat: 1, tactics: 'Runs' } },
       { id: 'champion', label: 'CHAMPION', hp: 30, defense: 17, values: { might: 16, threat: 4 } },
       { id: 'ghost', label: 'GHOST', values: { tactics: 'Haunts' } },
+      { id: 'knight', label: 'KNIGHT', hp: '10 + @level * 2', defense: '12 + floor(@level / 2)', values: { might: '8 + @level', threat: '2d6' } },
     ],
   },
 };
@@ -110,7 +111,7 @@ describe('the format', () => {
   it('reports every mistake in the tiers, with where it is', () => {
     expect(problems({ ...VAULT, npc: { sheet: NPC_SHEET, extra: 1, tiers: [
       { id: 'Squire', label: '', hp: -1, defense: 100, colour: 'red' },
-      { id: 'b', label: 'B', values: { might_mod: 3, wounds: 5, nope: 1, might: 'lots', tactics: 7 } },
+      { id: 'b', label: 'B', values: { might_mod: 3, wounds: 5, nope: 1, might: ['lots'], tactics: 7 } },
       { id: 'b', label: 'B' },
       'x',
     ] } })).toEqual([
@@ -118,15 +119,30 @@ describe('the format', () => {
       'npc tier Squire, colour: Not part of a tier',
       'npc tier Squire: Ids use lowercase letters, digits and _, starting with a letter',
       'npc tier Squire, label: Required',
-      'npc tier Squire, hp: A whole number from 0 to 9999',
-      'npc tier Squire, defense: A whole number from 0 to 99',
+      'npc tier Squire, hp: A whole number from 0 to 9999, a formula or dice',
+      'npc tier Squire, defense: A whole number from 0 to 99, a formula or dice',
       'npc tier b, might_mod: A derived value is worked out, not set',
       'npc tier b, wounds: Lives on the token or in the bank; use the tier\'s hp and defense',
       'npc tier b, nope: Not a field on the NPC sheet',
-      'npc tier b, might: Must be a number',
+      'npc tier b, might: A number, a formula or dice',
       'npc tier b, tactics: Must be text',
       'npc tier b: Defined twice',
       'npc tier 4: Must be a tier',
+    ]);
+  });
+
+  it('takes formulas and dice for HP, defense and numbers, worked out for the level (4b4a1)', () => {
+    expect(problems({ ...VAULT, npc: { sheet: NPC_SHEET, tiers: [
+      { id: 'boss', label: 'BOSS', hp: '@level d10 + 10', defense: '14 + floor(@level / 2)', values: { might: '3d6 + @level' } },
+    ] } })).toEqual([]);
+    expect(problems({ ...VAULT, npc: { sheet: NPC_SHEET, tiers: [
+      { id: 'boss', label: 'BOSS', hp: '@might d10', defense: '3d1', values: { might: '3d6 +', tactics: '3d6' } },
+      { id: 'long', label: 'LONG', hp: '1+'.repeat(200) + '1' },
+    ] } })).toEqual([
+      'npc tier boss, hp: Only @level can be used here, not @might',
+      'npc tier boss, defense: A die has 2 to 1000 sides',
+      expect.stringMatching(/^npc tier boss, might: /),
+      'npc tier long, hp: Longer than 300 characters',
     ]);
   });
 
@@ -245,7 +261,7 @@ describe('a published system with them', () => {
       const res = await request(app).get(`/api/systems/render/${id}`);
       expect(res.body.npc).toEqual({
         sheet: NPC_SHEET,
-        tiers: [{ id: 'squire', label: 'SQUIRE' }, { id: 'champion', label: 'CHAMPION' }, { id: 'ghost', label: 'GHOST' }],
+        tiers: [{ id: 'squire', label: 'SQUIRE' }, { id: 'champion', label: 'CHAMPION' }, { id: 'ghost', label: 'GHOST' }, { id: 'knight', label: 'KNIGHT' }],
       });
     });
 
@@ -257,12 +273,21 @@ describe('a published system with them', () => {
     });
 
     it('offer their tiers to GENERATE_SHEET, built with derived values worked out', () => {
-      expect(npcTiers.getTierOptions(id).map((t) => t.id)).toEqual(['squire', 'champion', 'ghost']);
+      expect(npcTiers.getTierOptions(id).map((t) => t.id)).toEqual(['squire', 'champion', 'ghost', 'knight']);
       expect(npcTiers.buildTier(id, 'champion')).toEqual({
         tierId: 'champion', data: { might: 16, threat: 4, might_mod: 1 }, hp: 30, dv: { melee: 17, ranged: 17 },
       });
       // An unknown tier is the first, as with the built-in ones.
       expect(npcTiers.buildTier(id, 'dragon').tierId).toBe('squire');
+    });
+
+    it('work a tier\'s formulas out for the level asked, and roll its dice (4b4a1)', () => {
+      const knight = npcTiers.buildTier(id, 'knight', 4);
+      expect(knight).toMatchObject({ tierId: 'knight', hp: 18, dv: { melee: 14, ranged: 14 }, data: { might: 12, might_mod: 0 } });
+      expect(knight.data.threat).toBeGreaterThanOrEqual(2);
+      expect(knight.data.threat).toBeLessThanOrEqual(12);
+      // No level asked for (an older browser): level 1.
+      expect(npcTiers.buildTier(id, 'knight')).toMatchObject({ hp: 12, dv: { melee: 12 }, data: { might: 9, might_mod: -1 } });
     });
 
     it('leave the built-in tiers as they were', () => {

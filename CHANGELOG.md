@@ -80,6 +80,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **NPC tiers that roll.** A custom system's NPC tier can now give HP, defense and any number on
+  the stat block as a number, a formula reading the NPC's level (`12 + floor(@level / 3)`), or dice
+  (`3d6`, `@level d8 + 4`). The server works each one out and rolls it with the game's own formula
+  language when the NPC is made, holding HP and defense to the token's limits; a mistake in one is
+  reported with what is wrong. For now every NPC is made at level 1; choosing the level, and the
+  builder page that writes tiers, come next. The built-in systems' tiers are unchanged.
+
 - **A custom system's characters show their public details in ID.EXE.** INFO on a player's token
   now lists the character's name and every field the system's sheet shows to EVERYONE, by the
   sheet's own labels, as the built-in systems show handle, name and role. A value that decides

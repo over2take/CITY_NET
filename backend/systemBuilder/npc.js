@@ -14,9 +14,12 @@
 // both layouts must be linked the same way on each.
 //
 // A tier is a package, as the built-in ones are: a label, the token's HP and defense, and
-// the sheet values a generated NPC starts with. The first tier is the default.
+// the sheet values a generated NPC starts with. The first tier is the default. HP, defense and
+// number values may be formulas or dice, worked out for the level the GM asks for
+// (tierRolls.js, 4b4a1): "@level d8 + 4", "12 + floor(@level / 3)".
 
 const { checkSheet, fieldsOf, effectiveSheet, withoutOffParts } = require('./sheet');
+const { boxProblem } = require('./tierRolls');
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const LIMITS = { tiers: 20, label: 30, values: 200, text: 300, hp: 9999, defense: 99 };
@@ -53,8 +56,15 @@ const checkTiers = (tiers, npcFields, derivedIds, problems) => {
     else ids.add(tier.id);
     if (typeof tier.label !== 'string' || !tier.label.trim()) problems.push({ where: `${tw}, label`, message: 'Required' });
     else if (tier.label.length > LIMITS.label) problems.push({ where: `${tw}, label`, message: `Longer than ${LIMITS.label} characters` });
-    if (tier.hp !== undefined && !wholeNumber(tier.hp, LIMITS.hp)) problems.push({ where: `${tw}, hp`, message: `A whole number from 0 to ${LIMITS.hp}` });
-    if (tier.defense !== undefined && !wholeNumber(tier.defense, LIMITS.defense)) problems.push({ where: `${tw}, defense`, message: `A whole number from 0 to ${LIMITS.defense}` });
+    // HP and defense: a whole number in the token's range, or a formula or dice worked out for
+    // the level when the NPC is made (tierRolls.js, 4b4a1), the result held to that range.
+    for (const [key, max] of [['hp', LIMITS.hp], ['defense', LIMITS.defense]]) {
+      const v = tier[key];
+      if (v === undefined || typeof v === 'string') {
+        const why = typeof v === 'string' && v.length > LIMITS.text ? `Longer than ${LIMITS.text} characters` : boxProblem(v);
+        if (why) problems.push({ where: `${tw}, ${key}`, message: why });
+      } else if (!wholeNumber(v, max)) problems.push({ where: `${tw}, ${key}`, message: `A whole number from 0 to ${max}, a formula or dice` });
+    }
     if (tier.values === undefined) return;
     if (!isPlainObject(tier.values)) { problems.push({ where: `${tw}, values`, message: 'Must be a set of field values' }); return; }
     const entries = Object.entries(tier.values);
@@ -67,7 +77,11 @@ const checkTiers = (tiers, npcFields, derivedIds, problems) => {
       // HP and defense come from the tier's own hp and defense, onto the token.
       if (field.source) { problems.push({ where: vw, message: 'Lives on the token or in the bank; use the tier\'s hp and defense' }); continue; }
       if (field.type === 'number') {
-        if (typeof value !== 'number' || !Number.isFinite(value)) problems.push({ where: vw, message: 'Must be a number' });
+        // A number, or a formula or dice worked out for the level (tierRolls.js).
+        if (typeof value === 'string') {
+          const why = value.length > LIMITS.text ? `Longer than ${LIMITS.text} characters` : boxProblem(value);
+          if (why) problems.push({ where: vw, message: why });
+        } else if (typeof value !== 'number' || !Number.isFinite(value)) problems.push({ where: vw, message: 'A number, a formula or dice' });
       } else if (typeof value !== 'string') {
         problems.push({ where: vw, message: 'Must be text' });
       } else if (value.length > LIMITS.text) {

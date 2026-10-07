@@ -11,7 +11,8 @@
 
 const { compileSystem } = require('./derived');
 const { effectiveSheet, fieldsOf } = require('./sheet');
-const { npcSheetOf, tiersOf } = require('./npc');
+const { npcSheetOf, tiersOf, LIMITS: NPC_LIMITS } = require('./npc');
+const { rollTier } = require('./tierRolls');
 const { ownWords } = require('./definition');
 const { partOn, PARTS } = require('./parts');
 const { buildingOn, buildingName, catalogueCurrency, ownBuildings } = require('./buildings');
@@ -65,14 +66,20 @@ const metaOf = (definition) => {
 const tiersFor = (definition, recompute) => {
   const tiers = tiersWhenOn(definition);
   if (!tiers.length) return null;
+  const fields = new Map(fieldsOf(npcSheetOf(definition)).filter((f) => f && typeof f.id === 'string').map((f) => [f.id, f]));
   return {
     options: tiers.map((t) => ({ id: t.id, label: t.label })),
-    build: (tierId) => {
+    // Worked out and rolled for the level the GM asked for (tierRolls.js, 4b4a1); a blank box
+    // leaves the field empty, and blank HP or defense leaves the token's own.
+    build: (tierId, level, rng) => {
       const tier = tiers.find((t) => t.id === tierId) || tiers[0];
-      const data = { ...(tier.values || {}) };
+      const rolled = rollTier(tier, level, fields, NPC_LIMITS, rng);
+      const data = {};
+      for (const [id, box] of Object.entries(rolled.values)) if ('value' in box) data[id] = box.value;
       recompute(data);
-      const defense = tier.defense ?? null;
-      return { tierId: tier.id, data, hp: tier.hp ?? null, dv: { melee: defense, ranged: defense } };
+      const number = (box) => ('value' in box ? box.value : null);
+      const defense = number(rolled.defense);
+      return { tierId: tier.id, data, hp: number(rolled.hp), dv: { melee: defense, ranged: defense } };
     },
   };
 };
