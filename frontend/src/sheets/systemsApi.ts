@@ -61,6 +61,12 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
     /** Store the builder's draft; its problems come back, stored either way. */
     saveDraft: (systemId: string, definition: Definition) =>
       call<{ problems: Problem[] }>(fetcher, token, `${id(systemId)}/draft`, 'PUT', { definition }),
+    /**
+     * A draft's formulas worked out from its sample character, without saving (STATS & RULES):
+     * the values that can be worked out yet, and the formulas' problems.
+     */
+    previewValues: (definition: Definition) =>
+      call<{ values: Record<string, number>; problems: Problem[] }>(fetcher, token, '/api/systems/preview-values', 'POST', { definition }),
     /** Make the stored draft what the game runs; refused, with `problems`, while it has any. */
     publish: (systemId: string) => call<{ version: number }>(fetcher, token, `${id(systemId)}/publish`, 'POST', {}),
     create: (name: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name }),
