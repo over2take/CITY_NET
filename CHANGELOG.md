@@ -75,6 +75,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A draft's character sheet, shown without saving.** The server can now answer, for a draft
+  still being edited, the sheet it would be drawn with and the starter sheet it would get without
+  one of its own, for the builder's CHARACTER SHEET page to preview and to copy when you customize.
+  The starter keeps fields for parts that are off (cash with the bank off), so turning a part back
+  on brings them back on a customized sheet too. Nothing is saved and play never sees it.
+
 - **The builder's STATS & RULES page: formulas.** FORMULAS lists each formula with the name
   players see, its formula written the rulebook way, and its value for the sample character,
   worked out by the game's own engine a moment after you stop typing. A mistake shows in red under
