@@ -5,15 +5,23 @@ import {
   sheetOf, fieldKind, pagesOf, sectionsOn, LAYOUTS, TYPES,
   withCustomized, withAutomatic, tabNameProblem, withNewTab, withTabName, withTabMoved, withoutTab,
   withNewSection, withSection, withSectionMoved, sectionRemoveProblem, withoutSection,
-  withFieldMoved,
+  withFieldMoved, withNewField, withField, withFieldIn, withoutField, withPlaced, tray, optionsText, NAME_FIELD,
 } from '../sheets/sheetDesigner';
 
-// The builder's CHARACTER SHEET page (4b3c): the layout players' sheets are drawn with (approved
-// mockup docs/mockups/builder-sheet.html, 2026-10-07). A system's sheet is AUTOMATIC, the server's
-// starter sheet built from its stats, formulas and health model, until CUSTOMIZE copies that in to
-// arrange by hand: tabs, then their sections, then fields, each picked on the left and set in the
-// middle. What it reads and writes is sheets/sheetDesigner.ts; every change goes through the
-// builder's `edit`, which autosaves it. Field settings, the tray and the preview come in 4b3d.
+// The builder's CHARACTER SHEET page (4b3c, 4b3d1): the layout players' sheets are drawn with
+// (approved mockup docs/mockups/builder-sheet.html, 2026-10-07). A system's sheet is AUTOMATIC, the
+// server's starter sheet built from its stats, formulas and health model, until CUSTOMIZE copies
+// that in to arrange by hand: tabs, then their sections, then fields, each picked on the left and
+// set in the middle. Stats, formulas and starter fields not on the sheet wait in NOT ON THE SHEET
+// YET until placed. What it reads and writes is sheets/sheetDesigner.ts; every change goes through
+// the builder's `edit`, which autosaves it. The preview comes in 4b3d2.
+
+type Field = CustomRenderSheet['sections'][number]['fields'][number];
+
+/** What a linked field is linked to, in the page's words. */
+const LINKED: Record<string, string> = {
+  token_hp: "the token's HP", token_hp_max: "the token's max HP", token_ac: "the token's armor", bank_balance: 'the bank balance',
+};
 
 interface Props {
   definition: Definition;
@@ -68,6 +76,22 @@ function NameBox({ value, aria, max, problem, onChange }: { value: string; aria:
   );
 }
 
+/**
+ * A pick-one field's choices, one per line. What is typed stays as typed (a new empty line while
+ * writing the next choice); the stored list drops blanks and repeats.
+ */
+function Choices({ field, onChange }: { field: Field; onChange: (text: string) => void }) {
+  const [text, setText] = useState(() => optionsText(field));
+  return (
+    <label style={label}>
+      <span style={small}>CHOICES, ONE PER LINE</span>
+      <textarea aria-label="Choices" rows={4} value={text} style={{ ...input, resize: 'vertical' }}
+        onChange={(e) => { setText(e.target.value); onChange(e.target.value); }} />
+      {!text.trim() && <span role="alert" style={{ color: 'var(--danger)', fontSize: 11 }}>A pick-one field needs at least one choice.</span>}
+    </label>
+  );
+}
+
 const blankProblem = (what: string) => (text: string) => (text.trim() ? null : `A ${what} needs a name.`);
 
 export function SheetPage({ definition, edit, api }: Props) {
@@ -115,7 +139,16 @@ export function SheetPage({ definition, edit, api }: Props) {
     set(next, first ? { kind: 'section', id: first.id } : { kind: 'none' });
   };
 
-  const fieldTag = (f: CustomRenderSheet['sections'][number]['fields'][number]) => {
+  const waiting = tray(definition, preview?.starter ?? null);
+  /** Where PLACE puts a field: the picked section, the picked field's, the picked tab's first, or a new one. */
+  const placeInto = (): { section: string | null; tab: string | null } => {
+    if (pickedSection) return { section: pickedSection.id, tab: null };
+    if (pickedField && own) return { section: own.sections.find((s) => s.fields.some((f) => f.id === pickedField.id))!.id, tab: null };
+    if (pickedTab && own) return { section: sectionsOn(own, pickedTab)[0]?.id ?? null, tab: pickedTab };
+    return { section: null, tab: null };
+  };
+
+  const fieldTag = (f: Field) => {
     const kind = fieldKind(definition, f);
     if (kind === 'formula') return 'WORKED OUT';
     if (kind === 'linked') return 'LINKED';
@@ -191,6 +224,25 @@ export function SheetPage({ definition, edit, api }: Props) {
               set(next, { kind: 'tab', id: sheetOf(next)!.tabs!.at(-1)! });
             }}>+ TAB</button>
         </div>
+      )}
+      {own && waiting.length > 0 && (
+        <section aria-label="Not on the sheet yet" style={{ marginTop: 14, border: '1px dashed var(--warning)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ ...small, color: 'var(--warning)', opacity: 1 }}>NOT ON THE SHEET YET</span>
+          {waiting.map((f) => (
+            <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {f.label} <span style={{ opacity: 0.6 }}>@{f.id}</span>
+              </span>
+              <span style={kindTag}>{fieldTag(f)}</span>
+              <button type="button" className="utility-btn" style={mini} aria-label={`Place ${f.label}`}
+                onClick={() => {
+                  const at = placeInto();
+                  set(withPlaced(definition, f, at.section, at.tab), { kind: 'field', id: f.id });
+                }}>PLACE</button>
+            </div>
+          ))}
+          <span style={{ ...why, fontSize: 11 }}>PLACE puts it at the end of the section you have picked.</span>
+        </section>
       )}
     </div>
   );
@@ -277,6 +329,13 @@ export function SheetPage({ definition, edit, api }: Props) {
               onChange={(e) => { if (e.target.value.trim() !== '') set(withSection(definition, s.id, { columns: Number(e.target.value) })); }} />
           </label>
         )}
+        <div>
+          <button type="button" className="utility-btn" style={btn} disabled={s.fields.length >= 100}
+            onClick={() => {
+              const next = withNewField(definition, s.id);
+              set(next, { kind: 'field', id: sheetOf(next)!.sections.find((x) => x.id === s.id)!.fields.at(-1)!.id });
+            }}>+ FIELD</button>
+        </div>
         {confirmSection !== s.id ? (
           <div>
             <button type="button" className="utility-btn" style={btn} disabled={!!blocked} title={blocked ?? undefined}
@@ -298,6 +357,86 @@ export function SheetPage({ definition, edit, api }: Props) {
             </div>
           </div>
         )}
+      </div>
+    );
+  })();
+
+  const fieldSettings = pickedField && own && (() => {
+    const f = pickedField;
+    const kind = fieldKind(definition, f);
+    const home = own.sections.find((s) => s.fields.some((x) => x.id === f.id))!;
+    const attack = f.sensitivity === 'combat';
+    const inStarter = !!preview?.starter.sections.some((s) => s.fields.some((x) => x.id === f.id));
+    const what = kind === 'formula' ? 'A formula from STATS & RULES: worked out, so nobody edits it.'
+      : kind === 'linked' ? `Linked to ${LINKED[f.source!] ?? f.source}: the same number everywhere.`
+        : kind === 'stat' ? 'A stat from STATS & RULES: a number players fill in.' : null;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }} data-testid="field-settings">
+        <span style={small}>FIELD <span style={{ opacity: 0.6 }}>@{f.id}</span></span>
+        <label style={label}>
+          <span style={small}>LABEL</span>
+          <NameBox key={f.id} value={f.label} aria="Field label" max={60} problem={blankProblem('field')}
+            onChange={(text) => set(withField(definition, f.id, { label: text }))} />
+        </label>
+        {what ? <span style={why}>{what}</span> : (
+          <>
+            <div role="group" aria-label="Kind" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={small}>KIND</span>
+              <span style={{ display: 'inline-flex', border: '1px solid var(--green)', alignSelf: 'flex-start', flexWrap: 'wrap' }}>
+                {TYPES.map((t) => (
+                  <button key={t.id} type="button" style={segBtn(f.type === t.id)} aria-pressed={f.type === t.id}
+                    onClick={() => set(withField(definition, f.id, { type: t.id }))}>{t.label}</button>
+                ))}
+              </span>
+            </div>
+            {f.type === 'select' && <Choices key={f.id} field={f} onChange={(text) => set(withField(definition, f.id, { options: text }))} />}
+          </>
+        )}
+        <div role="group" aria-label="Who sees it" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={small}>WHO SEES IT</span>
+          <span style={{ display: 'inline-flex', border: '1px solid var(--green)', alignSelf: 'flex-start' }}>
+            <button type="button" style={segBtn(f.visibility !== 'public')} aria-pressed={f.visibility !== 'public'}
+              onClick={() => set(withField(definition, f.id, { everyone: false }))}>OWNER AND GM</button>
+            <button type="button" style={{ ...segBtn(f.visibility === 'public'), ...(attack ? { opacity: 0.35, cursor: 'not-allowed' } : {}) }}
+              aria-pressed={f.visibility === 'public'} disabled={attack}
+              title={attack ? 'A number that decides whether attacks hit is never shown to anyone else.' : 'Other players see it too, on the card they open from the token.'}
+              onClick={() => set(withField(definition, f.id, { everyone: true }))}>EVERYONE</button>
+          </span>
+        </div>
+        <label style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+          <input type="checkbox" checked={attack} onChange={(e) => set(withField(definition, f.id, { attack: e.target.checked }))} />
+          <span style={why}>Decides whether attacks hit (like armor): never shown to anyone else</span>
+        </label>
+        {kind !== 'formula' && (
+          <div role="group" aria-label="Who changes it" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <span style={small}>WHO CHANGES IT</span>
+            <span style={{ display: 'inline-flex', border: '1px solid var(--green)', alignSelf: 'flex-start' }}>
+              <button type="button" style={segBtn(f.edit !== 'gm')} aria-pressed={f.edit !== 'gm'}
+                onClick={() => set(withField(definition, f.id, { gmOnly: false }))}>THE PLAYER</button>
+              <button type="button" style={segBtn(f.edit === 'gm')} aria-pressed={f.edit === 'gm'} title="The player sees it; only the GM changes it, like XP or awards."
+                onClick={() => set(withField(definition, f.id, { gmOnly: true }))}>ONLY THE GM</button>
+            </span>
+          </div>
+        )}
+        <label style={label}>
+          <span style={small}>HINT</span>
+          <input type="text" aria-label="Hint" maxLength={300} value={f.hint ?? ''} placeholder="shown under it" style={input}
+            onChange={(e) => set(withField(definition, f.id, { hint: e.target.value }))} />
+        </label>
+        <label style={label}>
+          <span style={small}>MOVE TO</span>
+          <select aria-label="Move to" value={home.id} style={input} onChange={(e) => set(withFieldIn(definition, f.id, e.target.value))}>
+            {own.sections.map((s) => <option key={s.id} value={s.id}>{s.tab ? `${s.tab} · ` : ''}{s.label}</option>)}
+          </select>
+        </label>
+        <div>
+          <button type="button" className="utility-btn" style={btn} disabled={f.id === NAME_FIELD}
+            onClick={() => set(withoutField(definition, f.id), { kind: 'section', id: home.id })}>TAKE OFF THE SHEET</button>
+          <p style={{ ...why, fontSize: 11, margin: '4px 0 0' }}>
+            {f.id === NAME_FIELD ? 'Every sheet keeps the character\'s name.'
+              : kind !== 'plain' || inStarter ? 'Taken off, it waits in NOT ON THE SHEET YET.' : 'Taken off, it is gone.'}
+          </p>
+        </div>
       </div>
     );
   })();
@@ -344,15 +483,9 @@ export function SheetPage({ definition, edit, api }: Props) {
                 </button>
               </div>
             </div>
-          ) : tabSettings || sectionSettings || (pickedField ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-testid="field-settings">
-              <span style={small}>FIELD <span style={{ opacity: 0.6 }}>@{pickedField.id}</span></span>
-              <b style={{ color: 'var(--green)' }}>{pickedField.label}</b>
-              <span style={why}>{fieldTag(pickedField)}. Settings for fields arrive in the next update; ▲ ▼ move it.</span>
-            </div>
-          ) : (
+          ) : tabSettings || sectionSettings || fieldSettings || (
             <p style={{ ...why, margin: 0 }}>Pick a tab, section or field on the left, or add one.</p>
-          ))}
+          )}
         </div>
       </div>
     </div>
