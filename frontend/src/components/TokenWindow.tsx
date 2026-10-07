@@ -4,6 +4,8 @@ import { TvPortrait } from './TvPortrait';
 import { GmNotes } from './GmNotes';
 import { useWords, todaysWords, type WordLookup } from '../sheets/words';
 import { useParts } from '../sheets/parts';
+import { customTemplate, isCustomSystem, useCustomTemplate } from '../sheets/customTemplates';
+import { othersSee } from '../sheets/publicLines';
 
 // A token's info window - a player, an enemy or a friendly NPC - drawn as a terminal like
 // the building window: the portrait in the corner, folders down the left, the open folder
@@ -133,7 +135,7 @@ export function TokenWindow({
     >
       {open === 'info' && (
         <>
-          {operator && <IdLines username={operator} socket={socket} />}
+          {operator && <IdLines username={operator} socket={socket} gameSystem={gameSystem} />}
           <div style={{ whiteSpace: 'pre-wrap' }}>{description || 'NO_DATA'}</div>
           {tierPicker && <TierPicker {...tierPicker} />}
         </>
@@ -206,14 +208,16 @@ function TierPicker({ tiers, value, onChange }: { tiers: { id: string; label: st
 }
 
 /**
- * A player's handle and role, from their sheet's public fields - INFO's first lines.
+ * A player's handle and role, from their sheet's public fields - INFO's first lines. A custom
+ * system shows its character's name and every field its sheet shows to EVERYONE, by their own
+ * labels (publicLines.ts, 4b3e).
  *
  * Asked of the server rather than read off anything the viewer holds: `requestQuickSheet`
  * returns only fields the server marks public, which is why stream spectators may ask too.
  * Nothing shows until it answers, and nothing when there is no sheet: the header already
  * names the player.
  */
-function IdLines({ username, socket }: { username: string; socket: any }) {
+function IdLines({ username, socket, gameSystem }: { username: string; socket: any; gameSystem?: string }) {
   const [data, setData] = useState<{ exists: boolean; fields?: Record<string, unknown> } | null>(null);
   useEffect(() => {
     setData(null);
@@ -224,8 +228,20 @@ function IdLines({ username, socket }: { username: string; socket: any }) {
     return () => { socket.off?.('quickSheetData', handler); };
   }, [socket, username]);
 
+  useCustomTemplate(gameSystem);
+  const custom = isCustomSystem(gameSystem) ? customTemplate(gameSystem) : undefined;
+
   if (!data?.exists) return null;
   const f = data.fields ?? {};
+  if (custom) {
+    return (
+      <div data-testid="id-lines" style={{ marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid var(--dark-green)' }}>
+        {othersSee(custom, f).map((line) => (
+          <div key={line.label} style={row}><span style={key}>{line.label.toUpperCase()}</span>{line.value}</div>
+        ))}
+      </div>
+    );
+  }
   const text = (v: unknown) => (v == null || v === '' ? null : String(v));
   const handle = text(f.handle);
   const name = text(f.name);

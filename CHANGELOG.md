@@ -9,6 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **A token-sharing test no longer fails on a busy machine.** It checked a moved token's position
+  after waiting a fixed number of database rounds, but the database doesn't always answer in the
+  order asked, so under load it sometimes read the position before the move was written. Tests
+  that expect a move now wait for the token to arrive. Nothing in the game changes.
+
 - **The backend and frontend no longer list the whole project as a package they need.** Each had
   a `mapsystem` dependency pointing back at the project itself, which nothing used. Installing it
   linked the project into its own `node_modules` in a loop, so file searches crawled, and the
@@ -74,6 +79,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   now work only for the GM and granted editors, as they appear in the admin panel.
 
 ### Under the hood
+
+- **A custom system's characters show their public details in ID.EXE.** INFO on a player's token
+  now lists the character's name and every field the system's sheet shows to EVERYONE, by the
+  sheet's own labels, as the built-in systems show handle, name and role. A value that decides
+  whether attacks hit never shows. The built-in systems' INFO is unchanged.
 
 - **The builder's CHARACTER SHEET page: a live preview.** Beside the layout, the sheet is drawn by
   the game's own sheet renderer for a made-up character (the SAMPLE values from STATS & RULES, with

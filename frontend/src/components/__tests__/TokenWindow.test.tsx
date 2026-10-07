@@ -11,6 +11,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TokenWindow } from '../TokenWindow';
+import { registerCustomTemplate } from '../../sheets/customTemplates';
 
 vi.mock('../TvPortrait', () => ({
   TvPortrait: ({ src, silhouette }: { src: string; silhouette?: boolean }) => (
@@ -98,6 +99,47 @@ describe('INFO', () => {
     expect(lines).toHaveTextContent('ROLENETRUNNER');
     // Before the description, not instead of it.
     expect(panel()).toHaveTextContent('Netrunner.');
+  });
+
+  describe('in a custom system (4b3e)', () => {
+    const SYS = 'sys_cccccccccccccccc';
+    const sheet = { header: { nameField: 'name' }, sections: [{ id: 'who', label: 'WHO', layout: 'list' as const, fields: [
+      { id: 'reputation', label: 'Reputation', type: 'number' as const, visibility: 'public' as const },
+      { id: 'name', label: 'Callsign', type: 'text' as const, visibility: 'public' as const },
+      { id: 'secret', label: 'Secret', type: 'text' as const },
+      { id: 'ward', label: 'Ward', type: 'number' as const, sensitivity: 'combat' as const },
+      { id: 'creed', label: 'Creed', type: 'text' as const, visibility: 'public' as const },
+    ] }] };
+    const answer = (socket: ReturnType<typeof makeSocket>, fields: Record<string, unknown>) =>
+      act(() => socket.handlers.quickSheetData({ username: 'ghost', exists: true, fields }));
+
+    it('shows the name, then every EVERYONE field by its own label, a dash for one not filled in', () => {
+      registerCustomTemplate({ id: SYS, name: 'Hearth', words: {}, parts: {}, derived: [], sheet });
+      const socket = makeSocket();
+      show({ operator: 'ghost', socket, gameSystem: SYS });
+      // What the server sends: only fields marked public, never one deciding hits.
+      answer(socket, { name: 'Ash', reputation: 0, creed: '' });
+      const lines = screen.getByTestId('id-lines');
+      expect([...lines.children].map((l) => l.textContent)).toEqual(['CALLSIGNAsh', 'REPUTATION0', 'CREED—']);
+      expect(panel()).toHaveTextContent('Netrunner.');
+    });
+
+    it('never shows a private field or an attack number, whatever arrives', () => {
+      registerCustomTemplate({ id: SYS, name: 'Hearth', words: {}, parts: {}, derived: [], sheet });
+      const socket = makeSocket();
+      show({ operator: 'ghost', socket, gameSystem: SYS });
+      answer(socket, { name: 'Ash', secret: 'debts', ward: 14 });
+      expect(screen.getByTestId('id-lines')).not.toHaveTextContent('debts');
+      expect(screen.getByTestId('id-lines')).not.toHaveTextContent('14');
+      expect(screen.getByTestId('id-lines')).not.toHaveTextContent('WARD');
+    });
+
+    it('leaves a built-in system\'s handle and role exactly as they were', () => {
+      const socket = makeSocket();
+      show({ operator: 'ghost', socket, gameSystem: 'cyberpunk_red' });
+      answer(socket, { handle: 'Ghost', name: 'Ada', role: 'Netrunner' });
+      expect([...screen.getByTestId('id-lines').children].map((l) => l.textContent)).toEqual(['HANDLEGHOST', 'NAMEAda', 'ROLENETRUNNER']);
+    });
   });
 
   it('ignores an answer about somebody else, and shows nothing extra without a sheet', () => {

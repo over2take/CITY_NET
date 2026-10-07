@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { makeTestDb, get, run } from './helpers/testDb.js';
-import { drain } from './helpers/until.js';
+import { drain, untilValue } from './helpers/until.js';
 
 process.env.JWT_SECRET = 'test-secret';
 process.env.DICE_ANIM_MS = '0';
@@ -76,20 +76,31 @@ const posOf = (id) => get(db, `SELECT x, z FROM locations WHERE id = ?`, [id]);
 const controllersOf = async (id) =>
   (await get(db, `SELECT controllers FROM locations WHERE id = ?`, [id])).controllers;
 
+/**
+ * Where a token ends up. When the move should be allowed, wait for it to land: `drain` assumes
+ * sqlite answers in the order asked, and under load it doesn't always, so the position was read
+ * before the write and a move that worked looked refused (CI, 2026-10-07). A refusal can't be
+ * waited for, but a late write could only make that test pass, never fail.
+ */
+const landed = async (id, allowed) => {
+  await flush();
+  if (allowed) await untilValue(() => posOf(id), (p) => p.x === 9 && p.z === 9, { timeout: 3000 }).catch(() => {});
+  return posOf(id);
+};
+
 /** Identify as a player, then try to walk the token to (9, 9). */
-const tryMove = async (id, userName) => {
+const tryMove = async (id, userName, { allowed = false } = {}) => {
   const { handlers } = boot(db);
   handlers['identify'](userName);
   await flush(50);
   handlers['moveRhombus']({ id, x: 9, z: 9 });
-  await flush(50);
-  return posOf(id);
+  return landed(id, allowed);
 };
 
 describe('moveRhombus honours the grant', () => {
   it('lets a named player move a shared friendly NPC', async () => {
     const id = await seedToken('friendly_rhombus', 'SYSTEM', JSON.stringify({ all: false, users: ['bob'] }));
-    expect(await tryMove(id, 'bob')).toEqual({ x: 9, z: 9 });
+    expect(await tryMove(id, 'bob', { allowed: true })).toEqual({ x: 9, z: 9 });
   });
 
   it('refuses a player who was not named', async () => {
@@ -99,7 +110,7 @@ describe('moveRhombus honours the grant', () => {
 
   it('lets anyone move one that is open to all', async () => {
     const id = await seedToken('friendly_rhombus', 'SYSTEM', JSON.stringify({ all: true, users: [] }));
-    expect(await tryMove(id, 'carol')).toEqual({ x: 9, z: 9 });
+    expect(await tryMove(id, 'carol', { allowed: true })).toEqual({ x: 9, z: 9 });
   });
 
   it('refuses an ungranted friendly NPC, as before', async () => {
@@ -115,7 +126,7 @@ describe('moveRhombus honours the grant', () => {
 
   it('still lets a player move their own token', async () => {
     const id = await seedToken('rhombus', 'alice');
-    expect(await tryMove(id, 'alice')).toEqual({ x: 9, z: 9 });
+    expect(await tryMove(id, 'alice', { allowed: true })).toEqual({ x: 9, z: 9 });
   });
 
   it('still refuses someone else the same token', async () => {
@@ -127,18 +138,17 @@ describe('moveRhombus honours the grant', () => {
 describe('moveRhombusPath honours the same rule', () => {
   // The path handler is a second copy of the same check, and it is the one a player
   // actually triggers by dragging - so it needs its own coverage, not an assumption.
-  const tryPath = async (id, userName) => {
+  const tryPath = async (id, userName, { allowed = false } = {}) => {
     const { handlers } = boot(db);
     handlers['identify'](userName);
     await flush(50);
     handlers['moveRhombusPath']({ id, waypoints: [{ x: 4, z: 4 }, { x: 9, z: 9 }] });
-    await flush(50);
-    return posOf(id);
+    return landed(id, allowed);
   };
 
   it('lets a named player walk a shared friendly NPC', async () => {
     const id = await seedToken('friendly_rhombus', 'SYSTEM', JSON.stringify({ all: false, users: ['bob'] }));
-    expect(await tryPath(id, 'bob')).toEqual({ x: 9, z: 9 });
+    expect(await tryPath(id, 'bob', { allowed: true })).toEqual({ x: 9, z: 9 });
   });
 
   it('refuses a player who was not named', async () => {
@@ -206,7 +216,7 @@ describe('sharing a token is not a feature of any one game system', () => {
   it.each(SYSTEMS)('lets a named player move a shared friendly NPC under %s', async (system) => {
     await run(db, `INSERT OR REPLACE INTO global_settings (key, value) VALUES ('game_system', ?)`, [system]);
     const id = await seedToken('friendly_rhombus', 'SYSTEM', JSON.stringify({ all: false, users: ['bob'] }));
-    expect(await tryMove(id, 'bob')).toEqual({ x: 9, z: 9 });
+    expect(await tryMove(id, 'bob', { allowed: true })).toEqual({ x: 9, z: 9 });
   });
 
   it.each(SYSTEMS)('still refuses an ungranted one under %s', async (system) => {
@@ -220,6 +230,6 @@ describe('sharing a token is not a feature of any one game system', () => {
     // A fresh install, before anyone has chosen one.
     await run(db, `DELETE FROM global_settings WHERE key = 'game_system'`);
     const id = await seedToken('friendly_rhombus', 'SYSTEM', JSON.stringify({ all: true, users: [] }));
-    expect(await tryMove(id, 'carol')).toEqual({ x: 9, z: 9 });
+    expect(await tryMove(id, 'carol', { allowed: true })).toEqual({ x: 9, z: 9 });
   });
 });

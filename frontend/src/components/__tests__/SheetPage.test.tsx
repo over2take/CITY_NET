@@ -5,7 +5,8 @@ import userEvent from '@testing-library/user-event';
 import { createRequire } from 'module';
 
 import { SheetPage, SHEET_PREVIEW_DELAY_MS } from '../SheetPage';
-import { othersSee, SAMPLE_NAME } from '../SheetPreview';
+import { SAMPLE_NAME } from '../SheetPreview';
+import { othersSee } from '../../sheets/publicLines';
 import type { Definition, systemsApi } from '../../sheets/systemsApi';
 import type { CustomRenderSheet } from '../../sheets/customTemplates';
 
