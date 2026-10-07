@@ -9,6 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **A token-sharing test no longer fails on a busy machine.** It checked a moved token's position
+  after waiting a fixed number of database rounds, but the database doesn't always answer in the
+  order asked, so under load it sometimes read the position before the move was written. Tests
+  that expect a move now wait for the token to arrive. Nothing in the game changes.
+
 - **The backend and frontend no longer list the whole project as a package they need.** Each had
   a `mapsystem` dependency pointing back at the project itself, which nothing used. Installing it
   linked the project into its own `node_modules` in a loop, so file searches crawled, and the
