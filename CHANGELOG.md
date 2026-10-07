@@ -75,6 +75,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Formulas worked out while you write them.** The server can now work out a draft's formulas
+  from its sample character without saving anything, for the STATS & RULES page to show each
+  formula's value as you type. A formula with a mistake, and any formula that reads it, is left
+  out so the others still show; a loop is reported with its path. The game itself only ever runs a
+  published system, so none of this reaches play.
+
 - **A custom system's stats.** A system can now list the numbers players fill in, in groups
   (abilities, skills, anything), each with a name, an optional lowest and highest value, and a
   skill optionally tied to an ability. Until a system designs its own sheet, the starter sheet
