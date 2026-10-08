@@ -112,6 +112,15 @@ describe('sheets', () => {
     expect(c.emit).toHaveBeenCalledWith('generateNpcSheet', { location_id: 9, tier: 'mook' });
   });
 
+  it('GENERATE_SHEET sends a custom system\'s level with the tier (4b4e)', async () => {
+    const c = context({ location: { id: 9, shape: 'enemy_rhombus', owner: null }, level: 6 });
+    await press('generate-sheet', c, { isPlayerToken: false });
+    expect(c.emit).toHaveBeenCalledWith('generateNpcSheet', { location_id: 9, tier: 'mook', level: 6 });
+    const zero = context({ location: { id: 9, shape: 'enemy_rhombus', owner: null }, level: 0 });
+    await press('generate-sheet', zero, { isPlayerToken: false });
+    expect(zero.emit).toHaveBeenCalledWith('generateNpcSheet', { location_id: 9, tier: 'mook', level: 0 });
+  });
+
   it('EDIT_DATA_POINT opens the edit window on this token', async () => {
     const c = context({ location: { id: 9, shape: 'enemy_rhombus', owner: null } });
     await press('edit', c, { isPlayerToken: false });

@@ -316,6 +316,8 @@ function App() {
   const [linkRefresh, setLinkRefresh] = useState(0);
   // Power tier for GENERATE_SHEET (per-system; CP:R: mook..elite)
   const [genTier, setGenTier] = useState<string>('');
+  // The level a custom system's tier is generated at (4b4e); the built-in tiers take none.
+  const [genLevel, setGenLevel] = useState(1);
 
   useEffect(() => {
     const loc = selectedLocation;
@@ -2512,6 +2514,7 @@ function App() {
                   refreshLocations: fetchLocations,
                   sheetLink: linked && tokenSheetLink ? { sheet_id: tokenSheetLink.sheet_id, npc_label: tokenSheetLink.npc_label } : null,
                   tier: tiers && tiers.length > 0 ? (genTier || tiers[0].id) : undefined,
+                  ...(isCustomSystem(gameSystem) ? { level: genLevel } : {}),
                   isOwner,
                   words: (term, form, builtIn) => wordFor(gameSystem, term, form, builtIn),
                   open: {
@@ -2633,7 +2636,7 @@ function App() {
                     folderRequest={tokenFolderRequest}
                     onFolderChange={setTokenFolder}
                     tierPicker={isAdmin && isNpc && !sheetHere && tiers && tiers.length > 0
-                      ? { tiers, value: genTier, onChange: setGenTier }
+                      ? { tiers, value: genTier, onChange: setGenTier, ...(isCustomSystem(gameSystem) ? { level: genLevel, onLevelChange: setGenLevel } : {}) }
                       : undefined}
                   />
                 );
