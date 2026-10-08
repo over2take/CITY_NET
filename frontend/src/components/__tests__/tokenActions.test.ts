@@ -8,7 +8,37 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { hitPointsTarget, tokenActionKeys, tokenView, type TokenViewer } from '../tokenActions';
+import { hitPointsTarget, tokenActionKeys, tokenView, attackAsOptions, type TokenViewer } from '../tokenActions';
+import { controlsToken } from '../../utils/tokenControl';
+
+describe('who a viewer may attack as (4b5b4b)', () => {
+  const grant = (users: string[], all = false) => JSON.stringify({ all, users });
+  const target = { id: 1, shape: 'enemy_rhombus', battle_map_id: 4, floor_index: 0 };
+  const locations = [
+    target,
+    { id: 2, name: 'Rex', shape: 'friendly_rhombus', controllers: grant(['vex']), battle_map_id: null },
+    { id: 3, name: '', shape: 'friendly_rhombus', controllers: grant([], true), battle_map_id: 4, floor_index: 0, sheet_data: '{}' },
+    { id: 4, name: 'Ghoul', shape: 'enemy_rhombus', controllers: grant(['vex'], true), battle_map_id: 4, floor_index: 0, sheet_data: '{}' },
+    { id: 5, name: 'Upstairs', shape: 'enemy_rhombus', battle_map_id: 4, floor_index: 1, sheet_data: '{}' },
+    { id: 6, name: 'Sheetless', shape: 'enemy_rhombus', battle_map_id: 4, floor_index: 0 },
+    { id: 7, name: 'Elsewhere', shape: 'enemy_rhombus', battle_map_id: null, sheet_data: '{}' },
+    { id: 8, name: 'Vex', shape: 'rhombus', owner: 'vex', battle_map_id: 4, floor_index: 0, sheet_data: '{}' },
+  ];
+  const as = (over: object) => attackAsOptions({ locations, userName: 'vex', isGm: false, target, controls: controlsToken, ...over });
+
+  it('a player: each friendly NPC the GM gave them, wherever it is, never an enemy', () => {
+    expect(as({})).toEqual([{ id: 2, name: 'Rex' }, { id: 3, name: 'NPC' }]);
+    expect(as({ userName: 'ash' })).toEqual([{ id: 3, name: 'NPC' }]);
+    expect(as({ userName: null })).toEqual([]);
+  });
+
+  it('the GM: each NPC with a sheet on the target\'s map and floor, not the target', () => {
+    expect(as({ isGm: true })).toEqual([{ id: 3, name: 'NPC' }, { id: 4, name: 'Ghoul' }]);
+    expect(as({ isGm: true, target: { id: 7, battle_map_id: null } })).toEqual([]);
+    expect(as({ isGm: true, target: { id: 99, battle_map_id: null } })).toEqual([{ id: 7, name: 'Elsewhere' }]);
+    expect(as({ isGm: true, target: undefined })).toEqual([]);
+  });
+});
 
 const base: TokenViewer = {
   isAdmin: false, isPrimaryAdmin: false, isOwner: false, isLoggedIn: true, isPlayerToken: true, hasOwner: true,

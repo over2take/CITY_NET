@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { themeRoot } from '../utils/themeRoot';
+import { controlsToken } from '../utils/tokenControl';
+import { attackAsOptions } from './tokenActions';
 import kofiLogo from '../assets/kofi.png';
 import { CityDataBaseMenu } from './CityDatabase';
 import type { CustomDie, AttackVehicle } from '../types';
@@ -588,15 +590,27 @@ const readWeapon = (data: any, prefix: string) => {
   return { name: String(data?.[`${prefix}_name`] ?? '').trim(), dmg, skill };
 };
 
-export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState, setIsDiceTrayOpen }: {
+export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombusState, setIsDiceTrayOpen, attackAs = [], authToken }: {
   system: keyof typeof ATTACK_PANEL_CONFIG;
   userName: string;
   socketRef: React.MutableRefObject<any>;
   targetId: number;
   rhombusState: any;
   setIsDiceTrayOpen: (v: any) => void;
+  /**
+   * NPCs this viewer may attack with (4b5b4b): a player, the friendly NPCs the GM gave them; the
+   * GM, the NPCs on the target's map. Offered as ATTACK AS beside the viewer themselves.
+   */
+  attackAs?: { id: number; name: string }[];
+  /** The viewer's login, for reading an NPC's sheet (GET /api/sheets/npcs/controlled/:id). */
+  authToken?: string | null;
 }) {
   const cfg = ATTACK_PANEL_CONFIG[system];
+  // Who attacks: the viewer (null) or one of their NPCs, by token.
+  const [attacker, setAttacker] = useState<number | null>(null);
+  // Between choosing an attacker and their sheet arriving: nothing to fire yet.
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { if (attacker !== null && !attackAs.some((a) => a.id === attacker)) setAttacker(null); }, [attackAs, attacker]);
   // `key` rather than `index`, because a mount is identified by the pair
   // (vehicle, mount) and the index alone stopped being unique.
   const [weapons, setWeapons] = useState<WeaponChoice[]>([]);
@@ -610,8 +624,10 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
   useEffect(() => {
     const s = socketRef.current;
     if (!s) return;
-    const onSheetData = (sheet: any) => {
-      if (!sheet || sheet.username !== userName) return;
+    // What the chosen attacker can fire, from their sheet: the player's own, sent by the server,
+    // or an NPC's the GM gave them (or the GM's), read from its read-only route.
+    const apply = (sheet: any) => {
+      setLoading(false);
       const rows: WeaponChoice[] = [];
       for (let i = 1; i <= 4; i++) {
         const row = readWeapon(sheet.data, `weapon${i}`);
@@ -664,8 +680,6 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
         setLuckSpend(prev => Math.min(prev, luck));
       }
     };
-    s.on('sheetData', onSheetData);
-    s.emit('requestMySheet');
     if (cfg.hasLuck) {
       fetch('/api/settings').then(r => r.json()).then((rows) => {
         if (Array.isArray(rows)) {
@@ -673,11 +687,22 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
         }
       }).catch(() => {});
     }
+    if (attacker !== null) {
+      let live = true;
+      fetch(`/api/sheets/npcs/controlled/${attacker}`, { headers: { Authorization: `Bearer ${authToken ?? ''}` } })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((npc) => { if (live) apply({ data: npc?.data ?? {} }); })
+        .catch(() => { if (live) apply({ data: {} }); });
+      return () => { live = false; };
+    }
+    const onSheetData = (sheet: any) => { if (sheet && sheet.username === userName) apply(sheet); };
+    s.on('sheetData', onSheetData);
+    s.emit('requestMySheet');
     return () => { s.off('sheetData', onSheetData); };
-  }, [userName, system]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userName, system, attacker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fire = () => {
-    if (selected === null) return;
+    if (selected === null || loading) return;
     const choice = weapons.find(w => w.key === selected);
     if (!choice) return;
     if (choice.ram) {
@@ -690,6 +715,7 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
     socketRef.current?.emit('sheetAttack', {
       targetId,
       weaponIndex: choice.index,
+      ...(attacker !== null ? { location_id: attacker } : {}),
       ...(choice.cyberIndex ? { cyberIndex: choice.cyberIndex } : {}),
       ...(choice.vehicleIndex ? { vehicleIndex: choice.vehicleIndex } : {}),
       ...(choice.rideMount ? { rideMount: true } : {}),
@@ -705,10 +731,30 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
     setIsDiceTrayOpen(true);
   };
 
+  const picker = attackAs.length > 0 && (
+    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: 'var(--green)', marginBottom: '5px' }}>
+      ATTACK AS
+      <select
+        aria-label="Attack as"
+        value={attacker === null ? '' : String(attacker)}
+        onChange={(e) => { setAttacker(e.target.value === '' ? null : Number(e.target.value)); setLoading(true); setWeapons([]); setSelected(null); setLuckSpend(0); setLuckNegate(false); }}
+        style={{ flex: 1, background: 'color-mix(in srgb, var(--black) 70%, transparent)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px' }}
+      >
+        <option value="">YOU</option>
+        {attackAs.map((a) => <option key={a.id} value={String(a.id)}>{a.name.toUpperCase()}</option>)}
+      </select>
+    </label>
+  );
+
   if (weapons.length === 0) {
     return (
-      <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '6px' }}>
-        NO USABLE WEAPONS — set NAME, DMG (e.g. {cfg.dmgExample}) and SKILL on your CHARACTER_SHEET weapons rows.
+      <div style={{ marginBottom: '6px' }}>
+        {picker}
+        <div style={{ color: '#888', fontSize: '0.7rem' }}>
+          {loading ? 'READING ITS SHEET…' : attacker === null
+            ? <>NO USABLE WEAPONS — set NAME, DMG (e.g. {cfg.dmgExample}) and SKILL on your CHARACTER_SHEET weapons rows.</>
+            : <>NO USABLE WEAPONS — its sheet has no weapon row with NAME, DMG (e.g. {cfg.dmgExample}) and SKILL. Only the GM changes it.</>}
+        </div>
       </div>
     );
   }
@@ -720,6 +766,7 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
   const isRam = !!chosen?.ram;
   return (
     <div style={{ marginBottom: '6px' }}>
+      {picker}
       <select
         aria-label="Weapon"
         value={selected ?? ''}
@@ -772,6 +819,10 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
 interface DiceMenuProps {
   userName: string;
   token?: string;
+  /** The viewer's login (a player's own, or the GM's), for reading an NPC's sheet to attack as it. */
+  writeToken?: string | null;
+  /** Every token, for whom ATTACK AS offers (tokenActions.ts attackAsOptions). */
+  locations?: any[];
   customDice?: CustomDie[];
   onOpenCustomDieBuilder?: (die?: CustomDie) => void;
   onDeleteCustomDie?: (id: number | string) => void;
@@ -784,7 +835,7 @@ interface DiceMenuProps {
   gameSystem?: string;
 }
 
-export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack, gameSystem, customDice = [], onOpenCustomDieBuilder, onDeleteCustomDie }: DiceMenuProps) {
+export function DiceMenu({ userName, token, writeToken, locations = [], socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack, gameSystem, customDice = [], onOpenCustomDieBuilder, onDeleteCustomDie }: DiceMenuProps) {
   const isAdmin = !!token;
   const defenseLabel = getTokenDefense(gameSystem).label;
   const diceTypes = [2, 4, 6, 8, 10, 12, 20, 100];
@@ -890,6 +941,8 @@ export function DiceMenu({ userName, token, socketRef, rhombusState, setIsDiceTr
               targetId={attackPending.targetId}
               rhombusState={rhombusState}
               setIsDiceTrayOpen={setIsDiceTrayOpen}
+              attackAs={attackAsOptions({ locations, userName, isGm: isAdmin, target: locations.find((l: any) => l.id === attackPending.targetId), controls: controlsToken })}
+              authToken={writeToken || token}
             />
           )}
           <button className="upload-btn" style={{ width: '100%', padding: '5px', fontSize: '0.75rem', backgroundColor: 'transparent', color: '#888', border: '1px solid #444' }} onClick={() => { socketRef.current?.emit('cancelAttack'); onCancelAttack?.(); }}>
@@ -1433,7 +1486,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'character_controls' && <CharacterControlsMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} writeToken={writeToken} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
-          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} />}
+          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} writeToken={writeToken} locations={locations} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} />}
           {activeMenu === 'initiative_tracker' && initiativeOn && (
             <InitiativeNavPanel
               system={gameSystem}

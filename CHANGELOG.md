@@ -88,6 +88,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **ATTACK AS.** When an attack is set up, the attack panel now offers ATTACK AS beside YOU: a
+  player, each friendly NPC the GM gave them; the GM, each NPC with a sheet on the target's map.
+  Picking one lists its weapons and LUCK and fires as it. Players with no NPC see the panel as
+  before. NPC control is now complete.
+
 - **Playing a friendly NPC the GM gave you.** In ID.EXE, a player the GM gave a friendly NPC now
   gets OPEN_SHEET on it, a read-only copy of its sheet whose roll buttons roll as the NPC, and
   the HEALTH controls a token's owner has. The GM's own NPC sheet window, opened from a token, now
