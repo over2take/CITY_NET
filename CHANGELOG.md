@@ -80,6 +80,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What the builder's NPCS page will change.** Giving NPCs a stat block of their own (a copy of
+  the character sheet, edited with the CHARACTER SHEET designer) or going back to the character
+  sheet. Adding, renaming, reordering and removing tiers (up to 20, the first the default); a tier's
+  HP, defense and starting values as numbers, formulas with @level or dice, text as written, blank
+  leaving the field empty. A tier is only offered fields a GM fills in, never a linked value or a
+  formula. TRY IT's results and mistakes, shown box by box. The page itself comes next.
+
 - **NPC tiers at a chosen level, and tried out.** GENERATE_SHEET now works a custom system's tier
   out for the level the GM asks for (1 when none is given). The server can also roll one of a
   draft's tiers for a level without making anything, each box with the dice that came up or what
