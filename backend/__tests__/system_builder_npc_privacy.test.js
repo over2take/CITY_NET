@@ -309,6 +309,18 @@ describe('a published system with them', () => {
         .toEqual({ hp_current: 30, hp_max: 30, melee_ac: 17, ranged_ac: 17 });
     });
 
+    it('generate a tier at the level the GM chose (4b4a2)', async () => {
+      await request(app).put('/api/sheets/system').set(gm).send({ system: id });
+      await run(db, `INSERT INTO locations (id, name, x, y, z, shape, hp_current, hp_max, melee_ac, ranged_ac) VALUES (42, 'Sir Rook', 0, 0, 0, 'enemy_rhombus', 3, 3, 8, 8)`);
+      const { handlers, sent } = await connectAs('gm', { admin: true });
+      handlers.generateNpcSheet({ location_id: 42, tier: 'knight', level: 4 });
+      const made = await untilValue(() => sent.find((s) => s.e === 'npcSheetGenerated'), Boolean, { label: 'the NPC sheet' });
+      const sheet = JSON.parse((await get(db, 'SELECT data FROM character_sheets WHERE id = ?', [made.d.sheet_id])).data);
+      expect(sheet).toMatchObject({ name: 'Sir Rook', might: 12, might_mod: 0 });
+      expect(await get(db, 'SELECT hp_current, hp_max, melee_ac, ranged_ac FROM locations WHERE id = 42'))
+        .toEqual({ hp_current: 18, hp_max: 18, melee_ac: 14, ranged_ac: 14 });
+    });
+
     it("keep the token's own HP and defense when a tier leaves them out", async () => {
       await request(app).put('/api/sheets/system').set(gm).send({ system: id });
       await run(db, `INSERT INTO locations (id, name, x, y, z, shape, hp_current, hp_max, melee_ac, ranged_ac) VALUES (41, 'Wisp', 0, 0, 0, 'enemy_rhombus', 4, 9, 12, 13)`);

@@ -1842,7 +1842,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           // Tier package (per-system power level) seeds stats/skills/armor/
           // weapons plus token HP and DV. Systems without tiers keep the
           // bare token-mirroring sheet.
-          const tier = npcTiers.buildTier(system, data.tier);
+          // A custom system's tier is worked out for the level the GM chose (tierRolls.js);
+          // the built-in ones take no level.
+          const tier = npcTiers.buildTier(system, data.tier, data.level);
           const randomHeadshot = headshots.randomHeadshot(loc.shape);
           const sheetData = {
             name: loc.name || '',

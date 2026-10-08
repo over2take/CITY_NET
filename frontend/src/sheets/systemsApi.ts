@@ -23,6 +23,14 @@ export interface SystemCopies {
   problems: Problem[];
 }
 
+/** One box of a tier worked out (backend/systemBuilder/tierRolls.js rollBox). */
+export type TriedBox =
+  | { value: number | string; dice: { count: number; sides: number; rolls: number[] }[] }
+  | { blank: true }
+  | { error: string };
+/** A tier worked out for a level (tierRolls.js rollTier). */
+export interface TriedTier { level: number; hp: TriedBox; defense: TriedBox; values: Record<string, TriedBox> }
+
 export type Answer<T> =
   | { ok: true; value: T }
   | { ok: false; error: string; status: number; changed?: boolean; problems?: Problem[] };
@@ -74,6 +82,12 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     previewSheet: (definition: Definition) =>
       call<{ sheet: CustomRenderSheet; starter: CustomRenderSheet }>(fetcher, token, '/api/systems/preview-sheet', 'POST', { definition }),
+    /**
+     * One of a draft's NPC tiers worked out and rolled for a level, without saving (NPCS, TRY IT):
+     * each box's value and dice, or what is wrong with it.
+     */
+    tryTier: (definition: Definition, tier: string, level: number) =>
+      call<TriedTier>(fetcher, token, '/api/systems/try-tier', 'POST', { definition, tier, level }),
     /** Make the stored draft what the game runs; refused, with `problems`, while it has any. */
     publish: (systemId: string) => call<{ version: number }>(fetcher, token, `${id(systemId)}/publish`, 'POST', {}),
     create: (name: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name }),
