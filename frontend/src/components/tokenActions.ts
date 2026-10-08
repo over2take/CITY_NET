@@ -225,6 +225,29 @@ export async function createPlayerTokenRow(
   await c.refreshLocations();
 }
 
+/**
+ * Who a viewer may attack as, besides themselves (4b5b4b; the server's rule is tokens/tokenAccess.js
+ * and sockets rollSheetOf). A player: each friendly NPC the GM gave them. The GM: each NPC with a
+ * sheet on the target's map and floor, the target itself left out. The server refuses anything
+ * else, so this only decides what ATTACK AS offers.
+ */
+export function attackAsOptions(c: {
+  locations: any[];
+  userName: string | null;
+  isGm: boolean;
+  target: any;
+  controls: (row: any, userName: string | null) => boolean;
+}): { id: number; name: string }[] {
+  const named = (l: any) => ({ id: l.id, name: l.name || 'NPC' });
+  if (!c.isGm) return c.locations.filter((l) => c.controls(l, c.userName)).map(named);
+  if (!c.target) return [];
+  const sameMap = (l: any) => (l.battle_map_id ?? null) === (c.target.battle_map_id ?? null)
+    && (l.battle_map_id == null || (l.floor_index ?? null) === (c.target.floor_index ?? null));
+  return c.locations
+    .filter((l) => (l.shape === 'enemy_rhombus' || l.shape === 'friendly_rhombus') && l.sheet_data && l.id !== c.target.id && sameMap(l))
+    .map(named);
+}
+
 const TOKEN_SHAPES = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];
 
 export const isTokenShape = (shape: unknown) => TOKEN_SHAPES.includes(shape as string);
