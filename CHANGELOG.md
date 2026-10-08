@@ -88,6 +88,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Rolling from an NPC's sheet.** A sheet roll or an ability roll can now be made from an NPC's
+  sheet: by the GM for any NPC, and by a player for the friendly NPC the GM gave them. It uses the
+  NPC's own numbers and wounds, and the dice log names it ("Vex rolled Shoot for Rex"). Before, no
+  one could roll from an NPC's sheet at all. A player's own rolls are unchanged. The window and
+  attacks from an NPC's token come next.
+
 - **A friendly NPC's sheet, for the player the GM gave it to.** The server now lets a player the
   GM gave control of a friendly NPC read that NPC's sheet, read-only, with its token's HP and armor
   filled in as on the GM's window. Nobody else gets it, an enemy's is never handed over, and
