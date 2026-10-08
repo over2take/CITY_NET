@@ -80,6 +80,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's NPCS page: a stat block of their own.** STAT BLOCK chooses whether NPCs are
+  written down on the character sheet or on a stat block of their own, which starts as a copy of
+  the character sheet and is edited with the same designer as CHARACTER SHEET. On a stat block
+  there is no WHO SEES IT or WHO CHANGES IT, since only the GM sees and changes an NPC's sheet,
+  and the preview shows it as the GM sees it. BACK TO THE CHARACTER SHEET asks first and keeps the
+  tiers, which offer the stat block's fields.
+
 - **The builder's NPCS page: tiers.** The NPCS page lists a system's tiers with their HP and
   defense, the first marked DEFAULT, with arrows to reorder, + TIER (up to 20) and REMOVE TIER,
   which asks first. A tier's name, HP, defense and starting values are set in boxes that take a

@@ -19,6 +19,7 @@ const { starterSheet, effectiveSheet, fieldsOf } = req('../../../../backend/syst
 const { npcSheetOf } = req('../../../../backend/systemBuilder/npc.js');
 const { rollTier } = req('../../../../backend/systemBuilder/tierRolls.js');
 const { checkDefinition } = req('../../../../backend/systemBuilder/definition.js');
+const { previewDerived } = req('../../../../backend/systemBuilder/derived.js');
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -37,6 +38,7 @@ type Api = ReturnType<typeof systemsApi>;
 /** The server's answers, by its own code; the dice are real, so only their shape is checked. */
 const serverApi = () => ({
   previewSheet: vi.fn(async (def: Definition) => ({ ok: true as const, value: { sheet: effectiveSheet(def), starter: starterSheet(def) } })),
+  previewValues: vi.fn(async (def: Definition) => ({ ok: true as const, value: previewDerived({ lookups: def.lookups, derived: def.derived }, (def.samples ?? {}) as object) })),
   tryTier: vi.fn(async (def: Definition, tier: string, level: number) => {
     const t = tierList(def).find((x) => x.id === tier);
     if (!t) return { ok: false as const, error: 'No such tier', status: 404 };
@@ -64,7 +66,7 @@ describe('the page', () => {
     open();
     expect(screen.getByRole('tab', { name: 'TIERS' }).getAttribute('aria-selected')).toBe('true');
     await userEvent.click(screen.getByRole('tab', { name: 'STAT BLOCK' }));
-    expect(screen.getByText(/NPCs use the character sheet for now/)).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'STAT BLOCK' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('lists the tiers with HP and defense as written, the first the default, and opens the first', async () => {
@@ -320,5 +322,104 @@ describe('TRY IT', () => {
   it('needs the server', () => {
     open(WITH_TIERS, null);
     expect((screen.getByRole('button', { name: 'ROLL A MOOK' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe('STAT BLOCK (4b4d)', () => {
+  const toBlock = async () => {
+    await userEvent.click(screen.getByRole('tab', { name: 'STAT BLOCK' }));
+    return within(screen.getByRole('group', { name: 'NPC stat block' }));
+  };
+  const own = () => (last: Definition) => (last.npc as { sheet?: { sections: { id: string; label: string; fields: { id: string }[] }[] } }).sheet;
+
+  it('uses the character sheet until given a stat block of their own, a copy of it as drawn', async () => {
+    const { last } = open();
+    const cards = await toBlock();
+    const same = cards.getByRole('button', { name: /SAME AS THE CHARACTER SHEET/ });
+    const ownCard = cards.getByRole('button', { name: /A STAT BLOCK OF THEIR OWN/ });
+    expect(same.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByTestId('sheet-page')).toBeNull();
+    await waitFor(() => expect((ownCard as HTMLButtonElement).disabled).toBe(false));
+    await userEvent.click(ownCard);
+    expect(own()(last())).toEqual(effectiveSheet(WITH_TIERS));
+    expect('sheet' in last()).toBe(false);
+    expect(tierList(last())).toHaveLength(2);
+    expect(problems(last())).toEqual([]);
+    expect(ownCard.getAttribute('aria-pressed')).toBe('true');
+    expect((ownCard as HTMLButtonElement).disabled).toBe(true);
+    expect((same as HTMLButtonElement).disabled).toBe(true);
+    expect(await screen.findByText('A STAT BLOCK OF THEIR OWN', { selector: 'span' })).toBeTruthy();
+  });
+
+  it('can\'t be made before the character sheet has arrived', async () => {
+    open(WITH_TIERS, null);
+    const cards = await toBlock();
+    expect((cards.getByRole('button', { name: /A STAT BLOCK OF THEIR OWN/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('is edited with the CHARACTER SHEET designer, written to the stat block', async () => {
+    const { last } = open({ ...WITH_TIERS, npc: { ...(WITH_TIERS.npc as object), sheet: effectiveSheet(WITH_TIERS) } });
+    await toBlock();
+    const page = within(await screen.findByTestId('sheet-page'));
+    await userEvent.click(page.getByRole('button', { name: 'IDENTITY section' }));
+    const name = page.getByLabelText('Section name');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'THREAT');
+    expect(own()(last())!.sections[0].label).toBe('THREAT');
+    expect('sheet' in last()).toBe(false);
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('has no WHO SEES IT or WHO CHANGES IT, and shows the block as the GM sees it', async () => {
+    open({ ...WITH_TIERS, npc: { ...(WITH_TIERS.npc as object), sheet: effectiveSheet(WITH_TIERS) } });
+    await toBlock();
+    const page = within(await screen.findByTestId('sheet-page'));
+    await userEvent.click(page.getByRole('button', { name: 'Strength field' }));
+    expect(page.queryByRole('group', { name: 'Who sees it' })).toBeNull();
+    expect(page.queryByRole('group', { name: 'Who changes it' })).toBeNull();
+    expect(page.queryByRole('checkbox', { name: /Decides whether attacks hit/ })).toBeNull();
+    expect(page.getByText("Only the GM sees and changes an NPC's stat block.")).toBeTruthy();
+    await page.findByTestId('sheet-preview');
+    expect(page.getByText('AS THE GM SEES IT')).toBeTruthy();
+    expect(page.queryByRole('group', { name: 'Seen by' })).toBeNull();
+  });
+
+  it('asks before going back to the character sheet, keeping the tiers', async () => {
+    const { last, edits } = open({ ...WITH_TIERS, npc: { ...(WITH_TIERS.npc as object), sheet: effectiveSheet(WITH_TIERS) } });
+    await toBlock();
+    const page = within(await screen.findByTestId('sheet-page'));
+    await userEvent.click(page.getByRole('button', { name: 'BACK TO THE CHARACTER SHEET' }));
+    expect(page.getByText('Throw the stat block away? NPCs go back to the character sheet; the tiers stay.')).toBeTruthy();
+    await userEvent.click(page.getByRole('button', { name: 'KEEP MINE' }));
+    expect(edits).toEqual([]);
+    await userEvent.click(page.getByRole('button', { name: 'BACK TO THE CHARACTER SHEET' }));
+    await userEvent.click(page.getByRole('button', { name: 'BACK TO THE CHARACTER SHEET' }));
+    expect(last().npc).toEqual({ tiers: (WITH_TIERS.npc as { tiers: unknown }).tiers });
+    expect(screen.queryByTestId('sheet-page')).toBeNull();
+  });
+
+  it('gives the tiers the stat block\'s fields', async () => {
+    open({ ...WITH_TIERS, npc: { ...(WITH_TIERS.npc as object), sheet: effectiveSheet(WITH_TIERS) } });
+    await toBlock();
+    const page = within(await screen.findByTestId('sheet-page'));
+    await userEvent.click(page.getByRole('button', { name: 'IDENTITY section' }));
+    await userEvent.click(page.getByRole('button', { name: '+ FIELD' }));
+    const label = page.getByLabelText('Field label');
+    await userEvent.clear(label);
+    await userEvent.type(label, 'Tactics');
+    await userEvent.click(page.getByRole('button', { name: 'Concept field' }));
+    await userEvent.click(page.getByRole('button', { name: 'TAKE OFF THE SHEET' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'TIERS' }));
+    expect(await screen.findByLabelText('Tactics starts with')).toBeTruthy();
+    expect(screen.queryByLabelText('Concept starts with')).toBeNull();
+  });
+
+  it('previews the block as the GM, so a field only the GM changes stays open', async () => {
+    const sheet = effectiveSheet(WITH_TIERS);
+    const locked = { ...sheet, sections: sheet.sections.map((s: { fields: { id: string }[] }) => ({ ...s, fields: s.fields.map((f) => (f.id === 'str' ? { ...f, edit: 'gm' } : f)) })) };
+    open({ ...WITH_TIERS, samples: { str: 10 }, npc: { ...(WITH_TIERS.npc as object), sheet: locked } });
+    await userEvent.click(screen.getByRole('tab', { name: 'STAT BLOCK' }));
+    const preview = within(await screen.findByTestId('sheet-preview'));
+    await waitFor(() => expect((preview.getByDisplayValue('10') as HTMLInputElement).readOnly).toBe(false));
   });
 });
