@@ -30,6 +30,12 @@ interface Props {
   edit: (next: Definition) => void;
   /** For the starter sheet and the sheet as drawn (POST /api/systems/preview-sheet). */
   api?: ReturnType<typeof systemsApi>;
+  /**
+   * Editing NPCs' stat block of their own (NPCS, 4b4d) rather than the character sheet: the same
+   * designer, with no WHO SEES IT or WHO CHANGES IT (only the GM sees and changes an NPC's sheet),
+   * a GM-only preview, and BACK TO THE CHARACTER SHEET for BACK TO AUTOMATIC.
+   */
+  forNpcs?: boolean;
 }
 
 type Pick = { kind: 'tab' | 'section' | 'field'; id: string } | { kind: 'none' };
@@ -96,7 +102,8 @@ function Choices({ field, onChange }: { field: Field; onChange: (text: string) =
 
 export const blankProblem = (what: string) => (text: string) => (text.trim() ? null : `A ${what} needs a name.`);
 
-export function SheetPage({ definition, edit, api }: Props) {
+export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
+  const back = forNpcs ? 'BACK TO THE CHARACTER SHEET' : 'BACK TO AUTOMATIC';
   const [preview, setPreview] = useState<{ sheet: CustomRenderSheet; starter: CustomRenderSheet } | null>(null);
   const [values, setValues] = useState<Record<string, number>>({});
   const [asked, setAsked] = useState(false);
@@ -398,6 +405,7 @@ export function SheetPage({ definition, edit, api }: Props) {
             {f.type === 'select' && <Choices key={f.id} field={f} onChange={(text) => set(withField(definition, f.id, { options: text }))} />}
           </>
         )}
+        {!forNpcs && <>
         <div role="group" aria-label="Who sees it" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={small}>WHO SEES IT</span>
           <span style={{ display: 'inline-flex', border: '1px solid var(--green)', alignSelf: 'flex-start' }}>
@@ -424,6 +432,8 @@ export function SheetPage({ definition, edit, api }: Props) {
             </span>
           </div>
         )}
+        </>}
+        {forNpcs && <span style={{ ...why, fontSize: 11 }}>Only the GM sees and changes an NPC&apos;s stat block.</span>}
         <label style={label}>
           <span style={small}>HINT</span>
           <input type="text" aria-label="Hint" maxLength={300} value={f.hint ?? ''} placeholder="shown under it" style={input}
@@ -452,17 +462,17 @@ export function SheetPage({ definition, edit, api }: Props) {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', border: '1px solid var(--dark-green)' }}>
         {own ? (
           <>
-            <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>CUSTOMIZED</span>
-            <span style={why}>Your own layout.</span>
+            <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>{forNpcs ? 'A STAT BLOCK OF THEIR OWN' : 'CUSTOMIZED'}</span>
+            <span style={why}>{forNpcs ? 'Only the GM sees and changes it.' : 'Your own layout.'}</span>
             <span style={{ flex: 1 }} />
             {confirmReset ? (
               <>
-                <span style={why}>Throw your layout away and go back to the automatic sheet?</span>
-                <button type="button" className="utility-btn" style={danger} onClick={() => { setConfirmReset(false); set(withAutomatic(definition), { kind: 'none' }); }}>BACK TO AUTOMATIC</button>
+                <span style={why}>{forNpcs ? 'Throw the stat block away? NPCs go back to the character sheet; the tiers stay.' : 'Throw your layout away and go back to the automatic sheet?'}</span>
+                <button type="button" className="utility-btn" style={danger} onClick={() => { setConfirmReset(false); set(withAutomatic(definition), { kind: 'none' }); }}>{back}</button>
                 <button type="button" className="utility-btn" style={btn} onClick={() => setConfirmReset(false)}>KEEP MINE</button>
               </>
             ) : (
-              <button type="button" className="utility-btn" style={btn} onClick={() => setConfirmReset(true)}>BACK TO AUTOMATIC</button>
+              <button type="button" className="utility-btn" style={btn} onClick={() => setConfirmReset(true)}>{back}</button>
             )}
           </>
         ) : (
@@ -494,7 +504,7 @@ export function SheetPage({ definition, edit, api }: Props) {
           )}
         </div>
         <div style={{ ...col, borderRight: 0 }} className="cyber-scroll">
-          {preview ? <SheetPreview definition={definition} sheet={preview.sheet} values={values} />
+          {preview ? <SheetPreview definition={definition} sheet={preview.sheet} values={values} gmOnly={forNpcs} />
             : <p style={why}>{api ? 'LOADING…' : 'No preview without the server.'}</p>}
         </div>
       </div>

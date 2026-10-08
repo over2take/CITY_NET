@@ -28,10 +28,13 @@ interface Props {
   sheet: CustomRenderSheet;
   /** Formulas worked out from the sample character. */
   values: Record<string, number>;
+  /** An NPC's stat block: only the GM ever sees it, so there is no one else to show it as. */
+  gmOnly?: boolean;
 }
 
-export function SheetPreview({ definition, sheet, values }: Props) {
-  const [view, setView] = useState<View>('owner');
+export function SheetPreview({ definition, sheet, values, gmOnly = false }: Props) {
+  const [chosen, setView] = useState<View>('owner');
+  const view: View = gmOnly ? 'gm' : chosen;
   const [tried, setTried] = useState<Record<string, unknown>>({});
 
   const template = useMemo(() => templateFromRender({
@@ -46,14 +49,16 @@ export function SheetPreview({ definition, sheet, values }: Props) {
 
   return (
     <div data-testid="sheet-preview" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={small}>SEEN BY</span>
-        <span role="group" aria-label="Seen by" style={{ display: 'inline-flex', border: '1px solid var(--green)' }}>
-          {([['owner', 'ITS OWNER'], ['gm', 'THE GM'], ['others', 'EVERYONE ELSE']] as const).map(([id, label]) => (
-            <button key={id} type="button" style={segBtn(view === id)} aria-pressed={view === id} onClick={() => setView(id)}>{label}</button>
-          ))}
-        </span>
-      </div>
+      {gmOnly ? <span style={small}>AS THE GM SEES IT</span> : (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={small}>SEEN BY</span>
+          <span role="group" aria-label="Seen by" style={{ display: 'inline-flex', border: '1px solid var(--green)' }}>
+            {([['owner', 'ITS OWNER'], ['gm', 'THE GM'], ['others', 'EVERYONE ELSE']] as const).map(([id, label]) => (
+              <button key={id} type="button" style={segBtn(view === id)} aria-pressed={view === id} onClick={() => setView(id)}>{label}</button>
+            ))}
+          </span>
+        </div>
+      )}
       {view === 'others' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <p style={{ ...why, margin: 0 }}>Other players and spectators, in ID.EXE&apos;s INFO when they open this character&apos;s token. Everything else stays with the owner and the GM.</p>

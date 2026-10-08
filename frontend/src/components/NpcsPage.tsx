@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { Definition, systemsApi, TriedTier } from '../sheets/systemsApi';
 import type { CustomRenderField, CustomRenderSheet } from '../sheets/customTemplates';
 import {
   tierList, withNewTier, withTierLabel, withTierBox, withTierValue, boxText, withTierMoved, withoutTier,
-  settableFields, blockFields, boxErrors, triedText, LIMITS,
+  settableFields, blockFields, boxErrors, triedText, LIMITS, ownBlock, withOwnBlock, asBlockDraft, fromBlockDraft,
 } from '../sheets/npcs';
-import { NameBox, blankProblem } from './SheetPage';
+import { NameBox, blankProblem, SheetPage } from './SheetPage';
 
 // The builder's NPCS page (4b4c): how a system's NPCs are written down (STAT BLOCK, 4b4d) and the
 // ready-made ones GENERATE_SHEET offers (TIERS). Approved mockup docs/mockups/builder-npcs.html
@@ -208,6 +208,42 @@ function TiersTab({ definition, edit, api, characterSheet }: Props & { character
   );
 }
 
+const card = (on: boolean): React.CSSProperties => ({
+  border: `1px solid ${on ? 'var(--green)' : 'var(--dark-green)'}`, background: on ? 'color-mix(in srgb, var(--green) 10%, transparent)' : 'none',
+  padding: '10px 12px', cursor: 'pointer', textAlign: 'left', color: 'inherit', font: 'inherit', display: 'flex', flexDirection: 'column', gap: 4,
+});
+
+/**
+ * How NPCs are written down (4b4d): the character sheet, or a stat block of their own, a copy of
+ * the character sheet edited with the CHARACTER SHEET designer (decided with the user: one designer
+ * for both), which shows it as only the GM ever sees it.
+ */
+function BlockTab({ definition, edit, api, characterSheet }: Props & { characterSheet: CustomRenderSheet | null }) {
+  const own = ownBlock(definition);
+  // The same object until the definition changes, so the designer asks the server only then.
+  const draft = useMemo(() => asBlockDraft(definition), [definition]);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <p style={{ ...why, margin: 0, maxWidth: '84ch' }}>What the GM fills in for an NPC. Players never see it; they see the token&apos;s card (name, description, portrait).</p>
+      <div role="group" aria-label="NPC stat block" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, maxWidth: 900 }}>
+        <button type="button" style={card(!own)} aria-pressed={!own} disabled
+          title={own ? 'Use BACK TO THE CHARACTER SHEET below, which asks first.' : undefined}>
+          <b style={{ color: 'var(--green)', letterSpacing: 1 }}>SAME AS THE CHARACTER SHEET</b>
+          <span style={why}>NPCs are written down exactly like player characters, and any change to the character sheet reaches them too.</span>
+        </button>
+        <button type="button" style={card(!!own)} aria-pressed={!!own} disabled={!!own || !characterSheet}
+          onClick={() => { if (characterSheet) edit(withOwnBlock(definition, characterSheet)); }}>
+          <b style={{ color: 'var(--green)', letterSpacing: 1 }}>A STAT BLOCK OF THEIR OWN</b>
+          <span style={why}>Usually shorter: just what a fight needs. Starts as a copy of the character sheet; take off what NPCs don&apos;t need.</span>
+        </button>
+      </div>
+      {own && (
+        <SheetPage forNpcs definition={draft} edit={(next) => edit(fromBlockDraft(definition, next))} api={api} />
+      )}
+    </div>
+  );
+}
+
 export function NpcsPage({ definition, edit, api }: Props) {
   const [tab, setTab] = useState<'block' | 'tiers'>('tiers');
   const [characterSheet, setCharacterSheet] = useState<CustomRenderSheet | null>(null);
@@ -231,7 +267,7 @@ export function NpcsPage({ definition, edit, api }: Props) {
       </div>
       {tab === 'tiers'
         ? <TiersTab definition={definition} edit={edit} api={api} characterSheet={characterSheet} />
-        : <p style={{ ...why, maxWidth: '72ch' }}>NPCs use the character sheet for now. A stat block of their own arrives in the next update.</p>}
+        : <BlockTab definition={definition} edit={edit} api={api} characterSheet={characterSheet} />}
     </div>
   );
 }
