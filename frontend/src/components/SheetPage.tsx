@@ -64,7 +64,7 @@ const kindTag: React.CSSProperties = { fontSize: 9, letterSpacing: 1, opacity: 0
  * A name box that keeps what is typed while the builder won't store it (blank, or a tab name
  * already taken), showing why, so the GM fixes it in place.
  */
-function NameBox({ value, aria, max, problem, onChange }: { value: string; aria: string; max: number; problem: (text: string) => string | null; onChange: (text: string) => void }) {
+export function NameBox({ value, aria, max, problem, onChange }: { value: string; aria: string; max: number; problem: (text: string) => string | null; onChange: (text: string) => void }) {
   const [text, setText] = useState(value);
   useEffect(() => { setText(value); }, [value]);
   const why = problem(text);
@@ -94,7 +94,7 @@ function Choices({ field, onChange }: { field: Field; onChange: (text: string) =
   );
 }
 
-const blankProblem = (what: string) => (text: string) => (text.trim() ? null : `A ${what} needs a name.`);
+export const blankProblem = (what: string) => (text: string) => (text.trim() ? null : `A ${what} needs a name.`);
 
 export function SheetPage({ definition, edit, api }: Props) {
   const [preview, setPreview] = useState<{ sheet: CustomRenderSheet; starter: CustomRenderSheet } | null>(null);

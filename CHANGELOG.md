@@ -80,6 +80,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's NPCS page: tiers.** The NPCS page lists a system's tiers with their HP and
+  defense, the first marked DEFAULT, with arrows to reorder, + TIER (up to 20) and REMOVE TIER,
+  which asks first. A tier's name, HP, defense and starting values are set in boxes that take a
+  number, a formula with @level or dice; what the server can't read shows under its box a moment
+  after typing. TRY IT rolls the tier at a chosen level and shows each result with its dice,
+  making nothing. The STAT BLOCK tab comes next.
+
 - **What the builder's NPCS page will change.** Giving NPCs a stat block of their own (a copy of
   the character sheet, edited with the CHARACTER SHEET designer) or going back to the character
   sheet. Adding, renaming, reordering and removing tiers (up to 20, the first the default); a tier's
