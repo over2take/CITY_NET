@@ -1509,6 +1509,40 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     // fieldId - the formula and the stat values come from the server-side
     // roll map and the STORED sheet, so a client can't inflate a roll. The
     // result flows through the same insert + broadcast as manual dice.
+    /**
+     * The sheet a roll is made from (4b5b3; asked for by the user 2026-10-07): the roller's own,
+     * or, given an NPC token's `location_id`, that NPC's. The GM rolls for any NPC; a player only
+     * for a friendly NPC the GM gave them (tokens/tokenAccess.js controls); anyone else is ignored,
+     * as an unknown roll always was. `hp` is the token's current HP, for the wound penalties;
+     * `forName` names the NPC in the log ("Ash rolled Shoot for Rex"); `updated` is what tells open
+     * windows the sheet changed (LUCK spent, a jack locked).
+     */
+    const rollSheetOf = (info, payload, system, cb) => {
+      if (payload.location_id === undefined || payload.location_id === null) {
+        db.get(`SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`, [info.userName, system], (e, row) => {
+          if (e || !row) return;
+          db.get(`SELECT hp_current FROM locations WHERE shape = 'rhombus' AND owner = ?
+                  ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`, [info.userName], (e2, hpRow) => {
+            cb({ row, hp: !e2 && hpRow ? hpRow.hp_current : null, forName: null, updated: { username: info.userName, system } });
+          });
+        });
+        return;
+      }
+      // A token with no NPC sheet linked for this system (a player's, or none at all) is ignored
+      // below, as is one the roller may not roll for.
+      db.get(`SELECT id, name, shape, owner, controllers, hp_current FROM locations WHERE id = ?`, [payload.location_id], (e, loc) => {
+        if (e || !loc) return;
+        if (!isAdminSocket(socket) && !tokenAccess.controls(loc, info.userName)) return;
+        db.get(`SELECT cs.id, cs.data FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id
+                WHERE l.location_id = ? AND cs.is_npc = 1 AND cs.system = ?`, [loc.id, system], (e2, row) => {
+          if (e2 || !row) return;
+          let name = loc.name;
+          try { name = JSON.parse(row.data || '{}').name || loc.name; } catch { /* the token's name */ }
+          cb({ row, hp: loc.hp_current, forName: name || 'an NPC', updated: { npc_id: row.id, system } });
+        });
+      });
+    };
+
     socket.on('requestSheetRoll', (payload) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
@@ -1519,20 +1553,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (!rollDef) return;
         db.get(`SELECT value FROM global_settings WHERE key = 'luck_negates_fumble'`, (lnErr, lnRow) => {
         const luckNegatesFumble = !lnErr && lnRow && lnRow.value === '1';
-        db.get(
-          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-          [info.userName, system],
-          (err2, row) => {
-            if (err2 || !row) return;
-            db.get(
-              `SELECT hp_current FROM locations WHERE shape = 'rhombus' AND owner = ?
-               ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
-              [info.userName],
-              (hpErr, hpRow) =>
-
-            {
+        rollSheetOf(info, payload, system, ({ row, hp, forName, updated }) => {
             const data = JSON.parse(row.data || '{}');
-            const hp = !hpErr && hpRow ? hpRow.hp_current : null;
             // Declared LUCK: flat bonus and/or a 1-pip fumble shield. The
             // house rule (bonus spend also negates fumbles) is settings-gated.
             // Fumble negation (shield or bonus) only exists while the
@@ -1582,13 +1604,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             const woundTag = hp !== null && hp <= 0 ? ' (MORTALLY WOUNDED -4)'
               : hp !== null && Number(data.seriously_wounded) > 0 && hp <= Number(data.seriously_wounded) ? ' (WOUNDED -2)' : '';
             const historyString =
-              `${identity.displayName(info.userName)} rolled ${rollDef.label} [${outcome.breakdown} = ${outcome.total}]${luckTag}${woundTag}${critTag}`;
+              `${identity.displayName(info.userName)} rolled ${rollDef.label}${forName ? ` for ${forName}` : ''} [${outcome.breakdown} = ${outcome.total}]${luckTag}${woundTag}${critTag}`;
             // A crashed jack is down for the scene, so it has to outlive this roll.
             if (outcome.plugCrash) {
               patchSheet(
                 db, row.id,
                 { [skillplugs.LOCKED_FIELD]: true },
-                () => io.emit('sheetUpdated', { username: info.userName, system })
+                () => io.emit('sheetUpdated', updated)
               );
             }
             // Spend the declared LUCK
@@ -1599,7 +1621,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 db,
                 row.id,
                 (d) => ({ luck: Math.max(0, (Number(d.luck) || 0) - luck) }),
-                () => io.emit('sheetUpdated', { username: info.userName, system })
+                () => io.emit('sheetUpdated', updated)
               );
             }
             const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
@@ -1622,10 +1644,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 io.emit('diceRollBroadcast', broadcastData);
               }
             );
-            }
-            );
-          }
-        );
+        });
         });
       });
     });
@@ -1643,11 +1662,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const shape = formula.startsWith('pool:') ? 'pool' : 'normal';
       getGameSystem((err, system) => {
         if (err) return;
-        db.get(
-          `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-          [info.userName, system],
-          (err2, row) => {
-            if (err2 || !row) return;
+        rollSheetOf(info, payload, system, ({ row, forName }) => {
             const data = JSON.parse(row.data || '{}');
             let outcome;
             try {
@@ -1656,7 +1671,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             } catch (e) {
               return;
             }
-            const historyString = `${identity.displayName(info.userName)} rolled ${label} [${outcome.breakdown} = ${outcome.total}]`;
+            const historyString = `${identity.displayName(info.userName)} rolled ${label}${forName ? ` for ${forName}` : ''} [${outcome.breakdown} = ${outcome.total}]`;
             const broadcastData = {
               userName: identity.displayName(info.userName),
               account: info.userName,
@@ -1673,8 +1688,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               [info.userName, outcome.total, JSON.stringify(outcome.rolls), '#00ff00', historyString],
               () => io.emit('diceRollBroadcast', broadcastData)
             );
-          }
-        );
+        });
       });
     });
 
