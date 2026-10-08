@@ -22,6 +22,7 @@ const { mutateSheet, patchSheet } = require('../sheets/mutate');
 const sheetAttack = require('../sheets/attack');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
+const tokenAccess = require('../tokens/tokenAccess');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
 // sheet, quick-sheet lookups) goes through socket events, matching how the
@@ -379,6 +380,31 @@ module.exports = (db, io) => {
   // Get full NPC sheet data (for editing). Like player sheets, HP is a
   // linked field: when the sheet is attached to a token, the token's HP is
   // overlaid at read time (first link wins if the sheet is on several tokens).
+  /** An NPC sheet row as sent: its data, with the values that live on its token filled in. */
+  const sendNpcSheet = (res, row) => {
+    const data = JSON.parse(row.data || '{}');
+    const linked = getLinkedFields(row.system);
+    const wantsHp = Object.values(linked).some(s => TOKEN_SOURCES.has(s));
+    if (!wantsHp) return res.json({ ...row, data });
+    db.get(
+      `SELECT loc.hp_current, loc.hp_max, loc.melee_ac, loc.ranged_ac FROM npc_sheet_links l
+       JOIN locations loc ON loc.id = l.location_id
+       WHERE l.sheet_id = ? LIMIT 1`,
+      [row.id],
+      (err2, hpRow) => {
+        if (!err2 && hpRow) {
+          Object.entries(linked).forEach(([fieldId, source]) => {
+            if (source === 'token_hp') data[fieldId] = hpRow.hp_current;
+            if (source === 'token_hp_max') data[fieldId] = hpRow.hp_max;
+            if (source === 'token_ac') data[fieldId] = hpRow.melee_ac ?? 10;
+            if (source === 'token_ac_ranged') data[fieldId] = rangedAcOf(hpRow);
+          });
+        }
+        res.json({ ...row, data });
+      }
+    );
+  };
+
   router.get('/npcs/:id', authenticate, requireAdmin, (req, res) => {
     db.get(
       `SELECT * FROM character_sheets WHERE id = ? AND is_npc = 1`,
@@ -386,29 +412,37 @@ module.exports = (db, io) => {
       (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: 'NPC not found' });
-        const data = JSON.parse(row.data || '{}');
-        const linked = getLinkedFields(row.system);
-        const wantsHp = Object.values(linked).some(s => TOKEN_SOURCES.has(s));
-        if (!wantsHp) return res.json({ ...row, data });
-        db.get(
-          `SELECT loc.hp_current, loc.hp_max, loc.melee_ac, loc.ranged_ac FROM npc_sheet_links l
-           JOIN locations loc ON loc.id = l.location_id
-           WHERE l.sheet_id = ? LIMIT 1`,
-          [req.params.id],
-          (err2, hpRow) => {
-            if (!err2 && hpRow) {
-              Object.entries(linked).forEach(([fieldId, source]) => {
-                if (source === 'token_hp') data[fieldId] = hpRow.hp_current;
-                if (source === 'token_hp_max') data[fieldId] = hpRow.hp_max;
-                if (source === 'token_ac') data[fieldId] = hpRow.melee_ac ?? 10;
-                if (source === 'token_ac_ranged') data[fieldId] = rangedAcOf(hpRow);
-              });
-            }
-            res.json({ ...row, data });
-          }
-        );
+        sendNpcSheet(res, row);
       }
     );
+  });
+
+  /**
+   * The sheet behind a friendly NPC, read-only, for the player the GM gave it to (4b5b2; asked
+   * for by the user 2026-10-07): its sheet as the GM's window draws it, the token's HP and armor
+   * filled in, for the running system. Only a signed-in player named in the token's grant, or the
+   * GM and editors; never an enemy (tokens/tokenAccess.js controls). Nothing here writes.
+   */
+  router.get('/npcs/controlled/:location_id', authenticatePlayer, (req, res) => {
+    db.get(`SELECT id, shape, owner, controllers FROM locations WHERE id = ?`, [req.params.location_id], (err, loc) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!loc) return res.status(404).json({ error: 'Not found' });
+      const allowed = canReadNpcSheets(req.user) || tokenAccess.controls(loc, req.user.username);
+      if (!allowed) return res.status(403).json({ error: 'Only the GM, or a player the GM gave this NPC to' });
+      getGameSystem((e2, system) => {
+        if (e2) return res.status(500).json({ error: e2.message });
+        db.get(
+          `SELECT cs.* FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id
+           WHERE l.location_id = ? AND cs.is_npc = 1 AND cs.system = ?`,
+          [loc.id, system],
+          (e3, row) => {
+            if (e3) return res.status(500).json({ error: e3.message });
+            if (!row) return res.status(404).json({ error: 'This NPC has no sheet yet' });
+            sendNpcSheet(res, row);
+          }
+        );
+      });
+    });
   });
 
   // Create a new NPC sheet
