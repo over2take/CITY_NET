@@ -67,6 +67,9 @@ interface Props {
     tiers: { id: string; label: string }[];
     value: string;
     onChange: (id: string) => void;
+    /** A custom system's level for the tier (4b4e); absent for the built-in systems. */
+    level?: number;
+    onLevelChange?: (level: number) => void;
   };
 
   /** Open this folder - HIT_POINTS asks for HEALTH. A new `seq` asks again. */
@@ -188,7 +191,14 @@ const field: React.CSSProperties = {
 const row: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 };
 const key: React.CSSProperties = { minWidth: 110, fontWeight: 'bold' };
 
-function TierPicker({ tiers, value, onChange }: { tiers: { id: string; label: string }[]; value: string; onChange: (id: string) => void }) {
+/**
+ * GENERATE_SHEET's tier, and for a custom system the level its tier is worked out and rolled for
+ * (4b4e; approved mockup builder-npcs, 2026-10-07). The built-in systems' tiers take no level.
+ */
+function TierPicker({ tiers, value, onChange, level, onLevelChange }: {
+  tiers: { id: string; label: string }[]; value: string; onChange: (id: string) => void;
+  level?: number; onLevelChange?: (level: number) => void;
+}) {
   return (
     <div style={{ whiteSpace: 'normal', marginTop: 12, borderTop: '1px solid var(--dark-green)', paddingTop: 10 }}>
       <label style={{ ...row, marginBottom: 0 }}>
@@ -202,6 +212,13 @@ function TierPicker({ tiers, value, onChange }: { tiers: { id: string; label: st
           {tiers.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
         </select>
       </label>
+      {level !== undefined && onLevelChange && (
+        <label style={{ ...row, marginBottom: 0, marginTop: 6 }}>
+          <span style={key}>LEVEL</span>
+          <input type="number" aria-label="NPC level" min={0} max={99} value={level} style={{ ...field, width: 70 }}
+            onChange={(e) => { if (e.target.value.trim() !== '') onLevelChange(Math.max(0, Math.min(99, Math.round(Number(e.target.value) || 0)))); }} />
+        </label>
+      )}
       <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>Used by GENERATE_SHEET below.</div>
     </div>
   );

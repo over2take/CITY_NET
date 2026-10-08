@@ -118,6 +118,11 @@ export interface TokenActionContext {
   sheetLink: { sheet_id: number; npc_label: string } | null;
   /** The tier GENERATE_SHEET asks for, already resolved; undefined where the system has none. */
   tier: string | undefined;
+  /**
+   * The level a custom system's tier is worked out for (backend systemBuilder/tierRolls.js, 4b4e);
+   * undefined for the built-in systems, whose tiers take none.
+   */
+  level?: number;
   isOwner: boolean;
   /** The running system's words (sheets/words.ts), for VIEW_BANK; today's text when not given. */
   words?: WordLookup;
@@ -167,7 +172,7 @@ export function buildTokenActions(viewer: TokenViewer, c: TokenActionContext): B
         if (c.sheetLink) c.open.npcSheet({ id: c.sheetLink.sheet_id, npc_label: c.sheetLink.npc_label, token_shape: loc.shape, locationId: loc.id });
       },
     },
-    'generate-sheet': { onClick: () => c.emit('generateNpcSheet', { location_id: loc.id, tier: c.tier }) },
+    'generate-sheet': { onClick: () => c.emit('generateNpcSheet', { location_id: loc.id, tier: c.tier, ...(c.level !== undefined ? { level: c.level } : {}) }) },
     edit: { onClick: () => c.open.editLocation(loc) },
     vehicles: { onClick: () => c.open.vehicles() },
     bank: { onClick: () => c.open.bank(loc.owner) },

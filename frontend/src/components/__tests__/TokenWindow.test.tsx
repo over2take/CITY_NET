@@ -162,6 +162,20 @@ describe('INFO', () => {
     show({ location: enemy, tierPicker: { tiers: [{ id: 'mook', label: 'Mook' }, { id: 'boss', label: 'Boss' }], value: 'mook', onChange } });
     await userEvent.selectOptions(screen.getByLabelText('NPC tier'), 'boss');
     expect(onChange).toHaveBeenCalledWith('boss');
+    // A built-in system's tiers take no level.
+    expect(screen.queryByLabelText('NPC level')).toBeNull();
+  });
+
+  it('asks a custom system\'s GM for the level too, from 0 to 99 (4b4e)', () => {
+    const onLevelChange = vi.fn();
+    show({ location: enemy, tierPicker: { tiers: [{ id: 'mook', label: 'Mook' }], value: 'mook', onChange: vi.fn(), level: 3, onLevelChange } });
+    const level = screen.getByLabelText('NPC level') as HTMLInputElement;
+    expect(level.value).toBe('3');
+    fireEvent.change(level, { target: { value: '6' } });
+    fireEvent.change(level, { target: { value: '250' } });
+    fireEvent.change(level, { target: { value: '-4' } });
+    fireEvent.change(level, { target: { value: '' } });
+    expect(onLevelChange.mock.calls).toEqual([[6], [99], [0]]);
   });
 });
 

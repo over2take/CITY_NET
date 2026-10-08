@@ -80,6 +80,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A level for a custom system's NPCs.** In ID.EXE, on an NPC token with no sheet, a custom
+  system's GM now sets a LEVEL (0 to 99) beside the tier, and GENERATE_SHEET works the tier out and
+  rolls it for that level. The built-in systems' tier picker is unchanged. The NPCS page is now
+  complete.
+
 - **The builder's NPCS page: a stat block of their own.** STAT BLOCK chooses whether NPCs are
   written down on the character sheet or on a stat block of their own, which starts as a copy of
   the character sheet and is edited with the same designer as CHARACTER SHEET. On a stat block
