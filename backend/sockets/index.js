@@ -1515,7 +1515,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
      * for a friendly NPC the GM gave them (tokens/tokenAccess.js controls); anyone else is ignored,
      * as an unknown roll always was. `hp` is the token's current HP, for the wound penalties;
      * `forName` names the NPC in the log ("Ash rolled Shoot for Rex"); `updated` is what tells open
-     * windows the sheet changed (LUCK spent, a jack locked).
+     * windows the sheet changed (LUCK spent, a jack locked); `tokenId` is the NPC's token, where an
+     * attack from it starts (null for the roller's own token).
      */
     const rollSheetOf = (info, payload, system, cb) => {
       if (payload.location_id === undefined || payload.location_id === null) {
@@ -1523,7 +1524,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           if (e || !row) return;
           db.get(`SELECT hp_current FROM locations WHERE shape = 'rhombus' AND owner = ?
                   ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`, [info.userName], (e2, hpRow) => {
-            cb({ row, hp: !e2 && hpRow ? hpRow.hp_current : null, forName: null, updated: { username: info.userName, system } });
+            cb({ row, hp: !e2 && hpRow ? hpRow.hp_current : null, forName: null, updated: { username: info.userName, system }, tokenId: null });
           });
         });
         return;
@@ -1538,7 +1539,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           if (e2 || !row) return;
           let name = loc.name;
           try { name = JSON.parse(row.data || '{}').name || loc.name; } catch { /* the token's name */ }
-          cb({ row, hp: loc.hp_current, forName: name || 'an NPC', updated: { npc_id: row.id, system } });
+          cb({ row, hp: loc.hp_current, forName: name || 'an NPC', updated: { npc_id: row.id, system }, tokenId: loc.id });
         });
       });
     };
@@ -2553,7 +2554,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       );
     };
 
-    const makeEmitResult = (info, target, weapon, base = {}) => (extra) => {
+    /**
+     * Where an attack starts, for the line drawn to the target: the attacking NPC's own token when
+     * one attacks (4b5b3b), otherwise the attacker's player token on the target's map.
+     */
+    const attackerPosition = (info, target, tokenId, cb) => {
+      if (tokenId) return db.get('SELECT x, z FROM locations WHERE id = ?', [tokenId], (e, row) => cb(e ? null : row));
       const onBattleMap = target.battle_map_id !== null && target.battle_map_id !== undefined;
       const attackerSql = onBattleMap
         ? 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id = ? AND floor_index = ?'
@@ -2561,7 +2567,16 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const attackerParams = onBattleMap
         ? [info.userName, target.battle_map_id, target.floor_index]
         : [info.userName];
-      db.get(attackerSql, attackerParams, (posErr, attackerRow) => {
+      db.get(attackerSql, attackerParams, (e, row) => cb(e ? null : row));
+    };
+
+    /** Who an attack is by, in the log: the roller, or the NPC they attack with ("Rex (Vex)"). */
+    const attackerLabel = (info, forName) => (forName
+      ? `${forName} (${identity.displayName(info.userName)})` : identity.displayName(info.userName));
+
+    const makeEmitResult = (info, target, weapon, base = {}, tokenId = null) => (extra) => {
+      const onBattleMap = target.battle_map_id !== null && target.battle_map_id !== undefined;
+      attackerPosition(info, target, tokenId, (attackerRow) => {
         io.emit('attackResult', {
           attackerId: socket.id,
           attackerName: info.userName,
@@ -2586,11 +2601,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     // adjudicated manually (GM can heal back what was soaked).
     const handleSr6Attack = (info, payload, color) => {
       const system = 'shadowrun_6e';
-      db.get(
-        `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-        [info.userName, system],
-        (err2, sheetRow) => {
-          if (err2 || !sheetRow) return;
+      rollSheetOf(info, payload, system, ({ row: sheetRow, forName, tokenId }) => {
           const attackerData = JSON.parse(sheetRow.data || '{}');
           const weapon = attackSr6.getWeapon(attackerData, payload.weaponIndex);
           if (!weapon) {
@@ -2619,11 +2630,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 ? identity.displayName(target.owner) : target.name;
 
               const hitHistory =
-                `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name} ` +
+                `${attackerLabel(info, forName)} attacks ${target.name} with ${weapon.name} ` +
                 `[${pool.breakdown}]` +
                 (defense ? ` vs dodge [${defense.breakdown}] — net ${Math.max(0, netHits)}` : '') +
                 ` — ${hit ? `HIT · ${damage}${weapon.dv.track}${arTag} · GM: soak BOD+ARMOR` : 'MISS'}`;
-              const emitResult = makeEmitResult(info, target, weapon, { hit, roll: pool.hits, ac: armor, glitch: pool.glitch });
+              const emitResult = makeEmitResult(info, target, weapon, { hit, roll: pool.hits, ac: armor, glitch: pool.glitch }, tokenId);
 
               const resolve = () => {
                 broadcastRoll(info.userName, pool, hitHistory, hit ? color : '#ff3333', () => {
@@ -2641,8 +2652,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               }
             });
           });
-        }
-      );
+      });
     };
 
     // ── CWN attacks ──────────────────────────────────────────────────────────
@@ -2653,11 +2663,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     // covers the target. Frail defenders die outright at 0 HP.
     const handleCwnAttack = (info, payload, color) => {
       const system = 'cities_without_number';
-      db.get(
-        `SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-        [info.userName, system],
-        (err2, sheetRow) => {
-          if (err2 || !sheetRow) return;
+      rollSheetOf(info, payload, system, ({ row: sheetRow, forName, updated, tokenId }) => {
           const attackerData = JSON.parse(sheetRow.data || '{}');
           // A mounted weapon belongs to one of the sheet's vehicles and is fired as its
           // own action by a gunner, so the client names the vehicle rather than the
@@ -2732,12 +2738,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   patchSheet(
                     db, sheetRow.id,
                     { [skillplugs.LOCKED_FIELD]: true },
-                    () => io.emit('sheetUpdated', { username: info.userName, system })
+                    () => io.emit('sheetUpdated', updated)
                   );
                 }
                 const hit = !plugCrash && toHit.total >= ac;
                 const hitHistory =
-                  `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name} ` +
+                  `${attackerLabel(info, forName)} attacks ${target.name} with ${weapon.name} ` +
                   (firePenalty ? 'from a moving vehicle ' : '') +
                   `[${toHit.breakdown} = ${toHit.total} vs AC ${ac}${acNote}] — ${hit ? 'HIT' : 'MISS'}`
                   + (plugCrash ? ' — PLUG CRASH: JACK DOWN FOR THE SCENE' : '');
@@ -2745,7 +2751,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const emitResult = makeEmitResult(info, target, weapon, {
                   hit, roll: toHit.total, ac,
                   vehicle: ride ? { name: ride.vehicle.name, moving: ride.vehicle.moving, armorRating: ride.vehicle.armorRating } : null,
-                });
+                }, tokenId);
 
                 // Applies damage and tags Frail deaths / GM prompts in the
                 // result. `outcome` carries the actual dice of the damage
@@ -2846,8 +2852,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             }
           );
           });
-        }
-      );
+      });
     };
 
     socket.on('sheetAttack', (payload) => {
@@ -2861,11 +2866,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (system === 'cities_without_number') return handleCwnAttack(info, payload, color);
         if (system === 'shadowrun_6e') return handleSr6Attack(info, payload, color);
         if (system !== 'cyberpunk_red') return;
-        db.get(
-          `SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`,
-          [info.userName, system],
-          (err2, sheetRow) => {
-            if (err2 || !sheetRow) return;
+        rollSheetOf(info, payload, system, ({ row: sheetRow, hp: attackerHp, forName, updated, tokenId }) => {
             const attackerData = JSON.parse(sheetRow.data || '{}');
             const weapon = sheetAttack.getWeapon(attackerData, payload.weaponIndex);
             if (!weapon) {
@@ -2883,11 +2884,6 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const rangedDv = target.ranged_ac !== null && target.ranged_ac !== undefined ? target.ranged_ac : meleeDv;
                 const dv = weapon.attackType === 'ranged' ? rangedDv : meleeDv;
 
-                db.get(
-                  `SELECT hp_current FROM locations WHERE shape = 'rhombus' AND owner = ?
-                   ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
-                  [info.userName],
-                  (hpErr, hpRow) => {
                 db.get(`SELECT value FROM global_settings WHERE key = 'luck_negates_fumble'`, (lnErr, lnRow) => {
                 const luckNegatesFumble = !lnErr && lnRow && lnRow.value === '1';
                 // Declared LUCK on the to-hit: flat bonus and/or 1-pip fumble
@@ -2899,7 +2895,6 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 );
                 const noFumble = spend.negate || (luckNegatesFumble && spend.bonus > 0);
                 const luck = spend.total;
-                const attackerHp = !hpErr && hpRow ? hpRow.hp_current : null;
                 let toHit;
                 try { toHit = sheetAttack.rollToHit(attackerData, weapon, aimed, Math.random, { luck: spend.bonus, noFumble, hp: attackerHp }); } catch (e) { return; }
                 const hit = toHit.total >= dv;
@@ -2911,29 +2906,24 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const woundTag = attackerHp !== null && attackerHp <= 0 ? ' (MORTALLY WOUNDED -4)'
                   : attackerHp !== null && Number(attackerData.seriously_wounded) > 0 && attackerHp <= Number(attackerData.seriously_wounded) ? ' (WOUNDED -2)' : '';
                 const hitHistory =
-                  `${identity.displayName(info.userName)} attacks ${target.name} with ${weapon.name}${aimedTag}${luckTag}${woundTag} ` +
+                  `${attackerLabel(info, forName)} attacks ${target.name} with ${weapon.name}${aimedTag}${luckTag}${woundTag} ` +
                   `[${toHit.breakdown} = ${toHit.total} vs DV ${dv}] — ${hit ? 'HIT' : 'MISS'}${critTag}`;
                 // Spend the declared LUCK
                 if (luck > 0) {
                   // Subtracted from what the sheet holds now, not from the copy this
-                  // attack was resolved against several callbacks ago.
-                  mutateSheetForUser(
+                  // attack was resolved against several callbacks ago. The attacker's sheet:
+                  // the player's own, or the NPC they attack with.
+                  patchSheet(
                     db,
-                    { username: info.userName, system },
-                    (d) => ({ ...d, luck: Math.max(0, (Number(d.luck) || 0) - luck) }),
-                    () => io.emit('sheetUpdated', { username: info.userName, system })
+                    sheetRow.id,
+                    (d) => ({ luck: Math.max(0, (Number(d.luck) || 0) - luck) }),
+                    () => io.emit('sheetUpdated', updated)
                   );
                 }
 
                 const emitResult = (extra) => {
                   const onBattleMap = target.battle_map_id !== null && target.battle_map_id !== undefined;
-                  const attackerSql = onBattleMap
-                    ? 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id = ? AND floor_index = ?'
-                    : 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id IS NULL';
-                  const attackerParams = onBattleMap
-                    ? [info.userName, target.battle_map_id, target.floor_index]
-                    : [info.userName];
-                  db.get(attackerSql, attackerParams, (posErr, attackerRow) => {
+                  attackerPosition(info, target, tokenId, (attackerRow) => {
                     io.emit('attackResult', {
                       hit,
                       attackerId: socket.id,
@@ -3029,12 +3019,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   });
                 });
                 });
-                  }
-                );
               }
             );
-          }
-        );
+        });
       });
     });
 

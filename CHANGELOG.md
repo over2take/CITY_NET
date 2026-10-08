@@ -88,6 +88,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Attacking with an NPC.** The sheet attacks of Cities Without Number, Shadowrun and Cyberpunk
+  RED can now be made with an NPC: by the GM with any NPC, and by a player with the friendly NPC
+  the GM gave them. The attack uses the NPC's weapons, numbers and wounds, starts from the NPC's
+  token on the map, spends the NPC's LUCK, and the log names both ("Rex (Vex) attacks ..."). A
+  player's own attacks are unchanged. The window comes next.
+
 - **Rolling from an NPC's sheet.** A sheet roll or an ability roll can now be made from an NPC's
   sheet: by the GM for any NPC, and by a player for the friendly NPC the GM gave them. It uses the
   NPC's own numbers and wounds, and the dice log names it ("Vex rolled Shoot for Rex"). Before, no
