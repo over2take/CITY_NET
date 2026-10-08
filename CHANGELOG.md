@@ -88,6 +88,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Playing a friendly NPC the GM gave you.** In ID.EXE, a player the GM gave a friendly NPC now
+  gets OPEN_SHEET on it, a read-only copy of its sheet whose roll buttons roll as the NPC, and
+  the HEALTH controls a token's owner has. The GM's own NPC sheet window, opened from a token, now
+  rolls as that NPC too; before, nobody could roll from an NPC's sheet. Attacking with the NPC
+  from the attack panel comes next.
+
 - **Attacking with an NPC.** The sheet attacks of Cities Without Number, Shadowrun and Cyberpunk
   RED can now be made with an NPC: by the GM with any NPC, and by a player with the friendly NPC
   the GM gave them. The attack uses the NPC's weapons, numbers and wounds, starts from the NPC's

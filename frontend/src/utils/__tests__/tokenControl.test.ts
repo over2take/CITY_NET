@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canMoveToken, parseGrant, describeGrant, isGrantable, GRANTABLE_SHAPES } from '../tokenControl';
+import { canMoveToken, parseGrant, describeGrant, isGrantable, GRANTABLE_SHAPES, controlsToken } from '../tokenControl';
 
 /**
  * The client's copy of the movement rule.
@@ -52,6 +52,23 @@ describe('the mirror agrees with the server', () => {
       grant({ all: true }), grant({ all: 'yes', users: ['bob', 42, ' carol '] })]) {
       expect(parseGrant(raw), String(raw)).toEqual(backend.parse(raw));
     }
+  });
+
+  it('agrees on who controls an NPC: the server\'s tokenAccess.controls, built from these two (4b5b4)', async () => {
+    // tokens/tokenAccess.js needs jsonwebtoken, which a frontend test must not load; its
+    // `controls` is exactly this, over the same tokenControl.js the rows go through above.
+    const backend = await import('../../../../backend/sockets/tokenControl.js');
+    const serverControls = (row: object, user: string | null) => !!user && backend.isGrantable(row)
+      && (backend.parse((row as { controllers: unknown }).controllers).all || backend.parse((row as { controllers: unknown }).controllers).users.includes(user));
+    for (const row of ROWS) {
+      for (const viewer of VIEWERS) {
+        const user = viewer.userName ?? null;
+        expect(controlsToken(row, user), `${row.shape} ${String(row.controllers)} / ${user}`).toBe(serverControls(row, user));
+      }
+    }
+    // Owning an NPC, or being the GM, is not being given it.
+    expect(controlsToken(friendly({ owner: 'cody' }), 'cody')).toBe(false);
+    expect(controlsToken(null, 'bob')).toBe(false);
   });
 
   it('agrees on which shapes can carry a grant', async () => {

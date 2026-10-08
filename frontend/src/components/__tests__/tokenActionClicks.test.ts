@@ -25,7 +25,7 @@ const context = (over: Partial<TokenActionContext> = {}): TokenActionContext => 
   tier: 'mook',
   isOwner: false,
   open: {
-    ownSheet: vi.fn(), playerSheet: vi.fn(), npcSheet: vi.fn(),
+    ownSheet: vi.fn(), playerSheet: vi.fn(), npcSheet: vi.fn(), controlledSheet: vi.fn(),
     editLocation: vi.fn(), vehicles: vi.fn(), bank: vi.fn(), enemyVehicles: vi.fn(), battleMap: vi.fn(),
   },
   ping: vi.fn(),
@@ -104,6 +104,16 @@ describe('sheets', () => {
     const c = context({ location: { id: 9, shape: 'enemy_rhombus', owner: null } });
     await press('npc-sheet', c, { isPlayerToken: false, sheetHere: true, linked: true });
     expect(c.open.npcSheet).toHaveBeenCalledWith({ id: 7, npc_label: 'Ganger', token_shape: 'enemy_rhombus', locationId: 9 });
+  });
+
+  it('OPEN_SHEET on a friendly NPC the GM gave a player opens it read-only for them (4b5b4)', async () => {
+    const c = context({ location: { id: 9, name: 'Rex', shape: 'friendly_rhombus', owner: 'gm' }, sheetLink: null });
+    await press('npc-sheet', c, { isAdmin: false, isPrimaryAdmin: false, canManage: false, isPlayerToken: false, controls: true });
+    expect(c.open.controlledSheet).toHaveBeenCalledWith({ locationId: 9, name: 'Rex' });
+    expect(c.open.npcSheet).not.toHaveBeenCalled();
+    const nameless = context({ location: { id: 9, shape: 'friendly_rhombus', owner: 'gm' }, sheetLink: null });
+    await press('npc-sheet', nameless, { isAdmin: false, isPlayerToken: false, controls: true });
+    expect(nameless.open.controlledSheet).toHaveBeenCalledWith({ locationId: 9, name: 'NPC' });
   });
 
   it('GENERATE_SHEET asks the server for a sheet at the chosen tier', async () => {

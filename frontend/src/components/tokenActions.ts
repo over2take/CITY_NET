@@ -47,6 +47,11 @@ export interface TokenViewer {
   systemHasCombat: boolean;
   /** This location has battle maps. */
   hasBattleMaps: boolean;
+  /**
+   * The GM gave this viewer this friendly NPC (utils/tokenControl.ts controlsToken, 4b5b4): they
+   * read its sheet, roll from it and change its health, as an owner does their own token.
+   */
+  controls?: boolean;
 }
 
 export function tokenActionKeys(v: TokenViewer): TokenActionKey[] {
@@ -59,8 +64,9 @@ export function tokenActionKeys(v: TokenViewer): TokenActionKey[] {
   }
   // A player's sheet: its owner, or the GM.
   if (v.isPlayerToken && v.hasOwner && (v.isOwner || v.isAdmin)) keys.push('player-sheet');
-  // An NPC's sheet, and what the GM does before it has one.
-  if (v.isAdmin && isNpc && v.sheetHere) keys.push('npc-sheet');
+  // An NPC's sheet, and what the GM does before it has one. A player the GM gave a friendly NPC
+  // reads its sheet too, read-only; whether it has one yet, the window says.
+  if (isNpc && ((v.isAdmin && v.sheetHere) || (!v.isAdmin && v.controls))) keys.push('npc-sheet');
   if (v.isAdmin && isNpc && !v.sheetHere) keys.push('generate-sheet');
   if (v.isAdmin && isNpc && !v.linked) keys.push('edit');
   if (v.hasRoster) keys.push('vehicles');
@@ -93,7 +99,7 @@ export interface TokenView {
 export function tokenView(v: TokenViewer): TokenView {
   const ownPlayerToken = v.isPlayerToken && v.isOwner;
   return {
-    health: v.isAdmin || ownPlayerToken ? 'edit' : 'watch',
+    health: v.isAdmin || ownPlayerToken || (!v.isPlayerToken && v.controls) ? 'edit' : 'watch',
     gmSections: v.isAdmin,
     quickActions: ownPlayerToken,
     // What the GM knows about a player is not this, and a granted editor never reads it.
@@ -130,6 +136,8 @@ export interface TokenActionContext {
     ownSheet: () => void;
     playerSheet: (owner: string) => void;
     npcSheet: (sheet: { id: number; npc_label: string; token_shape: string; locationId: number }) => void;
+    /** The read-only sheet of a friendly NPC the GM gave this player (4b5b4). */
+    controlledSheet: (npc: { locationId: number; name: string }) => void;
     editLocation: (location: any) => void;
     vehicles: () => void;
     bank: (owner: string) => void;
@@ -169,6 +177,7 @@ export function buildTokenActions(viewer: TokenViewer, c: TokenActionContext): B
     'player-sheet': { onClick: () => (c.isOwner ? c.open.ownSheet() : c.open.playerSheet(loc.owner)) },
     'npc-sheet': {
       onClick: () => {
+        if (!viewer.isAdmin) return c.open.controlledSheet({ locationId: loc.id, name: loc.name || 'NPC' });
         if (c.sheetLink) c.open.npcSheet({ id: c.sheetLink.sheet_id, npc_label: c.sheetLink.npc_label, token_shape: loc.shape, locationId: loc.id });
       },
     },

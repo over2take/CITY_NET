@@ -31,9 +31,14 @@ interface NpcSheetWindowProps {
   socket?: any;
   /** When provided, a ROLL INIT button appears in the title bar. */
   onRollInitiative?: (portraitUrl: string | undefined) => void;
+  /**
+   * The NPC's token, when the sheet was opened from one: its roll buttons then roll as the NPC,
+   * from its own sheet, named in the log (4b5b4). Before, the GM could not roll from an NPC sheet.
+   */
+  locationId?: number;
 }
 
-export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headshots = ALL_HEADSHOTS, pos, setPos, onClose, socket, onRollInitiative }: NpcSheetWindowProps) {
+export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headshots = ALL_HEADSHOTS, pos, setPos, onClose, socket, onRollInitiative, locationId }: NpcSheetWindowProps) {
   const apiPath = playerUsername
     ? `/api/sheets/user/${encodeURIComponent(playerUsername)}`
     : `/api/sheets/npcs/${npcId}`;
@@ -278,6 +283,10 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           onFieldChange={handleFieldChange}
           // GM-only in both modes: the GM sets the values a system keeps for the GM.
           gm
+          {...(!playerUsername && socket && locationId !== undefined ? {
+            onRoll: (fieldId: string, luck?: number, luckNegate?: boolean) => socket.emit('requestSheetRoll', { fieldId, location_id: locationId, ...(luck ? { luck } : {}), ...(luckNegate ? { luckNegate } : {}) }),
+            onRollAbility: (formula: string, label: string) => socket.emit('rollAbility', { formula, label, location_id: locationId }),
+          } : {})}
           onPortraitUpload={handlePortraitUpload}
           portraitShadow={shadowFilter}
           onTogglePortraitShadow={handleTogglePortraitShadow}
