@@ -88,6 +88,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A friendly NPC's health, for the player the GM gave it to.** The server now lets a player the
+  GM gave control of a friendly NPC change its health and injuries, as they do their own token's,
+  and sends them its health in full. They still can't change the rest of the token, an enemy is
+  never handed over, and being named in the grant needs a signed-in player (Secure Mode). The
+  windows that use it come with the rest of NPC control.
+
 - **A level for a custom system's NPCs.** In ID.EXE, on an NPC token with no sheet, a custom
   system's GM now sets a LEVEL (0 to 99) beside the tier, and GENERATE_SHEET works the tier out and
   rolls it for that level. The built-in systems' tier picker is unchanged. The NPCS page is now

@@ -13,9 +13,13 @@
 //   3. With no identity at all: refused under Secure Mode, where everyone has an account. Without
 //      it there are no accounts and names are trusted, so a player token may be changed as before.
 //   4. Nobody but the GM and editors changes whose a token is or what kind of token it is.
-// Later (4b5b), a player the GM gave a friendly NPC changes its health too: that is rule 2's place.
+//   5. A player the GM gave control of a friendly NPC (sockets/tokenControl.js) changes its health
+//      and injuries too, as an owner does their own (4b5b1, asked for by the user 2026-10-07);
+//      never the rest of the token. Being named in the grant needs a name, so this is a signed-in
+//      player's under Secure Mode; without it the server can't tell who sent a request.
 
 const { verifyHeader, canEdit, isPlayer } = require('../middleware/auth');
+const tokenControl = require('../sockets/tokenControl');
 
 /** Who is asking, from the request's Authorization header. */
 const callerOf = (req) => {
@@ -37,6 +41,17 @@ const mayChangeToken = (row, caller, secure = secureMode()) => {
   return !secure;
 };
 
+/** Does the GM's grant hand this friendly NPC (a locations row with `controllers`) to `player`? */
+const controls = (row, player) => {
+  if (!row || !player || !tokenControl.isGrantable(row)) return false;
+  const grant = tokenControl.parse(row.controllers);
+  return grant.all || grant.users.includes(player);
+};
+
+/** May `caller` change this token's health and injuries: as the whole token, or as its controller. */
+const mayChangeHealth = (row, caller, secure = secureMode()) =>
+  mayChangeToken(row, caller, secure) || controls(row, caller.player);
+
 /** Why `caller` may not make this change to the whole token, or null when they may. */
 const updateProblem = (row, body, caller, secure = secureMode()) => {
   if (!mayChangeToken(row, caller, secure)) return 'You can only change your own token';
@@ -46,4 +61,4 @@ const updateProblem = (row, body, caller, secure = secureMode()) => {
   return null;
 };
 
-module.exports = { callerOf, mayChangeToken, updateProblem };
+module.exports = { callerOf, mayChangeToken, mayChangeHealth, controls, updateProblem };
