@@ -12,6 +12,11 @@ const { readPct } = require('../shops/buyback');
 const { shopsOpen } = require('../shops/availability');
 const { selectByIds, deleteByIds } = require('../bulk');
 const { canReadNpcSheets, redactLocation } = require('../sheets/npcPrivacy');
+const tokenAccess = require('../tokens/tokenAccess');
+
+/** A change to a token refused (tokens/tokenAccess.js): 401 when nobody said who they are. */
+const refuse = (res, caller, message = 'You can only change your own token') =>
+  res.status(caller.editor || caller.player ? 403 : 401).json({ error: message });
 
 const ZONE_TYPE_NAMES = new Set(['CORPO', 'URBAN', 'SLUMS', 'INDUSTRIAL', 'PARK', 'HOLOTREE_CANOPY', 'LANDMARK', 'MARKETS', 'CUSTOM']);
 const isUserDefinedName = (name) => !!name && name.trim() !== '' && !ZONE_TYPE_NAMES.has(name.trim());
@@ -555,9 +560,9 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!oldRow) return res.status(404).json({ error: 'Location not found' });
 
-      if (!req.user && (oldRow.shape !== 'rhombus' || (shape && shape !== 'rhombus'))) {
-        return res.status(401).json({ error: 'Access denied: Unauthenticated users can only update rhombuses.' });
-      }
+      const caller = tokenAccess.callerOf(req);
+      const problem = tokenAccess.updateProblem(oldRow, req.body, caller);
+      if (problem) return refuse(res, caller, problem);
 
       const sql = `UPDATE locations SET name=?, description=?, npcs=?, x=?, y=?, z=?, width=?, height=?, depth=?, shape=?, color=?, district_name=?, district_color=?, parent_id=?, isFavorite=?, isDanger=?, owner=?, rotation=?, rotation_x=?, rotation_z=?, classification=?, polyCount=?, battle_map_id=?, floor_index=?, map_scale_multiplier=?, melee_ac=?, ranged_ac=?, has_sidewalk=?, has_signage=? WHERE id=?`;
       const meleAcVal = melee_ac !== undefined ? (melee_ac === '' || melee_ac === null ? null : parseInt(melee_ac, 10)) : oldRow.melee_ac;
@@ -612,9 +617,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'Location not found' });
 
-      if (!req.user && row.shape !== 'rhombus') {
-        return res.status(401).json({ error: 'Access denied: Unauthenticated users can only update rhombuses.' });
-      }
+      const caller = tokenAccess.callerOf(req);
+      if (!tokenAccess.mayChangeToken(row, caller)) return refuse(res, caller);
 
       // Resolve the CWN sheet behind this token (player rhombus by owner,
       // NPC by sheet link) - used by the stim_heal strain gate below.
@@ -827,7 +831,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     db.get('SELECT shape, owner FROM locations WHERE id = ?', [id], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'Not found' });
-      if (!req.user && row.shape !== 'rhombus') return res.status(401).json({ error: 'Access denied' });
+      const caller = tokenAccess.callerOf(req);
+      if (!tokenAccess.mayChangeToken(row, caller)) return refuse(res, caller);
       const query = row.shape === 'rhombus' && row.owner
         ? ['UPDATE locations SET injuries = ? WHERE shape = "rhombus" AND owner = ?', [json, row.owner]]
         : ['UPDATE locations SET injuries = ? WHERE id = ?', [json, id]];
