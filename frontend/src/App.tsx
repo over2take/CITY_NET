@@ -65,6 +65,8 @@ import { BuilderScreen } from './components/BuilderScreen';
 import { isCustomSystem } from './sheets/customTemplates';
 import type { BuilderPage } from './sheets/builderSession';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
+import { ControlledNpcSheetWindow } from './components/ControlledNpcSheetWindow';
+import { controlsToken } from './utils/tokenControl';
 import { TvPortrait } from './components/TvPortrait';
 import { headshotsForShape } from './headshots';
 import { getTemplate } from './sheets';
@@ -307,6 +309,8 @@ function App() {
    */
   const [builder, setBuilder] = useState<{ id: string | null; page: BuilderPage | 'systems' } | null>(null);
   const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string; locationId?: number } | null>(null);
+  // A friendly NPC the GM gave this player, its sheet open read-only (4b5b4).
+  const [controlledNpc, setControlledNpc] = useState<{ locationId: number; name: string } | null>(null);
   // NPC sheet linked to the currently selected token (admin) - drives
   // GENERATE_SHEET vs OPEN_SHEET on the token menu
   const [tokenSheetLink, setTokenSheetLink] = useState<{ location_id: number; sheet_id: number; system?: string; npc_label: string; portrait_url?: string | null; sheet_name?: string | null; sheet_description?: string | null; portrait_shadow_filter?: number | null } | null>(null);
@@ -2357,12 +2361,24 @@ function App() {
                 onClose={() => setOpenPlayerSheetUser(null)}
               />
             )}
+            {controlledNpc && (playerToken || token) && (
+              <ControlledNpcSheetWindow
+                token={(playerToken || token) as string}
+                locationId={controlledNpc.locationId}
+                name={controlledNpc.name}
+                socket={socketRef.current}
+                pos={npcSheetPos}
+                setPos={setNpcSheetPos}
+                onClose={() => setControlledNpc(null)}
+              />
+            )}
             {openNpcSheet && token && (
               <NpcSheetWindow
                 token={token}
                 socket={socketRef.current}
                 npcId={openNpcSheet.id}
                 npcLabel={openNpcSheet.npc_label}
+                locationId={openNpcSheet.locationId}
                 headshots={headshotsForShape(openNpcSheet.token_shape)}
                 pos={npcSheetPos}
                 setPos={setNpcSheetPos}
@@ -2505,6 +2521,7 @@ function App() {
                   sheetHere, linked, attackPending: !!attackPending, sheetCombat: hasSheetCombat(gameSystem),
                   canManage, hasRoster: vehicleRoster.hasVehicles, systemHasVehicles: hasVehicles(gameSystem), systemHasBank: bankOn, systemHasCombat: combatOn,
                   hasBattleMaps: currentLocBattleMaps.length > 0,
+                  controls: !isAdmin && controlsToken(selectedLocation, userName),
                 };
                 const tokenFolders = tokenView(viewer);
                 const tokenActions: TerminalAction[] = buildTokenActions(viewer, {
@@ -2522,6 +2539,7 @@ function App() {
                     ownSheet: () => setIsSheetOpen(true),
                     playerSheet: (owner) => setOpenPlayerSheetUser(owner),
                     npcSheet: (sheet) => setOpenNpcSheet(sheet),
+                    controlledSheet: (npc) => setControlledNpc(npc),
                     editLocation: (loc) => { setIsEditModalOpen(true); setActiveEditLocation(loc); setEditData({ ...loc, name: loc.name || '', description: loc.description || '', npcs: loc.npcs || '', owner: loc.owner || '', baseWidth: loc.width, baseHeight: loc.height, baseDepth: loc.depth, isFavorite: !!loc.isFavorite, isDanger: !!loc.isDanger }); },
                     vehicles: () => setIsVehiclesOpen(true),
                     bank: (owner) => setAdminBankPlayer(owner),

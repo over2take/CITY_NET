@@ -45,6 +45,14 @@ describe('a player looking at a token', () => {
   it('cannot attack before signing in', () => {
     expect(keys({ isLoggedIn: false })).toEqual(['ping']);
   });
+
+  it('opens the sheet of a friendly NPC the GM gave them, and no GM controls (4b5b4)', () => {
+    expect(keys({ isPlayerToken: false, hasOwner: true, controls: true })).toEqual(['melee', 'ranged', 'npc-sheet', 'ping']);
+    // Even before the GM has made it a sheet: the window says so.
+    expect(keys({ isPlayerToken: false, controls: true, linked: false, sheetHere: false })).toContain('npc-sheet');
+    // A player token can't be handed over, so `controls` never opens one.
+    expect(keys({ controls: true })).toEqual(['melee', 'ranged', 'ping']);
+  });
 });
 
 describe('the GM looking at a token', () => {
@@ -86,6 +94,11 @@ describe('which folders a viewer gets', () => {
 
   it('a player on their own token changes their health and gets QUICK ACTIONS', () => {
     expect(view({ isOwner: true })).toEqual({ health: 'edit', gmSections: false, quickActions: true, gmNotes: false });
+  });
+
+  it('a player given a friendly NPC changes its health, without QUICK ACTIONS or GM sections (4b5b4)', () => {
+    expect(view({ ...npc, controls: true })).toEqual({ health: 'edit', gmSections: false, quickActions: false, gmNotes: false });
+    expect(view({ controls: true })).toEqual({ health: 'watch', gmSections: false, quickActions: false, gmNotes: false });
   });
 
   it('owning an NPC token is not owning a character: no rolls, and health only watched', () => {

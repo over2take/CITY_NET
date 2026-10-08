@@ -63,6 +63,21 @@ export const canMoveToken = (
   return Boolean(userName) && grant.users.includes(userName as string);
 };
 
+/**
+ * Whether the GM gave this viewer this friendly NPC: named in its grant, or it open to all
+ * (backend tokens/tokenAccess.js controls, 4b5b4). Unlike canMoveToken, being the GM or the
+ * token's owner doesn't count: this is what lets a player read the NPC's sheet, roll from it and
+ * change its health, which the GM can anyway.
+ */
+export const controlsToken = (
+  row: { shape?: string; controllers?: unknown } | null | undefined,
+  userName: string | null | undefined,
+): boolean => {
+  if (!row || !userName || !isGrantable(row)) return false;
+  const grant = parseGrant(row.controllers);
+  return grant.all || grant.users.includes(userName);
+};
+
 /** A short line for the admin panel: who this token is shared with right now. */
 export const describeGrant = (row: { shape?: string; controllers?: unknown }): string => {
   if (!isGrantable(row)) return 'Only friendly NPCs can be shared.';
