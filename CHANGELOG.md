@@ -88,6 +88,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A friendly NPC's sheet, for the player the GM gave it to.** The server now lets a player the
+  GM gave control of a friendly NPC read that NPC's sheet, read-only, with its token's HP and armor
+  filled in as on the GM's window. Nobody else gets it, an enemy's is never handed over, and
+  nothing about it can be changed this way. The window comes with the rest of NPC control.
+
 - **A friendly NPC's health, for the player the GM gave it to.** The server now lets a player the
   GM gave control of a friendly NPC change its health and injuries, as they do their own token's,
   and sends them its health in full. They still can't change the rest of the token, an enemy is

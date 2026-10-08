@@ -8,7 +8,9 @@
 // The line is the one the sheet routes already draw (requireAdmin in routes/sheets.js): the
 // GM, or someone the GM granted editing rights, who can open the full sheet anyway. Everyone
 // else gets no sheet, and no portrait for an NPC the GM silhouetted - the client draws the
-// token in its side's color instead.
+// token in its side's color instead. One exception, asked for by the user (4b5b2): a player the
+// GM gave control of a friendly NPC reads that one NPC's sheet, read-only, through its own route
+// (GET /api/sheets/npcs/controlled/:location_id; tokens/tokenAccess.js controls).
 
 /** May this caller read NPC sheets? `user` is req.user after optionalAuthenticate. */
 const canReadNpcSheets = (user) => !!user && (user.role === 'admin' || !!user.isTemporary);
