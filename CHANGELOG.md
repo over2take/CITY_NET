@@ -80,6 +80,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **NPC tiers at a chosen level, and tried out.** GENERATE_SHEET now works a custom system's tier
+  out for the level the GM asks for (1 when none is given). The server can also roll one of a
+  draft's tiers for a level without making anything, each box with the dice that came up or what
+  is wrong with it, for the builder's TRY IT. The ID.EXE level box and the builder page come next.
+
 - **NPC tiers that roll.** A custom system's NPC tier can now give HP, defense and any number on
   the stat block as a number, a formula reading the NPC's level (`12 + floor(@level / 3)`), or dice
   (`3d6`, `@level d8 + 4`). The server works each one out and rolls it with the game's own formula

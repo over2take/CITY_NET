@@ -9,7 +9,9 @@ const store = require('../systemBuilder/store');
 const runtime = require('../systemBuilder/runtime');
 const { checkDefinition } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
-const { effectiveSheet, starterSheet } = require('../systemBuilder/sheet');
+const { effectiveSheet, starterSheet, fieldsOf } = require('../systemBuilder/sheet');
+const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
+const { rollTier } = require('../systemBuilder/tierRolls');
 
 /** What a currency's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
@@ -150,6 +152,21 @@ module.exports = (db, io = null) => {
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     const samples = definition.samples && typeof definition.samples === 'object' && !Array.isArray(definition.samples) ? definition.samples : {};
     res.json(previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples));
+  });
+
+  /**
+   * The builder's NPCS page, TRY IT (4b4a2): one of a draft's tiers worked out and rolled for a
+   * level, each box with its value and dice, or what is wrong with it. Changes nothing.
+   */
+  router.post('/try-tier', gm, (req, res) => {
+    const { definition, tier: tierId, level } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    const tier = (definition.npc && Array.isArray(definition.npc.tiers) ? definition.npc.tiers : [])
+      .find((t) => t && typeof t === 'object' && t.id === tierId);
+    if (!tier) return res.status(404).json({ error: 'No such tier' });
+    const fields = new Map(fieldsOf(npcSheetOf(definition)).filter((f) => f && typeof f.id === 'string').map((f) => [f.id, f]));
+    res.json(rollTier(tier, level, fields, NPC_LIMITS));
   });
 
   /**
