@@ -64,6 +64,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Security
 
+- **Only you can change your own token.** Anyone, signed in or not, could change any player's
+  token with a request of their own: knock another player's HP to 0, mark their injuries, move
+  their token or even make it someone else's. The GM and granted editors still change any token;
+  a player now changes only their own, and the windows send the player's login so the server can
+  tell. Under Secure Mode a request that says who nobody is is refused. Without Secure Mode there
+  are no accounts, so player tokens stay changeable as before. Enemies and NPCs were never open to
+  players.
+
 - **Players can no longer use the GM's tools.** A player's own login worked as a key to the GM's
   side of the server: with the right request, a signed-in player could delete buildings, edit the
   map, read GM notes, approve accounts, reset passwords, set anyone's bank balance, give themselves

@@ -174,6 +174,12 @@ interface CharacterControlsMenuProps {
   setSelectedLocation: (loc: any) => void;
   refreshLocations: () => void;
   token: string;
+  /**
+   * Who changes the player's own token: the GM's token, or a player's own login. The server lets a
+   * player change only their own token, so it must know who they are (4b5a). `token` stays the
+   * GM's alone: a non-empty one is what makes this menu the GM's.
+   */
+  writeToken?: string | null;
   userName: string;
   locations: any[];
   socketRef: React.MutableRefObject<any>;
@@ -191,7 +197,7 @@ interface CharacterControlsMenuProps {
   gameSystem?: string;
 }
 
-export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, isEnemyVehiclesOpen, setIsEnemyVehiclesOpen, gameSystem }: CharacterControlsMenuProps) {
+export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, writeToken, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, isEnemyVehiclesOpen, setIsEnemyVehiclesOpen, gameSystem }: CharacterControlsMenuProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -238,7 +244,7 @@ export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedL
       if (healthOn && rhombusState.hp_max > 0) {
         await fetch(`/api/locations/${target.id}/health`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${writeToken || token}` },
           body: JSON.stringify({ action: 'set_max', hp_max: rhombusState.hp_max }),
         });
       }
@@ -248,7 +254,7 @@ export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedL
         const rangedVal = acRanged === '' ? null : parseInt(acRanged, 10);
         await fetch(`/api/locations/${target.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${writeToken || token}` },
           body: JSON.stringify({ ...target, melee_ac: meleeVal, ranged_ac: rangedVal }),
         });
       }
@@ -1115,6 +1121,8 @@ interface SidebarProps {
   selectedLocation: any;
   userName: string;
   token: string;
+  /** For changes to the player's own token (CharacterControlsMenu writeToken). */
+  writeToken?: string | null;
   onLogout: () => void;
   audioEnabled: boolean;
   setAudioEnabled: (v: boolean) => void;
@@ -1171,7 +1179,7 @@ interface SidebarProps {
   onDeleteCustomDie?: (id: number | string) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, writeToken, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
   /** The rail label under the pointer, positioned from the button it belongs to. */
   const [railTip, setRailTip] = useState<{ label: string; x: number; y: number } | null>(null);
   // A custom system's own words for the rail's labels; today's text otherwise.
@@ -1423,7 +1431,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'system_info' && <SystemInfoMenu userName={userName} token={token} currentTheme={currentTheme} onThemeChange={onThemeChange} />}
           {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} view={view} activeUsers={activeUsers} />}
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
-          {activeMenu === 'character_controls' && <CharacterControlsMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
+          {activeMenu === 'character_controls' && <CharacterControlsMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} writeToken={writeToken} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
           {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} />}
           {activeMenu === 'initiative_tracker' && initiativeOn && (

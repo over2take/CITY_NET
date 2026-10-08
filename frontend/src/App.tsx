@@ -483,7 +483,7 @@ function App() {
     for (const existing of existingList) {
         await fetch(`/api/locations/${existing.id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token || playerToken}` },
             body: JSON.stringify({ ...existing, color: newState.color })
         });
     }
@@ -1727,6 +1727,7 @@ function App() {
               selectedLocation={selectedLocation}
               userName={userName}
               token={token}
+              writeToken={token || playerToken}
               onLogout={handleLogout}
               audioEnabled={audioEnabled}
               setAudioEnabled={setAudioEnabled}
@@ -2543,7 +2544,7 @@ function App() {
                   ? (
                     <HitPointsPanel
                       target={liveToken}
-                      token={token}
+                      token={token || playerToken || ''}
                       refreshLocations={fetchLocations}
                       gameSystem={gameSystem}
                       socket={socketRef.current}
@@ -2742,7 +2743,7 @@ function App() {
                       if (existing) {
                           fetch(`/api/locations/${existing.id}`, {
                               method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
+                              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token || playerToken}` },
                               body: JSON.stringify(newRhombus)
                           }).then(() => {
                               fetchLocations();
@@ -2845,7 +2846,7 @@ function App() {
                 onReady={setMapExportApi}
               />
             )}
-            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district' && assigningDistrict) { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token} roadLayerMode={roadLayerMode} cityGenDrawMode={cityGenDrawMode} genBoundaryTrail={genBoundaryTrail} setGenBoundaryTrail={setGenBoundaryTrail} onBoundaryDrawEnd={(pts: any[]) => setGenBoundaryTrail(pts)} />
+            <DistrictInteractions view={view} locations={locations} onSelectionChange={(data: any) => { if (view === 'city_gen') { setRoadSelectionBounds(data); } else if (view === 'district' && assigningDistrict) { setDistrictSelection(prev => [...new Set([...prev, ...data])]); } else if (isBatchSelecting) { setSelectedIds(prev => [...new Set([...prev, ...data])]); } }} roadTrail={roadTrail} setRoadTrail={setRoadTrail} waterTrail={waterTrail} setWaterTrail={setWaterTrail} onWaterDrawEnd={handleWaterDrawn} roadDrawMode={roadDrawMode} snapToGrid={snapToGrid} drawingRoadWidth={drawingRoadWidth} isBatchSelecting={isBatchSelecting} setSelectedIds={setSelectedIds} rhombusState={rhombusState} setRhombusState={setRhombusState} userName={userName} refreshLocations={fetchLocations} token={token || playerToken} roadLayerMode={roadLayerMode} cityGenDrawMode={cityGenDrawMode} genBoundaryTrail={genBoundaryTrail} setGenBoundaryTrail={setGenBoundaryTrail} onBoundaryDrawEnd={(pts: any[]) => setGenBoundaryTrail(pts)} />
             {roadSelectionBounds && view === 'city_gen' && (
               <mesh position={[(roadSelectionBounds.min.x + roadSelectionBounds.max.x) / 2, 0.02, (roadSelectionBounds.min.z + roadSelectionBounds.max.z) / 2]}>
                 <boxGeometry args={[Math.abs(roadSelectionBounds.max.x - roadSelectionBounds.min.x), 0.05, Math.abs(roadSelectionBounds.max.z - roadSelectionBounds.min.z)]} />

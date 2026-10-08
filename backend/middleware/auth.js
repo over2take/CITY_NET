@@ -82,5 +82,5 @@ const optionalAuthenticate = (req, res, next) => {
 
 module.exports = {
   authenticate, authenticatePlayer, optionalAuthenticate, requireMainAdmin, elevatedUsers,
-  isMainAdmin, isGrantedEditor, canEdit, isPlayer,
+  isMainAdmin, isGrantedEditor, canEdit, isPlayer, verifyHeader,
 };

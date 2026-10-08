@@ -256,6 +256,30 @@ describe('QuickAccessMenu', () => {
 const baseRhombus = { active: false, color: '#00ff00', name: '', description: '', hp_max: 0 };
 
 describe('CharacterControlsMenu', () => {
+  it('saves a player\'s own max health with their own login, so the server knows whose it is (4b5a)', async () => {
+    const calls: { url: string; auth: string | undefined }[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, auth: (init?.headers as Record<string, string> | undefined)?.Authorization });
+      return { ok: true, json: async () => ({}) } as Response;
+    }));
+    try {
+      const mine = [{ id: 10, shape: 'rhombus', owner: 'GHOST', battle_map_id: null, x: 0, y: 0, z: 0 }];
+      const { unmount } = render(
+        <CharacterControlsMenu rhombusState={{ ...baseRhombus, hp_max: 12 }} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" writeToken="player-login" userName="GHOST" locations={mine} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      );
+      await userEvent.click(screen.getByText('SAVE_STATS'));
+      await waitFor(() => expect(calls.find((c) => c.url === '/api/locations/10/health')?.auth).toBe('Bearer player-login'));
+      unmount();
+      // Without a write token (the GM, or an open table), the GM's token as before.
+      calls.length = 0;
+      render(
+        <CharacterControlsMenu rhombusState={{ ...baseRhombus, hp_max: 12 }} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="gm-token" userName="GHOST" locations={mine} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
+      );
+      await userEvent.click(screen.getByText('SAVE_STATS'));
+      await waitFor(() => expect(calls.find((c) => c.url === '/api/locations/10/health')?.auth).toBe('Bearer gm-token'));
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('renders CHARACTER_CONTROLS header', () => {
     render(
       <CharacterControlsMenu rhombusState={baseRhombus} setRhombusState={vi.fn()} selectedLocation={null} setSelectedLocation={vi.fn()} refreshLocations={vi.fn()} token="" userName="GHOST" locations={[]} socketRef={makeSocketRef()} syncRhombusToDB={vi.fn()} view="list" activeBattleMapData={null} measureMode={false} setMeasureMode={vi.fn()} />
