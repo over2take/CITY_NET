@@ -109,9 +109,17 @@ describe('the builder', () => {
   });
 
   it('shows what a page not built yet will hold', async () => {
-    open({ startPage: 'npcs' });
+    open({ startPage: 'try' });
     await ready();
     expect(screen.getByText(/This page arrives in a coming update\./)).toBeTruthy();
+  });
+
+  it('NPCS adds a tier, saved like any other change', async () => {
+    open({ startPage: 'npcs' });
+    await ready();
+    await userEvent.click(await screen.findByRole('button', { name: '+ TIER' }));
+    await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
+    await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', npc: { tiers: [{ id: 'new_tier', label: 'NEW TIER' }] } }));
   });
 
   it('CHARACTER SHEET customizes the sheet, saved like any other change', async () => {
