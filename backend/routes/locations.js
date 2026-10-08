@@ -613,12 +613,12 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     const { id } = req.params;
     const { hp_current, hp_max, hp_temp, action, amount } = req.body;
 
-    db.get('SELECT shape, owner, hp_current, hp_max, hp_temp FROM locations WHERE id = ?', [id], (err, row) => {
+    db.get('SELECT shape, owner, controllers, hp_current, hp_max, hp_temp FROM locations WHERE id = ?', [id], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'Location not found' });
 
       const caller = tokenAccess.callerOf(req);
-      if (!tokenAccess.mayChangeToken(row, caller)) return refuse(res, caller);
+      if (!tokenAccess.mayChangeHealth(row, caller)) return refuse(res, caller);
 
       // Resolve the CWN sheet behind this token (player rhombus by owner,
       // NPC by sheet link) - used by the stim_heal strain gate below.
@@ -828,11 +828,11 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     const { injuries } = req.body;
     if (typeof injuries !== 'object') return res.status(400).json({ error: 'injuries must be an object' });
     const json = JSON.stringify(injuries);
-    db.get('SELECT shape, owner FROM locations WHERE id = ?', [id], (err, row) => {
+    db.get('SELECT shape, owner, controllers FROM locations WHERE id = ?', [id], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'Not found' });
       const caller = tokenAccess.callerOf(req);
-      if (!tokenAccess.mayChangeToken(row, caller)) return refuse(res, caller);
+      if (!tokenAccess.mayChangeHealth(row, caller)) return refuse(res, caller);
       const query = row.shape === 'rhombus' && row.owner
         ? ['UPDATE locations SET injuries = ? WHERE shape = "rhombus" AND owner = ?', [json, row.owner]]
         : ['UPDATE locations SET injuries = ? WHERE id = ?', [json, id]];

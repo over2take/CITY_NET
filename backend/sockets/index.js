@@ -17,6 +17,7 @@ const cwnPharma = require('../sheets/cwnPharma');
 const skillplugs = require('../sheets/cwnSkillplugs');
 const awardXpModule = require('../sheets/awardXp');
 const tokenControl = require('./tokenControl');
+const tokenAccess = require('../tokens/tokenAccess');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
@@ -1805,10 +1806,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         const health = customSystems.health(system);
         const reply = (view) => socket.emit('healthView', { location_id: locationId, ...view });
         if (!health) return reply({ model: null });
-        db.get(`SELECT id, shape, owner, hp_current, hp_max, hp_temp FROM locations WHERE id = ?`, [locationId], (e2, loc) => {
+        db.get(`SELECT id, shape, owner, controllers, hp_current, hp_max, hp_temp FROM locations WHERE id = ?`, [locationId], (e2, loc) => {
           if (e2 || !loc || !RHOMBUS_SHAPES.includes(loc.shape)) return;
           const playerToken = loc.shape === 'rhombus' && !!loc.owner;
-          const full = isAdminSocket(socket) || (playerToken && loc.owner === info.userName);
+          // Whoever may change it sees it whole: the GM, the token's owner, and a player the GM
+          // gave control of a friendly NPC (tokens/tokenAccess.js, 4b5b1).
+          const full = isAdminSocket(socket) || (playerToken && loc.owner === info.userName) || tokenAccess.controls(loc, info.userName);
           const send = (row) => {
             let sheet = {};
             try { sheet = row ? JSON.parse(row.data || '{}') : {}; } catch { sheet = {}; }

@@ -16,7 +16,7 @@ import locationsRouteFactory from '../routes/locations.js';
 
 process.env.JWT_SECRET = 'test-secret';
 const require_ = createRequire(import.meta.url);
-const { mayChangeToken, updateProblem, callerOf } = require_('../tokens/tokenAccess');
+const { mayChangeToken, mayChangeHealth, controls, updateProblem, callerOf } = require_('../tokens/tokenAccess');
 const { elevatedUsers } = require_('../middleware/auth');
 
 const sign = (payload) => jwt.sign(payload, 'test-secret');
@@ -62,6 +62,28 @@ describe('the rule', () => {
     expect(updateProblem(VEXS, { owner: 'ash', shape: 'box' }, editor, true)).toBeNull();
     expect(updateProblem(ENEMY, {}, vex, true)).toBe('You can only change your own token');
     expect(updateProblem({ shape: 'rhombus', owner: null }, { owner: null }, nobody, false)).toBeNull();
+  });
+
+  it('lets a player the GM gave a friendly NPC change its health, and nothing else of it (4b5b1)', () => {
+    const named = { ...FRIEND, controllers: JSON.stringify({ all: false, users: ['vex'] }) };
+    const open = { ...FRIEND, controllers: JSON.stringify({ all: true, users: [] }) };
+    const enemyOpen = { ...ENEMY, controllers: JSON.stringify({ all: true, users: ['vex'] }) };
+    const ash = { editor: false, player: 'ash' };
+    expect([controls(named, 'vex'), controls(named, 'ash'), controls(open, 'ash'), controls(enemyOpen, 'vex'), controls(FRIEND, 'vex')]).toEqual([true, false, true, false, false]);
+    expect(controls(named, null)).toBe(false);
+    expect(controls(null, 'vex')).toBe(false);
+    expect(mayChangeHealth(named, vex, true)).toBe(true);
+    expect(mayChangeHealth(named, ash, true)).toBe(false);
+    expect(mayChangeHealth(open, ash, true)).toBe(true);
+    expect(mayChangeHealth(enemyOpen, vex, true)).toBe(false);
+    // Nobody unnamed is in a grant, with or without Secure Mode.
+    expect(mayChangeHealth(open, nobody, false)).toBe(false);
+    // The rest stays as for the whole token.
+    expect(mayChangeHealth(VEXS, vex, true)).toBe(true);
+    expect(mayChangeHealth(ENEMY, editor, true)).toBe(true);
+    // Controlling it is not owning it: the token itself stays the GM's.
+    expect(mayChangeToken(named, vex, true)).toBe(false);
+    expect(updateProblem(named, {}, vex, true)).toBe('You can only change your own token');
   });
 
   it('reads who is asking from the login token', () => {
@@ -150,6 +172,18 @@ describe('the routes', () => {
     expect((await update(ids.enemy, VEX, { shape: 'enemy_rhombus', owner: 'gm' })).status).toBe(403);
     expect((await update(ids.vex, null, { owner: 'vex' })).status).toBe(401);
     expect((await get(db, 'SELECT owner FROM locations WHERE id = ?', [ids.vex])).owner).toBe('vex');
+  });
+
+  it('lets the player given a friendly NPC change its health and injuries, never the token (4b5b1)', async () => {
+    const dog = (await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, controllers, hp_current, hp_max, hp_temp)
+      VALUES ('DOG', 0, 0, 0, 'friendly_rhombus', 'gm', '{"all":false,"users":["vex"]}', 10, 10, 0)`)).lastID;
+    expect((await health(dog, VEX)).status).toBe(200);
+    expect(await hpOf(dog)).toBe(6);
+    expect((await injuries(dog, VEX)).status).toBe(200);
+    expect((await health(dog, ASH)).status).toBe(403);
+    expect((await health(dog)).status).toBe(401);
+    expect(await update(dog, VEX, { shape: 'friendly_rhombus', owner: 'gm' })).toMatchObject({ status: 403 });
+    expect(await hpOf(dog)).toBe(6);
   });
 
   it('lets the GM change any token, whose it is included', async () => {

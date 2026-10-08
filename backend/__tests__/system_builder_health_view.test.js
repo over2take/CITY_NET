@@ -199,6 +199,21 @@ describe('in the running game', () => {
     expect((await viewFor(player, npc.lastID)).second).toEqual({ label: 'STUN', fill: 2 / 5, full: false });
   });
 
+  it('sends a friendly NPC in full to a player the GM gave it to, and nobody else (4b5b1)', async () => {
+    const system = await running(TRACKS);
+    const ally = await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, controllers, hp_current, hp_max) VALUES ('Dog', 0, 0, 0, 'friendly_rhombus', 'gm', '{"all":false,"users":["GHOST"]}', 4, 4)`);
+    const enemy = await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, controllers, hp_current, hp_max) VALUES ('Ghoul', 0, 0, 0, 'enemy_rhombus', 'gm', '{"all":true,"users":[]}', 4, 4)`);
+    for (const id of [ally.lastID, enemy.lastID]) {
+      const sheet = await run(db, `INSERT INTO character_sheets (username, system, data, is_npc, npc_label) VALUES ('gm', ?, '{"stun":2,"stun_max":5}', 1, 'X')`, [system]);
+      await run(db, 'INSERT INTO npc_sheet_links (location_id, sheet_id) VALUES (?, ?)', [id, sheet.lastID]);
+    }
+    const ghost = await connectAs('GHOST');
+    expect((await viewFor(ghost, ally.lastID)).second).toEqual({ id: 'stun', label: 'STUN', current: 2, max: 5 });
+    // An enemy is never handed over, whatever its grant says.
+    expect((await viewFor(ghost, enemy.lastID)).full).toBe(false);
+    expect((await viewFor(await connectAs('ROOK'), ally.lastID)).full).toBe(false);
+  });
+
   it("does not give a player an NPC's numbers because the NPC's owner field names them", async () => {
     // An enemy made by a player while the GM had granted them editing carries their name.
     // Once the grant is gone, so is the full view.
