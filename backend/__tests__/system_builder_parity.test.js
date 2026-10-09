@@ -14,10 +14,13 @@ import { createRequire } from 'module';
  */
 
 const require_ = createRequire(import.meta.url);
-const { TEMPLATES } = require_('../sheets/templates');
+const { TEMPLATES, applyDerived } = require_('../sheets/templates');
 const { ARMOR_MODS } = require_('../sheets/cwnGearMods');
 const { compileSystem } = require_('../systemBuilder/derived');
-const { CITIES_WITHOUT_NUMBER, SHADOWRUN_6E } = require_('../systemBuilder/definitions');
+const { CITIES_WITHOUT_NUMBER, SHADOWRUN_6E, CYBERPUNK_RED, GENERIC } = require_('../systemBuilder/definitions');
+
+/** A stored value as the engine reads it (derived.js). */
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
 const SHEETS = 3000;
 
@@ -150,6 +153,105 @@ holdsTo('Cities Without Number', CITIES_WITHOUT_NUMBER,
   TEMPLATES.cities_without_number.recompute, cwnSheet, 20260929);
 holdsTo('Shadowrun 6E', SHADOWRUN_6E,
   TEMPLATES.shadowrun_6e.recompute, sr6Sheet, 6);
+
+describe('Cyberpunk RED: the engine against applyDerived (4d2)', () => {
+  const compiled = compileSystem(CYBERPUNK_RED);
+  const { system } = compiled;
+  /** The code's way: EMP is worked out when Humanity is the field written. */
+  const byCode = (sheet) => applyDerived('cyberpunk_red', sheet, 'humanity');
+  /** Humanity as a sheet might hold it, a number once read: what the two agree on. */
+  const humanity = (g) => g.pick([g.int(-10, 120), g.int(0, 80) + 0.5, String(g.int(0, 80)), ` ${g.int(0, 80)} `, '', null, true, [7], 1e9, -0.5, '1e2']);
+
+  it('compiles', () => {
+    expect(compiled.problems).toBeUndefined();
+    expect(compiled.ok).toBe(true);
+  });
+
+  it(`gives the same sheet when Humanity is written as a number, on ${SHEETS} generated sheets`, () => {
+    const g = makeGen(2077);
+    for (let n = 0; n < SHEETS; n += 1) {
+      const sheet = { humanity: humanity(g), ...(g.chance(0.7) ? { emp: g.value(-2, 10) } : {}), cool: g.value(2, 8) };
+      expect(Number.isFinite(Number(sheet.humanity))).toBe(true);
+      const expected = clone(sheet);
+      const expectedChanged = byCode(expected);
+      const actual = clone(sheet);
+      const actualChanged = system.apply(actual);
+      const where = `sheet ${n}: ${JSON.stringify(sheet)}`;
+      // The same EMP as it reads, everything else untouched; the code also rewrites an EMP that
+      // already reads right, and names it every time (the third difference below).
+      expect(num(actual.emp), where).toBe(expected.emp);
+      expect({ ...actual, emp: 0 }, where).toEqual({ ...expected, emp: 0 });
+      expect(expectedChanged, where).toEqual(['emp']);
+      const alreadyRight = sheet.emp !== undefined && num(sheet.emp) === expected.emp;
+      expect(actualChanged, where).toEqual(alreadyRight ? [] : ['emp']);
+      expect(actual.emp, where).toEqual(alreadyRight ? sheet.emp : expected.emp);
+    }
+  });
+
+  it('works out EMP from Humanity, rounded down', () => {
+    expect(system.evaluate({ humanity: 80 }).emp).toBe(8);
+    expect(system.evaluate({ humanity: 47 }).emp).toBe(4);
+    expect(system.evaluate({ humanity: 9 }).emp).toBe(0);
+    expect(system.evaluate({ humanity: -5 }).emp).toBe(-1);
+  });
+
+  describe('where the two differ, pinned so moving CP:R onto data has to settle them', () => {
+    it('only the code waits for Humanity to be written: a hand-typed EMP survives other writes', () => {
+      const code = { humanity: 45, emp: 7 };
+      expect(applyDerived('cyberpunk_red', code, 'cool')).toEqual([]);
+      expect(code.emp).toBe(7);
+      const engine = { humanity: 45, emp: 7 };
+      expect(system.apply(engine)).toEqual(['emp']);
+      expect(engine.emp).toBe(4);
+    });
+
+    it('Humanity that isn\'t a number leaves EMP alone in the code, and makes it 0 in the engine', () => {
+      for (const h of ['abc', undefined, {}, 'Infinity', NaN]) {
+        const code = { humanity: h, emp: 6 };
+        expect(byCode(code)).toEqual([]);
+        expect(code.emp).toBe(6);
+        const engine = { humanity: h, emp: 6 };
+        system.apply(engine);
+        expect(engine.emp).toBe(0);
+      }
+    });
+
+    it('the code rewrites and names EMP even when it already read right; the engine leaves it be', () => {
+      expect(byCode({ humanity: 50, emp: 5 })).toEqual(['emp']);
+      expect(system.apply({ humanity: 50, emp: 5 })).toEqual([]);
+      const code = { humanity: 50, emp: '5' };
+      byCode(code);
+      expect(code.emp).toBe(5);
+      const engine = { humanity: 50, emp: '5' };
+      expect(system.apply(engine)).toEqual([]);
+      expect(engine.emp).toBe('5');
+    });
+  });
+});
+
+describe('Generic: nothing worked out, by either (4d2)', () => {
+  const compiled = compileSystem(GENERIC);
+
+  it('compiles to nothing', () => {
+    expect(compiled.ok).toBe(true);
+    expect(compiled.system.ids).toEqual([]);
+  });
+
+  it(`changes nothing on ${SHEETS} generated sheets, whichever field was written`, () => {
+    const g = makeGen(1);
+    for (let n = 0; n < SHEETS; n += 1) {
+      const sheet = { hp: g.value(0, 40), hp_max: g.value(0, 40), name: g.pick(['Ash', '', null]), humanity: g.value(0, 80), emp: g.value(0, 8) };
+      const field = g.pick(Object.keys(sheet));
+      const expected = clone(sheet);
+      const actual = clone(sheet);
+      expect(system(actual), field).toEqual(applyDerived('generic', expected, field));
+      expect(actual).toEqual(expected);
+      expect(actual).toEqual(sheet);
+    }
+  });
+
+  const system = (sheet) => compiled.system.apply(sheet);
+});
 
 describe('a few CWN characters, by hand', () => {
   const { system } = compileSystem(CITIES_WITHOUT_NUMBER);

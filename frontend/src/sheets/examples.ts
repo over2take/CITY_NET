@@ -11,9 +11,10 @@ export const exampleFacts = (def: Definition): [string, string][] => {
   const setup = setupOf(def);
   const model = HEALTH_MODELS.find((m) => m.id === setup.health.model)?.label ?? 'One pool';
   const health = setup.health.model === 'tracks' && (setup.health as { overflow?: boolean }).overflow ? `${model}, overflow` : model;
-  // In the system's own word for XP: Shadowrun spends KARMA.
-  const words = def.words as { xp?: { singular?: string } } | undefined;
-  const xp = typeof words?.xp?.singular === 'string' && words.xp.singular.trim() ? words.xp.singular : 'XP';
+  // In the system's own word for XP, as many: Shadowrun spends KARMA, Cyberpunk RED IMPROVEMENT POINTS.
+  const words = def.words as { xp?: { singular?: string; plural?: string } } | undefined;
+  const word = (w: unknown) => (typeof w === 'string' && w.trim() ? w : null);
+  const xp = word(words?.xp?.plural) ?? word(words?.xp?.singular) ?? 'XP';
   const advances = setup.advancement.length
     ? setup.advancement.map((id) => (ADVANCEMENT.find((a) => a.id === id)?.label ?? id).replace('XP', xp)).join(', ')
     : 'None';

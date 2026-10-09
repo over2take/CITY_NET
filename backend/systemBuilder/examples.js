@@ -1,5 +1,7 @@
-// Built-in systems as examples (4d1): Cities Without Number and Shadowrun 6E as whole system
-// definitions, for a GM to read and to copy as the start of their own.
+// Built-in systems as examples (4d1, Cyberpunk RED 4d2): Cities Without Number, Cyberpunk RED and
+// Shadowrun 6E as whole system definitions, for a GM to read and to copy as the start of their own.
+// Generic has a data version too (definitions.js), but no example: it works nothing out, so a
+// copy of it would be BLANK.
 //
 // Their formulas are the ones in definitions.js, word for word, which the parity test
 // (__tests__/system_builder_parity.test.js) holds to the hand-written recompute functions. Only
@@ -10,7 +12,7 @@
 // NOT what the built-in games run. A game running CWN keeps running CWN's code; these are copies
 // to change, and a copy has no link back.
 
-const { CITIES_WITHOUT_NUMBER, SHADOWRUN_6E } = require('./definitions');
+const { CITIES_WITHOUT_NUMBER, SHADOWRUN_6E, CYBERPUNK_RED } = require('./definitions');
 
 /** A derived list with the names players see, formulas untouched. */
 const labelled = (derived, labels) => derived.map((d) => (labels[d.id] ? { ...d, label: labels[d.id] } : { ...d }));
@@ -51,6 +53,40 @@ const CWN = {
   core: { health: { model: 'pool' }, advancement: ['levels'], dice: ['d20', '2d6'], distance: 'meters' },
 };
 
+/** The ten stats at one level, as the built-in NPC generator sets them (sheets/npcTiers.js cprTier). */
+const CPR_STATS = ['int', 'ref', 'dex', 'tech', 'cool', 'will', 'luck', 'move', 'body', 'emp_max'];
+const cprTier = (id, label, hp, defense, stats) => ({ id, label, hp, defense, values: Object.fromEntries(CPR_STATS.map((s) => [s, stats])) });
+
+const CPR = {
+  format: 1,
+  name: 'Cyberpunk RED',
+  description: 'The built-in Cyberpunk RED rules as data: ten stats, current EMP worked out from Humanity, '
+    + 'one pool of HP, and the generator\'s four NPC tiers. Copy it to change anything.',
+  stats: [
+    group('stats', 'STATS', [
+      stat('int', 'INT', 1, 10), stat('ref', 'REF', 1, 10), stat('dex', 'DEX', 1, 10), stat('tech', 'TECH', 1, 10),
+      stat('cool', 'COOL', 1, 10), stat('will', 'WILL', 1, 10), stat('luck', 'LUCK', 1, 10), stat('move', 'MOVE', 1, 10),
+      stat('body', 'BODY', 1, 10), stat('emp_max', 'EMP', 1, 10),
+    ]),
+    group('humanity', 'HUMANITY', [stat('humanity', 'Humanity', 0, 120)]),
+  ],
+  samples: { int: 6, ref: 7, dex: 6, tech: 5, cool: 6, will: 6, luck: 5, move: 6, body: 6, emp_max: 5, humanity: 50 },
+  derived: labelled(CYBERPUNK_RED.derived, { emp: 'Current EMP' }),
+  words: {
+    money: { singular: 'EURODOLLAR', plural: 'EURODOLLARS', short: 'eb' },
+    xp: { singular: 'IMPROVEMENT POINT', plural: 'IMPROVEMENT POINTS', short: 'IP' },
+  },
+  npc: {
+    tiers: [
+      cprTier('mook', 'MOOK', 20, 10, 4),
+      cprTier('skilled', 'SKILLED', 30, 12, 5),
+      cprTier('pro', 'PRO', 35, 13, 6),
+      cprTier('elite', 'ELITE', 45, 15, 8),
+    ],
+  },
+  core: { health: { model: 'pool' }, advancement: ['spend'], dice: ['d10', 'd6'], distance: 'meters' },
+};
+
 const SR6 = {
   format: 1,
   name: 'Shadowrun 6E',
@@ -80,6 +116,7 @@ const SR6 = {
 /** The examples, in the order the builder lists them. */
 const EXAMPLES = [
   { id: 'cwn', definition: CWN },
+  { id: 'cpr', definition: CPR },
   { id: 'sr6', definition: SR6 },
 ];
 

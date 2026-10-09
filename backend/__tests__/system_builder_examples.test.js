@@ -14,19 +14,25 @@ import { makeTestDb } from './helpers/testDb.js';
 process.env.JWT_SECRET = 'test-secret';
 const require_ = createRequire(import.meta.url);
 const { EXAMPLES, exampleDefinition, exampleList } = require_('../systemBuilder/examples');
-const { CITIES_WITHOUT_NUMBER, SHADOWRUN_6E } = require_('../systemBuilder/definitions');
+const { CITIES_WITHOUT_NUMBER, SHADOWRUN_6E, CYBERPUNK_RED } = require_('../systemBuilder/definitions');
 const { checkDefinition } = require_('../systemBuilder/definition');
 const { previewDerived } = require_('../systemBuilder/derived');
-const { TEMPLATES } = require_('../sheets/templates');
+const { TEMPLATES, applyDerived } = require_('../sheets/templates');
 const { elevatedUsers } = require_('../middleware/auth');
 const systemsRoute = require_('../routes/systems.js');
 
-const PROVEN = { cwn: [CITIES_WITHOUT_NUMBER, TEMPLATES.cities_without_number], sr6: [SHADOWRUN_6E, TEMPLATES.shadowrun_6e] };
+/** Each example's proven formulas, and how its built-in game works a sheet out. */
+const PROVEN = {
+  cwn: [CITIES_WITHOUT_NUMBER, (sheet) => TEMPLATES.cities_without_number.recompute(sheet)],
+  // Cyberpunk RED works EMP out when Humanity is written (definitions.js says how that differs).
+  cpr: [CYBERPUNK_RED, (sheet) => applyDerived('cyberpunk_red', sheet, 'humanity')],
+  sr6: [SHADOWRUN_6E, (sheet) => TEMPLATES.shadowrun_6e.recompute(sheet)],
+};
 const formulasOf = (derived) => derived.map(({ label, ...rest }) => rest);
 
 describe('the examples', () => {
-  it('are CWN and Shadowrun, each ready to publish as it stands', () => {
-    expect(EXAMPLES.map((e) => e.id)).toEqual(['cwn', 'sr6']);
+  it('are CWN, Cyberpunk RED and Shadowrun, each ready to publish as it stands', () => {
+    expect(EXAMPLES.map((e) => e.id)).toEqual(['cwn', 'cpr', 'sr6']);
     for (const { definition } of EXAMPLES) {
       expect(checkDefinition(definition)).toEqual({ problems: [] });
     }
@@ -43,13 +49,24 @@ describe('the examples', () => {
 
   it('work their sample character out as the built-in game does', () => {
     for (const { id, definition } of EXAMPLES) {
-      const [, template] = PROVEN[id];
+      const [, workOut] = PROVEN[id];
       const sheet = { ...definition.samples };
-      template.recompute(sheet);
+      workOut(sheet);
       const { values, problems } = previewDerived({ lookups: definition.lookups, derived: definition.derived }, definition.samples);
       expect(problems).toEqual([]);
       for (const d of definition.derived) expect([d.id, values[d.id]]).toEqual([d.id, sheet[d.id]]);
     }
+  });
+
+  it('give Cyberpunk RED its own money and IP, and the built-in generator\'s four tiers', () => {
+    const cpr = exampleDefinition('cpr');
+    expect(cpr.words.money).toEqual({ singular: 'EURODOLLAR', plural: 'EURODOLLARS', short: 'eb' });
+    expect(cpr.words.xp.short).toBe('IP');
+    expect(cpr.core.advancement).toEqual(['spend']);
+    expect(cpr.npc.tiers.map((t) => [t.id, t.hp, t.defense, t.values.ref])).toEqual([
+      ['mook', 20, 10, 4], ['skilled', 30, 12, 5], ['pro', 35, 13, 6], ['elite', 45, 15, 8],
+    ]);
+    expect(Object.keys(cpr.npc.tiers[0].values)).toHaveLength(10);
   });
 
   it('give Shadowrun its two tracks and its own words, CWN one pool in meters', () => {
@@ -71,6 +88,7 @@ describe('the examples', () => {
   it('are listed by name and description, without their definitions', () => {
     expect(exampleList()).toEqual([
       { id: 'cwn', name: 'Cities Without Number', description: expect.any(String) },
+      { id: 'cpr', name: 'Cyberpunk RED', description: expect.any(String) },
       { id: 'sr6', name: 'Shadowrun 6E', description: expect.any(String) },
     ]);
   });

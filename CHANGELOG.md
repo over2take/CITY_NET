@@ -88,6 +88,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Cyberpunk RED and Generic as data, and Cyberpunk RED as an example to copy.** Cyberpunk
+  RED's current EMP (Humanity / 10, rounded down) and Generic's nothing-at-all are now written in
+  the builder's format and held to the games' own code over thousands of made-up sheets, like
+  CWN's and Shadowrun's. They agree whenever Humanity is written as a number; the three places
+  they can't (the code only works EMP out when Humanity itself changes) are written down and
+  tested, for the day anyone moves Cyberpunk RED onto data. Cyberpunk RED joins the builder's
+  examples, with its ten stats, eurodollars and Improvement Points, and the NPC generator's
+  MOOK, SKILLED, PRO and ELITE tiers. The games themselves don't change.
+
 - **Start a system from Cities Without Number or Shadowrun.** In the builder's + NEW, A BUILT-IN
   EXAMPLE now works: a card for each says what it holds (its health, how characters advance, its
   stats and formulas), and COPY makes it a new system of your own under the name you type, opened
