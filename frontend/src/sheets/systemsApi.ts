@@ -31,6 +31,17 @@ export type TriedBox =
 /** A tier worked out for a level (tierRolls.js rollTier). */
 export interface TriedTier { level: number; hp: TriedBox; defense: TriedBox; values: Record<string, TriedBox> }
 
+/** Health tried on a pretend token (backend/systemBuilder/tryHealth.js). */
+export interface TriedHealth {
+  model: string;
+  token: { current: number; max: number; temp: number };
+  sheet: Record<string, unknown>;
+  /** The action's report, or its refusal; null when nothing was done. */
+  result: ({ ok: true; out?: boolean; placed?: string; turned?: number; penalty?: number } | { ok: false; error: string }) | null;
+  full: Record<string, unknown>;
+  others: Record<string, unknown>;
+}
+
 export type Answer<T> =
   | { ok: true; value: T }
   | { ok: false; error: string; status: number; changed?: boolean; problems?: Problem[] };
@@ -88,6 +99,13 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     tryTier: (definition: Definition, tier: string, level: number) =>
       call<TriedTier>(fetcher, token, '/api/systems/try-tier', 'POST', { definition, tier, level }),
+    /**
+     * A made-up character's health under a draft's model, without saving (TRY IT): an action, if
+     * any, applied to a pretend token and sheet by the game's own rules, and the HEALTH folder's
+     * views of the result for the owner (`full`) and for everyone else (`others`).
+     */
+    tryHealth: (definition: Definition, state: { token: { current: number; max: number; temp?: number }; sheet?: Record<string, unknown>; action?: Record<string, unknown> }) =>
+      call<TriedHealth>(fetcher, token, '/api/systems/try-health', 'POST', { definition, ...state }),
     /** Make the stored draft what the game runs; refused, with `problems`, while it has any. */
     publish: (systemId: string) => call<{ version: number }>(fetcher, token, `${id(systemId)}/publish`, 'POST', {}),
     create: (name: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name }),

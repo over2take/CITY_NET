@@ -88,6 +88,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Trying a draft's health.** The server can now take a made-up character's health under a
+  draft's health model, on a pretend token: apply DAMAGE, HEAL or a model's own action through
+  the game's own rules, and draw the HEALTH folder for the owner and for everyone else. Nothing is
+  saved, and the draft needn't be published. It's for the builder's TRY IT page, which comes next.
+
 - **ATTACK AS.** When an attack is set up, the attack panel now offers ATTACK AS beside YOU: a
   player, each friendly NPC the GM gave them; the GM, each NPC with a sheet on the target's map.
   Picking one lists its weapons and LUCK and fires as it. Players with no NPC see the panel as
