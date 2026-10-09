@@ -68,6 +68,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **CWN's LONG_REST recovers System Strain again.** Since an earlier change to how table-wide
+  resets write, it had been writing Shadowrun's Edge onto CWN sheets instead, so strain never went
+  down. It now takes 1 System Strain off every CWN sheet that has some, as it always meant to, and
+  has a test.
 - **No IMPORT button in a Generic game.** Generic has no PDF importer, so the character and NPC
   sheets' IMPORT button always failed there. It's now offered only in Cities Without Number,
   Cyberpunk RED and Shadowrun, the systems that can import.
@@ -103,6 +107,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Calling a rest.** The GM, or a granted editor, can preview or call one of a custom system's
+  rests for every player character, the ones named, or chosen NPC tokens. Each sheet is written
+  safely alongside anything a player types, health and conditions follow on every token, and
+  everyone sees one dice-log line per character. The GAME tab's panel for it comes next.
 - **What a rest does to a character.** The server can now work out a rest for one character: the
   rests it counts as first, then its own refills, health back through the system's own health
   model, sheet numbers kept between 0 and their maximum, and the conditions that end there taken off.

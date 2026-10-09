@@ -23,6 +23,8 @@ const sheetAttack = require('../sheets/attack');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
 const tokenAccess = require('../tokens/tokenAccess');
+const rests = require('../sheets/rests');
+const { restsOf } = require('../systemBuilder/rests');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
 // sheet, quick-sheet lookups) goes through socket events, matching how the
@@ -809,7 +811,9 @@ module.exports = (db, io) => {
           if (updates.length === 0) return res.json({ rested: 0 });
           let done = 0;
           for (const u of updates) {
-            patchSheet(db, u.id, (d) => ({ edge: Number(d['edge_max']) }),
+            // Strain read again at write time, as LUCK and EDGE are. (821dae0 wrote SR6's Edge
+            // here by mistake, so a long rest recovered no strain until 4f2b.)
+            patchSheet(db, u.id, (d) => ({ system_strain: Math.max(0, (Number(d.system_strain) || 0) - 1) }),
               () => {
                 if (!u.isNpc) io.emit('sheetUpdated', { username: u.username });
                 done++;
@@ -854,6 +858,40 @@ module.exports = (db, io) => {
           }
         }
       );
+    });
+  });
+
+  /**
+   * A custom system's rests (4f2b; approved mockup docs/mockups/builder-rests.html, 2026-10-09):
+   * the running game's rests that are on, for the GAME tab. A built-in game has none here; its
+   * rests are the buttons above.
+   */
+  router.get('/rests', authenticate, requireAdmin, (req, res) => {
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const definition = customSystems.definitionOf(system);
+      res.json({ system, rests: definition ? restsOf(definition).map((r) => ({ id: r.id, name: r.name })) : [] });
+    });
+  });
+
+  /**
+   * Call a rest, or preview one: { rest, players: true | [names], npcs: [token ids], preview }.
+   * The GM and granted editors, as with the built-in games' rest buttons (sheets/rests.js).
+   */
+  router.post('/rest', authenticate, requireAdmin, (req, res) => {
+    const { rest: restId, players, npcs, preview } = req.body || {};
+    const problem = rests.whoProblem(players, npcs);
+    if (problem) return res.status(400).json({ error: problem });
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const definition = customSystems.definitionOf(system);
+      if (!definition) return res.status(409).json({ error: 'This game\'s rests are its own buttons' });
+      const rest = restsOf(definition).find((r) => r.id === restId);
+      if (!rest) return res.status(400).json({ error: 'Not one of this game\'s rests' });
+      const args = { system, definition, rest, players, npcs };
+      (preview === true ? rests.previewRest(db, args) : rests.callRest(db, io, args))
+        .then((characters) => res.json({ rest: { id: rest.id, name: rest.name }, preview: preview === true, characters }))
+        .catch((e) => res.status(500).json({ error: e.message }));
     });
   });
 

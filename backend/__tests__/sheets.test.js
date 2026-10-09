@@ -469,6 +469,36 @@ describe('two writers, one sheet, through the routes', () => {
     expect(data.notes).toBe('keep me');
   });
 
+  it('rests every CWN sheet one System Strain down, players and NPCs, without discarding an edit made at the same moment', async () => {
+    // Untested until 4f2b: 821dae0 wrote SR6's Edge here instead, and nothing noticed.
+    await run(db, `DELETE FROM global_settings WHERE key = 'game_system'`);
+    await setSystem(db, 'cities_without_number');
+    await run(db, `UPDATE character_sheets SET system = 'cities_without_number', data = ? WHERE username = 'GHOST'`,
+      [JSON.stringify({ name: 'Ghost', system_strain: 3, notes: 'keep me' })]);
+    await insertSheet(db, { username: 'VEX', system: 'cities_without_number', data: JSON.stringify({ system_strain: 0 }) });
+    await insertSheet(db, { username: 'GANGER', system: 'cities_without_number', data: JSON.stringify({ system_strain: 1 }), is_npc: 1, npc_label: 'Ganger' });
+    await insertSheet(db, { username: 'JUNO', system: 'cyberpunk_red', data: JSON.stringify({ system_strain: 2 }) });
+
+    const [rested] = await Promise.all([
+      request(app).post('/api/sheets/cwn-rest').set('Authorization', `Bearer ${ADMIN_TOKEN}`),
+      patchAs({ notes: 'edited mid-rest' }),
+    ]);
+    expect(rested.body).toEqual({ rested: 2 });
+
+    const dataOf = async (username) => JSON.parse((await get(db, `SELECT data FROM character_sheets WHERE username = ?`, [username])).data);
+    const ghost = await dataOf('GHOST');
+    expect(ghost.system_strain).toBe(2);
+    expect(ghost.notes).toBe('edited mid-rest');
+    expect(ghost).not.toHaveProperty('edge');
+    expect((await dataOf('GANGER')).system_strain).toBe(0);
+    // No strain to recover, or another system's sheet: untouched.
+    expect(await dataOf('VEX')).toEqual({ system_strain: 0 });
+    expect(await dataOf('JUNO')).toEqual({ system_strain: 2 });
+    // Only a player's own window is told; an NPC's has no player.
+    expect(emitted.filter((e) => e.event === 'sheetUpdated').map((e) => e.payload.username)).toContain('GHOST');
+    expect(emitted.filter((e) => e.event === 'sheetUpdated').map((e) => e.payload.username)).not.toContain('GANGER');
+  });
+
   it('resets LUCK table-wide without discarding an edit made at the same moment', async () => {
     // The bulk reset scans every sheet, so it is the writer most likely to be holding a
     // stale copy by the time it reaches the last player.

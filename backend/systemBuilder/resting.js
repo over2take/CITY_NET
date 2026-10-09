@@ -209,4 +209,36 @@ const restOn = ({ definition, restId, sheet = {}, token = null, conditions = [],
   };
 };
 
-module.exports = { restOn, restOrder };
+/**
+ * A rest as one line of the dice log, for everyone: "LONG REST · Vex: HP 9 → 16, Fatigue 3 → 2;
+ * Poisoned wore off; rolled 1d8 + @con_mod = 7 (1d8: 5)". `result` is restOn's.
+ */
+const restLine = (definition, restName, who, result) => {
+  const names = new Map(conditionsOf(definition).map((c) => [c.id, c.name]));
+  const parts = [];
+  const moved = result.changes.map((c) => `${c.label} ${c.from} → ${c.to === null ? `${c.from} + ${(c.pending || []).join(' + ')}` : c.to}`);
+  if (moved.length) parts.push(moved.join(', '));
+  if (result.gone.length) parts.push(`${result.gone.map((id) => names.get(id) || id).join(', ')} wore off`);
+  const rolled = result.rolls.filter((r) => r.dice.length)
+    .map((r) => `${r.amount} = ${r.value} (${r.dice.map((d) => `${d.count}d${d.sides}: ${d.rolls.join('+') || '-'}`).join(', ')})`);
+  if (rolled.length) parts.push(`rolled ${rolled.join(', ')}`);
+  return `${String(restName).toUpperCase()} · ${who}: ${parts.join('; ') || 'nothing changed'}`;
+};
+
+/**
+ * Every die a rest rolled, by its sides, as the dice tray keeps a roll ({ 8: [5], 4: [3, 1] }),
+ * and their total: what the log's roll shows.
+ */
+const restDice = (result) => {
+  const results = {};
+  let total = 0;
+  for (const r of result.rolls) {
+    for (const d of r.dice) {
+      results[d.sides] = [...(results[d.sides] || []), ...d.rolls];
+      total += d.rolls.reduce((a, b) => a + b, 0);
+    }
+  }
+  return { results, total };
+};
+
+module.exports = { restOn, restOrder, restLine, restDice };
