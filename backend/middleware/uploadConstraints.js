@@ -41,6 +41,8 @@ const LIMITS = {
   // A currency's icon, drawn at the size of a letter beside an amount (3c2c2). A quarter of a
   // megabyte is generous for that; more is a photo, not an icon.
   currency_icon: MB / 4,
+  // A condition's icon (4e1a), drawn the size of a letter in a chip and over a token: the same.
+  condition_icon: MB / 4,
 };
 
 const asMb = (bytes) => `${(bytes / MB).toFixed(bytes < MB ? 2 : 1)}MB`;

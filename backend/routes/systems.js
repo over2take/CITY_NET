@@ -15,7 +15,7 @@ const { rollTier } = require('../systemBuilder/tierRolls');
 const { tryHealth } = require('../systemBuilder/tryHealth');
 const { exampleList, exampleDefinition, exampleKind, KINDS } = require('../systemBuilder/examples');
 
-/** What a currency's icon may be uploaded as (decided with the user, 2026-10-01). */
+/** What a currency's or condition's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
 
 // Custom game systems: the builder's storage (see systemBuilder/store.js).
@@ -29,15 +29,38 @@ module.exports = (db, io = null) => {
   // On every route rather than router.use, so the route walk in gm_route_auth.test.js sees them.
   const gm = [authenticate, requireMainAdmin];
 
-  // In memory: an icon is capped small, and hashing a buffer is simplest (as building photos).
-  const iconsDir = path.join(__dirname, '../uploads/currency_icons');
-  const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: LIMITS.currency_icon },
-    // Recorded so a refusal for size can name the file - multer aborts before any handler.
-    fileFilter: (req, file, cb) => { req.uploadFilename = file.originalname; cb(null, true); },
-  });
-  const iconUploadErrors = uploadErrors({ allowed: [...ICON_EXT], maxBytes: LIMITS.currency_icon });
+  /**
+   * An icon upload: a small PNG, WebP or SVG stored under its content hash in `folder`, so the same
+   * picture twice is one file, answered with its address. /uploads serves it with the sandbox
+   * headers (middleware/uploadHeaders.js), and the windows only ever draw it through <img>, which
+   * is what makes SVG safe to take, as with battle maps. In memory: an icon is capped small, and
+   * hashing a buffer is simplest (as building photos).
+   */
+  const iconUpload = (folder, maxBytes) => {
+    const dir = path.join(__dirname, '../uploads', folder);
+    const upload = multer({
+      storage: multer.memoryStorage(),
+      limits: { fileSize: maxBytes },
+      // Recorded so a refusal for size can name the file - multer aborts before any handler.
+      fileFilter: (req, file, cb) => { req.uploadFilename = file.originalname; cb(null, true); },
+    });
+    const store = (req, res) => {
+      if (!req.file) return res.status(400).json({ error: 'No icon was sent' });
+      const ext = path.extname(req.file.originalname || '').toLowerCase();
+      // The extension decides how it is served back: the type follows the name on disk.
+      if (!ICON_EXT.has(ext)) return rejectFormat(res, { file: req.file, allowed: [...ICON_EXT], maxBytes });
+      const filename = crypto.createHash('sha256').update(req.file.buffer).digest('hex') + ext;
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        const filepath = path.join(dir, filename);
+        if (!fs.existsSync(filepath)) fs.writeFileSync(filepath, req.file.buffer);
+      } catch (e) {
+        return res.status(500).json({ error: 'Could not store the icon.' });
+      }
+      return res.json({ icon: `/uploads/${folder}/${filename}` });
+    };
+    return [upload.single('icon'), uploadErrors({ allowed: [...ICON_EXT], maxBytes }), store];
+  };
 
   /** The status a store error carries, or 500. */
   const answer = (res, err, body) => {
@@ -49,28 +72,10 @@ module.exports = (db, io = null) => {
 
   router.get('/', gm, (req, res) => store.listSystems(db, (err, systems) => answer(res, err, systems)));
 
-  /**
-   * Upload an icon for a currency (3c2c2): a small PNG, WebP or SVG, stored under its content
-   * hash, so the same picture twice is one file. Answers with its address, which a currency's
-   * `icon` then names (currencies.js). /uploads serves it with the sandbox headers
-   * (middleware/uploadHeaders.js), and the windows only ever draw it through <img>, which is what
-   * makes SVG safe to take, as with battle maps.
-   */
-  router.post('/currency-icons', gm, upload.single('icon'), iconUploadErrors, (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No icon was sent' });
-    const ext = path.extname(req.file.originalname || '').toLowerCase();
-    // The extension decides how it is served back: the type follows the name on disk.
-    if (!ICON_EXT.has(ext)) return rejectFormat(res, { file: req.file, allowed: [...ICON_EXT], maxBytes: LIMITS.currency_icon });
-    const filename = crypto.createHash('sha256').update(req.file.buffer).digest('hex') + ext;
-    try {
-      fs.mkdirSync(iconsDir, { recursive: true });
-      const filepath = path.join(iconsDir, filename);
-      if (!fs.existsSync(filepath)) fs.writeFileSync(filepath, req.file.buffer);
-    } catch (e) {
-      return res.status(500).json({ error: 'Could not store the icon.' });
-    }
-    res.json({ icon: `/uploads/currency_icons/${filename}` });
-  });
+  // Upload an icon for a currency (3c2c2), which a currency's `icon` then names (currencies.js),
+  // or for a condition (4e1a), which a condition's `icon` names (conditions.js).
+  router.post('/currency-icons', gm, ...iconUpload('currency_icons', LIMITS.currency_icon));
+  router.post('/condition-icons', gm, ...iconUpload('condition_icons', LIMITS.condition_icon));
 
   // The built-in examples (4d1) and genre starters (4d3, ?kind=starter): what the library lists,
   // and one whole, to read. Copying either is POST / with `example`.

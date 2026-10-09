@@ -95,6 +95,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Conditions as part of a game system.** A custom system now carries its conditions: ten
+  standard ones every system starts with (Blinded, Bleeding, Poisoned, Prone, Stunned, Grappled,
+  Frightened, Unconscious, Restrained, Exhausted), each of which can be renamed, described, given
+  modifiers and an end, or turned off, plus its own, up to 60 in all. A condition's icon is one of
+  24 drawn for CITY_NET, or a small picture the GM uploads. It ends when removed or after a number
+  of rounds, and its modifiers name a stat, a formula or all rolls; they're recorded now and will
+  reach rolls once a system's own rolls are built. The builder's page for them, and conditions on
+  tokens, come next.
+
 - **Start a system from a genre starter.** In the builder's + NEW, A GENRE STARTER now works like
   A BUILT-IN EXAMPLE: a card for Sword & Spell, Starfarer and Story First saying what each holds,
   COPY under your own name, and LOOK FIRST to read one locked, marked as a starter.
