@@ -107,6 +107,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Rests in the builder, as logic.** The builder can now read and change a system's rests the
+  way the server does: renaming or switching the standard four, adding its own, what each counts
+  as, what it refills under the system's health model and sheet, and the conditions it wears off.
+  The RESTS page itself comes next.
 - **Calling a rest.** The GM, or a granted editor, can preview or call one of a custom system's
   rests for every player character, the ones named, or chosen NPC tokens. Each sheet is written
   safely alongside anything a player types, health and conditions follow on every token, and

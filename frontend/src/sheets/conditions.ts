@@ -11,7 +11,8 @@ import { allStats, formulaList } from './statsRules';
 export const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 99, modifiers: 10, amount: 99 } as const;
 export const ALL_ROLLS = 'all_rolls';
 
-export type Ends = 'removed' | 'rounds';
+/** When removed, after a number of rounds, or at any of the rests named in `at` (4f, rests.ts). */
+export type Ends = 'removed' | 'rounds' | 'rest';
 export interface Modifier { target: string; amount: number }
 export interface Condition {
   id: string;
@@ -21,13 +22,15 @@ export interface Condition {
   description: string;
   ends: Ends;
   rounds?: number;
+  /** The rests it wears off at, when it ends at a rest. */
+  at?: string[];
   modifiers: Modifier[];
   standard: boolean;
 }
 /** A condition as the page lists it: whole, and whether it is on. */
 export type Listed = Condition & { on: boolean };
 /** What the page changes on one condition. */
-export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'description' | 'ends' | 'rounds' | 'modifiers'>> & { on?: boolean };
+export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'description' | 'ends' | 'rounds' | 'at' | 'modifiers'>> & { on?: boolean };
 
 /** The standard set every system starts with, as the server has it. */
 export const STANDARD: Omit<Condition, 'ends' | 'modifiers' | 'standard'>[] = [
@@ -54,7 +57,7 @@ export const shortFrom = (name: string) => name.trim().split(/\s+/)[0].toUpperCa
 
 const whole = (base: { id: string; name: string; short?: string; icon?: string; description?: string }, c: Record<string, unknown>, standard: boolean): Condition => {
   const text = (v: unknown) => (typeof v === 'string' ? v : undefined);
-  const ends: Ends = c.ends === 'rounds' ? 'rounds' : 'removed';
+  const ends: Ends = c.ends === 'rounds' || c.ends === 'rest' ? c.ends : 'removed';
   return {
     id: base.id,
     name: text(c.name)?.trim() || base.name,
@@ -63,6 +66,7 @@ const whole = (base: { id: string; name: string; short?: string; icon?: string; 
     description: text(c.description) ?? base.description ?? '',
     ends,
     ...(ends === 'rounds' && Number.isInteger(c.rounds) ? { rounds: c.rounds as number } : {}),
+    ...(ends === 'rest' ? { at: Array.isArray(c.at) ? c.at.filter((id): id is string => typeof id === 'string') : [] } : {}),
     modifiers: Array.isArray(c.modifiers) ? (c.modifiers.filter(isObject) as unknown as Modifier[]).map((m) => ({ target: m.target, amount: m.amount })) : [],
     standard,
   };
@@ -100,7 +104,8 @@ const withStored = (def: Definition, stored: Stored): Definition => {
  * The definition with one condition changed. A standard condition keeps only what differs from the
  * standard (a name put back, or left blank, stores nothing); one of the system's own keeps its
  * name as typed, so a blank one is a problem to fix rather than a lost condition. Either way an
- * end of "when removed" stores nothing and drops any rounds; "after rounds" starts at 1.
+ * end of "when removed" stores nothing and drops any rounds or rests; "after rounds" starts at 1;
+ * "at a rest" keeps the rests it names, none to start with (a problem until one is picked).
  */
 export const withCondition = (def: Definition, id: string, patch: ConditionPatch): Definition => {
   const stored = storedOf(def);
@@ -108,9 +113,14 @@ export const withCondition = (def: Definition, id: string, patch: ConditionPatch
   const entry: Record<string, unknown> = { ...(stored[id] ?? {}), ...patch };
   if (entry.ends === 'rounds') {
     if (!Number.isInteger(entry.rounds)) entry.rounds = 1;
+    delete entry.at;
+  } else if (entry.ends === 'rest') {
+    entry.at = Array.isArray(entry.at) ? entry.at.filter((id): id is string => typeof id === 'string') : [];
+    delete entry.rounds;
   } else {
     delete entry.ends;
     delete entry.rounds;
+    delete entry.at;
   }
   if (Array.isArray(entry.modifiers) && entry.modifiers.length === 0) delete entry.modifiers;
   if (typeof entry.short === 'string' && !entry.short.trim()) delete entry.short;
