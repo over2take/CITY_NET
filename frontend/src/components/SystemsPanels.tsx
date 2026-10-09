@@ -132,7 +132,7 @@ export function NewPanel({ api, onMade, onLook }: { api: Api; onMade: (id: strin
 
   const starts: [Start, string, string, boolean][] = [
     ['blank', 'BLANK', 'A name and nothing else, to build up in the builder.', true],
-    ['example', 'A BUILT-IN EXAMPLE', 'Cities Without Number or Shadowrun, copied to change into your own.', true],
+    ['example', 'A BUILT-IN EXAMPLE', 'One of the built-in games, copied to change into your own.', true],
     ['starter', 'A GENRE STARTER', 'Fantasy, sci-fi, or a narrative one with no numbers. Coming later.', false],
   ];
 

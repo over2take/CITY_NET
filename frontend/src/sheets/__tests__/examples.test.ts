@@ -15,6 +15,9 @@ describe('what an example\'s card says', () => {
     expect(exampleFacts(exampleDefinition('cwn'))).toEqual([
       ['HEALTH', 'One pool'], ['ADVANCES', 'XP levels'], ['STATS', '13 in 5 groups'], ['FORMULAS', '17'], ['DISTANCE', 'Meters'],
     ]);
+    expect(exampleFacts(exampleDefinition('cpr'))).toEqual([
+      ['HEALTH', 'One pool'], ['ADVANCES', 'Spend IMPROVEMENT POINTS'], ['STATS', '11 in 2 groups'], ['FORMULAS', '1'], ['DISTANCE', 'Meters'],
+    ]);
     expect(exampleFacts(exampleDefinition('sr6'))).toEqual([
       ['HEALTH', 'Two tracks, overflow'], ['ADVANCES', 'Spend KARMA'], ['STATS', '10 in 2 groups'], ['FORMULAS', '6'], ['DISTANCE', 'Meters'],
     ]);
@@ -26,11 +29,18 @@ describe('what an example\'s card says', () => {
     ]);
     const one: Definition = {
       format: 1, name: 'One', stats: [{ id: 'a', label: 'A', stats: [{ id: 'x', label: 'X' }] }], derived: [{ id: 'y', formula: '1' }],
-      core: { health: { model: 'tracks', tracks: [] }, advancement: ['levels', 'use'] }, words: { xp: { singular: ' ' } },
+      core: { health: { model: 'tracks', tracks: [] }, advancement: ['levels', 'use'] }, words: { xp: { singular: ' ', plural: '' } },
     };
     expect(exampleFacts(one)).toEqual([
       ['HEALTH', 'Two tracks'], ['ADVANCES', 'XP levels, Improve by use'], ['STATS', '1 in 1 group'], ['FORMULAS', '1'], ['DISTANCE', 'Feet'],
     ]);
+  });
+
+  it('says XP as the system says it, as many, or as one when that is all it gives', () => {
+    const spending = (xp: Record<string, string>) => exampleFacts({ format: 1, name: 'W', core: { advancement: ['spend'] }, words: { xp } })[1][1];
+    expect(spending({ singular: 'KARMA', plural: 'KARMA' })).toBe('Spend KARMA');
+    expect(spending({ singular: 'MARK', plural: 'MARKS' })).toBe('Spend MARKS');
+    expect(spending({ singular: 'MARK' })).toBe('Spend MARK');
   });
 
   it('suggests a name for a copy', () => {

@@ -1,9 +1,10 @@
 // Built-in systems' derived values, written as data.
 //
-// Each is a word-for-word restatement of a hand-written recompute function in
-// sheets/templates.js - cwnRecompute and sr6Recompute - and is held to it by
+// Each is a restatement of the hand-written code in sheets/templates.js - cwnRecompute and
+// sr6Recompute word for word, and Cyberpunk RED's and Generic's applyDerived rules - held to it by
 // __tests__/system_builder_parity.test.js, which runs both over thousands of sheets and
-// requires the same values and the same list of changed fields.
+// requires the same values and the same list of changed fields (Cyberpunk RED's, below, with
+// the differences it names).
 //
 // NOT used by the app. Every sheet is still worked out by the hand-written functions. These
 // exist to prove the engine can carry a real system before anything is moved onto it, and to
@@ -60,4 +61,24 @@ const SHADOWRUN_6E = {
   ],
 };
 
-module.exports = { CITIES_WITHOUT_NUMBER, SHADOWRUN_6E };
+/**
+ * Cyberpunk RED (4d2), as applyDerived has it: current EMP is Humanity / 10, rounded down.
+ *
+ * Not word for word in when it runs. The code works EMP out only when Humanity itself is written,
+ * and only when Humanity reads as a number; the engine works every formula out on every write,
+ * reading a non-number as 0. So the two agree on EMP whenever Humanity is written as a number, and
+ * differ in three ways the parity test pins: a hand-typed EMP survives other writes in the code
+ * but not in the engine; Humanity that isn't a number leaves EMP alone in the code but makes it 0
+ * in the engine; and the code rewrites EMP (and reports it changed) even when it already read
+ * right, where the engine leaves it as stored. Moving CP:R onto data would have to settle these.
+ */
+const CYBERPUNK_RED = {
+  derived: [
+    { id: 'emp', formula: 'floor(@humanity / 10)' },
+  ],
+};
+
+/** Generic (4d2): it works nothing out, and neither does its data version. */
+const GENERIC = { derived: [] };
+
+module.exports = { CITIES_WITHOUT_NUMBER, SHADOWRUN_6E, CYBERPUNK_RED, GENERIC };
