@@ -74,5 +74,18 @@ export const notOnYet = (onToken: OnToken[], game: GameCondition[]) => game.filt
 export const modifierText = (m: { target: string; amount: number }) =>
   `${m.target === 'all_rolls' ? 'ALL ROLLS' : m.target.replace(/_/g, ' ').toUpperCase()} ${m.amount > 0 ? '+' : '−'}${Math.abs(m.amount)}`;
 
+/** How many condition icons a token draws on the map before the rest become +N (4e2b2). */
+export const MAP_ICONS = 4;
+
+/**
+ * What a token draws on the map: its first conditions' icons, and how many more there are with
+ * their names, for the +N to list when pointed at. Everyone sees these, as with the HEALTH folder.
+ */
+export const mapIcons = (shown: Shown[], max = MAP_ICONS) => ({
+  icons: shown.slice(0, max).map((s) => s.condition),
+  more: Math.max(0, shown.length - max),
+  moreNames: shown.slice(max).map((s) => s.condition.name),
+});
+
 /** Rounds left as the chip says it. */
 export const roundsText = (left: number) => `${left} ROUND${left === 1 ? '' : 'S'} LEFT`;

@@ -7,7 +7,7 @@ import { createRequire } from 'module';
 import { TokenConditions } from '../TokenConditions';
 import { StreamerOverlay } from '../StreamerOverlay';
 import { HealthReviewPanel } from '../HitPoints';
-import { CONDITIONS_CHANGED_EVENT } from '../../hooks/useConditionList';
+import { CONDITIONS_CHANGED_EVENT, forgetConditionLists } from '../../hooks/useConditionList';
 import type { Location } from '../../types';
 
 /**
@@ -31,6 +31,8 @@ let putAnswer: { status: number; body: unknown };
 let listAsked: { url: string; auth: string | null }[];
 
 beforeEach(() => {
+  // The game's list is shared between windows: each case asks afresh.
+  forgetConditionLists();
   puts = [];
   listAsked = [];
   putAnswer = { status: 200, body: {} };

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
-  parseOnToken, shownConditions, withPutOn, withTakenOff, notOnYet, modifierText, roundsText, type GameCondition,
+  parseOnToken, shownConditions, withPutOn, withTakenOff, notOnYet, modifierText, roundsText, mapIcons, MAP_ICONS, type GameCondition,
 } from '../tokenConditions';
 
 /**
@@ -70,6 +70,22 @@ describe('changing them', () => {
 
   it('offers the game\'s conditions not on the token yet', () => {
     expect(notOnYet(on, GAME).map((c) => c.id)).toEqual(GAME.map((c) => c.id).filter((id) => id !== 'prone' && id !== 'poisoned'));
+  });
+});
+
+describe('on the map', () => {
+  const shown = (ids: string[]) => shownConditions(ids.map((id) => ({ id })), conditionsOf(null));
+
+  it('draws the first four icons, and counts and names the rest', () => {
+    expect(MAP_ICONS).toBe(4);
+    const six = mapIcons(shown(['blinded', 'bleeding', 'poisoned', 'prone', 'stunned', 'grappled']));
+    expect(six.icons.map((c) => c.id)).toEqual(['blinded', 'bleeding', 'poisoned', 'prone']);
+    expect([six.more, six.moreNames]).toEqual([2, ['Stunned', 'Grappled']]);
+  });
+
+  it('has no +N up to four, and nothing at all for none', () => {
+    expect(mapIcons(shown(['prone', 'stunned', 'grappled', 'bleeding']))).toMatchObject({ more: 0, moreNames: [] });
+    expect(mapIcons([])).toEqual({ icons: [], more: 0, moreNames: [] });
   });
 });
 
