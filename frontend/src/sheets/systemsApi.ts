@@ -42,6 +42,9 @@ export interface TriedHealth {
   others: Record<string, unknown>;
 }
 
+/** A built-in example as the library lists it (backend/systemBuilder/examples.js exampleList). */
+export interface ExampleSummary { id: string; name: string; description: string }
+
 export type Answer<T> =
   | { ok: true; value: T }
   | { ok: false; error: string; status: number; changed?: boolean; problems?: Problem[] };
@@ -109,6 +112,13 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
     /** Make the stored draft what the game runs; refused, with `problems`, while it has any. */
     publish: (systemId: string) => call<{ version: number }>(fetcher, token, `${id(systemId)}/publish`, 'POST', {}),
     create: (name: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name }),
+    /** The built-in examples to copy (4d1): what each is called and does, without its definition. */
+    examples: () => call<ExampleSummary[]>(fetcher, token, '/api/systems/examples'),
+    /** One built-in example whole: its cards in + NEW, and the builder looking at it. */
+    example: (exampleId: string) =>
+      call<{ id: string; definition: Definition }>(fetcher, token, `/api/systems/examples/${encodeURIComponent(exampleId)}`),
+    /** A new draft copied from a built-in example under the GM's own name; no link back. */
+    createFromExample: (name: string, example: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name, example }),
     rename: (systemId: string, name: string) => call<{ name: string }>(fetcher, token, `${id(systemId)}/name`, 'PUT', { name }),
     duplicate: (systemId: string) => call<{ id: string; name: string }>(fetcher, token, `${id(systemId)}/duplicate`, 'POST', {}),
     remove: (systemId: string) => call<{ deleted: true }>(fetcher, token, id(systemId), 'DELETE'),

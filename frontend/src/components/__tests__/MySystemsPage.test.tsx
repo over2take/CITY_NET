@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { MySystemsPage } from '../MySystemsPage';
 import { systemsApi } from '../../sheets/systemsApi';
 import { SYSTEMS_CHANGED_EVENT, changedFact, type LibrarySystem, type InstallPreview } from '../../sheets/systemsLibrary';
+import { createRequire } from 'module';
 
 /**
  * The builder's MY SYSTEMS page (4a2c2a): everything SYSTEMS.EXE did, inside the builder. Approved
@@ -28,6 +29,9 @@ const AT = changedFact('2026-10-06 14:10:00');
 let systems: LibrarySystem[];
 let calls: { url: string; method: string; body: unknown }[];
 let renameAnswer: { status: number; body: unknown } | null;
+let examplesDown: boolean;
+let exampleGone: string | null;
+const { exampleList, exampleDefinition } = createRequire(import.meta.url)('../../../../backend/systemBuilder/examples.js');
 
 const PREVIEW: InstallPreview = {
   manifest: { name: 'Iron Sea', author: 'M. Okafor', license: '', builder: '1.15.0', version: 4, origin: 'org_iron' },
@@ -44,6 +48,9 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     ok: status < 300, status, json: async () => b, text: async () => String(b), headers: { get: (k: string) => headers[k] ?? null },
   }) as unknown as Response;
   if (url === '/api/systems' && method === 'GET') return json(200, systems);
+  if (url === '/api/systems/examples') return examplesDown ? json(500, { error: 'Could not reach the systems store' }) : json(200, exampleList());
+  const ex = /^\/api\/systems\/examples\/([a-z0-9]+)$/.exec(url);
+  if (ex) return ex[1] === exampleGone ? json(404, { error: 'No such example' }) : json(200, { id: ex[1], definition: exampleDefinition(ex[1]) });
   if (url === '/api/systems' && method === 'POST') {
     const taken = systems.find((s) => s.name.toLowerCase() === body.name.trim().toLowerCase());
     if (taken) return json(409, { error: `Another system is already called ${taken.name}.` });
@@ -77,6 +84,8 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
 beforeEach(() => {
   calls = [];
   renameAnswer = null;
+  examplesDown = false;
+  exampleGone = null;
   systems = [
     row({ description: 'Low fantasy around one village fire.', author: 'Cody', characterCount: 5 }),
     row({ id: NEON, name: 'Neon Exchange', version: 1, unpublishedChanges: true, characterCount: 1 }),
@@ -85,10 +94,10 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-const open = ({ openId = HEARTH as string | null, running = HEARTH as string | null } = {}) => {
+const open = ({ openId = HEARTH as string | null, running = HEARTH as string | null, onLook = undefined as ((id: string) => void) | undefined, startTab = undefined as 'list' | 'new' | 'install' | undefined } = {}) => {
   const onOpen = vi.fn();
   const say = vi.fn();
-  render(<MySystemsPage api={systemsApi('gm', fakeServer as typeof fetch)} openId={openId} running={running} onOpen={onOpen} say={say} />);
+  render(<MySystemsPage api={systemsApi('gm', fakeServer as typeof fetch)} openId={openId} running={running} onOpen={onOpen} say={say} onLook={onLook} startTab={startTab} />);
   return { onOpen, say };
 };
 const line = (id: string) => screen.getByTestId(`system-${id}`);
@@ -250,6 +259,12 @@ describe('+ NEW and INSTALL A FILE', () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
+  it('can open on + NEW', async () => {
+    open({ startTab: 'new' });
+    expect(screen.getByRole('tab', { name: '+ NEW' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByLabelText('NAME')).toBeTruthy();
+  });
+
   it('INSTALL A FILE installs, then offers OPEN IT', async () => {
     const { onOpen } = open();
     await ready();
@@ -263,5 +278,91 @@ describe('+ NEW and INSTALL A FILE', () => {
     // Back on the list, it is there.
     await userEvent.click(screen.getByRole('tab', { name: 'YOUR SYSTEMS · 4' }));
     expect(screen.getByTestId(`system-${COPY}`)).toBeTruthy();
+  });
+});
+
+describe('+ NEW from a built-in example (4d1b)', () => {
+  // Approved mockup builder-examples (2026-10-08): a card each, LOOK FIRST, a copy under a name of the GM's own.
+  const pickExamples = async (over: Parameters<typeof open>[0] = {}) => {
+    const opened = open({ startTab: 'new', ...over });
+    await userEvent.click(screen.getByRole('radio', { name: /A BUILT-IN EXAMPLE/ }));
+    return opened;
+  };
+  const card = (id: string) => screen.getByTestId(`example-${id}`);
+
+  it('shows a card for each, saying what it holds, the first picked and named on the button', async () => {
+    await pickExamples();
+    await screen.findByTestId('example-cwn');
+    expect(within(card('cwn')).getByText('13 in 5 groups')).toBeTruthy();
+    expect(within(card('cwn')).getByText('One pool')).toBeTruthy();
+    expect(within(card('sr6')).getByText('Two tracks, overflow')).toBeTruthy();
+    expect(within(card('sr6')).getByText('Spend KARMA')).toBeTruthy();
+    expect(within(card('cwn')).getByRole('radio', { name: 'CITIES WITHOUT NUMBER' }).getAttribute('aria-checked')).toBe('true');
+    expect((screen.getByLabelText('NAME') as HTMLInputElement).placeholder).toBe('Cities Without Number (house rules)');
+    expect((screen.getByRole('button', { name: 'COPY CITIES WITHOUT NUMBER' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/no link back to the example/)).toBeTruthy();
+  });
+
+  it('copies the one picked under the name typed, and opens it on SETUP, telling the picker', async () => {
+    const told = vi.fn();
+    window.addEventListener(SYSTEMS_CHANGED_EVENT, told);
+    const { onOpen } = await pickExamples();
+    await userEvent.click(await within(await screen.findByTestId('example-sr6')).findByRole('radio', { name: 'SHADOWRUN 6E' }));
+    await userEvent.type(screen.getByLabelText('NAME'), 'Runners');
+    await userEvent.click(screen.getByRole('button', { name: 'COPY SHADOWRUN 6E' }));
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith(COPY, 'setup'));
+    expect(calls.find((c) => c.method === 'POST')!.body).toEqual({ name: 'Runners', example: 'sr6' });
+    expect(told).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SYSTEMS_CHANGED_EVENT, told);
+  });
+
+  it('refuses a name in use where it was typed', async () => {
+    const { onOpen } = await pickExamples();
+    await screen.findByTestId('example-cwn');
+    await userEvent.type(screen.getByLabelText('NAME'), 'Neon exchange{Enter}');
+    expect((await screen.findByRole('alert')).textContent).toBe('Another system is already called Neon Exchange.');
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('LOOK FIRST opens the one asked for, and is offered only where there is somewhere to look', async () => {
+    const onLook = vi.fn();
+    await pickExamples({ onLook });
+    await userEvent.click(await screen.findByRole('button', { name: 'Look at Shadowrun 6E first' }));
+    expect(onLook).toHaveBeenCalledWith('sr6');
+    cleanup();
+    await pickExamples();
+    await screen.findByTestId('example-cwn');
+    expect(screen.queryByText('LOOK FIRST')).toBeNull();
+  });
+
+  it('BLANK goes back to a plain CREATE, sending no example', async () => {
+    const { onOpen } = await pickExamples();
+    await screen.findByTestId('example-cwn');
+    await userEvent.click(screen.getByRole('radio', { name: /^BLANK/ }));
+    expect(screen.queryByTestId('example-cwn')).toBeNull();
+    await userEvent.type(screen.getByLabelText('NAME'), 'Plain');
+    await userEvent.click(screen.getByRole('button', { name: 'CREATE' }));
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith(COPY, 'setup'));
+    expect(calls.find((c) => c.method === 'POST')!.body).toEqual({ name: 'Plain' });
+  });
+
+  it('says when the examples can\'t be read, and copies nothing', async () => {
+    examplesDown = true;
+    await pickExamples();
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not load the examples: Could not reach the systems store');
+    await userEvent.type(screen.getByLabelText('NAME'), 'Runners{Enter}');
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+  });
+
+  it('says so when one of them can\'t be read', async () => {
+    exampleGone = 'sr6';
+    await pickExamples();
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not load the examples: No such example');
+    expect(screen.queryByTestId('example-cwn')).toBeNull();
+  });
+
+  it('still has the genre starters to come', async () => {
+    open({ startTab: 'new' });
+    expect((screen.getByRole('radio', { name: /A GENRE STARTER/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

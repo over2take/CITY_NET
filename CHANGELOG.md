@@ -88,6 +88,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Start a system from Cities Without Number or Shadowrun.** In the builder's + NEW, A BUILT-IN
+  EXAMPLE now works: a card for each says what it holds (its health, how characters advance, its
+  stats and formulas), and COPY makes it a new system of your own under the name you type, opened
+  on SETUP, with no link back. LOOK FIRST opens the example in the builder to read: every page is
+  there with its boxes and buttons locked, tabs and settings still open, SAVE and PUBLISH off, and
+  TRY IT works as on your own systems. COPY TO CHANGE IT makes the copy from there. The built-in
+  games themselves don't change.
+
 - **Cities Without Number and Shadowrun as examples to copy.** Both are now whole systems in the
   builder's format, ready to publish as they stand: their stats, the names players see, a sample
   character, and their setup answers (one pool in meters for CWN; physical and stun with overflow,

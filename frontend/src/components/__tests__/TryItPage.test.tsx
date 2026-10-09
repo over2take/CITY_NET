@@ -90,6 +90,15 @@ describe('the made-up character', () => {
     expect(screen.queryByRole('button', { name: 'SAVE AS THE SAMPLE CHARACTER' })).toBeNull();
   });
 
+  it('offers no SAVE AS THE SAMPLE CHARACTER with nowhere to save it, as on a built-in example', async () => {
+    render(<TryItPage definition={H} api={serverApi() as unknown as Api} />);
+    await waitFor(() => expect(valueOf('Save')).toBe('11'));
+    fireEvent.change(character().getByLabelText('Strength'), { target: { value: '6' } });
+    await waitFor(() => expect(valueOf('Save')).toBe('7'));
+    expect(screen.queryByRole('button', { name: 'SAVE AS THE SAMPLE CHARACTER' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'RESET TO THE SAMPLE' })).toBeTruthy();
+  });
+
   it('goes back to the sample on RESET, health and all', async () => {
     open();
     await waitFor(() => expect(valueOf('Save')).toBe('11'));

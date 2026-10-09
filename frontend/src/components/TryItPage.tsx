@@ -22,7 +22,8 @@ import type { HealthView } from '../hooks/useHealthView';
 
 interface Props {
   definition: Definition;
-  edit: (next: Definition) => void;
+  /** None for a built-in example, whose samples can't change: no SAVE AS THE SAMPLE CHARACTER. */
+  edit?: (next: Definition) => void;
   api?: ReturnType<typeof systemsApi>;
 }
 
@@ -156,7 +157,7 @@ export function TryItPage({ definition, edit, api }: Props) {
         <span style={{ ...small, opacity: 1 }}>THE DRAFT AS IT STANDS</span>
         <span style={why}>Unsaved changes included. What you type here isn&apos;t saved.</span>
         <span style={{ flex: 1 }} />
-        {differsFromSample(definition, character) && (
+        {edit && differsFromSample(definition, character) && (
           <button type="button" className="utility-btn" style={btn} onClick={() => edit(withCharacterAsSample(definition, character))}>SAVE AS THE SAMPLE CHARACTER</button>
         )}
         <button type="button" className="utility-btn" style={btn} onClick={reset}>RESET TO THE SAMPLE</button>

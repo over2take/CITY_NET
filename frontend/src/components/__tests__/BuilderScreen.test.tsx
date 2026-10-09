@@ -21,6 +21,7 @@ import { createRequire } from 'module';
 const { starterSheet, effectiveSheet } = createRequire(import.meta.url)('../../../../backend/systemBuilder/sheet.js');
 const { tryHealth } = createRequire(import.meta.url)('../../../../backend/systemBuilder/tryHealth.js');
 const { previewDerived } = createRequire(import.meta.url)('../../../../backend/systemBuilder/derived.js');
+const { exampleList, exampleDefinition } = createRequire(import.meta.url)('../../../../backend/systemBuilder/examples.js');
 
 /**
  * The builder screen (4a2b): it takes over the window, with its own sidebar of pages, SAVE,
@@ -43,6 +44,8 @@ let calls: { url: string; method: string }[];
 let publishAnswer: { status: number; body: unknown };
 let draftAnswer: { status: number; body: unknown };
 let drafts: unknown[];
+let posts: unknown[];
+const COPY = 'sys_cccccccccccccccc';
 
 const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
@@ -56,6 +59,18 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     return json(draftAnswer.status, draftAnswer.body);
   }
   if (url === '/api/systems' && method === 'GET') return json(200, LIBRARY);
+  if (url === '/api/systems' && method === 'POST') {
+    const body = JSON.parse(String(init!.body));
+    posts.push(body);
+    if (body.name.trim().toLowerCase() === 'hearth') return json(409, { error: 'Another system is already called Hearth.' });
+    return json(200, { id: COPY, problems: [] });
+  }
+  if (url === '/api/systems/examples') return json(200, exampleList());
+  const ex = /^\/api\/systems\/examples\/([a-z0-9]+)$/.exec(url);
+  if (ex) {
+    const definition = exampleDefinition(ex[1]);
+    return definition ? json(200, { id: ex[1], definition }) : json(404, { error: 'No such example' });
+  }
   if (url === '/api/systems/try-health') {
     const body = JSON.parse(String(init!.body));
     return json(200, tryHealth(body.definition, body));
@@ -84,6 +99,7 @@ beforeEach(() => {
   publishAnswer = { status: 200, body: { version: 4 } };
   draftAnswer = { status: 200, body: { problems: [] } };
   drafts = [];
+  posts = [];
 });
 afterEach(() => cleanup());
 
@@ -348,6 +364,137 @@ describe('with no system open', () => {
     const { onExit } = open({ systemId: null });
     await userEvent.click(screen.getByLabelText('Exit the builder and go back to the map'));
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('looking at a built-in example (4d1b)', () => {
+  // Approved mockup builder-examples (2026-10-08): every page shown, everything locked but TRY IT,
+  // nothing saved, COPY TO CHANGE IT under a name of the GM's own.
+  const look = (page: 'rules' | 'try' | 'features' | 'sheet' = 'rules', over = {}) =>
+    open({ systemId: null, example: 'cwn', startPage: page, ...over });
+  const banner = () => screen.getByRole('region', { name: 'Example' });
+
+  it('opens it under its own name, marked as an example, with nothing to save or publish', async () => {
+    look();
+    await screen.findByRole('region', { name: 'Example' });
+    expect(within(screen.getByTestId('builder-system')).getByText('CITIES WITHOUT NUMBER')).toBeTruthy();
+    expect(within(screen.getByTestId('builder-system')).getByText('EXAMPLE · READ ONLY')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('STATS & RULES');
+    for (const label of ['SAVE', 'PUBLISH']) expect((within(sidebar()).getByLabelText(label) as HTMLButtonElement).disabled, label).toBe(true);
+    for (const label of ['SETUP', 'WORDS', 'TRY IT', 'PROBLEMS']) expect((within(sidebar()).getByLabelText(label) as HTMLButtonElement).disabled, label).toBe(false);
+    expect(calls.map((c) => c.url)).toContain('/api/systems/examples/cwn');
+    expect(calls.some((c) => c.url === '/api/systems' || /\/api\/systems\/sys_/.test(c.url))).toBe(false);
+  });
+
+  it('shows every page with its boxes and buttons locked, its tabs still there to read', async () => {
+    look();
+    const strength = await screen.findByLabelText('Strength name');
+    await waitFor(() => expect((strength as HTMLInputElement).disabled).toBe(true));
+    expect((screen.getByLabelText('Strength sample') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByText('+ GROUP').closest('button') as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole('tab', { name: 'FORMULAS' }));
+    const save = await screen.findByLabelText('Physical save formula');
+    await waitFor(() => expect((save as HTMLInputElement).disabled).toBe(true));
+    expect((save as HTMLInputElement).value).toBe('16 - (@level + max(@str_mod, @con_mod))');
+    expect(screen.getByTestId('locked-page')).toBeTruthy();
+  });
+
+  it('locks each page as it is opened from the rail, not only the first', async () => {
+    look();
+    await waitFor(() => expect((screen.getByLabelText('Strength name') as HTMLInputElement).disabled).toBe(true));
+    await userEvent.click(within(sidebar()).getByLabelText('WORDS'));
+    const boxes = within(screen.getByTestId('locked-page')).getAllByRole('textbox');
+    expect(boxes.length).toBeGreaterThan(10);
+    for (const box of boxes) expect((box as HTMLInputElement).disabled).toBe(true);
+    // The banner's name box sits outside the page, so a copy can still be named.
+    expect((within(banner()).getByLabelText('Name for the copy') as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it('opens things out on FEATURES, but switches nothing', async () => {
+    look('features');
+    const opener = await within(await screen.findByTestId('part-bank')).findByRole('button', { name: /SETTINGS/, expanded: false });
+    await userEvent.click(opener);
+    await waitFor(() => expect(opener.getAttribute('aria-expanded')).toBe('true'));
+    for (const s of screen.getAllByRole('switch')) expect((s as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('lets the CHARACTER SHEET preview be seen by each viewer, but not customized', async () => {
+    look('sheet');
+    const others = await screen.findByRole('button', { name: 'EVERYONE ELSE' });
+    await waitFor(() => expect((screen.getByRole('button', { name: /CUSTOMIZE/ }) as HTMLButtonElement).disabled).toBe(true));
+    expect((others as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(others);
+    expect(others.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('never saves, and says so if anything tries to change it', async () => {
+    look();
+    const strength = await screen.findByLabelText('Strength name');
+    fireEvent.change(strength, { target: { value: 'Brawn' } });
+    expect(screen.getByRole('status').textContent).toBe('This is an example: copy it to change it.');
+    expect((screen.getByLabelText('Strength name') as HTMLInputElement).value).toBe('Strength');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(drafts).toEqual([]);
+  });
+
+  it('leaves TRY IT usable, without SAVE AS THE SAMPLE CHARACTER', async () => {
+    look('try');
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Made-up character' })).toBeTruthy());
+    const str = await within(screen.getByRole('region', { name: 'Made-up character' })).findByLabelText('Strength');
+    expect((str as HTMLInputElement).disabled).toBe(false);
+    fireEvent.change(str, { target: { value: '18' } });
+    expect(screen.queryByRole('button', { name: 'SAVE AS THE SAMPLE CHARACTER' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'DAMAGE' }));
+    expect((await screen.findByTestId('health-log')).textContent).toContain('DAMAGE 5');
+    expect(screen.queryByTestId('locked-page')).toBeNull();
+  });
+
+  it('COPY TO CHANGE IT makes it the GM\'s own under the name typed, opened on SETUP', async () => {
+    const told = vi.fn();
+    window.addEventListener(SYSTEMS_CHANGED_EVENT, told);
+    const { onOpenSystem } = look();
+    await screen.findByRole('region', { name: 'Example' });
+    const name = within(banner()).getByLabelText('Name for the copy') as HTMLInputElement;
+    expect(name.disabled).toBe(false);
+    expect(name.placeholder).toBe('Cities Without Number (house rules)');
+    await userEvent.click(within(banner()).getByRole('button', { name: 'COPY TO CHANGE IT' }));
+    expect(within(banner()).getByRole('alert').textContent).toBe('Give the copy a name.');
+    await userEvent.type(name, 'hearth{Enter}');
+    expect((await within(banner()).findByRole('alert')).textContent).toBe('Another system is already called Hearth.');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Neon Nights');
+    await userEvent.click(within(banner()).getByRole('button', { name: 'COPY TO CHANGE IT' }));
+    await waitFor(() => expect(onOpenSystem).toHaveBeenCalledWith(COPY, 'setup'));
+    expect(posts.at(-1)).toEqual({ name: 'Neon Nights', example: 'cwn' });
+    expect(told).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SYSTEMS_CHANGED_EVENT, told);
+  });
+
+  it('BACK TO + NEW goes back to where it was picked', async () => {
+    look();
+    await screen.findByRole('region', { name: 'Example' });
+    await userEvent.click(within(banner()).getByRole('button', { name: 'BACK TO + NEW' }));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('MY SYSTEMS');
+    expect(screen.getByRole('tab', { name: '+ NEW' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('region', { name: 'Example' })).toBeNull();
+    // MY SYSTEMS is the GM's own, never locked.
+    await new Promise((r) => setTimeout(r, 0));
+    expect((screen.getByLabelText('NAME') as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it('LOOK FIRST in + NEW asks for it to be opened', async () => {
+    const onLookAt = vi.fn();
+    open({ systemId: null, onLookAt });
+    await userEvent.click(await screen.findByRole('tab', { name: '+ NEW' }));
+    await userEvent.click(screen.getByRole('radio', { name: /A BUILT-IN EXAMPLE/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Look at Cities Without Number first' }));
+    await waitFor(() => expect(onLookAt).toHaveBeenCalledWith('cwn'));
+  });
+
+  it('says when the example can\'t be read', async () => {
+    look('rules', { example: 'dnd' });
+    expect((await screen.findByRole('alert')).textContent).toBe('No such example');
+    expect(screen.queryByRole('region', { name: 'Example' })).toBeNull();
   });
 });
 

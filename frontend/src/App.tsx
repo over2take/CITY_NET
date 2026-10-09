@@ -305,9 +305,9 @@ function App() {
   const [npcLibraryPos, setNpcLibraryPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 }));
   /**
    * The builder, taking over the window while open (4a2b): the system open in it (none until the
-   * GM picks one in MY SYSTEMS) and the page it opened at.
+   * GM picks one in MY SYSTEMS) and the page it opened at, or a built-in example looked at (4d1b).
    */
-  const [builder, setBuilder] = useState<{ id: string | null; page: BuilderPage | 'systems' } | null>(null);
+  const [builder, setBuilder] = useState<{ id: string | null; page: BuilderPage | 'systems'; example?: string } | null>(null);
   const [openNpcSheet, setOpenNpcSheet] = useState<{ id: number; npc_label: string; token_shape?: string; locationId?: number } | null>(null);
   // A friendly NPC the GM gave this player, its sheet open read-only (4b5b4).
   const [controlledNpc, setControlledNpc] = useState<{ locationId: number; name: string } | null>(null);
@@ -2340,13 +2340,15 @@ function App() {
             )}
             {builder && token && isPrimaryAdmin && (
               <BuilderScreen
-                key={builder.id ?? 'none'}
+                key={builder.id ?? (builder.example ? `example:${builder.example}` : 'none')}
                 token={token}
                 systemId={builder.id}
                 startPage={builder.page}
+                example={builder.example ?? null}
                 running={gameSystem}
                 onExit={() => setBuilder(null)}
                 onOpenSystem={(id, page) => setBuilder({ id, page })}
+                onLookAt={(example) => setBuilder({ id: null, page: 'rules', example })}
               />
             )}
             {openPlayerSheetUser && token && (

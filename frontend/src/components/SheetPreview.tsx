@@ -54,7 +54,7 @@ export function SheetPreview({ definition, sheet, values, gmOnly = false }: Prop
           <span style={small}>SEEN BY</span>
           <span role="group" aria-label="Seen by" style={{ display: 'inline-flex', border: '1px solid var(--green)' }}>
             {([['owner', 'ITS OWNER'], ['gm', 'THE GM'], ['others', 'EVERYONE ELSE']] as const).map(([id, label]) => (
-              <button key={id} type="button" style={segBtn(view === id)} aria-pressed={view === id} onClick={() => setView(id)}>{label}</button>
+              <button key={id} type="button" style={segBtn(view === id)} aria-pressed={view === id} data-browse onClick={() => setView(id)}>{label}</button>
             ))}
           </span>
         </div>
