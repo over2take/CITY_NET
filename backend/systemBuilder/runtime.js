@@ -17,6 +17,7 @@ const { ownWords } = require('./definition');
 const { partOn, PARTS } = require('./parts');
 const { buildingOn, buildingName, catalogueCurrency, ownBuildings } = require('./buildings');
 const { currenciesOf } = require('./currencies');
+const { conditionsOf } = require('./conditions');
 const { bankOf } = require('./bank');
 const { distanceOf } = require('./core');
 const templates = require('../sheets/templates');
@@ -214,4 +215,11 @@ const health = (id) => {
 templates.setCustomMeta(meta);
 npcTiers.setCustomTiers(tiers);
 
-module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, metaOf, renderOf };
+/**
+ * The conditions `system` offers for tokens (4e2a; conditions.js): a published custom system's own,
+ * or, for a built-in system (and anything not loaded), the standard set as it stands, names and
+ * descriptions with no modifiers, so a built-in game's rules don't change.
+ */
+const conditionsIn = (system) => conditionsOf(loaded.has(system) ? loaded.get(system).definition : null);
+
+module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, metaOf, renderOf };

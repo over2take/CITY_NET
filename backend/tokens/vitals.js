@@ -1,4 +1,4 @@
-// A token's health, defense and injuries, kept per game system.
+// A token's health, defense, injuries and conditions, kept per game system.
 //
 // A character's state belongs to the game it is in (decided with the user, 2026-09-29), but a
 // token lives on the map, which every system shares. So the token's own columns on `locations`
@@ -10,7 +10,9 @@
 // left, and the incoming system's are brought back, or blanks where that system has never seen
 // the token. One transaction, so a switch happens entirely or not at all.
 
-const FIELDS = ['hp_current', 'hp_max', 'hp_temp', 'melee_ac', 'ranged_ac', 'injuries'];
+const FIELDS = ['hp_current', 'hp_max', 'hp_temp', 'melee_ac', 'ranged_ac', 'injuries', 'conditions'];
+/** What a token shows where a system has never seen it, for the fields that are lists rather than numbers. */
+const EMPTY = { injuries: '{}', conditions: '[]' };
 const TOKEN_SHAPES = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];
 const SHAPES_SQL = TOKEN_SHAPES.map((s) => `'${s}'`).join(', ');
 
@@ -52,9 +54,9 @@ const switchSystem = async (db, to, { defaultSystem = 'generic' } = {}) => {
          SELECT id, ?, ${FIELDS.join(', ')} FROM locations WHERE shape IN (${SHAPES_SQL})`,
         [from]);
       // A subselect that finds no row gives NULL: a blank, which is what a system that has
-      // never seen this token should show. Injuries fall back to none rather than NULL.
-      const sets = FIELDS.map((col) => (col === 'injuries'
-        ? `injuries = COALESCE((SELECT injuries FROM token_vitals v WHERE v.location_id = locations.id AND v.system = ?), '{}')`
+      // never seen this token should show. Injuries and conditions fall back to none rather than NULL.
+      const sets = FIELDS.map((col) => (EMPTY[col]
+        ? `${col} = COALESCE((SELECT ${col} FROM token_vitals v WHERE v.location_id = locations.id AND v.system = ?), '${EMPTY[col]}')`
         : `${col} = (SELECT ${col} FROM token_vitals v WHERE v.location_id = locations.id AND v.system = ?)`));
       const res = await q(db, 'run',
         `UPDATE locations SET ${sets.join(', ')} WHERE shape IN (${SHAPES_SQL})`,

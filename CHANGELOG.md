@@ -95,6 +95,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Tokens can carry conditions.** The server now keeps a list of conditions on each token, put on
+  and taken off by whoever may change its health: the GM, a granted editor, the player whose token
+  it is, or the player given a friendly NPC. Only conditions the running game has are accepted: a
+  custom system's own, or under a built-in game the standard ten as names and descriptions, with
+  nothing that changes its rules. Everyone sees which conditions a token has; how many rounds one
+  has left goes only to the GM. Like a token's health, each game keeps its own conditions when you
+  switch systems. The windows that show and change them come next.
+
 - **The builder's CONDITIONS page.** A new page between NPCS and TRY IT lists the ten standard
   conditions with on/off switches and the system's own below them. Each can be renamed (the
   standard name shows until you type one), given a short label for its chip, an icon (24 drawn for
