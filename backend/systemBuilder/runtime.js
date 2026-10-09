@@ -226,4 +226,10 @@ const conditionsIn = (system) => conditionsOf(loaded.has(system)
   ? loaded.get(system).definition
   : { conditions: tableConditionsOf(system) });
 
-module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, metaOf, renderOf };
+/**
+ * A published custom system's definition, for rules that read it whole (a rest, resting.js, 4f2b);
+ * null for a built-in system, a draft or an unknown id. Read, never changed.
+ */
+const definitionOf = (system) => (loaded.has(system) ? loaded.get(system).definition : null);
+
+module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, definitionOf, metaOf, renderOf };
