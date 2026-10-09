@@ -9,6 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **A LUCK test no longer fails on a busy machine.** It checked that a roll spent the declared LUCK
+  by reading the sheet the moment the roll was announced, but the spend is written alongside the
+  announcement rather than before it, so on a slow CI machine it sometimes read the old value. It
+  now waits for the spend to land. Nothing in the game changes.
+
 - **The README's map of the code is complete again, and kept that way.** Its Project Structure had
   fallen behind: 202 source and test files weren't in it, and 28 lines put a file in a folder it
   wasn't in. Every file now has a line saying what it is for, the misplaced ones are where their

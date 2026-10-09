@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
 import { makeTestDb, get, run } from './helpers/testDb.js';
-import { drain } from './helpers/until.js';
+import { drain, untilValue } from './helpers/until.js';
 
 process.env.JWT_SECRET = 'test-secret';
 process.env.DICE_ANIM_MS = '0'; // skip the 5s dice-animation delay on outcome writes
@@ -232,8 +232,16 @@ describe('requestSheetRoll with LUCK', () => {
 
     const roll = emitted.find(e => e.event === 'diceRollBroadcast');
     expect(roll.data.historyString).toContain('(LUCK +2)');
-    const sheet = await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`);
-    expect(JSON.parse(sheet.data).luck).toBe(0);
+    // The spend is written alongside the broadcast, not before it: wait for it to land rather
+    // than reading the sheet the moment the roll is seen (which failed on a busy CI machine).
+    // The whole sheet is waited on, not the number: untilValue takes a falsy value for "not yet",
+    // and the LUCK expected here is 0.
+    const sheet = await untilValue(
+      async () => JSON.parse((await get(db, `SELECT data FROM character_sheets WHERE username = 'GHOST'`)).data),
+      (data) => data.luck === 0,
+      { label: 'the LUCK spent' },
+    );
+    expect(sheet.luck).toBe(0);
   });
 
   it('rolls without LUCK leave the pool alone', async () => {
