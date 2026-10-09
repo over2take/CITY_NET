@@ -22,6 +22,7 @@
 //     npc:     { sheet, tiers },                     // NPC layout and power tiers (npc.js)
 //     core:    { health, advancement, dice, distance }, // the setup questions (core.js)
 //     conditions: { blinded: { on: false }, glitching: { name: 'Glitching', ... } }, // (conditions.js)
+//     rests: { long_rest: { counts_as: ['short_rest'], refills: [...] } },          // (rests.js)
 //   }
 //
 // Problems come in two weights. A **fatal** one means the document cannot be stored at all:
@@ -47,6 +48,7 @@ const { checkBuildings } = require('./buildings');
 const { checkCurrencies } = require('./currencies');
 const { checkBank } = require('./bank');
 const { checkConditions } = require('./conditions');
+const { checkRests, restIdsOf } = require('./rests');
 
 const FORMAT = 1;
 
@@ -62,7 +64,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions']);
+const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -167,7 +169,8 @@ const checkDefinition = (definition) => {
   checkSheet(definition.sheet, derivedIds, problems);
   checkCore(definition.core, derivedIds, problems);
   checkNpc(definition, derivedIds, problems);
-  checkConditions(definition.conditions, new Set([...statIdsOf(definition), ...derivedIds]), problems);
+  checkConditions(definition.conditions, new Set([...statIdsOf(definition), ...derivedIds]), problems, restIdsOf(definition));
+  checkRests(definition, problems);
   return { problems };
 };
 

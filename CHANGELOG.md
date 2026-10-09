@@ -100,6 +100,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Rests, as data.** A custom system has rests: Short rest, Long rest, End of scene and End of
+  session, each renamed or turned off, plus its own, twelve in all. Each one can count as other
+  rests and refills, in order, health, a number on the sheet or a whole section of it. Amounts can
+  be numbers, formulas or dice that use the character's own numbers. Conditions can now wear off
+  at a rest. The builder page and calling a rest in the game come next.
 - **A built-in game's own conditions in the GAME tab.** Under CWN, Cyberpunk RED, Shadowrun or
   Generic, the main admin sees a CONDITIONS panel in TTRPG_SYSTEM: the standard ten, and the
   table's own, added with a name, a drawn or uploaded icon and a description, or removed after

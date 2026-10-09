@@ -5,6 +5,7 @@
 //     blinded:  { on: false },                                  // a standard one, turned off
 //     poisoned: { ends: 'rounds', rounds: 3,
 //                 modifiers: [{ target: 'all_rolls', amount: -1 }] },  // a standard one, edited
+//     exhausted: { ends: 'rest', at: ['long_rest'] },            // wears off at a rest (4f, rests.js)
 //     glitching: { name: 'Glitching', short: 'GLITCH', icon: '/uploads/condition_icons/<hash>.png',
 //                  description: 'Chrome misfiring.' },          // one of the system's own
 //   }
@@ -15,7 +16,8 @@
 // - conditions for every system, as many as a table needs (up to LIMITS.conditions in all);
 // - an icon is one of ICONS, drawn for CITY_NET in the theme's colors, or an uploaded PNG, WebP or
 //   SVG (POST /api/systems/condition-icons), kept in its own colors as currency icons are;
-// - a condition ends when removed, or after a number of rounds (refresh events come with 4f);
+// - a condition ends when removed, after a number of rounds, or at any of the rests it names
+//   (4f1, rests.js; approved mockup docs/mockups/builder-rests.html), one way only;
 // - modifiers name a stat, a formula or all rolls, and are recorded and shown now; they reach
 //   rolls once a system's rolls are built (Phase 6).
 //
@@ -32,8 +34,8 @@ const ICONS = [
 const UPLOADED_ICON = /^\/uploads\/condition_icons\/[0-9a-f]{64}\.(png|webp|svg)$/;
 const isIcon = (icon) => typeof icon === 'string' && (ICONS.includes(icon) || UPLOADED_ICON.test(icon));
 
-/** How a condition ends: when someone takes it off, or after a number of rounds. */
-const ENDS = ['removed', 'rounds'];
+/** How a condition ends: when someone takes it off, after a number of rounds, or at a rest. */
+const ENDS = ['removed', 'rounds', 'rest'];
 /** A modifier's target that is no single number: every roll the character makes. */
 const ALL_ROLLS = 'all_rolls';
 
@@ -52,8 +54,8 @@ const STANDARD = [
 ];
 const STANDARD_IDS = new Set(STANDARD.map((c) => c.id));
 
-const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'description', 'ends', 'rounds', 'modifiers']);
-const OWN_KEYS = new Set(['name', 'short', 'icon', 'description', 'ends', 'rounds', 'modifiers']);
+const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers']);
+const OWN_KEYS = new Set(['name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -83,9 +85,9 @@ const checkModifiers = (modifiers, where, targets, problems) => {
 
 /**
  * Problems with a definition's `conditions`, pushed onto `problems`. `targets` are the ids a
- * modifier may name: the system's stats and formulas.
+ * modifier may name: the system's stats and formulas; `rests` the ids a condition may end at.
  */
-const checkConditions = (conditions, targets, problems) => {
+const checkConditions = (conditions, targets, problems, rests = new Set()) => {
   if (conditions === undefined) return;
   if (!isPlainObject(conditions)) { problems.push({ where: 'conditions', message: 'Must be a set of conditions' }); return; }
   const own = Object.keys(conditions).filter((id) => !STANDARD_IDS.has(id));
@@ -106,13 +108,19 @@ const checkConditions = (conditions, targets, problems) => {
     text(c.short, `${where}, short`, LIMITS.short, problems);
     text(c.description, `${where}, description`, LIMITS.description, problems);
     if (c.icon !== undefined && !isIcon(c.icon)) problems.push({ where: `${where}, icon`, message: 'Must be one of the drawn icons or an uploaded one' });
-    if (c.ends !== undefined && !ENDS.includes(c.ends)) problems.push({ where: `${where}, ends`, message: 'Ends when removed, or after rounds' });
+    if (c.ends !== undefined && !ENDS.includes(c.ends)) problems.push({ where: `${where}, ends`, message: 'Ends when removed, after rounds, or at a rest' });
     if (c.ends === 'rounds') {
       if (!Number.isInteger(c.rounds) || c.rounds < 1 || c.rounds > LIMITS.rounds) {
         problems.push({ where: `${where}, rounds`, message: `A whole number from 1 to ${LIMITS.rounds}` });
       }
     } else if (c.rounds !== undefined) {
       problems.push({ where: `${where}, rounds`, message: 'Only a condition that ends after rounds has rounds' });
+    }
+    if (c.ends === 'rest') {
+      if (!Array.isArray(c.at) || !c.at.length) problems.push({ where: `${where}, at`, message: 'Name the rests it wears off at' });
+      else c.at.forEach((id, i) => { if (!rests.has(id)) problems.push({ where: `${where}, at ${i + 1}`, message: 'Not one of this system\'s rests' }); });
+    } else if (c.at !== undefined) {
+      problems.push({ where: `${where}, at`, message: 'Only a condition that ends at a rest names rests' });
     }
     checkModifiers(c.modifiers, `${where}, modifier`, targets, problems);
   }
@@ -138,6 +146,7 @@ const conditionsOf = (definition) => {
       description: typeof c.description === 'string' ? c.description : (base.description || ''),
       ends,
       ...(ends === 'rounds' && Number.isInteger(c.rounds) ? { rounds: c.rounds } : {}),
+      ...(ends === 'rest' ? { at: Array.isArray(c.at) ? c.at.filter((id) => typeof id === 'string') : [] } : {}),
       modifiers: Array.isArray(c.modifiers) ? c.modifiers.filter((m) => isPlainObject(m)).map((m) => ({ target: m.target, amount: m.amount })) : [],
       standard,
     };

@@ -150,7 +150,7 @@ describe('the checks', () => {
   });
 
   it('ends when removed or after 1 to 99 rounds, and has rounds only then', () => {
-    expect(messages({ prone: { ends: 'scene' } })).toEqual(['condition prone, ends: Ends when removed, or after rounds']);
+    expect(messages({ prone: { ends: 'scene' } })).toEqual(['condition prone, ends: Ends when removed, after rounds, or at a rest']);
     for (const rounds of [0, 100, 2.5, '3', undefined]) {
       expect(messages({ prone: { ends: 'rounds', rounds } }), String(rounds)).toEqual(['condition prone, rounds: A whole number from 1 to 99']);
     }
