@@ -139,7 +139,7 @@ export const publishedMessage = (version: number, running: boolean): string =>
 
 // ─── The sidebar ────────────────────────────────────────────────────────────
 
-export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'sheet' | 'npcs' | 'try' | 'problems';
+export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'sheet' | 'npcs' | 'conditions' | 'try' | 'problems';
 
 /**
  * The builder's pages, in the sidebar's order, each with the line that says what it is for
@@ -153,6 +153,7 @@ export const BUILDER_PAGES: { id: BuilderPage; label: string; what: string }[] =
   { id: 'rules', label: 'STATS & RULES', what: 'Stats, formulas and tables.' },
   { id: 'sheet', label: 'CHARACTER SHEET', what: 'How a character sheet is laid out.' },
   { id: 'npcs', label: 'NPCS', what: 'NPC tiers and their sheets.' },
+  { id: 'conditions', label: 'CONDITIONS', what: 'What can happen to a character besides losing health.' },
   { id: 'try', label: 'TRY IT', what: 'A test character, to see the rules work.' },
   { id: 'problems', label: 'PROBLEMS', what: 'What to fix before publishing.' },
 ];

@@ -95,6 +95,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's CONDITIONS page.** A new page between NPCS and TRY IT lists the ten standard
+  conditions with on/off switches and the system's own below them. Each can be renamed (the
+  standard name shows until you type one), given a short label for its chip, an icon (24 drawn for
+  CITY_NET that follow the theme, or a picture you upload), a description, an end (when removed, or
+  after a number of rounds) and modifiers on all rolls, a stat or a formula. + CONDITION adds one of
+  your own, up to 60 in all, and deleting one asks first. Putting a standard condition back as it
+  was saves nothing, as with WORDS. Conditions on tokens come next.
+
 - **Conditions as part of a game system.** A custom system now carries its conditions: ten
   standard ones every system starts with (Blinded, Bleeding, Poisoned, Prone, Stunned, Grappled,
   Frightened, Unconscious, Restrained, Exhausted), each of which can be renamed, described, given
