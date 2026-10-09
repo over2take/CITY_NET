@@ -29,6 +29,9 @@ db.serialize(() => {
     injuries TEXT DEFAULT '{}'
   )`);
   db.run(`ALTER TABLE locations ADD COLUMN injuries TEXT DEFAULT '{}'`, () => {});
+  // A token's conditions (4e2a): JSON [{"id":"prone"},{"id":"poisoned","left":2}], kept per game
+  // system like its health (tokens/vitals.js), checked by tokens/conditions.js.
+  db.run(`ALTER TABLE locations ADD COLUMN conditions TEXT DEFAULT '[]'`, () => {});
   // Who besides an admin may move this token. JSON: {"all":bool,"users":[names]}.
   // Only friendly NPCs honour it - see backend/sockets/tokenControl.js.
   db.run(`ALTER TABLE locations ADD COLUMN controllers TEXT`, () => {});
@@ -371,6 +374,7 @@ db.serialize(() => {
     injuries TEXT DEFAULT '{}',
     PRIMARY KEY (location_id, system)
   )`);
+  db.run(`ALTER TABLE token_vitals ADD COLUMN conditions TEXT DEFAULT '[]'`, () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS water_bodies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

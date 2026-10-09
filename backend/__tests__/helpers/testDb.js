@@ -46,6 +46,7 @@ function makeTestDb() {
         melee_ac INTEGER,
         ranged_ac INTEGER,
         injuries TEXT DEFAULT '{}',
+        conditions TEXT DEFAULT '[]',
         controllers TEXT,
         is_global INTEGER DEFAULT 0,
         has_sidewalk INTEGER DEFAULT 1,
@@ -253,6 +254,7 @@ function makeTestDb() {
         melee_ac INTEGER,
         ranged_ac INTEGER,
         injuries TEXT DEFAULT '{}',
+        conditions TEXT DEFAULT '[]',
         PRIMARY KEY (location_id, system)
       )`);
 

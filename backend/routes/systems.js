@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
-const { authenticate, requireMainAdmin } = require('../middleware/auth');
+const { authenticate, optionalAuthenticate, requireMainAdmin } = require('../middleware/auth');
 const { LIMITS, rejectFormat, uploadErrors } = require('../middleware/uploadConstraints');
 const store = require('../systemBuilder/store');
 const runtime = require('../systemBuilder/runtime');
@@ -257,6 +257,17 @@ module.exports = (db, io = null) => {
     const render = runtime.render(req.params.id);
     if (!render) return res.status(404).json({ error: 'No such published system' });
     res.json(render);
+  });
+
+  /**
+   * The conditions a system offers for tokens (4e2a; runtime.conditionsIn): a published custom
+   * system's own, or the standard set under a built-in one. Public, as the token list is: everyone
+   * sees a token's conditions by name, icon and description. Their modifiers go only to the GM and
+   * a granted editor here; a token's owner sees them in its HEALTH folder.
+   */
+  router.get('/conditions/:system', optionalAuthenticate, (req, res) => {
+    const all = runtime.conditionsIn(req.params.system);
+    res.json(req.user ? all : all.map(({ modifiers, ...c }) => ({ ...c, modifiers: [] })));
   });
 
   return router;
