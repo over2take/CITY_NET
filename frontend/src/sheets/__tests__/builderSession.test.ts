@@ -205,7 +205,7 @@ describe('what it says', () => {
   });
 
   it('the sidebar\'s pages, in order, each saying what it is for', () => {
-    expect(BUILDER_PAGES.map((p) => p.label)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'TRY IT', 'PROBLEMS']);
+    expect(BUILDER_PAGES.map((p) => p.label)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'TRY IT', 'PROBLEMS']);
     for (const p of BUILDER_PAGES) expect(p.what, p.label).toMatch(/\.$/);
     expect(new Set(BUILDER_PAGES.map((p) => p.id)).size).toBe(BUILDER_PAGES.length);
   });

@@ -14,6 +14,7 @@ import { StatsRulesPage } from './StatsRulesPage';
 import { SheetPage } from './SheetPage';
 import { NpcsPage } from './NpcsPage';
 import { ConditionsPage } from './ConditionsPage';
+import { RestsPage } from './RestsPage';
 import { CONDITION_ICONS } from '../sheets/conditionIcons';
 import { TryItPage } from './TryItPage';
 
@@ -118,6 +119,7 @@ const Icons: Record<BuilderPage | 'builder' | 'systems' | 'save' | 'publish', Re
   sheet: icon('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M16 13H8', 'M16 17H8', 'M10 9H8'),
   npcs: icon('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'),
   conditions: icon(...CONDITION_ICONS.skull),
+  rests: icon('M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'),
   try: icon('M5 3l14 9-14 9z'),
   problems: icon('M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z', 'M12 9v4', 'M12 17h.01'),
   save: icon('M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z', 'M17 21v-8H7v8', 'M7 3v5h8'),
@@ -420,6 +422,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}
+            {ready && page === 'rests' && <RestsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'try' && <TryItPage definition={definition!} edit={looking ? undefined : edit} api={api} />}
           </Locked>
         </section>
