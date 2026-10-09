@@ -88,6 +88,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Three genre starters for the system builder.** Ready-made starting points for a genre rather
+  than a game, each ready to publish as it stands: **Sword & Spell**, fantasy on a d20 (six
+  abilities with modifiers, proficiency by level, gold pieces, NPCs whose HP is rolled for their
+  level); **Starfarer**, sci-fi on 2d6 (every modifier read from one table, a count of three
+  wounds instead of HP); and **Story First**, a narrative one (six approaches rated 0 to 3, harm
+  levels, milestones, nothing worked out by formula, credited to Fate Accelerated under CC BY).
+  The server lists them apart from the built-in games and copies one like an example. The
+  builder's button for them comes next.
+
 - **Cyberpunk RED and Generic as data, and Cyberpunk RED as an example to copy.** Cyberpunk
   RED's current EMP (Humanity / 10, rounded down) and Generic's nothing-at-all are now written in
   the builder's format and held to the games' own code over thousands of made-up sheets, like
