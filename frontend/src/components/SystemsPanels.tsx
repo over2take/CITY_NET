@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { systemsApi } from '../sheets/systemsApi';
+import { exampleFacts, suggestedName } from '../sheets/examples';
 import {
   insideBadges, installPlan, installedMessage, type Badge, type InstallPreview, type InstallAction,
 } from '../sheets/systemsLibrary';
@@ -41,27 +42,97 @@ export const field: React.CSSProperties = {
 };
 export const danger: React.CSSProperties = { borderColor: 'var(--danger)', color: 'var(--danger)' };
 
-/** NEW: a system from a name. Example and genre starts come later (4d1, 4d3). */
-export function NewPanel({ api, onMade }: { api: Api; onMade: (id: string, name: string) => void }) {
+type Start = 'blank' | 'example' | 'starter';
+
+/**
+ * The built-in examples to start from (4d1b): a card each saying what it holds, picked as a radio,
+ * with LOOK FIRST to open it in the builder read-only.
+ */
+function ExampleCards({ api, picked, onPick, onLook, onLoaded }: {
+  api: Api; picked: string | null; onPick: (id: string) => void; onLook?: (id: string) => void;
+  onLoaded: (names: Record<string, string>) => void;
+}) {
+  const [examples, setExamples] = useState<{ id: string; name: string; description: string; facts: [string, string][] }[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const list = await api.examples();
+      if (!live) return;
+      if (!list.ok) { setError(list.error); return; }
+      const whole = await Promise.all(list.value.map((e) => api.example(e.id)));
+      if (!live) return;
+      const failed = whole.find((w) => !w.ok);
+      if (failed && !failed.ok) { setError(failed.error); return; }
+      const cards = list.value.map((e, i) => {
+        const w = whole[i];
+        return { ...e, facts: w.ok ? exampleFacts(w.value.definition) : [] };
+      });
+      setExamples(cards);
+      onLoaded(Object.fromEntries(cards.map((c) => [c.id, c.name])));
+    })();
+    return () => { live = false; };
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (error) return <span role="alert" style={{ ...why, color: 'var(--danger)', marginLeft: 18 }}>Could not load the examples: {error}</span>;
+  if (!examples) return <span style={{ ...why, marginLeft: 18 }}>LOADING…</span>;
+  return (
+    <div role="radiogroup" aria-label="Example" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginLeft: 18 }}>
+      {examples.map((e) => {
+        const on = picked === e.id;
+        return (
+          <div key={e.id} data-testid={`example-${e.id}`} style={{
+            border: `1px solid ${on ? 'var(--green)' : 'var(--dark-green)'}`, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6,
+            background: on ? 'color-mix(in srgb, var(--green) 8%, transparent)' : 'none', boxShadow: on ? 'inset 3px 0 0 var(--green)' : 'none',
+          }}>
+            <button type="button" role="radio" aria-checked={on} onClick={() => onPick(e.id)} style={{
+              background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer', color: 'var(--green)',
+              fontFamily: 'monospace', fontSize: 12, fontWeight: 700, letterSpacing: 1,
+            }}>{e.name.toUpperCase()}</button>
+            <span style={why}>{e.description}</span>
+            <dl style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '2px 10px', margin: 0, fontSize: 10 }}>
+              {e.facts.map(([k, v]) => <React.Fragment key={k}><dt style={{ opacity: 0.6, letterSpacing: 1 }}>{k}</dt><dd style={{ margin: 0 }}>{v}</dd></React.Fragment>)}
+            </dl>
+            {onLook && (
+              <div><button type="button" className="utility-btn" style={btn} onClick={() => onLook(e.id)} aria-label={`Look at ${e.name} first`}>LOOK FIRST</button></div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * NEW: a system from a name, blank or copied from a built-in example (4d1b). Genre starters come
+ * with 4d3. `onLook` opens an example in the builder to look at first.
+ */
+export function NewPanel({ api, onMade, onLook }: { api: Api; onMade: (id: string, name: string) => void; onLook?: (id: string) => void }) {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [start, setStart] = useState<Start>('blank');
+  const [picked, setPicked] = useState<string | null>(null);
+  const [names, setNames] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
+  const example = start === 'example' ? picked : null;
+  const exampleName = example ? names[example] ?? null : null;
 
   const create = async () => {
     const wanted = name.trim();
-    if (!wanted || busy) return;
+    if (!wanted || busy || (start === 'example' && !example)) return;
     setBusy(true);
-    const r = await api.create(wanted);
+    const r = example ? await api.createFromExample(wanted, example) : await api.create(wanted);
     setBusy(false);
     if (!r.ok) { setError(r.error); inputRef.current?.focus(); return; }
     setName('');
     onMade(r.value.id, wanted);
   };
 
-  const starts: [string, string, string, boolean][] = [
+  const starts: [Start, string, string, boolean][] = [
     ['blank', 'BLANK', 'A name and nothing else, to build up in the builder.', true],
-    ['example', 'A BUILT-IN EXAMPLE', 'Cities Without Number or Shadowrun as data, to change into your own. Coming later.', false],
+    ['example', 'A BUILT-IN EXAMPLE', 'Cities Without Number or Shadowrun, copied to change into your own.', true],
     ['starter', 'A GENRE STARTER', 'Fantasy, sci-fi, or a narrative one with no numbers. Coming later.', false],
   ];
 
@@ -73,7 +144,7 @@ export function NewPanel({ api, onMade }: { api: Api; onMade: (id: string, name:
         ref={inputRef}
         type="text"
         maxLength={80}
-        placeholder="Vault Knights"
+        placeholder={exampleName ? suggestedName(exampleName) : 'Vault Knights'}
         autoComplete="off"
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? 'systems-new-error' : undefined}
@@ -86,25 +157,36 @@ export function NewPanel({ api, onMade }: { api: Api; onMade: (id: string, name:
       <span style={small}>START FROM</span>
       <div role="radiogroup" aria-label="Start from" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {starts.map(([id, label, what, can]) => (
-          <button
-            key={id} type="button" role="radio" aria-checked={id === 'blank'} disabled={!can}
-            style={{
-              display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '2px 8px', padding: '6px 8px', textAlign: 'left',
-              fontFamily: 'monospace', fontSize: 11, color: 'var(--green)', cursor: can ? 'pointer' : 'not-allowed', opacity: can ? 1 : 0.45,
-              border: `1px solid ${id === 'blank' ? 'var(--green)' : 'var(--dark-green)'}`,
-              background: id === 'blank' ? 'color-mix(in srgb, var(--green) 12%, transparent)' : 'none',
-            }}
-          >
-            <span aria-hidden style={{ width: 10, height: 10, marginTop: 2, borderRadius: '50%', border: '1px solid var(--green)', background: id === 'blank' ? 'var(--green)' : 'none' }} />
-            <span>{label}</span>
-            <small style={{ gridColumn: 2, opacity: 0.75 }}>{what}</small>
-          </button>
+          <React.Fragment key={id}>
+            <button
+              type="button" role="radio" aria-checked={start === id} disabled={!can}
+              onClick={() => { setStart(id); setError(null); }}
+              style={{
+                display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '2px 8px', padding: '6px 8px', textAlign: 'left',
+                fontFamily: 'monospace', fontSize: 11, color: 'var(--green)', cursor: can ? 'pointer' : 'not-allowed', opacity: can ? 1 : 0.45,
+                border: `1px solid ${start === id ? 'var(--green)' : 'var(--dark-green)'}`,
+                background: start === id ? 'color-mix(in srgb, var(--green) 12%, transparent)' : 'none',
+              }}
+            >
+              <span aria-hidden style={{ width: 10, height: 10, marginTop: 2, borderRadius: '50%', border: '1px solid var(--green)', background: start === id ? 'var(--green)' : 'none' }} />
+              <span>{label}</span>
+              <small style={{ gridColumn: 2, opacity: 0.75 }}>{what}</small>
+            </button>
+            {id === 'example' && start === 'example' && (
+              <ExampleCards api={api} picked={picked} onPick={setPicked} onLook={onLook}
+                onLoaded={(n) => { setNames(n); setPicked((p) => p ?? Object.keys(n)[0] ?? null); }} />
+            )}
+          </React.Fragment>
         ))}
       </div>
       <div>
-        <button type="button" className="utility-btn active" style={btn} disabled={!name.trim() || busy} onClick={create}>CREATE</button>
+        <button type="button" className="utility-btn active" style={btn} disabled={!name.trim() || busy || (start === 'example' && !exampleName)} onClick={create}>
+          {exampleName ? `COPY ${exampleName.toUpperCase()}` : 'CREATE'}
+        </button>
       </div>
-      <span style={why}>It's made as a draft: nobody plays it until it's published from the builder.</span>
+      <span style={why}>
+        It's made as a draft: nobody plays it until it's published from the builder.{exampleName ? ' The copy is yours alone, with no link back to the example.' : ''}
+      </span>
     </div>
   );
 }

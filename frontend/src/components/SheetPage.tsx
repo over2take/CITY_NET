@@ -179,7 +179,7 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
             </>
           ) : (
             <div style={{ ...node(pickedTab === tab, 0), color: 'var(--green)', fontWeight: 'bold', letterSpacing: 1 }}>
-              {own ? <button type="button" style={nodeName} aria-label={`${tab} tab`} aria-current={pickedTab === tab || undefined} onClick={() => choose({ kind: 'tab', id: tab })}>{tab}</button>
+              {own ? <button type="button" style={nodeName} aria-label={`${tab} tab`} data-browse aria-current={pickedTab === tab || undefined} onClick={() => choose({ kind: 'tab', id: tab })}>{tab}</button>
                 : <span style={{ ...nodeName, cursor: 'default' }}>{tab}</span>}
               {own && (
                 <>
@@ -192,7 +192,7 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
           {sectionsOn(sheet, tab).map((s, si, list) => (
             <React.Fragment key={s.id}>
               <div style={node(pickedSection?.id === s.id, 1)}>
-                {own ? <button type="button" style={nodeName} aria-label={`${s.label} section`} aria-current={pickedSection?.id === s.id || undefined} onClick={() => choose({ kind: 'section', id: s.id })}>{s.label}</button>
+                {own ? <button type="button" style={nodeName} aria-label={`${s.label} section`} data-browse aria-current={pickedSection?.id === s.id || undefined} onClick={() => choose({ kind: 'section', id: s.id })}>{s.label}</button>
                   : <span style={{ ...nodeName, cursor: 'default' }}>{s.label}</span>}
                 <span style={kindTag}>{LAYOUTS.find((l) => l.id === s.layout)?.label ?? s.layout.toUpperCase()}</span>
                 {own && (
@@ -204,7 +204,7 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
               </div>
               {s.fields.map((f, fi) => (
                 <div key={f.id} style={{ ...node(pickedField?.id === f.id, 2), opacity: 0.9 }}>
-                  {own ? <button type="button" style={nodeName} aria-label={`${f.label} field`} aria-current={pickedField?.id === f.id || undefined} onClick={() => choose({ kind: 'field', id: f.id })}>{f.label}</button>
+                  {own ? <button type="button" style={nodeName} aria-label={`${f.label} field`} data-browse aria-current={pickedField?.id === f.id || undefined} onClick={() => choose({ kind: 'field', id: f.id })}>{f.label}</button>
                     : <span style={{ ...nodeName, cursor: 'default' }}>{f.label}</span>}
                   <span style={kindTag}>{fieldTag(f)}</span>
                   {own && (

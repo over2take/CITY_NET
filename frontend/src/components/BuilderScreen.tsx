@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { systemsApi, type Definition, type SystemCopies } from '../sheets/systemsApi';
+import { lockControls, suggestedName, LOCKED_MESSAGE } from '../sheets/examples';
 import {
   createAutosave, saveStatus, exitWarning, leaveNeedsAsking, publishBlocked, publishedMessage,
   BUILDER_PAGES, type Autosave, type BuilderPage,
@@ -36,7 +37,32 @@ interface Props {
   onExit: () => void;
   /** Another system, opened here in its place at a page (MY SYSTEMS), once the open one is saved. */
   onOpenSystem: (id: string, page: BuilderPage) => void;
+  /**
+   * A built-in example open to look at (4d1b) instead of a system: every page shown, everything
+   * locked but TRY IT, nothing saved, and COPY TO CHANGE IT to make it the GM's own.
+   */
+  example?: string | null;
+  /** Look at a built-in example here, from + NEW's LOOK FIRST. */
+  onLookAt?: (exampleId: string) => void;
   fetcher?: typeof fetch;
+}
+
+/**
+ * A page of an example, locked: every control greyed but those that only move around it (tabs,
+ * things opening out), so it can be read but not changed (sheets/examples.ts lockControls).
+ */
+function Locked({ on, children }: { on: boolean; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!on || !root) return undefined;
+    lockControls(root);
+    // Pages draw more as they load and open out, so whatever appears is locked too.
+    const watch = new MutationObserver(() => lockControls(root));
+    watch.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled'] });
+    return () => watch.disconnect();
+  }, [on]);
+  return <div ref={ref} className={on ? 'builder-locked' : undefined} data-testid={on ? 'locked-page' : undefined}>{children}</div>;
 }
 
 /**
@@ -132,12 +158,14 @@ function RailButton({ icon: glyph, label, onClick, title, active, disabled, coun
   );
 }
 
-export function BuilderScreen({ token, systemId, startPage = 'setup', running, onExit, onOpenSystem, fetcher }: Props) {
+export function BuilderScreen({ token, systemId, startPage = 'setup', running, onExit, onOpenSystem, example = null, onLookAt, fetcher }: Props) {
   const api = useMemo(() => systemsApi(token, fetcher), [token, fetcher]);
   const [system, setSystem] = useState<SystemCopies | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const looking = !systemId && !!example;
   // With no system open, MY SYSTEMS is the only page there is.
-  const [page, setPage] = useState<Page>(systemId ? startPage : 'systems');
+  const [page, setPage] = useState<Page>(systemId || looking ? startPage : 'systems');
+  const [copy, setCopy] = useState<{ name: string; error: string | null; busy: boolean }>({ name: '', error: null, busy: false });
   const [status, setStatus] = useState<{ text: string; bad?: boolean } | null>(null);
   const [exitError, setExitError] = useState<{ error: string; then: () => void } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -172,10 +200,35 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     return () => { live = false; autosave.current?.dispose(); };
   }, [api, load, systemId]);
 
+  // An example to look at: its definition, with nothing to save it to.
+  useEffect(() => {
+    if (!looking || !example) return undefined;
+    let live = true;
+    api.example(example).then((r) => {
+      if (!live) return;
+      if (r.ok) setDefinition(r.value.definition); else setLoadError(r.error);
+    });
+    return () => { live = false; };
+  }, [api, looking, example]);
+
   /** A page changed the system: shown at once, saved once editing pauses (builderSession). */
   const edit = (next: Definition) => {
+    // Nothing on a locked page can call this, but an example never changes whatever does.
+    if (looking) { setStatus({ text: LOCKED_MESSAGE, bad: true }); return; }
     setDefinition(next);
     autosave.current?.edit(next);
+  };
+
+  /** COPY TO CHANGE IT: the example as a new system of the GM's own, opened on SETUP. */
+  const copyExample = async () => {
+    const wanted = copy.name.trim();
+    if (!example || copy.busy) return;
+    if (!wanted) { setCopy({ ...copy, error: 'Give the copy a name.' }); return; }
+    setCopy({ ...copy, busy: true, error: null });
+    const r = await api.createFromExample(wanted, example);
+    if (!r.ok) { setCopy({ ...copy, busy: false, error: r.error }); return; }
+    window.dispatchEvent(new Event(SYSTEMS_CHANGED_EVENT));
+    onOpenSystem(r.value.id, 'setup');
   };
 
   // Closing or reloading the tab asks first while anything is unsaved.
@@ -227,6 +280,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
 
   const current = page === 'systems' ? MY_SYSTEMS : BUILDER_PAGES.find((p) => p.id === page)!;
   const saveLine = state ? saveStatus(state) : null;
+  /** Whether the pages have something to show: an open system's draft, or an example. */
+  const ready = !!definition && (looking || !!system);
 
   return (
     <div
@@ -251,7 +306,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
         }}
       >
         <div className="rail-top" style={{ alignItems: 'stretch' }}>
-          <RailButton icon={Icons.builder} label="SYSTEM_BUILDER" big onClick={() => setPage(systemId ? 'setup' : 'systems')} />
+          <RailButton icon={Icons.builder} label="SYSTEM_BUILDER" big onClick={() => setPage(systemId || looking ? 'setup' : 'systems')} />
         </div>
         <div style={{ padding: '10px 0' }}>
           <RailButton icon={<ExitIcon />} label="EXIT TO MAP" aria="Exit the builder and go back to the map" onClick={() => leave(onExit)} />
@@ -264,8 +319,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
               key={p.id}
               icon={Icons[p.id]}
               label={p.label}
-              title={systemId ? p.what : 'Open a system first, in MY SYSTEMS.'}
-              disabled={!systemId}
+              title={systemId || looking ? p.what : 'Open a system first, in MY SYSTEMS.'}
+              disabled={!systemId && !looking}
               active={p.id === page}
               count={p.id === 'problems' && problems.length > 0 ? problems.length : undefined}
               onClick={() => { setPage(p.id); setStatus(null); }}
@@ -287,7 +342,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
           minWidth: 0,
         }}>
           <span data-testid="builder-system" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <b style={{ color: 'var(--green)', letterSpacing: 1 }}>{systemId ? (name.toUpperCase() || '…') : 'NO SYSTEM OPEN'}</b>
+            <b style={{ color: 'var(--green)', letterSpacing: 1 }}>{systemId || looking ? (name.toUpperCase() || '…') : 'NO SYSTEM OPEN'}</b>
+            {looking && <span style={badge('var(--cyan)', 'var(--cyan)')}>EXAMPLE · READ ONLY</span>}
             {system && (system.published
               ? <span style={badge('color-mix(in srgb, var(--green) 50%, transparent)')}>PUBLISHED v{system.version}</span>
               : <span style={badge('var(--warning)', 'var(--warning)')}>NEVER PUBLISHED</span>)}
@@ -302,7 +358,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
 
         <section aria-label={current.label} className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 24, fontSize: 13, lineHeight: 1.5 }}>
           {loadError && <p role="alert" style={{ color: 'var(--danger)' }}>{loadError}</p>}
-          {systemId && !system && !loadError && <p style={{ opacity: 0.7 }}>LOADING…</p>}
+          {(systemId ? !system : looking && !definition) && !loadError && <p style={{ opacity: 0.7 }}>LOADING…</p>}
           {page === 'systems' && (systemId === null || system) && (
             <MySystemsPage
               api={api}
@@ -310,24 +366,56 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
               running={running}
               onOpen={(id, at) => leave(() => onOpenSystem(id, at))}
               say={(text, bad) => setStatus({ text, bad })}
+              onLook={onLookAt ? (id) => leave(() => onLookAt(id)) : undefined}
+              startTab={looking ? 'new' : undefined}
             />
           )}
-          {system && page === 'problems' && (problems.length === 0
-            ? <p style={{ color: 'var(--green)' }}>No problems. It can be published.</p>
-            : (
-              <ul style={{ margin: 0, paddingLeft: '1.2em', color: 'var(--warning)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {problems.map((p, i) => <li key={i}><b>{p.where}</b>: {p.message}</li>)}
-              </ul>
-            ))}
-          {systemId && system && definition && page === 'setup' && (
-            <SetupPage api={api} systemId={systemId} definition={definition} edit={edit} say={(text, bad) => setStatus({ text, bad })} />
+          {looking && ready && page !== 'systems' && (
+            <div role="region" aria-label="Example" style={{ border: '1px solid var(--cyan)', padding: '10px 12px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 900 }}>
+              <span style={{ color: 'var(--cyan)', fontSize: 10, letterSpacing: 2 }}>A BUILT-IN EXAMPLE</span>
+              <span style={{ fontSize: 12, lineHeight: 1.45 }}>
+                Look around and try it. Nothing here can be changed. To make it your own, copy it under a name of yours: the copy opens on SETUP.
+              </span>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <input
+                  type="text" aria-label="Name for the copy" maxLength={80} autoComplete="off" value={copy.name}
+                  placeholder={suggestedName(definition!.name)}
+                  aria-invalid={copy.error ? true : undefined}
+                  onChange={(e) => setCopy({ ...copy, name: e.target.value, error: null })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); copyExample(); } }}
+                  style={{
+                    ...mono, flex: 1, minWidth: 0, maxWidth: 320, background: 'var(--black)', color: 'var(--green)', fontSize: 12, padding: '5px 7px',
+                    border: `1px solid ${copy.error ? 'var(--danger)' : 'var(--green)'}`,
+                  }}
+                />
+                <button type="button" className="utility-btn active" style={{ ...mono, fontSize: 11, letterSpacing: 1, padding: '5px 9px' }} disabled={copy.busy} onClick={copyExample}>
+                  COPY TO CHANGE IT
+                </button>
+                <button type="button" className="utility-btn" style={{ ...mono, fontSize: 11, letterSpacing: 1, padding: '5px 9px' }} onClick={() => { setPage('systems'); setStatus(null); }}>
+                  BACK TO + NEW
+                </button>
+              </div>
+              {copy.error && <span role="alert" style={{ color: 'var(--danger)', fontSize: 12 }}>{copy.error}</span>}
+            </div>
           )}
-          {system && definition && page === 'words' && <WordsPage definition={definition} edit={edit} />}
-          {system && definition && page === 'features' && <FeaturesPage definition={definition} edit={edit} api={api} />}
-          {system && definition && page === 'rules' && <StatsRulesPage definition={definition} edit={edit} api={api} />}
-          {system && definition && page === 'sheet' && <SheetPage definition={definition} edit={edit} api={api} />}
-          {system && definition && page === 'npcs' && <NpcsPage definition={definition} edit={edit} api={api} />}
-          {system && definition && page === 'try' && <TryItPage definition={definition} edit={edit} api={api} />}
+          <Locked key={page} on={looking && page !== 'try'}>
+            {ready && page === 'problems' && (problems.length === 0
+              ? <p style={{ color: 'var(--green)' }}>No problems. It can be published.</p>
+              : (
+                <ul style={{ margin: 0, paddingLeft: '1.2em', color: 'var(--warning)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {problems.map((p, i) => <li key={i}><b>{p.where}</b>: {p.message}</li>)}
+                </ul>
+              ))}
+            {ready && page === 'setup' && (
+              <SetupPage api={api} systemId={systemId ?? ''} definition={definition!} edit={edit} say={(text, bad) => setStatus({ text, bad })} />
+            )}
+            {ready && page === 'words' && <WordsPage definition={definition!} edit={edit} />}
+            {ready && page === 'features' && <FeaturesPage definition={definition!} edit={edit} api={api} />}
+            {ready && page === 'rules' && <StatsRulesPage definition={definition!} edit={edit} api={api} />}
+            {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
+            {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
+            {ready && page === 'try' && <TryItPage definition={definition!} edit={looking ? undefined : edit} api={api} />}
+          </Locked>
         </section>
 
         <footer style={{

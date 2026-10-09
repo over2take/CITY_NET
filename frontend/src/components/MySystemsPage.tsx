@@ -26,6 +26,10 @@ interface Props {
   onOpen: (id: string, page: BuilderPage) => void;
   /** A line for the builder's status bar. */
   say: (text: string, bad?: boolean) => void;
+  /** Open a built-in example in the builder to look at first (4d1b). */
+  onLook?: (exampleId: string) => void;
+  /** The tab it opens on: + NEW when coming back from looking at an example. */
+  startTab?: Tab;
 }
 
 const tabStyle = (on: boolean): React.CSSProperties => ({
@@ -34,8 +38,8 @@ const tabStyle = (on: boolean): React.CSSProperties => ({
   color: on ? 'var(--green)' : 'color-mix(in srgb, var(--green) 55%, transparent)', fontFamily: 'monospace', fontSize: 11, letterSpacing: 1,
 });
 
-export function MySystemsPage({ api, openId, running, onOpen, say }: Props) {
-  const [tab, setTab] = useState<Tab>('list');
+export function MySystemsPage({ api, openId, running, onOpen, say, onLook, startTab = 'list' }: Props) {
+  const [tab, setTab] = useState<Tab>(startTab);
   const [systems, setSystems] = useState<LibrarySystem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(openId);
@@ -237,7 +241,7 @@ export function MySystemsPage({ api, openId, running, onOpen, say }: Props) {
         )}
       </>}
 
-      {tab === 'new' && <NewPanel api={api} onMade={(id) => { window.dispatchEvent(new Event(SYSTEMS_CHANGED_EVENT)); onOpen(id, 'setup'); }} />}
+      {tab === 'new' && <NewPanel api={api} onLook={onLook} onMade={(id) => { window.dispatchEvent(new Event(SYSTEMS_CHANGED_EVENT)); onOpen(id, 'setup'); }} />}
 
       {tab === 'install' && <>
         {installed && (

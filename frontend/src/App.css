@@ -650,6 +650,13 @@ header {
   --rail-top-padding: clamp(6px,   1.5vh, 15px);
 }
 
+/* A built-in example's page in the builder (4d1b): its controls are locked, so they look it.
+   A filter rather than colors, since the pages color their controls inline from the theme. */
+.builder-locked :is(input, select, textarea, button):disabled {
+  cursor: not-allowed;
+  filter: saturate(0.4) brightness(0.75);
+}
+
 .icon-rail {
   width: var(--rail-width);
   height: 100%;
