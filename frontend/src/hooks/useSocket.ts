@@ -125,6 +125,10 @@ export function useSocket({
       // Its conditions may have changed too (4e2b1): the windows showing them ask again.
       window.dispatchEvent(new Event(CONDITIONS_CHANGED_EVENT));
     });
+    // A built-in game's own conditions changed in the GAME tab (4e2c2): the same windows ask again.
+    newSocket.on('conditionsChanged', () => {
+      window.dispatchEvent(new Event(CONDITIONS_CHANGED_EVENT));
+    });
 
     newSocket.on('dataUpdated', (payload: { isRhombusOnly?: boolean }) => {
       onFetchLocations();

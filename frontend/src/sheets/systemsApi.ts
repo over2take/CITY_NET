@@ -5,6 +5,8 @@
 
 import type { InstallMode, InstallPreview, InstallResult, LibrarySystem } from './systemsLibrary';
 import type { CustomRenderSheet } from './customTemplates';
+import type { GameCondition } from './tokenConditions';
+import type { TableEntry } from './tableConditions';
 
 type Problem = { where: string; message: string };
 
@@ -136,6 +138,12 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      * stored by the server under its content hash: the address the currency's or condition's
      * `icon` then names.
      */
+    /**
+     * A built-in game's own conditions, the whole set replaced (4e2c2; the GAME tab): the game's list
+     * comes back, the standard ones first.
+     */
+    saveTableConditions: (system: string, conditions: Record<string, TableEntry>) =>
+      call<{ conditions: GameCondition[] }>(fetcher, token, `/api/systems/table-conditions/${encodeURIComponent(system)}`, 'PUT', { conditions }),
     uploadIcon: async (file: File, kind: 'currency' | 'condition' = 'currency'): Promise<Answer<{ icon: string }>> => {
       const form = new FormData();
       form.append('icon', file);
