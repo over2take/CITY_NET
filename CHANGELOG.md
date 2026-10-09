@@ -88,6 +88,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What the builder's TRY IT page will do.** A made-up character starting from the sample in
+  STATS & RULES (RESET goes back to it), typed numbers sent to the server so formulas are worked
+  out from them, SAVE AS THE SAMPLE CHARACTER offered only when the stats differ and saving just
+  the stats, and a pretend token for health that starts full (at the wound count where wounds are
+  the token) and sets its maximum as the game does. The page itself comes next.
+
 - **Trying a draft's health.** The server can now take a made-up character's health under a
   draft's health model, on a pretend token: apply DAMAGE, HEAL or a model's own action through
   the game's own rules, and draw the HEALTH folder for the owner and for everyone else. Nothing is
