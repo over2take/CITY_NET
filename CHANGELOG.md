@@ -9,6 +9,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **The proxy check in CI downloads nginx from Google's Docker Hub mirror.** Docker Hub refuses
+  downloads without a login once GitHub's shared machines have used up its limit, which failed
+  three runs in a row. It's the same official image, so the check is unchanged.
 - **A LUCK test no longer fails on a busy machine.** It checked that a roll spent the declared LUCK
   by reading the sheet the moment the roll was announced, but the spend is written alongside the
   announcement rather than before it, so on a slow CI machine it sometimes read the old value. It
@@ -100,6 +103,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Rests, as data.** A custom system has rests: Short rest, Long rest, End of scene and End of
+  session, each renamed or turned off, plus its own, twelve in all. Each one can count as other
+  rests and refills, in order, health, a number on the sheet or a whole section of it. Amounts can
+  be numbers, formulas or dice that use the character's own numbers. Conditions can now wear off
+  at a rest. The builder page and calling a rest in the game come next.
 - **A built-in game's own conditions in the GAME tab.** Under CWN, Cyberpunk RED, Shadowrun or
   Generic, the main admin sees a CONDITIONS panel in TTRPG_SYSTEM: the standard ten, and the
   table's own, added with a name, a drawn or uploaded icon and a description, or removed after
