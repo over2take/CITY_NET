@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **The README's map of the code is complete again, and kept that way.** Its Project Structure had
+  fallen behind: 202 source and test files weren't in it, and 28 lines put a file in a folder it
+  wasn't in. Every file now has a line saying what it is for, the misplaced ones are where their
+  files are, and several out-of-date descriptions are corrected. A new test reads the tree and
+  fails if a file is added without a line, or a line names a file that has gone, so it can't fall
+  behind again unnoticed.
+
 - **A token-sharing test no longer fails on a busy machine.** It checked a moved token's position
   after waiting a fixed number of database rounds, but the database doesn't always answer in the
   order asked, so under load it sometimes read the position before the move was written. Tests
@@ -88,14 +95,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Start a system from a genre starter.** In the builder's + NEW, A GENRE STARTER now works like
+  A BUILT-IN EXAMPLE: a card for Sword & Spell, Starfarer and Story First saying what each holds,
+  COPY under your own name, and LOOK FIRST to read one locked, marked as a starter.
+
 - **Three genre starters for the system builder.** Ready-made starting points for a genre rather
   than a game, each ready to publish as it stands: **Sword & Spell**, fantasy on a d20 (six
   abilities with modifiers, proficiency by level, gold pieces, NPCs whose HP is rolled for their
   level); **Starfarer**, sci-fi on 2d6 (every modifier read from one table, a count of three
   wounds instead of HP); and **Story First**, a narrative one (six approaches rated 0 to 3, harm
   levels, milestones, nothing worked out by formula, credited to Fate Accelerated under CC BY).
-  The server lists them apart from the built-in games and copies one like an example. The
-  builder's button for them comes next.
+  The server lists them apart from the built-in games and copies one like an example.
 
 - **Cyberpunk RED and Generic as data, and Cyberpunk RED as an example to copy.** Cyberpunk
   RED's current EMP (Humanity / 10, rounded down) and Generic's nothing-at-all are now written in

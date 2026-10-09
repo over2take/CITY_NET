@@ -221,9 +221,15 @@ const exampleDefinition = (id) => {
   return found ? JSON.parse(JSON.stringify(found.definition)) : null;
 };
 
+/** Whether an id is a built-in game or a genre starter, or null for neither. */
+const exampleKind = (id) => {
+  const found = EXAMPLES.find((e) => e.id === id);
+  return found ? found.kind : null;
+};
+
 /** What the library shows of each of one kind: no definitions, just enough to pick one. */
 const exampleList = (kind = 'example') => EXAMPLES
   .filter((e) => e.kind === kind)
   .map(({ id, definition }) => ({ id, name: definition.name, description: definition.description }));
 
-module.exports = { EXAMPLES, KINDS, exampleDefinition, exampleList };
+module.exports = { EXAMPLES, KINDS, exampleDefinition, exampleKind, exampleList };

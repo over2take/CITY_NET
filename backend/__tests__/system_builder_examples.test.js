@@ -185,7 +185,8 @@ describe('the routes', () => {
     expect(list.status).toBe(200);
     expect(list.body).toEqual(exampleList());
     const one = await request(app).get('/api/systems/examples/sr6').set(as());
-    expect(one.body).toEqual({ id: 'sr6', definition: exampleDefinition('sr6') });
+    expect(one.body).toEqual({ id: 'sr6', kind: 'example', definition: exampleDefinition('sr6') });
+    expect((await request(app).get('/api/systems/examples/narrative').set(as())).body.kind).toBe('starter');
     expect((await request(app).get('/api/systems/examples/nope').set(as())).status).toBe(404);
   });
 

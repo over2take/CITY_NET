@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { systemsApi } from '../sheets/systemsApi';
+import type { systemsApi, ExampleKind } from '../sheets/systemsApi';
 import { exampleFacts, suggestedName } from '../sheets/examples';
 import {
   insideBadges, installPlan, installedMessage, type Badge, type InstallPreview, type InstallAction,
@@ -45,11 +45,11 @@ export const danger: React.CSSProperties = { borderColor: 'var(--danger)', color
 type Start = 'blank' | 'example' | 'starter';
 
 /**
- * The built-in examples to start from (4d1b): a card each saying what it holds, picked as a radio,
- * with LOOK FIRST to open it in the builder read-only.
+ * The built-in examples (4d1b) or genre starters (4d3b) to start from: a card each saying what it
+ * holds, picked as a radio, with LOOK FIRST to open it in the builder read-only.
  */
-function ExampleCards({ api, picked, onPick, onLook, onLoaded }: {
-  api: Api; picked: string | null; onPick: (id: string) => void; onLook?: (id: string) => void;
+function ExampleCards({ api, kind, picked, onPick, onLook, onLoaded }: {
+  api: Api; kind: ExampleKind; picked: string | null; onPick: (id: string) => void; onLook?: (id: string) => void;
   onLoaded: (names: Record<string, string>) => void;
 }) {
   const [examples, setExamples] = useState<{ id: string; name: string; description: string; facts: [string, string][] }[] | null>(null);
@@ -58,7 +58,7 @@ function ExampleCards({ api, picked, onPick, onLook, onLoaded }: {
   useEffect(() => {
     let live = true;
     (async () => {
-      const list = await api.examples();
+      const list = await api.examples(kind);
       if (!live) return;
       if (!list.ok) { setError(list.error); return; }
       const whole = await Promise.all(list.value.map((e) => api.example(e.id)));
@@ -73,12 +73,12 @@ function ExampleCards({ api, picked, onPick, onLook, onLoaded }: {
       onLoaded(Object.fromEntries(cards.map((c) => [c.id, c.name])));
     })();
     return () => { live = false; };
-  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [api, kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error) return <span role="alert" style={{ ...why, color: 'var(--danger)', marginLeft: 18 }}>Could not load the examples: {error}</span>;
+  if (error) return <span role="alert" style={{ ...why, color: 'var(--danger)', marginLeft: 18 }}>Could not load the {kind === 'starter' ? 'starters' : 'examples'}: {error}</span>;
   if (!examples) return <span style={{ ...why, marginLeft: 18 }}>LOADING…</span>;
   return (
-    <div role="radiogroup" aria-label="Example" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginLeft: 18 }}>
+    <div role="radiogroup" aria-label={kind === 'starter' ? 'Starter' : 'Example'} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginLeft: 18 }}>
       {examples.map((e) => {
         const on = picked === e.id;
         return (
@@ -105,8 +105,8 @@ function ExampleCards({ api, picked, onPick, onLook, onLoaded }: {
 }
 
 /**
- * NEW: a system from a name, blank or copied from a built-in example (4d1b). Genre starters come
- * with 4d3. `onLook` opens an example in the builder to look at first.
+ * NEW: a system from a name, blank or copied from a built-in example (4d1b) or a genre starter
+ * (4d3b). `onLook` opens either in the builder to look at first.
  */
 export function NewPanel({ api, onMade, onLook }: { api: Api; onMade: (id: string, name: string) => void; onLook?: (id: string) => void }) {
   const [name, setName] = useState('');
@@ -116,12 +116,21 @@ export function NewPanel({ api, onMade, onLook }: { api: Api; onMade: (id: strin
   const [picked, setPicked] = useState<string | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
-  const example = start === 'example' ? picked : null;
+  /** Copying a game or a starter, rather than starting blank. */
+  const copying = start === 'example' || start === 'starter';
+  const example = copying ? picked : null;
   const exampleName = example ? names[example] ?? null : null;
+
+  /** A different start: nothing picked from the cards it had shown. */
+  const choose = (id: Start) => {
+    if (id !== start) { setPicked(null); setNames({}); }
+    setStart(id);
+    setError(null);
+  };
 
   const create = async () => {
     const wanted = name.trim();
-    if (!wanted || busy || (start === 'example' && !example)) return;
+    if (!wanted || busy || (copying && !example)) return;
     setBusy(true);
     const r = example ? await api.createFromExample(wanted, example) : await api.create(wanted);
     setBusy(false);
@@ -133,7 +142,7 @@ export function NewPanel({ api, onMade, onLook }: { api: Api; onMade: (id: strin
   const starts: [Start, string, string, boolean][] = [
     ['blank', 'BLANK', 'A name and nothing else, to build up in the builder.', true],
     ['example', 'A BUILT-IN EXAMPLE', 'One of the built-in games, copied to change into your own.', true],
-    ['starter', 'A GENRE STARTER', 'Fantasy, sci-fi, or a narrative one with no numbers. Coming later.', false],
+    ['starter', 'A GENRE STARTER', 'Fantasy, sci-fi, or a narrative one with nothing worked out, to make your own.', true],
   ];
 
   return (
@@ -160,7 +169,7 @@ export function NewPanel({ api, onMade, onLook }: { api: Api; onMade: (id: strin
           <React.Fragment key={id}>
             <button
               type="button" role="radio" aria-checked={start === id} disabled={!can}
-              onClick={() => { setStart(id); setError(null); }}
+              onClick={() => choose(id)}
               style={{
                 display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '2px 8px', padding: '6px 8px', textAlign: 'left',
                 fontFamily: 'monospace', fontSize: 11, color: 'var(--green)', cursor: can ? 'pointer' : 'not-allowed', opacity: can ? 1 : 0.45,
@@ -172,20 +181,20 @@ export function NewPanel({ api, onMade, onLook }: { api: Api; onMade: (id: strin
               <span>{label}</span>
               <small style={{ gridColumn: 2, opacity: 0.75 }}>{what}</small>
             </button>
-            {id === 'example' && start === 'example' && (
-              <ExampleCards api={api} picked={picked} onPick={setPicked} onLook={onLook}
+            {id !== 'blank' && start === id && (
+              <ExampleCards key={id} api={api} kind={id} picked={picked} onPick={setPicked} onLook={onLook}
                 onLoaded={(n) => { setNames(n); setPicked((p) => p ?? Object.keys(n)[0] ?? null); }} />
             )}
           </React.Fragment>
         ))}
       </div>
       <div>
-        <button type="button" className="utility-btn active" style={btn} disabled={!name.trim() || busy || (start === 'example' && !exampleName)} onClick={create}>
+        <button type="button" className="utility-btn active" style={btn} disabled={!name.trim() || busy || (copying && !exampleName)} onClick={create}>
           {exampleName ? `COPY ${exampleName.toUpperCase()}` : 'CREATE'}
         </button>
       </div>
       <span style={why}>
-        It's made as a draft: nobody plays it until it's published from the builder.{exampleName ? ' The copy is yours alone, with no link back to the example.' : ''}
+        It's made as a draft: nobody plays it until it's published from the builder.{exampleName ? ` The copy is yours alone, with no link back to the ${start === 'starter' ? 'starter' : 'example'}.` : ''}
       </span>
     </div>
   );

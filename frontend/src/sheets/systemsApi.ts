@@ -44,6 +44,8 @@ export interface TriedHealth {
 
 /** A built-in example as the library lists it (backend/systemBuilder/examples.js exampleList). */
 export interface ExampleSummary { id: string; name: string; description: string }
+/** A built-in game (4d1) or a genre starter (4d3). */
+export type ExampleKind = 'example' | 'starter';
 
 export type Answer<T> =
   | { ok: true; value: T }
@@ -112,11 +114,15 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
     /** Make the stored draft what the game runs; refused, with `problems`, while it has any. */
     publish: (systemId: string) => call<{ version: number }>(fetcher, token, `${id(systemId)}/publish`, 'POST', {}),
     create: (name: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name }),
-    /** The built-in examples to copy (4d1): what each is called and does, without its definition. */
-    examples: () => call<ExampleSummary[]>(fetcher, token, '/api/systems/examples'),
-    /** One built-in example whole: its cards in + NEW, and the builder looking at it. */
+    /**
+     * The built-in examples (4d1) or the genre starters (4d3) to copy: what each is called and
+     * does, without its definition.
+     */
+    examples: (kind: ExampleKind = 'example') =>
+      call<ExampleSummary[]>(fetcher, token, kind === 'starter' ? '/api/systems/examples?kind=starter' : '/api/systems/examples'),
+    /** One example or starter whole, with which it is: its card in + NEW, and the builder looking at it. */
     example: (exampleId: string) =>
-      call<{ id: string; definition: Definition }>(fetcher, token, `/api/systems/examples/${encodeURIComponent(exampleId)}`),
+      call<{ id: string; kind: ExampleKind; definition: Definition }>(fetcher, token, `/api/systems/examples/${encodeURIComponent(exampleId)}`),
     /** A new draft copied from a built-in example under the GM's own name; no link back. */
     createFromExample: (name: string, example: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name, example }),
     rename: (systemId: string, name: string) => call<{ name: string }>(fetcher, token, `${id(systemId)}/name`, 'PUT', { name }),

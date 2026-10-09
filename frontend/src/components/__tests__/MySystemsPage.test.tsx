@@ -31,7 +31,7 @@ let calls: { url: string; method: string; body: unknown }[];
 let renameAnswer: { status: number; body: unknown } | null;
 let examplesDown: boolean;
 let exampleGone: string | null;
-const { exampleList, exampleDefinition } = createRequire(import.meta.url)('../../../../backend/systemBuilder/examples.js');
+const { exampleList, exampleDefinition, exampleKind } = createRequire(import.meta.url)('../../../../backend/systemBuilder/examples.js');
 
 const PREVIEW: InstallPreview = {
   manifest: { name: 'Iron Sea', author: 'M. Okafor', license: '', builder: '1.15.0', version: 4, origin: 'org_iron' },
@@ -48,9 +48,10 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     ok: status < 300, status, json: async () => b, text: async () => String(b), headers: { get: (k: string) => headers[k] ?? null },
   }) as unknown as Response;
   if (url === '/api/systems' && method === 'GET') return json(200, systems);
-  if (url === '/api/systems/examples') return examplesDown ? json(500, { error: 'Could not reach the systems store' }) : json(200, exampleList());
+  const listed = /^\/api\/systems\/examples(\?kind=starter)?$/.exec(url);
+  if (listed) return examplesDown ? json(500, { error: 'Could not reach the systems store' }) : json(200, exampleList(listed[1] ? 'starter' : 'example'));
   const ex = /^\/api\/systems\/examples\/([a-z0-9]+)$/.exec(url);
-  if (ex) return ex[1] === exampleGone ? json(404, { error: 'No such example' }) : json(200, { id: ex[1], definition: exampleDefinition(ex[1]) });
+  if (ex) return ex[1] === exampleGone ? json(404, { error: 'No such example' }) : json(200, { id: ex[1], kind: exampleKind(ex[1]), definition: exampleDefinition(ex[1]) });
   if (url === '/api/systems' && method === 'POST') {
     const taken = systems.find((s) => s.name.toLowerCase() === body.name.trim().toLowerCase());
     if (taken) return json(409, { error: `Another system is already called ${taken.name}.` });
@@ -361,8 +362,65 @@ describe('+ NEW from a built-in example (4d1b)', () => {
     expect(screen.queryByTestId('example-cwn')).toBeNull();
   });
 
-  it('still has the genre starters to come', async () => {
+});
+
+describe('+ NEW from a genre starter (4d3b)', () => {
+  // The same cards as the examples (the user's call, 2026-10-09: no mockup), listed apart from the games.
+  const pickStarters = async (over: Parameters<typeof open>[0] = {}) => {
+    const opened = open({ startTab: 'new', ...over });
+    await userEvent.click(screen.getByRole('radio', { name: /A GENRE STARTER/ }));
+    await screen.findByTestId('example-fantasy');
+    return opened;
+  };
+  const card = (id: string) => screen.getByTestId(`example-${id}`);
+
+  it('shows the three starters, not the games, each saying what it holds', async () => {
+    await pickStarters();
+    expect(screen.getByRole('radiogroup', { name: 'Starter' })).toBeTruthy();
+    expect(within(card('fantasy')).getByText('SWORD & SPELL')).toBeTruthy();
+    expect(within(card('scifi')).getByText('Wound count')).toBeTruthy();
+    expect(within(card('narrative')).getByText('Harm levels')).toBeTruthy();
+    expect(within(card('narrative')).getByText('Milestone')).toBeTruthy();
+    expect(within(card('narrative')).getByText('Zones')).toBeTruthy();
+    expect(screen.queryByTestId('example-cwn')).toBeNull();
+    expect(calls.map((c) => c.url)).toContain('/api/systems/examples?kind=starter');
+    expect((screen.getByLabelText('NAME') as HTMLInputElement).placeholder).toBe('Sword & Spell (house rules)');
+    expect(screen.getByText(/no link back to the starter/)).toBeTruthy();
+  });
+
+  it('copies the one picked under the name typed, and opens it on SETUP', async () => {
+    const { onOpen } = await pickStarters();
+    await userEvent.click(within(card('scifi')).getByRole('radio', { name: 'STARFARER' }));
+    await userEvent.type(screen.getByLabelText('NAME'), 'Deep Black');
+    await userEvent.click(screen.getByRole('button', { name: 'COPY STARFARER' }));
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith(COPY, 'setup'));
+    expect(calls.find((c) => c.method === 'POST')!.body).toEqual({ name: 'Deep Black', example: 'scifi' });
+  });
+
+  it('starts afresh when switching between games and starters', async () => {
+    await pickStarters();
+    await userEvent.click(within(card('narrative')).getByRole('radio', { name: 'STORY FIRST' }));
+    expect(screen.getByRole('button', { name: 'COPY STORY FIRST' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('radio', { name: /A BUILT-IN EXAMPLE/ }));
+    await screen.findByTestId('example-cwn');
+    expect(screen.queryByTestId('example-fantasy')).toBeNull();
+    expect(screen.getByRole('button', { name: 'COPY CITIES WITHOUT NUMBER' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('radio', { name: /A GENRE STARTER/ }));
+    await screen.findByTestId('example-fantasy');
+    expect(screen.getByRole('button', { name: 'COPY SWORD & SPELL' })).toBeTruthy();
+  });
+
+  it('LOOK FIRST opens a starter like an example', async () => {
+    const onLook = vi.fn();
+    await pickStarters({ onLook });
+    await userEvent.click(screen.getByRole('button', { name: 'Look at Story First first' }));
+    expect(onLook).toHaveBeenCalledWith('narrative');
+  });
+
+  it('says when the starters can\'t be read', async () => {
+    examplesDown = true;
     open({ startTab: 'new' });
-    expect((screen.getByRole('radio', { name: /A GENRE STARTER/ }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole('radio', { name: /A GENRE STARTER/ }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not load the starters: Could not reach the systems store');
   });
 });

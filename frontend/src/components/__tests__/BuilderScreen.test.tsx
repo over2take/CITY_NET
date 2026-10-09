@@ -21,7 +21,7 @@ import { createRequire } from 'module';
 const { starterSheet, effectiveSheet } = createRequire(import.meta.url)('../../../../backend/systemBuilder/sheet.js');
 const { tryHealth } = createRequire(import.meta.url)('../../../../backend/systemBuilder/tryHealth.js');
 const { previewDerived } = createRequire(import.meta.url)('../../../../backend/systemBuilder/derived.js');
-const { exampleList, exampleDefinition } = createRequire(import.meta.url)('../../../../backend/systemBuilder/examples.js');
+const { exampleList, exampleDefinition, exampleKind } = createRequire(import.meta.url)('../../../../backend/systemBuilder/examples.js');
 
 /**
  * The builder screen (4a2b): it takes over the window, with its own sidebar of pages, SAVE,
@@ -69,7 +69,7 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
   const ex = /^\/api\/systems\/examples\/([a-z0-9]+)$/.exec(url);
   if (ex) {
     const definition = exampleDefinition(ex[1]);
-    return definition ? json(200, { id: ex[1], definition }) : json(404, { error: 'No such example' });
+    return definition ? json(200, { id: ex[1], kind: exampleKind(ex[1]), definition }) : json(404, { error: 'No such example' });
   }
   if (url === '/api/systems/try-health') {
     const body = JSON.parse(String(init!.body));
@@ -489,6 +489,19 @@ describe('looking at a built-in example (4d1b)', () => {
     await userEvent.click(screen.getByRole('radio', { name: /A BUILT-IN EXAMPLE/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Look at Cities Without Number first' }));
     await waitFor(() => expect(onLookAt).toHaveBeenCalledWith('cwn'));
+  });
+
+  it('says so when it is a genre starter, locked and copied the same way', async () => {
+    const { onOpenSystem } = look('rules', { example: 'narrative' });
+    await screen.findByRole('region', { name: 'Example' });
+    expect(within(banner()).getByText('A GENRE STARTER')).toBeTruthy();
+    expect(within(screen.getByTestId('builder-system')).getByText('STORY FIRST')).toBeTruthy();
+    expect(within(screen.getByTestId('builder-system')).getByText('STARTER · READ ONLY')).toBeTruthy();
+    await waitFor(() => expect((screen.getByLabelText('Forceful name') as HTMLInputElement).disabled).toBe(true));
+    await userEvent.type(within(banner()).getByLabelText('Name for the copy'), 'Quiet Streets');
+    await userEvent.click(within(banner()).getByRole('button', { name: 'COPY TO CHANGE IT' }));
+    await waitFor(() => expect(onOpenSystem).toHaveBeenCalledWith(COPY, 'setup'));
+    expect(posts.at(-1)).toEqual({ name: 'Quiet Streets', example: 'narrative' });
   });
 
   it('says when the example can\'t be read', async () => {

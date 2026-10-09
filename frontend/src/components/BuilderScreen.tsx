@@ -166,6 +166,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   // With no system open, MY SYSTEMS is the only page there is.
   const [page, setPage] = useState<Page>(systemId || looking ? startPage : 'systems');
   const [copy, setCopy] = useState<{ name: string; error: string | null; busy: boolean }>({ name: '', error: null, busy: false });
+  /** Whether the one looked at is a genre starter (4d3b) rather than a built-in game. */
+  const [starter, setStarter] = useState(false);
   const [status, setStatus] = useState<{ text: string; bad?: boolean } | null>(null);
   const [exitError, setExitError] = useState<{ error: string; then: () => void } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -206,7 +208,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     let live = true;
     api.example(example).then((r) => {
       if (!live) return;
-      if (r.ok) setDefinition(r.value.definition); else setLoadError(r.error);
+      if (r.ok) { setDefinition(r.value.definition); setStarter(r.value.kind === 'starter'); } else setLoadError(r.error);
     });
     return () => { live = false; };
   }, [api, looking, example]);
@@ -343,7 +345,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
         }}>
           <span data-testid="builder-system" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <b style={{ color: 'var(--green)', letterSpacing: 1 }}>{systemId || looking ? (name.toUpperCase() || '…') : 'NO SYSTEM OPEN'}</b>
-            {looking && <span style={badge('var(--cyan)', 'var(--cyan)')}>EXAMPLE · READ ONLY</span>}
+            {looking && <span style={badge('var(--cyan)', 'var(--cyan)')}>{starter ? 'STARTER' : 'EXAMPLE'} · READ ONLY</span>}
             {system && (system.published
               ? <span style={badge('color-mix(in srgb, var(--green) 50%, transparent)')}>PUBLISHED v{system.version}</span>
               : <span style={badge('var(--warning)', 'var(--warning)')}>NEVER PUBLISHED</span>)}
@@ -372,7 +374,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
           )}
           {looking && ready && page !== 'systems' && (
             <div role="region" aria-label="Example" style={{ border: '1px solid var(--cyan)', padding: '10px 12px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 900 }}>
-              <span style={{ color: 'var(--cyan)', fontSize: 10, letterSpacing: 2 }}>A BUILT-IN EXAMPLE</span>
+              <span style={{ color: 'var(--cyan)', fontSize: 10, letterSpacing: 2 }}>{starter ? 'A GENRE STARTER' : 'A BUILT-IN EXAMPLE'}</span>
               <span style={{ fontSize: 12, lineHeight: 1.45 }}>
                 Look around and try it. Nothing here can be changed. To make it your own, copy it under a name of yours: the copy opens on SETUP.
               </span>
