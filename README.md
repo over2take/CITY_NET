@@ -440,6 +440,7 @@ CITY_NET/
 │   ├── startup/
 │   │   ├── backup.js           # A whole copy of the database (VACUUM INTO, beside it) before a migration changes real data; skipped, and logged, when the disk lacks room
 │   │   ├── bankAccounts.js     # The one-time move from one bank per player (`player_banks`, kept untouched) to one per player per system: the database copied first, each balance copied into every system the player has a sheet in plus the running one, in one transaction, with a marker so it never runs twice
+│   │   ├── injuryConditions.js # The one-time move of BLIND and BLEED from the injury map into the Blinded and Bleeding conditions, on every token and in every game's saved values, the rest of each injury map and condition list kept; one transaction, a marker so it runs once, after tokenVitals.js
 │   │   ├── tokenVitals.js      # The one-time start of per-system token health: each token's current values saved under every system it could be shown in (a player's sheet systems, or every system for enemies and friendlies, plus the running one), so switching shows what it showed before. Adds rows only; a marker so it runs once
 │   │   └── sanity_checks.js    # In-memory DB checks on boot
 │   ├── utils/
@@ -515,6 +516,7 @@ CITY_NET/
 │       ├── sockets.identify.secure.test.js # Secure Mode's gate on identify: a claimed admin flag with no token behind it connecting as nobody rather than walking past the player-token check
 │       ├── update_helper.test.js       # The update helper's compose call: the working directory mounted at its own path, and values passed as arguments rather than through a shell
 │       ├── bank_accounts.test.js       # Per-system accounts kept apart; the one-time move (every sheet's system plus the running one, the old table untouched, once only, all or nothing); the database copy and its disk-space check; switching systems in play; and db.js opening a 1.14.4-shaped database file in a child process
+│       ├── injury_conditions.test.js   # BLIND and BLEED moving into conditions: one record (a flag that was off taken out, none added twice, junk left alone), every token and saved game's values, nothing that isn't a token, once only, all or nothing
 │       ├── token_vitals.test.js        # Switching swaps and restores every token's health (enemies too, buildings untouched), entirely or not at all, and waits for the one-time start; the start's systems and run-once; map clears and loads; the system picker route and the settings route's guard; db.js on a real file
 │       ├── system_builder_runtime.test.js # The sheet format's checks and starter sheet; a published system known to the game (never a draft), answering the same helpers as the built-ins without changing them, its render copy free of formulas, switched to from the picker, and a player's edit recomputing its derived values
 │       ├── system_builder_core.test.js # The setup answers: every health model's starter sheet (and that it passes the sheet checks), the unanswered starter unchanged to the byte, and every mistake reported with where it is
@@ -644,7 +646,8 @@ CITY_NET/
 │   │   │   ├── InventorySection.tsx    # The inventory table, on every system. Its own file because SheetRenderer is long enough, and generic: which rows carry an extra button, and what pressing it does, is supplied from outside - so a drug offers CONSUME and a skillplug offers LOAD without either knowing about the other
 │   │   │   ├── PharmaSection.tsx       # What is currently in the bloodstream, drawn in the sheet HEADER rather than a tab: a drug that wears off at the end of a scene and bills System Strain for it is not something to hide behind a tab somebody might not open. Draws nothing at all while a character is on nothing
 │   │   │   ├── XpWindow.tsx            # AWARD_EXPERIENCE — points each rather than a pot to divide, with LEVEL_UP and LEVEL_DOWN for correcting a level on purpose
-│   │   │   ├── HitPoints.tsx           # The HEALTH folder's two bodies: HitPointsPanel changes health (own token, or any for the GM) under a live heart monitor, with injuries and STIM_HEAL (CWN); HealthReviewPanel only watches someone else's - the monitor, a stun bar and the injury map, never a number - with STABILIZE for an ally on a mortal wound
+│   │   │   ├── HitPoints.tsx           # The HEALTH folder's two bodies: HitPointsPanel changes health (own token, or any for the GM) under a live heart monitor, with injuries, the token's conditions and STIM_HEAL (CWN); HealthReviewPanel only watches someone else's - the monitor, a stun bar, the injury map and which conditions, never a number - with STABILIZE for an ally on a mortal wound
+│   │   │   ├── TokenConditions.tsx     # A token's CONDITIONS in its HEALTH folder: any number as wrapping chips with descriptions; whoever may change its health puts them on (+ CONDITION from the game's list) and takes them off, and sees rounds left and modifiers; everyone else sees which and what they mean
 │   │   │   ├── healthBands.ts          # How hurt, as a band the heart monitor draws: its color and its rhythm (steady over half, twice as fast at half or less, fast, uneven and weakening at a quarter or less, flatline when down), on the same thresholds, for every system and the stream overlay; harm levels read their worst level instead
 │   │   │   ├── HealthModelPanels.tsx   # The HEALTH folder under a custom system's health model (not one pool): each model's editor (track, damage type, harm level and hit location pickers, harm notes, wound pips and penalty, the GM's SET rows) saying what happened, and what other players see instead of numbers; HitPoints.tsx keeps the monitor, injury map and TEMP_HP around it
 │   │   │   ├── BankWindows.tsx         # Player bank UI; the candle chart is nudged by balance changes on a log scale, so a fortune is a tall candle rather than a spike that flattens the rest. In a custom system's currencies: every account listed, amounts read and written the currency's way, refusals said in it, celebrations only as the system chose; PAYROLL and BANK_ADMIN likewise, per currency
@@ -672,7 +675,7 @@ CITY_NET/
 │   │   │   ├── MeasurementTool.tsx     # Ruler overlay for distance measurement, read in the running system's unit (sheets/distance.ts) from each map's own scale; no number in zones
 │   │   │   ├── StatusDisplay.tsx       # Status log and status bar text
 │   │   │   ├── Streamer.tsx            # Camera broadcaster/rig pairs for streamer mode
-│   │   │   ├── StreamerOverlay.tsx     # HUD overlay rendered on the spectator window
+│   │   │   ├── StreamerOverlay.tsx     # HUD overlay rendered on the spectator window; a selected token's heart monitor, injury map and conditions by name and icon
 │   │   │   ├── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
 │   │   │   ├── CharacterSheetWindow.tsx # Player's own character sheet (socket-based, self-only)
 │   │   │   ├── NpcSheetWindow.tsx       # Admin view/edit of NPC or player sheets (REST-based)
@@ -785,6 +788,7 @@ CITY_NET/
 │   │   │       ├── StatsRulesPage.test.tsx          # Stats in groups with their SAMPLE column, formulas with live values and mistakes, and tables with TRY IT
 │   │   │       ├── SheetPage.test.tsx               # Automatic or customized, the tree of tabs, sections and fields, moving and removing them (sections going to a tab you choose, the last tab making one page), and each field's settings
 │   │   │       ├── NpcsPage.test.tsx                # The stat block shared or its own, tiers whose boxes keep what was typed, and TRY IT rolling one, all through the server's own code
+│   │   │       ├── TokenConditions.test.tsx         # The HEALTH folder's conditions: chips with rounds, descriptions and modifiers for whoever may change them, putting one on and taking one off (a refusal said), nothing but which and what for everyone else, nothing drawn for a token with none, the list asked again when a system changes, and the stream overlay showing them
 │   │   │       ├── ConditionsPage.test.tsx          # Switches storing only "off", renaming and putting back, icons drawn or uploaded (a refusal said), ends and rounds, modifiers typed negative, a system's own added, named, deleted after asking, and + CONDITION stopping at 60
 │   │   │       ├── TryItPage.test.tsx               # The made-up character and its formulas, SAVE AS THE SAMPLE (absent with nowhere to save), RESET, health on a pretend token under each model, both maximums, and an NPC rolled from a tier
 │   │   │       ├── ControlledNpcSheetWindow.test.tsx # A friendly NPC's sheet read-only for the player it was given to, fetched with their own login, rolling as the NPC
@@ -861,6 +865,7 @@ CITY_NET/
 │   │   │   ├── useApi.ts           # Fetch helpers
 │   │   │   ├── useMapExport.ts     # PNG/WebM city export — one cached off-screen renderer for the session, shared ortho camera, GPU size clamp, per-frame render loop for video, MediaRecorder with codec fallback; never touches the live camera
 │   │   │   ├── useCustomTemplates.ts # Redraws when a custom system's sheet template arrives, and fetches the running system's ahead of need
+│   │   │   ├── useConditionList.ts # The running game's conditions (GET /api/systems/conditions/:system, modifiers only with the GM's login), asked again when a published system changes; and a token's rounds left and modifiers for whoever may see them (requestTokenConditions)
 │   │   │   ├── useHealthView.ts    # A token's health under a custom model, as the server lets this viewer see it: asked over the socket (requestHealthView), again on every sheet or map change
 │   │   │   ├── useMapData.ts       # Location/district/road/overpass/water body/sign data fetching. Sends the GM's sign-in with the location list, held in a ref so signing in does not give fetchLocations a new identity
 │   │   │   ├── useCustomDice.ts    # Custom dice state — fetches GM dice and the active system's built-ins, merges them (built-ins first, flagged `locked`), and applies `customDiceUpdated` broadcasts
@@ -930,6 +935,7 @@ CITY_NET/
 │   │   │   ├── publicLines.ts      # What everyone else sees of a custom system's character: the sheet's public lines, for ID.EXE's INFO and the sheet preview's EVERYONE ELSE
 │   │   │   ├── npcs.ts             # NPCS as logic: the stat block (shared or its own), tiers and their boxes (number, formula with @level, or dice), the server's limits, and a rolled box as text
 │   │   │   ├── conditions.ts       # CONDITIONS as logic: the standard set and a system's own read from a definition and written back storing only what differs (a standard one put back leaves nothing), the count against 60, new and deleted ones, and what a modifier may name; mirrors the server's conditions.js
+│   │   │   ├── tokenConditions.ts  # A token's conditions in the windows as logic: the column read as the server reads it, what to draw from the game's list (one it no longer has left out), rounds left and modifiers where sent, and putting one on or taking one off without resetting another's rounds
 │   │   │   ├── conditionIcons.ts   # The 24 condition icons drawn for CITY_NET as path data on a 24-pixel grid, ours to use (the four first sketched too close to Feather's redrawn), and telling a drawn icon from an uploaded one
 │   │   │   ├── tryIt.ts            # TRY IT as logic: the made-up character from the sample, typed values, SAVE AS THE SAMPLE, the pretend token and its maximum
 │   │   │   ├── examples.ts         # The examples' and starters' cards (health, advancement in the system's own XP word, stats, formulas, distance), the copy's suggested name, and locking a page while one is looked at (every control but tabs, things opening out and marked views)
@@ -951,6 +957,7 @@ CITY_NET/
 │   │   │       ├── sheetDesigner.test.ts        # The sheet designer's every step (customize, the tray, moving and removing tabs, sections and fields, attack numbers never EVERYONE), held to the server's check
 │   │   │       ├── npcs.test.ts                 # The stat block and tiers written back, held to the server's check and rolled by its tierRolls
 │   │   │       ├── conditions.test.ts           # The standard set and what the game offers held to the server's own conditionsOf, each change storing only what differs, a system's own added, renamed and deleted, the limit of 60, and what a modifier may name
+│   │   │       ├── tokenConditions.test.ts      # Reading a token's conditions as the server does, what is drawn (in order, rounds and modifiers where sent, one the game lacks left out), putting on and taking off keeping the others' rounds, and the words for modifiers and rounds
 │   │   │       ├── conditionIcons.test.tsx      # The 24 icons are the server's, path data alone, none of Feather's paths, stroked in currentColor and never filled; an upload drawn through <img>; anything unknown drawn as the target
 │   │   │       ├── tryIt.test.ts                # The made-up character, typed values, SAVE AS THE SAMPLE and RESET, the pretend token and its maximum
 │   │   │       ├── examples.test.ts             # The examples' and starters' card facts read off the server's own definitions, XP in the system's word, and locking a page but for browsing

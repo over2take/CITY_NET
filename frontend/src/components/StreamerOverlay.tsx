@@ -3,6 +3,9 @@ import type { DirectorState, Location } from '../types';
 import { HeartMonitor, PersonSVG, INJURY_ZONES } from './HitPoints';
 import { bandOf } from './healthBands';
 import { useParts } from '../sheets/parts';
+import { useConditionList } from '../hooks/useConditionList';
+import { parseOnToken, shownConditions } from '../sheets/tokenConditions';
+import { ConditionIcon } from './ConditionIcon';
 
 interface DiceEvent {
   id: string;
@@ -18,6 +21,8 @@ interface DiceEvent {
 export function StreamerOverlay({ socket, directorState, selectedLocation, battleMapLabel, gameSystem }: { socket: any; directorState: DirectorState; selectedLocation: Location | null; battleMapLabel?: string | null; gameSystem?: string }) {
   // No heart monitor or injury map where the game has token health off (3b6d).
   const healthOn = useParts(gameSystem)('token_health');
+  // The running game's conditions, for the names and icons of a token's (4e2b1).
+  const gameConditions = useConditionList(gameSystem);
   const [diceEvents, setDiceEvents] = useState<DiceEvent[]>([]);
 
   useEffect(() => {
@@ -125,11 +130,22 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                   try { return JSON.parse((selectedLocation as any).injuries || '{}'); } catch { return {}; }
                 })();
                 const hasInjuries = Object.values(injuries).some(Boolean);
+                const shown = shownConditions(parseOnToken((selectedLocation as Location & { conditions?: string }).conditions), gameConditions);
                 return (
                   <>
                     <div style={{ borderTop: '1px solid #0a2a0a', paddingTop: '8px' }}>
                       <HeartMonitor band={bandOf(hpCurrent, hpMax)} />
                     </div>
+                    {/* Conditions by name, never rounds or modifiers (4e2b1; BLIND and BLEED among them now). */}
+                    {shown.length > 0 && (
+                      <div data-testid="overlay-conditions" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center' }}>
+                        {shown.map(({ condition: c }) => (
+                          <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--danger)', border: '1px solid var(--danger)', padding: '1px 5px', fontSize: '10px', letterSpacing: '1px' }}>
+                            <ConditionIcon icon={c.icon} size={11} />{c.short}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {hasInjuries && (
                       <div style={{ borderTop: '1px solid #0a2a0a', paddingTop: '8px' }}>
                         <div style={{ fontSize: '9px', color: '#555', letterSpacing: '1px', textAlign: 'center', marginBottom: '6px' }}>INJURY_MAP</div>
@@ -148,11 +164,6 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                             ))}
                           </div>
                         </div>
-                        {(['blind', 'bleeding'] as const).filter(c => injuries[c]).map(cond => (
-                          <div key={cond} style={{ textAlign: 'center', color: 'var(--danger)', fontSize: '10px', letterSpacing: '1px', marginTop: '4px' }}>
-                            ⚠ {cond.toUpperCase()}
-                          </div>
-                        ))}
                       </div>
                     )}
                   </>

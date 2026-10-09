@@ -95,6 +95,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Conditions in the HEALTH folder, and BLIND and BLEED become conditions.** A token's HEALTH
+  folder now has a CONDITIONS section: every condition on the token as a chip with its icon, and
+  below them what each one means. Whoever may change the token's health can put conditions on
+  from the game's list (+ CONDITION) and take them off, and sees how many rounds each has left and
+  its modifiers; everyone else sees which conditions and what they mean. The injury map keeps the
+  body; its BLIND and BLEED switches are now the Blinded and Bleeding conditions, and any token that
+  had them keeps them, moved over on first start in every game's saved values too. The stream
+  overlay shows a selected token's conditions in place of the two old flags.
+
 - **Tokens can carry conditions.** The server now keeps a list of conditions on each token, put on
   and taken off by whoever may change its health: the GM, a granted editor, the player whose token
   it is, or the player given a friendly NPC. Only conditions the running game has are accepted: a
