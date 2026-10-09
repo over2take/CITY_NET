@@ -12,6 +12,7 @@ const { previewDerived } = require('../systemBuilder/derived');
 const { effectiveSheet, starterSheet, fieldsOf } = require('../systemBuilder/sheet');
 const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
 const { rollTier } = require('../systemBuilder/tierRolls');
+const { tryHealth } = require('../systemBuilder/tryHealth');
 
 /** What a currency's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
@@ -152,6 +153,18 @@ module.exports = (db, io = null) => {
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     const samples = definition.samples && typeof definition.samples === 'object' && !Array.isArray(definition.samples) ? definition.samples : {};
     res.json(previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples));
+  });
+
+  /**
+   * The builder's TRY IT (4c1): a made-up character's health under a draft's model, on a pretend
+   * token: an action applied through the game's own rules, and the HEALTH folder's views of it,
+   * for its owner and for everyone else. Changes nothing.
+   */
+  router.post('/try-health', gm, (req, res) => {
+    const { definition, token, sheet, action } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    res.json(tryHealth(definition, { token, sheet, action }));
   });
 
   /**

@@ -31,6 +31,8 @@ describe('the requests', () => {
       [(a) => a.previewValues({ format: 1, name: 'H' }), '/api/systems/preview-values', 'POST', { definition: { format: 1, name: 'H' } }],
       [(a) => a.previewSheet({ format: 1, name: 'H' }), '/api/systems/preview-sheet', 'POST', { definition: { format: 1, name: 'H' } }],
       [(a) => a.tryTier({ format: 1, name: 'H' }, 'boss', 6), '/api/systems/try-tier', 'POST', { definition: { format: 1, name: 'H' }, tier: 'boss', level: 6 }],
+      [(a) => a.tryHealth({ format: 1, name: 'H' }, { token: { current: 5, max: 9 }, action: { kind: 'damage', amount: 2 } }), '/api/systems/try-health', 'POST',
+        { definition: { format: 1, name: 'H' }, token: { current: 5, max: 9 }, action: { kind: 'damage', amount: 2 } }],
       [(a) => a.create('Hearth'), '/api/systems', 'POST', { name: 'Hearth' }],
       [(a) => a.rename(ID, 'Emberhold'), `/api/systems/${ID}/name`, 'PUT', { name: 'Emberhold' }],
       [(a) => a.duplicate(ID), `/api/systems/${ID}/duplicate`, 'POST', {}],
