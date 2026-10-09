@@ -103,6 +103,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What a rest does to a character.** The server can now work out a rest for one character: the
+  rests it counts as first, then its own refills, health back through the system's own health
+  model, sheet numbers kept between 0 and their maximum, and the conditions that end there taken off.
+  A preview leaves dice unrolled. Calling a rest from the GAME tab comes next.
 - **Rests, as data.** A custom system has rests: Short rest, Long rest, End of scene and End of
   session, each renamed or turned off, plus its own, twelve in all. Each one can count as other
   rests and refills, in order, health, a number on the sheet or a whole section of it. Amounts can
