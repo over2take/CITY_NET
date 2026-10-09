@@ -6,6 +6,7 @@ import type {
 } from '../types';
 import type { BankCurrencyAccount } from '../sheets/currencies';
 import { refreshCustomTemplate } from '../sheets/customTemplates';
+import { CONDITIONS_CHANGED_EVENT } from './useConditionList';
 
 interface UseSocketOptions {
   userName: string;
@@ -121,6 +122,8 @@ export function useSocket({
     // template is fetched again, and every window drawn from it redraws once it arrives.
     newSocket.on('customSystemChanged', (data: { id?: string }) => {
       if (data && typeof data.id === 'string') void refreshCustomTemplate(data.id);
+      // Its conditions may have changed too (4e2b1): the windows showing them ask again.
+      window.dispatchEvent(new Event(CONDITIONS_CHANGED_EVENT));
     });
 
     newSocket.on('dataUpdated', (payload: { isRhombusOnly?: boolean }) => {

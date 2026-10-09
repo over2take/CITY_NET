@@ -9,6 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **A LUCK test no longer fails on a busy machine.** It checked that a roll spent the declared LUCK
+  by reading the sheet the moment the roll was announced, but the spend is written alongside the
+  announcement rather than before it, so on a slow CI machine it sometimes read the old value. It
+  now waits for the spend to land. Nothing in the game changes.
+
 - **The README's map of the code is complete again, and kept that way.** Its Project Structure had
   fallen behind: 202 source and test files weren't in it, and 28 lines put a file in a folder it
   wasn't in. Every file now has a line saying what it is for, the misplaced ones are where their
@@ -94,6 +99,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   now work only for the GM and granted editors, as they appear in the admin panel.
 
 ### Under the hood
+
+- **Conditions in the HEALTH folder, and BLIND and BLEED become conditions.** A token's HEALTH
+  folder now has a CONDITIONS section: every condition on the token as a chip with its icon, and
+  below them what each one means. Whoever may change the token's health can put conditions on
+  from the game's list (+ CONDITION) and take them off, and sees how many rounds each has left and
+  its modifiers; everyone else sees which conditions and what they mean. The injury map keeps the
+  body; its BLIND and BLEED switches are now the Blinded and Bleeding conditions, and any token that
+  had them keeps them, moved over on first start in every game's saved values too. The stream
+  overlay shows a selected token's conditions in place of the two old flags.
 
 - **Tokens can carry conditions.** The server now keeps a list of conditions on each token, put on
   and taken off by whoever may change its health: the GM, a granted editor, the player whose token

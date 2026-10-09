@@ -90,7 +90,9 @@ describe('asking the server', () => {
     expect(screen.getByText('8 / 10')).toBeTruthy();
     expect(screen.getByText('STIM_HEAL (+1 STRAIN)')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'DAMAGE' })).toBeTruthy();
-    expect(socket.emitted).toEqual([]);
+    // No health view: a built-in system has no model to describe. Its conditions are asked for, as
+    // every system's are (4e2b1).
+    expect(socket.emitted.filter((x) => x.e !== 'requestTokenConditions')).toEqual([]);
   });
 });
 

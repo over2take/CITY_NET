@@ -5,25 +5,11 @@ import { useHealthView } from '../hooks/useHealthView';
 import { isCustomSystem } from '../sheets';
 import { useWords, asLabel } from '../sheets/words';
 import { ModelHealthEditor, ModelHealthDescription, NoHealthNotice, monitorBandFor, type SendHealth } from './HealthModelPanels';
+import { TokenConditions } from './TokenConditions';
 // Inline SVGs so we can tint them with CSS `color` (currentColor)
 export const PersonSVG = ({ color = 'currentColor', style }: { color?: string; style?: React.CSSProperties }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill={color} style={style}>
     <path d="M128 68a28 28 0 1 0-28-28a28 28 0 0 0 28 28m0-48a20 20 0 1 1-20 20a20 20 0 0 1 20-20m87.42 116.78l-45.25-51.3a28 28 0 0 0-21-9.48h-42.34a28 28 0 0 0-21 9.48l-45.25 51.3a16 16 0 0 0 22.56 22.69L89 138.7l-19.7 74.88a16 16 0 0 0 29.08 13.35L128 176l29.58 51a16 16 0 0 0 29.08-13.35L167 138.7l25.9 20.77a16 16 0 0 0 22.56-22.69Zm-5.76 16.87a8 8 0 0 1-11.31 0a3 3 0 0 0-.33-.29l-35.51-28.48a4 4 0 0 0-6.38 4.13L179 215.94a4 4 0 0 0 .24.67a8 8 0 1 1-14.5 6.76c-.05-.11-.11-.21-.17-.32L131.46 166a4 4 0 0 0-6.92 0l-33.12 57.05c-.06.11-.12.21-.17.32a8 8 0 1 1-14.5-6.76a4 4 0 0 0 .24-.67L99.87 129a4 4 0 0 0-6.38-4.13L58 153.36a3 3 0 0 0-.33.29a8 8 0 0 1-11.31-11.31l.17-.18l45.3-51.39a20 20 0 0 1 15-6.77h42.34a20 20 0 0 1 15 6.77l45.32 51.39l.17.18a8 8 0 0 1 0 11.31" />
-  </svg>
-);
-
-const EyeSVG = ({ color = 'currentColor', size = 18 }: { color?: string; size?: number }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill={color} width={size} height={size}>
-    <path d="M243.66 126.38c-.34-.76-8.52-18.89-26.83-37.2C199.87 72.22 170.7 52 128 52S56.13 72.22 39.17 89.18c-18.31 18.31-26.49 36.44-26.83 37.2a4.08 4.08 0 0 0 0 3.25c.34.77 8.52 18.89 26.83 37.2c17 17 46.14 37.17 88.83 37.17s71.87-20.21 88.83-37.17c18.31-18.31 26.49-36.43 26.83-37.2a4.08 4.08 0 0 0 0-3.25m-32.7 35c-23.07 23-51 34.62-83 34.62s-59.89-11.65-83-34.62A135.7 135.7 0 0 1 20.44 128A135.7 135.7 0 0 1 45 94.62C68.11 71.65 96 60 128 60s59.89 11.65 83 34.62A135.8 135.8 0 0 1 235.56 128A135.7 135.7 0 0 1 211 161.38ZM128 84a44 44 0 1 0 44 44a44.05 44.05 0 0 0-44-44m0 80a36 36 0 1 1 36-36a36 36 0 0 1-36 36" />
-  </svg>
-);
-
-const BloodSVG = ({ color = 'currentColor', size = 18 }: { color?: string; size?: number }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width={size} height={size}>
-    <g fill={color}>
-      <path d="M15.465 31.398a1 1 0 1 0-1.902.62a11.53 11.53 0 0 0 4.178 5.767a11.48 11.48 0 0 0 6.759 2.203c.552 0 1-.449 1-1.003s-.448-1.003-1-1.003a9.5 9.5 0 0 1-5.584-1.82a9.53 9.53 0 0 1-3.451-4.764" />
-      <path fillRule="evenodd" d="m24 4l-.69.66l-.004.004l-.009.008l-.032.032l-.122.119q-.16.157-.456.455a72 72 0 0 0-6.492 7.621C12.681 17.68 9 24.082 9 30.08C9 37.845 15.796 44 24 44s15-6.155 15-13.92c0-6-3.681-12.401-7.195-17.18a72 72 0 0 0-6.492-7.622a42 42 0 0 0-.578-.574l-.032-.032l-.01-.008zm-1.451 4.334A64 64 0 0 1 24 6.8a70 70 0 0 1 6.195 7.29C33.681 18.832 37 24.777 37 30.08c0 6.503-5.74 11.914-13 11.914S11 36.583 11 30.08c0-5.303 3.319-11.248 6.805-15.99a70 70 0 0 1 4.744-5.756" clipRule="evenodd" />
-    </g>
   </svg>
 );
 
@@ -33,8 +19,8 @@ const BloodSVG = ({ color = 'currentColor', size = 18 }: { color?: string; size?
 
 const BODY_PARTS = ['head', 'right_arm', 'torso', 'left_arm', 'right_leg', 'left_leg'] as const;
 type BodyPart = typeof BODY_PARTS[number];
-type StatusFlag = 'blind' | 'bleeding';
-type Injuries = Partial<Record<BodyPart | StatusFlag, boolean>>;
+// BLIND and BLEED used to be flags here; they are the Blinded and Bleeding conditions now (4e2b1).
+type Injuries = Partial<Record<BodyPart, boolean>>;
 
 export const INJURY_ZONES: Record<string, React.CSSProperties> = {
   head:      { left: '38%', top: '9%',  width: '24%', height: '20%' },
@@ -60,21 +46,12 @@ const zoneStyle = (injured: boolean | undefined, clickable: boolean): React.CSSP
   transition: 'background 0.15s, border 0.15s',
 });
 
-const flagStyle = (active: boolean, clickable: boolean): React.CSSProperties => ({
-  fontFamily: 'monospace', fontSize: '8px', borderRadius: '3px', userSelect: 'none',
-  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '6px 10px',
-  background: active ? tint('var(--danger)', 20) : tint('var(--green)', 8),
-  border: `1px solid ${active ? 'var(--danger)' : 'var(--green)'}`,
-  color: active ? 'var(--danger)' : 'var(--green)',
-  cursor: clickable ? 'pointer' : 'default',
-});
-
 /**
- * The body with its hurt parts marked, and the BLIND / BLEED flags beside it. Clicking marks
- * and unmarks when `onToggle` is given; without it the map is only looked at.
+ * The body with its hurt parts marked. Clicking marks and unmarks when `onToggle` is given;
+ * without it the map is only looked at.
  */
 function InjuryMap({ injuries, onToggle, onClear }: {
-  injuries: Injuries; onToggle?: (key: BodyPart | StatusFlag) => void; onClear?: () => void;
+  injuries: Injuries; onToggle?: (key: BodyPart) => void; onClear?: () => void;
 }) {
   const clickable = !!onToggle;
   return (
@@ -91,21 +68,6 @@ function InjuryMap({ injuries, onToggle, onClear }: {
             return clickable
               ? <button key={part} type="button" title={label} aria-label={label} aria-pressed={!!injuries[part]} onClick={() => onToggle(part)} style={style} />
               : <div key={part} title={label} data-injured={injuries[part] ? 'yes' : 'no'} style={{ ...style, pointerEvents: 'none' }} />;
-          })}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {(['blind', 'bleeding'] as const).map((flag) => {
-            const active = !!injuries[flag];
-            const color = active ? 'var(--danger)' : 'var(--green)';
-            const inner = (
-              <>
-                {flag === 'blind' ? <EyeSVG color={color} /> : <BloodSVG color={color} />}
-                <span>{flag === 'blind' ? 'BLIND' : 'BLEED'}</span>
-              </>
-            );
-            return clickable
-              ? <button key={flag} type="button" title={flag.toUpperCase()} aria-pressed={active} onClick={() => onToggle(flag)} style={flagStyle(active, true)}>{inner}</button>
-              : <div key={flag} style={flagStyle(active, false)}>{inner}</div>;
           })}
         </div>
       </div>
@@ -230,6 +192,10 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
       onClear={() => saveInjuries({})}
     />
   );
+  // Whoever has this panel may change the token's health, and so its conditions (4e2b1).
+  const conditions = (
+    <TokenConditions location={target} gameSystem={gameSystem} socket={socket} canChange authToken={token || undefined} onChanged={refreshLocations} />
+  );
   const tempRow = (
     <div>
       <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TEMP_{asLabel(hp)}</label>
@@ -257,6 +223,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
           <InjuryToggle open={injuriesOpen} onClick={() => setInjuriesOpen((o) => !o)} size={18} />
         </div>
         {injuryMap}
+        {conditions}
         <ModelHealthEditor key={`${target.id}:${view.model}`} view={view} target={target} send={sendHealth} gm={token !== ''} words={word} />
         {(view.model === 'tracks' || view.model === 'locations') && (
           <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>{tempRow}</div>
@@ -285,6 +252,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
       </div>
 
       {injuryMap}
+      {conditions}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
         <input type="number" placeholder="0" aria-label="Amount" value={actionAmount || ''} onChange={e => setActionAmount(parseInt(e.target.value) || 0)} style={{ width: '100%', boxSizing: 'border-box' }} />
@@ -471,6 +439,8 @@ export function HealthReviewPanel({ location, socket, gameSystem, onRolled }: He
       )}
 
       {injuriesOpen && <InjuryMap injuries={injuries} />}
+      {/* Which conditions, and what they mean: never the rounds left or the modifiers (4e2b1). */}
+      <TokenConditions location={location} gameSystem={gameSystem} socket={socket} canChange={false} />
     </div>
   );
 }

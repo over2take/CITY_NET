@@ -602,7 +602,14 @@ db.serialize(() => {
       console.error('[tokens] Saving token health per system failed, so switching systems is unavailable until the next start:', err.message);
       throw err;
     });
-  require('./tokens/vitals').setReady(tokensSaved);
+  // Then move BLIND and BLEED from the injury map into conditions, once (4e2b1). A switch waits for
+  // this too, so it never swaps a row the move is rewriting.
+  const conditionsMoved = tokensSaved.then(() => require('./startup/injuryConditions').moveInjuryConditions(db)
+    .catch((err) => {
+      console.error('[tokens] Moving BLIND and BLEED into conditions failed, so switching systems is unavailable until the next start:', err.message);
+      throw err;
+    }));
+  require('./tokens/vitals').setReady(conditionsMoved);
 });
 
 module.exports = db;
