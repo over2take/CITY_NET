@@ -19,6 +19,8 @@ import type { SystemCopies } from '../../sheets/systemsApi';
 import { createRequire } from 'module';
 
 const { starterSheet, effectiveSheet } = createRequire(import.meta.url)('../../../../backend/systemBuilder/sheet.js');
+const { tryHealth } = createRequire(import.meta.url)('../../../../backend/systemBuilder/tryHealth.js');
+const { previewDerived } = createRequire(import.meta.url)('../../../../backend/systemBuilder/derived.js');
 
 /**
  * The builder screen (4a2b): it takes over the window, with its own sidebar of pages, SAVE,
@@ -54,6 +56,14 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     return json(draftAnswer.status, draftAnswer.body);
   }
   if (url === '/api/systems' && method === 'GET') return json(200, LIBRARY);
+  if (url === '/api/systems/try-health') {
+    const body = JSON.parse(String(init!.body));
+    return json(200, tryHealth(body.definition, body));
+  }
+  if (url === '/api/systems/preview-values') {
+    const { definition } = JSON.parse(String(init!.body));
+    return json(200, previewDerived({ lookups: definition.lookups, derived: definition.derived }, definition.samples ?? {}));
+  }
   if (url === '/api/systems/preview-sheet') {
     const { definition } = JSON.parse(String(init!.body));
     return json(200, { sheet: effectiveSheet(definition), starter: starterSheet(definition) });
@@ -108,10 +118,13 @@ describe('the builder', () => {
     await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', stats: [{ id: 'new_group', label: 'NEW GROUP', stats: [] }] }));
   });
 
-  it('shows what a page not built yet will hold', async () => {
+  it('TRY IT tries the draft without saving anything', async () => {
     open({ startPage: 'try' });
     await ready();
-    expect(screen.getByText(/This page arrives in a coming update\./)).toBeTruthy();
+    await userEvent.click(await screen.findByRole('button', { name: 'DAMAGE' }));
+    expect((await screen.findByTestId('health-log')).textContent).toContain('DAMAGE 5 → 5/10');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(drafts).toEqual([]);
   });
 
   it('NPCS adds a tier, saved like any other change', async () => {

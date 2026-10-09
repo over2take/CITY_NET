@@ -88,6 +88,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's TRY IT page.** A GM can now try a draft as a player would meet it, unsaved
+  changes included: a made-up character on the draft's own sheet, its formulas worked out by the
+  server a moment after typing; its health on a pretend token in the HEALTH folder's own panels,
+  with what everyone else sees beside it and a log of what was done; and an NPC rolled from a tier
+  at a chosen level, each result with its dice. Nothing is saved except SAVE AS THE SAMPLE
+  CHARACTER, and RESET goes back to the sample. With this, a whole system can be built and tried
+  in the builder without touching JSON.
+
 - **What the builder's TRY IT page will do.** A made-up character starting from the sample in
   STATS & RULES (RESET goes back to it), typed numbers sent to the server so formulas are worked
   out from them, SAVE AS THE SAMPLE CHARACTER offered only when the stats differ and saving just
