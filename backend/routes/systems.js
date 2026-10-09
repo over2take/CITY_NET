@@ -14,6 +14,8 @@ const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
 const { rollTier } = require('../systemBuilder/tierRolls');
 const { tryHealth } = require('../systemBuilder/tryHealth');
 const { exampleList, exampleDefinition, exampleKind, KINDS } = require('../systemBuilder/examples');
+const { checkTableConditions, saveTableConditions } = require('../systemBuilder/tableConditions');
+const { isBuiltIn } = require('../sheets/templates');
 
 /** What a currency's or condition's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
@@ -265,6 +267,25 @@ module.exports = (db, io = null) => {
    * sees a token's conditions by name, icon and description. Their modifiers go only to the GM and
    * a granted editor here; a token's owner sees them in its HEALTH folder.
    */
+  /**
+   * A built-in game's own conditions (4e2c1; tableConditions.js), the whole set replaced: names,
+   * labels, icons and descriptions beside the standard ones. A custom system's are its own
+   * definition's, edited in the builder. Every screen is told, so token windows and the map ask
+   * for the game's list again.
+   */
+  router.put('/table-conditions/:system', gm, (req, res) => {
+    const { system } = req.params;
+    if (!isBuiltIn(system)) return res.status(400).json({ error: 'A custom system\'s conditions are edited in the builder' });
+    const entries = req.body && req.body.conditions;
+    const problems = checkTableConditions(entries);
+    if (problems.length) return res.status(400).json({ error: `${problems[0].where}: ${problems[0].message}`, problems });
+    saveTableConditions(db, system, entries, (err) => {
+      if (err) return answer(res, err);
+      if (io) io.emit('conditionsChanged', { system });
+      res.json({ conditions: runtime.conditionsIn(system) });
+    });
+  });
+
   router.get('/conditions/:system', optionalAuthenticate, (req, res) => {
     const all = runtime.conditionsIn(req.params.system);
     res.json(req.user ? all : all.map(({ modifiers, ...c }) => ({ ...c, modifiers: [] })));

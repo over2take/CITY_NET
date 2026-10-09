@@ -18,6 +18,7 @@ const { partOn, PARTS } = require('./parts');
 const { buildingOn, buildingName, catalogueCurrency, ownBuildings } = require('./buildings');
 const { currenciesOf } = require('./currencies');
 const { conditionsOf } = require('./conditions');
+const { loadTableConditions, tableConditionsOf } = require('./tableConditions');
 const { bankOf } = require('./bank');
 const { distanceOf } = require('./core');
 const templates = require('../sheets/templates');
@@ -127,13 +128,13 @@ const put = (id, publishedText, version) => {
   });
 };
 
-/** Load every published system. cb(err, count). */
+/** Load every published system, and the built-in games' own conditions. cb(err, count). */
 const load = (db, cb = () => {}) => {
   db.all('SELECT id, published, version FROM custom_systems WHERE published IS NOT NULL AND deleted_at IS NULL', [], (err, rows) => {
     if (err) { console.error('[systems] Could not load custom systems:', err.message); return cb(err); }
     loaded.clear();
     for (const r of rows) put(r.id, r.published, r.version);
-    cb(null, loaded.size);
+    loadTableConditions(db, () => cb(null, loaded.size));
   });
 };
 
@@ -217,9 +218,12 @@ npcTiers.setCustomTiers(tiers);
 
 /**
  * The conditions `system` offers for tokens (4e2a; conditions.js): a published custom system's own,
- * or, for a built-in system (and anything not loaded), the standard set as it stands, names and
- * descriptions with no modifiers, so a built-in game's rules don't change.
+ * or, for a built-in system (and anything not loaded), the standard set as it stands and the
+ * table's own from the GAME tab (tableConditions.js, 4e2c1), names and descriptions with no
+ * modifiers, so a built-in game's rules don't change.
  */
-const conditionsIn = (system) => conditionsOf(loaded.has(system) ? loaded.get(system).definition : null);
+const conditionsIn = (system) => conditionsOf(loaded.has(system)
+  ? loaded.get(system).definition
+  : { conditions: tableConditionsOf(system) });
 
 module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, metaOf, renderOf };
