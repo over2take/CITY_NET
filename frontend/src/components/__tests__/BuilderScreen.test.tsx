@@ -143,6 +143,21 @@ describe('the builder', () => {
     expect(drafts).toEqual([]);
   });
 
+  it('CONDITIONS turns a standard condition off, saved like any other change', async () => {
+    open({ startPage: 'conditions' });
+    await ready();
+    await userEvent.click(await screen.findByRole('switch', { name: 'Prone on' }));
+    await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
+    await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', conditions: { prone: { on: false } } }));
+  });
+
+  it('CONDITIONS is locked on a built-in example like every other page', async () => {
+    open({ systemId: null, example: 'cwn', startPage: 'conditions' });
+    const sw = await screen.findByRole('switch', { name: 'Prone on' });
+    await waitFor(() => expect((sw as HTMLButtonElement).disabled).toBe(true));
+    expect(screen.queryByRole('button', { name: 'UPLOAD' })).toBeNull();
+  });
+
   it('NPCS adds a tier, saved like any other change', async () => {
     open({ startPage: 'npcs' });
     await ready();
@@ -180,7 +195,7 @@ describe('the builder', () => {
     open({ startPage: 'problems' });
     await ready();
     const pages = within(sidebar()).getAllByRole('button').filter((b) => b.title && !['PUBLISH', 'MY SYSTEMS'].includes(b.textContent!));
-    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'TRY IT', 'PROBLEMS']);
+    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'TRY IT', 'PROBLEMS']);
     expect(pages[1].title).toBe('What the game calls things: HP, credits, skills.');
     await userEvent.click(pages[1]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('WORDS');

@@ -101,6 +101,13 @@ describe('uploading a currency icon', () => {
     const down = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
     expect(await systemsApi('tok', down as never).uploadIcon(file)).toEqual({ ok: false, status: 0, error: 'Could not reach the server.' });
   });
+
+  it('sends a condition\'s icon to the conditions\' own folder (4e1b)', async () => {
+    const f = server(200, { icon: `/uploads/condition_icons/${'d'.repeat(64)}.svg` });
+    const file = new File(['x'], 'hex.svg', { type: 'image/svg+xml' });
+    expect(await systemsApi('tok', f).uploadIcon(file, 'condition')).toEqual({ ok: true, value: { icon: `/uploads/condition_icons/${'d'.repeat(64)}.svg` } });
+    expect((f.mock.calls[0] as unknown as [string])[0]).toBe('/api/systems/condition-icons');
+  });
 });
 
 describe('exporting', () => {

@@ -709,6 +709,8 @@ CITY_NET/
 │   │   │   ├── SheetPage.tsx            # CHARACTER SHEET: automatic until CUSTOMIZE copies the starter; a tree of tabs, sections and fields to move and edit, who sees and who changes each field, a tray of stats not placed yet, and a live preview. Also edits NPCS' stat block of its own (GM-only preview)
 │   │   │   ├── SheetPreview.tsx         # The sheet designer's live preview, drawn by the real SheetRenderer, as its owner, the GM and everyone else see it
 │   │   │   ├── NpcsPage.tsx             # NPCS: the stat block (the character sheet, or one of its own) and TIERS, each box a number, a formula with @level or dice, typed text kept as typed, a TRY IT roll at a level
+│   │   │   ├── ConditionsPage.tsx       # CONDITIONS: the standard set with switches and a system's own (+ CONDITION, DELETE after asking), up to 60; each one's name (the standard name as placeholder), chip label, icon (24 drawn, or UPLOAD), description, how it ends (when removed or after rounds) and modifiers on all rolls, a stat or a formula, typed numbers kept as typed
+│   │   │   ├── ConditionIcon.tsx        # A condition's icon: one drawn for CITY_NET, stroked in the theme's color, or an uploaded picture through <img> only; anything unknown draws the target
 │   │   │   ├── TryItPage.tsx            # TRY IT: the draft as a player would meet it, unsaved changes included. A made-up character on its own sheet with formulas worked out as you type, its health on a pretend token in the HEALTH folder's own panels with what others see, and an NPC rolled from a tier. Saves nothing but SAVE AS THE SAMPLE CHARACTER
 │   │   │   ├── ControlledNpcSheetWindow.tsx # A friendly NPC's sheet for the player the GM gave it to: read-only, with rolls made for the NPC through the server
 │   │   │   ├── UpdateModal.tsx          # Draggable update notification modal (shown on admin login when update available; Update Now / Remind Me Later / Skip Version; docker-aware)
@@ -780,6 +782,7 @@ CITY_NET/
 │   │   │       ├── StatsRulesPage.test.tsx          # Stats in groups with their SAMPLE column, formulas with live values and mistakes, and tables with TRY IT
 │   │   │       ├── SheetPage.test.tsx               # Automatic or customized, the tree of tabs, sections and fields, moving and removing them (sections going to a tab you choose, the last tab making one page), and each field's settings
 │   │   │       ├── NpcsPage.test.tsx                # The stat block shared or its own, tiers whose boxes keep what was typed, and TRY IT rolling one, all through the server's own code
+│   │   │       ├── ConditionsPage.test.tsx          # Switches storing only "off", renaming and putting back, icons drawn or uploaded (a refusal said), ends and rounds, modifiers typed negative, a system's own added, named, deleted after asking, and + CONDITION stopping at 60
 │   │   │       ├── TryItPage.test.tsx               # The made-up character and its formulas, SAVE AS THE SAMPLE (absent with nowhere to save), RESET, health on a pretend token under each model, both maximums, and an NPC rolled from a tier
 │   │   │       ├── ControlledNpcSheetWindow.test.tsx # A friendly NPC's sheet read-only for the player it was given to, fetched with their own login, rolling as the NPC
 │   │   │       ├── SheetAttackPanel.attackAs.test.tsx # ATTACK AS: a player with a friendly NPC given to them, the GM with an NPC near the target, its weapons and LUCK, firing as it
@@ -923,6 +926,8 @@ CITY_NET/
 │   │   │   ├── sheetDesigner.ts    # CHARACTER SHEET as logic: a system's own sheet read from its definition and written back - tabs, sections, fields, placement, the tray, and the problems that stop it saving
 │   │   │   ├── publicLines.ts      # What everyone else sees of a custom system's character: the sheet's public lines, for ID.EXE's INFO and the sheet preview's EVERYONE ELSE
 │   │   │   ├── npcs.ts             # NPCS as logic: the stat block (shared or its own), tiers and their boxes (number, formula with @level, or dice), the server's limits, and a rolled box as text
+│   │   │   ├── conditions.ts       # CONDITIONS as logic: the standard set and a system's own read from a definition and written back storing only what differs (a standard one put back leaves nothing), the count against 60, new and deleted ones, and what a modifier may name; mirrors the server's conditions.js
+│   │   │   ├── conditionIcons.ts   # The 24 condition icons drawn for CITY_NET as path data on a 24-pixel grid, ours to use (the four first sketched too close to Feather's redrawn), and telling a drawn icon from an uploaded one
 │   │   │   ├── tryIt.ts            # TRY IT as logic: the made-up character from the sample, typed values, SAVE AS THE SAMPLE, the pretend token and its maximum
 │   │   │   ├── examples.ts         # The examples' and starters' cards (health, advancement in the system's own XP word, stats, formulas, distance), the copy's suggested name, and locking a page while one is looked at (every control but tabs, things opening out and marked views)
 │   │   │   ├── templates/
@@ -942,6 +947,8 @@ CITY_NET/
 │   │   │       ├── statsRules.test.ts           # Stats, samples, formulas and tables written back, ids from first names and kept after, held to the server's check and engine
 │   │   │       ├── sheetDesigner.test.ts        # The sheet designer's every step (customize, the tray, moving and removing tabs, sections and fields, attack numbers never EVERYONE), held to the server's check
 │   │   │       ├── npcs.test.ts                 # The stat block and tiers written back, held to the server's check and rolled by its tierRolls
+│   │   │       ├── conditions.test.ts           # The standard set and what the game offers held to the server's own conditionsOf, each change storing only what differs, a system's own added, renamed and deleted, the limit of 60, and what a modifier may name
+│   │   │       ├── conditionIcons.test.tsx      # The 24 icons are the server's, path data alone, none of Feather's paths, stroked in currentColor and never filled; an upload drawn through <img>; anything unknown drawn as the target
 │   │   │       ├── tryIt.test.ts                # The made-up character, typed values, SAVE AS THE SAMPLE and RESET, the pretend token and its maximum
 │   │   │       ├── examples.test.ts             # The examples' and starters' card facts read off the server's own definitions, XP in the system's word, and locking a page but for browsing
 │   │   │       ├── customTemplates.test.tsx     # A published custom system's sheet drawn by the ordinary renderer from the server's render copy, the generic template standing in until it loads

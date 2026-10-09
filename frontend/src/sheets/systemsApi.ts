@@ -132,15 +132,16 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
     install: (file: string, mode: InstallMode, replaceChanges = false) =>
       call<InstallResult>(fetcher, token, '/api/systems/install', 'POST', { file, mode, ...(replaceChanges ? { replaceChanges: true } : {}) }),
     /**
-     * A currency icon image (PNG, WebP or SVG, a quarter of a megabyte at most), stored by the
-     * server under its content hash: the address a currency's `icon` then names.
+     * A currency's or a condition's icon image (PNG, WebP or SVG, a quarter of a megabyte at most),
+     * stored by the server under its content hash: the address the currency's or condition's
+     * `icon` then names.
      */
-    uploadIcon: async (file: File): Promise<Answer<{ icon: string }>> => {
+    uploadIcon: async (file: File, kind: 'currency' | 'condition' = 'currency'): Promise<Answer<{ icon: string }>> => {
       const form = new FormData();
       form.append('icon', file);
       let res: Response;
       try {
-        res = await fetcher('/api/systems/currency-icons', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+        res = await fetcher(`/api/systems/${kind}-icons`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
       } catch {
         return { ok: false, error: UNREACHABLE, status: 0 };
       }
