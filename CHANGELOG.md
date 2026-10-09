@@ -88,6 +88,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Cities Without Number and Shadowrun as examples to copy.** Both are now whole systems in the
+  builder's format, ready to publish as they stand: their stats, the names players see, a sample
+  character, and their setup answers (one pool in meters for CWN; physical and stun with overflow,
+  karma and nuyen for Shadowrun), around the same formulas already proven against the built-in
+  games' own code. The server can list them, open one, and copy one into a new draft under a new
+  name. The games themselves don't change: CWN and Shadowrun still run their own code. The
+  builder's buttons for this come next.
+
 - **The builder's TRY IT page.** A GM can now try a draft as a player would meet it, unsaved
   changes included: a made-up character on the draft's own sheet, its formulas worked out by the
   server a moment after typing; its health on a pretend token in the HEALTH folder's own panels,
