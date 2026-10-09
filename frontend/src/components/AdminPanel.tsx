@@ -47,7 +47,8 @@ import { parseGrant, describeGrant } from '../utils/tokenControl';
 import { useWords, asLabel, type WordLookup } from '../sheets/words';
 import { useParts, partOn, type PartLookup } from '../sheets/parts';
 import { currenciesFor, isUploadedIcon, BUILT_IN_ICONS, type Currency } from '../sheets/currencies';
-import { useCustomTemplate, refreshCustomTemplate } from '../sheets/customTemplates';
+import { useCustomTemplate, refreshCustomTemplate, isCustomSystem } from '../sheets/customTemplates';
+import { TableConditionsPanel } from './TableConditionsPanel';
 import { shortfallRule } from '../sheets/moneyText';
 import { SYSTEMS_CHANGED_EVENT } from '../sheets/systemsLibrary';
 
@@ -58,7 +59,7 @@ function BattleAdminPanel({
   token, isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly,
   tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, locations, refreshLocations,
   handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen, secureModeEnabled, onLogout,
-  globalSettings, fetchGlobalSettings, onOpenNpcLibrary, onOpenSystems, activeUsers,
+  globalSettings, fetchGlobalSettings, onOpenNpcLibrary, onOpenSystems, activeUsers, isPrimaryAdmin,
 }: any) {
   const [tab, setTab] = useState<'battle_map' | 'game'>('battle_map');
   // A custom system with the bank off has no pay or currency (3b2b).
@@ -142,7 +143,7 @@ function BattleAdminPanel({
       </>}
 
       {tab === 'game' && <>
-        <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} />
+        <TTRPGSystemPanel token={token} mainAdmin={isPrimaryAdmin} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} />
         {/* Money, which a custom system with the bank off does not have (3b2b). */}
         {bankOn && <>
           <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={globalSettings?.game_system} />
@@ -204,7 +205,7 @@ export function AdminPanel({
         handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
         setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} setIsCatalogueOpen={setIsCatalogueOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
         globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings}
-        onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers}
+        onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} isPrimaryAdmin={isPrimaryAdmin}
       />
     );
   }
@@ -1046,7 +1047,7 @@ export function AdminPanel({
 
           {adminTab === 'game' && (
             <>
-              <TTRPGSystemPanel token={token} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} />
+              <TTRPGSystemPanel token={token} mainAdmin={isPrimaryAdmin} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} />
               {/* Money, which a custom system with the bank off does not have (3b2b). */}
               {bankOn && <>
                 <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={gameSystem} />
@@ -2298,8 +2299,10 @@ const SR6_HOUSE_RULES: HouseRuleDef[] = [
   },
 ];
 
-function TTRPGSystemPanel({ token, onOpenNpcLibrary, onOpenSystems, activeUsers }: {
+function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, activeUsers }: {
   token: string; onOpenNpcLibrary?: () => void; activeUsers?: any[];
+  /** The main admin: changes a built-in game's own conditions (the server's route is theirs alone). */
+  mainAdmin?: boolean;
   /** Opens the system builder on MY SYSTEMS; the main admin's alone, so absent for a granted editor. */
   onOpenSystems?: () => void;
 }) {
@@ -2362,6 +2365,8 @@ function TTRPGSystemPanel({ token, onOpenNpcLibrary, onOpenSystems, activeUsers 
             ...(system === 'cyberpunk_red' ? CPR_HOUSE_RULES : []),
             ...(system === 'shadowrun_6e' ? SR6_HOUSE_RULES : []),
           ]} />
+          {/* A built-in game's own conditions (4e2c2); a custom system's are edited in the builder. */}
+          {mainAdmin && !isCustomSystem(system) && <TableConditionsPanel token={token} system={system} />}
           {system === 'shadowrun_6e' && (() => {
             const onlinePlayers = (activeUsers || []).filter((u: any) => !u.isAdmin && !u.isNPC).map((u: any) => u.userName);
             return (

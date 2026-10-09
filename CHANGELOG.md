@@ -100,6 +100,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A built-in game's own conditions in the GAME tab.** Under CWN, Cyberpunk RED, Shadowrun or
+  Generic, the main admin sees a CONDITIONS panel in TTRPG_SYSTEM: the standard ten, and the
+  table's own, added with a name, a drawn or uploaded icon and a description, or removed after
+  asking. Token windows and the map pick up the change at once. The builder's CONDITIONS page and
+  this panel now share one icon picker.
 - **A built-in game's own conditions, server side.** CWN, Cyberpunk RED, Shadowrun and Generic can
   each keep conditions of their own beside the standard ten: a name, label, icon and description,
   with no modifiers or rounds, so the game's rules don't change. Tokens can take them, they survive

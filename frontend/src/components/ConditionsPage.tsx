@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   conditionList, conditionCount, withCondition, withNewCondition, withoutCondition, modifierTargets,
   LIMITS, ALL_ROLLS, STANDARD, type Listed,
 } from '../sheets/conditions';
-import { CONDITION_ICON_IDS, isUploadedIcon } from '../sheets/conditionIcons';
 import { ConditionIcon } from './ConditionIcon';
+import { ConditionIconPicker } from './ConditionIconPicker';
 
 // The builder's CONDITIONS page (4e1b; approved mockup docs/mockups/builder-conditions.html,
 // 2026-10-09): what can happen to a character besides losing health. The standard set, each with
@@ -56,24 +56,11 @@ function Switch({ on, label, onChange }: { on: boolean; label: string; onChange:
 
 function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
   const [confirm, setConfirm] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const base = STANDARD.find((s) => s.id === c.id);
   const targets = modifierTargets(definition);
   const set = (patch: Parameters<typeof withCondition>[2]) => edit(withCondition(definition, c.id, patch));
   const stored = (definition.conditions as Record<string, Record<string, unknown>> | undefined)?.[c.id] ?? {};
   const typed = (key: 'name' | 'short') => (typeof stored[key] === 'string' ? stored[key] as string : (base ? '' : c[key]));
-
-  const upload = async (file: File | undefined) => {
-    if (!file || !api) return;
-    setUploading(true);
-    const r = await api.uploadIcon(file, 'condition');
-    setUploading(false);
-    if (!r.ok) { setUploadError(r.error); return; }
-    setUploadError(null);
-    set({ icon: r.value.icon });
-  };
 
   return (
     <section aria-label={`${c.name || c.id} condition`} style={{ border: '1px solid var(--dark-green)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
@@ -98,31 +85,7 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
         <input id={`cond-short-${c.id}`} type="text" maxLength={LIMITS.short} value={typed('short')} placeholder={c.short} style={{ ...input, width: 120 }}
           onChange={(e) => set({ short: e.target.value.toUpperCase() })} />
         <span style={{ ...small, textAlign: 'right' }}>ICON</span>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-          <div role="radiogroup" aria-label="Icon" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {CONDITION_ICON_IDS.map((id) => (
-              <button key={id} type="button" role="radio" aria-checked={c.icon === id} aria-label={id} onClick={() => set({ icon: id })}
-                style={{ width: 30, height: 30, display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--green)', padding: 0,
-                  border: `1px solid ${c.icon === id ? 'var(--green)' : 'var(--dark-green)'}`, background: c.icon === id ? 'color-mix(in srgb, var(--green) 15%, transparent)' : 'none' }}>
-                <ConditionIcon icon={id} />
-              </button>
-            ))}
-          </div>
-          <div style={row}>
-            {isUploadedIcon(c.icon) && (
-              <span role="radio" aria-checked aria-label="Uploaded icon" style={{ width: 30, height: 30, display: 'grid', placeItems: 'center', border: '1px solid var(--green)' }}>
-                <ConditionIcon icon={c.icon} />
-              </span>
-            )}
-            {api && <>
-              <button type="button" className="utility-btn" style={btn} disabled={uploading} onClick={() => fileRef.current?.click()}>{uploading ? 'UPLOADING…' : 'UPLOAD'}</button>
-              <input ref={fileRef} type="file" accept=".png,.webp,.svg" aria-label={`Upload an icon for ${c.name || c.id}`} style={{ display: 'none' }}
-                onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }} />
-              <span style={{ ...why, fontSize: 11 }}>PNG, WebP or SVG, a quarter of a megabyte. Kept in its own colors; the drawn ones follow the theme.</span>
-            </>}
-          </div>
-          {uploadError && <span role="alert" style={{ color: 'var(--danger)', fontSize: 11 }}>{uploadError}</span>}
-        </div>
+        <ConditionIconPicker value={c.icon} onPick={(icon) => set({ icon })} api={api} name={c.name || c.id} />
         <label style={{ ...small, textAlign: 'right' }} htmlFor={`cond-desc-${c.id}`}>DESCRIPTION</label>
         <textarea id={`cond-desc-${c.id}`} rows={2} maxLength={LIMITS.description} value={c.description} style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
           onChange={(e) => set({ description: e.target.value })} />
