@@ -18,6 +18,7 @@ const skillplugs = require('../sheets/cwnSkillplugs');
 const awardXpModule = require('../sheets/awardXp');
 const tokenControl = require('./tokenControl');
 const tokenAccess = require('../tokens/tokenAccess');
+const { parseTokenConditions } = require('../tokens/conditions');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
@@ -74,7 +75,7 @@ const formatMeasurementPayload = (data, userName, socketId) => ({
 });
 
 module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
-  registerInitiativeHandlers(io, db);
+  registerInitiativeHandlers(io, db, { emitUpdate });
 
   /**
    * Bring the running system's uploaded catalogues into memory.
@@ -1840,6 +1841,32 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             db.get(`SELECT cs.data FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id
                     WHERE l.location_id = ? AND cs.system = ?`, [loc.id, system], (e3, row) => send(e3 ? null : row));
           }
+        });
+      });
+    });
+
+    /**
+     * A token's conditions as this viewer may see them (4e2a2), under every system. Whoever may
+     * change them (the GM, the token's owner, a player given a friendly NPC) gets the rounds left
+     * and each condition's modifiers; everyone else gets which conditions, as the token list shows.
+     */
+    socket.on('requestTokenConditions', (data) => {
+      const info = userSockets.get(socket.id);
+      if (!info || !data || !Number.isInteger(Number(data.location_id))) return;
+      const locationId = Number(data.location_id);
+      db.get(`SELECT id, shape, owner, controllers, conditions FROM locations WHERE id = ?`, [locationId], (e1, loc) => {
+        if (e1 || !loc || !RHOMBUS_SHAPES.includes(loc.shape)) return;
+        const full = isAdminSocket(socket) || (loc.shape === 'rhombus' && !!loc.owner && loc.owner === info.userName) || tokenAccess.controls(loc, info.userName);
+        const on = parseTokenConditions(loc.conditions);
+        if (!full) return socket.emit('tokenConditions', { location_id: locationId, full: false, conditions: on.map(({ id }) => ({ id })) });
+        getGameSystem((err, system) => {
+          if (err) return;
+          const offered = new Map(customSystems.conditionsIn(system).map((c) => [c.id, c]));
+          socket.emit('tokenConditions', {
+            location_id: locationId,
+            full: true,
+            conditions: on.map((c) => ({ ...c, modifiers: offered.has(c.id) ? offered.get(c.id).modifiers : [] })),
+          });
         });
       });
     });

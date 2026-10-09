@@ -101,7 +101,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   custom system's own, or under a built-in game the standard ten as names and descriptions, with
   nothing that changes its rules. Everyone sees which conditions a token has; how many rounds one
   has left goes only to the GM. Like a token's health, each game keeps its own conditions when you
-  switch systems. The windows that show and change them come next.
+  switch systems. A condition put on for a number of rounds counts down each new round of a
+  combat its token is in (in Shadowrun, once every pass is spent) and comes off when it runs out.
+  The GM, the token's owner and a player given a friendly NPC can see the rounds left and each
+  condition's modifiers. The windows that show and change them come next.
 
 - **The builder's CONDITIONS page.** A new page between NPCS and TRY IT lists the ten standard
   conditions with on/off switches and the system's own below them. Each can be renamed (the

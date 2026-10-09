@@ -1,5 +1,6 @@
 const { cryptoRng } = require('../utils/random');
 const customSystems = require('../systemBuilder/runtime');
+const { tickCombat } = require('../tokens/conditions');
 
 /** A custom system's own word for initiative in the dice log; today's text for the rest. */
 const initiativeWord = (system) => customSystems.wordIn(system, 'initiative', 'singular', 'INITIATIVE').toUpperCase();
@@ -62,7 +63,16 @@ function sortSides(sides) {
   });
 }
 
-function registerInitiativeHandlers(io, db) {
+function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
+  /**
+   * A new round: conditions with rounds left on the combat's tokens lose one, and those at none
+   * come off (tokens/conditions.js, 4e2a2). Every screen redraws the map when any token changed.
+   */
+  const newRound = (combatants) => tickCombat(db, combatants, (err, { tokens }) => {
+    if (err) console.error('[initiative] Could not count conditions down:', err.message);
+    if (tokens) emitUpdate();
+  });
+
   io.on('connection', (socket) => {
 
     // ── Join scene: send current state if initiative is active ─────────────────
@@ -353,6 +363,7 @@ function registerInitiativeHandlers(io, db) {
               (err) => {
                 if (err) return;
                 if (wrapped) {
+                  newRound(JSON.parse(row.combatants || '[]'));
                   db.run(
                     `UPDATE initiative_combat SET turn_counter = turn_counter + 1 WHERE id = ?`,
                     [row.combat_id],
@@ -387,8 +398,10 @@ function registerInitiativeHandlers(io, db) {
           if (row.system === 'shadowrun_6e') {
             const decayed = combatants.map((c) => ({ ...c, score: c.score - 10 }));
             const survivors = decayed.filter((c) => c.score > 0);
-            const newRound = survivors.length === 0;
-            const nextCombatants = newRound ? [] : survivors;
+            const startsRound = survivors.length === 0;
+            const nextCombatants = startsRound ? [] : survivors;
+            // Shadowrun's round ends when every pass is spent, not when a pass ends.
+            if (startsRound) newRound(combatants);
 
             db.run(
               `UPDATE initiative_scene SET combatants = ?, turn_index = 0, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
@@ -398,11 +411,12 @@ function registerInitiativeHandlers(io, db) {
                 db.run(
                   `UPDATE initiative_combat SET pass_counter = pass_counter + 1 WHERE id = ?`,
                   [row.combat_id],
-                  () => broadcastScene(io, db, sceneKey, { newRound })
+                  () => broadcastScene(io, db, sceneKey, { newRound: startsRound })
                 );
               }
             );
           } else {
+            newRound(combatants);
             db.run(
               `UPDATE initiative_scene SET turn_index = 0, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
               [sceneKey],
