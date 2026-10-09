@@ -13,7 +13,7 @@ const { effectiveSheet, starterSheet, fieldsOf } = require('../systemBuilder/she
 const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
 const { rollTier } = require('../systemBuilder/tierRolls');
 const { tryHealth } = require('../systemBuilder/tryHealth');
-const { exampleList, exampleDefinition, KINDS } = require('../systemBuilder/examples');
+const { exampleList, exampleDefinition, exampleKind, KINDS } = require('../systemBuilder/examples');
 
 /** What a currency's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
@@ -82,7 +82,7 @@ module.exports = (db, io = null) => {
   router.get('/examples/:id', gm, (req, res) => {
     const definition = exampleDefinition(req.params.id);
     if (!definition) return res.status(404).json({ error: 'No such example' });
-    res.json({ id: req.params.id, definition });
+    res.json({ id: req.params.id, kind: exampleKind(req.params.id), definition });
   });
 
   /** A new system: blank from a name, a whole definition, or a copy of an example under a new name. */
