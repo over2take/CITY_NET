@@ -100,6 +100,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Conditions on the map.** A token with conditions shows up to four of their icons above it,
+  then +N for the rest; pointing at an icon names it, and pointing at +N lists the others. Everyone
+  sees them, on every kind of token, including in a game that has token health turned off and
+  tracks harm through conditions alone. All the tokens on a map share one request for the game's
+  list of conditions.
+
 - **Conditions in the HEALTH folder, and BLIND and BLEED become conditions.** A token's HEALTH
   folder now has a CONDITIONS section: every condition on the token as a chip with its icon, and
   below them what each one means. Whoever may change the token's health can put conditions on

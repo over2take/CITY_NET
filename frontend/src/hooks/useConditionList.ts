@@ -7,23 +7,45 @@ import type { GameCondition, OnToken } from '../sheets/tokenConditions';
 
 export const CONDITIONS_CHANGED_EVENT = 'citynet:conditions-changed';
 
+/**
+ * One request per game and login, shared: every token on the map draws its condition icons from
+ * the same list (4e2b2), so dozens of tokens ask once. A failed request isn't kept, so the next
+ * one asks again; a published system changing forgets them all.
+ */
+const asked = new Map<string, Promise<GameCondition[]>>();
+const listFor = (system: string, authToken?: string) => {
+  const key = `${system}\n${authToken ?? ''}`;
+  if (!asked.has(key)) {
+    const request = fetch(`/api/systems/conditions/${encodeURIComponent(system)}`, authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : undefined)
+      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then((body) => (Array.isArray(body) ? body as GameCondition[] : []))
+      .catch(() => { asked.delete(key); return [] as GameCondition[]; });
+    asked.set(key, request);
+  }
+  return asked.get(key)!;
+};
+
+/** Forget every list asked for (a system changed; and tests, between cases). */
+export const forgetConditionLists = () => asked.clear();
+
+// Once, when this module loads: listening before any hook does, so the lists are forgotten before
+// the hooks ask again and they all share the one new request.
+if (typeof window !== 'undefined') window.addEventListener(CONDITIONS_CHANGED_EVENT, forgetConditionLists);
+
 export function useConditionList(system: string | undefined, authToken?: string): GameCondition[] {
   const [list, setList] = useState<GameCondition[]>([]);
-  const [asked, setAsked] = useState(0);
+  const [round, setRound] = useState(0);
   useEffect(() => {
-    const again = () => setAsked((n) => n + 1);
+    const again = () => setRound((n) => n + 1);
     window.addEventListener(CONDITIONS_CHANGED_EVENT, again);
     return () => window.removeEventListener(CONDITIONS_CHANGED_EVENT, again);
   }, []);
   useEffect(() => {
     if (!system) { setList([]); return undefined; }
     let live = true;
-    fetch(`/api/systems/conditions/${encodeURIComponent(system)}`, authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : undefined)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((body) => { if (live) setList(Array.isArray(body) ? body : []); })
-      .catch(() => { if (live) setList([]); });
+    listFor(system, authToken).then((body) => { if (live) setList(body); });
     return () => { live = false; };
-  }, [system, authToken, asked]);
+  }, [system, authToken, round]);
   return list;
 }
 

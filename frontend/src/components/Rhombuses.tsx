@@ -8,6 +8,9 @@ import { IS_SPECTATOR } from '../streamerMode';
 import { parseVehicleState } from '../types';
 import { canMoveToken } from '../utils/tokenControl';
 import { useParts } from '../sheets/parts';
+import { useConditionList } from '../hooks/useConditionList';
+import { parseOnToken, shownConditions, mapIcons } from '../sheets/tokenConditions';
+import { ConditionIcon } from './ConditionIcon';
 
 /**
  * Marks a token as being inside a vehicle.
@@ -40,6 +43,44 @@ function VehicleTag({ raw, height, isBattleMap }: { raw: string | null | undefin
         {(vehicle.occupants?.length ?? 0) > 1 && (
           // Only worth saying when it is shared: one name on your own car is noise.
           <div style={{ opacity: 0.8, fontSize: '8px' }}>{vehicle.occupants!.join(' · ')}</div>
+        )}
+      </div>
+    </Html>
+  );
+}
+
+/**
+ * A token's conditions on the map (4e2b2; approved mockup docs/mockups/builder-conditions.html,
+ * 2026-10-09): up to four icons above it, then +N, pointing at one naming it. Drawn for everyone
+ * and whatever the game's health, since a game without token health may track harm in conditions
+ * alone. The game's list is one request shared by every token (useConditionList).
+ */
+function ConditionIcons({ raw, gameSystem, height, isBattleMap }: { raw: string | null | undefined; gameSystem?: string; height: number; isBattleMap: boolean }) {
+  const game = useConditionList(gameSystem);
+  const { icons, more, moreNames } = mapIcons(shownConditions(parseOnToken(raw), game));
+  if (!icons.length) return null;
+  return (
+    <Html
+      position={[0, isBattleMap ? 0.1 : (height * 0.8) + 4.4, 0]}
+      center
+      zIndexRange={[100, 0]}
+      occlude={!isBattleMap}
+      style={{ pointerEvents: 'none', userSelect: 'none' }}
+    >
+      <div data-testid="map-conditions" style={{ display: 'flex', gap: '2px', transform: isBattleMap ? 'translateY(-56px)' : undefined }}>
+        {icons.map((c) => (
+          <span key={c.id} title={c.name} style={{
+            width: '16px', height: '16px', display: 'grid', placeItems: 'center', boxSizing: 'border-box',
+            border: '1px solid var(--warning)', color: 'var(--warning)', background: 'var(--black)',
+          }}>
+            <ConditionIcon icon={c.icon} size={11} title={c.name} />
+          </span>
+        ))}
+        {more > 0 && (
+          <span title={moreNames.join(', ')} style={{
+            height: '16px', padding: '0 3px', display: 'grid', placeItems: 'center', boxSizing: 'border-box',
+            border: '1px solid var(--warning)', color: 'var(--warning)', background: 'var(--black)', fontFamily: 'monospace', fontSize: '9px',
+          }}>+{more}</span>
         )}
       </div>
     </Html>
@@ -333,6 +374,7 @@ export const EnemyRhombus = React.memo(({ gameSystem, location, onClick, isSelec
       )}
 
       <VehicleTag raw={location.vehicle_state} height={location.height} isBattleMap={isBattleMap} />
+      <ConditionIcons raw={location.conditions} gameSystem={gameSystem} height={location.height} isBattleMap={isBattleMap} />
 
       {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && streamerHovered)) && (
           <Html position={[0, isBattleMap ? 0.1 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude={!isBattleMap} style={{ pointerEvents: 'none', userSelect: 'none' }}>
@@ -601,6 +643,7 @@ export const FriendlyRhombus = React.memo(({ gameSystem, location, onClick, isSe
       )}
 
       <VehicleTag raw={location.vehicle_state} height={location.height} isBattleMap={isBattleMap} />
+      <ConditionIcons raw={location.conditions} gameSystem={gameSystem} height={location.height} isBattleMap={isBattleMap} />
 
       {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && streamerHovered)) && (
           <Html position={[0, isBattleMap ? 0.1 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude={!isBattleMap} style={{ pointerEvents: 'none', userSelect: 'none' }}>
@@ -915,6 +958,7 @@ export const PlayerRhombus = React.memo(({ gameSystem, location, onClick, isSele
       )}
 
       <VehicleTag raw={location.vehicle_state} height={location.height} isBattleMap={isBattleMap} />
+      <ConditionIcons raw={location.conditions} gameSystem={gameSystem} height={location.height} isBattleMap={isBattleMap} />
 
       {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && streamerHovered)) && (
           <Html position={[0, isBattleMap ? 0.1 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude={!isBattleMap} style={{ pointerEvents: 'none', userSelect: 'none' }}>

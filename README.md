@@ -657,7 +657,7 @@ CITY_NET/
 │   │   │   ├── Buildings.tsx           # 3D building meshes
 │   │   │   ├── Sidewalks.tsx           # Road-flanking pavement strips (mitered quad ribbons, no geometry under roads) + neon curb line overlays
 │   │   │   ├── MapExportController.tsx # R3F bridge — renders null, lifts the export API out of the Canvas so AdminPanel buttons can drive it
-│   │   │   ├── Rhombuses.tsx           # Player token meshes; carries the vehicle badge, drawn always rather than on hover — cover you have to hover to discover is cover nobody accounts for
+│   │   │   ├── Rhombuses.tsx           # Player token meshes; carries the vehicle badge, drawn always rather than on hover — cover you have to hover to discover is cover nobody accounts for; and the token's conditions as up to four icons above it, then +N, for everyone
 │   │   │   ├── Overpasses.tsx          # Elevated road meshes (deck tiles, ramps, pillars) + ghost OverpassPreview
 │   │   │   ├── MapElements.tsx         # Roads, water, overlays; RoadEraser (segment/path delete with hover highlight)
 │   │   │   ├── Sidebar.tsx             # Nav rail — controls, volume, help, geometry tools; initiative button blinks when a roll is needed; exports `hasSheetCombat` + `SheetAttackPanel` (system-agnostic via ATTACK_PANEL_CONFIG)
@@ -788,6 +788,7 @@ CITY_NET/
 │   │   │       ├── StatsRulesPage.test.tsx          # Stats in groups with their SAMPLE column, formulas with live values and mistakes, and tables with TRY IT
 │   │   │       ├── SheetPage.test.tsx               # Automatic or customized, the tree of tabs, sections and fields, moving and removing them (sections going to a tab you choose, the last tab making one page), and each field's settings
 │   │   │       ├── NpcsPage.test.tsx                # The stat block shared or its own, tiers whose boxes keep what was typed, and TRY IT rolling one, all through the server's own code
+│   │   │       ├── mapConditions.test.tsx           # Condition icons over tokens: four then +N naming the rest, on every kind of token for anyone with token health off too, nothing for none, and one shared request for the game's list (again after a system changes or a request fails)
 │   │   │       ├── TokenConditions.test.tsx         # The HEALTH folder's conditions: chips with rounds, descriptions and modifiers for whoever may change them, putting one on and taking one off (a refusal said), nothing but which and what for everyone else, nothing drawn for a token with none, the list asked again when a system changes, and the stream overlay showing them
 │   │   │       ├── ConditionsPage.test.tsx          # Switches storing only "off", renaming and putting back, icons drawn or uploaded (a refusal said), ends and rounds, modifiers typed negative, a system's own added, named, deleted after asking, and + CONDITION stopping at 60
 │   │   │       ├── TryItPage.test.tsx               # The made-up character and its formulas, SAVE AS THE SAMPLE (absent with nowhere to save), RESET, health on a pretend token under each model, both maximums, and an NPC rolled from a tier
@@ -865,7 +866,7 @@ CITY_NET/
 │   │   │   ├── useApi.ts           # Fetch helpers
 │   │   │   ├── useMapExport.ts     # PNG/WebM city export — one cached off-screen renderer for the session, shared ortho camera, GPU size clamp, per-frame render loop for video, MediaRecorder with codec fallback; never touches the live camera
 │   │   │   ├── useCustomTemplates.ts # Redraws when a custom system's sheet template arrives, and fetches the running system's ahead of need
-│   │   │   ├── useConditionList.ts # The running game's conditions (GET /api/systems/conditions/:system, modifiers only with the GM's login), asked again when a published system changes; and a token's rounds left and modifiers for whoever may see them (requestTokenConditions)
+│   │   │   ├── useConditionList.ts # The running game's conditions (GET /api/systems/conditions/:system, modifiers only with the GM's login), one request shared by every window and token, asked again when a published system changes or a request failed; and a token's rounds left and modifiers for whoever may see them (requestTokenConditions)
 │   │   │   ├── useHealthView.ts    # A token's health under a custom model, as the server lets this viewer see it: asked over the socket (requestHealthView), again on every sheet or map change
 │   │   │   ├── useMapData.ts       # Location/district/road/overpass/water body/sign data fetching. Sends the GM's sign-in with the location list, held in a ref so signing in does not give fetchLocations a new identity
 │   │   │   ├── useCustomDice.ts    # Custom dice state — fetches GM dice and the active system's built-ins, merges them (built-ins first, flagged `locked`), and applies `customDiceUpdated` broadcasts
@@ -935,7 +936,7 @@ CITY_NET/
 │   │   │   ├── publicLines.ts      # What everyone else sees of a custom system's character: the sheet's public lines, for ID.EXE's INFO and the sheet preview's EVERYONE ELSE
 │   │   │   ├── npcs.ts             # NPCS as logic: the stat block (shared or its own), tiers and their boxes (number, formula with @level, or dice), the server's limits, and a rolled box as text
 │   │   │   ├── conditions.ts       # CONDITIONS as logic: the standard set and a system's own read from a definition and written back storing only what differs (a standard one put back leaves nothing), the count against 60, new and deleted ones, and what a modifier may name; mirrors the server's conditions.js
-│   │   │   ├── tokenConditions.ts  # A token's conditions in the windows as logic: the column read as the server reads it, what to draw from the game's list (one it no longer has left out), rounds left and modifiers where sent, and putting one on or taking one off without resetting another's rounds
+│   │   │   ├── tokenConditions.ts  # A token's conditions in the windows as logic: the column read as the server reads it, what to draw from the game's list (one it no longer has left out), rounds left and modifiers where sent, putting one on or taking one off without resetting another's rounds, and the map's four icons then +N
 │   │   │   ├── conditionIcons.ts   # The 24 condition icons drawn for CITY_NET as path data on a 24-pixel grid, ours to use (the four first sketched too close to Feather's redrawn), and telling a drawn icon from an uploaded one
 │   │   │   ├── tryIt.ts            # TRY IT as logic: the made-up character from the sample, typed values, SAVE AS THE SAMPLE, the pretend token and its maximum
 │   │   │   ├── examples.ts         # The examples' and starters' cards (health, advancement in the system's own XP word, stats, formulas, distance), the copy's suggested name, and locking a page while one is looked at (every control but tabs, things opening out and marked views)
