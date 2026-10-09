@@ -13,7 +13,7 @@ const { effectiveSheet, starterSheet, fieldsOf } = require('../systemBuilder/she
 const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
 const { rollTier } = require('../systemBuilder/tierRolls');
 const { tryHealth } = require('../systemBuilder/tryHealth');
-const { exampleList, exampleDefinition } = require('../systemBuilder/examples');
+const { exampleList, exampleDefinition, KINDS } = require('../systemBuilder/examples');
 
 /** What a currency's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
@@ -72,8 +72,13 @@ module.exports = (db, io = null) => {
     res.json({ icon: `/uploads/currency_icons/${filename}` });
   });
 
-  // The built-in examples (4d1): what the library lists, and one whole, to read.
-  router.get('/examples', gm, (req, res) => res.json(exampleList()));
+  // The built-in examples (4d1) and genre starters (4d3, ?kind=starter): what the library lists,
+  // and one whole, to read. Copying either is POST / with `example`.
+  router.get('/examples', gm, (req, res) => {
+    const kind = req.query.kind === undefined ? 'example' : req.query.kind;
+    if (!KINDS.includes(kind)) return res.status(400).json({ error: 'Examples or starters only' });
+    res.json(exampleList(kind));
+  });
   router.get('/examples/:id', gm, (req, res) => {
     const definition = exampleDefinition(req.params.id);
     if (!definition) return res.status(404).json({ error: 'No such example' });

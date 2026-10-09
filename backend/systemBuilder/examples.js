@@ -113,20 +113,117 @@ const SR6 = {
   },
 };
 
-/** The examples, in the order the builder lists them. */
+// ─── Genre starters (4d3) ───────────────────────────────────────────────────
+// Starting points for a genre rather than a game, approved by the user 2026-10-09. Each shows off
+// a different part of the builder: formulas and NPC dice (fantasy), a lookup table and a wound
+// count (sci-fi), harm levels with nothing worked out at all (narrative). Common mechanics under
+// made-up names; nothing is taken from a published game's text.
+
+const ABILITIES = [['str', 'Strength'], ['dex', 'Dexterity'], ['con', 'Constitution'], ['int', 'Intelligence'], ['wis', 'Wisdom'], ['cha', 'Charisma']];
+
+const FANTASY = {
+  format: 1,
+  name: 'Sword & Spell',
+  description: 'A fantasy starter on a d20: six abilities with modifiers worked out from them, proficiency that grows '
+    + 'with level, one pool of HP, and four NPC tiers whose HP is rolled for their level. Copy it to make it yours.',
+  stats: [
+    group('abilities', 'ABILITIES', ABILITIES.map(([id, label]) => stat(id, label, 1, 20))),
+    group('character', 'CHARACTER', [stat('level', 'Level', 1, 20)]),
+  ],
+  samples: { str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8, level: 3 },
+  derived: [
+    ...ABILITIES.map(([id, label]) => ({ id: `${id}_mod`, label: `${label} mod`, formula: `floor((@${id} - 10) / 2)` })),
+    { id: 'proficiency', label: 'Proficiency', formula: '2 + floor((@level - 1) / 4)' },
+    { id: 'defense', label: 'Unarmored defense', formula: '10 + @dex_mod' },
+    { id: 'initiative', label: 'Initiative', formula: '@dex_mod' },
+    { id: 'passive_perception', label: 'Passive perception', formula: '10 + @wis_mod' },
+  ],
+  words: { money: { singular: 'GOLD PIECE', plural: 'GOLD PIECES', short: 'gp' } },
+  parts: { vehicles: { on: false }, cyberware: { on: false } },
+  npc: {
+    tiers: [
+      { id: 'minion', label: 'MINION', hp: '@level d6', defense: 11, values: { level: '@level' } },
+      { id: 'soldier', label: 'SOLDIER', hp: '@level d8 + @level', defense: 14, values: { level: '@level' } },
+      { id: 'champion', label: 'CHAMPION', hp: '@level d10 + @level * 2', defense: 16, values: { level: '@level' } },
+      { id: 'boss', label: 'BOSS', hp: '@level d12 + @level * 3', defense: 18, values: { level: '@level' } },
+    ],
+  },
+  core: { health: { model: 'pool' }, advancement: ['levels'], dice: ['d20', 'd4', 'd6', 'd8', 'd10', 'd12'], distance: 'feet' },
+};
+
+const CHARACTERISTICS = [['str', 'Strength'], ['dex', 'Dexterity'], ['end', 'Endurance'], ['int', 'Intellect'], ['edu', 'Education'], ['soc', 'Standing']];
+const scifiTier = (id, label, hp, defense, stats) => ({
+  id, label, hp, defense, values: Object.fromEntries(CHARACTERISTICS.map(([s]) => [s, stats])),
+});
+
+const SCIFI = {
+  format: 1,
+  name: 'Starfarer',
+  description: 'A sci-fi starter on 2d6: six characteristics, each modifier read from one table, a count of wounds '
+    + 'instead of HP, and crews to fight. Copy it to make it yours.',
+  stats: [group('characteristics', 'CHARACTERISTICS', CHARACTERISTICS.map(([id, label]) => stat(id, label, 2, 15)))],
+  samples: { str: 7, dex: 9, end: 8, int: 10, edu: 6, soc: 5 },
+  lookups: {
+    characteristic_mod: {
+      bands: [{ upTo: 2, value: -2 }, { upTo: 5, value: -1 }, { upTo: 8, value: 0 }, { upTo: 11, value: 1 }, { upTo: 14, value: 2 }, { value: 3 }],
+    },
+  },
+  derived: CHARACTERISTICS.map(([id, label]) => ({ id: `${id}_mod`, label: `${label} mod`, formula: `characteristic_mod(@${id})` })),
+  npc: {
+    // A wound count is the token's own number, so each tier's HP is the wounds it takes.
+    tiers: [scifiTier('crew', 'CREW', 1, 7, 6), scifiTier('veteran', 'VETERAN', 2, 8, 8), scifiTier('elite', 'ELITE', 3, 9, 10)],
+  },
+  core: { health: { model: 'wounds', count: 3, penalty: -1 }, advancement: ['spend'], dice: ['2d6', 'd6'], distance: 'meters' },
+};
+
+const APPROACHES = [['forceful', 'Forceful'], ['careful', 'Careful'], ['clever', 'Clever'], ['quick', 'Quick'], ['flashy', 'Flashy'], ['sneaky', 'Sneaky']];
+
+const NARRATIVE = {
+  format: 1,
+  name: 'Story First',
+  description: 'A narrative starter: six approaches rated 0 to 3, harm levels instead of HP, milestones instead of XP, '
+    + 'and nothing worked out by formula. Copy it to make it yours.',
+  license: 'Approaches from Fate Accelerated Edition (faterpg.com) by Evil Hat Productions, LLC, used under CC BY 3.0',
+  stats: [group('approaches', 'APPROACHES', APPROACHES.map(([id, label]) => stat(id, label, 0, 3)))],
+  samples: { forceful: 1, careful: 2, clever: 3, quick: 1, flashy: 0, sneaky: 2 },
+  parts: { vehicles: { on: false }, cyberware: { on: false } },
+  core: {
+    health: {
+      model: 'harm',
+      levels: [
+        { id: 'lesser', label: 'LESSER', slots: 2, penalty: 'Less effect' },
+        { id: 'moderate', label: 'MODERATE', slots: 2, penalty: '-1 die' },
+        { id: 'severe', label: 'SEVERE', slots: 1, penalty: 'Needs help' },
+      ],
+    },
+    advancement: ['milestone'],
+    dice: ['d6'],
+    distance: 'zones',
+  },
+};
+
+/** The examples and starters, in the order the builder lists them. */
 const EXAMPLES = [
-  { id: 'cwn', definition: CWN },
-  { id: 'cpr', definition: CPR },
-  { id: 'sr6', definition: SR6 },
+  { id: 'cwn', kind: 'example', definition: CWN },
+  { id: 'cpr', kind: 'example', definition: CPR },
+  { id: 'sr6', kind: 'example', definition: SR6 },
+  { id: 'fantasy', kind: 'starter', definition: FANTASY },
+  { id: 'scifi', kind: 'starter', definition: SCIFI },
+  { id: 'narrative', kind: 'starter', definition: NARRATIVE },
 ];
 
-/** A fresh copy of one example's definition, or null for an id that isn't one. */
+/** What the library can list: the built-in games, or the genre starters. */
+const KINDS = ['example', 'starter'];
+
+/** A fresh copy of one example's or starter's definition, or null for an id that isn't one. */
 const exampleDefinition = (id) => {
   const found = EXAMPLES.find((e) => e.id === id);
   return found ? JSON.parse(JSON.stringify(found.definition)) : null;
 };
 
-/** What the library shows of each: no definitions, just enough to pick one. */
-const exampleList = () => EXAMPLES.map(({ id, definition }) => ({ id, name: definition.name, description: definition.description }));
+/** What the library shows of each of one kind: no definitions, just enough to pick one. */
+const exampleList = (kind = 'example') => EXAMPLES
+  .filter((e) => e.kind === kind)
+  .map(({ id, definition }) => ({ id, name: definition.name, description: definition.description }));
 
-module.exports = { EXAMPLES, exampleDefinition, exampleList };
+module.exports = { EXAMPLES, KINDS, exampleDefinition, exampleList };
