@@ -100,6 +100,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A built-in game's own conditions, server side.** CWN, Cyberpunk RED, Shadowrun and Generic can
+  each keep conditions of their own beside the standard ten: a name, label, icon and description,
+  with no modifiers or rounds, so the game's rules don't change. Tokens can take them, they survive
+  a restart, every screen hears when they change, and only the main admin can change them. The GAME
+  tab's panel for them comes next.
 - **Conditions on the map.** A token with conditions shows up to four of their icons above it,
   then +N for the rest; pointing at an icon names it, and pointing at +N lists the others. Everyone
   sees them, on every kind of token, including in a game that has token health turned off and
