@@ -13,6 +13,7 @@ const { effectiveSheet, starterSheet, fieldsOf } = require('../systemBuilder/she
 const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
 const { rollTier } = require('../systemBuilder/tierRolls');
 const { tryHealth } = require('../systemBuilder/tryHealth');
+const { exampleList, exampleDefinition } = require('../systemBuilder/examples');
 
 /** What a currency's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
@@ -71,9 +72,22 @@ module.exports = (db, io = null) => {
     res.json({ icon: `/uploads/currency_icons/${filename}` });
   });
 
+  // The built-in examples (4d1): what the library lists, and one whole, to read.
+  router.get('/examples', gm, (req, res) => res.json(exampleList()));
+  router.get('/examples/:id', gm, (req, res) => {
+    const definition = exampleDefinition(req.params.id);
+    if (!definition) return res.status(404).json({ error: 'No such example' });
+    res.json({ id: req.params.id, definition });
+  });
+
+  /** A new system: blank from a name, a whole definition, or a copy of an example under a new name. */
   router.post('/', gm, (req, res) => {
-    const { name, definition } = req.body || {};
-    store.createSystem(db, { name, definition }, (err, made) => answer(res, err, made));
+    const { name, definition, example } = req.body || {};
+    if (example === undefined) return store.createSystem(db, { name, definition }, (err, made) => answer(res, err, made));
+    const copy = exampleDefinition(example);
+    if (!copy) return res.status(404).json({ error: 'No such example' });
+    if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'A system needs a name' });
+    store.createSystem(db, { definition: { ...copy, name: name.trim() } }, (err, made) => answer(res, err, made));
   });
 
   router.get('/:id', gm, (req, res) => store.getSystem(db, req.params.id, (err, sys) => answer(res, err, sys)));
