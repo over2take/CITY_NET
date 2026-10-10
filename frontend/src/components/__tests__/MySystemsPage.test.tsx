@@ -294,7 +294,7 @@ describe('+ NEW from a built-in example (4d1b)', () => {
   it('shows a card for each, saying what it holds, the first picked and named on the button', async () => {
     await pickExamples();
     await screen.findByTestId('example-cwn');
-    expect(within(card('cwn')).getByText('13 in 5 groups')).toBeTruthy();
+    expect(within(card('cwn')).getByText('14 in 6 groups')).toBeTruthy();
     expect(within(card('cwn')).getByText('One pool')).toBeTruthy();
     expect(within(card('sr6')).getByText('Two tracks, overflow')).toBeTruthy();
     expect(within(card('sr6')).getByText('Spend KARMA')).toBeTruthy();

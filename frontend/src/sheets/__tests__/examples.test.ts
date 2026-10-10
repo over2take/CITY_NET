@@ -13,13 +13,13 @@ const { exampleDefinition } = createRequire(import.meta.url)('../../../../backen
 describe('what an example\'s card says', () => {
   it('reads the server\'s own examples', () => {
     expect(exampleFacts(exampleDefinition('cwn'))).toEqual([
-      ['HEALTH', 'One pool'], ['ADVANCES', 'XP levels'], ['STATS', '13 in 5 groups'], ['FORMULAS', '17'], ['DISTANCE', 'Meters'],
+      ['HEALTH', 'One pool'], ['ADVANCES', 'XP levels'], ['STATS', '14 in 6 groups'], ['FORMULAS', '17'], ['DISTANCE', 'Meters'],
     ]);
     expect(exampleFacts(exampleDefinition('cpr'))).toEqual([
-      ['HEALTH', 'One pool'], ['ADVANCES', 'Spend IMPROVEMENT POINTS'], ['STATS', '11 in 2 groups'], ['FORMULAS', '1'], ['DISTANCE', 'Meters'],
+      ['HEALTH', 'One pool'], ['ADVANCES', 'Spend IMPROVEMENT POINTS'], ['STATS', '12 in 3 groups'], ['FORMULAS', '1'], ['DISTANCE', 'Meters'],
     ]);
     expect(exampleFacts(exampleDefinition('sr6'))).toEqual([
-      ['HEALTH', 'Two tracks, overflow'], ['ADVANCES', 'Spend KARMA'], ['STATS', '10 in 2 groups'], ['FORMULAS', '6'], ['DISTANCE', 'Meters'],
+      ['HEALTH', 'Two tracks, overflow'], ['ADVANCES', 'Spend KARMA'], ['STATS', '11 in 3 groups'], ['FORMULAS', '6'], ['DISTANCE', 'Meters'],
     ]);
   });
 

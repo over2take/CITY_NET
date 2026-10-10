@@ -107,6 +107,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Rests for the examples and starters.** A copy of CWN takes 1 System Strain off on a long rest,
+  Cyberpunk RED gives LUCK back and Shadowrun gives Edge back each session, as their own buttons
+  do, each kept in a new RESOURCES stat. Sword & Spell, Starfarer and Story First get rests that
+  suit them. The built-in games themselves are unchanged.
 - **Trying a draft's rest.** The server can run one of a draft's rests on a made-up character,
   previewed or rolled, through the game's own rules, for TRY IT and the RESTS page to show next.
 - **Calling a rest from the GAME tab.** Under a custom game, TTRPG_SYSTEM has a RESTS panel for the
