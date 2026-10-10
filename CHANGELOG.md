@@ -107,6 +107,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Conditions that end at a rest.** The builder's CONDITIONS page can end a condition AT A REST,
+  with the rests that end it ticked beside it; the RESTS page's WEARS OFF is the same setting.
 - **The builder's RESTS page.** Between CONDITIONS and TRY IT: switch the standard rests on or off,
   rename them, add the system's own, say which other rests each one counts as, what it refills
   (health, a number on the sheet, or a whole section, with amounts as numbers, formulas or dice),

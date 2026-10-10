@@ -96,7 +96,39 @@ describe('a standard condition', () => {
     expect(stored(last())).toEqual({ stunned: { ends: 'rounds', rounds: 4 } });
     fireEvent.change(detail('Stunned condition').getByLabelText('ENDS'), { target: { value: 'removed' } });
     expect(last()).toEqual(H);
-    expect((detail('Stunned condition').getByRole('option', { name: 'AT A REFRESH EVENT (COMING)' }) as HTMLOptionElement).disabled).toBe(true);
+  });
+
+  it('ends at a rest, the rests ticked, the same setting as the RESTS page', async () => {
+    // 4f4b. A rest turned off isn't offered, unless already picked, so it can be unticked.
+    const start: Definition = { ...H, rests: { end_of_scene: { on: false }, downtime: { name: 'Downtime' } }, conditions: { stunned: { ends: 'rest', at: ['end_of_scene'] } } };
+    const { last } = open(start);
+    await userEvent.click(list().getByRole('button', { name: 'EXHAUSTED' }));
+    fireEvent.change(detail('Exhausted condition').getByLabelText('ENDS'), { target: { value: 'rest' } });
+    expect(stored(last())!.exhausted).toEqual({ ends: 'rest', at: [] });
+    const ticks = () => within(detail('Exhausted condition').getByRole('group', { name: 'Ends at' }));
+    expect(ticks().getAllByRole('checkbox').map((t) => t.textContent)).toEqual(['SHORT REST', 'LONG REST', 'END OF SESSION', 'DOWNTIME']);
+    expect(detail('Exhausted condition').getByText('Pick at least one rest.')).toBeTruthy();
+    expect(checkDefinition(last()).problems).toEqual([{ where: 'condition exhausted, at', message: 'Name the rests it wears off at' }]);
+    await userEvent.click(ticks().getByRole('checkbox', { name: 'LONG REST' }));
+    await userEvent.click(ticks().getByRole('checkbox', { name: 'DOWNTIME' }));
+    expect(stored(last())!.exhausted).toEqual({ ends: 'rest', at: ['long_rest', 'downtime'] });
+    expect(ticks().getByRole('checkbox', { name: 'LONG REST' }).getAttribute('aria-checked')).toBe('true');
+    expect(detail('Exhausted condition').queryByText('Pick at least one rest.')).toBeNull();
+    expect(detail('Exhausted condition').getByText(/Comes off at any of these/)).toBeTruthy();
+    expect(checkDefinition(last()).problems).toEqual([]);
+    await userEvent.click(ticks().getByRole('checkbox', { name: 'LONG REST' }));
+    expect(stored(last())!.exhausted).toEqual({ ends: 'rest', at: ['downtime'] });
+    // Switched to another ending, the rests go with it.
+    fireEvent.change(detail('Exhausted condition').getByLabelText('ENDS'), { target: { value: 'rounds' } });
+    expect(stored(last())!.exhausted).toEqual({ ends: 'rounds', rounds: 1 });
+    expect(detail('Exhausted condition').queryByRole('group', { name: 'Ends at' })).toBeNull();
+    // The picked rest that is off is still there to untick.
+    await userEvent.click(list().getByRole('button', { name: 'STUNNED' }));
+    const off = within(detail('Stunned condition').getByRole('group', { name: 'Ends at' })).getByRole('checkbox', { name: 'END OF SCENE (OFF)' });
+    expect(off.getAttribute('aria-checked')).toBe('true');
+    await userEvent.click(off);
+    expect(stored(last())!.stunned).toEqual({ ends: 'rest', at: [] });
+    expect(within(detail('Stunned condition').getByRole('group', { name: 'Ends at' })).queryByRole('checkbox', { name: /END OF SCENE/ })).toBeNull();
   });
 
   it('gets modifiers on all rolls or the system\'s stats and formulas, a negative typed sign first', async () => {
