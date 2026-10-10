@@ -107,6 +107,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Calling a rest from the GAME tab.** Under a custom game, TTRPG_SYSTEM has a RESTS panel for the
+  GM and granted editors: pick a rest, rest every player character, the NPCs on the map too, or
+  the ones ticked, see what each will get, and CALL it. Everyone sees a dice-log line each.
 - **Conditions that end at a rest.** The builder's CONDITIONS page can end a condition AT A REST,
   with the rests that end it ticked beside it; the RESTS page's WEARS OFF is the same setting.
 - **The builder's RESTS page.** Between CONDITIONS and TRY IT: switch the standard rests on or off,

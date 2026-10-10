@@ -49,6 +49,8 @@ import { useParts, partOn, type PartLookup } from '../sheets/parts';
 import { currenciesFor, isUploadedIcon, BUILT_IN_ICONS, type Currency } from '../sheets/currencies';
 import { useCustomTemplate, refreshCustomTemplate, isCustomSystem } from '../sheets/customTemplates';
 import { TableConditionsPanel } from './TableConditionsPanel';
+import { GameRestsPanel } from './GameRestsPanel';
+import { npcsOnMap } from '../sheets/restCalls';
 import { shortfallRule } from '../sheets/moneyText';
 import { SYSTEMS_CHANGED_EVENT } from '../sheets/systemsLibrary';
 
@@ -143,7 +145,8 @@ function BattleAdminPanel({
       </>}
 
       {tab === 'game' && <>
-        <TTRPGSystemPanel token={token} mainAdmin={isPrimaryAdmin} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} />
+        <TTRPGSystemPanel token={token} mainAdmin={isPrimaryAdmin} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers}
+          npcs={npcsOnMap(locations || [], 'battle_map', activeBattleMapData)} />
         {/* Money, which a custom system with the bank off does not have (3b2b). */}
         {bankOn && <>
           <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={globalSettings?.game_system} />
@@ -1047,7 +1050,8 @@ export function AdminPanel({
 
           {adminTab === 'game' && (
             <>
-              <TTRPGSystemPanel token={token} mainAdmin={isPrimaryAdmin} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} />
+              <TTRPGSystemPanel token={token} mainAdmin={isPrimaryAdmin} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers}
+                npcs={npcsOnMap(locations || [], view, activeBattleMapData)} />
               {/* Money, which a custom system with the bank off does not have (3b2b). */}
               {bankOn && <>
                 <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={gameSystem} />
@@ -2299,8 +2303,10 @@ const SR6_HOUSE_RULES: HouseRuleDef[] = [
   },
 ];
 
-function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, activeUsers }: {
+function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, activeUsers, npcs }: {
   token: string; onOpenNpcLibrary?: () => void; activeUsers?: any[];
+  /** The NPC tokens on the map being viewed, for a custom game's rests (4f5). */
+  npcs?: { id: number; name: string }[];
   /** The main admin: changes a built-in game's own conditions (the server's route is theirs alone). */
   mainAdmin?: boolean;
   /** Opens the system builder on MY SYSTEMS; the main admin's alone, so absent for a granted editor. */
@@ -2367,6 +2373,8 @@ function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, a
           ]} />
           {/* A built-in game's own conditions (4e2c2); a custom system's are edited in the builder. */}
           {mainAdmin && !isCustomSystem(system) && <TableConditionsPanel token={token} system={system} />}
+          {/* A custom game's rests (4f5); a built-in game's are its own buttons below. */}
+          {isCustomSystem(system) && <GameRestsPanel token={token} system={system} npcs={npcs ?? []} />}
           {system === 'shadowrun_6e' && (() => {
             const onlinePlayers = (activeUsers || []).filter((u: any) => !u.isAdmin && !u.isNPC).map((u: any) => u.userName);
             return (
