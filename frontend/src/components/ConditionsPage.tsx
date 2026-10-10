@@ -2,15 +2,17 @@ import React, { useEffect, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   conditionList, conditionCount, withCondition, withNewCondition, withoutCondition, modifierTargets,
-  LIMITS, ALL_ROLLS, STANDARD, type Listed,
+  LIMITS, ALL_ROLLS, STANDARD, type Listed, type ConditionPatch,
 } from '../sheets/conditions';
+import { restList } from '../sheets/rests';
 import { ConditionIcon } from './ConditionIcon';
 import { ConditionIconPicker } from './ConditionIconPicker';
 
 // The builder's CONDITIONS page (4e1b; approved mockup docs/mockups/builder-conditions.html,
 // 2026-10-09): what can happen to a character besides losing health. The standard set, each with
 // a switch, edited or turned off; the system's own, added and deleted; each one's name, chip label,
-// icon (drawn, or uploaded), description, how it ends, and its modifiers. What it reads and writes
+// icon (drawn, or uploaded), description, how it ends (when removed, after rounds, or at a rest,
+// 4f4b), and its modifiers. What it reads and writes
 // is sheets/conditions.ts; every change goes through the builder's `edit`.
 
 interface Props {
@@ -55,6 +57,37 @@ export function Switch({ on, label, onChange }: { on: boolean; label: string; on
   );
 }
 
+/**
+ * AT A REST (4f4b; approved mockup builder-rests, 2026-10-09): the rests that end a condition, ticked
+ * here or as WEARS OFF on the RESTS page, the same setting. The rests that are on, and any picked one
+ * since turned off, so it can be unticked.
+ */
+function EndsAt({ c, definition, set }: { c: Listed; definition: Definition; set: (patch: ConditionPatch) => void }) {
+  const at = c.at ?? [];
+  const offered = restList(definition).filter((r) => r.on || at.includes(r.id));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexBasis: '100%', minWidth: 0 }}>
+      <div role="group" aria-label="Ends at" style={{ ...row, gap: 4 }}>
+        {offered.map((r) => {
+          const on = at.includes(r.id);
+          return (
+            <button key={r.id} type="button" role="checkbox" aria-checked={on}
+              onClick={() => set({ ends: 'rest', at: on ? at.filter((a) => a !== r.id) : [...at, r.id] })}
+              style={{ ...btn, cursor: 'pointer', fontWeight: 'normal', opacity: r.on ? 1 : 0.5,
+                border: `1px solid ${on ? 'var(--warning)' : 'var(--dark-green)'}`, color: on ? 'var(--warning)' : 'var(--green)',
+                background: on ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : 'none' }}>
+              {(r.name || r.id).toUpperCase()}{!r.on && ' (OFF)'}
+            </button>
+          );
+        })}
+      </div>
+      <span style={{ ...why, fontSize: 11, ...(at.length ? {} : { color: 'var(--warning)' }) }}>
+        {at.length ? 'Comes off at any of these, or a rest that counts as one. The RESTS page shows the same choice.' : 'Pick at least one rest.'}
+      </span>
+    </div>
+  );
+}
+
 function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
   const [confirm, setConfirm] = useState(false);
   const base = STANDARD.find((s) => s.id === c.id);
@@ -95,12 +128,13 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
           <select id={`cond-ends-${c.id}`} value={c.ends} style={input} onChange={(e) => set({ ends: e.target.value as Listed['ends'] })}>
             <option value="removed">WHEN REMOVED</option>
             <option value="rounds">AFTER ROUNDS</option>
-            <option value="refresh" disabled>AT A REFRESH EVENT (COMING)</option>
+            <option value="rest">AT A REST</option>
           </select>
           {c.ends === 'rounds' && <>
             <WholeBox aria="Rounds" value={c.rounds ?? 1} min={1} max={LIMITS.rounds} onChange={(n) => set({ rounds: n })} />
             <span style={{ ...why, fontSize: 11 }}>rounds, unless changed when it&apos;s put on</span>
           </>}
+          {c.ends === 'rest' && <EndsAt c={c} definition={definition} set={set} />}
         </div>
         <span style={{ ...small, textAlign: 'right' }}>MODIFIERS</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
