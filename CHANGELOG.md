@@ -107,6 +107,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Trying a draft's rest.** The server can run one of a draft's rests on a made-up character,
+  previewed or rolled, through the game's own rules, for TRY IT and the RESTS page to show next.
 - **Calling a rest from the GAME tab.** Under a custom game, TTRPG_SYSTEM has a RESTS panel for the
   GM and granted editors: pick a rest, rest every player character, the NPCs on the map too, or
   the ones ticked, see what each will get, and CALL it. Everyone sees a dice-log line each.

@@ -13,6 +13,7 @@ const { effectiveSheet, starterSheet, fieldsOf } = require('../systemBuilder/she
 const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
 const { rollTier } = require('../systemBuilder/tierRolls');
 const { tryHealth } = require('../systemBuilder/tryHealth');
+const { tryRest } = require('../systemBuilder/tryRest');
 const { exampleList, exampleDefinition, exampleKind, KINDS } = require('../systemBuilder/examples');
 const { checkTableConditions, saveTableConditions } = require('../systemBuilder/tableConditions');
 const { isBuiltIn } = require('../sheets/templates');
@@ -191,6 +192,19 @@ module.exports = (db, io = null) => {
     const checked = checkDefinition(definition);
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     res.json(tryHealth(definition, { token, sheet, action }));
+  });
+
+  /**
+   * A draft's rest on a made-up character (4f6a): TRY IT's CALL A REST, rolled, and the RESTS page's
+   * ON THE SAMPLE, not. Through the game's own rules; changes nothing.
+   */
+  router.post('/try-rest', gm, (req, res) => {
+    const { definition, rest, sheet, token, conditions, roll } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    const tried = tryRest(definition, { rest, sheet, token, conditions, roll: roll === true });
+    if (!tried.ok) return res.status(400).json({ error: tried.error });
+    res.json(tried);
   });
 
   /**
