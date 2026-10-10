@@ -107,6 +107,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder's RESTS page.** Between CONDITIONS and TRY IT: switch the standard rests on or off,
+  rename them, add the system's own, say which other rests each one counts as, what it refills
+  (health, a number on the sheet, or a whole section, with amounts as numbers, formulas or dice),
+  and which conditions wear off. Calling a rest in the game comes after.
 - **Rests in the builder, as logic.** The builder can now read and change a system's rests the
   way the server does: renaming or switching the standard four, adding its own, what each counts
   as, what it refills under the system's health model and sheet, and the conditions it wears off.

@@ -158,6 +158,20 @@ describe('the builder', () => {
     expect(screen.queryByRole('button', { name: 'UPLOAD' })).toBeNull();
   });
 
+  it('RESTS turns a standard rest off, saved like any other change', async () => {
+    open({ startPage: 'rests' });
+    await ready();
+    await userEvent.click(await screen.findByRole('switch', { name: 'End of scene on' }));
+    await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
+    await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', rests: { end_of_scene: { on: false } } }));
+  });
+
+  it('RESTS is locked on a built-in example like every other page', async () => {
+    open({ systemId: null, example: 'cwn', startPage: 'rests' });
+    const sw = await screen.findByRole('switch', { name: 'End of scene on' });
+    await waitFor(() => expect((sw as HTMLButtonElement).disabled).toBe(true));
+  });
+
   it('NPCS adds a tier, saved like any other change', async () => {
     open({ startPage: 'npcs' });
     await ready();
@@ -195,7 +209,7 @@ describe('the builder', () => {
     open({ startPage: 'problems' });
     await ready();
     const pages = within(sidebar()).getAllByRole('button').filter((b) => b.title && !['PUBLISH', 'MY SYSTEMS'].includes(b.textContent!));
-    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'TRY IT', 'PROBLEMS']);
+    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'TRY IT', 'PROBLEMS']);
     expect(pages[1].title).toBe('What the game calls things: HP, credits, skills.');
     await userEvent.click(pages[1]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('WORDS');

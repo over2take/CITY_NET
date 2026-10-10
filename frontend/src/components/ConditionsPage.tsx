@@ -44,7 +44,8 @@ function WholeBox({ aria, value, min, max, width = 64, onChange }: { aria: strin
   );
 }
 
-function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: (on: boolean) => void }) {
+/** An on/off switch, as the rail's lists use it (CONDITIONS, RESTS). */
+export function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: (on: boolean) => void }) {
   return (
     <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
       style={{ width: 28, height: 14, borderRadius: 7, border: '1px solid var(--green)', padding: 0, position: 'relative', cursor: 'pointer', flexShrink: 0,
