@@ -5,8 +5,8 @@
 //
 // Their formulas are the ones in definitions.js, word for word, which the parity test
 // (__tests__/system_builder_parity.test.js) holds to the hand-written recompute functions. Only
-// the names players see, the stats those formulas read, a sample character and the setup answers
-// are added here. Mechanics and structure only, never a book's wording or item lists (the plan,
+// the names players see, the stats those formulas read, a sample character, the setup answers and
+// a rest doing what the built-in game's own rest button does (4f6b) are added here. Mechanics and structure only, never a book's wording or item lists (the plan,
 // "Built-in systems as examples").
 //
 // NOT what the built-in games run. A game running CWN keeps running CWN's code; these are copies
@@ -36,10 +36,11 @@ const CWN = {
     group('armor', 'ARMOR', [stat('armor_soak', 'Damage soak', 0, 99), stat('armor_trauma_mod', 'Trauma target mod', -10, 10)]),
     group('magic', 'MAGIC', [stat('cast_skill', 'Cast skill', 0, 4), stat('summon_skill', 'Summon skill', 0, 4)]),
     group('adjustments', 'TABLE ADJUSTMENTS', [stat('strain_mod', 'Strain adjustment', -10, 10), stat('move_mod', 'Move adjustment', -99, 99)]),
+    group('resources', 'RESOURCES', [stat('system_strain', 'System strain', 0, 20)]),
   ],
   samples: {
     str: 14, dex: 12, con: 13, int: 10, wis: 9, cha: 11, level: 3,
-    armor_soak: 0, armor_trauma_mod: 0, cast_skill: 0, summon_skill: 0, strain_mod: 0, move_mod: 0,
+    armor_soak: 0, armor_trauma_mod: 0, cast_skill: 0, summon_skill: 0, strain_mod: 0, move_mod: 0, system_strain: 2,
   },
   lookups: CITIES_WITHOUT_NUMBER.lookups,
   derived: labelled(CITIES_WITHOUT_NUMBER.derived, {
@@ -51,6 +52,8 @@ const CWN = {
   }),
   npc: { tiers: [{ id: 'by_hit_dice', label: 'BY HIT DICE', hp: '@level d8', values: { level: '@level' } }] },
   core: { health: { model: 'pool' }, advancement: ['levels'], dice: ['d20', '2d6'], distance: 'meters' },
+  // As the built-in LONG_REST button: 1 System Strain off, never below 0.
+  rests: { long_rest: { refills: [{ what: 'system_strain', how: 'by', amount: '-1' }] } },
 };
 
 /** The ten stats at one level, as the built-in NPC generator sets them (sheets/npcTiers.js cprTier). */
@@ -69,8 +72,9 @@ const CPR = {
       stat('body', 'BODY', 1, 10), stat('emp_max', 'EMP', 1, 10),
     ]),
     group('humanity', 'HUMANITY', [stat('humanity', 'Humanity', 0, 120)]),
+    group('resources', 'RESOURCES', [stat('luck_points', 'LUCK points', 0, 10)]),
   ],
-  samples: { int: 6, ref: 7, dex: 6, tech: 5, cool: 6, will: 6, luck: 5, move: 6, body: 6, emp_max: 5, humanity: 50 },
+  samples: { int: 6, ref: 7, dex: 6, tech: 5, cool: 6, will: 6, luck: 5, move: 6, body: 6, emp_max: 5, humanity: 50, luck_points: 2 },
   derived: labelled(CYBERPUNK_RED.derived, { emp: 'Current EMP' }),
   words: {
     money: { singular: 'EURODOLLAR', plural: 'EURODOLLARS', short: 'eb' },
@@ -85,6 +89,8 @@ const CPR = {
     ],
   },
   core: { health: { model: 'pool' }, advancement: ['spend'], dice: ['d10', 'd6'], distance: 'meters' },
+  // As the built-in RESET_ALL_LUCK button: LUCK points back to the LUCK stat.
+  rests: { end_of_session: { refills: [{ what: 'luck_points', how: 'to', amount: '@luck' }] } },
 };
 
 const SR6 = {
@@ -98,8 +104,9 @@ const SR6 = {
       stat('willpower', 'Willpower', 1, 9), stat('logic', 'Logic', 1, 9), stat('intuition', 'Intuition', 1, 9), stat('charisma', 'Charisma', 1, 9),
     ]),
     group('special', 'SPECIAL', [stat('edge', 'Edge', 1, 7), stat('magic', 'Magic', 0, 9)]),
+    group('resources', 'RESOURCES', [stat('edge_points', 'Edge points', 0, 7)]),
   ],
-  samples: { body: 4, agility: 5, reaction: 4, strength: 3, willpower: 3, logic: 3, intuition: 4, charisma: 2, edge: 3, magic: 0 },
+  samples: { body: 4, agility: 5, reaction: 4, strength: 3, willpower: 3, logic: 3, intuition: 4, charisma: 2, edge: 3, magic: 0, edge_points: 1 },
   derived: labelled(SHADOWRUN_6E.derived, {
     physical_monitor: 'Physical monitor', stun_monitor: 'Stun monitor', initiative_score: 'Initiative',
     composure: 'Composure', power_points_spent: 'Power points spent', power_points_remaining: 'Power points left',
@@ -111,6 +118,8 @@ const SR6 = {
     dice: ['d6'],
     distance: 'meters',
   },
+  // As the built-in REPLENISH ALL EDGE button: Edge points back to Edge.
+  rests: { end_of_session: { refills: [{ what: 'edge_points', how: 'to', amount: '@edge' }] } },
 };
 
 // ─── Genre starters (4d3) ───────────────────────────────────────────────────
@@ -149,6 +158,12 @@ const FANTASY = {
     ],
   },
   core: { health: { model: 'pool' }, advancement: ['levels'], dice: ['d20', 'd4', 'd6', 'd8', 'd10', 'd12'], distance: 'feet' },
+  // A breather heals a die's worth; a night's sleep heals the rest and shakes off exhaustion.
+  rests: {
+    short_rest: { refills: [{ what: 'health', how: 'by', amount: '1d8 + @con_mod' }] },
+    long_rest: { counts_as: ['short_rest'], refills: [{ what: 'health', how: 'full' }] },
+  },
+  conditions: { exhausted: { ends: 'rest', at: ['long_rest'] } },
 };
 
 const CHARACTERISTICS = [['str', 'Strength'], ['dex', 'Dexterity'], ['end', 'Endurance'], ['int', 'Intellect'], ['edu', 'Education'], ['soc', 'Standing']];
@@ -174,6 +189,11 @@ const SCIFI = {
     tiers: [scifiTier('crew', 'CREW', 1, 7, 6), scifiTier('veteran', 'VETERAN', 2, 8, 8), scifiTier('elite', 'ELITE', 3, 9, 10)],
   },
   core: { health: { model: 'wounds', count: 3, penalty: -1 }, advancement: ['spend'], dice: ['2d6', 'd6'], distance: 'meters' },
+  // A wound back after a breather, all of them after proper rest.
+  rests: {
+    short_rest: { refills: [{ what: 'health', how: 'by', amount: '1' }] },
+    long_rest: { counts_as: ['short_rest'], refills: [{ what: 'health', how: 'full' }] },
+  },
 };
 
 const APPROACHES = [['forceful', 'Forceful'], ['careful', 'Careful'], ['clever', 'Clever'], ['quick', 'Quick'], ['flashy', 'Flashy'], ['sneaky', 'Sneaky']];
@@ -200,6 +220,13 @@ const NARRATIVE = {
     dice: ['d6'],
     distance: 'zones',
   },
+  // No rests by the clock: harm clears in downtime, and fear passes when the scene does.
+  rests: {
+    short_rest: { on: false },
+    long_rest: { on: false },
+    downtime: { name: 'Downtime', refills: [{ what: 'health', how: 'full' }] },
+  },
+  conditions: { frightened: { ends: 'rest', at: ['end_of_scene'] }, exhausted: { ends: 'rest', at: ['downtime'] } },
 };
 
 /** The examples and starters, in the order the builder lists them. */

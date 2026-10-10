@@ -18,6 +18,8 @@ const { CITIES_WITHOUT_NUMBER, SHADOWRUN_6E, CYBERPUNK_RED } = require_('../syst
 const { checkDefinition } = require_('../systemBuilder/definition');
 const { previewDerived } = require_('../systemBuilder/derived');
 const { rollTier } = require_('../systemBuilder/tierRolls');
+const { tryRest } = require_('../systemBuilder/tryRest');
+const { restsOf } = require_('../systemBuilder/rests');
 const { TEMPLATES, applyDerived } = require_('../sheets/templates');
 const { elevatedUsers } = require_('../middleware/auth');
 const systemsRoute = require_('../routes/systems.js');
@@ -161,6 +163,58 @@ describe('the genre starters (4d3)', () => {
     expect(d.core.health.levels.map((l) => [l.label, l.slots])).toEqual([['LESSER', 2], ['MODERATE', 2], ['SEVERE', 1]]);
     expect(d.core).toMatchObject({ advancement: ['milestone'], distance: 'zones' });
     expect(d.license).toMatch(/Fate Accelerated.*Evil Hat Productions.*CC BY 3\.0/);
+  });
+});
+
+/**
+ * Rests (4f6b). The examples' rests do what the built-in games' own rest buttons do; the starters'
+ * suit their genre. Each tried on its own sample character through TRY IT's rule (tryRest.js).
+ */
+describe('the examples\' and starters\' rests', () => {
+  const tried = (id, rest, over = {}) => {
+    const d = exampleDefinition(id);
+    return tryRest(d, { rest, sheet: d.samples, ...over });
+  };
+  const restIds = (id) => restsOf(exampleDefinition(id)).map((r) => r.id);
+
+  it('take a CWN character\'s System Strain down by 1 on a long rest, never below 0, as LONG_REST does', () => {
+    expect(tried('cwn', 'long_rest').changes).toEqual([{ what: 'system_strain', label: 'System strain', from: 2, to: 1 }]);
+    expect(tried('cwn', 'long_rest', { sheet: { ...exampleDefinition('cwn').samples, system_strain: 0 } }).changes).toEqual([]);
+  });
+
+  it('give a Cyberpunk RED character their LUCK back each session, as RESET_ALL_LUCK does', () => {
+    expect(tried('cpr', 'end_of_session').changes).toEqual([{ what: 'luck_points', label: 'LUCK points', from: 2, to: 5 }]);
+  });
+
+  it('give a Shadowrun character their Edge back each session, as REPLENISH ALL EDGE does', () => {
+    expect(tried('sr6', 'end_of_session').changes).toEqual([{ what: 'edge_points', label: 'Edge points', from: 1, to: 3 }]);
+  });
+
+  it('heal a die on a fantasy breather, and all of it and exhaustion with a night\'s sleep', () => {
+    const token = { current: 3, max: 20 };
+    expect(tried('fantasy', 'short_rest', { token }).changes).toEqual([{ what: 'health', label: 'HP', from: 3, to: null, pending: ['1d8 + @con_mod'] }]);
+    const night = tried('fantasy', 'long_rest', { token, conditions: [{ id: 'exhausted' }] });
+    expect(night.changes).toEqual([{ what: 'health', label: 'HP', from: 3, to: 20 }]);
+    expect(night.gone).toEqual(['Exhausted']);
+  });
+
+  it('give a starfarer a wound back after a breather, and all of them after proper rest', () => {
+    expect(tried('scifi', 'short_rest', { token: { current: 1, max: 3 } }).token.current).toBe(2);
+    expect(tried('scifi', 'long_rest', { token: { current: 0, max: 3 } }).token.current).toBe(3);
+  });
+
+  it('clear a story\'s harm in downtime and its fear at the end of a scene, with no rests by the clock', () => {
+    expect(restIds('narrative')).toEqual(['end_of_scene', 'end_of_session', 'downtime']);
+    const down = tried('narrative', 'downtime', { sheet: { lesser_1: 'Bruised', severe_1: 'Broken arm' }, token: { current: 3, max: 5 }, conditions: [{ id: 'exhausted' }, { id: 'frightened' }] });
+    expect(down.sheet).toMatchObject({ lesser_1: '', severe_1: '' });
+    expect(down.token.current).toBe(5);
+    expect(down.gone).toEqual(['Exhausted']);
+    expect(tried('narrative', 'end_of_scene', { conditions: [{ id: 'exhausted' }, { id: 'frightened' }] }).gone).toEqual(['Frightened']);
+  });
+
+  it('keep every example and starter one that publishes, with the four standard rests otherwise on', () => {
+    for (const { id, definition } of EXAMPLES) expect(checkDefinition(definition), id).toEqual({ problems: [] });
+    for (const id of ['cwn', 'cpr', 'sr6', 'fantasy', 'scifi']) expect(restIds(id), id).toEqual(['short_rest', 'long_rest', 'end_of_scene', 'end_of_session']);
   });
 });
 
