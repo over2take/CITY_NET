@@ -20,6 +20,7 @@ const { previewDerived } = req('../../../../backend/systemBuilder/derived.js');
 const { tryHealth } = req('../../../../backend/systemBuilder/tryHealth.js');
 const { npcSheetOf } = req('../../../../backend/systemBuilder/npc.js');
 const { rollTier } = req('../../../../backend/systemBuilder/tierRolls.js');
+const { tryRest } = req('../../../../backend/systemBuilder/tryRest.js');
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -47,6 +48,11 @@ const serverApi = () => ({
     const fields = new Map(fieldsOf(npcSheetOf(def)).map((f: { id: string }) => [f.id, f]));
     return { ok: true as const, value: rollTier(t, level, fields, { hp: 9999, defense: 99 }) };
   }),
+  // Every die shows its highest face, so a rolled rest is known.
+  tryRest: vi.fn(async (def: Definition, state: object) => {
+    const r = tryRest(def, state, () => 0.999999);
+    return r.ok ? { ok: true as const, value: r } : { ok: false as const, error: r.error, status: 400 };
+  }),
 });
 
 const open = (start: Definition = H, api: ReturnType<typeof serverApi> | null = serverApi()) => {
@@ -62,6 +68,74 @@ const character = () => within(screen.getByRole('region', { name: 'Made-up chara
 const health = () => within(screen.getByRole('region', { name: 'Health' }));
 const npcBox = () => within(screen.getByRole('region', { name: 'An NPC to fight' }));
 const valueOf = (label: string) => (character().getByLabelText(label) as HTMLInputElement).value;
+
+/** HEARTH with rests (4f6c): a breather rolls, the end of a session sets a stat. */
+const RESTED: Definition = { ...H, rests: {
+  short_rest: { refills: [{ what: 'health', how: 'by', amount: '1d6 + @level' }] },
+  end_of_session: { refills: [{ what: 'str', how: 'to', amount: '@level' }] },
+  end_of_scene: { on: false },
+} };
+const restBox = () => within(screen.getByRole('region', { name: 'A rest' }));
+
+describe('CALL A REST', () => {
+  it('rolls one of the draft\'s rests on the pretend token, logging the line the game would', async () => {
+    const { api } = open(RESTED);
+    await health().findByRole('button', { name: 'DAMAGE' });
+    fireEvent.change(health().getByLabelText('Amount'), { target: { value: '8' } });
+    await userEvent.click(health().getByRole('button', { name: 'DAMAGE' }));
+    await waitFor(() => expect(health().getByText(/^2 \/ 10/)).toBeTruthy());
+    expect(health().getByRole('img', { name: /Heart monitor/ }).getAttribute('data-band')).not.toBe('steady');
+    expect(within(restBox().getByLabelText('Rest')).getAllByRole('option').map((o) => o.textContent)).toEqual(['SHORT REST', 'LONG REST', 'END OF SESSION']);
+    await userEvent.click(restBox().getByRole('button', { name: 'CALL A REST' }));
+    // 2 + a 6 + level 3, held to the maximum of 10.
+    await waitFor(() => expect(health().getByText(/^10 \/ 10/)).toBeTruthy());
+    expect(screen.getByTestId('health-log').textContent).toContain('SHORT REST · Sample: HP 2 → 10; rolled 1d6 + @level = 9 (1d6: 6)');
+    expect(api!.tryRest.mock.calls[0][1]).toMatchObject({ rest: 'short_rest', roll: true, token: { current: 2, max: 10 } });
+    // What others see is asked for again, for the token as the rest left it: a steady heartbeat.
+    await waitFor(() => expect(api!.tryHealth).toHaveBeenLastCalledWith(expect.anything(), { token: { current: 10, max: 10, temp: 0 }, sheet: {} }));
+    await waitFor(() => expect(health().getByRole('img', { name: /Heart monitor/ }).getAttribute('data-band')).toBe('steady'));
+  });
+
+  it('puts what a rest refilled back into the character, its formulas worked out again', async () => {
+    open(RESTED);
+    await waitFor(() => expect(valueOf('Save')).toBe('11'));
+    fireEvent.change(restBox().getByLabelText('Rest'), { target: { value: 'end_of_session' } });
+    await userEvent.click(restBox().getByRole('button', { name: 'CALL A REST' }));
+    await waitFor(() => expect(valueOf('Strength')).toBe('3'));
+    await waitFor(() => expect(valueOf('Save')).toBe('10'));
+    expect(screen.getByTestId('health-log').textContent).toContain('END OF SESSION · Sample: Strength 2 → 3');
+  });
+
+  it('says when no rest is on, and what the server refused', async () => {
+    open({ ...H, rests: { short_rest: { on: false }, long_rest: { on: false }, end_of_scene: { on: false }, end_of_session: { on: false } } });
+    expect(await restBox().findByText('No rest is on: turn one on in RESTS.')).toBeTruthy();
+    cleanup();
+    const api = serverApi();
+    api.tryRest.mockResolvedValueOnce({ ok: false as const, error: 'Not one of this system\'s rests', status: 400 } as never);
+    open(RESTED, api);
+    await userEvent.click(await restBox().findByRole('button', { name: 'CALL A REST' }));
+    expect(await restBox().findByRole('alert')).toHaveTextContent('Not one of this system\'s rests');
+  });
+
+  it('redraws a custom model\'s panel from what the rest left: the second track cleared', async () => {
+    open({ ...TRACKS, rests: { long_rest: { refills: [{ what: 'health', how: 'full' }] } } });
+    await userEvent.click(within(await health().findByRole('group', { name: /track/i })).getByRole('button', { name: 'STUN' }));
+    fireEvent.change(health().getByLabelText('MAX STUN'), { target: { value: '6' } });
+    await userEvent.click(health().getByRole('button', { name: 'SET' }));
+    fireEvent.change(health().getByLabelText('Amount'), { target: { value: '6' } });
+    await userEvent.click(health().getByRole('button', { name: 'DAMAGE' }));
+    // What others see: the stun track full.
+    await waitFor(() => expect(health().getByTestId('second-track').textContent).toContain('STUN — FULL'));
+    fireEvent.change(restBox().getByLabelText('Rest'), { target: { value: 'long_rest' } });
+    await userEvent.click(restBox().getByRole('button', { name: 'CALL A REST' }));
+    await waitFor(() => expect(health().getByTestId('second-track').textContent).toBe('STUN'));
+  });
+
+  it('can\'t be called without the server', () => {
+    open(RESTED, null);
+    expect((restBox().getByRole('button', { name: 'CALL A REST' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
 
 describe('the made-up character', () => {
   it('starts as the sample on the draft\'s own sheet, its formulas worked out by the server', async () => {

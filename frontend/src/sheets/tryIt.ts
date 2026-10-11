@@ -5,9 +5,9 @@
 // (POST /api/systems/preview-values, the typed numbers as the sample); health is tried on a pretend
 // token by the game's own rules (POST /api/systems/try-health).
 
-import type { Definition } from './systemsApi';
+import type { Definition, TriedRest } from './systemsApi';
 import type { CustomRenderField } from './customTemplates';
-import { allStats, sampleOf, withSample } from './statsRules';
+import { allStats, sampleOf, withSample, formulaList } from './statsRules';
 
 /** A made-up character: field id to what is in it. */
 export type Character = Record<string, string | number>;
@@ -65,6 +65,42 @@ export const startingToken = (def: Definition): PretendToken => {
   const health = (def.core as { health?: { model?: string; count?: number } } | undefined)?.health;
   const max = health?.model === 'wounds' && Number.isInteger(health.count) && (health.count as number) > 0 ? health.count as number : 10;
   return { current: max, max, temp: 0 };
+};
+
+/**
+ * The pretend token a rest is shown on (the RESTS page's ON THE SAMPLE, 4f6c): the starting one hurt
+ * to half, so "to full" has something to show.
+ */
+export const hurtToken = (def: Definition): PretendToken => {
+  const t = startingToken(def);
+  return { ...t, current: Math.floor(t.max / 2) };
+};
+
+/**
+ * TRY IT after a rest (4f6c): what a refill changed goes back into the typed character, the health
+ * model's own fields into the health sheet, and the token is the rest's. Formulas are left out:
+ * the server works them out again from what is typed.
+ */
+export const afterRest = (
+  def: Definition,
+  character: Character,
+  healthSheet: Record<string, unknown>,
+  tried: Pick<TriedRest, 'sheet' | 'token' | 'changes'>,
+): { character: Character; healthSheet: Record<string, unknown>; token: PretendToken | null } => {
+  const formulas = new Set(formulaList(def).map((f) => f.id));
+  const refilled = new Set(tried.changes.filter((c) => !c.what.startsWith('health')).map((c) => c.what));
+  const next: Character = { ...character };
+  for (const id of refilled) {
+    const v = tried.sheet[id];
+    if (typeof v === 'number') next[id] = v;
+  }
+  // What is left is the health model's own: refills change only refillable numbers, and the rest
+  // was sent the character and the health sheet alone.
+  const health: Record<string, unknown> = { ...healthSheet };
+  for (const [id, v] of Object.entries(tried.sheet)) {
+    if (!refilled.has(id) && !(id in character) && !formulas.has(id)) health[id] = v;
+  }
+  return { character: next, healthSheet: health, token: tried.token ? { current: tried.token.current, max: tried.token.max, temp: tried.token.temp } : null };
 };
 
 /** The pretend token as the HEALTH folder's panels read a token. */

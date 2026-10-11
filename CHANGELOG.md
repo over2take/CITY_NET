@@ -107,6 +107,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Rests in TRY IT, and on the sample.** TRY IT can CALL A REST on its made-up character, dice
+  rolled, with the line the game would log. The RESTS page shows what each rest does to the sample
+  character, hurt to half health, as you edit it. Rests are complete.
 - **Rests for the examples and starters.** A copy of CWN takes 1 System Strain off on a long rest,
   Cyberpunk RED gives LUCK back and Shadowrun gives Edge back each session, as their own buttons
   do, each kept in a new RESOURCES stat. Sword & Spell, Starfarer and Story First get rests that
