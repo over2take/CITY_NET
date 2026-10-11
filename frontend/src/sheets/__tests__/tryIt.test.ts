@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
   sampleCharacter, withTyped, withCharacterAsData, differsFromSample, withCharacterAsSample,
-  startingToken, asLocation, withMax, SAMPLE_NAME,
+  startingToken, asLocation, withMax, afterRest, hurtToken, SAMPLE_NAME,
 } from '../tryIt';
 import type { Definition } from '../systemsApi';
 
@@ -15,6 +15,7 @@ const req = createRequire(import.meta.url);
 const { checkDefinition } = req('../../../../backend/systemBuilder/definition.js');
 const { previewDerived } = req('../../../../backend/systemBuilder/derived.js');
 const { tryHealth } = req('../../../../backend/systemBuilder/tryHealth.js');
+const { tryRest } = req('../../../../backend/systemBuilder/tryRest.js');
 
 const H: Definition = {
   format: 1,
@@ -98,5 +99,41 @@ describe('the pretend token', () => {
   it('is what the server tries health on', () => {
     const r = tryHealth(H, { token: startingToken(H), action: { kind: 'damage', amount: 4 } });
     expect(r.token).toEqual({ current: 6, max: 10, temp: 0 });
+  });
+});
+
+describe('after a rest (4f6c)', () => {
+  const TRACKS: Definition = {
+    format: 1, name: 'T',
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'level', label: 'Level' }, { id: 'fatigue', label: 'Fatigue' }] }],
+    derived: [{ id: 'ward', label: 'Ward', formula: '@fatigue + 10' }],
+    core: { health: { model: 'tracks', tracks: [{ id: 'physical', label: 'PHYSICAL' }, { id: 'stun', label: 'STUN' }] } },
+    rests: { long_rest: { refills: [{ what: 'health', how: 'full' }, { what: 'fatigue', how: 'by', amount: '-1' }] } },
+  };
+
+  it('puts refilled numbers back into the character, the health model\'s own into the health sheet, formulas left out', () => {
+    const character = { name: 'Sample character', level: 2, fatigue: 3 };
+    const healthSheet = { stun: 4, stun_max: 6 };
+    const tried = tryRest(TRACKS, { rest: 'long_rest', sheet: { ...character, ...healthSheet }, token: { current: 3, max: 9 } });
+    const after = afterRest(TRACKS, character, healthSheet, tried);
+    expect(after.character).toEqual({ name: 'Sample character', level: 2, fatigue: 2 });
+    expect(after.healthSheet).toEqual({ stun: 0, stun_max: 6 });
+    expect(after.token).toEqual({ current: 9, max: 9, temp: 0 });
+  });
+
+  it('fills a number the character never typed, and keeps no token where there was none', () => {
+    const SET: Definition = { ...TRACKS, rests: { long_rest: { refills: [{ what: 'fatigue', how: 'to', amount: '@level' }] } } };
+    const tried = tryRest(SET, { rest: 'long_rest', sheet: { level: 2 } });
+    const after = afterRest(SET, { level: 2 }, {}, tried);
+    expect(after.character).toEqual({ level: 2, fatigue: 2 });
+    // Nothing moved (fatigue already none), nothing put back.
+    expect(afterRest(TRACKS, { level: 2 }, {}, tryRest(TRACKS, { rest: 'long_rest', sheet: { level: 2 } })).character).toEqual({ level: 2 });
+    expect(after.healthSheet).toEqual({});
+    expect(after.token).toBeNull();
+  });
+
+  it('shows a rest on a token hurt to half, so "to full" has something to show', () => {
+    expect(hurtToken({ format: 1, name: 'P' })).toEqual({ current: 5, max: 10, temp: 0 });
+    expect(hurtToken({ format: 1, name: 'W', core: { health: { model: 'wounds', count: 3 } } })).toEqual({ current: 1, max: 3, temp: 0 });
   });
 });

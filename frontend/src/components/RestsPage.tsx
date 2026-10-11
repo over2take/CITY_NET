@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { Definition, systemsApi } from '../sheets/systemsApi';
+import type { Definition, systemsApi, TriedRest } from '../sheets/systemsApi';
 import type { CustomRenderSheet } from '../sheets/customTemplates';
 import {
   restList, restCount, withRest, withNewRest, withoutRest, countedAs, makesLoop, refillTargets, describeRefill,
@@ -9,18 +9,21 @@ import { conditionsOf } from '../sheets/conditions';
 import { ConditionIcon } from './ConditionIcon';
 import { Switch } from './ConditionsPage';
 import { TRY_DELAY_MS } from './NpcsPage';
+import { sampleCharacter, hurtToken } from '../sheets/tryIt';
+import { changeText } from '../sheets/restCalls';
 
 // The builder's RESTS page (4f4a; approved mockup docs/mockups/builder-rests.html, 2026-10-09): the
 // moments the game refills things and wears things off. The standard four, each with a switch,
 // renamed or turned off; the system's own, added and deleted; each one's name, the rests it also
-// counts as, its refills in order, and the conditions it wears off. What it reads and writes is
+// counts as, its refills in order, the conditions it wears off, and what it does to the sample
+// character (4f6c, the server running it as the game would). What it reads and writes is
 // sheets/rests.ts; every change goes through the builder's `edit`.
 
 interface Props {
   definition: Definition;
   edit: (next: Definition) => void;
-  /** For the sheet the system plays with, which says what a rest can refill. */
-  api?: Pick<ReturnType<typeof systemsApi>, 'previewSheet'>;
+  /** For the sheet the system plays with (what a rest can refill), and ON THE SAMPLE. */
+  api?: Pick<ReturnType<typeof systemsApi>, 'previewSheet' | 'tryRest'>;
 }
 
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
@@ -95,7 +98,41 @@ function Refills({ rest, definition, edit, targets }: { rest: Rest; definition: 
   );
 }
 
-function Detail({ rest, definition, edit, targets }: { rest: Rest; definition: Definition; edit: Props['edit']; targets: Target[] }) {
+/**
+ * ON THE SAMPLE (4f6c): the rest on the sample character, its token hurt to half so "to full" shows,
+ * worked out by the server as the game would and dice left to roll. Asked again a moment after the
+ * last change; a late answer never replaces a newer one.
+ */
+function Sample({ rest, definition, api }: { rest: Rest; definition: Definition; api: NonNullable<Props['api']> }) {
+  const [tried, setTried] = useState<TriedRest | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const first = React.useRef(true);
+  useEffect(() => {
+    let live = true;
+    const timer = setTimeout(() => {
+      api.tryRest(definition, { rest: rest.id, sheet: sampleCharacter(definition), token: hurtToken(definition) }).then((r) => {
+        if (!live) return;
+        if (r.ok) { setTried(r.value); setError(null); } else { setTried(null); setError(r.error); }
+      });
+    }, first.current ? 0 : TRY_DELAY_MS);
+    first.current = false;
+    return () => { live = false; clearTimeout(timer); };
+  }, [api, definition, rest.id]);
+  const token = hurtToken(definition);
+  return (
+    <div data-testid="rest-sample" style={{ border: '1px dashed var(--dark-green)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <span style={small}>THE SAMPLE CHARACTER · HP {token.current}/{token.max}</span>
+      {!rest.on ? <span style={why}>Turn it on to see what it does.</span>
+        : error ? <span role="alert" style={{ ...why, color: 'var(--danger)' }}>{error}</span>
+          : !tried ? <span style={why}>WORKING IT OUT…</span>
+            : tried.changes.length
+              ? tried.changes.map((c) => <span key={c.what} style={{ fontSize: 12, color: 'var(--cyan)' }}>{changeText(c)}</span>)
+              : <span style={why}>Nothing changes for the sample.</span>}
+    </div>
+  );
+}
+
+function Detail({ rest, definition, edit, targets, api }: { rest: Rest; definition: Definition; edit: Props['edit']; targets: Target[]; api?: Props['api'] }) {
   const [confirm, setConfirm] = useState(false);
   const others = restList(definition).filter((r) => r.id !== rest.id && r.on);
   const order = new Set([...countedAs(definition, rest.id), rest.id]);
@@ -168,6 +205,11 @@ function Detail({ rest, definition, edit, targets }: { rest: Rest; definition: D
           </div>
           <p style={{ ...why, fontSize: 11 }}>The same switch as AT A REST on the CONDITIONS page. A condition that ends after rounds keeps counting them.</p>
         </div>
+
+        {api && <>
+          <span style={{ ...small, textAlign: 'right', paddingTop: 6 }}>ON THE SAMPLE</span>
+          <Sample rest={rest} definition={definition} api={api} />
+        </>}
       </div>
     </section>
   );
@@ -224,7 +266,7 @@ export function RestsPage({ definition, edit, api }: Props) {
           ))}
         </ul>
       </div>
-      {current && <Detail key={current.id} rest={current} definition={definition} edit={edit} targets={targets} />}
+      {current && <Detail key={current.id} rest={current} definition={definition} edit={edit} targets={targets} api={api} />}
     </div>
   );
 }

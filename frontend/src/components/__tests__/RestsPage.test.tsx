@@ -18,6 +18,7 @@ import type { Definition } from '../../sheets/systemsApi';
 const req = createRequire(import.meta.url);
 const { checkDefinition } = req('../../../../backend/systemBuilder/definition.js');
 const { effectiveSheet } = req('../../../../backend/systemBuilder/sheet.js');
+const { tryRest } = req('../../../../backend/systemBuilder/tryRest.js');
 afterEach(cleanup);
 
 const H: Definition = {
@@ -40,7 +41,13 @@ const H: Definition = {
   rests: { short_rest: { refills: [{ what: 'health', how: 'by', amount: '1d8 + @con_mod' }] }, long_rest: { counts_as: ['short_rest'] } },
   conditions: { exhausted: { ends: 'rest', at: ['short_rest'] }, stunned: { ends: 'rounds', rounds: 1 } },
 };
-const serverApi = () => ({ previewSheet: vi.fn(async (def: Definition) => ({ ok: true as const, value: { sheet: effectiveSheet(def), starter: effectiveSheet(def) } })) });
+const serverApi = () => ({
+  previewSheet: vi.fn(async (def: Definition) => ({ ok: true as const, value: { sheet: effectiveSheet(def), starter: effectiveSheet(def) } })),
+  tryRest: vi.fn(async (def: Definition, state: object) => {
+    const r = tryRest(def, state);
+    return r.ok ? { ok: true as const, value: r } : { ok: false as const, error: r.error, status: 400 };
+  }),
+});
 
 /** `api` null for a page with no server to ask (a default only fills in for undefined). */
 const open = (start: Definition = H, api: ReturnType<typeof serverApi> | null = serverApi()) => {
@@ -216,5 +223,36 @@ describe('what wears off', () => {
     publishes(last());
     await userEvent.click(off.getByRole('checkbox', { name: /POISONED/ }));
     expect((last().conditions as Record<string, unknown>).poisoned).toBeUndefined();
+  });
+});
+
+describe('on the sample', () => {
+  const sample = () => within(screen.getByTestId('rest-sample'));
+
+  it('shows what the rest does to the sample character, its token hurt to half, dice left to roll', async () => {
+    const { api } = open({ ...H, samples: { con_mod: 1 }, rests: { ...(H.rests as object), long_rest: { counts_as: ['short_rest'], refills: [{ what: 'health', how: 'full' }, { what: 'fatigue', how: 'to', amount: '2' }] } } });
+    expect(sample().getByText('THE SAMPLE CHARACTER · HP 5/10')).toBeTruthy();
+    expect(await sample().findByText('HP 5 → 10')).toBeTruthy();
+    expect(sample().getByText('FATIGUE 0 → 2')).toBeTruthy();
+    expect(api!.tryRest.mock.calls[0][1]).toEqual({ rest: 'long_rest', sheet: { name: 'Sample character', con_mod: 1 }, token: { current: 5, max: 10, temp: 0 } });
+    await userEvent.click(list().getByRole('button', { name: 'SHORT REST' }));
+    expect(await sample().findByText('HP 5 + 1d8 + @con_mod')).toBeTruthy();
+  });
+
+  it('follows an edit a moment later', async () => {
+    open();
+    await userEvent.click(list().getByRole('button', { name: 'END OF SESSION' }));
+    expect(await sample().findByText('Nothing changes for the sample.')).toBeTruthy();
+    await userEvent.click(detail('End of session rest').getByRole('button', { name: '+ REFILL' }));
+    expect(await sample().findByText('HP 5 → 10', {}, { timeout: 2000 })).toBeTruthy();
+  });
+
+  it('says to turn an off rest on, and isn\'t there without the server', async () => {
+    open();
+    await userEvent.click(list().getByRole('switch', { name: 'Long rest on' }));
+    expect(await sample().findByText('Turn it on to see what it does.')).toBeTruthy();
+    cleanup();
+    open(H, null);
+    expect(screen.queryByTestId('rest-sample')).toBeNull();
   });
 });

@@ -33,6 +33,21 @@ export type TriedBox =
 /** A tier worked out for a level (tierRolls.js rollTier). */
 export interface TriedTier { level: number; hp: TriedBox; defense: TriedBox; values: Record<string, TriedBox> }
 
+/** A draft's rest tried on a made-up character (backend/systemBuilder/tryRest.js, 4f6a). */
+export interface TriedRest {
+  ok: true;
+  rest: { id: string; name: string };
+  /** The character after the rest, its formulas worked out again. */
+  sheet: Record<string, unknown>;
+  token: { current: number; max: number; temp: number } | null;
+  conditions: { id: string; left?: number }[];
+  changes: { what: string; label: string; from: number; to: number | null; pending?: string[] }[];
+  gone: string[];
+  rolls: { amount: string; value: number; dice: { count: number; sides: number; rolls: number[] }[] }[];
+  /** The dice-log line the game would write. */
+  line: string;
+}
+
 /** Health tried on a pretend token (backend/systemBuilder/tryHealth.js). */
 export interface TriedHealth {
   model: string;
@@ -111,6 +126,12 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      * any, applied to a pretend token and sheet by the game's own rules, and the HEALTH folder's
      * views of the result for the owner (`full`) and for everyone else (`others`).
      */
+    /**
+     * One of a draft's rests on a made-up character (4f6a): previewed with dice waiting, or rolled
+     * when `roll` (TRY IT's CALL A REST). Changes nothing.
+     */
+    tryRest: (definition: Definition, state: { rest: string; sheet?: Record<string, unknown>; token?: { current: number; max: number; temp?: number } | null; conditions?: { id: string }[]; roll?: boolean }) =>
+      call<TriedRest>(fetcher, token, '/api/systems/try-rest', 'POST', { definition, ...state }),
     tryHealth: (definition: Definition, state: { token: { current: number; max: number; temp?: number }; sheet?: Record<string, unknown>; action?: Record<string, unknown> }) =>
       call<TriedHealth>(fetcher, token, '/api/systems/try-health', 'POST', { definition, ...state }),
     /** Make the stored draft what the game runs; refused, with `problems`, while it has any. */

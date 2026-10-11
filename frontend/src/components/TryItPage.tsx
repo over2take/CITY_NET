@@ -6,8 +6,9 @@ import { fieldsOn } from '../sheets/sheetDesigner';
 import { tierList, settableFields, triedText } from '../sheets/npcs';
 import {
   sampleCharacter, withTyped, withCharacterAsData, differsFromSample, withCharacterAsSample,
-  startingToken, asLocation, withMax, type Character, type PretendToken,
+  startingToken, asLocation, withMax, afterRest, type Character, type PretendToken,
 } from '../sheets/tryIt';
+import { restsOf } from '../sheets/rests';
 import { SheetRenderer } from './SheetRenderer';
 import { HeartMonitor } from './HitPoints';
 import { ModelHealthEditor, ModelHealthDescription, NoHealthNotice, monitorBandFor, type SendHealth } from './HealthModelPanels';
@@ -17,7 +18,8 @@ import type { HealthView } from '../hooks/useHealthView';
 // the draft as a player would meet it, unsaved changes included. A made-up character on the
 // draft's own sheet, its formulas worked out by the server from what is typed; its health on a
 // pretend token through the game's own rules, in the HEALTH folder's own panels; and an NPC made
-// from a tier at a level. Nothing is saved, except SAVE AS THE SAMPLE CHARACTER, which writes the
+// from a tier at a level; and CALL A REST (4f6c), one of the draft's rests on the character and its
+// token, rolled. Nothing is saved, except SAVE AS THE SAMPLE CHARACTER, which writes the
 // typed stats back to STATS & RULES. The logic is sheets/tryIt.ts.
 
 interface Props {
@@ -75,6 +77,8 @@ export function TryItPage({ definition, edit, api }: Props) {
   const [level, setLevel] = useState(3);
   const [npc, setNpc] = useState<TriedTier | null>(null);
   const [npcError, setNpcError] = useState<string | null>(null);
+  const [restPick, setRestPick] = useState('');
+  const [restError, setRestError] = useState<string | null>(null);
   const first = useRef(true);
 
   // The sheet as the server draws it, and the formulas from what is typed: at once the first time,
@@ -151,6 +155,24 @@ export function TryItPage({ definition, edit, api }: Props) {
   };
   const npcNumbers = settableFields(definition, sheet).filter((f) => f.type === 'number' && npc?.values[f.id]);
 
+  const rests = restsOf(definition);
+  const pickedRest = rests.some((r) => r.id === restPick) ? restPick : rests[0]?.id ?? '';
+  /** One of the draft's rests on the character and its token, rolled; the game's line into the log. */
+  const callRest = async () => {
+    if (!api || !pickedRest) return;
+    const r = await api.tryRest(definition, { rest: pickedRest, sheet: { ...character, ...healthSheet }, token, roll: true });
+    if (!r.ok) { setRestError(r.error); return; }
+    setRestError(null);
+    const after = afterRest(definition, character, healthSheet, r.value);
+    const nextToken = after.token ?? token;
+    setCharacter(after.character);
+    setHealthSheet(after.healthSheet);
+    setToken(nextToken);
+    setLog((l) => [...l, r.value.line].slice(-8));
+    const h = await api.tryHealth(definition, { token: nextToken, sheet: after.healthSheet });
+    if (h.ok) setHealth(h.value);
+  };
+
   return (
     <div data-testid="try-it-page" style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 1200 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', border: '1px solid var(--dark-green)' }}>
@@ -203,6 +225,20 @@ export function TryItPage({ definition, edit, api }: Props) {
                 {log.map((l, i) => <span key={i}>{l}</span>)}
               </div>
             )}
+          </section>
+
+          <section aria-label="A rest" style={box}>
+            <span style={small}>A REST</span>
+            {rests.length === 0 ? <p style={{ ...why, margin: 0 }}>No rest is on: turn one on in RESTS.</p> : (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <select aria-label="Rest" value={pickedRest} style={input} onChange={(e) => setRestPick(e.target.value)}>
+                  {rests.map((r) => <option key={r.id} value={r.id}>{r.name.toUpperCase()}</option>)}
+                </select>
+                <button type="button" className="utility-btn" style={{ ...btn, background: 'var(--green)', color: 'var(--black)' }} disabled={!api} onClick={callRest}>CALL A REST</button>
+              </div>
+            )}
+            {restError && <p role="alert" style={{ color: 'var(--danger)', fontSize: 11, margin: 0 }}>{restError}</p>}
+            <p style={{ ...why, margin: 0, fontSize: 11 }}>On this character and its token, through the game&apos;s own rules, dice rolled. The line the game would log goes in the log above.</p>
           </section>
 
           <section aria-label="An NPC to fight" style={box}>
