@@ -113,6 +113,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What a GM can give, for GIVE ITEM.** The server now knows everything the running game can
+  give: whatever its shops could sell (the CWN book on CWN, the GM's own uploads everywhere),
+  leaving out any catalogue the game has turned off, and places a gift where buying it would,
+  so many at once, all or none.
 - **The CWN book on the server, for GIVE ITEM.** The server can now place any item from the CWN
   book, or a GM's own item on one of its shelves, exactly where the shop would: a weapon Stowed in
   a free row, a vehicle with its stats and immunity note, cyberware unplaced, everything else in
