@@ -6,6 +6,7 @@ const multer = require('multer');
 const { authenticate, optionalAuthenticate, requireMainAdmin } = require('../middleware/auth');
 const { LIMITS, rejectFormat, uploadErrors } = require('../middleware/uploadConstraints');
 const store = require('../systemBuilder/store');
+const { previewPublish } = require('../systemBuilder/publishPreview');
 const runtime = require('../systemBuilder/runtime');
 const { checkDefinition } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
@@ -104,6 +105,23 @@ module.exports = (db, io = null) => {
   });
 
   router.get('/:id', gm, (req, res) => store.getSystem(db, req.params.id, (err, sys) => answer(res, err, sys)));
+
+  /**
+   * What PUBLISH would change (4h1b; approved mockup docs/mockups/version-preview.html): the draft
+   * against the published version, for every character playing it, or on the SAMPLE values when
+   * nobody does (systemBuilder/publishPreview.js). Writes nothing. `problems` is how many the draft
+   * still has, which PUBLISH refuses.
+   */
+  router.get('/:id/publish-preview', gm, (req, res) => {
+    store.getSystem(db, req.params.id, (err, sys) => {
+      if (err) return answer(res, err);
+      db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, [], (e2, row) => {
+        if (e2) return answer(res, e2);
+        previewPublish(db, { system: sys.id, version: sys.version, before: sys.published, after: sys.draft, running: !!row && row.value === sys.id })
+          .then((preview) => answer(res, null, { ...preview, problems: sys.problems.length }), (e3) => answer(res, e3));
+      });
+    });
+  });
 
   router.put('/:id/draft', gm, (req, res) => {
     const { definition } = req.body || {};
