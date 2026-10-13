@@ -536,6 +536,20 @@ db.serialize(() => {
   // A system made before files existed is its own origin.
   db.run(`UPDATE custom_systems SET origin = id WHERE origin IS NULL`, () => {});
 
+  // GIVE ITEM's GIVEN list (sheets/givenList.js): the last 50 gifts in each game, for the GM's
+  // window. `recipients` is the names given it, as JSON. Starts empty; nothing else reads it.
+  db.run(`CREATE TABLE IF NOT EXISTS given_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    system TEXT NOT NULL,
+    given_by TEXT NOT NULL,
+    catalogue TEXT NOT NULL,
+    item TEXT NOT NULL,
+    qty INTEGER NOT NULL DEFAULT 1,
+    recipients TEXT NOT NULL DEFAULT '[]',
+    note TEXT NOT NULL DEFAULT '',
+    given_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // Migration: CP:R's name field was stored as 'handle'; it is now 'name'
   // (uniform across systems — the sheet is the source of truth for player
   // identity, see backend/sheets/identity.js). Copy handle → name once.
