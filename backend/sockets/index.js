@@ -39,6 +39,8 @@ const shopCheckout = require('../shops/checkout');
 const shopSell = require('../shops/sell');
 const shopBuyback = require('../shops/buyback');
 const { shopsOpen } = require('../shops/availability');
+const giving = require('../sheets/giving');
+const { givable } = require('../shops/give');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -2311,6 +2313,42 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('requestCatalogues', () => {
       if (!userSockets.get(socket.id)) return;
       sendCatalogues();
+    });
+
+    /**
+     * GIVE ITEM (4g2b; approved mockup docs/mockups/give-item.html): what the running game can
+     * give, to the GM and granted editors only. Through getShopSystem, as a purchase reads it, so
+     * the uploads held are this game's.
+     */
+    socket.on('requestGivable', () => {
+      if (!isAdminSocket(socket)) return;
+      getShopSystem((err, system) => {
+        if (err) return socket.emit('givableItems', { ok: false, reason: 'no_system' });
+        socket.emit('givableItems', { ok: true, system, catalogues: givable(system) });
+      });
+    });
+
+    /**
+     * Give an item, or preview where it would land: { catalogue, id, qty, players: [names],
+     * npcs: [token ids], note, preview } (sheets/giving.js). The answer goes to the giver; each
+     * player given it is told privately, on every screen they're signed in on.
+     */
+    socket.on('giveItem', (data) => {
+      if (!isAdminSocket(socket)) return;
+      const request = data && typeof data === 'object' ? data : {};
+      const refuse = (reason) => socket.emit('itemGiven', { ok: false, reason });
+      const problem = giving.requestProblem(request);
+      if (problem) return refuse(problem);
+      getShopSystem((err, system) => {
+        if (err) return refuse('no_system');
+        const notify = (username, notice) => emitToUser(username, 'itemReceived', notice);
+        giving.giveItem(db, io, { ...request, preview: request.preview === true, system }, notify)
+          .then((result) => (result ? socket.emit('itemGiven', { ok: true, ...result }) : refuse('Not something this game can give.')))
+          .catch((e) => {
+            console.error('[giveItem]', e.message);
+            refuse('write');
+          });
+      });
     });
 
     socket.on('adminPayPlayers', (data) => {
