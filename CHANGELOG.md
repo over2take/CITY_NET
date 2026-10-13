@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **The server keeps the mods fitted to each implant.** Its reading of a cyberware row had
+  drifted from the sheet's and dropped the list of fitted mods (a Tailored Interface, say), so
+  anything the server read and wrote back would have lost them. It now reads rows exactly as the
+  sheet does, held together by a test.
 - **The proxy check in CI downloads nginx from Google's Docker Hub mirror.** Docker Hub refuses
   downloads without a login once GitHub's shared machines have used up its limit, which failed
   three runs in a row. It's the same official image, so the check is unchanged.

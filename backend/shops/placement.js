@@ -19,7 +19,6 @@
 
 const sheetSlots = require('./sheetSlots');
 const cyberware = require('../sheets/cyberware');
-const { fittedIds } = require('../sheets/cwnCyberMods');
 
 const INVENTORY_FIELD = 'inventory';
 
@@ -96,17 +95,6 @@ const shapeOf = (system, catalogue) => {
   return 'inventory';
 };
 
-/**
- * A sheet's cyberware rows as the shop reads them (frontend cyberwareRows.ts readRows): each with the
- * mods fitted to it. The server's own normaliseRow predates that list and would drop it, stripping
- * mods off chrome the character already has.
- */
-const cyberRows = (data) => {
-  const value = data && data[cyberware.FIELD];
-  if (!Array.isArray(value)) return [];
-  return value.filter((r) => r && typeof r === 'object').map((r) => ({ ...cyberware.normaliseRow(r), cyberMods: fittedIds(r) }));
-};
-
 /** The first row of a group with no name in it, or null when every one is taken. */
 const firstFreeSlot = (data, group, rows) => {
   for (let i = 1; i <= rows; i += 1) {
@@ -153,8 +141,8 @@ const placeUploaded = (system, catalogue, entry, data) => {
       equipped: true,
       placed: false,
     });
-    // Nothing fitted to a new piece yet.
-    return { ok: true, patch: { [cyberware.FIELD]: [...cyberRows(sheet), { ...row, cyberMods: [] }] } };
+    // Existing chrome keeps the mods fitted to it; a new piece has none yet.
+    return { ok: true, patch: { [cyberware.FIELD]: [...cyberware.rows(sheet), row] } };
   }
 
   return { ok: true, patch: addToInventory(sheet, entry.name, fields.enc ?? '') };
@@ -180,6 +168,6 @@ const placeTimes = (place, data, qty) => {
 
 module.exports = {
   INVENTORY_FIELD, CYBERWARE_TABLE, GROUP_OF,
-  normaliseItem, readInventory, writeInventory, blankItem, addToInventory, cyberRows,
+  normaliseItem, readInventory, writeInventory, blankItem, addToInventory,
   shapeOf, firstFreeSlot, placeUploaded, placeTimes,
 };

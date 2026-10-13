@@ -98,13 +98,13 @@ describe('rows', () => {
     // what it says, and the importers set it explicitly — see the placement tests.
     const data = { cyberware: [{ name: 'Kerenzikov', type: 'neural', hl: 7, cost: 500, conc: '', data: '+2 init' }] };
     expect(cyberware.rows(data)).toEqual([
-      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, conc: '', data: '+2 init', equipped: true, placed: true, mods: [] },
+      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, conc: '', cyberMods: [], data: '+2 init', equipped: true, placed: true, mods: [] },
     ]);
   });
 
   it('fills in every field, so nothing downstream has to check', () => {
     expect(cyberware.rows({ cyberware: [{ name: 'Bare' }] })).toEqual([
-      { name: 'Bare', type: '', side: null, hl: 0, cost: null, conc: '', data: '', equipped: true, placed: false, mods: [] },
+      { name: 'Bare', type: '', side: null, hl: 0, cost: null, conc: '', cyberMods: [], data: '', equipped: true, placed: false, mods: [] },
     ]);
   });
 
@@ -160,7 +160,7 @@ describe('fromNotes', () => {
 
   it('leaves everything unfiled and unpriced, because the line said nothing else', () => {
     const out = cyberware.fromNotes('Neural Link');
-    expect(out[0]).toEqual({ name: 'Neural Link', type: '', side: null, hl: 0, cost: null, conc: '', data: '', equipped: true, placed: false, mods: [] });
+    expect(out[0]).toEqual({ name: 'Neural Link', type: '', side: null, hl: 0, cost: null, conc: '', cyberMods: [], data: '', equipped: true, placed: false, mods: [] });
   });
 
   it('ignores empty gaps rather than making blank rows', () => {
@@ -177,7 +177,7 @@ describe('fromFormFields', () => {
       cyber1_cost: '500', cyber1_data: '+2 init',
     });
     expect(out).toEqual([
-      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, conc: '', data: '+2 init', equipped: true, placed: false, mods: [] },
+      { name: 'Kerenzikov', type: 'neural', side: null, hl: 7, cost: 500, conc: '', cyberMods: [], data: '+2 init', equipped: true, placed: false, mods: [] },
     ]);
   });
 
