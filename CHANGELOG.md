@@ -107,6 +107,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Placing items on the server, for GIVE ITEM.** The server can now put an item from an uploaded
+  catalogue onto any sheet exactly where buying it would: a free weapon or vehicle row, the
+  cyberware table, or an inventory line. It's held to the shop's own placement by a test. The CWN
+  book's shelves follow next, then the GIVE ITEM window.
 - **Rests in TRY IT, and on the sample.** TRY IT can CALL A REST on its made-up character, dice
   rolled, with the line the game would log. The RESTS page shows what each rest does to the sample
   character, hurt to half health, as you edit it. Rests are complete.

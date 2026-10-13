@@ -398,6 +398,7 @@ CITY_NET/
 │   │   ├── purchase.js         # What a purchase does to an account, pure. Short of funds with the overdraft house rule on, it refuses with needs_choice rather than picking between debt and a negative balance for the player
 │   │   ├── buyback.js          # What a shop pays for something sold back: this storefront's rate, then the global, then 45%. A shop set to 0 is set, not blank
 │   │   ├── owned.js            # What a character owns, derived from the four places a sheet keeps things. Never cached - a manifest would go stale on every path that removes an item. How many weapon and vehicle rows to read comes from sheetSlots, per system
+│   │   ├── placement.js        # Where an item lands on a sheet, on the server, for GIVE ITEM (the user wanted a gift on the sheet the moment it is given): an uploaded catalogue's entry into the first free numbered row, the cyberware table (fitted mods on existing chrome kept) or an inventory line stacked onto a carried one; the inventory read and written as the sheet does; several at once, all or none. Mirrors the shop's own placement (frontend shopPlacement.ts, inventory.ts), held to it by serverPlacement.test.ts
 │   │   ├── sell.js             # Prices a sell basket and builds the sheet patch. A row is emptied of exactly the fields that system's template draws for it (sheetSlots), so a vehicle takes its mounts and fittings with it and a Cyberpunk RED gun its ROF. Refuses without a known system rather than guessing CWN; a basket that fails part way empties nothing
 │   │   ├── checkout.js         # A shop cart, settled as one: prices from the server, the sale through sell.js, the account moved once by the difference, and nothing moved unless every line is good. Refuses a total that changed since the player was shown it
 │   │   ├── sheetSlots.js       # Where each system keeps weapons and vehicles: row counts and every field a row owns, nested mounts included. The server's templates carry no field ids, so this is a copy of what the frontend reads out of its templates, compared entry for entry by a test
@@ -517,6 +518,7 @@ CITY_NET/
 │       ├── shop_purchase.test.js       # What a purchase does to an account, as plain arithmetic: funds, debt, the overdraft question
 │       ├── shop_buyback.test.js        # What a shop pays back: the storefront's rate, the global one, then 45%, and a shop set to 0 staying 0
 │       ├── shop_owned.test.js          # What a character owns, read off the sheet: the same gun twice, a renamed vehicle, an item no catalogue carries, missing fields
+│       ├── shops_placement.test.js     # Where a gift lands, the parts only the server has: several at once (a row each, stacked lines, all or none with how many would have fit), a custom system taking everything as inventory, stacking by the caller's own rule never onto the stash, and mods fitted to existing chrome kept
 │       ├── shop_sell.test.js           # Selling a basket: a payout the client cannot talk up, the item really leaving the sheet, and nothing emptied when a basket fails part way
 │       ├── shop_buy_sockets.test.js    # Buying through the socket as a cart of one, the old buy handler's cases moved across whole
 │       ├── shop_sell_sockets.test.js   # Selling through the socket as a cart with nothing to buy, the old sell handler's cases moved across whole
@@ -999,6 +1001,7 @@ CITY_NET/
 │   │   │       ├── csvToSale.test.ts            # A CSV all the way through: written, parsed by the server, placed on a sheet and sold back, every field arriving
 │   │   │       ├── shopPrices.test.ts           # Every price a shelf shows equal to what the server would charge
 │   │   │       ├── shopPlacement.test.ts        # Buying onto any system's sheet and the server selling it back off, the sheet left as it was before
+│   │   │       ├── serverPlacement.test.ts      # The server's placement (backend/shops/placement.js) held to the shop's own for every built-in game, catalogue and a spread of sheets (rows full and blank-named, stacks and stashes, junk, chrome with mods fitted), the catalogue shapes and cyberware tables, and the inventory's reading
 │   │   │       ├── ownedItems.test.ts           # What a character owns, worked out by both sides on the same sheets and compared
 │   │   │       ├── sheetSlots.test.ts           # Where each system keeps weapons and vehicles, the template's shape and the server's copy compared entry for entry
 │   │   │       ├── inventory.test.ts            # Inventory rows on all four systems, sharing Readied, Stowed and Stash with weapons
