@@ -113,6 +113,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The version preview, in words.** What publishing would change, written the way the builder will
+  show it: by change or by character, each line saying what it means and whether anything is kept.
 - **What PUBLISH would change, for each character.** The builder can now ask the server, before
   publishing, what the draft changes for every character playing the system: their own numbers
   (with token health and cash as the sheet shows them), anything they hold that stops showing, money
