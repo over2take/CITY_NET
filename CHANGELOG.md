@@ -113,6 +113,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What PUBLISH would change, for each character.** The builder can now ask the server, before
+  publishing, what the draft changes for every character playing the system: their own numbers
+  (with token health and cash as the sheet shows them), anything they hold that stops showing, money
+  in a currency being removed, and conditions left on their token. Nothing is written by asking.
 - **What a new version changes, worked out.** Before publishing a custom system again, the server
   can say what the new version changes: fields gone or renamed, formulas, stat ranges, the health
   model, money, features and conditions, and for each character the values that stop showing (kept,
