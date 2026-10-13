@@ -132,6 +132,16 @@ describe('a preview', () => {
     ]);
   });
 
+  it('can be asked about every player character in the game at once', async () => {
+    const reply = await give({ catalogue: 'weapons', id: 'heavy_pistol', players: true, npcs: [ids.ganger], preview: true });
+    expect(reply.recipients.map((r) => [r.name, r.given, r.lands ? r.lands.rows : r.reason])).toEqual([
+      ['Juno', false, expect.stringMatching(/^No free weapon row/)], ['Rook', false, [1]], ['Vex', false, [2]], ['GANGER', false, [1]],
+    ]);
+    expect(await dataOf(ids.vex)).toEqual({ name: 'Vex', weapon1_name: 'Knife', notes: 'keep me' });
+    // With no NPCs on the map, only the players.
+    expect((await give({ catalogue: 'gear', id: 'lucky_coin', players: true, preview: true })).recipients.map((r) => r.name)).toEqual(['Juno', 'Rook', 'Vex']);
+  });
+
   it('writes nothing and tells nobody', async () => {
     await connect('vex');
     await give({ ...pistols, npcs: [ids.ganger], preview: true });
@@ -312,13 +322,13 @@ describe('refused', () => {
       undefined, { ...ok, id: '' }, { ...ok, catalogue: 7 },
       { ...ok, qty: 0 }, { ...ok, qty: 100 }, { ...ok, qty: 1.5 }, { ...ok, qty: '2' },
       { ...ok, players: 'vex' }, { ...ok, players: [3] }, { ...ok, npcs: [0] }, { ...ok, npcs: ['1'] },
-      { ...ok, players: [] }, { catalogue: 'gear', id: 'lucky_coin' },
+      { ...ok, players: [] }, { catalogue: 'gear', id: 'lucky_coin' }, { ...ok, players: true }, { ...ok, players: true, preview: 'yes' },
       { ...ok, note: 'x'.repeat(201) }, { ...ok, note: 5 }, { ...ok, note: ['x'] },
     ])).toEqual([
       'catalogue and id: the item to give', 'catalogue and id: the item to give', 'catalogue and id: the item to give',
       'qty: a whole number from 1 to 99', 'qty: a whole number from 1 to 99', 'qty: a whole number from 1 to 99', 'qty: a whole number from 1 to 99',
       'players: a list of up to 100 player names', 'players: a list of up to 100 player names', 'npcs: a list of up to 100 token ids', 'npcs: a list of up to 100 token ids',
-      'Pick someone to give it to', 'Pick someone to give it to',
+      'Pick someone to give it to', 'Pick someone to give it to', 'players: name who gets it', 'players: name who gets it',
       'note: at most 200 characters', 'note: at most 200 characters', 'note: at most 200 characters',
     ]);
     expect(await dataOf(ids.vex)).toEqual({ name: 'Vex', weapon1_name: 'Knife', notes: 'keep me' });

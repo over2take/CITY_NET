@@ -113,6 +113,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **GIVE ITEM's window, as logic.** Searching what the game can give, what each item is worth, where
+  a gift would land on each sheet or why not, and the GIVEN list's lines, ready for the window. A
+  preview can now ask about every player character at once.
 - **GIVE ITEM can be switched off.** A custom system's FEATURES page has a GIVE ITEM switch, on
   to start and separate from SHOPS, so a game with no shops can still hand out loot. Off, the
   server offers nothing to give and refuses any GIVE.

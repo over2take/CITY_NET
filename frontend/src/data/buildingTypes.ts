@@ -218,3 +218,18 @@ export const SHOP_SYSTEMS = new Set(Object.keys(TEMPLATES));
 export const shopsAvailable = (gameSystem: string | null | undefined): boolean =>
   (SHOP_SYSTEMS.has(String(gameSystem ?? '')) || isCustomSystem(gameSystem))
   && partOn(gameSystem, 'shops') && partOn(gameSystem, 'bank');
+
+/**
+ * Whether the GM can GIVE ITEM in this system (4g4): one the shops know, which hasn't switched
+ * GIVE ITEM off. Shops and the bank needn't be on; a gift is free. Mirrors the server's own check
+ * (backend/shops/give.js knowsSheet, and the give_items part in sockets/index.js).
+ */
+export const giveAvailable = (gameSystem: string | null | undefined): boolean =>
+  (SHOP_SYSTEMS.has(String(gameSystem ?? '')) || isCustomSystem(gameSystem)) && partOn(gameSystem, 'give_items');
+
+/**
+ * Whether the GM can upload catalogues: where there are shops to sell from them, or GIVE ITEM to
+ * hand them out (decided with the user, 2026-10-13, so a game with no shops can still give loot).
+ */
+export const cataloguesAvailable = (gameSystem: string | null | undefined): boolean =>
+  shopsAvailable(gameSystem) || giveAvailable(gameSystem);
