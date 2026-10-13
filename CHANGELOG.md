@@ -113,6 +113,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **What a new version changes, worked out.** Before publishing a custom system again, the server
+  can say what the new version changes: fields gone or renamed, formulas, stat ranges, the health
+  model, money, features and conditions, and for each character the values that stop showing (kept,
+  never deleted) and the numbers that change. The PUBLISH screen that shows it comes next.
 - **GIVE ITEM from a token, and the player's notice.** A GIVE_ITEM button on a character's or NPC's
   token opens GIVE.EXE with them already ticked. The player given something sees "THE GM GAVE YOU
   HEAVY PISTOL x2" with the GM's note, on their own screen only, until they close it.
