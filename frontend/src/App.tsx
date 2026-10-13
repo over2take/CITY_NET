@@ -39,7 +39,7 @@ import { TERMINAL_PREVIEW, type TerminalAction } from './components/TerminalWind
 import { BuildingPreview } from './components/BuildingPreview';
 import { ShopWindow } from './components/ShopWindow';
 import { CatalogueWindow } from './components/CatalogueWindow';
-import { shopsAvailable, isShopIn } from './data/buildingTypes';
+import { shopsAvailable, isShopIn, giveAvailable } from './data/buildingTypes';
 import { HitPointsPanel, HealthReviewPanel } from './components/HitPoints';
 import { SecureLogin } from './components/SecureLogin';
 import { MeasurementTool, MeasurementVisualizer } from './components/MeasurementTool';
@@ -48,6 +48,7 @@ import { AdminBankWindow, AdminPayWindow, BankWindow, formatBankValue } from './
 import type { BankCurrencyAccount } from './sheets/currencies';
 import { AdminXpWindow } from './components/XpWindow';
 import { GiveItemWindow } from './components/GiveItemWindow';
+import { GiftNotices } from './components/GiftNotices';
 import { npcsOnMap } from './sheets/restCalls';
 import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, CharacterControlsMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
@@ -366,6 +367,8 @@ function App() {
   const [isAdminXpOpen, setIsAdminXpOpen] = useState(false);
   // GIVE.EXE (4g4b): the GM handing out items, free.
   const [isGiveOpen, setIsGiveOpen] = useState(false);
+  // Who GIVE.EXE ticks on opening: the character whose token's GIVE_ITEM opened it (4g4c).
+  const [giveFor, setGiveFor] = useState<string[]>([]);
   const [givePos, setGivePos] = useState(() => ({ x: window.innerWidth / 2 - 380, y: window.innerHeight / 2 - 260 }));
   const [adminXpPos, setAdminXpPos] = useState(() => ({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 150 }));
   // Where a GM adds to what the shops sell. Opened from the GAME tab, under the buy-back rate.
@@ -1897,7 +1900,7 @@ function App() {
                 isAdmin={isAdmin}
                 setIsAdminPayOpen={setIsAdminPayOpen}
                 setIsAdminXpOpen={setIsAdminXpOpen}
-                setIsGiveOpen={setIsGiveOpen}
+                setIsGiveOpen={(open: boolean) => { setGiveFor([]); setIsGiveOpen(open); }}
                 setIsCatalogueOpen={setIsCatalogueOpen}
                 isPrimaryAdmin={isPrimaryAdmin}
                 setShowBattleMapManager={setShowBattleMapManager}
@@ -2094,6 +2097,7 @@ function App() {
                   system={gameSystem}
                   npcs={npcsOnMap(locations || [], view, activeBattleMapData)}
                   online={(activeUsers || []).filter((u: { isNPC?: boolean }) => !u.isNPC).map((u: { userName?: string }) => u.userName ?? '').filter(Boolean)}
+                  preselect={giveFor}
               />
             )}
             {isAdminXpOpen && (
@@ -2118,6 +2122,8 @@ function App() {
                   activeUsers={activeUsers}
               />
             )}
+            {/* A gift from the GM (4g4c): only the player given it is sent one. */}
+            <GiftNotices socket={socketRef.current} system={gameSystem} />
             <BankWindow
                 pos={bankPos}
                 setPos={setBankPos}
@@ -2539,6 +2545,7 @@ function App() {
                   isPlayerToken: isPlayerRhombus, hasOwner: !!selectedLocation.owner,
                   sheetHere, linked, attackPending: !!attackPending, sheetCombat: hasSheetCombat(gameSystem),
                   canManage, hasRoster: vehicleRoster.hasVehicles, systemHasVehicles: hasVehicles(gameSystem), systemHasBank: bankOn, systemHasCombat: combatOn,
+                  systemHasGive: giveAvailable(gameSystem),
                   hasBattleMaps: currentLocBattleMaps.length > 0,
                   controls: !isAdmin && controlsToken(selectedLocation, userName),
                 };
@@ -2562,6 +2569,7 @@ function App() {
                     editLocation: (loc) => { setIsEditModalOpen(true); setActiveEditLocation(loc); setEditData({ ...loc, name: loc.name || '', description: loc.description || '', npcs: loc.npcs || '', owner: loc.owner || '', baseWidth: loc.width, baseHeight: loc.height, baseDepth: loc.depth, isFavorite: !!loc.isFavorite, isDanger: !!loc.isDanger }); },
                     vehicles: () => setIsVehiclesOpen(true),
                     bank: (owner) => setAdminBankPlayer(owner),
+                    give: (recipient) => { setGiveFor([recipient]); setIsGiveOpen(true); },
                     enemyVehicles: () => setIsEnemyVehiclesOpen(true),
                     battleMap: (id) => enterBattleMap(id),
                   },

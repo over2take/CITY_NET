@@ -51,6 +51,12 @@ export function GiveItemWindow({ pos, setPos, onClose, socket, system, npcs, onl
   const [qty, setQty] = useState(1);
   const [people, setPeople] = useState<Recipient[]>([]);
   const [ticked, setTicked] = useState<Set<string>>(() => new Set(preselect));
+  // Opened again from another token's GIVE_ITEM while already open: that character is ticked too.
+  const preselectKey = preselect.join('|');
+  useEffect(() => {
+    setTicked((prev) => new Set([...prev, ...preselect]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectKey]);
   const [note, setNote] = useState('');
   const [results, setResults] = useState<{ recipients: Recipient[]; qty: number } | null>(null);
   const [given, setGiven] = useState<GivenLine[]>([]);

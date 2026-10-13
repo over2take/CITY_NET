@@ -123,8 +123,8 @@ export const givenAt = (at: string, now: Date = new Date()): string => {
 export const givenText = (l: GivenLine, now?: Date): string =>
   `${givenAt(l.at, now)} · ${l.by} gave ${l.to.join(', ')}: ${l.item} ×${l.qty}`;
 
-/** What a player is told: "THE GM GAVE YOU HEAVY PISTOL ×2". */
-export const noticeText = (n: ReceivedNotice): string => `THE GM GAVE YOU ${n.item.toUpperCase()} ×${n.qty}`;
+/** What a player is told: "THE GM GAVE YOU HEAVY PISTOL ×2", in the game's own word for the GM. */
+export const noticeText = (n: ReceivedNotice, gm = 'GM'): string => `THE ${gm.toUpperCase()} GAVE YOU ${n.item.toUpperCase()} ×${n.qty}`;
 
 /** A recipient's key, for ticking: a player by name, an NPC by token. */
 export const recipientKey = (r: Pick<Recipient, 'kind' | 'username' | 'location_id'>) =>
