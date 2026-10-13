@@ -113,6 +113,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **PUBLISH shows what changes first.** From a system's second version on, PUBLISH in the builder
+  stops to show what the new version changes, by change or by character: fields that go (their
+  values kept), numbers old to new for each character or on the sample values, money, features and
+  conditions. BACK TO EDITING, or PUBLISH. A first version still publishes at once.
 - **The version preview, in words.** What publishing would change, written the way the builder will
   show it: by change or by character, each line saying what it means and whether anything is kept.
 - **What PUBLISH would change, for each character.** The builder can now ask the server, before

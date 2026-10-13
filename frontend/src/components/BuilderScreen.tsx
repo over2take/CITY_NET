@@ -17,6 +17,8 @@ import { ConditionsPage } from './ConditionsPage';
 import { RestsPage } from './RestsPage';
 import { CONDITION_ICONS } from '../sheets/conditionIcons';
 import { TryItPage } from './TryItPage';
+import { PublishPreviewPage } from './PublishPreviewPage';
+import type { PublishPreview } from '../sheets/versionPreview';
 
 // The system builder (4a2b): it takes over the whole window, with no map. A sidebar down the left
 // holds the system's name, its pages, SAVE and PUBLISH, and EXIT TO MAP; the open page fills the
@@ -74,7 +76,12 @@ function Locked({ on, children }: { on: boolean; children: React.ReactNode }) {
  * which retired the SYSTEMS.EXE window).
  */
 const MY_SYSTEMS = { id: 'systems' as const, label: 'MY SYSTEMS', what: 'Every system you have made or installed. Pick one to work on it.' };
-type Page = BuilderPage | 'systems';
+/**
+ * What PUBLISH shows first, from v2 on (4h4; approved mockup docs/mockups/version-preview.html): what the
+ * new version changes, in place of the open page, with BACK TO EDITING and PUBLISH vN.
+ */
+const PUBLISH_PAGE = { id: 'publish' as const, label: 'PUBLISH', what: 'What the new version changes, before it goes live.' };
+type Page = BuilderPage | 'systems' | 'publish';
 
 /** Above the map and its panels, below the windows (DraggableWindow starts at 2000). */
 const Z = 1900;
@@ -181,6 +188,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   const autosave = useRef<Autosave<Definition> | null>(null);
   /** The draft as the pages edit it; the server's copy catches up as autosave saves it. */
   const [definition, setDefinition] = useState<Definition | null>(null);
+  /** What PUBLISH would change, while its page is open, and the page to go back to. */
+  const [preview, setPreview] = useState<{ value: Extract<PublishPreview, { first: false }>; back: Page } | null>(null);
 
   const load = useCallback(async () => {
     if (!systemId) return null;
@@ -266,6 +275,10 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     setStatus(null);
   };
 
+  /**
+   * PUBLISH: save, then, from v2 on, show what the new version changes first (characters or not);
+   * a first version, with nothing before it to compare with, goes straight through.
+   */
   const publish = async () => {
     if (!autosave.current || busy) return;
     setBusy(true);
@@ -273,19 +286,34 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     if (!saved) { setBusy(false); return; }
     const blocked = publishBlocked(autosave.current.problems);
     if (blocked) { setBusy(false); setPage('problems'); setStatus({ text: blocked, bad: true }); return; }
+    const asked = await api.publishPreview(systemId!);
+    if (!asked.ok) { setBusy(false); setStatus({ text: asked.error, bad: true }); return; }
+    if (asked.value.first) { await publishNow(page); return; }
+    setPreview({ value: asked.value, back: page === 'publish' && preview ? preview.back : page });
+    setPage('publish');
+    setStatus(null);
+    setBusy(false);
+  };
+
+  /** Make the draft what the game runs, then go back to ack. */
+  const publishNow = async (back: Page) => {
+    setBusy(true);
     const r = await api.publish(systemId!);
     setBusy(false);
     if (!r.ok) {
-      if (r.problems) setPage('problems');
+      setPage(r.problems ? 'problems' : back);
+      setPreview(null);
       setStatus({ text: r.error, bad: true });
       return;
     }
+    setPreview(null);
+    setPage(back);
     setStatus({ text: publishedMessage(r.value.version, running === systemId) });
     await load();
     window.dispatchEvent(new Event(SYSTEMS_CHANGED_EVENT));
   };
 
-  const current = page === 'systems' ? MY_SYSTEMS : BUILDER_PAGES.find((p) => p.id === page)!;
+  const current = page === 'systems' ? MY_SYSTEMS : page === 'publish' ? PUBLISH_PAGE : BUILDER_PAGES.find((p) => p.id === page)!;
   const saveLine = state ? saveStatus(state) : null;
   /** Whether the pages have something to show: an open system's draft, or an example. */
   const ready = !!definition && (looking || !!system);
@@ -336,7 +364,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
         </div>
         <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--dark-green)' }}>
           <RailButton icon={Icons.save} label="SAVE" disabled={!autosave.current || busy} onClick={save} />
-          <RailButton icon={Icons.publish} label="PUBLISH" disabled={!autosave.current || busy} onClick={publish}
+          <RailButton icon={Icons.publish} label="PUBLISH" active={page === 'publish'} disabled={!autosave.current || busy} onClick={publish}
             title={publishBlocked(problems) ?? 'Make this the version the game runs'} />
         </div>
       </nav>
@@ -404,6 +432,10 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
               </div>
               {copy.error && <span role="alert" style={{ color: 'var(--danger)', fontSize: 12 }}>{copy.error}</span>}
             </div>
+          )}
+          {page === 'publish' && preview && (
+            <PublishPreviewPage preview={preview.value} system={name} busy={busy}
+              onBack={() => { setPage(preview.back); setPreview(null); }} onPublish={() => publishNow(preview.back)} />
           )}
           <Locked key={page} on={looking && page !== 'try'}>
             {ready && page === 'problems' && (problems.length === 0

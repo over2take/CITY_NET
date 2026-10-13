@@ -42,6 +42,8 @@ const LIBRARY = [row(HEARTH, 'Hearth', { version: 3 }), row(EMBER, 'Ember', { in
 let served: SystemCopies;
 let calls: { url: string; method: string }[];
 let publishAnswer: { status: number; body: unknown };
+/** What PUBLISH would change (4h4): a first version, unless a test says otherwise. */
+let previewAnswer: { status: number; body: unknown };
 let draftAnswer: { status: number; body: unknown };
 let drafts: unknown[];
 let posts: unknown[];
@@ -83,6 +85,7 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     const { definition } = JSON.parse(String(init!.body));
     return json(200, { sheet: effectiveSheet(definition), starter: starterSheet(definition) });
   }
+  if (url === `/api/systems/${HEARTH}/publish-preview`) return json(previewAnswer.status, previewAnswer.body);
   if (url === `/api/systems/${HEARTH}/publish`) {
     if (publishAnswer.status === 200) served = { ...served, version: served.version + 1 };
     return json(publishAnswer.status, publishAnswer.body);
@@ -97,6 +100,7 @@ beforeEach(() => {
     draft: { format: 1, name: 'Hearth' }, published: { format: 1, name: 'Hearth' }, problems: [],
   };
   publishAnswer = { status: 200, body: { version: 4 } };
+  previewAnswer = { status: 200, body: { first: true, problems: 0 } };
   draftAnswer = { status: 200, body: { problems: [] } };
   drafts = [];
   posts = [];
@@ -684,5 +688,100 @@ describe('the GAME tab', () => {
     await waitFor(() => expect(pickerFetches).toBe(1));
     window.dispatchEvent(new Event(SYSTEMS_CHANGED_EVENT));
     await waitFor(() => expect(pickerFetches).toBe(2));
+  });
+});
+
+describe('PUBLISH from v2 on (4h4)', () => {
+  const PREVIEW = {
+    first: false, from: 3, to: 4, problems: 0, sample: [],
+    changes: [{ kind: 'sheet', change: 'removed', id: 'reputation', label: 'Reputation' }],
+    characters: [{ kind: 'player', username: 'vex', name: 'Vex', changes: [{ kind: 'sheet', change: 'removed', id: 'reputation', label: 'Reputation', value: 3 }] }],
+  };
+  const heading = () => screen.getByRole('heading', { level: 1 }).textContent;
+  /** What was published: other pages post previews of their own. */
+  const posts = () => calls.filter((c) => c.method === 'POST' && c.url.endsWith('/publish')).map((c) => c.url);
+
+  it('shows what the new version changes first, in place of the open page, and publishes on PUBLISH vN', async () => {
+    previewAnswer = { status: 200, body: PREVIEW };
+    const told = vi.fn();
+    window.addEventListener(SYSTEMS_CHANGED_EVENT, told);
+    open({ startPage: 'words', running: HEARTH });
+    await ready();
+    await userEvent.click(within(sidebar()).getByLabelText('PUBLISH'));
+    expect(await screen.findByTestId('publish-preview')).toBeTruthy();
+    expect(heading()).toBe('PUBLISH');
+    expect(within(sidebar()).getByLabelText('PUBLISH').getAttribute('aria-current')).toBe('page');
+    expect(screen.getByText(/^PUBLISH v4 · WHAT CHANGES FROM v3/)).toBeTruthy();
+    expect(screen.getByTestId('who').textContent).toBe('VEX has 3, kept');
+    expect(posts()).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'PUBLISH v4' }));
+    expect(await screen.findByText('Published v4. The game runs it from now on.')).toBeTruthy();
+    expect(posts()).toEqual([`/api/systems/${HEARTH}/publish`]);
+    expect(heading()).toBe('WORDS');
+    expect(screen.queryByTestId('publish-preview')).toBeNull();
+    await waitFor(() => expect(within(screen.getByTestId('builder-system')).getByText('PUBLISHED v4')).toBeTruthy());
+    expect(told).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SYSTEMS_CHANGED_EVENT, told);
+  });
+
+  it('goes back to editing without publishing', async () => {
+    previewAnswer = { status: 200, body: PREVIEW };
+    open({ startPage: 'rests' });
+    await ready();
+    await userEvent.click(within(sidebar()).getByLabelText('PUBLISH'));
+    await screen.findByTestId('publish-preview');
+    await userEvent.click(screen.getByRole('button', { name: 'BACK TO EDITING' }));
+    expect(heading()).toBe('RESTS');
+    expect(screen.queryByTestId('publish-preview')).toBeNull();
+    expect(posts()).toEqual([]);
+  });
+
+  it('asks again on PUBLISH from the preview, still going back where it came from', async () => {
+    previewAnswer = { status: 200, body: PREVIEW };
+    open({ startPage: 'npcs' });
+    await ready();
+    await userEvent.click(within(sidebar()).getByLabelText('PUBLISH'));
+    await screen.findByTestId('publish-preview');
+    await userEvent.click(within(sidebar()).getByLabelText('PUBLISH'));
+    await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/publish-preview')).length).toBe(2));
+    await userEvent.click(screen.getByRole('button', { name: 'BACK TO EDITING' }));
+    expect(heading()).toBe('NPCS');
+  });
+
+  it('publishes a first version at once, with no preview', async () => {
+    open({ startPage: 'words' });
+    await ready();
+    await userEvent.click(within(sidebar()).getByLabelText('PUBLISH'));
+    expect(await screen.findByText(/^Published v4/)).toBeTruthy();
+    expect(screen.queryByTestId('publish-preview')).toBeNull();
+    expect(heading()).toBe('WORDS');
+  });
+
+  it('says so when it can\'t ask, and publishes nothing', async () => {
+    previewAnswer = { status: 500, body: { error: 'Could not reach the systems store' } };
+    open({ startPage: 'words' });
+    await ready();
+    await userEvent.click(within(sidebar()).getByLabelText('PUBLISH'));
+    expect(await screen.findByText('Could not reach the systems store')).toBeTruthy();
+    expect(heading()).toBe('WORDS');
+    expect(posts()).toEqual([]);
+  });
+
+  it('opens PROBLEMS when the server refuses PUBLISH vN over them, and goes back when it refuses otherwise', async () => {
+    previewAnswer = { status: 200, body: PREVIEW };
+    publishAnswer = { status: 409, body: { error: 'Fix these before publishing', problems: [PROBLEM] } };
+    open({ startPage: 'words' });
+    await ready();
+    await userEvent.click(within(sidebar()).getByLabelText('PUBLISH'));
+    await userEvent.click(await screen.findByRole('button', { name: 'PUBLISH v4' }));
+    expect(await screen.findByText('Fix these before publishing')).toBeTruthy();
+    expect(heading()).toBe('PROBLEMS');
+    publishAnswer = { status: 500, body: { error: 'Could not reach the systems store' } };
+    await userEvent.click(within(sidebar()).getByText('RESTS'));
+    await userEvent.click(within(sidebar()).getByLabelText('PUBLISH'));
+    await userEvent.click(await screen.findByRole('button', { name: 'PUBLISH v4' }));
+    expect(await screen.findByText('Could not reach the systems store')).toBeTruthy();
+    expect(heading()).toBe('RESTS');
+    expect(screen.queryByTestId('publish-preview')).toBeNull();
   });
 });
