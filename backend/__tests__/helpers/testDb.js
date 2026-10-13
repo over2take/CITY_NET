@@ -272,6 +272,18 @@ function makeTestDb() {
         deleted_at DATETIME
       )`);
 
+      db.run(`CREATE TABLE given_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        system TEXT NOT NULL,
+        given_by TEXT NOT NULL,
+        catalogue TEXT NOT NULL,
+        item TEXT NOT NULL,
+        qty INTEGER NOT NULL DEFAULT 1,
+        recipients TEXT NOT NULL DEFAULT '[]',
+        note TEXT NOT NULL DEFAULT '',
+        given_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
       db.run(`CREATE TABLE sqlite_sequence (name TEXT, seq INTEGER)`, () => {
         // ignore error — it may already exist
         resolve(db);

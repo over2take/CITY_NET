@@ -40,6 +40,7 @@ const shopSell = require('../shops/sell');
 const shopBuyback = require('../shops/buyback');
 const { shopsOpen } = require('../shops/availability');
 const giving = require('../sheets/giving');
+const givenList = require('../sheets/givenList');
 const { givable } = require('../shops/give');
 const systemDice = require('../dice/systemDice');
 
@@ -2343,11 +2344,31 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (err) return refuse('no_system');
         const notify = (username, notice) => emitToUser(username, 'itemReceived', notice);
         giving.giveItem(db, io, { ...request, preview: request.preview === true, system }, notify)
-          .then((result) => (result ? socket.emit('itemGiven', { ok: true, ...result }) : refuse('Not something this game can give.')))
+          .then(async (result) => {
+            if (!result) return refuse('Not something this game can give.');
+            if (result.preview) return socket.emit('itemGiven', { ok: true, ...result });
+            // On the GIVEN list (4g2c). The gift is made either way: a list that couldn't be
+            // written is said as null rather than the GIVE reported as failed.
+            const to = result.recipients.filter((r) => r.given).map((r) => r.name);
+            const given = await givenList.record(db, { system, by: userSockets.get(socket.id).userName, catalogue: result.item.catalogue, item: result.item.name, qty: result.qty, to, note: result.note })
+              .catch((e) => { console.error('[giveItem] GIVEN list:', e.message); return null; });
+            socket.emit('itemGiven', { ok: true, ...result, given });
+          })
           .catch((e) => {
             console.error('[giveItem]', e.message);
             refuse('write');
           });
+      });
+    });
+
+    /** The running game's GIVEN list, newest first: the GM and granted editors only. */
+    socket.on('requestGiven', () => {
+      if (!isAdminSocket(socket)) return;
+      getGameSystem((err, system) => {
+        if (err) return socket.emit('givenList', { ok: false, reason: 'no_system' });
+        givenList.recent(db, system)
+          .then((entries) => socket.emit('givenList', { ok: true, system, entries }))
+          .catch(() => socket.emit('givenList', { ok: false, reason: 'read' }));
       });
     });
 

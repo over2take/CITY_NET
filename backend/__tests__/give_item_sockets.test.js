@@ -212,6 +212,49 @@ describe('giving', () => {
   });
 });
 
+describe('the GIVEN list', () => {
+  it('gains a line for each GIVE, naming those given it, and is sent with the answer', async () => {
+    const reply = await give({ ...pistols, npcs: [ids.ganger, ids.dog], note: ' For the job. ' });
+    expect(reply.given).toEqual([{ id: 1, at: expect.any(String), by: 'gm', catalogue: 'weapons', item: 'Heavy Pistol', qty: 2, to: ['Rook', 'Vex', 'GANGER'], note: 'For the job.' }]);
+    const ghost = await connect('ghost');
+    const second = await give({ catalogue: 'gear', id: 'lucky_coin', players: ['vex'] }, ghost);
+    expect(second.given.map((l) => [l.by, l.item, l.to])).toEqual([['ghost', 'Lucky Coin', ['Vex']], ['gm', 'Heavy Pistol', ['Rook', 'Vex', 'GANGER']]]);
+  });
+
+  it('gains nothing from a preview, or from a GIVE nobody got', async () => {
+    expect((await give({ ...pistols, preview: true })).given).toBeUndefined();
+    expect((await give({ ...pistols, players: ['juno', 'nobody'] })).given).toEqual([]);
+    expect((await ask(gm, 'requestGiven', undefined, 'givenList'))).toEqual({ ok: true, system: CWN, entries: [] });
+  });
+
+  it('is sent to the GM and granted editors on asking, and never to a player', async () => {
+    await give({ catalogue: 'gear', id: 'lucky_coin', players: ['vex'] });
+    const list = await ask(gm, 'requestGiven', undefined, 'givenList');
+    expect(list).toMatchObject({ ok: true, system: CWN, entries: [{ by: 'gm', item: 'Lucky Coin', to: ['Vex'] }] });
+    const ghost = await connect('ghost');
+    expect(await ask(ghost, 'requestGiven', undefined, 'givenList')).toEqual(list);
+    const vex = await connect('vex');
+    handlers[vex].requestGiven();
+    await drain(db);
+    expect(replies[vex].filter((r) => r.event === 'givenList')).toEqual([]);
+  });
+
+  it('only ever shows the running game\'s', async () => {
+    await give({ catalogue: 'gear', id: 'lucky_coin', players: ['vex'] });
+    await run(db, `UPDATE global_settings SET value = 'cyberpunk_red' WHERE key = 'game_system'`);
+    expect((await ask(gm, 'requestGiven', undefined, 'givenList')).entries).toEqual([]);
+  });
+
+  it('doesn\'t undo a gift it couldn\'t write down', async () => {
+    await run(db, 'DROP TABLE given_items');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const reply = await give({ catalogue: 'gear', id: 'lucky_coin', players: ['vex'] });
+    expect(reply).toMatchObject({ ok: true, given: null, recipients: [{ given: true }] });
+    expect(readInventory(await dataOf(ids.vex)).map((i) => i.name)).toEqual(['Lucky Coin']);
+    expect((await ask(gm, 'requestGiven', undefined, 'givenList'))).toEqual({ ok: false, reason: 'read' });
+  });
+});
+
 describe('refused', () => {
   it('to a player, who is not even answered', async () => {
     const vex = await connect('vex');
