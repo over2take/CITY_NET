@@ -147,8 +147,10 @@ export const giveRequest = (item: Pick<ListedItem, 'catalogue' | 'id'>, qty: num
 /** A socket, as far as asking once and hearing one answer goes. */
 export interface AskSocket {
   emit: (event: string, payload?: unknown) => unknown;
-  on: (event: string, fn: (data: never) => void) => unknown;
-  off: (event: string, fn: (data: never) => void) => unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on: (event: string, fn: (...args: any[]) => void) => unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  off: (event: string, fn: (...args: any[]) => void) => unknown;
 }
 
 /** How long the window waits for the server before saying it got no answer. */
@@ -160,9 +162,9 @@ export const ASK_TIMEOUT_MS = 15_000;
  */
 export const askOnce = <T>(socket: AskSocket, event: string, payload: unknown, answer: string, timeoutMs = ASK_TIMEOUT_MS): Promise<T | null> =>
   new Promise((resolve) => {
-    const heard = (data: T) => { clearTimeout(timer); socket.off(answer, heard as (d: never) => void); resolve(data); };
-    const timer = setTimeout(() => { socket.off(answer, heard as (d: never) => void); resolve(null); }, timeoutMs);
-    socket.on(answer, heard as (d: never) => void);
+    const heard = (data: T) => { clearTimeout(timer); socket.off(answer, heard); resolve(data); };
+    const timer = setTimeout(() => { socket.off(answer, heard); resolve(null); }, timeoutMs);
+    socket.on(answer, heard);
     socket.emit(event, payload);
   });
 

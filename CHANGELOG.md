@@ -113,6 +113,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **GIVE.EXE.** A GIVE_ITEM button in the GAME tab opens a window, laid out like the shop, where the
+  GM searches every catalogue, picks an item and how many, ticks who gets it (online or not, and
+  NPCs on the map) and sees where it would land on each sheet before giving it free. A GIVEN folder
+  keeps the last gifts. A game with no shops keeps its catalogue upload while GIVE ITEM is on.
 - **GIVE ITEM's window, as logic.** Searching what the game can give, what each item is worth, where
   a gift would land on each sheet or why not, and the GIVEN list's lines, ready for the window. A
   preview can now ask about every player character at once.
