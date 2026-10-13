@@ -4,6 +4,7 @@
 // What the answers mean is systemsLibrary.ts.
 
 import type { InstallMode, InstallPreview, InstallResult, LibrarySystem } from './systemsLibrary';
+import type { PublishPreview } from './versionPreview';
 import type { CustomRenderSheet } from './customTemplates';
 import type { GameCondition } from './tokenConditions';
 import type { TableEntry } from './tableConditions';
@@ -134,6 +135,11 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
       call<TriedRest>(fetcher, token, '/api/systems/try-rest', 'POST', { definition, ...state }),
     tryHealth: (definition: Definition, state: { token: { current: number; max: number; temp?: number }; sheet?: Record<string, unknown>; action?: Record<string, unknown> }) =>
       call<TriedHealth>(fetcher, token, '/api/systems/try-health', 'POST', { definition, ...state }),
+    /**
+     * What PUBLISH would change (4h1b, sheets/versionPreview.ts): the stored draft against the published
+     * version, for every character playing it or on the SAMPLE values; `first` for a first version.
+     */
+    publishPreview: (systemId: string) => call<PublishPreview>(fetcher, token, `${id(systemId)}/publish-preview`),
     /** Make the stored draft what the game runs; refused, with `problems`, while it has any. */
     publish: (systemId: string) => call<{ version: number }>(fetcher, token, `${id(systemId)}/publish`, 'POST', {}),
     create: (name: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name }),
