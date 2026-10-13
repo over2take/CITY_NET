@@ -18,17 +18,22 @@ const LIMITS = { qty: 99, note: 200, players: 100, npcs: 100 };
 
 const isId = (v) => typeof v === 'string' && v.length > 0 && v.length <= 200;
 
-/** Why a request can't be read, or null. */
-const requestProblem = ({ catalogue, id, qty, players, npcs, note } = {}) => {
+/**
+ * Why a request can't be read, or null. A preview may ask about every player character in the game
+ * (`players: true`), so the GM's window can say where it would land on each before any is ticked;
+ * a GIVE names them.
+ */
+const requestProblem = ({ catalogue, id, qty, players, npcs, note, preview } = {}) => {
   if (!isId(catalogue) || !isId(id)) return 'catalogue and id: the item to give';
   if (qty !== undefined && !(Number.isInteger(qty) && qty >= 1 && qty <= LIMITS.qty)) return `qty: a whole number from 1 to ${LIMITS.qty}`;
-  if (players !== undefined && !(Array.isArray(players) && players.length <= LIMITS.players && players.every(isId))) {
+  if (players === true && preview !== true) return 'players: name who gets it';
+  if (players !== undefined && players !== true && !(Array.isArray(players) && players.length <= LIMITS.players && players.every(isId))) {
     return `players: a list of up to ${LIMITS.players} player names`;
   }
   if (npcs !== undefined && !(Array.isArray(npcs) && npcs.length <= LIMITS.npcs && npcs.every((n) => Number.isInteger(n) && n > 0))) {
     return `npcs: a list of up to ${LIMITS.npcs} token ids`;
   }
-  if (!(players || []).length && !(npcs || []).length) return 'Pick someone to give it to';
+  if (players !== true && !(players || []).length && !(npcs || []).length) return 'Pick someone to give it to';
   if (note !== undefined && !(typeof note === 'string' && note.length <= LIMITS.note)) return `note: at most ${LIMITS.note} characters`;
   return null;
 };
@@ -71,7 +76,7 @@ const giveItem = async (db, io, { system, catalogue, id, qty = 1, players = [], 
   const recipients = [];
   // A named player with no character in this game is said, not silently dropped.
   const have = new Set(people.filter((c) => c.kind === 'player').map((c) => c.username.toLowerCase()));
-  for (const name of new Set(players)) {
+  for (const name of new Set(Array.isArray(players) ? players : [])) {
     if (!have.has(name.toLowerCase())) recipients.push({ kind: 'player', username: name, name, given: false, reason: 'No character in this game.' });
   }
   for (const c of people) {
