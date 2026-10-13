@@ -17,7 +17,7 @@ import { customTemplate, isCustomSystem, useCustomTemplate } from './customTempl
 /** The parts a system can turn off. Mirrors PARTS in backend/systemBuilder/parts.js. */
 export const PARTS = [
   'bank', 'shops', 'vehicles', 'cyberware', 'initiative', 'combat', 'token_health',
-  'death', 'luck', 'xp', 'npc_tiers', 'sheet_import',
+  'death', 'luck', 'xp', 'npc_tiers', 'sheet_import', 'give_items',
 ] as const;
 export type Part = typeof PARTS[number];
 
