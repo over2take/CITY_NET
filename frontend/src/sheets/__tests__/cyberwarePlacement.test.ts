@@ -87,6 +87,30 @@ describe('agreeing with the server on what is installed', () => {
   });
 });
 
+describe('agreeing with the server on every row', () => {
+  /**
+   * The whole row, not just whether it is installed. The server's normaliseRow once dropped the
+   * fitted mods (cyberMods) that this one keeps, so anything the server read and wrote back
+   * lost them; GIVE ITEM's placement found it (4g1a). Held together here so it can't drift again.
+   */
+  const ROWS: unknown[] = [
+    {},
+    { name: 'Reflexes', type: 'body', side: 'l', hl: '3', cost: '25000', conc: 'touch', data: 'Faster.', equipped: false, placed: true, cyberMods: ['tailored_interface'] },
+    { name: 'Blades', cyberMods: '["tailored_interface","x"]' },
+    { name: 'Odd', cyberMods: 'not json', cost: '', hl: 'x', conc: 'glowing', side: 'up' },
+    { name: 'Blank', cyberMods: '   ', mods: [{ kind: 'nope' }] },
+    { name: 'Numbers', cyberMods: [1, 2] },
+    { cost: null, equipped: 'yes', placed: 'no', type: 'cyberarm' },
+    null,
+    'junk',
+  ];
+
+  it.each(ROWS.map((row) => [JSON.stringify(row), row]))('reads %s the same way', async (_label, row) => {
+    const backend = await import('../../../../backend/sheets/cyberware.js');
+    expect(backend.default.normaliseRow(row)).toEqual(normaliseRow(row as never));
+  });
+});
+
 describe('the System Strain ceiling', () => {
   // CWN p40: maximum System Strain equals Constitution, and installed gear may not exceed
   // it. Owning chrome costs nothing - only what is in the body counts.

@@ -11,6 +11,9 @@
 // which is the whole reason the window exists.
 
 /** The sheet field holding the array. */
+// The mods fitted to each implant (CWN p71). cwnCyberMods requires nothing, so there is no cycle.
+const { fittedIds } = require('./cwnCyberMods');
+
 const FIELD = 'cyberware';
 
 /**
@@ -150,6 +153,10 @@ function normaliseRow(raw) {
     // Blank on a system that does not rate concealment, and on any row saved before this
     // existed. An unknown rating is not the same as the easiest one to hide.
     conc: CONC_VALUES.includes(r.conc) ? r.conc : '',
+    // The ids of the mods fitted to it. Kept, or a row read back without them charges full
+    // Strain for a Tailored Interface somebody paid for, and a sheet written back from those
+    // rows loses them for good. The frontend's normaliseRow had the same bug first.
+    cyberMods: fittedIds(r),
     data: typeof r.data === 'string' ? r.data : '',
     // Installed unless it says otherwise. Rows stored before this field existed have no
     // opinion, and defaulting those to false would switch off chrome nobody touched.
