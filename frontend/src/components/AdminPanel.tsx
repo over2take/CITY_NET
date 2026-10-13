@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BUILDING_TYPES, shopsAvailable, isShopIn, typeLabel, typeOn } from '../data/buildingTypes';
+import { BUILDING_TYPES, shopsAvailable, cataloguesAvailable, giveAvailable, isShopIn, typeLabel, typeOn } from '../data/buildingTypes';
 import { EmptyShopSteps } from './EmptyShopSteps';
 import { SystemPicker } from './SystemPicker';
 import type { PickerSystem } from './systemPickerRules';
@@ -60,7 +60,7 @@ import { SYSTEMS_CHANGED_EVENT } from '../sheets/systemsLibrary';
 function BattleAdminPanel({
   token, isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly,
   tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, locations, refreshLocations,
-  handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen, secureModeEnabled, onLogout,
+  handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen, setIsGiveOpen, secureModeEnabled, onLogout,
   globalSettings, fetchGlobalSettings, onOpenNpcLibrary, onOpenSystems, activeUsers, isPrimaryAdmin,
 }: any) {
   const [tab, setTab] = useState<'battle_map' | 'game'>('battle_map');
@@ -152,6 +152,9 @@ function BattleAdminPanel({
           <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={globalSettings?.game_system} />
           <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
         </>}
+        {giveAvailable(globalSettings?.game_system) && setIsGiveOpen && (
+          <button onClick={() => setIsGiveOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>GIVE_ITEM</button>
+        )}
         <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
       </>}
     </div>
@@ -184,7 +187,7 @@ export function AdminPanel({
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
     isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
-    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen,
+    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen, setIsGiveOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onOpenSystems, onToggleHidden,
@@ -206,7 +209,7 @@ export function AdminPanel({
         tempBattleMapScale={tempBattleMapScale} setTempBattleMapScale={setTempBattleMapScale}
         activeBattleMapData={activeBattleMapData} locations={locations} refreshLocations={refreshLocations}
         handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
-        setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} setIsCatalogueOpen={setIsCatalogueOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
+        setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} setIsCatalogueOpen={setIsCatalogueOpen} setIsGiveOpen={setIsGiveOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
         globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings}
         onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} isPrimaryAdmin={isPrimaryAdmin}
       />
@@ -1066,24 +1069,30 @@ export function AdminPanel({
               {xpAvailable(globalSettings['game_system']) && (
                 <button onClick={() => setIsAdminXpOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>AWARD_EXPERIENCE</button>
               )}
+              {/* Beside PAY_PLAYERS, the other way the GM hands things out (4g4). Free: shops and the
+                  bank needn't be on, only GIVE ITEM itself. */}
+              {giveAvailable(gameSystem) && setIsGiveOpen && (
+                <button onClick={() => setIsGiveOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>GIVE_ITEM</button>
+              )}
               {/* What shops pay for second-hand goods. Beside the other two money controls
                   because it is the same kind of decision: how much the party is worth. */}
               {shopsAvailable(globalSettings['game_system']) && (
-                <>
-                  <BuybackPanel
-                    token={token}
-                    globalSettings={globalSettings}
-                    fetchGlobalSettings={fetchGlobalSettings}
-                  />
-                  {/* Beside the buy-back rate because both are about what shops trade in.
-                      Its own window, because a paste box and a preview table do not fit in
-                      a panel this narrow. */}
-                  <button
-                    onClick={() => setIsCatalogueOpen?.(true)}
-                    className="utility-btn"
-                    style={{ width: '100%', marginTop: '8px' }}
-                  >{asLabel(word('shop', 'singular', 'SHOP'))}_CATALOGUES</button>
-                </>
+                <BuybackPanel
+                  token={token}
+                  globalSettings={globalSettings}
+                  fetchGlobalSettings={fetchGlobalSettings}
+                />
+              )}
+              {/* Beside the buy-back rate because both are about what shops trade in.
+                  Its own window, because a paste box and a preview table do not fit in
+                  a panel this narrow. Also where GIVE ITEM's loot comes from, so a game
+                  with no shops keeps it while GIVE ITEM is on (the user's call, 2026-10-13). */}
+              {cataloguesAvailable(globalSettings['game_system']) && (
+                <button
+                  onClick={() => setIsCatalogueOpen?.(true)}
+                  className="utility-btn"
+                  style={{ width: '100%', marginTop: '8px' }}
+                >{asLabel(word('shop', 'singular', 'SHOP'))}_CATALOGUES</button>
               )}
               <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
               <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
