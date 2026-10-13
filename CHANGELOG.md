@@ -113,6 +113,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **GIVE ITEM from a token, and the player's notice.** A GIVE_ITEM button on a character's or NPC's
+  token opens GIVE.EXE with them already ticked. The player given something sees "THE GM GAVE YOU
+  HEAVY PISTOL x2" with the GM's note, on their own screen only, until they close it.
 - **GIVE.EXE.** A GIVE_ITEM button in the GAME tab opens a window, laid out like the shop, where the
   GM searches every catalogue, picks an item and how many, ticks who gets it (online or not, and
   NPCs on the map) and sees where it would land on each sheet before giving it free. A GIVEN folder

@@ -7,11 +7,12 @@
 // with the same split: the old UPDATE_HEALTH viewers change it, CHECK_HEALTH viewers watch it.
 
 import { asLabel, todaysWords, type WordLookup } from '../sheets/words';
+import { recipientKey } from '../sheets/giveItems';
 
 export type TokenActionKey =
   | 'attack' | 'melee' | 'ranged'
   | 'player-sheet' | 'npc-sheet' | 'generate-sheet' | 'edit'
-  | 'vehicles' | 'bank' | 'enemy-vehicles' | 'battle'
+  | 'vehicles' | 'bank' | 'give' | 'enemy-vehicles' | 'battle'
   | 'ping' | 'broadcast' | 'purge';
 
 export interface TokenViewer {
@@ -43,6 +44,8 @@ export interface TokenViewer {
   systemHasVehicles: boolean;
   /** The running system has a bank (a custom system can turn it off). */
   systemHasBank: boolean;
+  /** The running system has GIVE ITEM (data/buildingTypes giveAvailable; a custom system can switch it off). */
+  systemHasGive?: boolean;
   /** The running system has combat (a custom system can turn it off): no attack buttons without. */
   systemHasCombat: boolean;
   /** This location has battle maps. */
@@ -71,6 +74,8 @@ export function tokenActionKeys(v: TokenViewer): TokenActionKey[] {
   if (v.isAdmin && isNpc && !v.linked) keys.push('edit');
   if (v.hasRoster) keys.push('vehicles');
   if (v.isAdmin && v.isPlayerToken && v.systemHasBank) keys.push('bank');
+  // GIVE ITEM (4g4c) with this character ticked: a player's character, or an NPC with a sheet here.
+  if (v.isAdmin && v.systemHasGive && ((v.isPlayerToken && v.hasOwner) || (isNpc && v.sheetHere))) keys.push('give');
   // The enemy roster never reaches a player's client at all.
   if (v.isAdmin && v.systemHasVehicles) keys.push('enemy-vehicles');
   if (v.hasBattleMaps) keys.push('battle');
@@ -141,6 +146,8 @@ export interface TokenActionContext {
     editLocation: (location: any) => void;
     vehicles: () => void;
     bank: (owner: string) => void;
+    /** GIVE.EXE with this character ticked, by its key there (sheets/giveItems.ts recipientKey). */
+    give?: (recipient: string) => void;
     enemyVehicles: () => void;
     battleMap: (locationId: number) => void;
   };
@@ -153,7 +160,7 @@ export interface TokenActionContext {
 const LABEL: Record<TokenActionKey, string> = {
   attack: '⚔ ATTACK', melee: '⚔ MELEE', ranged: '🏹 RANGED',
   'player-sheet': 'OPEN_SHEET', 'npc-sheet': 'OPEN_SHEET', 'generate-sheet': 'GENERATE_SHEET', edit: 'EDIT_DATA_POINT',
-  vehicles: 'VEHICLES', bank: 'VIEW_BANK', 'enemy-vehicles': 'ENEMY VEHICLES', battle: 'ENTER BATTLE MAP',
+  vehicles: 'VEHICLES', bank: 'VIEW_BANK', give: 'GIVE_ITEM', 'enemy-vehicles': 'ENEMY VEHICLES', battle: 'ENTER BATTLE MAP',
   ping: 'BROADCAST PING', broadcast: 'BROADCAST_THIS', purge: 'REMOVE_TOKEN',
 };
 
@@ -185,6 +192,10 @@ export function buildTokenActions(viewer: TokenViewer, c: TokenActionContext): B
     edit: { onClick: () => c.open.editLocation(loc) },
     vehicles: { onClick: () => c.open.vehicles() },
     bank: { onClick: () => c.open.bank(loc.owner) },
+    give: {
+      title: 'Give this character an item, free',
+      onClick: () => c.open.give?.(recipientKey(viewer.isPlayerToken ? { kind: 'player', username: loc.owner } : { kind: 'npc', location_id: loc.id })),
+    },
     'enemy-vehicles': { title: 'Enemy vehicles, kept on NPC sheets between sessions', onClick: () => c.open.enemyVehicles() },
     battle: { tone: 'accent', onClick: () => c.open.battleMap(loc.id) },
     ping: { title: 'Show everyone where this is', onClick: () => c.ping() },

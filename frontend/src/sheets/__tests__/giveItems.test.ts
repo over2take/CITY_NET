@@ -158,6 +158,7 @@ describe('the words around it', () => {
     const line = { id: 1, at: '2026-10-13 14:05:00', by: 'gm', catalogue: 'weapons', item: 'Heavy Pistol', qty: 2, to: ['Vex', 'Rook'], note: '' };
     expect(givenText(line, now)).toBe(`${givenAt(line.at, now)} · gm gave Vex, Rook: Heavy Pistol ×2`);
     expect(noticeText({ item: 'Heavy Pistol', catalogue: 'weapons', qty: 2, note: 'x' })).toBe('THE GM GAVE YOU HEAVY PISTOL ×2');
+    expect(noticeText({ item: 'Rope', catalogue: 'gear', qty: 1, note: '' }, 'Keeper')).toBe('THE KEEPER GAVE YOU ROPE ×1');
   });
 });
 
