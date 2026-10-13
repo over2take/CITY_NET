@@ -30,9 +30,9 @@ const openShops = () => userEvent.click(within(part('shops')).getByText(/SETTING
 describe('the parts', () => {
   it('lists every part with what it does, all on to start', () => {
     open();
-    expect(screen.getAllByTestId(/^part-/)).toHaveLength(12);
+    expect(screen.getAllByTestId(/^part-/)).toHaveLength(13);
     expect(part('vehicles').textContent).toContain('VEHICLES.EXE and vehicle sheets.');
-    for (const p of ['BANK', 'SHOPS', 'VEHICLES', 'CYBERWARE', 'INITIATIVE', 'COMBAT', 'TOKEN HEALTH', 'NPC TIERS']) {
+    for (const p of ['BANK', 'SHOPS', 'GIVE ITEM', 'VEHICLES', 'CYBERWARE', 'INITIATIVE', 'COMBAT', 'TOKEN HEALTH', 'NPC TIERS']) {
       expect(sw(p).getAttribute('aria-checked'), p).toBe('true');
     }
   });
@@ -44,6 +44,19 @@ describe('the parts', () => {
     expect(sw('VEHICLES').getAttribute('aria-checked')).toBe('false');
     await userEvent.click(sw('VEHICLES'));
     expect(last()).toEqual({ format: 1, name: 'Hearth' });
+  });
+
+  it('turns GIVE ITEM off on its own, shops on or off (4g3)', async () => {
+    const { last } = open();
+    expect(part('give_items').textContent).toContain('The GM handing out items from the catalogues, free.');
+    await userEvent.click(sw('SHOPS'));
+    expect(sw('GIVE ITEM').getAttribute('aria-checked')).toBe('true');
+    expect(sw('GIVE ITEM').disabled).toBe(false);
+    await userEvent.click(sw('GIVE ITEM'));
+    expect(last().parts).toEqual({ shops: { on: false }, give_items: { on: false } });
+    await userEvent.click(sw('SHOPS'));
+    expect(last().parts).toEqual({ give_items: { on: false } });
+    expect(sw('GIVE ITEM').getAttribute('aria-checked')).toBe('false');
   });
 
   it('shows the four a custom system can\'t use yet as off and greyed', () => {

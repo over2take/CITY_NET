@@ -18,6 +18,7 @@ const GM = jwt.sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false }
 
 const require_ = createRequire(import.meta.url);
 const store = require_('../shops/catalogueStore');
+const runtime = require_('../systemBuilder/runtime');
 const { givable } = require_('../shops/give');
 const { readInventory } = require_('../shops/placement');
 const socketsFactory = require_('../sockets/index.js');
@@ -252,6 +253,40 @@ describe('the GIVEN list', () => {
     expect(reply).toMatchObject({ ok: true, given: null, recipients: [{ given: true }] });
     expect(readInventory(await dataOf(ids.vex)).map((i) => i.name)).toEqual(['Lucky Coin']);
     expect((await ask(gm, 'requestGiven', undefined, 'givenList'))).toEqual({ ok: false, reason: 'read' });
+  });
+});
+
+describe('a custom system with GIVE ITEM switched off (4g3)', () => {
+  const OFF = 'sys_aaaaaaaaaaaaaaaa';
+  const ON = 'sys_bbbbbbbbbbbbbbbb';
+  const rope = { gear: [{ id: 'rope', name: 'Rope', price: 2, fields: {} }] };
+
+  const playing = async (system) => {
+    for (const [id, parts] of [[OFF, { give_items: { on: false } }], [ON, {}]]) {
+      const text = JSON.stringify({ format: 1, name: id, parts });
+      await run(db, 'INSERT OR IGNORE INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [id, id, text, text]);
+    }
+    await new Promise((resolve) => runtime.load(db, resolve));
+    await run(db, `UPDATE global_settings SET value = ? WHERE key = 'game_system'`, [system]);
+    const sheetId = await sheet('vex', system, { name: 'Vex' });
+    store.load(system, rope);
+    return sheetId;
+  };
+
+  it('offers nothing and gives nothing', async () => {
+    const vex = await playing(OFF);
+    expect(await ask(gm, 'requestGivable', undefined, 'givableItems')).toEqual({ ok: false, reason: 'give_off' });
+    expect(await give({ catalogue: 'gear', id: 'rope', players: ['vex'] })).toEqual({ ok: false, reason: 'give_off' });
+    expect(await give({ catalogue: 'gear', id: 'rope', players: ['vex'], preview: true })).toEqual({ ok: false, reason: 'give_off' });
+    expect(await dataOf(vex)).toEqual({ name: 'Vex' });
+    expect(notices()).toEqual([]);
+  });
+
+  it('gives as any game does with it left on', async () => {
+    const vex = await playing(ON);
+    expect((await ask(gm, 'requestGivable', undefined, 'givableItems')).catalogues).toEqual([{ catalogue: 'gear', items: [{ id: 'rope', name: 'Rope', price: 2 }] }]);
+    expect((await give({ catalogue: 'gear', id: 'rope', players: ['vex'] })).recipients[0].given).toBe(true);
+    expect(readInventory(await dataOf(vex)).map((i) => i.name)).toEqual(['Rope']);
   });
 });
 

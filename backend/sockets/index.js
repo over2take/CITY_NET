@@ -2325,6 +2325,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!isAdminSocket(socket)) return;
       getShopSystem((err, system) => {
         if (err) return socket.emit('givableItems', { ok: false, reason: 'no_system' });
+        // A custom system can turn GIVE ITEM off (4g3, the give_items part): nothing to give then.
+        if (!customSystems.partIn(system, 'give_items')) return socket.emit('givableItems', { ok: false, reason: 'give_off' });
         socket.emit('givableItems', { ok: true, system, catalogues: givable(system) });
       });
     });
@@ -2342,6 +2344,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (problem) return refuse(problem);
       getShopSystem((err, system) => {
         if (err) return refuse('no_system');
+        if (!customSystems.partIn(system, 'give_items')) return refuse('give_off');
         const notify = (username, notice) => emitToUser(username, 'itemReceived', notice);
         giving.giveItem(db, io, { ...request, preview: request.preview === true, system }, notify)
           .then(async (result) => {

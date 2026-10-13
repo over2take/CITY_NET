@@ -8,7 +8,7 @@ const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 /** Every part a system can turn off. All on unless a system says. */
 const PARTS = [
   'bank', 'shops', 'vehicles', 'cyberware', 'initiative', 'combat', 'token_health',
-  'death', 'luck', 'xp', 'npc_tiers', 'sheet_import',
+  'death', 'luck', 'xp', 'npc_tiers', 'sheet_import', 'give_items',
 ];
 
 /** Is `part` on in this definition? Everything is, unless the system turns it off. */

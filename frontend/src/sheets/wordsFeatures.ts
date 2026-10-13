@@ -99,6 +99,7 @@ export interface PartRow { id: string; label: string; what: string; unused?: tru
 export const PART_ROWS: PartRow[] = [
   { id: 'bank', label: 'BANK', what: 'Money: the BANK window, pay and debt.' },
   { id: 'shops', label: 'SHOPS', what: 'Buildings that sell from catalogues, and the cart.' },
+  { id: 'give_items', label: 'GIVE ITEM', what: 'The GM handing out items from the catalogues, free.' },
   { id: 'vehicles', label: 'VEHICLES', what: 'VEHICLES.EXE and vehicle sheets.' },
   { id: 'cyberware', label: 'CYBERWARE', what: 'Cyberware on the sheet, and its shelves.' },
   { id: 'initiative', label: 'INITIATIVE', what: 'The initiative tracker in combat.' },

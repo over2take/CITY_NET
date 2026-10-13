@@ -113,6 +113,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **GIVE ITEM can be switched off.** A custom system's FEATURES page has a GIVE ITEM switch, on
+  to start and separate from SHOPS, so a game with no shops can still hand out loot. Off, the
+  server offers nothing to give and refuses any GIVE.
 - **The GIVEN list, for GIVE ITEM.** The server keeps the last 50 gifts in each game: who gave what
   to whom, when, and the note. A new table, empty until the first gift; nothing else changes.
 - **Giving an item, on the server, for GIVE ITEM.** The GM or an editor can give an item to any
