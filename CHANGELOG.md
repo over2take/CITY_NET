@@ -113,6 +113,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Giving an item, on the server, for GIVE ITEM.** The GM or an editor can give an item to any
+  player characters, online or not, and NPCs with a sheet: so many of it, free, straight onto each
+  sheet. Anyone with no room for it is named and skipped while the others get theirs, a preview says
+  where it would land first, and only the player given it is told, privately, with the GM's note.
 - **What a GM can give, for GIVE ITEM.** The server now knows everything the running game can
   give: whatever its shops could sell (the CWN book on CWN, the GM's own uploads everywhere),
   leaving out any catalogue the game has turned off, and places a gift where buying it would,
