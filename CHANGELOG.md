@@ -72,6 +72,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **No more "undefined" Encumbrance.** A GM's uploaded armor or gear with no Encumbrance column
+  landed in the inventory with an Enc of "undefined"; it now lands blank, as the rest do.
 - **CWN's LONG_REST recovers System Strain again.** Since an earlier change to how table-wide
   resets write, it had been writing Shadowrun's Edge onto CWN sheets instead, so strain never went
   down. It now takes 1 System Strain off every CWN sheet that has some, as it always meant to, and
@@ -111,6 +113,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The CWN book on the server, for GIVE ITEM.** The server can now place any item from the CWN
+  book, or a GM's own item on one of its shelves, exactly where the shop would: a weapon Stowed in
+  a free row, a vehicle with its stats and immunity note, cyberware unplaced, everything else in
+  the inventory. The shop's shelves now share one placement function, and a test holds the
+  server's copy to it item by item.
 - **Placing items on the server, for GIVE ITEM.** The server can now put an item from an uploaded
   catalogue onto any sheet exactly where buying it would: a free weapon or vehicle row, the
   cyberware table, or an inventory line. It's held to the shop's own placement by a test. The CWN

@@ -10,12 +10,12 @@ import {
 import { ownedItems, sellableAt, BOOK_SYSTEM } from '../sheets/ownedItems';
 import { uploadedIn, type UploadedEntry } from '../sheets/uploadedCatalogues';
 import { placeUploaded, destinationOf } from '../sheets/shopPlacement';
+import { placeBook, asBookRow, type BookRow } from '../sheets/bookPlacement';
 import { columnsFor } from '../sheets/catalogueSchema';
 import { EmptyShopSteps } from './EmptyShopSteps';
 import { CWN_CYBERWARE, type CwnCyberPreset } from '../sheets/cwnCyberwarePresets';
-import { CYBERWARE_FIELD, readRows, normaliseRow } from '../sheets/cyberwareRows';
-import { CWN_WEAPONS, weaponToStashed, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
-import { readStash, firstFreeRow, stashedToCarried } from '../sheets/cwnWeaponStash';
+import { CWN_WEAPONS, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
+import { readStash } from '../sheets/cwnWeaponStash';
 import { encLimits } from '../sheets/cwnEncumbrance';
 import { CWN_PHARMACEUTICALS, pharmaByName, type Pharmaceutical } from '../sheets/cwnPharma';
 import { CWN_ARMOR, acText, OBSOLETE_TECH, type ArmorPreset } from '../sheets/cwnArmorPresets';
@@ -23,9 +23,9 @@ import { CWN_GEAR, encText, ENC_FOOTNOTE, type GearItem } from '../sheets/cwnGea
 import { CWN_ARMOR_MODS, CWN_WEAPON_MODS, type GearMod } from '../sheets/cwnGearMods';
 import { VEHICLE_FITTINGS, type VehicleFitting } from '../sheets/vehicleFittings';
 import { VEHICLE_WEAPONS, type VehicleWeapon } from '../sheets/vehicleWeapons';
-import { VEHICLE_PRESETS, presetFields, type VehiclePreset } from '../sheets/vehiclePresets';
+import { VEHICLE_PRESETS, type VehiclePreset } from '../sheets/vehiclePresets';
 import {
-  INVENTORY_FIELD, readInventory, writeInventory, blankItem, type InventoryItem,
+  readInventory,
 } from '../sheets/inventory';
 import { CWN_WEAPON_ROWS, CWN_VEHICLE_ROWS } from '../sheets/templates/cities_without_number';
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
@@ -433,29 +433,6 @@ export function ShopWindow({
   const shelfId: ShopStock | null =
     picked && catalogues.includes(picked) ? picked : catalogues[0] ?? null;
 
-  /**
-   * Put one of something into the inventory, stacking onto a row already there.
-   *
-   * `same` decides what counts as the same thing, because that differs: a drug matches
-   * through its alias table, everything else matches on its name. Stash rows are never
-   * stacked onto - a box of stims in a locker is yours, but it is not what you just walked
-   * out of the shop holding.
-   */
-  const addToInventory = (
-    label: string, enc: string, same: (item: InventoryItem) => boolean,
-  ) => {
-    const current = sheetNow.current;
-    if (!current) return;
-    const data = (current.data ?? {}) as Record<string, unknown>;
-    const items = readInventory(data);
-    const i = items.findIndex((item) => item.carry !== 'stash' && same(item));
-    const next = i >= 0
-      ? items.map((item, n) => (n === i ? { ...item, qty: item.qty + 1 } : item))
-      : [...items, { ...blankItem(), name: label, qty: 1, enc }];
-    setRefused(null);
-    handleFieldChange?.(INVENTORY_FIELD, writeInventory(next));
-  };
-
   // ────────────────────────────────────────────────────────────────── the cart ───
 
   /**
@@ -814,12 +791,7 @@ export function ShopWindow({
     // something to discover after the account has been debited.
     const why = refuseReason(w);
     if (why) { setRefused(why); return; }
-    purchase('weapons', w.id, w.name, w.price, () => {
-      const data = (sheetNow.current?.data ?? {}) as Record<string, unknown>;
-      const row = firstFreeRow(data, CWN_WEAPON_ROWS);
-      if (row === null) return;
-      handleFieldsChange?.(stashedToCarried(weaponToStashed(w, name || ''), row));
-    }, { enc: Number(w.enc) || 0, slot: 'weapon' });
+    purchase('weapons', w.id, w.name, w.price, () => placeFromBook('weapons', w), { enc: Number(w.enc) || 0, slot: 'weapon' });
   };
 
   const weaponShelf: Shelf<CwnWeaponPreset> = {
@@ -938,9 +910,7 @@ export function ShopWindow({
       },
     },
     matches: (p, q) => p.label.toLowerCase().includes(q) || p.effect.toLowerCase().includes(q),
-    buy: (p) => purchase('pharmaceuticals', p.id, p.label, p.cost, () => {
-      addToInventory(p.label, '', (item) => pharmaByName(item.name)?.id === p.id);
-    }),
+    buy: (p) => purchase('pharmaceuticals', p.id, p.label, p.cost, () => placeFromBook('pharmaceuticals', p)),
     notice: 'A DOSE GOES INTO YOUR INVENTORY, STOWED',
     filterHint: 'Filter by name or effect',
     // Said on the shelf, because the table sells sixteen and the sheet rolls with three.
@@ -964,24 +934,8 @@ export function ShopWindow({
     },
     matches: (c, q) => c.name.toLowerCase().includes(q) || c.effect.toLowerCase().includes(q),
     countKey: (c) => c.id,
-    buy: (item) => purchase('cyberware', item.id, item.name, item.price, () => {
-      const current = sheetNow.current;
-      if (!current) return;
-      // Unplaced: owning a piece and having it in your body are two different facts, and
-      // the diagram is the only thing that decides the second.
-      const row = normaliseRow({
-        name: item.name,
-        type: item.type,
-        hl: item.strain,
-        cost: item.price,
-        conc: item.conc,
-        data: item.effect,
-        mods: (item.mods ?? []).map((m) => ({ ...m })),
-        equipped: true,
-        placed: false,
-      });
-      handleFieldChange(CYBERWARE_FIELD, [...readRows(current.data), row] as never);
-    }),
+    // Unplaced: owning a piece and having it in your body are two different facts (bookPlacement.ts).
+    buy: (item) => purchase('cyberware', item.id, item.name, item.price, () => placeFromBook('cyberware', item)),
     notice: 'GOES INTO YOUR AUGMENTS, UNPLACED — BUYING IS NOT SURGERY',
     filterHint: 'Filter by name or effect',
   };
@@ -1050,9 +1004,7 @@ export function ShopWindow({
       },
     },
     matches: (a, q) => a.label.toLowerCase().includes(q) || a.group.includes(q),
-    buy: (a) => purchase('armor', a.id, a.label, a.cost, () => {
-      addToInventory(a.label, String(a.enc), (item) => item.name === a.label);
-    }, { enc: Number(a.enc) || 0 }),
+    buy: (a) => purchase('armor', a.id, a.label, a.cost, () => placeFromBook('armor', a), { enc: Number(a.enc) || 0 }),
     notice: 'GOES INTO YOUR INVENTORY, STOWED — IT DOES NOT SET YOUR AC',
     filterHint: 'Filter by name or kind',
     note: (
@@ -1083,11 +1035,7 @@ export function ShopWindow({
       },
     },
     matches: (g, q) => g.label.toLowerCase().includes(q) || g.note.toLowerCase().includes(q),
-    buy: (g) => purchase('gear', g.id, g.label, g.cost, () => {
-      // The symbol rows carry no Encumbrance the sheet can add up, so they go in blank
-      // rather than as a zero somebody would later mistake for a measurement.
-      addToInventory(g.label, g.encNote ? '' : String(g.enc), (item) => item.name === g.label);
-    }, { enc: g.encNote ? 0 : Number(g.enc) || 0 }),
+    buy: (g) => purchase('gear', g.id, g.label, g.cost, () => placeFromBook('gear', g), { enc: g.encNote ? 0 : Number(g.enc) || 0 }),
     notice: 'GOES INTO YOUR INVENTORY, STOWED',
     filterHint: 'Filter by name or what it does',
     note: ENC_FOOTNOTE,
@@ -1131,9 +1079,7 @@ export function ShopWindow({
       },
     },
     matches: (m, q) => m.label.toLowerCase().includes(q) || m.effect.toLowerCase().includes(q),
-    buy: (m) => purchase(id, m.id, m.label, m.cost, () => {
-      addToInventory(m.label, '', (item) => item.name === m.label);
-    }),
+    buy: (m) => purchase(id, m.id, m.label, m.cost, () => placeFromBook(id, m)),
     notice: 'GOES INTO YOUR INVENTORY, UNFITTED',
     filterHint: 'Filter by name or effect',
     note: `Buying a mod is not fitting it — that is a ${fits} check at a bench, and the `
@@ -1143,23 +1089,15 @@ export function ShopWindow({
   // --------------------------------------------------------------- vehicles
 
   /**
-   * The first vehicle slot with nothing in it, or null when all six are full.
+   * How many vehicle slots are empty.
    *
    * A slot is free when it has no name. The sheet writes the preset's label into the name
    * on selection, so "has a name" and "has a vehicle" are the same question.
    */
-  /** How many vehicle slots are empty. */
   const freeVehicleSlots = (data: Record<string, unknown>): number => {
     let n = 0;
     for (let i = 1; i <= CWN_VEHICLE_ROWS; i += 1) if (!String(data[`vehicle${i}_name`] ?? '').trim()) n += 1;
     return n;
-  };
-
-  const firstFreeVehicle = (data: Record<string, unknown>): number | null => {
-    for (let i = 1; i <= CWN_VEHICLE_ROWS; i += 1) {
-      if (!String(data[`vehicle${i}_name`] ?? '').trim()) return i;
-    }
-    return null;
   };
 
   /** How many of a preset the character already has parked, by type rather than by name. */
@@ -1178,7 +1116,7 @@ export function ShopWindow({
    *
    * This shelf was left out of the first pass on the grounds that a vehicle is its own
    * sheet rather than a row - which was wrong. It is the same move the gun shop already
-   * makes: find the first free numbered slot and write the block into it. `presetFields`
+   * makes: find the first free numbered slot and write the block into it (bookPlacement.ts). `presetFields`
    * is the sheet's own function for exactly this, the one the TYPE dropdown calls, so the
    * shop cannot fill a vehicle in differently from the sheet.
    *
@@ -1195,14 +1133,7 @@ export function ShopWindow({
       );
       return;
     }
-    purchase('vehicles', preset.id, preset.label, preset.cost, () => {
-      const data = (sheetNow.current?.data ?? {}) as Record<string, unknown>;
-      const slot = firstFreeVehicle(data);
-      if (slot === null) return;
-      const fields = presetFields(slot, preset);
-      if (preset.note) fields[`vehicle${slot}_notes`] = preset.note;
-      handleFieldsChange?.(fields);
-    }, { slot: 'vehicle' });
+    purchase('vehicles', preset.id, preset.label, preset.cost, () => placeFromBook('vehicles', preset), { slot: 'vehicle' });
   };
 
   const vehicleShelf: Shelf<VehiclePreset> = {
@@ -1260,9 +1191,7 @@ export function ShopWindow({
       },
     },
     matches: (f, q) => f.label.toLowerCase().includes(q) || f.effect.toLowerCase().includes(q),
-    buy: (f) => purchase('vehicle_fittings', f.id, f.label, f.cost, () => {
-      addToInventory(f.label, '', (item) => item.name === f.label);
-    }),
+    buy: (f) => purchase('vehicle_fittings', f.id, f.label, f.cost, () => placeFromBook('vehicle_fittings', f)),
     notice: 'GOES INTO YOUR INVENTORY, UNFITTED',
     filterHint: 'Filter by name or effect',
     note: 'POW and MASS are what the fitting costs the vehicle once installed, and MIN is '
@@ -1299,9 +1228,7 @@ export function ShopWindow({
     matches: (w, q) => w.label.toLowerCase().includes(q) || (w.note ?? '').toLowerCase().includes(q),
     // A weapon the book prices as part of a hull rather than over a counter.
     buyable: (w) => w.cost !== undefined,
-    buy: (w) => purchase('vehicle_weapons', w.id, w.label, w.cost ?? 0, () => {
-      addToInventory(w.label, '', (item) => item.name === w.label);
-    }),
+    buy: (w) => purchase('vehicle_weapons', w.id, w.label, w.cost ?? 0, () => placeFromBook('vehicle_weapons', w)),
     notice: 'GOES INTO YOUR INVENTORY, UNMOUNTED',
     filterHint: 'Filter by name or note',
     note: 'A line with no price is not sold separately — it comes with the hull. Mounting '
@@ -1321,6 +1248,18 @@ export function ShopWindow({
     const entries = Object.entries(patch);
     if (entries.length === 1) handleFieldChange?.(entries[0][0], entries[0][1] as never);
     else if (entries.length) handleFieldsChange?.(patch as Record<string, string | number>);
+  };
+
+  /**
+   * One of a CWN book item, placed on the sheet as it stands now, the way its shelf places it
+   * (sheets/bookPlacement.ts, which GIVE ITEM's server placement is held to). Runs once per unit
+   * after checkout is paid; a full rack was refused before the money moved.
+   */
+  const placeFromBook = (catalogue: ShopStock, row: { id: string }) => {
+    const placed = placeBook(catalogue, row as BookRow, (sheetNow.current?.data ?? {}) as Record<string, unknown>);
+    if (!placed.ok) return;
+    setRefused(null);
+    applyPatch(placed.patch);
   };
 
   /**
@@ -1428,19 +1367,9 @@ export function ShopWindow({
     const extra = uploadedIn(base.id);
     if (!extra.length) return base;
 
-    const asRow = (e: { id: string; name: string; price: number; fields: Record<string, string> }) => ({
-      id: e.id,
-      // Both spellings, because the shelves are not consistent about it: weapons and
-      // cyberware use `name`, everything newer uses `label`.
-      name: e.name,
-      label: e.name,
-      price: e.price,
-      cost: e.price,
-      ...e.fields,
-    });
-
+    // As a row of this shelf (bookPlacement.ts asBookRow), so it is placed the CWN way.
     const byId = new Map(base.rows.map((r: any) => [base.rowKey(r), r]));
-    for (const e of extra) byId.set(e.id, asRow(e));
+    for (const e of extra) byId.set(e.id, asBookRow(e));
     return { ...base, rows: [...byId.values()] };
   })();
 
