@@ -15,6 +15,7 @@ import { SheetPage } from './SheetPage';
 import { NpcsPage } from './NpcsPage';
 import { ConditionsPage } from './ConditionsPage';
 import { RestsPage } from './RestsPage';
+import { HouseRulesPage } from './HouseRulesPage';
 import { CONDITION_ICONS } from '../sheets/conditionIcons';
 import { TryItPage } from './TryItPage';
 import { PublishPreviewPage } from './PublishPreviewPage';
@@ -135,6 +136,7 @@ const Icons: Record<BuilderPage | 'builder' | 'systems' | 'help' | 'save' | 'pub
   npcs: icon('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'),
   conditions: icon(...CONDITION_ICONS.skull),
   rests: icon('M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'),
+  house_rules: icon('M9 11l3 3L22 4', 'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'),
   try: icon('M5 3l14 9-14 9z'),
   problems: icon('M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z', 'M12 9v4', 'M12 17h.01'),
   help: icon('M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20z', 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3', 'M12 17h.01'),
@@ -501,6 +503,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}
             {ready && page === 'rests' && <RestsPage definition={definition!} edit={edit} api={api} />}
+            {ready && page === 'house_rules' && <HouseRulesPage definition={definition!} edit={edit} onGoTo={(p) => { setPage(p); setStatus(null); }} />}
             {ready && page === 'try' && <TryItPage definition={definition!} edit={looking ? undefined : edit} api={api} />}
           </Locked>
         </section>

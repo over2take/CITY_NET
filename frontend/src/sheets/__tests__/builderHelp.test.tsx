@@ -81,7 +81,7 @@ describe('the formula reference', () => {
 describe('the words beside each setting', () => {
   it('are sentences, filed by the page that shows them (each page\'s test checks they are all there)', () => {
     for (const [k, text] of Object.entries(HINTS)) {
-      expect(k, k).toMatch(/^(setup|words|bank|rules|sheet|npcs|conditions|rests|try)\.[a-zA-Z]+$/);
+      expect(k, k).toMatch(/^(setup|words|bank|rules|sheet|npcs|conditions|rests|house|try)\.[a-zA-Z]+$/);
       expect(text.length, k).toBeGreaterThan(30);
       expect(text.trim(), k).toMatch(/\.$/);
     }
