@@ -91,6 +91,16 @@ export const withoutHouseRule = (def: Definition, id: string): Definition => {
   return next;
 };
 
+/**
+ * The draft as it would be worked out with house rule `rule` on (4j4b): each formula whose
+ * alternative follows it worked out by the alternative, as the running game does
+ * (backend houseRules.js withHouseRules). For the sample character's value both ways.
+ */
+export const withHouseRuleOn = (def: Definition, rule: string): Definition => (Array.isArray(def.derived)
+  ? { ...def, derived: (def.derived as unknown[]).map((d) => (isObject(d) && isObject(d.alternative) && d.alternative.rule === rule && typeof d.alternative.formula === 'string'
+    ? { ...d, formula: d.alternative.formula } : d)) as Definition['derived'] }
+  : def);
+
 const sectionsWaiting = (sheet: unknown, id: string, kind: Waiting['kind'], page: BuilderPage): Waiting[] => (isObject(sheet) && Array.isArray(sheet.sections) ? sheet.sections : [])
   .filter((s): s is Obj => isObject(s) && s.only_with === id && typeof s.id === 'string')
   .map((s) => ({ kind, id: s.id as string, label: typeof s.label === 'string' && s.label ? s.label : s.id as string, page }));

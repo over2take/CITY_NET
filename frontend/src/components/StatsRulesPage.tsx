@@ -3,10 +3,16 @@ import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   statGroups, allStats, withNewGroup, withGroupLabel, withoutGroup, withNewStat, withStat, withoutStat, sampleOf, withSample,
   tableList, withNewTable, withTableLabel, withoutTable, withBands, lookupIn,
-  formulaList, withNewFormula, withFormula, withoutFormula, usedBy, problemsByFormula, insertToken, FUNCTIONS,
+  formulaList, withNewFormula, withFormula, withoutFormula, withAlternative, usedBy, problemsByFormula, insertToken, FUNCTIONS,
+  type Formula,
 } from '../sheets/statsRules';
+import { houseRuleList, withHouseRuleOn } from '../sheets/houseRules';
+import { OnlyWith } from './OnlyWith';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead, FieldName } from './HelpHint';
+
+/** Worked out values and mistakes, by formula. */
+type Tried = { values: Record<string, number>; problems: Record<string, string> };
 
 // The builder's STATS & RULES page (4b2d): the numbers players fill in (STATS) and the lookup
 // tables formulas read (TABLES), with FORMULAS between them (approved mockup
@@ -171,13 +177,50 @@ function TablesTab({ definition, edit }: Props) {
 }
 
 /**
+ * A formula's alternative under a house rule (4j4b; approved mockup docs/mockups/optional-rules.html,
+ * 2026-10-14): WITH A RULE, then USE INSTEAD, and the sample character's value with that rule on (or
+ * the alternative's mistake), worked out by the server like the formula's own. Nothing in a system with
+ * no house rules, unless a formula still has one naming a rule since deleted.
+ */
+function Alternative({ f, definition, edit, tried, field }: { f: Formula; definition: Definition; edit: (next: Definition) => void; tried: Record<string, Tried>; field: React.CSSProperties }) {
+  const id = React.useId();
+  const rule = f.alternative?.rule;
+  const rules = houseRuleList(definition);
+  if (!rules.length && !rule) return null;
+  const ruleName = (rules.find((r) => r.id === rule)?.name.trim() || rule || '').toUpperCase();
+  const t = rule ? tried[rule] : undefined;
+  const mistake = t?.problems[f.id];
+  const label: React.CSSProperties = { fontSize: 9, letterSpacing: 2, opacity: 0.75 };
+  return (
+    <div data-testid={`alternative-${f.id}`} style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '4px 8px', alignItems: 'center', marginTop: 4 }}>
+      <OnlyWith definition={definition} value={rule} label="WITH A RULE" hint={HINTS['only.alternative']} none="— none —" style={label}
+        selectStyle={{ ...field, justifySelf: 'start' }} onChange={(r) => edit(withAlternative(definition, f.id, { rule: r }))} />
+      {rule && <>
+        <FieldName htmlFor={id} hint={HINTS['only.instead']} style={label}>USE INSTEAD</FieldName>
+        <input id={id} type="text" maxLength={1000} value={f.alternative?.formula ?? ''} aria-invalid={mistake ? true : undefined}
+          style={{ ...field, width: '100%', borderColor: mistake ? 'var(--danger)' : 'var(--cyan)' }}
+          onChange={(e) => edit(withAlternative(definition, f.id, { formula: e.target.value }))} />
+        <span />
+        {mistake
+          ? <span role="alert" style={{ color: 'var(--danger)', fontSize: 11 }}>{mistake}</span>
+          : <span data-testid={`alt-value-${f.id}`} style={{ color: 'var(--cyan)', fontSize: 11 }}>
+              {t && t.values[f.id] !== undefined ? `${t.values[f.id]} with ${ruleName} on` : '·'}
+            </span>}
+      </>}
+    </div>
+  );
+}
+
+/**
  * FORMULAS: each formula's name and text, its value for the sample character a moment after
  * typing stops (worked out by the server, POST /api/systems/preview-values, so it is the game's own
  * engine), its mistake under it, and which formulas read it; INSERT puts a name at the cursor.
  */
 function FormulasTab({ definition, edit, api }: Props) {
   const formulas = formulaList(definition);
-  const [preview, setPreview] = useState<{ values: Record<string, number>; problems: Record<string, string> } | null>(null);
+  const [preview, setPreview] = useState<Tried | null>(null);
+  /** The values with each house rule an alternative follows on, by rule (4j4b). */
+  const [tried, setTried] = useState<Record<string, Tried>>({});
   const [cursor, setCursor] = useState<{ id: string; at: number } | null>(null);
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -188,6 +231,11 @@ function FormulasTab({ definition, edit, api }: Props) {
       api.previewValues(definition).then((r) => {
         if (live && r.ok) setPreview({ values: r.value.values, problems: problemsByFormula(r.value.problems) });
       });
+      for (const rule of new Set(formulaList(definition).map((f) => f.alternative?.rule).filter((x): x is string => !!x))) {
+        api.previewValues(withHouseRuleOn(definition, rule)).then((r) => {
+          if (live && r.ok) setTried((was) => ({ ...was, [rule]: { values: r.value.values, problems: problemsByFormula(r.value.problems) } }));
+        });
+      }
     }, PREVIEW_DELAY_MS);
     return () => { live = false; clearTimeout(timer); };
   }, [api, definition]);
@@ -248,6 +296,7 @@ function FormulasTab({ definition, edit, api }: Props) {
                             onSelect={(e) => setCursor({ id: f.id, at: (e.target as HTMLInputElement).selectionStart ?? 0 })}
                             onFocus={(e) => setCursor({ id: f.id, at: e.target.selectionStart ?? e.target.value.length })} />}
                       {problem && <div role="alert" style={{ ...why, color: 'var(--danger)', opacity: 1, fontSize: 11 }}>{problem}</div>}
+                      {!condition && <Alternative f={f} definition={definition} edit={edit} tried={tried} field={field} />}
                     </td>
                     <td data-testid={`value-${f.id}`} style={{ ...td, textAlign: 'right', color: 'var(--cyan)', fontSize: 13 }}>
                       {value !== undefined ? value : '·'}

@@ -259,3 +259,55 @@ describe('the "?"', () => {
     allSeen('rules', 10);
   });
 });
+
+describe('a formula\'s alternative (4j4b)', () => {
+  const req = createRequire(import.meta.url);
+  const { previewDerived } = req('../../../../backend/systemBuilder/derived.js');
+  const server = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+    const { definition } = JSON.parse(String(init!.body));
+    return { ok: true, status: 200, json: async () => previewDerived({ lookups: definition.lookups, derived: definition.derived }, definition.samples || {}) } as unknown as Response;
+  });
+  const RULED = { ...HEARTH, samples: { str: 16, dex: 14 },
+    house_rules: [{ id: 'gritty', name: 'Gritty wounds' }],
+    derived: [{ id: 'max_hp', label: 'Max HP', formula: '10 + @str' }, { id: 'hurt', kind: 'condition', when: '1', then: '1', else: '0' }] } as unknown as Definition;
+  const openFormulas = async (start: Definition) => {
+    const edits: Definition[] = [];
+    const Harness = () => {
+      const [def, setDef] = useState(start);
+      return <StatsRulesPage definition={def} api={systemsApi('gm', server as typeof fetch)} edit={(next) => { edits.push(next); setDef(next); }} />;
+    };
+    render(<Harness />);
+    await userEvent.click(screen.getByRole('tab', { name: 'FORMULAS' }));
+    return { last: () => edits[edits.length - 1] };
+  };
+  const row = (id: string) => within(screen.getByTestId(`formula-${id}`));
+
+  it('is picked, written, and worked out for the sample with its rule on', async () => {
+    const { last } = await openFormulas(RULED);
+    expect(row('hurt').queryByRole('combobox', { name: 'WITH A RULE' })).toBeNull();
+    const pick = row('max_hp').getByRole('combobox', { name: 'WITH A RULE' });
+    expect(within(pick).getAllByRole('option').map((o) => o.textContent)).toEqual(['— none —', 'GRITTY WOUNDS']);
+    fireEvent.change(pick, { target: { value: 'gritty' } });
+    expect((last().derived as object[])[0]).toEqual({ id: 'max_hp', label: 'Max HP', formula: '10 + @str', alternative: { rule: 'gritty', formula: '10 + @str' } });
+    fireEvent.change(row('max_hp').getByRole('textbox', { name: 'USE INSTEAD' }), { target: { value: '@str' } });
+    expect((last().derived as { alternative: object }[])[0].alternative).toEqual({ rule: 'gritty', formula: '@str' });
+    await waitFor(() => expect(screen.getByTestId('alt-value-max_hp').textContent).toBe('16 with GRITTY WOUNDS on'));
+    expect(screen.getByTestId('value-max_hp').textContent).toBe('26');
+    for (const k of ['only.alternative', 'only.instead'] as const) expect(row('max_hp').getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+  });
+
+  it('says its own mistake under it, and goes with its rule', async () => {
+    const { last } = await openFormulas({ ...RULED, derived: [{ id: 'max_hp', label: 'Max HP', formula: '10 + @str', alternative: { rule: 'gritty', formula: 'mod(' } }] } as unknown as Definition);
+    expect(await row('max_hp').findByRole('alert')).toBeTruthy();
+    expect(row('max_hp').getByRole('textbox', { name: 'USE INSTEAD' }).getAttribute('aria-invalid')).toBe('true');
+    fireEvent.change(row('max_hp').getByRole('combobox', { name: 'WITH A RULE' }), { target: { value: '' } });
+    expect((last().derived as object[])[0]).toEqual({ id: 'max_hp', label: 'Max HP', formula: '10 + @str' });
+    expect(row('max_hp').queryByRole('textbox', { name: 'USE INSTEAD' })).toBeNull();
+  });
+
+  it('isn\'t there in a system with no house rules', async () => {
+    await openFormulas({ ...HEARTH, derived: [{ id: 'max_hp', formula: '1' }] } as unknown as Definition);
+    expect(screen.queryByRole('combobox', { name: 'WITH A RULE' })).toBeNull();
+    expect(screen.queryByTestId('alternative-max_hp')).toBeNull();
+  });
+});
