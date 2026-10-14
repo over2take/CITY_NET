@@ -5,6 +5,8 @@ import {
   tableList, withNewTable, withTableLabel, withoutTable, withBands, lookupIn,
   formulaList, withNewFormula, withFormula, withoutFormula, usedBy, problemsByFormula, insertToken, FUNCTIONS,
 } from '../sheets/statsRules';
+import { HINTS } from '../sheets/builderHelp';
+import { ColumnHead, FieldName } from './HelpHint';
 
 // The builder's STATS & RULES page (4b2d): the numbers players fill in (STATS) and the lookup
 // tables formulas read (TABLES), with FORMULAS between them (approved mockup
@@ -64,8 +66,9 @@ function StatsTab({ definition, edit }: Props) {
           {g.stats.length > 0 && (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead><tr>
-                <th scope="col" style={th}>NAME</th><th scope="col" style={th}>ID</th><th scope="col" style={th}>LOWEST</th><th scope="col" style={th}>HIGHEST</th>
-                <th scope="col" style={th}>TIED TO</th><th scope="col" style={th}>SAMPLE</th><th scope="col" style={th} />
+                <ColumnHead style={th}>NAME</ColumnHead><ColumnHead style={th} hint={HINTS['rules.id']}>ID</ColumnHead>
+                <ColumnHead style={th} hint={HINTS['rules.lowest']}>LOWEST</ColumnHead><ColumnHead style={th} hint={HINTS['rules.highest']}>HIGHEST</ColumnHead>
+                <ColumnHead style={th} hint={HINTS['rules.tiedTo']}>TIED TO</ColumnHead><ColumnHead style={th} hint={HINTS['rules.sample']}>SAMPLE</ColumnHead><ColumnHead style={th} />
               </tr></thead>
               <tbody>
                 {g.stats.map((s) => (
@@ -127,7 +130,7 @@ function TablesTab({ definition, edit }: Props) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 220px', gap: 16, padding: '8px 10px', alignItems: 'start' }}>
               <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead><tr><th scope="col" style={th}>UP TO</th><th scope="col" style={th}>GIVES</th><th scope="col" style={th} /></tr></thead>
+                <thead><tr><ColumnHead style={th} hint={HINTS['rules.upTo']}>UP TO</ColumnHead><ColumnHead style={th} hint={HINTS['rules.gives']}>GIVES</ColumnHead><ColumnHead style={th} /></tr></thead>
                 <tbody>
                   {t.bands.map((b, i) => {
                     const last = i === t.bands.length - 1;
@@ -147,7 +150,7 @@ function TablesTab({ definition, edit }: Props) {
                 </tbody>
               </table>
               <div style={{ border: '1px solid var(--dark-green)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={small}>TRY IT</span>
+                <FieldName hint={HINTS['rules.tryTable']} style={small}>TRY IT</FieldName>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input type="number" aria-label={`Try ${t.label || t.id}`} value={test} style={{ ...field, width: 70 }}
                     onChange={(e) => setTests({ ...tests, [t.id]: e.target.value })} />
@@ -219,8 +222,8 @@ function FormulasTab({ definition, edit, api }: Props) {
         {formulas.length > 0 && (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead><tr>
-              <th scope="col" style={{ ...th, width: 190 }}>NAME</th><th scope="col" style={th}>FORMULA</th>
-              <th scope="col" style={{ ...th, width: 60, textAlign: 'right' }}>VALUE</th><th scope="col" style={th} />
+              <ColumnHead style={{ ...th, width: 190 }}>NAME</ColumnHead><ColumnHead style={th} hint={HINTS['rules.formula']}>FORMULA</ColumnHead>
+              <ColumnHead style={{ ...th, width: 60, textAlign: 'right' }} hint={HINTS['rules.value']}>VALUE</ColumnHead><ColumnHead style={th} />
             </tr></thead>
             <tbody>
               {formulas.map((f) => {

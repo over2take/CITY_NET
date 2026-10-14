@@ -2,7 +2,7 @@ import React from 'react';
 import type { Definition } from '../sheets/systemsApi';
 import type { WordForm } from '../sheets/words';
 import { HINTS, type HintKey } from '../sheets/builderHelp';
-import { HelpHint } from './HelpHint';
+import { ColumnHead } from './HelpHint';
 import { TERM_GROUPS, PART_ROWS, WORD_LIMIT, wordOf, withWord, withoutWord, readsAs, termPartOff } from '../sheets/wordsFeatures';
 
 // The builder's WORDS page (4b1b): what the game calls the app's terms, one table, each term's one,
@@ -32,10 +32,7 @@ export function WordsPage({ definition, edit }: Props) {
         <thead>
           <tr>
             {([['TERM'], ...FORMS.map((f) => [FORM_LABEL[f], FORM_HINT[f]]), ['READS AS', 'words.readsAs'], ['']] as [string, HintKey?][]).map(([h, hint], i) => (
-              // The header is named by its word alone, so the "?" isn't read out with every cell under it.
-              <th key={i} scope="col" aria-label={hint ? h : undefined} style={{ textAlign: 'left', fontSize: 10, letterSpacing: 2, opacity: 0.7, fontWeight: 'normal', padding: '0 8px 6px 0' }}>
-                {hint ? <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}>{h}<HelpHint text={HINTS[hint]} /></span> : h}
-              </th>
+              <ColumnHead key={i} hint={hint && HINTS[hint]} style={{ textAlign: 'left', fontSize: 10, letterSpacing: 2, opacity: 0.7, fontWeight: 'normal', padding: '0 8px 6px 0' }}>{h}</ColumnHead>
             ))}
           </tr>
         </thead>

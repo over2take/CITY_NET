@@ -6,6 +6,7 @@ import { createRequire } from 'module';
 
 import { StatsRulesPage } from '../StatsRulesPage';
 import { systemsApi, type Definition } from '../../sheets/systemsApi';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * The builder's STATS & RULES page, STATS and TABLES (4b2d1). Approved mockup builder-stats-rules
@@ -233,5 +234,28 @@ describe('TABLES', () => {
     expect((last().lookups as { new_table: { label: string } }).new_table.label).toBe('Armor');
     await userEvent.click(screen.getByLabelText('Remove the Armor table'));
     expect('lookups' in last()).toBe(false);
+  });
+});
+
+describe('the "?"', () => {
+  it('explains the columns of STATS, FORMULAS and TABLES and the table check, each header still named by its word', async () => {
+  const seen = new Set<string | null>();
+  const look = () => screen.queryAllByRole('note').forEach((n) => seen.add(n.getAttribute('aria-label')));
+  const allSeen = (page: string, count: number) => {
+    const keys = Object.keys(HINTS).filter((k) => k.startsWith(`${page}.`)) as (keyof typeof HINTS)[];
+    expect(keys).toHaveLength(count);
+    for (const k of keys) expect(seen.has(HINTS[k]), k).toBe(true);
+  };
+    open({ ...HEARTH, lookups: { mod: { bands: [{ upTo: 9, value: -1 }, { value: 1 }] } }, derived: [{ id: 'str_mod', formula: 'mod(@str)' }] });
+    for (const name of ['ID', 'LOWEST', 'HIGHEST', 'TIED TO', 'SAMPLE']) expect(screen.getAllByRole('columnheader', { name }).length, name).toBe(2);
+    expect(within(screen.getAllByRole('columnheader', { name: 'NAME' })[0]).queryByRole('note')).toBeNull();
+    look();
+    await userEvent.click(screen.getByRole('tab', { name: 'FORMULAS' }));
+    for (const name of ['FORMULA', 'VALUE']) expect(screen.getByRole('columnheader', { name }), name).toBeTruthy();
+    look();
+    await userEvent.click(screen.getByRole('tab', { name: 'TABLES' }));
+    for (const name of ['UP TO', 'GIVES']) expect(screen.getByRole('columnheader', { name }), name).toBeTruthy();
+    look();
+    allSeen('rules', 10);
   });
 });

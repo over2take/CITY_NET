@@ -3,6 +3,8 @@ import type { Definition, systemsApi } from '../sheets/systemsApi';
 import { partIsOn } from '../sheets/wordsFeatures';
 import type { CustomRenderSheet } from '../sheets/customTemplates';
 import { SheetPreview } from './SheetPreview';
+import { HINTS } from '../sheets/builderHelp';
+import { FieldName } from './HelpHint';
 import {
   sheetOf, fieldKind, pagesOf, sectionsOn, LAYOUTS, TYPES,
   withCustomized, withAutomatic, tabNameProblem, withNewTab, withTabName, withTabMoved, withoutTab,
@@ -333,7 +335,7 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
           </label>
         )}
         <div role="group" aria-label="Looks like" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={small}>LOOKS LIKE</span>
+          <FieldName hint={HINTS['sheet.looksLike']} style={small}>LOOKS LIKE</FieldName>
           <span style={{ display: 'inline-flex', border: '1px solid var(--green)', alignSelf: 'flex-start' }}>
             {LAYOUTS.map((l) => (
               <button key={l.id} type="button" style={segBtn(s.layout === l.id)} aria-pressed={s.layout === l.id}
@@ -342,11 +344,11 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
           </span>
         </div>
         {s.layout === 'grid' && (
-          <label style={label}>
-            <span style={small}>COLUMNS</span>
+          <div style={label}>
+            <FieldName hint={HINTS['sheet.columns']} style={small}>COLUMNS</FieldName>
             <input type="number" min={1} max={8} aria-label="Columns" value={s.columns ?? 1} style={{ ...input, width: 70 }}
               onChange={(e) => { if (e.target.value.trim() !== '') set(withSection(definition, s.id, { columns: Number(e.target.value) })); }} />
-          </label>
+          </div>
         )}
         <div>
           <button type="button" className="utility-btn" style={btn} disabled={s.fields.length >= 100}
@@ -400,7 +402,7 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
         {what ? <span style={why}>{what}</span> : (
           <>
             <div role="group" aria-label="Kind" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <span style={small}>KIND</span>
+              <FieldName hint={HINTS['sheet.kind']} style={small}>KIND</FieldName>
               <span style={{ display: 'inline-flex', border: '1px solid var(--green)', alignSelf: 'flex-start', flexWrap: 'wrap' }}>
                 {TYPES.map((t) => (
                   <button key={t.id} type="button" style={segBtn(f.type === t.id)} aria-pressed={f.type === t.id}
@@ -413,7 +415,7 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
         )}
         {!forNpcs && <>
         <div role="group" aria-label="Who sees it" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={small}>WHO SEES IT</span>
+          <FieldName hint={HINTS['sheet.whoSees']} style={small}>WHO SEES IT</FieldName>
           <span style={{ display: 'inline-flex', border: '1px solid var(--green)', alignSelf: 'flex-start' }}>
             <button type="button" style={segBtn(f.visibility !== 'public')} aria-pressed={f.visibility !== 'public'}
               onClick={() => set(withField(definition, f.id, { everyone: false }))}>OWNER AND GM</button>
@@ -429,7 +431,7 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
         </label>
         {kind !== 'formula' && (
           <div role="group" aria-label="Who changes it" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <span style={small}>WHO CHANGES IT</span>
+            <FieldName hint={HINTS['sheet.whoChanges']} style={small}>WHO CHANGES IT</FieldName>
             <span style={{ display: 'inline-flex', border: '1px solid var(--green)', alignSelf: 'flex-start' }}>
               <button type="button" style={segBtn(f.edit !== 'gm')} aria-pressed={f.edit !== 'gm'}
                 onClick={() => set(withField(definition, f.id, { gmOnly: false }))}>THE PLAYER</button>
@@ -440,11 +442,11 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
         )}
         </>}
         {forNpcs && <span style={{ ...why, fontSize: 11 }}>Only the GM sees and changes an NPC&apos;s stat block.</span>}
-        <label style={label}>
-          <span style={small}>HINT</span>
+        <div style={label}>
+          <FieldName hint={HINTS['sheet.hint']} style={small}>HINT</FieldName>
           <input type="text" aria-label="Hint" maxLength={300} value={f.hint ?? ''} placeholder="shown under it" style={input}
             onChange={(e) => set(withField(definition, f.id, { hint: e.target.value }))} />
-        </label>
+        </div>
         <label style={label}>
           <span style={small}>MOVE TO</span>
           <select aria-label="Move to" value={home.id} style={input} onChange={(e) => set(withFieldIn(definition, f.id, e.target.value))}>

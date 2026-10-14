@@ -7,6 +7,7 @@ import { createRequire } from 'module';
 import { NpcsPage, TRY_DELAY_MS } from '../NpcsPage';
 import type { Definition, systemsApi } from '../../sheets/systemsApi';
 import { tierList } from '../../sheets/npcs';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * The builder's NPCS page, TIERS (4b4c). Approved mockup builder-npcs (2026-10-07): tiers are
@@ -421,5 +422,23 @@ describe('STAT BLOCK (4b4d)', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'STAT BLOCK' }));
     const preview = within(await screen.findByTestId('sheet-preview'));
     await waitFor(() => expect((preview.getByDisplayValue('10') as HTMLInputElement).readOnly).toBe(false));
+  });
+});
+
+describe('the "?"', () => {
+  it('sits beside a tier\'s HP, defense and the level to try it at', async () => {
+  const seen = new Set<string | null>();
+  const look = () => screen.queryAllByRole('note').forEach((n) => seen.add(n.getAttribute('aria-label')));
+  const allSeen = (page: string, count: number) => {
+    const keys = Object.keys(HINTS).filter((k) => k.startsWith(`${page}.`)) as (keyof typeof HINTS)[];
+    expect(keys).toHaveLength(count);
+    for (const k of keys) expect(seen.has(HINTS[k]), k).toBe(true);
+  };
+    open();
+    await ready();
+    for (const name of ['HP', 'Defense']) expect(settings().getByRole('textbox', { name }), name).toBeTruthy();
+    expect(settings().getByRole('spinbutton', { name: 'Level' })).toBeTruthy();
+    look();
+    allSeen('npcs', 3);
   });
 });
