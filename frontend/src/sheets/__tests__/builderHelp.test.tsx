@@ -1,13 +1,13 @@
 import React from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createRequire } from 'module';
 
 import { TOUR, TOPICS, FORMULA_FUNCTIONS, EXAMPLES, HINTS, topicById } from '../builderHelp';
 import { BUILDER_PAGES } from '../builderSession';
 import { HEALTH_MODELS } from '../setup';
-import { HelpHint, FieldName, popoverPlace, POP_WIDTH } from '../../components/HelpHint';
+import { HelpHint, FieldName, ColumnHead, popoverPlace, POP_WIDTH } from '../../components/HelpHint';
 
 /**
  * Help for GMs in the builder (4i; approved mockup docs/mockups/builder-help.html, 2026-10-13):
@@ -81,7 +81,7 @@ describe('the formula reference', () => {
 describe('the words beside each setting', () => {
   it('are sentences, filed by the page that shows them (each page\'s test checks they are all there)', () => {
     for (const [k, text] of Object.entries(HINTS)) {
-      expect(k, k).toMatch(/^(setup|words|bank)\.[a-zA-Z]+$/);
+      expect(k, k).toMatch(/^(setup|words|bank|rules|sheet|npcs)\.[a-zA-Z]+$/);
       expect(text.length, k).toBeGreaterThan(30);
       expect(text.trim(), k).toMatch(/\.$/);
     }
@@ -142,5 +142,15 @@ describe('a setting\'s name with its "?"', () => {
     expect(document.querySelector('label')).toBeNull();
     expect(screen.getByText('COUNTED IN').tagName).toBe('SPAN');
     expect(screen.getByRole('note', { name: 'How it counts.' })).toBeTruthy();
+  });
+});
+
+describe('a column header with its "?"', () => {
+  it('is named by its word alone, the "?" inside it', () => {
+    render(<table><thead><tr><ColumnHead hint="The lowest.">LOWEST</ColumnHead><ColumnHead>NAME</ColumnHead><ColumnHead /></tr></thead></table>);
+    const lowest = screen.getByRole('columnheader', { name: 'LOWEST' });
+    expect(within(lowest).getByRole('note', { name: 'The lowest.' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'NAME' }).getAttribute('aria-label')).toBeNull();
+    expect(screen.getAllByRole('note')).toHaveLength(1);
   });
 });

@@ -9,6 +9,7 @@ import { SAMPLE_NAME } from '../SheetPreview';
 import { othersSee } from '../../sheets/publicLines';
 import type { Definition, systemsApi } from '../../sheets/systemsApi';
 import type { CustomRenderSheet } from '../../sheets/customTemplates';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * The builder's CHARACTER SHEET page: automatic or customized, the tree of tabs, sections and
@@ -670,5 +671,27 @@ describe('asking the server', () => {
     await act(async () => { answers[1]({ ok: true, value: { sheet: effectiveSheet(noBank), starter: starterSheet(noBank) } }); });
     await act(async () => { answers[0]({ ok: true, value: { sheet: effectiveSheet(HEARTH), starter: STARTER } }); });
     expect(within(tree()).queryByText('MONEY')).toBeNull();
+  });
+});
+
+describe('the "?"', () => {
+  it('sits beside each setting of a section and a field', async () => {
+  const seen = new Set<string | null>();
+  const look = () => screen.queryAllByRole('note').forEach((n) => seen.add(n.getAttribute('aria-label')));
+  const allSeen = (page: string, count: number) => {
+    const keys = Object.keys(HINTS).filter((k) => k.startsWith(`${page}.`)) as (keyof typeof HINTS)[];
+    expect(keys).toHaveLength(count);
+    for (const k of keys) expect(seen.has(HINTS[k]), k).toBe(true);
+  };
+    await customized();
+    await userEvent.click(node('IDENTITY section'));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Looks like' })).getByRole('button', { name: 'GRID' }));
+    expect(screen.getByRole('spinbutton', { name: 'Columns' })).toBeTruthy();
+    look();
+    await userEvent.click(screen.getByRole('button', { name: '+ FIELD' }));
+    for (const name of ['Kind', 'Who sees it', 'Who changes it']) expect(screen.getByRole('group', { name }), name).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Hint' })).toBeTruthy();
+    look();
+    allSeen('sheet', 6);
   });
 });

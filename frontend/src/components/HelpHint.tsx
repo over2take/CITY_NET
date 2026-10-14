@@ -58,6 +58,18 @@ export function HelpHint({ text }: { text: string }) {
 }
 
 /**
+ * A table's column header with its "?". The header is named by its word alone, so the "?"'s words
+ * aren't read out with every cell under it.
+ */
+export function ColumnHead({ hint, style, children }: { hint?: string; style?: CSSProperties; children?: string }) {
+  return (
+    <th scope="col" aria-label={hint ? children : undefined} style={style}>
+      {hint ? <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}>{children}<HelpHint text={hint} /></span> : children}
+    </th>
+  );
+}
+
+/**
  * A setting's name with its "?" after it. The "?" stays outside the <label>: inside, its words would
  * be read as part of the field's name. `htmlFor` ties the name to its field, when it has one.
  */

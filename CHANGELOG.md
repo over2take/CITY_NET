@@ -115,8 +115,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
-- **A "?" beside the builder's settings, first pages.** SETUP, WORDS and the bank's currencies on
-  FEATURES now explain each setting on hover or keyboard focus. The rest of the pages follow.
+- **A "?" beside the builder's settings.** SETUP, WORDS, the bank's currencies on FEATURES, STATS & RULES,
+  CHARACTER SHEET and NPCS now explain each setting on hover or keyboard focus. The rest of the pages follow.
 - **Help for the builder, written.** The words of the builder's help in one place: a first-time tour,
   a topic for every page, and a reference for formulas, dice, health models and sharing; and the "?"
   that will sit beside each setting. They reach the screen in the next pieces.

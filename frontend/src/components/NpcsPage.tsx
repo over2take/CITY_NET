@@ -6,6 +6,8 @@ import {
   settableFields, blockFields, boxErrors, triedText, LIMITS, ownBlock, withOwnBlock, asBlockDraft, fromBlockDraft,
 } from '../sheets/npcs';
 import { NameBox, blankProblem, SheetPage } from './SheetPage';
+import { HINTS } from '../sheets/builderHelp';
+import { FieldName } from './HelpHint';
 
 // The builder's NPCS page (4b4c): how a system's NPCs are written down (STAT BLOCK, 4b4d) and the
 // ready-made ones GENERATE_SHEET offers (TIERS). Approved mockup docs/mockups/builder-npcs.html
@@ -145,12 +147,12 @@ function TiersTab({ definition, edit, api, characterSheet }: Props & { character
                 <NameBox value={open.label} aria="Tier name" max={LIMITS.label} problem={blankProblem('tier')}
                   onChange={(text) => edit(withTierLabel(definition, open.id, text))} />
               </label>
-              <label style={{ ...label, width: 170 }}><span style={small}>HP</span>
+              <div style={{ ...label, width: 170 }}><FieldName hint={HINTS['npcs.hp']} style={small}>HP</FieldName>
                 <Box key={`${open.id}-hp`} aria="HP" value={boxText(open.hp)} error={errors.hp} placeholder="the token's own" onChange={(text) => edit(withTierBox(definition, open.id, 'hp', text))} />
-              </label>
-              <label style={{ ...label, width: 190 }}><span style={small}>DEFENSE</span>
+              </div>
+              <div style={{ ...label, width: 190 }}><FieldName hint={HINTS['npcs.defense']} style={small}>DEFENSE</FieldName>
                 <Box key={`${open.id}-defense`} aria="Defense" value={boxText(open.defense)} error={errors.defense} placeholder="the token's own" onChange={(text) => edit(withTierBox(definition, open.id, 'defense', text))} />
-              </label>
+              </div>
               <span style={{ flex: 1 }} />
               {confirm === open.id ? (
                 <span role="group" aria-label={`Remove ${open.label}`} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -176,10 +178,10 @@ function TiersTab({ definition, edit, api, characterSheet }: Props & { character
             <div role="group" aria-label="Try it" style={{ borderTop: '1px solid var(--dark-green)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <span style={{ ...small, alignSelf: 'center' }}>TRY IT</span>
-                <label style={label}><span style={small}>LEVEL</span>
+                <div style={label}><FieldName hint={HINTS['npcs.level']} style={small}>LEVEL</FieldName>
                   <input type="number" aria-label="Level" min={0} max={99} value={level} style={{ ...input, width: 64 }}
                     onChange={(e) => { if (e.target.value.trim() !== '') setLevel(Math.max(0, Math.min(99, Math.round(Number(e.target.value) || 0)))); }} />
-                </label>
+                </div>
                 <button type="button" className="utility-btn" style={{ ...btn, background: 'var(--green)', color: 'var(--black)' }} disabled={!api} onClick={roll}>ROLL A {open.label}</button>
                 <span style={why}>Rolls a sample here; nothing is made or saved.</span>
               </div>

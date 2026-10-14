@@ -148,6 +148,28 @@ export const HINTS = {
   'bank.icon': 'Shown beside amounts in BANK.EXE and the shops: one of the five built in, or a PNG, WebP or SVG you upload.',
   'bank.readsAs': 'How an amount looks in the game with these settings.',
   'bank.whale': 'The balance in the main currency at which a player earns the whale celebration. Empty: never.',
+  // STATS & RULES
+  'rules.id': 'What formulas call this stat, like @str. It is set when the stat is added and never changes, so renaming the stat never breaks a formula.',
+  'rules.lowest': 'The lowest it should be. The sheet shows the range under the box, like 3 to 18. Empty: no lowest.',
+  'rules.highest': 'The highest it should be, shown with the lowest under the box on the sheet. Empty: no highest.',
+  'rules.tiedTo': 'The stat this one goes with, like a skill with its ability (Shoot with Dexterity). A formula still names every stat it reads.',
+  'rules.sample': 'A made-up character\'s value, for checking formulas: FORMULAS works every value out from these. Saved with the draft; players never see it.',
+  'rules.formula': 'Written the way the rulebook says it: @ and an id for a stat or another formula, a table by its id like mod(@str), and the functions under INSERT.',
+  'rules.value': 'What the formula comes to for the sample character, worked out by the game\'s own engine a moment after you stop typing.',
+  'rules.upTo': 'The highest number this row covers. Rows are read top to bottom, and the last one catches anything higher.',
+  'rules.gives': 'What a number in this row turns into: the table\'s answer.',
+  'rules.tryTable': 'Type a number to see what the table gives for it. Only for checking: nothing is saved.',
+  // CHARACTER SHEET
+  'sheet.looksLike': 'How the section sets out its fields. LIST: one under another. GRID: side by side in columns. NOTES: a list meant for long text. ITEMS: the character\'s items, where shops and GIVE put what they hand over.',
+  'sheet.columns': 'How many fields sit side by side in the grid, 1 to 8.',
+  'sheet.kind': 'What the field holds. NUMBER and TEXT take one line, LONG TEXT a box for paragraphs, and PICK ONE a list of choices you write.',
+  'sheet.whoSees': 'OWNER AND GM: only the character\'s player and the GM. EVERYONE: other players too, on the card they open from the token.',
+  'sheet.whoChanges': 'THE PLAYER fills it in. ONLY THE GM: the player sees it, but only the GM changes it, like XP or awards.',
+  'sheet.hint': 'A short line under the field on the sheet, like where a number comes from.',
+  // NPCS
+  'npcs.hp': 'The NPC token\'s HP: a number, a formula reading @level, or dice, rolled fresh for each NPC made from the tier. Blank: the token keeps its own.',
+  'npcs.defense': 'The NPC token\'s armor, worked out the same way as HP. Blank: the token keeps its own.',
+  'npcs.level': 'The level to try the tier at, what @level reads. In play the GM picks the level in ID.EXE, beside GENERATE_SHEET.',
 } as const;
 
 export type HintKey = keyof typeof HINTS;
