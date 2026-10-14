@@ -154,6 +154,9 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
       call<{ id: string; kind: ExampleKind; definition: Definition }>(fetcher, token, `/api/systems/examples/${encodeURIComponent(exampleId)}`),
     /** A new draft copied from a built-in example under the GM's own name; no link back. */
     createFromExample: (name: string, example: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name, example }),
+    /** A running system's house rules switched at the table (4j5a): the GM or a granted editor. */
+    setHouseRules: (systemId: string, rules: Record<string, boolean>) =>
+      call<{ house_rules: import('./types').HouseRuleState[] }>(fetcher, token, `${id(systemId)}/house-rules`, 'PUT', { rules }),
     /** Whether the builder's first-time tour has been seen (4i): one setting, on the server. */
     tourSeen: () => call<{ seen: boolean }>(fetcher, token, '/api/systems/tour'),
     /** The tour seen (finished or skipped), or to be shown again the next time the builder opens. */

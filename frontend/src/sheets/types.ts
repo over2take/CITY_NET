@@ -241,6 +241,9 @@ export interface CustomBank {
   whale: number | null;
 }
 
+/** One of a custom system's house rules as the game runs it (4j): whether the table has it on. */
+export interface HouseRuleState { id: string; name: string; description: string; starts: boolean; on: boolean }
+
 export interface SheetTemplate {
   id: string;
   name: string;
@@ -275,6 +278,9 @@ export interface SheetTemplate {
   /** A custom system's distance unit (sheets/distance.ts reads it). Absent on the built-in
    *  systems, whose ruler reads feet as it always has. */
   distance?: string;
+  /** A custom system's house rules, each with whether the table has it on (sheets/houseRules.ts
+   *  houseRulesIn reads them). Absent on the built-in systems, whose house rules are their own. */
+  houseRules?: HouseRuleState[];
   /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
    *  (a custom system's stat block). Absent = NPCs use this template. */
   npcLayout?: SheetTemplate;

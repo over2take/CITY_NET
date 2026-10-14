@@ -119,8 +119,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   part, a sheet section, a condition or a formula's alternative can wait on one; the server checks them all and runs
   the game with them, hiding what waits on a rule that is off and never deleting it (a condition already on a token
   stays there, out of sight). The builder has a HOUSE RULES page to make them, ONLY WITH puts a part, a sheet section
-  or a condition under one, and a formula can be worked out another way while one is on. The GAME tab's checkboxes
-  come next.
+  or a condition under one, and a formula can be worked out another way while one is on. The GM switches them in
+  TTRPG_SYSTEM's HOUSE RULES, beside the shared ones.
 - **A tour of the builder.** The first time the builder opens, eight short steps walk down its rail, lighting
   each page they explain. Skip it or finish it and it stays away, on any browser; START THE TOUR on HELP plays it again.
 - **HELP in the builder.** A HELP page on the builder's rail: how each page works with a GO TO button,

@@ -12,6 +12,8 @@ import { idFor } from './setup';
 import { conditionList } from './conditions';
 import { formulaList } from './statsRules';
 import { PART_ROWS } from './wordsFeatures';
+import { customTemplate, useCustomTemplate } from './customTemplates';
+import type { HouseRuleState } from './types';
 
 export const LIMITS = { rules: 20, name: 40, description: 300 } as const;
 
@@ -100,6 +102,22 @@ export const withHouseRuleOn = (def: Definition, rule: string): Definition => (A
   ? { ...def, derived: (def.derived as unknown[]).map((d) => (isObject(d) && isObject(d.alternative) && d.alternative.rule === rule && typeof d.alternative.formula === 'string'
     ? { ...d, formula: d.alternative.formula } : d)) as Definition['derived'] }
   : def);
+
+/**
+ * The house rules `system` runs with, each with whether the table has it on (4j5a): a published
+ * custom system's, from its render copy; none for a built-in game or one not loaded yet.
+ */
+export const houseRulesIn = (system: string | null | undefined): HouseRuleState[] => (system ? customTemplate(system)?.houseRules ?? [] : []);
+
+/** The same, redrawn when the system's render copy arrives or changes (the GAME tab's HOUSE RULES). */
+export function useHouseRules(system: string | null | undefined): HouseRuleState[] {
+  useCustomTemplate(system);
+  return houseRulesIn(system);
+}
+
+/** The rules whose box differs from what the game runs, to send: rule -> on. */
+export const changedRules = (running: HouseRuleState[], ticked: Record<string, boolean>): Record<string, boolean> =>
+  Object.fromEntries(running.filter((r) => typeof ticked[r.id] === 'boolean' && ticked[r.id] !== r.on).map((r) => [r.id, ticked[r.id]]));
 
 const sectionsWaiting = (sheet: unknown, id: string, kind: Waiting['kind'], page: BuilderPage): Waiting[] => (isObject(sheet) && Array.isArray(sheet.sections) ? sheet.sections : [])
   .filter((s): s is Obj => isObject(s) && s.only_with === id && typeof s.id === 'string')

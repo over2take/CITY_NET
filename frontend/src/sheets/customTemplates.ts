@@ -57,6 +57,8 @@ export interface CustomRender {
   sheet: CustomRenderSheet;
   /** NPCs' own layout (null: they use the character sheet) and GENERATE_SHEET's tiers. */
   npc?: { sheet: CustomRenderSheet | null; tiers: { id: string; label: string }[] };
+  /** Its house rules, each with whether the table has it on (backend runtime.js, 4j). */
+  house_rules?: import('./types').HouseRuleState[];
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -117,6 +119,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.currencies ? { currencies: render.currencies } : {}),
     ...(render.bank ? { bank: render.bank } : {}),
     ...(render.distance ? { distance: render.distance } : {}),
+    ...(render.house_rules?.length ? { houseRules: render.house_rules } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived), ...tiers } } : {}),
   };
