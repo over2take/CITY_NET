@@ -4,10 +4,10 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createRequire } from 'module';
 
-import { TOUR, TOPICS, FORMULA_FUNCTIONS, EXAMPLES, topicById } from '../builderHelp';
+import { TOUR, TOPICS, FORMULA_FUNCTIONS, EXAMPLES, HINTS, topicById } from '../builderHelp';
 import { BUILDER_PAGES } from '../builderSession';
 import { HEALTH_MODELS } from '../setup';
-import { HelpHint, popoverPlace, POP_WIDTH } from '../../components/HelpHint';
+import { HelpHint, FieldName, popoverPlace, POP_WIDTH } from '../../components/HelpHint';
 
 /**
  * Help for GMs in the builder (4i; approved mockup docs/mockups/builder-help.html, 2026-10-13):
@@ -78,6 +78,16 @@ describe('the formula reference', () => {
   });
 });
 
+describe('the words beside each setting', () => {
+  it('are sentences, filed by the page that shows them (each page\'s test checks they are all there)', () => {
+    for (const [k, text] of Object.entries(HINTS)) {
+      expect(k, k).toMatch(/^(setup|words|bank)\.[a-zA-Z]+$/);
+      expect(text.length, k).toBeGreaterThan(30);
+      expect(text.trim(), k).toMatch(/\.$/);
+    }
+  });
+});
+
 describe('the "?"', () => {
   it('says its words to screen readers, and shows them on hover and focus, gone again after', async () => {
     render(<p>Health model <HelpHint text="How characters get hurt." /></p>);
@@ -117,5 +127,20 @@ describe('the "?"', () => {
     expect(popoverPlace({ left: 1000, right: 1014, top: 2 }, 1200)).toEqual({ left: 1000 - 8 - POP_WIDTH, top: 8 });
     expect(popoverPlace({ left: 100, right: 114, top: 50 }, 200)).toEqual({ left: 8, top: 46 });
     expect(popoverPlace({ left: 0, right: 14, top: 50 }, 14 + 8 + POP_WIDTH + 8)).toEqual({ left: 22, top: 46 });
+  });
+});
+
+describe('a setting\'s name with its "?"', () => {
+  it('names the field by its words alone, the "?" beside it', () => {
+    render(<p><FieldName htmlFor="f" hint="What it does.">SYMBOL</FieldName><input id="f" /></p>);
+    expect(screen.getByRole('textbox', { name: 'SYMBOL' })).toBeTruthy();
+    expect(screen.getByRole('note', { name: 'What it does.' })).toBeTruthy();
+  });
+
+  it('is plain words where there is no one field', () => {
+    render(<p><FieldName hint="How it counts.">COUNTED IN</FieldName></p>);
+    expect(document.querySelector('label')).toBeNull();
+    expect(screen.getByText('COUNTED IN').tagName).toBe('SPAN');
+    expect(screen.getByRole('note', { name: 'How it counts.' })).toBeTruthy();
   });
 });

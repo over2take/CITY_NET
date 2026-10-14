@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { themeRoot } from '../utils/themeRoot';
 
@@ -53,6 +53,19 @@ export function HelpHint({ text }: { text: string }) {
         }}>{text}</span>,
         themeRoot(),
       )}
+    </span>
+  );
+}
+
+/**
+ * A setting's name with its "?" after it. The "?" stays outside the <label>: inside, its words would
+ * be read as part of the field's name. `htmlFor` ties the name to its field, when it has one.
+ */
+export function FieldName({ htmlFor, hint, style, children }: { htmlFor?: string; hint: string; style?: CSSProperties; children: ReactNode }) {
+  return (
+    <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}>
+      {htmlFor ? <label htmlFor={htmlFor} style={style}>{children}</label> : <span style={style}>{children}</span>}
+      <HelpHint text={hint} />
     </span>
   );
 }

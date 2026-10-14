@@ -121,5 +121,36 @@ export const EXAMPLES: { id: string; name: string }[] = [
   { id: 'sr6', name: 'SHADOWRUN 6E' },
 ];
 
+/**
+ * The "?" beside each builder setting (components/HelpHint.tsx), by page and setting. Each page's
+ * test checks its own are all on screen, so a setting can't lose its "?" unnoticed.
+ */
+export const HINTS = {
+  // SETUP
+  'setup.name': 'What players see in the system picker and on every sheet. Two systems can\'t share a name. RENAME changes it at once, in the draft and the published version.',
+  'setup.description': 'Shown under the name in MY SYSTEMS, and to anyone installing the system from a file.',
+  'setup.author': 'Who made it. It travels with the .citysys file when you share the system.',
+  'setup.license': 'The terms others may use it under if you share it, like CC BY 4.0. Leave it blank for a game only your table plays.',
+  'setup.health': 'The chosen model\'s own settings: what its pool, tracks, types, levels or locations are called, and how many. The preview beside them is the HEALTH section every sheet starts with.',
+  'setup.die': 'A die your game uses that isn\'t listed: d7, or a handful rolled together like 3d8. The dice you pick are offered first whenever a roll is added.',
+  // WORDS
+  'words.one': 'The word for one of it: 1 Wound, 1 Gold.',
+  'words.many': 'The word for more than one: 3 Wounds. Often the same word with an s.',
+  'words.short': 'A short form for tight spaces: bars, chips and buttons. HP, GP.',
+  'words.readsAs': 'How the term reads in the game with your words, or the app\'s where you left a box empty.',
+  // FEATURES: the bank's currencies
+  'bank.main': 'The main currency is what every bank account\'s balance is in. Prices are in it unless a catalogue names another. MAKE MAIN swaps which one it is.',
+  'bank.countedIn': 'Whole numbers (40 Gold), decimals (4.34 credits) or coins (2 gp 5 sp). Amounts are kept in the smallest unit, so nothing is lost to rounding.',
+  'bank.symbol': 'A sign written with amounts, like $ or €, before or after the number. Left empty, amounts show the short name, or the name.',
+  'bank.decimals': 'How many places after the decimal mark: 2 for dollars and cents.',
+  'bank.short': 'A short name written after amounts, like gp. Left empty, the currency\'s name is used.',
+  'bank.worth': 'How many of the smallest coin this coin is worth. With copper the smallest, a silver worth 10 copper is 10, and a gold worth 10 silver is 100.',
+  'bank.icon': 'Shown beside amounts in BANK.EXE and the shops: one of the five built in, or a PNG, WebP or SVG you upload.',
+  'bank.readsAs': 'How an amount looks in the game with these settings.',
+  'bank.whale': 'The balance in the main currency at which a player earns the whale celebration. Empty: never.',
+} as const;
+
+export type HintKey = keyof typeof HINTS;
+
 /** A topic by its id, or the first. */
 export const topicById = (id: string | null | undefined): HelpTopic => TOPICS.find((t) => t.id === id) ?? TOPICS[0];

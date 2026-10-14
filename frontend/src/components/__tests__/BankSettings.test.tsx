@@ -7,6 +7,7 @@ vi.mock('../../assets/Credits.png', () => ({ default: 'credits.png' }));
 
 import { BankSettings } from '../BankSettings';
 import { systemsApi, type Definition } from '../../sheets/systemsApi';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * The bank's settings on FEATURES (4b1c2). Approved mockup builder-words-features (2026-10-06):
@@ -151,5 +152,28 @@ describe('celebrations', () => {
     open();
     await userEvent.click(screen.getByLabelText(/The bank's easter eggs/));
     expect(screen.getByText('Whale status needs a currency of the system\'s own: add one above.')).toBeTruthy();
+  });
+});
+
+describe('the "?"', () => {
+  it('sits beside every currency setting and the whale threshold, outside the fields\' names', async () => {
+    open(gold);
+    const seen = new Set<string | null>();
+    const look = () => screen.getAllByRole('note').forEach((n) => seen.add(n.getAttribute('aria-label')));
+    look();
+    expect(screen.getByRole('textbox', { name: 'SYMBOL' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'SHORT' })).toBeTruthy();
+    await userEvent.click(within(currency('gold')).getByText('DECIMALS', { selector: 'button' }));
+    expect(screen.getByRole('spinbutton', { name: 'DECIMALS' })).toBeTruthy();
+    look();
+    await userEvent.click(within(currency('gold')).getByText('COINS'));
+    await userEvent.click(within(currency('gold')).getByText('+ COIN'));
+    look();
+    await userEvent.click(screen.getByLabelText(/The bank's easter eggs/));
+    expect(screen.getByRole('textbox', { name: 'WHALE STATUS AT' })).toBeTruthy();
+    look();
+    const keys = Object.keys(HINTS).filter((k) => k.startsWith('bank.')) as (keyof typeof HINTS)[];
+    expect(keys).toHaveLength(9);
+    for (const k of keys) expect(seen.has(HINTS[k]), k).toBe(true);
   });
 });
