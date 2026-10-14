@@ -25,6 +25,7 @@ const identity = require('../sheets/identity');
 const tokenAccess = require('../tokens/tokenAccess');
 const rests = require('../sheets/rests');
 const { restsOf } = require('../systemBuilder/rests');
+const { jsonTemplate } = require('../systemBuilder/sheetImport');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
 // sheet, quick-sheet lookups) goes through socket events, matching how the
@@ -264,6 +265,24 @@ module.exports = (db, io) => {
     });
   });
 
+  // A custom system's JSON template (4h2a; approved mockup docs/mockups/sheet-import.html): its
+  // sheet's fields by id, empty, a HELP line for each and instructions, for a player to fill in
+  // and upload in IMPORT. Made from the running system's published sheet, so it asks for exactly
+  // what the importer reads. Open, like the blank PDF: it holds nobody's data.
+  router.get('/import/template.json', (req, res) => {
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const definition = customSystems.definitionOf(system);
+      if (!definition || !customSystems.partIn(system, 'sheet_import')) {
+        return res.status(400).json({ error: `No JSON template for ${system}` });
+      }
+      const { version } = customSystems.list().find((s) => s.id === system) || {};
+      const template = jsonTemplate(definition, { version });
+      const file = String(template.system || 'system').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'system';
+      res.setHeader('Content-Disposition', `attachment; filename="citynet-${file}-import.json"`);
+      res.type('application/json').send(JSON.stringify(template, null, 2));
+    });
+  });
   // Stage-1+2 preview: extract candidates from a fillable PDF, JSON paste, or
   // raw text, and map them onto the active system's fields. No auth needed -
   // it only transforms what the caller sends; applying is where identity is
@@ -298,8 +317,8 @@ module.exports = (db, io) => {
         } else {
           return res.status(400).json({ error: 'Send a PDF file, json, or text' });
         }
-        const { mapped, unmapped, skipped } = importer.mapFields(raw);
-        res.json({ system, source, mapped, unmapped, skipped });
+        // A custom system's importer also says what it left and why (workedOut, gmOnly, notAChoice).
+        res.json({ system, source, ...importer.mapFields(raw) });
       } catch (e) {
         res.status(422).json({ error: `Could not read input: ${e.message}` });
       }

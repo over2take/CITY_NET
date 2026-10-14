@@ -15,6 +15,8 @@
 const { PDFDocument } = require('pdf-lib');
 const { CPR_SKILLS, CWN_SKILLS } = require('./rolls');
 const { getLinkedFields } = require('./templates');
+const customSystems = require('../systemBuilder/runtime');
+const { customImporter } = require('../systemBuilder/sheetImport');
 const gearMods = require('./cwnGearMods');
 // One source for how many weapon rows a CWN sheet has, so the aliases and the resolver
 // cannot disagree about which rows exist.
@@ -34,52 +36,9 @@ const norm = (key) => String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
 const aliasInventory = (alias) =>
   alias(['inventory', 'items', 'itemscarried', 'carried', 'kit'], 'inventory');
 
-/**
- * One line of a written-out inventory.
- *
- * A form prints "3x Stim" or "Stim x3" or just "Rope", so both places a quantity can sit
- * are read and the rest is the name. A number that is only part of the name - "9mm rounds",
- * "Type 2 Vacc Suit" - is left alone: it is not at either end with an x beside it.
- */
-const parseInventoryLine = (line) => {
-  const text = String(line).trim();
-  if (!text) return null;
-  let qty = 1;
-  let name = text;
-  const lead = /^(\d{1,4})\s*[x×]\s*(.+)$/i.exec(text);
-  const trail = /^(.+?)\s*[x×]\s*(\d{1,4})$/i.exec(text);
-  if (lead) { qty = Number(lead[1]); name = lead[2].trim(); }
-  else if (trail) { name = trail[1].trim(); qty = Number(trail[2]); }
-  if (!name) return null;
-  // Stowed rather than unfiled: an imported sheet lists what the character is carrying,
-  // and the stash - which costs nothing and is not on them - is a claim the form did not
-  // make. Same reading the weapon rows take of a row nobody filed.
-  return { name, qty: Math.max(1, qty), enc: '', bundled: false, carry: 'stowed', location: '' };
-};
-
-/**
- * The inventory as the sheet stores it, from whichever way it arrived.
- *
- * JSON from a sheet round-trip, or "2x Stim, Rope; 9mm rounds" from a printed form. Rows
- * that come in as JSON are passed through as objects rather than rebuilt: the sheet
- * normalises what it reads (sheets/inventory.ts), so a second copy of that rule here would
- * only be somewhere for the two to disagree. What is enforced is that it is a list of
- * objects, which is the part that would throw.
- */
-const normaliseInventory = (mapped) => {
-  if (typeof mapped.inventory !== 'string') return;
-  const raw = mapped.inventory.trim();
-  let items = null;
-  if (raw.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) items = parsed.filter((r) => r && typeof r === 'object');
-    } catch { items = null; }
-  }
-  if (!items) items = raw.split(/[,;\n]/).map(parseInventoryLine).filter(Boolean);
-  if (items.length) mapped.inventory = JSON.stringify(items);
-  else delete mapped.inventory;
-};
+// One line of it, and the whole of it as the sheet stores it: shared with the custom systems'
+// importer (systemBuilder/sheetImport.js), in a module that needs no pdf-lib.
+const { normaliseInventory } = require('./inventoryImport');
 
 // ─── Stage 1: extraction ─────────────────────────────────────────────────────
 
@@ -790,6 +749,14 @@ const IMPORTERS = {
   // generic: no importer - import is only offered for systems that define one
 };
 
-const getImporter = (system) => IMPORTERS[system] || null;
+/**
+ * The importer for `system`: a built-in game's own, or one made from a custom system's sheet (4h2a,
+ * systemBuilder/sheetImport.js) while it has SHEET IMPORT on. Null where there is none.
+ */
+const getImporter = (system) => {
+  if (IMPORTERS[system]) return IMPORTERS[system];
+  const definition = customSystems.definitionOf(system);
+  return definition && customSystems.partIn(system, 'sheet_import') ? customImporter(definition) : null;
+};
 
 module.exports = { extractPdfFields, getImporter, IMPORTERS, norm };
