@@ -16,7 +16,7 @@ export const TOUR: TourStep[] = [
   { at: 'setup', title: 'SETUP', text: 'Start here: how characters get hurt (one pool of HP, two tracks, harm levels...), how they advance, and how the ruler measures. The rest builds on these answers.' },
   { at: 'words', title: 'WORDS', text: 'What your game calls things. Call HP "Wounds" and credits "Gold", and every window your players see says so. Leave a word blank to keep the app\'s.' },
   { at: 'features', title: 'FEATURES', text: 'Which parts of CITY_NET this game uses: the bank, shops, vehicles, GIVE ITEM, SHEET IMPORT... Off only hides; turn one back on and everything it held comes back.' },
-  { at: 'rules', title: 'STATS & RULES', text: 'The numbers players fill in, the formulas worked out from them (Defense = 10 + @agility), and lookup tables. Each formula shows its value on a sample character as you type.' },
+  { at: 'rules', title: 'STATS & RULES', text: 'The numbers players fill in, the formulas worked out from them (Defense = 10 + @agility), and lookup tables. Each formula shows its value on a sample character as you type. Optional rules for the table, like MAGIC, are made on HOUSE RULES, further down.' },
   { at: 'sheet', title: 'CHARACTER SHEET', text: 'How a sheet is laid out. It arranges itself from your stats at first; CUSTOMIZE to move tabs, sections and fields, and to say who sees and changes each one.' },
   { at: 'try', title: 'TRY IT', text: 'A test character, to see your rules work: change a stat, take some damage, call a rest, make an NPC. Nothing here is saved to any player.' },
   { at: 'publish', title: 'SAVE AND PUBLISH', text: 'Your work saves itself as a draft while you build. PUBLISH makes it the version the game runs; from the second version on, it shows what will change for anyone playing first.' },
@@ -43,6 +43,7 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
   { page: 'rules', title: 'STATS & RULES', body: [
     'STATS are the numbers players fill in, in groups (abilities, skills...), each with a lowest and highest. FORMULAS work values out from them; TABLES turn a number into another, in bands.',
     'Every formula shows its value on the SAMPLE character as you type, and its mistakes under it. See FORMULAS for what a formula can say.',
+    'A formula can be worked out another way while a house rule is on: WITH A RULE, then USE INSTEAD. See HOUSE RULES.',
   ] },
   { page: 'sheet', title: 'CHARACTER SHEET', body: [
     'The layout players see. Until you CUSTOMIZE it, it arranges itself from your stats, formulas and health model.',
