@@ -26,6 +26,9 @@ describe('a random system', () => {
     }
   });
 
+  it('is what it would be once stored: nothing JSON would change, such as -0', () => {
+    for (const [seed, def] of systems) expect(JSON.parse(JSON.stringify(def)), `seed ${seed}`).toEqual(def);
+  });
   it('is the same from the same seed, and another from another', () => {
     expect(randomSystem(42)).toEqual(randomSystem(42));
     expect(JSON.stringify(randomSystem(42))).not.toBe(JSON.stringify(randomSystem(43)));

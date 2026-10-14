@@ -51,7 +51,8 @@ const healthOf = (r) => {
     case 'tracks': return { model, tracks: named('trk', 2), overflow: r.chance(0.5) };
     case 'typed': return { model, types: named('dmg', r.int(2, 4)) };
     case 'harm': return { model, levels: named('harm', r.int(1, 6)).map((l) => ({ ...l, slots: r.int(1, 4), ...(r.chance(0.5) ? { penalty: `-${r.int(1, 3)}d` } : {}) })) };
-    case 'wounds': return { model, count: r.int(1, 10), penalty: -r.int(0, 5) };
+    // 0 - n, not -n: a -0 would not survive being stored as JSON.
+    case 'wounds': return { model, count: r.int(1, 10), penalty: 0 - r.int(0, 5) };
     case 'locations': return { model, locations: named('loc', r.int(1, 12)) };
     default: return { model };
   }
