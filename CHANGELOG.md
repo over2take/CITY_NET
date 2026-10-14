@@ -115,6 +115,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The builder remembers its tour.** Whether the first-time tour has been seen is kept on the server,
+  so a new browser won't show it again. The tour itself comes next.
 - **HELP in the builder.** A HELP page on the builder's rail: how each page works with a GO TO button,
   every function a formula can use, dice, health models, sharing and versions, and the built-in games to look at.
 - **A "?" beside the builder's settings.** Every page from SETUP to TRY IT now explains its settings on

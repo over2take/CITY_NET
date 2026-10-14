@@ -20,6 +20,9 @@ const { exampleList, exampleDefinition, exampleKind, KINDS } = require('../syste
 const { checkTableConditions, saveTableConditions } = require('../systemBuilder/tableConditions');
 const { isBuiltIn } = require('../sheets/templates');
 
+/** The global_settings key that says the builder's first-time tour has been seen. */
+const TOUR_SEEN = 'builder_tour_seen';
+
 /** What a currency's or condition's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
 
@@ -103,6 +106,24 @@ module.exports = (db, io = null) => {
     if (!copy) return res.status(404).json({ error: 'No such example' });
     if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'A system needs a name' });
     store.createSystem(db, { definition: { ...copy, name: name.trim() } }, (err, made) => answer(res, err, made));
+  });
+
+  // Whether the builder's first-time tour has been seen (4i; approved mockup
+  // docs/mockups/builder-help.html, 2026-10-13): kept here, so a new browser doesn't show it again,
+  // and one setting, as only the main admin builds. Seen when finished or skipped; START THE TOUR
+  // plays it again without asking. Before /:id, which would read "tour" as a system.
+  router.get('/tour', gm, (req, res) => {
+    db.get('SELECT value FROM global_settings WHERE key = ?', [TOUR_SEEN], (err, row) => {
+      if (err) return answer(res, err);
+      return res.json({ seen: !!row && row.value === '1' });
+    });
+  });
+  router.put('/tour', gm, (req, res) => {
+    const { seen } = req.body || {};
+    if (typeof seen !== 'boolean') return res.status(400).json({ error: 'Seen is true or false' });
+    const done = (err) => (err ? answer(res, err) : res.json({ seen }));
+    if (seen) db.run(`INSERT INTO global_settings (key, value) VALUES (?, '1') ON CONFLICT(key) DO UPDATE SET value = '1'`, [TOUR_SEEN], done);
+    else db.run('DELETE FROM global_settings WHERE key = ?', [TOUR_SEEN], done);
   });
 
   router.get('/:id', gm, (req, res) => store.getSystem(db, req.params.id, (err, sys) => answer(res, err, sys)));
